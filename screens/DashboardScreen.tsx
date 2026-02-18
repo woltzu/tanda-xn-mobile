@@ -702,14 +702,14 @@ export default function DashboardScreen() {
                     </View>
                   </View>
                   <View style={styles.elderStats}>
-                    <View style={styles.elderStatItem}>
+                    <TouchableOpacity style={styles.elderStatItem} onPress={() => navigation.navigate("ElderDashboard" as any)}>
                       <Text style={styles.elderStatValue}>{elderProfile.totalCasesResolved}</Text>
                       <Text style={styles.elderStatLabel}>Resolved</Text>
-                    </View>
-                    <View style={styles.elderStatItem}>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.elderStatItem} onPress={() => navigation.navigate("VouchSystem" as any)}>
                       <Text style={styles.elderStatValue}>{elderStats?.activeVouches || 0}</Text>
                       <Text style={styles.elderStatLabel}>Vouches</Text>
-                    </View>
+                    </TouchableOpacity>
                   </View>
                 </View>
               </TouchableOpacity>

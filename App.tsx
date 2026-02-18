@@ -330,6 +330,10 @@ function HomeStackScreen() {
       <HomeStack.Screen name="CreateCommunity" component={CreateCommunityScreen} />
       <HomeStack.Screen name="ElderDashboard" component={ElderDashboardScreen} />
       <HomeStack.Screen name="BecomeElder" component={BecomeElderScreen} />
+      <HomeStack.Screen name="HonorScoreOverview" component={HonorScoreOverviewScreen} />
+      <HomeStack.Screen name="VouchSystem" component={VouchSystemScreen} />
+      <HomeStack.Screen name="MediationCase" component={MediationCaseScreen} />
+      <HomeStack.Screen name="ElderTrainingHub" component={ElderTrainingHubScreen} />
       <HomeStack.Screen name="AddFunds" component={AddFundsScreen} />
       <HomeStack.Screen name="CreateCircleStart" component={CreateCircleStartScreen} />
       <HomeStack.Screen name="CreateCircleDetails" component={CreateCircleDetailsScreen} />
