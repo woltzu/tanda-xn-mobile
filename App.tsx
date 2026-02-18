@@ -325,6 +325,17 @@ function HomeStackScreen() {
       <HomeStack.Screen name="NotificationsInbox" component={NotificationsInboxScreen} />
       <HomeStack.Screen name="Settings" component={SettingsMainScreen} />
       <HomeStack.Screen name="HelpCenter" component={HelpCenterScreen} />
+      <HomeStack.Screen name="CommunityBrowser" component={CommunityBrowserScreen} />
+      <HomeStack.Screen name="CommunityHub" component={CommunityHubScreen} />
+      <HomeStack.Screen name="CreateCommunity" component={CreateCommunityScreen} />
+      <HomeStack.Screen name="ElderDashboard" component={ElderDashboardScreen} />
+      <HomeStack.Screen name="BecomeElder" component={BecomeElderScreen} />
+      <HomeStack.Screen name="AddFunds" component={AddFundsScreen} />
+      <HomeStack.Screen name="CreateCircleStart" component={CreateCircleStartScreen} />
+      <HomeStack.Screen name="CreateCircleDetails" component={CreateCircleDetailsScreen} />
+      <HomeStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} />
+      <HomeStack.Screen name="CreateCircleInvite" component={CreateCircleInviteScreen} />
+      <HomeStack.Screen name="CreateCircleSuccess" component={CreateCircleSuccessScreen} />
     </HomeStack.Navigator>
   );
 }
