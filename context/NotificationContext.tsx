@@ -322,7 +322,15 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
       }
 
       // Get the Expo push token
-      const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+      const projectId =
+        Constants.expoConfig?.extra?.eas?.projectId ??
+        Constants.easConfig?.projectId;
+
+      if (!projectId) {
+        console.log("No EAS projectId found — push tokens unavailable in Expo Go. Use a development build.");
+        return null;
+      }
+
       const tokenData = await Notifications.getExpoPushTokenAsync({
         projectId,
       });
@@ -579,10 +587,10 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
 
     return () => {
       if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(notificationListener.current);
+        notificationListener.current.remove();
       }
       if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
+        responseListener.current.remove();
       }
     };
   }, [handleNotificationReceived, handleNotificationResponse]);

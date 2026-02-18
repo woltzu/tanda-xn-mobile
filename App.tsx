@@ -46,6 +46,7 @@ import VouchMemberScreen from "./screens/VouchMemberScreen";
 import HonorSystemScreen from "./screens/HonorSystemScreen";
 import AccessRestrictedScreen from "./screens/AccessRestrictedScreen";
 import RemittanceScreen from "./screens/RemittanceScreen";
+import DomesticSendMoneyScreen from "./screens/DomesticSendMoneyScreen";
 import AdvanceHubScreen from "./screens/AdvanceHubScreen";
 import RequestAdvanceScreen from "./screens/RequestAdvanceScreen";
 import AdvanceDetailsScreen from "./screens/AdvanceDetailsScreen";
@@ -190,6 +191,7 @@ export type RootStackParamList = {
   AddFunds: undefined;
   Withdraw: undefined;
   SendMoney: undefined;
+  DomesticSendMoney: undefined;
   Remittance: undefined;
   WalletTransactionSuccess: {
     type: "add" | "withdraw" | "send";
@@ -295,6 +297,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="Dashboard" component={DashboardScreen} />
       <HomeStack.Screen name="CircleDetail" component={CircleDetailScreen} />
       <HomeStack.Screen name="SendMoney" component={SendMoneyScreen} />
+      <HomeStack.Screen name="DomesticSendMoney" component={DomesticSendMoneyScreen} />
       <HomeStack.Screen name="Remittance" component={RemittanceScreen} />
       <HomeStack.Screen name="GoalsHub" component={GoalsHubScreen} />
       <HomeStack.Screen name="CreateGoal" component={CreateGoalScreen} />
@@ -334,6 +337,7 @@ function WalletStackScreen() {
       <WalletStack.Screen name="AddFunds" component={AddFundsScreen} />
       <WalletStack.Screen name="Withdraw" component={WithdrawScreen} />
       <WalletStack.Screen name="SendMoney" component={SendMoneyScreen} />
+      <WalletStack.Screen name="DomesticSendMoney" component={DomesticSendMoneyScreen} />
       <WalletStack.Screen name="Remittance" component={RemittanceScreen} />
       <WalletStack.Screen name="WalletTransactionSuccess" component={WalletTransactionSuccessScreen} />
       <WalletStack.Screen name="SavedRecipients" component={SavedRecipientsScreen} />
