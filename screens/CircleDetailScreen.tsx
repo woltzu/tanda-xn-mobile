@@ -204,7 +204,7 @@ export default function CircleDetailScreen() {
 
   const handleCircleSettings = () => {
     setShowMenu(false);
-    navigation.navigate("CircleSettings" as any, { circleId });
+    navigation.navigate("AdminSettings" as any, { circleName: circle?.name || "", circleId });
   };
 
   const handleLeaveCircle = () => {

@@ -68,7 +68,7 @@ export default function LoanMarketplaceScreen() {
       navigation.navigate("LoanApplication", { productId: product.id });
     } else {
       // Show requirements
-      navigation.navigate("LoanProductDetails", { productId: product.id });
+      navigation.navigate("LoanDetails" as any, { loanId: product.id });
     }
   };
 

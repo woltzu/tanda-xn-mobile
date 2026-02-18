@@ -213,7 +213,7 @@ export default function CommunityHubScreen() {
                   circle={circle}
                   getStatusColor={getStatusColor}
                   getStatusLabel={getStatusLabel}
-                  onJoin={() => console.log("Join circle:", circle.id)}
+                  onJoin={() => navigation.navigate("JoinCircleConfirm" as any, { circleId: circle.id })}
                   onView={() => navigation.navigate("CircleDetail", { circleId: circle.id })}
                 />
               ))}

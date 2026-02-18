@@ -157,7 +157,7 @@ export default function DashboardScreen() {
               {/* Avatar */}
               <TouchableOpacity
                 style={styles.avatarButton}
-                onPress={handleSignOut}
+                onPress={() => navigation.getParent()?.navigate("Profile")}
                 accessibilityLabel="Profile"
                 accessibilityRole="button"
               >
