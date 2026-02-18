@@ -2,8 +2,10 @@ import React, {
   createContext,
   useState,
   useContext,
+  useEffect,
   ReactNode,
 } from "react";
+import { useAuth } from "./AuthContext";
 
 // ============ TYPES ============
 
@@ -235,33 +237,64 @@ export const useElder = () => {
 
 // ============ MOCK DATA ============
 
-const mockElderProfile: ElderProfile = {
-  userId: "user-1",
-  tier: "Junior",
+// Founder's ID — the platform creator is always Grand Elder
+const FOUNDER_ID = "35545a5f-b71b-46a0-a2de-ad56228dd4cf";
+
+const founderElderProfile: ElderProfile = {
+  userId: FOUNDER_ID,
+  tier: "Grand",
   status: "approved",
-  honorScore: 72,
-  xnScore: 75,
-  specializations: ["payment", "trust"],
-  trainingCredits: 45,
-  joinedAsElderDate: "2024-06-15",
-  vouchStrength: 10,
-  maxConcurrentCases: 5,
-  activeCases: 2,
-  totalCasesResolved: 23,
-  successRate: 91,
+  honorScore: 95,
+  xnScore: 95,
+  specializations: ["payment", "trust", "financial", "communication"],
+  trainingCredits: 300,
+  joinedAsElderDate: "2024-01-01",
+  vouchStrength: 50,
+  maxConcurrentCases: 10,
+  activeCases: 1,
+  totalCasesResolved: 58,
+  successRate: 97,
 };
 
-const mockElderStats: ElderStats = {
-  vouchesAvailable: 3,
-  maxVouches: 5,
+const defaultElderProfile: ElderProfile = {
+  userId: "",
+  tier: "Junior",
+  status: "not_applied",
+  honorScore: 0,
+  xnScore: 50,
+  specializations: [],
+  trainingCredits: 0,
+  vouchStrength: 10,
+  maxConcurrentCases: 5,
+  activeCases: 0,
+  totalCasesResolved: 0,
+  successRate: 0,
+};
+
+const founderElderStats: ElderStats = {
+  vouchesAvailable: 8,
+  maxVouches: 10,
   vouchesUsedThisMonth: 2,
-  activeVouches: 8,
-  successfulVouches: 47,
-  defaultedVouches: 1,
-  totalCasesAssigned: 28,
-  casesResolvedThisMonth: 5,
-  avgResolutionTime: "2.3 days",
-  satisfactionRate: 94,
+  activeVouches: 12,
+  successfulVouches: 85,
+  defaultedVouches: 2,
+  totalCasesAssigned: 62,
+  casesResolvedThisMonth: 8,
+  avgResolutionTime: "1.8 days",
+  satisfactionRate: 97,
+};
+
+const defaultElderStats: ElderStats = {
+  vouchesAvailable: 0,
+  maxVouches: 5,
+  vouchesUsedThisMonth: 0,
+  activeVouches: 0,
+  successfulVouches: 0,
+  defaultedVouches: 0,
+  totalCasesAssigned: 0,
+  casesResolvedThisMonth: 0,
+  avgResolutionTime: "N/A",
+  satisfactionRate: 0,
 };
 
 const mockVouchRequests: VouchRequest[] = [
@@ -583,26 +616,82 @@ const mockHonorScoreHistory: HonorScoreActivity[] = [
 // ============ PROVIDER ============
 
 export const ElderProvider = ({ children }: { children: ReactNode }) => {
-  const [isElder, setIsElder] = useState(true); // For demo purposes
-  const [elderProfile, setElderProfile] = useState<ElderProfile | null>(mockElderProfile);
-  const [elderStats, setElderStats] = useState<ElderStats | null>(mockElderStats);
-  const [vouchRequests, setVouchRequests] = useState<VouchRequest[]>(mockVouchRequests);
-  const [activeVouches, setActiveVouches] = useState<ActiveVouch[]>(mockActiveVouches);
-  const [vouchHistory, setVouchHistory] = useState<VouchHistory[]>(mockVouchHistory);
-  const [availableCases, setAvailableCases] = useState<MediationCase[]>(mockAvailableCases);
-  const [myCases, setMyCases] = useState<MediationCase[]>(mockMyCases);
-  const [trainingCourses, setTrainingCourses] = useState<TrainingCourse[]>(mockTrainingCourses);
-  const [badges, setBadges] = useState<ElderBadge[]>(mockBadges);
-  const [honorScoreHistory, setHonorScoreHistory] = useState<HonorScoreActivity[]>(mockHonorScoreHistory);
+  const { user } = useAuth();
+  const isFounder = user?.id === FOUNDER_ID;
+
+  const [isElder, setIsElder] = useState(false);
+  const [elderProfile, setElderProfile] = useState<ElderProfile | null>(null);
+  const [elderStats, setElderStats] = useState<ElderStats | null>(null);
+  const [vouchRequests, setVouchRequests] = useState<VouchRequest[]>([]);
+  const [activeVouches, setActiveVouches] = useState<ActiveVouch[]>([]);
+  const [vouchHistory, setVouchHistory] = useState<VouchHistory[]>([]);
+  const [availableCases, setAvailableCases] = useState<MediationCase[]>([]);
+  const [myCases, setMyCases] = useState<MediationCase[]>([]);
+  const [trainingCourses, setTrainingCourses] = useState<TrainingCourse[]>([]);
+  const [badges, setBadges] = useState<ElderBadge[]>([]);
+  const [honorScoreHistory, setHonorScoreHistory] = useState<HonorScoreActivity[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Get Elder Requirements
+  // ============ INITIALIZE ELDER DATA BASED ON USER ============
+  useEffect(() => {
+    if (!user) {
+      // Logged out — reset everything
+      setIsElder(false);
+      setElderProfile(null);
+      setElderStats(null);
+      return;
+    }
+
+    if (isFounder) {
+      // Founder is ALWAYS Grand Elder with full privileges
+      setIsElder(true);
+      setElderProfile({ ...founderElderProfile, userId: user.id });
+      setElderStats(founderElderStats);
+      setVouchRequests(mockVouchRequests);
+      setActiveVouches(mockActiveVouches);
+      setVouchHistory(mockVouchHistory);
+      setAvailableCases(mockAvailableCases);
+      setMyCases(mockMyCases);
+      setTrainingCourses(mockTrainingCourses.map((c) => ({ ...c, progress: 100, completed: true })));
+      setBadges(mockBadges.map((b) => ({ ...b, earned: true, earnedDate: b.earnedDate || "2024-01-15" })));
+      setHonorScoreHistory(mockHonorScoreHistory);
+    } else {
+      // Regular users — start as non-elder (they can apply)
+      setIsElder(false);
+      setElderProfile({ ...defaultElderProfile, userId: user.id, xnScore: user.xnScore || 50 });
+      setElderStats(defaultElderStats);
+      setVouchRequests([]);
+      setActiveVouches([]);
+      setVouchHistory([]);
+      setAvailableCases([]);
+      setMyCases([]);
+      setTrainingCourses(mockTrainingCourses.map((c) => ({ ...c, progress: 0, completed: false })));
+      setBadges(mockBadges.map((b) => ({ ...b, earned: false, earnedDate: undefined })));
+      setHonorScoreHistory([]);
+    }
+  }, [user?.id]);
+
+  // Get Elder Requirements (uses real user data)
   const getElderRequirements = (): ElderRequirement[] => {
+    const xnScore = user?.xnScore || 50;
+    const honorScore = elderProfile?.honorScore || 0;
+
+    if (isFounder) {
+      // Founder automatically meets all requirements
+      return [
+        { id: "founder", label: "Platform Founder", current: "Yes", required: "Yes", met: true },
+        { id: "xnscore", label: "XnScore 70+", current: xnScore, required: 70, met: true },
+        { id: "honor", label: "Honor Score 65+", current: honorScore, required: 65, met: true },
+        { id: "circles", label: "5+ circles completed", current: 12, required: 5, met: true },
+        { id: "tenure", label: "6+ months member", current: "14 months", required: "6 months", met: true },
+      ];
+    }
+
     return [
-      { id: "xnscore", label: "XnScore 70+", current: 75, required: 70, met: true },
-      { id: "honor", label: "Honor Score 65+", current: 68, required: 65, met: true },
-      { id: "circles", label: "5+ circles completed", current: 8, required: 5, met: true },
-      { id: "tenure", label: "6+ months member", current: "8 months", required: "6 months", met: true },
+      { id: "xnscore", label: "XnScore 70+", current: xnScore, required: 70, met: xnScore >= 70 },
+      { id: "honor", label: "Honor Score 65+", current: honorScore, required: 65, met: honorScore >= 65 },
+      { id: "circles", label: "5+ circles completed", current: 0, required: 5, met: false },
+      { id: "tenure", label: "6+ months member", current: "1 month", required: "6 months", met: false },
       { id: "standing", label: "No active disputes", current: "0 disputes", required: "0", met: true },
     ];
   };
@@ -619,6 +708,17 @@ export const ElderProvider = ({ children }: { children: ReactNode }) => {
     try {
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
+      if (isFounder) {
+        // Founder is auto-approved as Grand Elder
+        setIsElder(true);
+        setElderProfile({ ...founderElderProfile, userId: user?.id || FOUNDER_ID });
+        setElderStats(founderElderStats);
+        return {
+          success: true,
+          message: "As the platform founder, you are automatically a Grand Elder!",
+        };
+      }
+
       if (!checkEligibility()) {
         return {
           success: false,
@@ -628,9 +728,11 @@ export const ElderProvider = ({ children }: { children: ReactNode }) => {
 
       setIsElder(true);
       setElderProfile({
-        ...mockElderProfile,
+        ...defaultElderProfile,
+        userId: user?.id || "",
         status: "pending",
         tier: "Junior",
+        xnScore: user?.xnScore || 50,
       });
 
       return {
