@@ -1,0 +1,753 @@
+-- ══════════════════════════════════════════════════════════════════════════════
+-- MIGRATION 024 COMPLETE: Monthly Payment System
+-- ══════════════════════════════════════════════════════════════════════════════
+-- Run this complete migration - it handles all dependencies correctly
+-- ══════════════════════════════════════════════════════════════════════════════
+
+-- ╔═══════════════════════════════════════════════════════════════════════════╗
+-- ║ PHASE 1: DROP ALL EXISTING OBJECTS                                        ║
+-- ╚═══════════════════════════════════════════════════════════════════════════╝
+
+-- Drop views first (depend on tables)
+DROP VIEW IF EXISTS v_monthly_payment_dashboard CASCADE;
+DROP VIEW IF EXISTS v_autopay_queue CASCADE;
+DROP VIEW IF EXISTS v_payment_reminders_due CASCADE;
+DROP VIEW IF EXISTS v_obligation_summary CASCADE;
+
+-- Drop functions (depend on tables and types)
+DROP FUNCTION IF EXISTS generate_monthly_obligation(UUID, DATE) CASCADE;
+DROP FUNCTION IF EXISTS generate_all_monthly_obligations() CASCADE;
+DROP FUNCTION IF EXISTS calculate_estimated_monthly_payment(INTEGER, DECIMAL, INTEGER) CASCADE;
+DROP FUNCTION IF EXISTS process_autopay_payment(UUID) CASCADE;
+DROP FUNCTION IF EXISTS process_all_autopay() CASCADE;
+DROP FUNCTION IF EXISTS schedule_payment_reminders(UUID) CASCADE;
+DROP FUNCTION IF EXISTS send_due_reminders() CASCADE;
+DROP FUNCTION IF EXISTS mark_reminder_sent(UUID, TEXT) CASCADE;
+DROP FUNCTION IF EXISTS update_autopay_config(UUID, BOOLEAN, UUID, TEXT, INTEGER) CASCADE;
+DROP FUNCTION IF EXISTS get_next_payment_obligation(UUID) CASCADE;
+DROP FUNCTION IF EXISTS get_payment_obligations(UUID, obligation_status[], INTEGER) CASCADE;
+DROP FUNCTION IF EXISTS retry_failed_autopay(UUID) CASCADE;
+DROP FUNCTION IF EXISTS update_overdue_obligations() CASCADE;
+DROP FUNCTION IF EXISTS update_obligation_timestamp() CASCADE;
+DROP FUNCTION IF EXISTS update_autopay_timestamp() CASCADE;
+DROP FUNCTION IF EXISTS update_reminder_timestamp() CASCADE;
+
+-- Drop tables (will cascade drop triggers, policies, indexes)
+DROP TABLE IF EXISTS loan_payment_reminders CASCADE;
+DROP TABLE IF EXISTS loan_autopay_configs CASCADE;
+DROP TABLE IF EXISTS loan_payment_obligations CASCADE;
+
+-- Drop types last
+DROP TYPE IF EXISTS obligation_status CASCADE;
+DROP TYPE IF EXISTS autopay_type CASCADE;
+DROP TYPE IF EXISTS autopay_status CASCADE;
+DROP TYPE IF EXISTS reminder_channel CASCADE;
+DROP TYPE IF EXISTS reminder_status CASCADE;
+DROP TYPE IF EXISTS reminder_type CASCADE;
+
+-- ╔═══════════════════════════════════════════════════════════════════════════╗
+-- ║ PHASE 2: CREATE ENUMS                                                     ║
+-- ╚═══════════════════════════════════════════════════════════════════════════╝
+
+CREATE TYPE obligation_status AS ENUM (
+    'upcoming', 'due', 'partial', 'paid', 'overdue', 'skipped', 'waived'
+);
+
+CREATE TYPE autopay_type AS ENUM (
+    'minimum', 'scheduled', 'fixed', 'full_balance'
+);
+
+CREATE TYPE autopay_status AS ENUM (
+    'active', 'paused', 'disabled', 'failed'
+);
+
+CREATE TYPE reminder_channel AS ENUM (
+    'push', 'email', 'sms', 'in_app'
+);
+
+CREATE TYPE reminder_status AS ENUM (
+    'scheduled', 'sent', 'failed', 'cancelled'
+);
+
+CREATE TYPE reminder_type AS ENUM (
+    'upcoming', 'due_soon', 'due_tomorrow', 'due_today', 'overdue', 'final_warning'
+);
+
+-- ╔═══════════════════════════════════════════════════════════════════════════╗
+-- ║ PHASE 3: ALTER LOANS TABLE                                                ║
+-- ╚═══════════════════════════════════════════════════════════════════════════╝
+
+DO $$
+BEGIN
+    -- Drop constraint if exists to allow re-add
+    ALTER TABLE loans DROP CONSTRAINT IF EXISTS loans_payment_day_of_month_check;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS payment_day_of_month INTEGER DEFAULT 1;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS estimated_monthly_payment_cents INTEGER;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS first_payment_date DATE;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS next_payment_date DATE;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS last_obligation_generated_date DATE;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS autopay_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS autopay_config_id UUID;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS autopay_last_executed_at TIMESTAMPTZ;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS autopay_next_scheduled_at TIMESTAMPTZ;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS autopay_consecutive_failures INTEGER DEFAULT 0;
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS reminder_days_before INTEGER[] DEFAULT ARRAY[7, 3, 1];
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS reminder_channels reminder_channel[] DEFAULT ARRAY['push'::reminder_channel, 'in_app'::reminder_channel];
+ALTER TABLE loans ADD COLUMN IF NOT EXISTS reminders_enabled BOOLEAN DEFAULT TRUE;
+
+-- Add check constraint
+DO $$
+BEGIN
+    ALTER TABLE loans ADD CONSTRAINT loans_payment_day_of_month_check
+        CHECK (payment_day_of_month >= 1 AND payment_day_of_month <= 28);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- ╔═══════════════════════════════════════════════════════════════════════════╗
+-- ║ PHASE 4: CREATE TABLES                                                    ║
+-- ╚═══════════════════════════════════════════════════════════════════════════╝
+
+-- Table 1: Payment Obligations
+CREATE TABLE loan_payment_obligations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    loan_id UUID NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    obligation_number INTEGER NOT NULL,
+    period_start_date DATE NOT NULL,
+    period_end_date DATE NOT NULL,
+    due_date DATE NOT NULL,
+    estimated_payment_cents INTEGER NOT NULL,
+    principal_due_cents INTEGER NOT NULL,
+    interest_due_cents INTEGER NOT NULL,
+    fees_due_cents INTEGER DEFAULT 0,
+    total_due_cents INTEGER NOT NULL,
+    principal_paid_cents INTEGER DEFAULT 0,
+    interest_paid_cents INTEGER DEFAULT 0,
+    fees_paid_cents INTEGER DEFAULT 0,
+    total_paid_cents INTEGER DEFAULT 0,
+    status obligation_status NOT NULL DEFAULT 'upcoming',
+    days_overdue INTEGER DEFAULT 0,
+    payment_id UUID,
+    paid_at TIMESTAMPTZ,
+    paid_via TEXT,
+    late_fee_id UUID,
+    late_fee_applied BOOLEAN DEFAULT FALSE,
+    late_fee_cents INTEGER DEFAULT 0,
+    xnscore_event_triggered BOOLEAN DEFAULT FALSE,
+    xnscore_adjustment INTEGER,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT unique_obligation_per_loan UNIQUE(loan_id, obligation_number)
+);
+
+-- Table 2: Autopay Configs
+CREATE TABLE loan_autopay_configs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    loan_id UUID NOT NULL REFERENCES loans(id) ON DELETE CASCADE UNIQUE,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    autopay_type autopay_type NOT NULL DEFAULT 'scheduled',
+    fixed_amount_cents INTEGER,
+    payment_method_id UUID,
+    payment_method_type TEXT,
+    days_before_due INTEGER DEFAULT 0,
+    preferred_time TIME DEFAULT '09:00:00',
+    status autopay_status NOT NULL DEFAULT 'active',
+    paused_until DATE,
+    pause_reason TEXT,
+    max_retries INTEGER DEFAULT 3,
+    retry_interval_hours INTEGER DEFAULT 24,
+    current_retry_count INTEGER DEFAULT 0,
+    last_executed_at TIMESTAMPTZ,
+    last_execution_status TEXT,
+    last_execution_error TEXT,
+    next_scheduled_at TIMESTAMPTZ,
+    total_payments_made INTEGER DEFAULT 0,
+    total_amount_paid_cents BIGINT DEFAULT 0,
+    consecutive_failures INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Table 3: Payment Reminders
+CREATE TABLE loan_payment_reminders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    loan_id UUID NOT NULL REFERENCES loans(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    obligation_id UUID REFERENCES loan_payment_obligations(id) ON DELETE CASCADE,
+    reminder_type reminder_type NOT NULL,
+    channel reminder_channel NOT NULL,
+    scheduled_for TIMESTAMPTZ NOT NULL,
+    days_before_due INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    amount_due_cents INTEGER,
+    due_date DATE,
+    status reminder_status NOT NULL DEFAULT 'scheduled',
+    sent_at TIMESTAMPTZ,
+    failed_at TIMESTAMPTZ,
+    failure_reason TEXT,
+    notification_id TEXT,
+    opened_at TIMESTAMPTZ,
+    clicked_at TIMESTAMPTZ,
+    metadata JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ╔═══════════════════════════════════════════════════════════════════════════╗
+-- ║ PHASE 5: CREATE INDEXES                                                   ║
+-- ╚═══════════════════════════════════════════════════════════════════════════╝
+
+CREATE INDEX idx_obligations_loan ON loan_payment_obligations(loan_id);
+CREATE INDEX idx_obligations_user ON loan_payment_obligations(user_id);
+CREATE INDEX idx_obligations_due_date ON loan_payment_obligations(due_date);
+CREATE INDEX idx_obligations_status ON loan_payment_obligations(status);
+CREATE INDEX idx_obligations_upcoming ON loan_payment_obligations(due_date) WHERE status IN ('upcoming', 'due');
+
+CREATE INDEX idx_autopay_loan ON loan_autopay_configs(loan_id);
+CREATE INDEX idx_autopay_user ON loan_autopay_configs(user_id);
+CREATE INDEX idx_autopay_status ON loan_autopay_configs(status);
+CREATE INDEX idx_autopay_next ON loan_autopay_configs(next_scheduled_at) WHERE status = 'active';
+
+CREATE INDEX idx_reminders_loan ON loan_payment_reminders(loan_id);
+CREATE INDEX idx_reminders_user ON loan_payment_reminders(user_id);
+CREATE INDEX idx_reminders_scheduled ON loan_payment_reminders(scheduled_for) WHERE status = 'scheduled';
+CREATE INDEX idx_reminders_obligation ON loan_payment_reminders(obligation_id);
+
+-- ╔═══════════════════════════════════════════════════════════════════════════╗
+-- ║ PHASE 6: CREATE FUNCTIONS                                                 ║
+-- ╚═══════════════════════════════════════════════════════════════════════════╝
+
+-- Function 1: Calculate Estimated Monthly Payment (PMT Formula)
+CREATE FUNCTION calculate_estimated_monthly_payment(
+    p_principal_cents INTEGER,
+    p_annual_rate DECIMAL,
+    p_term_months INTEGER
+)
+RETURNS TABLE (
+    monthly_payment_cents INTEGER,
+    total_payments_cents INTEGER,
+    total_interest_cents INTEGER,
+    monthly_rate DECIMAL,
+    effective_rate DECIMAL
+) AS $$
+DECLARE
+    v_monthly_rate DECIMAL;
+    v_payment DECIMAL;
+BEGIN
+    IF p_term_months <= 0 THEN RAISE EXCEPTION 'Term months must be positive'; END IF;
+    IF p_principal_cents <= 0 THEN
+        RETURN QUERY SELECT 0::INTEGER, 0::INTEGER, 0::INTEGER, 0::DECIMAL, 0::DECIMAL;
+        RETURN;
+    END IF;
+
+    v_monthly_rate := p_annual_rate / 12;
+
+    IF p_annual_rate = 0 OR p_annual_rate IS NULL THEN
+        v_payment := p_principal_cents::DECIMAL / p_term_months;
+        RETURN QUERY SELECT CEIL(v_payment)::INTEGER, ROUND(v_payment * p_term_months)::INTEGER, 0::INTEGER, 0::DECIMAL, 0::DECIMAL;
+        RETURN;
+    END IF;
+
+    v_payment := p_principal_cents * (
+        (v_monthly_rate * POWER(1 + v_monthly_rate, p_term_months)) /
+        (POWER(1 + v_monthly_rate, p_term_months) - 1)
+    );
+
+    RETURN QUERY SELECT CEIL(v_payment)::INTEGER, ROUND(v_payment * p_term_months)::INTEGER,
+        (ROUND(v_payment * p_term_months) - p_principal_cents)::INTEGER, v_monthly_rate, p_annual_rate;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Function 2: Schedule Payment Reminders (needs to be created before generate_monthly_obligation)
+CREATE FUNCTION schedule_payment_reminders(p_obligation_id UUID)
+RETURNS INTEGER AS $$
+DECLARE
+    v_obligation RECORD;
+    v_loan RECORD;
+    v_reminder_day INTEGER;
+    v_channel reminder_channel;
+    v_reminder_type reminder_type;
+    v_scheduled_time TIMESTAMPTZ;
+    v_title TEXT;
+    v_message TEXT;
+    v_count INTEGER := 0;
+BEGIN
+    SELECT * INTO v_obligation FROM loan_payment_obligations WHERE id = p_obligation_id;
+    IF NOT FOUND THEN RETURN 0; END IF;
+
+    SELECT * INTO v_loan FROM loans WHERE id = v_obligation.loan_id;
+    IF NOT COALESCE(v_loan.reminders_enabled, TRUE) THEN RETURN 0; END IF;
+
+    FOREACH v_reminder_day IN ARRAY COALESCE(v_loan.reminder_days_before, ARRAY[7, 3, 1])
+    LOOP
+        v_reminder_type := CASE
+            WHEN v_reminder_day >= 7 THEN 'upcoming'::reminder_type
+            WHEN v_reminder_day >= 3 THEN 'due_soon'::reminder_type
+            WHEN v_reminder_day = 1 THEN 'due_tomorrow'::reminder_type
+            ELSE 'due_today'::reminder_type
+        END;
+
+        v_scheduled_time := (v_obligation.due_date - v_reminder_day)::TIMESTAMPTZ + INTERVAL '9 hours';
+        IF v_scheduled_time < now() THEN CONTINUE; END IF;
+
+        v_title := format('Payment Due %s', CASE WHEN v_reminder_day = 0 THEN 'Today' WHEN v_reminder_day = 1 THEN 'Tomorrow' ELSE format('in %s days', v_reminder_day) END);
+        v_message := format('Your payment of $%s is due on %s.', (v_obligation.total_due_cents / 100.0)::NUMERIC(10,2), to_char(v_obligation.due_date, 'Mon DD, YYYY'));
+
+        FOREACH v_channel IN ARRAY COALESCE(v_loan.reminder_channels, ARRAY['push'::reminder_channel])
+        LOOP
+            INSERT INTO loan_payment_reminders (loan_id, user_id, obligation_id, reminder_type, channel, scheduled_for, days_before_due, title, message, amount_due_cents, due_date, status)
+            VALUES (v_obligation.loan_id, v_obligation.user_id, p_obligation_id, v_reminder_type, v_channel, v_scheduled_time, v_reminder_day, v_title, v_message, v_obligation.total_due_cents, v_obligation.due_date, 'scheduled');
+            v_count := v_count + 1;
+        END LOOP;
+    END LOOP;
+    RETURN v_count;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function 3: Generate Monthly Obligation
+CREATE FUNCTION generate_monthly_obligation(p_loan_id UUID, p_for_date DATE DEFAULT NULL)
+RETURNS TABLE (
+    obligation_id UUID, obligation_number INTEGER, due_date DATE, total_due_cents INTEGER,
+    principal_cents INTEGER, interest_cents INTEGER, already_exists BOOLEAN, message TEXT
+) AS $$
+DECLARE
+    v_loan RECORD;
+    v_existing RECORD;
+    v_num INTEGER;
+    v_due DATE;
+    v_start DATE;
+    v_end DATE;
+    v_payment INTEGER;
+    v_interest INTEGER;
+    v_principal INTEGER;
+    v_id UUID;
+    v_rate DECIMAL;
+    v_target DATE;
+BEGIN
+    SELECT * INTO v_loan FROM loans WHERE id = p_loan_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Loan not found'; END IF;
+    IF v_loan.status != 'active' THEN
+        RETURN QUERY SELECT NULL::UUID, 0, NULL::DATE, 0, 0, 0, FALSE, format('Loan is %s', v_loan.status);
+        RETURN;
+    END IF;
+
+    v_target := COALESCE(p_for_date,
+        CASE WHEN v_loan.last_obligation_generated_date IS NULL THEN
+            COALESCE(v_loan.first_payment_date, (v_loan.created_at + INTERVAL '1 month')::DATE)
+        ELSE (v_loan.last_obligation_generated_date + INTERVAL '1 month')::DATE END);
+
+    v_due := make_date(EXTRACT(YEAR FROM v_target)::INTEGER, EXTRACT(MONTH FROM v_target)::INTEGER, LEAST(COALESCE(v_loan.payment_day_of_month, 1), 28));
+
+    SELECT * INTO v_existing FROM loan_payment_obligations WHERE loan_id = p_loan_id AND loan_payment_obligations.due_date = v_due;
+    IF FOUND THEN
+        RETURN QUERY SELECT v_existing.id, v_existing.obligation_number, v_existing.due_date, v_existing.total_due_cents,
+            v_existing.principal_due_cents, v_existing.interest_due_cents, TRUE, 'Already exists';
+        RETURN;
+    END IF;
+
+    SELECT COALESCE(MAX(loan_payment_obligations.obligation_number), 0) + 1 INTO v_num FROM loan_payment_obligations WHERE loan_id = p_loan_id;
+
+    v_start := v_due - INTERVAL '1 month';
+    v_end := v_due - INTERVAL '1 day';
+    v_payment := COALESCE(v_loan.estimated_monthly_payment_cents, 0);
+
+    IF v_payment = 0 THEN
+        SELECT monthly_payment_cents INTO v_payment FROM calculate_estimated_monthly_payment(v_loan.principal_cents, COALESCE(v_loan.apr / 100, 0.10), COALESCE(v_loan.term_months, 12));
+    END IF;
+
+    v_rate := get_effective_rate(p_loan_id, v_due);
+    SELECT interest_cents INTO v_interest FROM calculate_daily_interest(v_loan.outstanding_principal_cents, v_rate, 30);
+    v_principal := GREATEST(0, v_payment - v_interest);
+
+    IF v_principal > v_loan.outstanding_principal_cents THEN
+        v_principal := v_loan.outstanding_principal_cents;
+        v_payment := v_principal + v_interest;
+    END IF;
+
+    INSERT INTO loan_payment_obligations (loan_id, user_id, obligation_number, period_start_date, period_end_date, due_date, estimated_payment_cents, principal_due_cents, interest_due_cents, total_due_cents, status)
+    VALUES (p_loan_id, v_loan.user_id, v_num, v_start, v_end, v_due, v_payment, v_principal, v_interest, v_payment,
+        CASE WHEN v_due <= CURRENT_DATE THEN 'due'::obligation_status ELSE 'upcoming'::obligation_status END)
+    RETURNING id INTO v_id;
+
+    UPDATE loans SET last_obligation_generated_date = v_due, next_payment_date = v_due,
+        estimated_monthly_payment_cents = COALESCE(estimated_monthly_payment_cents, v_payment), updated_at = now()
+    WHERE id = p_loan_id;
+
+    PERFORM schedule_payment_reminders(v_id);
+
+    RETURN QUERY SELECT v_id, v_num, v_due, v_payment, v_principal, v_interest, FALSE, 'Created';
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function 4: Generate All Monthly Obligations
+CREATE FUNCTION generate_all_monthly_obligations()
+RETURNS TABLE (loans_processed INTEGER, obligations_created INTEGER, already_existed INTEGER, errors_count INTEGER) AS $$
+DECLARE
+    v_loan RECORD;
+    v_result RECORD;
+    v_proc INTEGER := 0;
+    v_created INTEGER := 0;
+    v_existed INTEGER := 0;
+    v_errors INTEGER := 0;
+BEGIN
+    FOR v_loan IN SELECT id FROM loans WHERE status = 'active' AND (last_obligation_generated_date IS NULL OR last_obligation_generated_date < date_trunc('month', CURRENT_DATE)::DATE)
+    LOOP
+        BEGIN
+            SELECT * INTO v_result FROM generate_monthly_obligation(v_loan.id);
+            IF v_result.already_exists THEN v_existed := v_existed + 1; ELSE v_created := v_created + 1; END IF;
+            v_proc := v_proc + 1;
+        EXCEPTION WHEN OTHERS THEN v_errors := v_errors + 1;
+        END;
+    END LOOP;
+    RETURN QUERY SELECT v_proc, v_created, v_existed, v_errors;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function 5: Send Due Reminders
+CREATE FUNCTION send_due_reminders()
+RETURNS TABLE (reminders_processed INTEGER, reminders_marked INTEGER, errors_count INTEGER) AS $$
+DECLARE
+    v_reminder RECORD;
+    v_proc INTEGER := 0;
+    v_marked INTEGER := 0;
+    v_errors INTEGER := 0;
+BEGIN
+    FOR v_reminder IN
+        SELECT r.*, o.status as ostatus FROM loan_payment_reminders r
+        LEFT JOIN loan_payment_obligations o ON o.id = r.obligation_id
+        WHERE r.status = 'scheduled' AND r.scheduled_for <= now() LIMIT 100
+    LOOP
+        BEGIN
+            IF v_reminder.ostatus = 'paid' THEN
+                UPDATE loan_payment_reminders SET status = 'cancelled', updated_at = now() WHERE id = v_reminder.id;
+            ELSE
+                UPDATE loan_payment_reminders SET status = 'sent', sent_at = now(), updated_at = now() WHERE id = v_reminder.id;
+                v_marked := v_marked + 1;
+            END IF;
+            v_proc := v_proc + 1;
+        EXCEPTION WHEN OTHERS THEN v_errors := v_errors + 1;
+        END;
+    END LOOP;
+    RETURN QUERY SELECT v_proc, v_marked, v_errors;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function 6: Mark Reminder Sent
+CREATE FUNCTION mark_reminder_sent(p_id UUID, p_notif_id TEXT DEFAULT NULL)
+RETURNS BOOLEAN AS $$
+BEGIN
+    UPDATE loan_payment_reminders SET status = 'sent', sent_at = now(), notification_id = p_notif_id, updated_at = now() WHERE id = p_id;
+    RETURN FOUND;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function 7: Update Autopay Config
+CREATE FUNCTION update_autopay_config(p_loan_id UUID, p_enabled BOOLEAN, p_method_id UUID DEFAULT NULL, p_type TEXT DEFAULT 'scheduled', p_fixed INTEGER DEFAULT NULL)
+RETURNS TABLE (config_id UUID, enabled BOOLEAN, autopay_type autopay_type, next_scheduled_at TIMESTAMPTZ, message TEXT) AS $$
+DECLARE
+    v_loan RECORD;
+    v_config RECORD;
+    v_config_id UUID;
+    v_next TIMESTAMPTZ;
+BEGIN
+    SELECT * INTO v_loan FROM loans WHERE id = p_loan_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'Loan not found'; END IF;
+
+    SELECT * INTO v_config FROM loan_autopay_configs WHERE loan_id = p_loan_id;
+
+    SELECT (o.due_date::TIMESTAMPTZ + INTERVAL '9 hours') INTO v_next FROM loan_payment_obligations o
+    WHERE o.loan_id = p_loan_id AND o.status IN ('upcoming', 'due') ORDER BY o.due_date ASC LIMIT 1;
+
+    IF p_enabled THEN
+        IF v_config IS NULL THEN
+            INSERT INTO loan_autopay_configs (loan_id, user_id, autopay_type, payment_method_id, fixed_amount_cents, status, next_scheduled_at)
+            VALUES (p_loan_id, v_loan.user_id, p_type::autopay_type, p_method_id, p_fixed, 'active', v_next)
+            RETURNING id INTO v_config_id;
+        ELSE
+            UPDATE loan_autopay_configs SET autopay_type = p_type::autopay_type, payment_method_id = COALESCE(p_method_id, payment_method_id),
+                fixed_amount_cents = COALESCE(p_fixed, fixed_amount_cents), status = 'active', next_scheduled_at = v_next, updated_at = now()
+            WHERE loan_id = p_loan_id RETURNING id INTO v_config_id;
+        END IF;
+        UPDATE loans SET autopay_enabled = TRUE, autopay_config_id = v_config_id, autopay_next_scheduled_at = v_next, updated_at = now() WHERE id = p_loan_id;
+        RETURN QUERY SELECT v_config_id, TRUE, p_type::autopay_type, v_next, 'Enabled';
+    ELSE
+        IF v_config IS NOT NULL THEN
+            UPDATE loan_autopay_configs SET status = 'disabled', next_scheduled_at = NULL, updated_at = now() WHERE loan_id = p_loan_id;
+        END IF;
+        UPDATE loans SET autopay_enabled = FALSE, autopay_next_scheduled_at = NULL, updated_at = now() WHERE id = p_loan_id;
+        RETURN QUERY SELECT v_config.id, FALSE, v_config.autopay_type, NULL::TIMESTAMPTZ, 'Disabled';
+    END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function 8: Process Autopay Payment
+CREATE FUNCTION process_autopay_payment(p_config_id UUID)
+RETURNS TABLE (success BOOLEAN, payment_id UUID, amount_cents INTEGER, obligation_id UUID, error_message TEXT) AS $$
+DECLARE
+    v_config RECORD;
+    v_loan RECORD;
+    v_obl RECORD;
+    v_amount INTEGER;
+    v_pay RECORD;
+BEGIN
+    SELECT * INTO v_config FROM loan_autopay_configs WHERE id = p_config_id;
+    IF NOT FOUND THEN RETURN QUERY SELECT FALSE, NULL::UUID, 0, NULL::UUID, 'Config not found'; RETURN; END IF;
+    IF v_config.status != 'active' THEN RETURN QUERY SELECT FALSE, NULL::UUID, 0, NULL::UUID, 'Not active'; RETURN; END IF;
+
+    SELECT * INTO v_loan FROM loans WHERE id = v_config.loan_id;
+    IF v_loan.status != 'active' THEN RETURN QUERY SELECT FALSE, NULL::UUID, 0, NULL::UUID, 'Loan not active'; RETURN; END IF;
+
+    SELECT * INTO v_obl FROM loan_payment_obligations WHERE loan_id = v_config.loan_id AND status IN ('due', 'upcoming', 'overdue') AND due_date <= CURRENT_DATE + 1 ORDER BY due_date ASC LIMIT 1;
+    IF NOT FOUND THEN RETURN QUERY SELECT FALSE, NULL::UUID, 0, NULL::UUID, 'No payment due'; RETURN; END IF;
+
+    v_amount := CASE v_config.autopay_type WHEN 'minimum' THEN v_obl.total_due_cents WHEN 'scheduled' THEN v_obl.estimated_payment_cents
+        WHEN 'fixed' THEN v_config.fixed_amount_cents WHEN 'full_balance' THEN v_loan.total_outstanding_cents ELSE v_obl.total_due_cents END;
+
+    SELECT * INTO v_pay FROM apply_payment_to_loan(v_config.loan_id, v_amount, 'autopay', v_config.payment_method_id::TEXT, NULL);
+
+    UPDATE loan_payment_obligations SET status = CASE WHEN v_pay.remaining_principal_cents <= 0 THEN 'paid'::obligation_status ELSE 'partial'::obligation_status END,
+        principal_paid_cents = v_pay.principal_paid_cents, interest_paid_cents = v_pay.interest_paid_cents, fees_paid_cents = v_pay.fees_paid_cents,
+        total_paid_cents = v_amount, payment_id = v_pay.payment_id, paid_at = now(), paid_via = 'autopay', updated_at = now() WHERE id = v_obl.id;
+
+    UPDATE loan_autopay_configs SET last_executed_at = now(), last_execution_status = 'success', total_payments_made = total_payments_made + 1,
+        total_amount_paid_cents = total_amount_paid_cents + v_amount, consecutive_failures = 0, current_retry_count = 0, updated_at = now() WHERE id = p_config_id;
+
+    UPDATE loan_autopay_configs SET next_scheduled_at = (SELECT (due_date::TIMESTAMPTZ + INTERVAL '9 hours') FROM loan_payment_obligations
+        WHERE loan_id = v_config.loan_id AND status = 'upcoming' ORDER BY due_date ASC LIMIT 1) WHERE id = p_config_id;
+
+    IF v_obl.due_date >= CURRENT_DATE THEN
+        UPDATE loan_payment_obligations SET xnscore_event_triggered = TRUE, xnscore_adjustment = 3 WHERE id = v_obl.id;
+    END IF;
+
+    RETURN QUERY SELECT TRUE, v_pay.payment_id, v_amount, v_obl.id, NULL::TEXT;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function 9: Process All Autopay
+CREATE FUNCTION process_all_autopay()
+RETURNS TABLE (configs_processed INTEGER, payments_successful INTEGER, payments_failed INTEGER, total_amount_cents BIGINT) AS $$
+DECLARE
+    v_config RECORD;
+    v_result RECORD;
+    v_proc INTEGER := 0;
+    v_ok INTEGER := 0;
+    v_fail INTEGER := 0;
+    v_total BIGINT := 0;
+BEGIN
+    FOR v_config IN SELECT ac.* FROM loan_autopay_configs ac JOIN loans l ON l.id = ac.loan_id
+        WHERE ac.status = 'active' AND l.status = 'active' AND ac.next_scheduled_at <= now() LIMIT 50
+    LOOP
+        BEGIN
+            SELECT * INTO v_result FROM process_autopay_payment(v_config.id);
+            IF v_result.success THEN v_ok := v_ok + 1; v_total := v_total + v_result.amount_cents;
+            ELSE
+                v_fail := v_fail + 1;
+                UPDATE loan_autopay_configs SET consecutive_failures = consecutive_failures + 1, current_retry_count = current_retry_count + 1,
+                    last_execution_status = 'failed', last_execution_error = v_result.error_message,
+                    status = CASE WHEN consecutive_failures + 1 >= max_retries THEN 'failed'::autopay_status ELSE status END, updated_at = now()
+                WHERE id = v_config.id;
+            END IF;
+            v_proc := v_proc + 1;
+        EXCEPTION WHEN OTHERS THEN v_fail := v_fail + 1;
+        END;
+    END LOOP;
+    RETURN QUERY SELECT v_proc, v_ok, v_fail, v_total;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function 10: Retry Failed Autopay
+CREATE FUNCTION retry_failed_autopay(p_config_id UUID)
+RETURNS TABLE (success BOOLEAN, payment_id UUID, amount_cents INTEGER, message TEXT) AS $$
+DECLARE
+    v_config RECORD;
+    v_result RECORD;
+BEGIN
+    SELECT * INTO v_config FROM loan_autopay_configs WHERE id = p_config_id;
+    IF NOT FOUND THEN RETURN QUERY SELECT FALSE, NULL::UUID, 0, 'Not found'; RETURN; END IF;
+    IF v_config.current_retry_count >= v_config.max_retries THEN RETURN QUERY SELECT FALSE, NULL::UUID, 0, 'Max retries'; RETURN; END IF;
+
+    UPDATE loan_autopay_configs SET status = 'active', updated_at = now() WHERE id = p_config_id;
+    SELECT * INTO v_result FROM process_autopay_payment(p_config_id);
+
+    IF v_result.success THEN RETURN QUERY SELECT TRUE, v_result.payment_id, v_result.amount_cents, 'Success';
+    ELSE RETURN QUERY SELECT FALSE, NULL::UUID, 0, v_result.error_message; END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function 11: Get Next Payment Obligation
+CREATE FUNCTION get_next_payment_obligation(p_loan_id UUID)
+RETURNS TABLE (
+    obligation_id UUID, obligation_number INTEGER, due_date DATE, days_until_due INTEGER,
+    total_due_cents INTEGER, principal_due_cents INTEGER, interest_due_cents INTEGER,
+    fees_due_cents INTEGER, status obligation_status, is_overdue BOOLEAN, late_fee_cents INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY SELECT o.id, o.obligation_number, o.due_date, (o.due_date - CURRENT_DATE)::INTEGER,
+        o.total_due_cents, o.principal_due_cents, o.interest_due_cents, o.fees_due_cents,
+        o.status, o.due_date < CURRENT_DATE, COALESCE(o.late_fee_cents, 0)
+    FROM loan_payment_obligations o WHERE o.loan_id = p_loan_id AND o.status IN ('upcoming', 'due', 'overdue', 'partial')
+    ORDER BY o.due_date ASC LIMIT 1;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Function 12: Get Payment Obligations
+CREATE FUNCTION get_payment_obligations(p_loan_id UUID, p_status obligation_status[] DEFAULT NULL, p_limit INTEGER DEFAULT 12)
+RETURNS TABLE (
+    obligation_id UUID, obligation_number INTEGER, period_start DATE, period_end DATE, due_date DATE,
+    total_due_cents INTEGER, total_paid_cents INTEGER, remaining_cents INTEGER, status obligation_status,
+    is_overdue BOOLEAN, days_overdue INTEGER, late_fee_cents INTEGER, paid_at TIMESTAMPTZ, paid_via TEXT
+) AS $$
+BEGIN
+    RETURN QUERY SELECT o.id, o.obligation_number, o.period_start_date, o.period_end_date, o.due_date,
+        o.total_due_cents, o.total_paid_cents, (o.total_due_cents - o.total_paid_cents),
+        o.status, o.due_date < CURRENT_DATE AND o.status NOT IN ('paid', 'waived'),
+        CASE WHEN o.due_date < CURRENT_DATE THEN (CURRENT_DATE - o.due_date)::INTEGER ELSE 0 END,
+        COALESCE(o.late_fee_cents, 0), o.paid_at, o.paid_via
+    FROM loan_payment_obligations o WHERE o.loan_id = p_loan_id AND (p_status IS NULL OR o.status = ANY(p_status))
+    ORDER BY o.due_date DESC LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Function 13: Update Overdue Obligations
+CREATE FUNCTION update_overdue_obligations()
+RETURNS TABLE (obligations_updated INTEGER, xnscore_events INTEGER, late_fees_applied INTEGER) AS $$
+DECLARE
+    v_obl RECORD;
+    v_upd INTEGER := 0;
+    v_xn INTEGER := 0;
+    v_fees INTEGER := 0;
+    v_days INTEGER;
+    v_fee RECORD;
+BEGIN
+    FOR v_obl IN SELECT o.*, l.loan_product_id FROM loan_payment_obligations o JOIN loans l ON l.id = o.loan_id
+        WHERE o.status IN ('upcoming', 'due', 'partial') AND o.due_date < CURRENT_DATE AND l.status = 'active'
+    LOOP
+        BEGIN
+            v_days := CURRENT_DATE - v_obl.due_date;
+            UPDATE loan_payment_obligations SET status = 'overdue', days_overdue = v_days, updated_at = now() WHERE id = v_obl.id;
+            v_upd := v_upd + 1;
+
+            IF v_days > 5 AND NOT v_obl.late_fee_applied THEN
+                SELECT * INTO v_fee FROM apply_late_fee_to_loan(v_obl.loan_id, v_obl.id, v_days);
+                IF v_fee.applied THEN
+                    UPDATE loan_payment_obligations SET late_fee_applied = TRUE, late_fee_id = v_fee.fee_id, late_fee_cents = v_fee.fee_cents,
+                        fees_due_cents = fees_due_cents + v_fee.fee_cents, total_due_cents = total_due_cents + v_fee.fee_cents, updated_at = now()
+                    WHERE id = v_obl.id;
+                    v_fees := v_fees + 1;
+                END IF;
+            END IF;
+
+            IF NOT v_obl.xnscore_event_triggered AND v_days >= 1 THEN
+                UPDATE loan_payment_obligations SET xnscore_event_triggered = TRUE, xnscore_adjustment = -5 WHERE id = v_obl.id;
+                v_xn := v_xn + 1;
+            END IF;
+
+            IF v_days IN (1, 3, 7, 14, 30) THEN
+                INSERT INTO loan_payment_reminders (loan_id, user_id, obligation_id, reminder_type, channel, scheduled_for, days_before_due, title, message, amount_due_cents, due_date, status)
+                VALUES (v_obl.loan_id, v_obl.user_id, v_obl.id,
+                    CASE WHEN v_days >= 14 THEN 'final_warning'::reminder_type ELSE 'overdue'::reminder_type END,
+                    'push', now(), -v_days, format('Payment %s Days Overdue', v_days),
+                    format('Your payment of $%s is %s days overdue.', (v_obl.total_due_cents / 100.0)::NUMERIC(10,2), v_days),
+                    v_obl.total_due_cents, v_obl.due_date, 'scheduled');
+            END IF;
+        EXCEPTION WHEN OTHERS THEN NULL;
+        END;
+    END LOOP;
+    RETURN QUERY SELECT v_upd, v_xn, v_fees;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ╔═══════════════════════════════════════════════════════════════════════════╗
+-- ║ PHASE 7: CREATE VIEWS                                                     ║
+-- ╚═══════════════════════════════════════════════════════════════════════════╝
+
+CREATE VIEW v_monthly_payment_dashboard AS
+SELECT o.id as obligation_id, o.loan_id, o.user_id, p.full_name, o.obligation_number, o.due_date,
+    (o.due_date - CURRENT_DATE) as days_until_due, o.total_due_cents / 100.0 as total_due,
+    o.total_paid_cents / 100.0 as total_paid, (o.total_due_cents - o.total_paid_cents) / 100.0 as remaining,
+    o.status, o.late_fee_cents / 100.0 as late_fee, l.autopay_enabled, ac.autopay_type, ac.status as autopay_status
+FROM loan_payment_obligations o
+JOIN loans l ON l.id = o.loan_id
+JOIN profiles p ON p.id = o.user_id
+LEFT JOIN loan_autopay_configs ac ON ac.loan_id = o.loan_id
+WHERE o.status IN ('upcoming', 'due', 'overdue', 'partial')
+ORDER BY o.due_date ASC;
+
+CREATE VIEW v_autopay_queue AS
+SELECT ac.id as config_id, ac.loan_id, l.user_id, p.full_name, ac.autopay_type, ac.status, ac.next_scheduled_at,
+    ac.consecutive_failures, o.id as next_obligation_id, o.due_date as next_due_date,
+    o.total_due_cents / 100.0 as next_amount_due, l.total_outstanding_cents / 100.0 as total_outstanding
+FROM loan_autopay_configs ac
+JOIN loans l ON l.id = ac.loan_id
+JOIN profiles p ON p.id = l.user_id
+LEFT JOIN LATERAL (SELECT * FROM loan_payment_obligations WHERE loan_id = ac.loan_id AND status IN ('upcoming', 'due') ORDER BY due_date ASC LIMIT 1) o ON TRUE
+WHERE ac.status = 'active' AND l.status = 'active'
+ORDER BY ac.next_scheduled_at ASC;
+
+CREATE VIEW v_payment_reminders_due AS
+SELECT r.id as reminder_id, r.loan_id, r.user_id, p.full_name, p.email, r.reminder_type, r.channel,
+    r.scheduled_for, r.title, r.message, r.amount_due_cents / 100.0 as amount_due, r.due_date, r.status
+FROM loan_payment_reminders r JOIN profiles p ON p.id = r.user_id
+WHERE r.status = 'scheduled' AND r.scheduled_for <= now()
+ORDER BY r.scheduled_for ASC;
+
+CREATE VIEW v_obligation_summary AS
+SELECT l.id as loan_id, l.user_id, l.estimated_monthly_payment_cents / 100.0 as monthly_payment,
+    l.payment_day_of_month, l.autopay_enabled,
+    COUNT(o.id) as total_obligations, COUNT(o.id) FILTER (WHERE o.status = 'paid') as paid_count,
+    COUNT(o.id) FILTER (WHERE o.status IN ('overdue', 'partial')) as overdue_count,
+    COALESCE(SUM(o.total_due_cents), 0) / 100.0 as total_due, COALESCE(SUM(o.total_paid_cents), 0) / 100.0 as total_paid,
+    COALESCE(SUM(o.late_fee_cents), 0) / 100.0 as total_late_fees
+FROM loans l LEFT JOIN loan_payment_obligations o ON o.loan_id = l.id
+WHERE l.status = 'active' GROUP BY l.id;
+
+-- ╔═══════════════════════════════════════════════════════════════════════════╗
+-- ║ PHASE 8: CREATE TRIGGERS                                                  ║
+-- ╚═══════════════════════════════════════════════════════════════════════════╝
+
+CREATE FUNCTION update_obligation_timestamp() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER tr_obligations_updated BEFORE UPDATE ON loan_payment_obligations FOR EACH ROW EXECUTE FUNCTION update_obligation_timestamp();
+
+CREATE FUNCTION update_autopay_timestamp() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER tr_autopay_updated BEFORE UPDATE ON loan_autopay_configs FOR EACH ROW EXECUTE FUNCTION update_autopay_timestamp();
+
+CREATE FUNCTION update_reminder_timestamp() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER tr_reminders_updated BEFORE UPDATE ON loan_payment_reminders FOR EACH ROW EXECUTE FUNCTION update_reminder_timestamp();
+
+-- ╔═══════════════════════════════════════════════════════════════════════════╗
+-- ║ PHASE 9: ROW LEVEL SECURITY                                               ║
+-- ╚═══════════════════════════════════════════════════════════════════════════╝
+
+ALTER TABLE loan_payment_obligations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE loan_autopay_configs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE loan_payment_reminders ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "obligations_own_select" ON loan_payment_obligations FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "obligations_own_update" ON loan_payment_obligations FOR UPDATE USING (user_id = auth.uid());
+CREATE POLICY "autopay_own_select" ON loan_autopay_configs FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "autopay_own_insert" ON loan_autopay_configs FOR INSERT WITH CHECK (user_id = auth.uid());
+CREATE POLICY "autopay_own_update" ON loan_autopay_configs FOR UPDATE USING (user_id = auth.uid());
+CREATE POLICY "reminders_own_select" ON loan_payment_reminders FOR SELECT USING (user_id = auth.uid());
+
+-- ╔═══════════════════════════════════════════════════════════════════════════╗
+-- ║ PHASE 10: GRANT PERMISSIONS                                               ║
+-- ╚═══════════════════════════════════════════════════════════════════════════╝
+
+GRANT EXECUTE ON FUNCTION calculate_estimated_monthly_payment(INTEGER, DECIMAL, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION generate_monthly_obligation(UUID, DATE) TO authenticated;
+GRANT EXECUTE ON FUNCTION schedule_payment_reminders(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION mark_reminder_sent(UUID, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION update_autopay_config(UUID, BOOLEAN, UUID, TEXT, INTEGER) TO authenticated;
+GRANT EXECUTE ON FUNCTION process_autopay_payment(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION retry_failed_autopay(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_next_payment_obligation(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION get_payment_obligations(UUID, obligation_status[], INTEGER) TO authenticated;
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- END OF MIGRATION 024 COMPLETE
+-- ══════════════════════════════════════════════════════════════════════════════
