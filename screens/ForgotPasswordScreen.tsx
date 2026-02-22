@@ -47,8 +47,11 @@ export default function ForgotPasswordScreen() {
     setIsLoading(true);
 
     try {
+      const redirectTo = Platform.OS === "web"
+        ? "https://v0-tanda-xn.vercel.app/reset-password"
+        : "tandaxn://reset-password";
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: "tandaxn://reset-password",
+        redirectTo,
       });
 
       if (resetError) throw resetError;

@@ -6,11 +6,20 @@ import React, {
   ReactNode,
   useCallback,
 } from "react";
+import { Platform } from "react-native";
 import { supabase } from "../lib/supabase";
 import { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as Linking from "expo-linking";
+
+// Platform-aware redirect URLs for Supabase Auth emails
+const getEmailRedirectUrl = (path: string) => {
+  if (Platform.OS === "web") {
+    return `https://v0-tanda-xn.vercel.app/${path}`;
+  }
+  return `tandaxn://${path}`;
+};
 
 type User = {
   id: string;
@@ -362,8 +371,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             full_name: name,
             xn_score: 75, // Starting XnScore (75 unlocks all features for testing)
           },
-          // Redirect to mobile app after email verification
-          emailRedirectTo: "tandaxn://verify-email",
+          // Redirect to app after email verification (platform-aware)
+          emailRedirectTo: getEmailRedirectUrl("verify-email"),
         },
       });
 
