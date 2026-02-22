@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Linking,
   Alert,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -61,9 +62,15 @@ export default function EmailVerificationScreen() {
     setResendSuccess(false);
 
     try {
+      const emailRedirectTo = Platform.OS === "web"
+        ? "https://v0-tanda-xn.vercel.app/verify-email"
+        : "tandaxn://verify-email";
       const { error } = await supabase.auth.resend({
         type: "signup",
         email: email,
+        options: {
+          emailRedirectTo,
+        },
       });
 
       if (error) {
