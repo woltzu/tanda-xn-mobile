@@ -239,10 +239,8 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
       if (goalsData) {
         setGoals(JSON.parse(goalsData));
       } else {
-        // Initialize with sample goals
-        const sampleGoals = createSampleGoals();
-        setGoals(sampleGoals);
-        await AsyncStorage.setItem(STORAGE_KEY_GOALS, JSON.stringify(sampleGoals));
+        // New users start with no goals - empty state encourages them to create their own
+        setGoals([]);
       }
 
       if (transactionsData) {

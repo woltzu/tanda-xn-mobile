@@ -81,18 +81,13 @@ type WalletContextType = {
   refreshWallet: () => Promise<void>;
 };
 
+// New users start with $0 across all default wallets
 const DEFAULT_CURRENCIES: WalletCurrency[] = [
-  { code: "USD", name: "US Dollar", flag: "🇺🇸", symbol: "$", balance: 2450.0, change: 0, isActive: true },
-  { code: "EUR", name: "Euro", flag: "🇪🇺", symbol: "€", balance: 850.0, usdValue: 923.5, rate: 1.0865, change: 0.23, isActive: true },
-  { code: "GBP", name: "British Pound", flag: "🇬🇧", symbol: "£", balance: 320.0, usdValue: 405.76, rate: 1.268, change: -0.15, isActive: true },
-  { code: "XOF", name: "CFA Franc", flag: "🇸🇳", symbol: "CFA", balance: 485000, usdValue: 785.0, rate: 0.00162, change: 0.45, isActive: true },
+  { code: "USD", name: "US Dollar", flag: "🇺🇸", symbol: "$", balance: 0, change: 0, isActive: true },
 ];
 
-const DEFAULT_TRANSACTIONS: Transaction[] = [
-  { id: "1", type: "received", description: "From Amadou Diallo", flag: "🇫🇷", amount: 500, currency: "EUR", date: "Dec 20" },
-  { id: "2", type: "converted", description: "USD → XOF", amount: 122000, currency: "XOF", date: "Dec 19" },
-  { id: "3", type: "sent", description: "To Mama Diallo", flag: "🇸🇳", amount: -150000, currency: "XOF", date: "Dec 18" },
-];
+// No default transactions for new users
+const DEFAULT_TRANSACTIONS: Transaction[] = [];
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 

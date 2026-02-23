@@ -369,7 +369,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           data: {
             name,
             full_name: name,
-            xn_score: 75, // Starting XnScore (75 unlocks all features for testing)
+            xn_score: 25, // Starting XnScore — grows through activity
           },
           // Redirect to app after email verification (platform-aware)
           emailRedirectTo: getEmailRedirectUrl("verify-email"),

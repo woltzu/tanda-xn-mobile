@@ -150,8 +150,8 @@ const POINT_VALUES = {
   account_verified: 1.0,       // KYC verified
   profile_completed: 1.0,      // Profile complete
 
-  // Starting score for new user with deposit + KYC + profile
-  initial_score: 75,           // Testing score: 75 unlocks all features
+  // Starting score for new users — builds up as they engage
+  initial_score: 25,           // New users start at 25, grow through activity
 };
 
 // XnScore™ V3.0 Tips based on 6-factor algorithm
