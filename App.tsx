@@ -19,6 +19,7 @@ import LoginScreen from "./screens/LoginScreen";
 import SignupScreen from "./screens/SignupScreen";
 import OTPScreen from "./screens/OTPScreen";
 import EmailVerificationScreen from "./screens/EmailVerificationScreen";
+import AuthCallbackScreen from "./screens/AuthCallbackScreen";
 import DashboardScreen from "./screens/DashboardScreen";
 import WalletScreen from "./screens/WalletScreen";
 import CirclesScreen from "./screens/CirclesScreen";
@@ -121,6 +122,7 @@ export type RootStackParamList = {
   ResetPassword: undefined;
   OTP: { phone: string };
   EmailVerification: { email: string };
+  AuthCallback: undefined;
   MainTabs: undefined;
   PersonalInfo: undefined;
   LanguageRegion: undefined;
@@ -465,6 +467,7 @@ function AppContent() {
           <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
           <Stack.Screen name="OTP" component={OTPScreen} />
           <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
+          <Stack.Screen name="AuthCallback" component={AuthCallbackScreen} options={{ headerShown: false }} />
           {/* Main App with Tab Bar */}
           <Stack.Screen name="MainTabs" component={MainTabs} />
           {/* Modal screens that should appear over tabs without tab bar */}

@@ -31,6 +31,7 @@ export const linkingConfig = {
       ForgotPassword: "forgot-password",
       ResetPassword: "reset-password",
       EmailVerification: "verify-email",
+      AuthCallback: "auth/confirm",
 
       // Invite screens
       CircleInvite: "invite/circle/:circleId",
