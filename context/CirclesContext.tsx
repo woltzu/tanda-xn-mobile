@@ -656,12 +656,16 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
 
     setMyCircleIds((prev) => new Set([...prev, circleId]));
 
-    // Auto-post: Joined a circle
-    if (user?.id) {
-      const joinedCircle = circles.find(c => c.id === circleId);
-      createAutoPost(user.id, "circle_joined", circleId, "circle", {
-        circleName: joinedCircle?.name || "a savings circle",
-      });
+    // Auto-post: Joined a circle (fire-and-forget, never blocks join)
+    try {
+      if (user?.id) {
+        const joinedCircle = circles.find(c => c.id === circleId);
+        createAutoPost(user.id, "circle_joined", circleId, "circle", {
+          circleName: joinedCircle?.name || "a savings circle",
+        });
+      }
+    } catch (autoPostErr) {
+      console.warn("[AutoPost] Failed to auto-post circle join:", autoPostErr);
     }
   };
 
@@ -927,13 +931,17 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
       throw new Error("Failed to make contribution");
     }
 
-    // Auto-post: Made a contribution
-    if (user?.id) {
-      const circle = circles.find(c => c.id === circleId);
-      createAutoPost(user.id, "contribution", circleId, "circle", {
-        circleName: circle?.name || "a savings circle",
-        amount,
-      });
+    // Auto-post: Made a contribution (fire-and-forget)
+    try {
+      if (user?.id) {
+        const circle = circles.find(c => c.id === circleId);
+        createAutoPost(user.id, "contribution", circleId, "circle", {
+          circleName: circle?.name || "a savings circle",
+          amount,
+        });
+      }
+    } catch (autoPostErr) {
+      console.warn("[AutoPost] Failed to auto-post contribution:", autoPostErr);
     }
 
     // Refresh circles to update data

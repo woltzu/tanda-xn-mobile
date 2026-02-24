@@ -24,6 +24,7 @@ import {
   LOCKED_TERM_OPTIONS,
   GoalType,
 } from "../context/SavingsContext";
+import { showToast } from "../components/Toast";
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 type CreateGoalRouteProp = RouteProp<RootStackParamList, "CreateGoal">;
@@ -141,7 +142,9 @@ export default function CreateGoalScreen() {
         ]
       );
     } catch (error) {
+      console.error("[CreateGoal] Error:", error);
       Alert.alert("Error", "Failed to create goal. Please try again.");
+      showToast("Failed to create goal", "error");
     } finally {
       setIsProcessing(false);
     }

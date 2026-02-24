@@ -23,6 +23,7 @@ import { useAuth } from "../context/AuthContext";
 import VisibilityPicker from "../components/VisibilityPicker";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
+import { showToast } from "../components/Toast";
 
 // ============================================
 // Types
@@ -124,21 +125,26 @@ export default function CreateDreamPostScreen() {
   // Image Picker
   // ============================================
 
-  const pickImage = async () => {
+  const pickMedia = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"],
+        mediaTypes: ["images", "videos"],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 0.8,
+        videoMaxDuration: 60,
       });
 
       if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri);
+        const asset = result.assets[0];
+        setImageUri(asset.uri);
+        if (asset.type === "video") {
+          showToast("Video selected (up to 60s)", "info");
+        }
       }
     } catch (err) {
-      console.error("Image picker error:", err);
-      Alert.alert("Error", "Could not open image picker");
+      console.error("Media picker error:", err);
+      Alert.alert("Error", "Could not open media picker");
     }
   };
 
@@ -247,6 +253,7 @@ export default function CreateDreamPostScreen() {
       }
 
       await createDreamPost(content, imageUrl, amount, visibility, metadata, relatedId, relatedType);
+      showToast("Dream posted successfully! \u{2728}", "success");
       navigation.goBack();
     } catch (err) {
       Alert.alert("Error", "Failed to create post. Please try again.");
@@ -621,7 +628,7 @@ export default function CreateDreamPostScreen() {
             )}
 
             {/* Photo Picker */}
-            <TouchableOpacity style={styles.photoButton} onPress={pickImage} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.photoButton} onPress={pickMedia} activeOpacity={0.7}>
               {imageUri ? (
                 <View style={styles.photoPreview}>
                   <Image source={{ uri: imageUri }} style={styles.photoImage} />
@@ -634,8 +641,8 @@ export default function CreateDreamPostScreen() {
                 </View>
               ) : (
                 <View style={styles.photoPlaceholder}>
-                  <Ionicons name="camera-outline" size={24} color={colors.accentTeal} />
-                  <Text style={styles.photoText}>Add a Photo</Text>
+                  <Ionicons name="videocam-outline" size={24} color={colors.accentTeal} />
+                  <Text style={styles.photoText}>Add Photo or Video</Text>
                 </View>
               )}
             </TouchableOpacity>

@@ -1,11 +1,12 @@
 import "react-native-gesture-handler";
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer, CommonActions } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { View, TouchableWithoutFeedback } from "react-native";
+import Toast, { ToastType, registerToastHandler } from "./components/Toast";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { PreferencesProvider } from "./context/PreferencesContext";
 import { useInactivityLock } from "./hooks/useInactivityLock";
@@ -577,6 +578,24 @@ function MainTabs() {
 }
 
 export default function App() {
+  const [toast, setToast] = useState<{
+    visible: boolean;
+    message: string;
+    type: ToastType;
+    duration?: number;
+  }>({ visible: false, message: "", type: "success" });
+
+  // Register global toast handler on mount
+  React.useEffect(() => {
+    registerToastHandler(({ message, type, duration }) => {
+      setToast({ visible: true, message, type, duration });
+    });
+  }, []);
+
+  const dismissToast = useCallback(() => {
+    setToast((prev) => ({ ...prev, visible: false }));
+  }, []);
+
   return (
     <PreferencesProvider>
       <AuthProvider>
@@ -595,6 +614,13 @@ export default function App() {
                                 <NavigationContainer linking={linkingConfig}>
                                   <AppContent />
                                 </NavigationContainer>
+                                <Toast
+                                  visible={toast.visible}
+                                  message={toast.message}
+                                  type={toast.type}
+                                  duration={toast.duration}
+                                  onDismiss={dismissToast}
+                                />
                               </FeedProvider>
                             </OnboardingProvider>
                           </NotificationProvider>

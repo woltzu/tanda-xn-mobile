@@ -18,6 +18,7 @@ import { useFeed, FeedPost, FeedComment } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
 import FeedPostCard from "../components/FeedPostCard";
 import FeedCommentItem from "../components/FeedCommentItem";
+import { showToast } from "../components/Toast";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 
 type PostDetailRouteParams = {
@@ -67,10 +68,12 @@ export default function PostDetailScreen() {
       const newComment = await addComment(postId, commentText.trim());
       setComments((prev) => [...prev, newComment]);
       setCommentText("");
+      showToast("Comment added!", "success");
       // Reload post to get updated comment count
       const updatedPost = await getPostById(postId);
       if (updatedPost) setPost(updatedPost);
     } catch (err) {
+      showToast("Failed to add comment", "error");
       Alert.alert("Error", "Failed to add comment.");
     } finally {
       setIsSubmitting(false);
@@ -88,8 +91,10 @@ export default function PostDetailScreen() {
         onPress: async () => {
           try {
             await deletePost(postId);
+            showToast("Post deleted", "info");
             navigation.goBack();
           } catch (err) {
+            showToast("Failed to delete post", "error");
             Alert.alert("Error", "Failed to delete post.");
           }
         },

@@ -17,6 +17,7 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useFeed, FeedComment } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
 import FeedCommentItem from "../components/FeedCommentItem";
+import { showToast } from "../components/Toast";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 
 type CommentsRouteParams = {
@@ -54,7 +55,9 @@ export default function DreamPostCommentsScreen() {
       const newComment = await addComment(postId, commentText.trim());
       setComments((prev) => [...prev, newComment]);
       setCommentText("");
+      showToast("Comment posted!", "success");
     } catch (err) {
+      showToast("Failed to post comment", "error");
       Alert.alert("Error", "Failed to post comment.");
     } finally {
       setIsSubmitting(false);
