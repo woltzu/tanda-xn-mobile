@@ -28,6 +28,7 @@ import { useOnboarding } from "../context/OnboardingContext";
 import { OnboardingTooltipManager } from "../components/OnboardingTooltip";
 import { CommunitySuggestionBubble } from "../components/CommunitySuggestions";
 import { ProfileCompletionCard, OnboardingProgressSteps } from "../components/ProfileCompletionCard";
+import DreamFeedWidget from "../components/DreamFeedWidget";
 
 type DashboardScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<TabParamList, "Home">,
@@ -289,6 +290,21 @@ export default function DashboardScreen() {
               <Ionicons name="flag-outline" size={18} color={colors.textSecondary} />
               <Text style={styles.neutralActionText}>Save</Text>
             </TouchableOpacity>
+          </View>
+
+          {/* SECTION 3.5 — DREAM FEED WIDGET */}
+          <View style={{ marginTop: 12 }}>
+            <DreamFeedWidget
+              onViewAll={() => {
+                (navigation as any).navigate("Dreams");
+              }}
+              onPostPress={(postId) => {
+                (navigation as any).navigate("Dreams", {
+                  screen: "PostDetail",
+                  params: { postId },
+                });
+              }}
+            />
           </View>
 
           {/* SECTION 4 — COMING UP (LIGHT TINT CARDS) */}

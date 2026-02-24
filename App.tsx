@@ -112,6 +112,14 @@ import CircleInviteScreen from "./screens/CircleInviteScreen";
 import ForgotPasswordScreen from "./screens/ForgotPasswordScreen";
 import ResetPasswordScreen from "./screens/ResetPasswordScreen";
 import { linkingConfig } from "./lib/deepLinking";
+// Dream Feed imports
+import { FeedProvider } from "./context/FeedContext";
+import DreamFeedScreen from "./screens/DreamFeedScreen";
+import CreateDreamPostScreen from "./screens/CreateDreamPostScreen";
+import PostDetailScreen from "./screens/PostDetailScreen";
+import DreamPostCommentsScreen from "./screens/DreamPostCommentsScreen";
+import UserDreamProfileScreen from "./screens/UserDreamProfileScreen";
+import FeedSettingsScreen from "./screens/FeedSettingsScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -276,10 +284,18 @@ export type RootStackParamList = {
   // Invite Screens (Deep Linking)
   CircleInvite: { circleId: string; name?: string; emoji?: string; inviter?: string; inviterName?: string; contribution?: number; frequency?: string; members?: number };
   CommunityInvite: { communityId: string; name?: string; icon?: string; inviter?: string; inviterName?: string; members?: number };
+  // Dream Feed Flow
+  DreamFeed: undefined;
+  CreateDreamPost: undefined;
+  PostDetail: { postId: string };
+  PostComments: { postId: string };
+  UserDreamProfile: { userId: string };
+  FeedSettings: undefined;
 };
 
 export type TabParamList = {
   Home: undefined;
+  Dreams: undefined;
   Wallet: undefined;
   Circles: undefined;
   Profile: undefined;
@@ -288,6 +304,7 @@ export type TabParamList = {
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 const HomeStack = createStackNavigator();
+const DreamsStack = createStackNavigator();
 const WalletStack = createStackNavigator();
 const CirclesStack = createStackNavigator();
 const ProfileStack = createStackNavigator();
@@ -343,6 +360,20 @@ function HomeStackScreen() {
       <HomeStack.Screen name="CreateCircleInvite" component={CreateCircleInviteScreen} />
       <HomeStack.Screen name="CreateCircleSuccess" component={CreateCircleSuccessScreen} />
     </HomeStack.Navigator>
+  );
+}
+
+// Dreams Tab Stack
+function DreamsStackScreen() {
+  return (
+    <DreamsStack.Navigator screenOptions={{ headerShown: false }}>
+      <DreamsStack.Screen name="DreamFeed" component={DreamFeedScreen} />
+      <DreamsStack.Screen name="CreateDreamPost" component={CreateDreamPostScreen} />
+      <DreamsStack.Screen name="PostDetail" component={PostDetailScreen} />
+      <DreamsStack.Screen name="PostComments" component={DreamPostCommentsScreen} />
+      <DreamsStack.Screen name="UserDreamProfile" component={UserDreamProfileScreen} />
+      <DreamsStack.Screen name="FeedSettings" component={FeedSettingsScreen} />
+    </DreamsStack.Navigator>
   );
 }
 
@@ -505,6 +536,8 @@ function MainTabs() {
 
           if (route.name === "Home") {
             iconName = focused ? "home" : "home-outline";
+          } else if (route.name === "Dreams") {
+            iconName = focused ? "sparkles" : "sparkles-outline";
           } else if (route.name === "Wallet") {
             iconName = focused ? "wallet" : "wallet-outline";
           } else if (route.name === "Circles") {
@@ -535,6 +568,7 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Home" component={HomeStackScreen} />
+      <Tab.Screen name="Dreams" component={DreamsStackScreen} />
       <Tab.Screen name="Wallet" component={WalletStackScreen} />
       <Tab.Screen name="Circles" component={CirclesStackScreen} />
       <Tab.Screen name="Profile" component={ProfileStackScreen} />
@@ -557,9 +591,11 @@ export default function App() {
                         <ElderProvider>
                           <NotificationProvider>
                             <OnboardingProvider>
-                              <NavigationContainer linking={linkingConfig}>
-                                <AppContent />
-                              </NavigationContainer>
+                              <FeedProvider>
+                                <NavigationContainer linking={linkingConfig}>
+                                  <AppContent />
+                                </NavigationContainer>
+                              </FeedProvider>
                             </OnboardingProvider>
                           </NotificationProvider>
                         </ElderProvider>

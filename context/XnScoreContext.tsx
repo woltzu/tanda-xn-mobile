@@ -1,3 +1,5 @@
+import { createAutoPost } from "../lib/autoPost";
+import { supabase } from "../lib/supabase";
 import React, {
   createContext,
   useState,
@@ -343,6 +345,22 @@ export const XnScoreProvider = ({ children }: { children: ReactNode }) => {
     }
 
     await saveScoreData(newScore, newHistory, tips, contributionStreak, newProcessedIds);
+
+    // Auto-post: Check for XnScore level up
+    const clampedNew = Math.min(100, Math.max(0, newScore));
+    const clampedOld = Math.min(100, Math.max(0, score));
+    const oldLevel = SCORE_LEVELS.find(l => clampedOld >= l.minScore && clampedOld <= l.maxScore);
+    const newLevel = SCORE_LEVELS.find(l => clampedNew >= l.minScore && clampedNew <= l.maxScore);
+    if (newLevel && oldLevel && newLevel.name !== oldLevel.name && clampedNew > clampedOld) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) {
+        createAutoPost(session.user.id, "xn_level_up", "xn_score", "xn_score", {
+          levelName: newLevel.name,
+          score: Math.round(clampedNew),
+          previousLevel: oldLevel.name,
+        });
+      }
+    }
 
     return newEvent;
   };

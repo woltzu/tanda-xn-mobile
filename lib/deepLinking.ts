@@ -41,6 +41,13 @@ export const linkingConfig = {
       MainTabs: {
         screens: {
           Home: "home",
+          Dreams: {
+            screens: {
+              DreamFeed: "dreams",
+              PostDetail: "dreams/post/:postId",
+              UserDreamProfile: "dreams/user/:userId",
+            },
+          },
           Circles: "circles",
           Wallet: "wallet",
           Community: "community",

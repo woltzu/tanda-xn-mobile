@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { createAutoPost } from "../lib/autoPost";
+import { supabase } from "../lib/supabase";
 
 /**
  * TANDAXN SAVINGS GOALS SYSTEM
@@ -361,6 +363,17 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
     };
 
     await saveGoals([...goals, newGoal]);
+
+    // Auto-post: New savings goal created
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user?.id) {
+      createAutoPost(session.user.id, "goal_created", newGoal.id, "savings_goal", {
+        goalName: newGoal.name,
+        targetAmount: newGoal.targetAmount,
+        goalType: newGoal.type,
+      });
+    }
+
     return newGoal;
   };
 
@@ -457,6 +470,32 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
       updateGoal(goalId, updatedGoal),
       saveTransactions([...transactions, transaction]),
     ]);
+
+    // Auto-post: Check for milestones and goal completion
+    const { data: { session: authSession } } = await supabase.auth.getSession();
+    if (authSession?.user?.id) {
+      const uid = authSession.user.id;
+      if (updatedGoal.status === "completed") {
+        // Goal reached!
+        createAutoPost(uid, "goal_reached", goalId, "savings_goal", {
+          goalName: goal.name,
+          targetAmount: goal.targetAmount,
+          amount: goal.targetAmount,
+        });
+      } else {
+        // Check for milestone posts (25%, 50%, 75%)
+        const newlyReached = updatedMilestones.find(
+          (m, i) => m.reachedAt === now && !goal.milestones[i]?.reachedAt && m.targetPercent < 100
+        );
+        if (newlyReached) {
+          createAutoPost(uid, "milestone", goalId, "savings_goal", {
+            goalName: goal.name,
+            targetAmount: goal.targetAmount,
+            percentage: newlyReached.targetPercent,
+          });
+        }
+      }
+    }
 
     return transaction;
   };

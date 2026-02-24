@@ -9,6 +9,7 @@ import React, {
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
 import { RealtimeChannel } from "@supabase/supabase-js";
+import { createAutoPost } from "../lib/autoPost";
 
 export type CircleType = "traditional" | "goal-based" | "emergency" | "family-support" | "goal" | "beneficiary";
 
@@ -654,6 +655,14 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     }
 
     setMyCircleIds((prev) => new Set([...prev, circleId]));
+
+    // Auto-post: Joined a circle
+    if (user?.id) {
+      const joinedCircle = circles.find(c => c.id === circleId);
+      createAutoPost(user.id, "circle_joined", circleId, "circle", {
+        circleName: joinedCircle?.name || "a savings circle",
+      });
+    }
   };
 
   // Leave a circle
@@ -916,6 +925,15 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     if (error) {
       console.error("Error making contribution:", error);
       throw new Error("Failed to make contribution");
+    }
+
+    // Auto-post: Made a contribution
+    if (user?.id) {
+      const circle = circles.find(c => c.id === circleId);
+      createAutoPost(user.id, "contribution", circleId, "circle", {
+        circleName: circle?.name || "a savings circle",
+        amount,
+      });
     }
 
     // Refresh circles to update data
