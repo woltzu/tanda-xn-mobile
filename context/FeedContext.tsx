@@ -166,7 +166,10 @@ type FeedContextType = {
     content: string,
     imageUrl?: string,
     amount?: number,
-    visibility?: FeedVisibility
+    visibility?: FeedVisibility,
+    metadata?: Record<string, any>,
+    relatedId?: string,
+    relatedType?: string
   ) => Promise<FeedPost>;
   createAutoPost: (
     type: FeedPostType,
@@ -393,7 +396,10 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
     content: string,
     imageUrl?: string,
     amount?: number,
-    visibility: FeedVisibility = "public"
+    visibility: FeedVisibility = "public",
+    metadata: Record<string, any> = {},
+    relatedId?: string,
+    relatedType?: string
   ): Promise<FeedPost> => {
     if (!user?.id) throw new Error("Must be logged in to create a post");
 
@@ -407,7 +413,9 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
         amount: amount || null,
         visibility,
         is_auto: false,
-        metadata: {},
+        metadata,
+        related_id: relatedId || null,
+        related_type: relatedType || null,
       })
       .select(`
         *,

@@ -22,14 +22,14 @@ type FeedPostCardProps = {
 
 // Post type configurations
 const POST_TYPE_CONFIG: Record<FeedPostType, { emoji: string; label: string; color: string }> = {
-  dream: { emoji: "✨", label: "Dream", color: "#8B5CF6" },
-  milestone: { emoji: "🏆", label: "Milestone", color: "#F59E0B" },
-  contribution: { emoji: "💰", label: "Contribution", color: "#10B981" },
-  goal_created: { emoji: "🎯", label: "New Goal", color: "#3B82F6" },
-  goal_reached: { emoji: "🎉", label: "Goal Reached!", color: "#10B981" },
-  circle_joined: { emoji: "🤝", label: "Joined Circle", color: "#6366F1" },
-  payout_received: { emoji: "💸", label: "Payout", color: "#059669" },
-  xn_level_up: { emoji: "⬆️", label: "Level Up", color: "#EC4899" },
+  dream: { emoji: "\u{2728}", label: "Dream", color: "#8B5CF6" },
+  milestone: { emoji: "\u{1F3C6}", label: "Milestone", color: "#F59E0B" },
+  contribution: { emoji: "\u{1F4B0}", label: "Contribution", color: "#10B981" },
+  goal_created: { emoji: "\u{1F3AF}", label: "New Goal", color: "#3B82F6" },
+  goal_reached: { emoji: "\u{1F389}", label: "Goal Reached!", color: "#10B981" },
+  circle_joined: { emoji: "\u{1F91D}", label: "Joined Circle", color: "#6366F1" },
+  payout_received: { emoji: "\u{1F4B8}", label: "Payout", color: "#059669" },
+  xn_level_up: { emoji: "\u{2B06}\u{FE0F}", label: "Level Up", color: "#EC4899" },
 };
 
 // Format relative time
@@ -61,6 +61,16 @@ export default function FeedPostCard({
   const isAnonymous = post.visibility === "anonymous";
   const isOwnPost = post.userId === currentUserId;
   const displayName = isAnonymous && !isOwnPost ? "Anonymous Member" : post.authorName;
+
+  // Extract progress data from metadata
+  const meta = post.metadata || {};
+  const hasGoalProgress = meta.targetAmount && meta.currentBalance !== undefined;
+  const hasCircleProgress = meta.circleName && meta.progress !== undefined;
+  const progress = hasGoalProgress
+    ? Math.round((meta.currentBalance / meta.targetAmount) * 100)
+    : hasCircleProgress
+      ? meta.progress
+      : null;
 
   return (
     <TouchableOpacity
@@ -104,8 +114,74 @@ export default function FeedPostCard({
         {post.content}
       </Text>
 
+      {/* Goal Progress Card */}
+      {hasGoalProgress && (
+        <View style={styles.progressCard}>
+          <View style={styles.progressCardHeader}>
+            <Text style={styles.progressEmoji}>{meta.goalEmoji || "\u{1F3AF}"}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.progressTitle} numberOfLines={1}>
+                {meta.goalName}
+              </Text>
+              <Text style={styles.progressSubtext}>
+                ${Number(meta.currentBalance).toLocaleString()} of $
+                {Number(meta.targetAmount).toLocaleString()}
+              </Text>
+            </View>
+            <View style={styles.progressPercentBadge}>
+              <Text style={styles.progressPercentText}>{progress}%</Text>
+            </View>
+          </View>
+          <View style={styles.progressBarBg}>
+            <View
+              style={[
+                styles.progressBarFill,
+                { width: `${Math.min(progress || 0, 100)}%` },
+              ]}
+            />
+          </View>
+        </View>
+      )}
+
+      {/* Circle Info Card */}
+      {hasCircleProgress && !hasGoalProgress && (
+        <View style={styles.progressCard}>
+          <View style={styles.progressCardHeader}>
+            <Text style={styles.progressEmoji}>{meta.circleEmoji || "\u{1F91D}"}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.progressTitle} numberOfLines={1}>
+                {meta.circleName}
+              </Text>
+              <Text style={styles.progressSubtext}>
+                {meta.currentMembers || "?"} members {"\u00B7"} $
+                {meta.contributionAmount || "??"}/{meta.frequency || "month"}
+              </Text>
+            </View>
+            <View style={styles.progressPercentBadge}>
+              <Text style={styles.progressPercentText}>{progress}%</Text>
+            </View>
+          </View>
+          <View style={styles.progressBarBg}>
+            <View
+              style={[
+                styles.progressBarFill,
+                { width: `${Math.min(progress || 0, 100)}%` },
+              ]}
+            />
+          </View>
+        </View>
+      )}
+
+      {/* New Dream Category Badge */}
+      {meta.dreamTitle && meta.dreamCategory && !hasGoalProgress && !hasCircleProgress && (
+        <View style={styles.dreamBadge}>
+          <Text style={styles.dreamBadgeEmoji}>{meta.dreamCategoryEmoji || "\u{2728}"}</Text>
+          <Text style={styles.dreamBadgeText}>{meta.dreamTitle}</Text>
+        </View>
+      )}
+
       {/* Amount pill (if applicable and not anonymous) */}
-      {post.amount && post.amount > 0 && !(isAnonymous && !isOwnPost) && (
+      {post.amount && post.amount > 0 && !(isAnonymous && !isOwnPost) && !hasGoalProgress && (
         <View style={styles.amountPill}>
           <Text style={styles.amountText}>
             ${post.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
@@ -239,6 +315,78 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: spacing.md,
   },
+
+  // Progress card (goal/circle data)
+  progressCard: {
+    backgroundColor: colors.screenBg,
+    borderRadius: radius.small,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  progressCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: spacing.sm,
+  },
+  progressEmoji: {
+    fontSize: 24,
+    marginRight: spacing.sm,
+  },
+  progressTitle: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
+    color: colors.textPrimary,
+  },
+  progressSubtext: {
+    fontSize: typography.labelSmall,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  progressPercentBadge: {
+    backgroundColor: colors.tealTintBg,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    marginLeft: spacing.sm,
+  },
+  progressPercentText: {
+    fontSize: typography.labelSmall,
+    fontWeight: typography.bold,
+    color: colors.accentTeal,
+  },
+  progressBarBg: {
+    height: 6,
+    backgroundColor: colors.border,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: 6,
+    backgroundColor: colors.accentTeal,
+    borderRadius: 3,
+  },
+
+  // Dream badge
+  dreamBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(139,92,246,0.08)",
+    borderRadius: radius.small,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+    alignSelf: "flex-start",
+  },
+  dreamBadgeEmoji: {
+    fontSize: 14,
+    marginRight: spacing.xs,
+  },
+  dreamBadgeText: {
+    fontSize: typography.labelSmall,
+    fontWeight: typography.semibold,
+    color: "#8B5CF6",
+  },
+
   amountPill: {
     flexDirection: "row",
     alignItems: "center",
