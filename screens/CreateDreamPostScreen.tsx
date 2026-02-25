@@ -846,177 +846,197 @@ export default function CreateDreamPostScreen() {
         {/* STEP 4: Review & Post — TikTok-style */}
         {/* ============================================ */}
         {step === "review" && (
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: 140 }}
-            showsVerticalScrollIndicator={false}
-          >
-            {/* Media Hero — full width, with floating side actions */}
-            {mediaUri && (
-              <View style={styles.rvHeroWrap}>
-                {mediaType === "video" ? (
-                  <VideoPlayer
-                    uri={mediaUri}
-                    style={styles.rvHeroMedia}
-                    disableTouch
-                    showControls={false}
-                    aspectRatio={9 / 16}
-                  />
-                ) : (
-                  <Image source={{ uri: mediaUri }} style={styles.rvHeroImage} resizeMode="cover" />
-                )}
-
-                {/* Floating Side Actions — TandaXn Blueprint engagement */}
-                <View style={styles.rvSideActions}>
-                  <View style={styles.rvSideBtn}>
-                    <View style={[styles.rvSideBtnCircle, { backgroundColor: "rgba(0, 198, 174, 0.3)" }]}>
-                      <Ionicons name="wallet" size={24} color={colors.accentTeal} />
-                    </View>
-                    <Text style={styles.rvSideBtnLabel}>I Saved</Text>
-                  </View>
-                  <View style={styles.rvSideBtn}>
-                    <View style={styles.rvSideBtnCircle}>
-                      <Ionicons name="flag-outline" size={22} color="#FFFFFF" />
-                    </View>
-                    <Text style={styles.rvSideBtnLabel}>Challenge</Text>
-                  </View>
-                  <View style={styles.rvSideBtn}>
-                    <View style={styles.rvSideBtnCircle}>
-                      <Ionicons name="copy-outline" size={22} color="#FFFFFF" />
-                    </View>
-                    <Text style={styles.rvSideBtnLabel}>Clone</Text>
-                  </View>
-                  {(source === "goal" || source === "circle") && (
-                    <View style={styles.rvSideBtn}>
-                      <View style={[styles.rvSideBtnCircle, { backgroundColor: colors.accentTeal }]}>
-                        <Ionicons name="hand-left" size={20} color="#FFFFFF" />
-                      </View>
-                      <Text style={styles.rvSideBtnLabel}>Support</Text>
-                    </View>
-                  )}
-                  <View style={styles.rvSideBtn}>
-                    <View style={styles.rvSideBtnCircle}>
-                      <Ionicons name="people-outline" size={20} color="#FFFFFF" />
-                    </View>
-                    <Text style={styles.rvSideBtnLabel}>Link</Text>
-                  </View>
-                </View>
-
-                {/* Bottom overlay — author + caption on the video */}
-                <View style={styles.rvOverlayBottom}>
-                  <View style={styles.rvOverlayAuthor}>
-                    <View style={styles.rvOverlayAvatar}>
-                      <Text style={styles.rvOverlayAvatarText}>
-                        {visibility === "anonymous"
-                          ? "?"
-                          : (user?.name || "U").charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                    <Text style={styles.rvOverlayName}>
-                      {visibility === "anonymous" ? "Anonymous" : user?.name || "You"}
-                    </Text>
-                    <View style={styles.rvOverlayBadge}>
-                      <Text style={styles.rvOverlayBadgeText}>
-                        {source === "goal" ? "\u{1F3AF}" : source === "circle" ? "\u{1F91D}" : "\u{2728}"}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={styles.rvOverlayCaption} numberOfLines={3}>
-                    {caption}
-                  </Text>
-                  {location.trim().length > 0 && (
-                    <View style={styles.rvOverlayLocation}>
-                      <Ionicons name="location" size={12} color="#FFFFFF" />
-                      <Text style={styles.rvOverlayLocationText}>{location.trim()}</Text>
-                    </View>
-                  )}
-                  {parseHashtags(hashtags).length > 0 && (
-                    <Text style={styles.rvOverlayTags}>
-                      {parseHashtags(hashtags).join(" ")}
-                    </Text>
-                  )}
-                </View>
-
-                {/* Goal/Circle progress overlay — bottom of media */}
-                {source === "goal" && selectedGoal && (() => {
-                  const p = Math.round((selectedGoal.currentBalance / selectedGoal.targetAmount) * 100);
-                  return (
-                    <View style={styles.rvProgressOverlay}>
-                      <Text style={styles.rvProgressEmoji}>{selectedGoal.emoji}</Text>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.rvProgressName} numberOfLines={1}>{selectedGoal.name}</Text>
-                        <View style={styles.rvProgressBarBg}>
-                          <View style={[styles.rvProgressBarFill, { width: `${Math.min(p, 100)}%` }]} />
-                        </View>
-                      </View>
-                      <Text style={styles.rvProgressPercent}>{p}%</Text>
-                    </View>
-                  );
-                })()}
-                {source === "circle" && selectedCircle && (
-                  <View style={styles.rvProgressOverlay}>
-                    <Text style={styles.rvProgressEmoji}>{selectedCircle.emoji}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.rvProgressName} numberOfLines={1}>{selectedCircle.name}</Text>
-                      <View style={styles.rvProgressBarBg}>
-                        <View style={[styles.rvProgressBarFill, { width: `${Math.min(selectedCircle.progress, 100)}%` }]} />
-                      </View>
-                    </View>
-                    <Text style={styles.rvProgressPercent}>{selectedCircle.progress}%</Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* If no media — show simple text preview */}
-            {!mediaUri && (
-              <View style={styles.rvNoMediaCard}>
-                <View style={styles.rvOverlayAuthor}>
-                  <View style={[styles.rvOverlayAvatar, { backgroundColor: colors.primaryNavy }]}>
-                    <Text style={styles.rvOverlayAvatarText}>
-                      {(user?.name || "U").charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <Text style={[styles.rvOverlayName, { color: colors.textPrimary }]}>
-                    {user?.name || "You"}
-                  </Text>
-                </View>
-                <Text style={styles.rvNoMediaCaption}>{caption}</Text>
-              </View>
-            )}
-
-            {/* Community tags (below media) */}
-            {selectedCommunities.length > 0 && (
-              <View style={styles.rvTagsSection}>
-                {selectedCommunities.map((c) => (
-                  <View key={c.id} style={styles.rvCommunityPill}>
-                    <Text style={styles.rvCommunityPillIcon}>{c.icon}</Text>
-                    <Text style={styles.rvCommunityPillText}>{c.name}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Post Details Summary */}
-            <View style={styles.rvSummary}>
-              <View style={styles.rvSummaryRow}>
-                <Text style={styles.rvSummaryLabel}>Visibility</Text>
-                <Text style={styles.rvSummaryValue}>
-                  {visibility === "public" ? "\u{1F30D} Public" : visibility === "community" ? "\u{1F465} Community" : "\u{1F441}\u{FE0F}\u{200D}\u{1F5E8}\u{FE0F} Anonymous"}
-                </Text>
-              </View>
+          <View style={{ flex: 1 }}>
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 20 }}
+              showsVerticalScrollIndicator={true}
+            >
+              {/* Media Hero — capped height, with floating side actions */}
               {mediaUri && (
-                <View style={styles.rvSummaryRow}>
-                  <Text style={styles.rvSummaryLabel}>Media</Text>
-                  <Text style={styles.rvSummaryValue}>
-                    {mediaType === "video" ? "\u{1F3AC} Video" : "\u{1F4F7} Photo"}
-                  </Text>
+                <View style={styles.rvHeroWrap}>
+                  {mediaType === "video" ? (
+                    <VideoPlayer
+                      uri={mediaUri}
+                      style={styles.rvHeroMedia}
+                      disableTouch
+                      showControls={false}
+                      aspectRatio={3 / 4}
+                    />
+                  ) : (
+                    <Image source={{ uri: mediaUri }} style={styles.rvHeroImage} resizeMode="cover" />
+                  )}
+
+                  {/* Floating Side Actions — TandaXn Blueprint engagement */}
+                  <View style={styles.rvSideActions}>
+                    <View style={styles.rvSideBtn}>
+                      <View style={[styles.rvSideBtnCircle, { backgroundColor: "rgba(0, 198, 174, 0.3)" }]}>
+                        <Ionicons name="wallet" size={22} color={colors.accentTeal} />
+                      </View>
+                      <Text style={styles.rvSideBtnLabel}>I Saved</Text>
+                    </View>
+                    <View style={styles.rvSideBtn}>
+                      <View style={styles.rvSideBtnCircle}>
+                        <Ionicons name="flag-outline" size={20} color="#FFFFFF" />
+                      </View>
+                      <Text style={styles.rvSideBtnLabel}>Join</Text>
+                    </View>
+                    <View style={styles.rvSideBtn}>
+                      <View style={styles.rvSideBtnCircle}>
+                        <Ionicons name="copy-outline" size={20} color="#FFFFFF" />
+                      </View>
+                      <Text style={styles.rvSideBtnLabel}>Clone</Text>
+                    </View>
+                    {(source === "goal" || source === "circle") && (
+                      <View style={styles.rvSideBtn}>
+                        <View style={[styles.rvSideBtnCircle, { backgroundColor: colors.accentTeal }]}>
+                          <Ionicons name="hand-left" size={18} color="#FFFFFF" />
+                        </View>
+                        <Text style={styles.rvSideBtnLabel}>Support</Text>
+                      </View>
+                    )}
+                    <View style={styles.rvSideBtn}>
+                      <View style={styles.rvSideBtnCircle}>
+                        <Ionicons name="arrow-redo" size={20} color="#FFFFFF" />
+                      </View>
+                      <Text style={styles.rvSideBtnLabel}>Share</Text>
+                    </View>
+                  </View>
+
+                  {/* Bottom overlay — author + caption on the video */}
+                  <View style={styles.rvOverlayBottom}>
+                    <View style={styles.rvOverlayAuthor}>
+                      <View style={styles.rvOverlayAvatar}>
+                        <Text style={styles.rvOverlayAvatarText}>
+                          {visibility === "anonymous"
+                            ? "?"
+                            : (user?.name || "U").charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <Text style={styles.rvOverlayName}>
+                        {visibility === "anonymous" ? "Anonymous" : user?.name || "You"}
+                      </Text>
+                      <View style={styles.rvOverlayBadge}>
+                        <Text style={styles.rvOverlayBadgeText}>
+                          {source === "goal" ? "\u{1F3AF}" : source === "circle" ? "\u{1F91D}" : "\u{2728}"}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={styles.rvOverlayCaption} numberOfLines={2}>
+                      {caption}
+                    </Text>
+                    {location.trim().length > 0 && (
+                      <View style={styles.rvOverlayLocation}>
+                        <Ionicons name="location" size={12} color="#FFFFFF" />
+                        <Text style={styles.rvOverlayLocationText}>{location.trim()}</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
               )}
-            </View>
 
-            {/* Action Buttons — Edit & Post */}
-            <View style={styles.rvButtonRow}>
+              {/* If no media — show simple text preview */}
+              {!mediaUri && (
+                <View style={styles.rvNoMediaCard}>
+                  <View style={styles.rvOverlayAuthor}>
+                    <View style={[styles.rvOverlayAvatar, { backgroundColor: colors.primaryNavy }]}>
+                      <Text style={styles.rvOverlayAvatarText}>
+                        {(user?.name || "U").charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <Text style={[styles.rvOverlayName, { color: colors.textPrimary }]}>
+                      {user?.name || "You"}
+                    </Text>
+                  </View>
+                  <Text style={styles.rvNoMediaCaption}>{caption}</Text>
+                </View>
+              )}
+
+              {/* Goal/Circle Detail Card — rich info below video */}
+              {source === "goal" && selectedGoal && (() => {
+                const p = Math.round((selectedGoal.currentBalance / selectedGoal.targetAmount) * 100);
+                return (
+                  <View style={styles.rvDetailCard}>
+                    <View style={styles.rvDetailHeader}>
+                      <Text style={styles.rvDetailEmoji}>{selectedGoal.emoji}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.rvDetailTitle}>{selectedGoal.name}</Text>
+                        <Text style={styles.rvDetailSubtext}>
+                          ${Number(selectedGoal.currentBalance).toLocaleString()} of ${Number(selectedGoal.targetAmount).toLocaleString()}
+                        </Text>
+                      </View>
+                      <View style={styles.rvDetailPercentBadge}>
+                        <Text style={styles.rvDetailPercentText}>{p}%</Text>
+                      </View>
+                    </View>
+                    <View style={styles.rvDetailProgressBg}>
+                      <View style={[styles.rvDetailProgressFill, { width: `${Math.min(p, 100)}%` }]} />
+                    </View>
+                  </View>
+                );
+              })()}
+
+              {source === "circle" && selectedCircle && (
+                <View style={styles.rvDetailCard}>
+                  <View style={styles.rvDetailHeader}>
+                    <Text style={styles.rvDetailEmoji}>{selectedCircle.emoji}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rvDetailTitle}>{selectedCircle.name}</Text>
+                      <Text style={styles.rvDetailSubtext}>
+                        {selectedCircle.currentMembers}/{selectedCircle.memberCount} members {"\u00B7"} ${selectedCircle.amount}/{selectedCircle.frequency}
+                      </Text>
+                    </View>
+                    <View style={styles.rvDetailPercentBadge}>
+                      <Text style={styles.rvDetailPercentText}>{selectedCircle.progress}%</Text>
+                    </View>
+                  </View>
+                  <View style={styles.rvDetailProgressBg}>
+                    <View style={[styles.rvDetailProgressFill, { width: `${Math.min(selectedCircle.progress, 100)}%` }]} />
+                  </View>
+                </View>
+              )}
+
+              {/* Community tags */}
+              {selectedCommunities.length > 0 && (
+                <View style={styles.rvTagsSection}>
+                  {selectedCommunities.map((c) => (
+                    <View key={c.id} style={styles.rvCommunityPill}>
+                      <Text style={styles.rvCommunityPillIcon}>{c.icon}</Text>
+                      <Text style={styles.rvCommunityPillText}>{c.name}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Post Details Summary */}
+              <View style={styles.rvSummary}>
+                <View style={styles.rvSummaryRow}>
+                  <Text style={styles.rvSummaryLabel}>Visibility</Text>
+                  <Text style={styles.rvSummaryValue}>
+                    {visibility === "public" ? "\u{1F30D} Public" : visibility === "community" ? "\u{1F465} Community" : "\u{1F441}\u{FE0F}\u{200D}\u{1F5E8}\u{FE0F} Anonymous"}
+                  </Text>
+                </View>
+                {mediaUri && (
+                  <View style={styles.rvSummaryRow}>
+                    <Text style={styles.rvSummaryLabel}>Media</Text>
+                    <Text style={styles.rvSummaryValue}>
+                      {mediaType === "video" ? "\u{1F3AC} Video" : "\u{1F4F7} Photo"}
+                    </Text>
+                  </View>
+                )}
+                {parseHashtags(hashtags).length > 0 && (
+                  <View style={[styles.rvSummaryRow, { borderBottomWidth: 0 }]}>
+                    <Text style={styles.rvSummaryLabel}>Hashtags</Text>
+                    <Text style={[styles.rvSummaryValue, { color: colors.accentTeal }]}>
+                      {parseHashtags(hashtags).join(" ")}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </ScrollView>
+
+            {/* FIXED BOTTOM — Edit & Post buttons (always visible) */}
+            <View style={styles.rvFixedBottom}>
               <TouchableOpacity
                 style={styles.editBtn}
                 onPress={() => setStep("compose")}
@@ -1040,7 +1060,7 @@ export default function CreateDreamPostScreen() {
                 )}
               </TouchableOpacity>
             </View>
-          </ScrollView>
+          </View>
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -1577,26 +1597,26 @@ const styles = StyleSheet.create({
   },
   rvHeroImage: {
     width: "100%",
-    aspectRatio: 9 / 16,
-    maxHeight: 500,
+    aspectRatio: 3 / 4,
+    maxHeight: 420,
   },
 
   // Floating side action buttons (right side, TikTok-style)
   rvSideActions: {
     position: "absolute",
-    right: 12,
-    bottom: 100,
+    right: 8,
+    bottom: 60,
     alignItems: "center",
-    gap: 16,
+    gap: 10,
   },
   rvSideBtn: {
     alignItems: "center",
-    gap: 3,
+    gap: 2,
   },
   rvSideBtnCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: "rgba(0, 0, 0, 0.45)",
     alignItems: "center",
     justifyContent: "center",
@@ -1692,44 +1712,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 2,
   },
 
-  // Goal/Circle progress bar overlaid on media
-  rvProgressOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.75)",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 10,
-  },
-  rvProgressEmoji: {
-    fontSize: 20,
-  },
-  rvProgressName: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#FFFFFF",
-    marginBottom: 4,
-  },
-  rvProgressBarBg: {
-    height: 4,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  rvProgressBarFill: {
-    height: 4,
-    backgroundColor: colors.accentTeal,
-    borderRadius: 2,
-  },
-  rvProgressPercent: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: colors.accentTeal,
-  },
+  // (Progress overlay removed — detail card shown below video instead)
 
   // No media fallback
   rvNoMediaCard: {
@@ -1798,11 +1781,67 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
   },
 
-  // Action buttons row
-  rvButtonRow: {
+  // Goal/Circle detail card below video
+  rvDetailCard: {
+    backgroundColor: colors.screenBg,
+    borderRadius: radius.card,
+    padding: spacing.md,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  rvDetailHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: spacing.sm,
+  },
+  rvDetailEmoji: {
+    fontSize: 28,
+    marginRight: spacing.md,
+  },
+  rvDetailTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: colors.textPrimary,
+  },
+  rvDetailSubtext: {
+    fontSize: typography.labelSmall,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  rvDetailPercentBadge: {
+    backgroundColor: colors.tealTintBg,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    marginLeft: spacing.sm,
+  },
+  rvDetailPercentText: {
+    fontSize: typography.labelSmall,
+    fontWeight: typography.bold,
+    color: colors.accentTeal,
+  },
+  rvDetailProgressBg: {
+    height: 6,
+    backgroundColor: colors.border,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  rvDetailProgressFill: {
+    height: 6,
+    backgroundColor: colors.accentTeal,
+    borderRadius: 3,
+  },
+
+  // Fixed bottom bar with Edit & Post buttons
+  rvFixedBottom: {
     flexDirection: "row",
     gap: 12,
     paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingBottom: 30,
+    backgroundColor: colors.cardBg,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   editBtn: {
     flex: 1,

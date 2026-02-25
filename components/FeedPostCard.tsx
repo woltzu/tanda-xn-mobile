@@ -101,9 +101,9 @@ export default function FeedPostCard({
             aspectRatio={9 / 16}
           />
 
-          {/* Floating side action buttons — TandaXn Blueprint engagement */}
+          {/* Floating side action buttons — TandaXn engagement */}
           <View style={styles.sideActions}>
-            {/* I Saved Too (replaces Like) */}
+            {/* I Saved Too */}
             <TouchableOpacity
               style={styles.sideBtn}
               onPress={() => onLike(post.id)}
@@ -116,11 +116,11 @@ export default function FeedPostCard({
                 />
               </View>
               <Text style={[styles.sideBtnCount, isLiked && { color: colors.accentTeal }]}>
-                {post.likesCount > 0 ? post.likesCount : ""}
+                {post.likesCount > 0 ? post.likesCount : "Saved"}
               </Text>
             </TouchableOpacity>
 
-            {/* Join Challenge (replaces Comment) */}
+            {/* Join — context-aware label */}
             <TouchableOpacity
               style={styles.sideBtn}
               onPress={() => onComment(post.id)}
@@ -129,11 +129,11 @@ export default function FeedPostCard({
                 <Ionicons name="flag-outline" size={22} color="#FFFFFF" />
               </View>
               <Text style={styles.sideBtnCount}>
-                {post.commentsCount > 0 ? post.commentsCount : ""}
+                {post.commentsCount > 0 ? post.commentsCount : "Join"}
               </Text>
             </TouchableOpacity>
 
-            {/* Clone Plan (replaces Share) */}
+            {/* Clone Goal — start a similar dream */}
             <TouchableOpacity
               style={styles.sideBtn}
               onPress={() => onClonePlan?.(post)}
@@ -144,7 +144,7 @@ export default function FeedPostCard({
               <Text style={styles.sideBtnCount}>Clone</Text>
             </TouchableOpacity>
 
-            {/* Support Dream — only for others' goal/circle posts */}
+            {/* Join Circle / Support — only for others' goal/circle posts */}
             {(hasGoalProgress || hasCircleProgress) && !isOwnPost && onSupport && (
               <TouchableOpacity
                 style={styles.sideBtn}
@@ -153,19 +153,21 @@ export default function FeedPostCard({
                 <View style={[styles.sideBtnCircle, { backgroundColor: colors.accentTeal }]}>
                   <Ionicons name="hand-left" size={20} color="#FFFFFF" />
                 </View>
-                <Text style={styles.sideBtnCount}>Support</Text>
+                <Text style={styles.sideBtnCount}>
+                  {hasCircleProgress ? "Join" : "Support"}
+                </Text>
               </TouchableOpacity>
             )}
 
-            {/* Accountability Link (replaces Bookmark) */}
+            {/* Share */}
             <TouchableOpacity
               style={styles.sideBtn}
               onPress={() => onAccountability?.(post)}
             >
               <View style={styles.sideBtnCircle}>
-                <Ionicons name="people-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="arrow-redo" size={20} color="#FFFFFF" />
               </View>
-              <Text style={styles.sideBtnCount}>Link</Text>
+              <Text style={styles.sideBtnCount}>Share</Text>
             </TouchableOpacity>
           </View>
 
@@ -300,7 +302,7 @@ export default function FeedPostCard({
         </View>
       )}
 
-      {/* Circle Info Card */}
+      {/* Circle Info Card — enriched with spots and per-person */}
       {hasCircleProgress && !hasGoalProgress && (
         <View style={styles.progressCard}>
           <View style={styles.progressCardHeader}>
@@ -310,7 +312,7 @@ export default function FeedPostCard({
                 {meta.circleName}
               </Text>
               <Text style={styles.progressSubtext}>
-                {meta.currentMembers || "?"} members {"\u00B7"} $
+                {meta.currentMembers || "?"}/{meta.memberCount || "?"} members {"\u00B7"} $
                 {meta.contributionAmount || "??"}/{meta.frequency || "month"}
               </Text>
             </View>
@@ -326,6 +328,12 @@ export default function FeedPostCard({
               ]}
             />
           </View>
+          {/* Spots left indicator */}
+          {meta.memberCount && meta.currentMembers && meta.memberCount > meta.currentMembers && (
+            <Text style={styles.spotsLeftText}>
+              {meta.memberCount - meta.currentMembers} spot{meta.memberCount - meta.currentMembers !== 1 ? "s" : ""} left
+            </Text>
+          )}
         </View>
       )}
 
@@ -402,7 +410,7 @@ export default function FeedPostCard({
         </TouchableOpacity>
       )}
 
-      {/* Footer — Blueprint engagement actions */}
+      {/* Footer — engagement actions */}
       <View style={styles.footer}>
         <TouchableOpacity style={styles.actionButton} onPress={() => onLike(post.id)}>
           <Ionicons
@@ -411,20 +419,24 @@ export default function FeedPostCard({
             color={isLiked ? colors.accentTeal : colors.textSecondary}
           />
           <Text style={[styles.actionText, isLiked && { color: colors.accentTeal }]}>
-            {post.likesCount > 0 ? `${post.likesCount}` : "I Saved Too"}
+            {post.likesCount > 0 ? `${post.likesCount} saved` : "I Saved Too"}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton} onPress={() => onComment(post.id)}>
           <Ionicons name="flag-outline" size={18} color={colors.textSecondary} />
           <Text style={styles.actionText}>
-            {post.commentsCount > 0 ? `${post.commentsCount}` : "Challenge"}
+            {post.commentsCount > 0 ? `${post.commentsCount}` : "Join"}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton} onPress={() => onClonePlan?.(post)}>
           <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
-          <Text style={styles.actionText}>Clone</Text>
+          <Text style={styles.actionText}>Clone Goal</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.actionButton, { marginRight: 0, marginLeft: "auto" }]} onPress={() => onAccountability?.(post)}>
+          <Ionicons name="arrow-redo" size={18} color={colors.textSecondary} />
         </TouchableOpacity>
 
         {post.isAuto && (
@@ -737,6 +749,13 @@ const styles = StyleSheet.create({
     height: 6,
     backgroundColor: colors.accentTeal,
     borderRadius: 3,
+  },
+  spotsLeftText: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold as any,
+    color: "#F59E0B",
+    marginTop: spacing.xs,
+    textAlign: "right",
   },
 
   // Dream badge

@@ -130,7 +130,7 @@ export default function PostDetailScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Post</Text>
+          <Text style={styles.headerTitle}>Dream Details</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.loadingContainer}>
@@ -152,7 +152,7 @@ export default function PostDetailScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Post</Text>
+          <Text style={styles.headerTitle}>Dream Details</Text>
           {post.userId === user?.id ? (
             <TouchableOpacity onPress={handleDelete}>
               <Ionicons name="trash-outline" size={22} color={colors.errorText} />
@@ -186,6 +186,80 @@ export default function PostDetailScreen() {
             onAccountability={handleAccountability}
             currentUserId={user?.id}
           />
+
+          {/* Dream Details Card — Goal info */}
+          {post.metadata?.goalName && post.metadata?.targetAmount && (() => {
+            const meta = post.metadata;
+            const p = Math.round(((meta.currentBalance || 0) / meta.targetAmount) * 100);
+            return (
+              <View style={styles.dreamDetailCard}>
+                <View style={styles.dreamDetailRow}>
+                  <Text style={styles.dreamDetailEmoji}>{meta.goalEmoji || "\u{1F3AF}"}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.dreamDetailTitle}>{meta.goalName}</Text>
+                    <Text style={styles.dreamDetailAmount}>
+                      ${Number(meta.currentBalance || 0).toLocaleString()} of ${Number(meta.targetAmount).toLocaleString()}
+                    </Text>
+                  </View>
+                  <View style={styles.dreamDetailBadge}>
+                    <Text style={styles.dreamDetailBadgeText}>{p}%</Text>
+                  </View>
+                </View>
+                <View style={styles.dreamDetailBarBg}>
+                  <View style={[styles.dreamDetailBarFill, { width: `${Math.min(p, 100)}%` }]} />
+                </View>
+                {/* CTA Buttons */}
+                <View style={styles.dreamDetailCTAs}>
+                  <TouchableOpacity style={styles.dreamDetailPrimaryCTA} onPress={() => handleSupport(post)}>
+                    <Ionicons name="hand-left" size={16} color="#FFFFFF" />
+                    <Text style={styles.dreamDetailPrimaryCTAText}>Support Dream</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.dreamDetailSecondaryCTA} onPress={() => handleClonePlan(post)}>
+                    <Ionicons name="copy-outline" size={16} color={colors.accentTeal} />
+                    <Text style={styles.dreamDetailSecondaryCTAText}>Start Similar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })()}
+
+          {/* Dream Details Card — Circle info */}
+          {post.metadata?.circleName && !post.metadata?.goalName && (() => {
+            const meta = post.metadata;
+            const spotsLeft = (meta.memberCount || 0) - (meta.currentMembers || 0);
+            return (
+              <View style={styles.dreamDetailCard}>
+                <View style={styles.dreamDetailRow}>
+                  <Text style={styles.dreamDetailEmoji}>{meta.circleEmoji || "\u{1F91D}"}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.dreamDetailTitle}>{meta.circleName}</Text>
+                    <Text style={styles.dreamDetailAmount}>
+                      {meta.currentMembers || "?"}/{meta.memberCount || "?"} members {"\u00B7"} ${meta.contributionAmount || "??"}/{meta.frequency || "month"}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.dreamDetailBarBg}>
+                  <View style={[styles.dreamDetailBarFill, { width: `${Math.min(meta.progress || 0, 100)}%` }]} />
+                </View>
+                {spotsLeft > 0 && (
+                  <Text style={styles.dreamDetailSpotsLeft}>
+                    {spotsLeft} spot{spotsLeft !== 1 ? "s" : ""} left
+                  </Text>
+                )}
+                {/* CTA Buttons */}
+                <View style={styles.dreamDetailCTAs}>
+                  <TouchableOpacity style={styles.dreamDetailPrimaryCTA} onPress={() => handleSupport(post)}>
+                    <Ionicons name="people" size={16} color="#FFFFFF" />
+                    <Text style={styles.dreamDetailPrimaryCTAText}>Join Circle</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.dreamDetailSecondaryCTA} onPress={() => handleClonePlan(post)}>
+                    <Ionicons name="copy-outline" size={16} color={colors.accentTeal} />
+                    <Text style={styles.dreamDetailSecondaryCTAText}>Start Similar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })()}
 
           {/* Challenge Commitments Section */}
           <View style={styles.commentsHeader}>
@@ -294,6 +368,103 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: "center",
   },
+  // Dream Detail Card
+  dreamDetailCard: {
+    backgroundColor: colors.cardBg,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    borderRadius: radius.card,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.tealTintBg,
+  },
+  dreamDetailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: spacing.sm,
+  },
+  dreamDetailEmoji: {
+    fontSize: 28,
+    marginRight: spacing.md,
+  },
+  dreamDetailTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: colors.textPrimary,
+  },
+  dreamDetailAmount: {
+    fontSize: typography.labelSmall,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  dreamDetailBadge: {
+    backgroundColor: colors.tealTintBg,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.pill,
+    marginLeft: spacing.sm,
+  },
+  dreamDetailBadgeText: {
+    fontSize: typography.labelSmall,
+    fontWeight: typography.bold,
+    color: colors.accentTeal,
+  },
+  dreamDetailBarBg: {
+    height: 6,
+    backgroundColor: colors.border,
+    borderRadius: 3,
+    overflow: "hidden",
+    marginBottom: spacing.sm,
+  },
+  dreamDetailBarFill: {
+    height: 6,
+    backgroundColor: colors.accentTeal,
+    borderRadius: 3,
+  },
+  dreamDetailSpotsLeft: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold,
+    color: "#F59E0B",
+    textAlign: "right",
+    marginBottom: spacing.sm,
+  },
+  dreamDetailCTAs: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: spacing.sm,
+  },
+  dreamDetailPrimaryCTA: {
+    flex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accentTeal,
+    borderRadius: radius.button,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  dreamDetailPrimaryCTAText: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.bold,
+    color: "#FFFFFF",
+  },
+  dreamDetailSecondaryCTA: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: colors.accentTeal,
+    borderRadius: radius.button,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  dreamDetailSecondaryCTAText: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold,
+    color: colors.accentTeal,
+  },
+
   commentInputContainer: {
     flexDirection: "row",
     alignItems: "center",
