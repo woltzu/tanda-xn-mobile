@@ -57,6 +57,7 @@ const formatRelativeTime = (dateStr: string): string => {
 export default function FeedPostCard({
   post,
   isLiked,
+  isSaved,
   onLike,
   onComment,
   onPress,
