@@ -19,8 +19,10 @@ import * as ImagePicker from "expo-image-picker";
 import { useFeed, FeedVisibility } from "../context/FeedContext";
 import { useSavings, SavingsGoal } from "../context/SavingsContext";
 import { useCircles, Circle } from "../context/CirclesContext";
+import { useCommunity, Community } from "../context/CommunityContext";
 import { useAuth } from "../context/AuthContext";
 import VisibilityPicker from "../components/VisibilityPicker";
+import VideoPlayer from "../components/VideoPlayer";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
 import { showToast } from "../components/Toast";
@@ -30,7 +32,8 @@ import { showToast } from "../components/Toast";
 // ============================================
 
 type PostSource = "goal" | "circle" | "new_dream";
-type Step = "choose_source" | "select_item" | "compose";
+type Step = "choose_source" | "select_item" | "compose" | "review";
+type MediaType = "image" | "video" | null;
 
 const DREAM_CATEGORIES = [
   { id: "home", emoji: "\u{1F3E0}", label: "Home" },
@@ -52,6 +55,7 @@ export default function CreateDreamPostScreen() {
   const { user } = useAuth();
   const { getActiveGoals } = useSavings();
   const { myCircles } = useCircles();
+  const { myCommunities } = useCommunity();
   const { createDreamPost } = useFeed();
 
   // Flow state
@@ -64,9 +68,15 @@ export default function CreateDreamPostScreen() {
 
   // Compose state
   const [caption, setCaption] = useState("");
-  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [mediaUri, setMediaUri] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState<MediaType>(null);
   const [visibility, setVisibility] = useState<FeedVisibility>("public");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Tagging state
+  const [selectedCommunities, setSelectedCommunities] = useState<Community[]>([]);
+  const [location, setLocation] = useState("");
+  const [hashtags, setHashtags] = useState("");
 
   // New dream fields
   const [dreamTitle, setDreamTitle] = useState("");
@@ -102,7 +112,9 @@ export default function CreateDreamPostScreen() {
   };
 
   const handleBack = () => {
-    if (step === "compose" && source !== "new_dream") {
+    if (step === "review") {
+      setStep("compose");
+    } else if (step === "compose" && source !== "new_dream") {
       setStep("select_item");
       if (source === "goal") setSelectedGoal(null);
       if (source === "circle") setSelectedCircle(null);
@@ -122,7 +134,7 @@ export default function CreateDreamPostScreen() {
   };
 
   // ============================================
-  // Image Picker
+  // Media Picker
   // ============================================
 
   const pickMedia = async () => {
@@ -137,8 +149,10 @@ export default function CreateDreamPostScreen() {
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
-        setImageUri(asset.uri);
-        if (asset.type === "video") {
+        setMediaUri(asset.uri);
+        const type: MediaType = asset.type === "video" ? "video" : "image";
+        setMediaType(type);
+        if (type === "video") {
           showToast("Video selected (up to 60s)", "info");
         }
       }
@@ -148,17 +162,22 @@ export default function CreateDreamPostScreen() {
     }
   };
 
-  const uploadImage = async (uri: string): Promise<string | null> => {
+  const uploadMedia = async (uri: string): Promise<string | null> => {
     try {
       const response = await fetch(uri);
       const blob = await response.blob();
       const fileExt = uri.split(".").pop()?.split("?")[0] || "jpg";
       const fileName = `${user?.id}/${Date.now()}.${fileExt}`;
 
+      // Determine content type based on media type
+      const videoExts = ["mp4", "mov", "avi", "m4v", "webm"];
+      const isVideo = mediaType === "video" || videoExts.includes(fileExt.toLowerCase());
+      const contentType = isVideo ? `video/${fileExt === "mov" ? "quicktime" : fileExt}` : `image/${fileExt}`;
+
       const { data, error } = await supabase.storage
         .from("feed-images")
         .upload(fileName, blob, {
-          contentType: `image/${fileExt}`,
+          contentType,
           upsert: false,
         });
 
@@ -173,9 +192,36 @@ export default function CreateDreamPostScreen() {
 
       return urlData.publicUrl;
     } catch (err) {
-      console.warn("[Upload] Image upload failed:", err);
+      console.warn("[Upload] Media upload failed:", err);
       return null;
     }
+  };
+
+  // ============================================
+  // Community Tag Toggle
+  // ============================================
+
+  const toggleCommunity = (community: Community) => {
+    setSelectedCommunities((prev) => {
+      const exists = prev.find((c) => c.id === community.id);
+      if (exists) {
+        return prev.filter((c) => c.id !== community.id);
+      }
+      return [...prev, community];
+    });
+  };
+
+  // ============================================
+  // Parse hashtags
+  // ============================================
+
+  const parseHashtags = (raw: string): string[] => {
+    return raw
+      .split(/[\s,]+/)
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0)
+      .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`))
+      .slice(0, 10);
   };
 
   // ============================================
@@ -240,13 +286,33 @@ export default function CreateDreamPostScreen() {
       return;
     }
 
+    // Add tagging metadata
+    if (mediaType) {
+      metadata.mediaType = mediaType;
+    }
+    if (selectedCommunities.length > 0) {
+      metadata.communityTags = selectedCommunities.map((c) => ({
+        id: c.id,
+        name: c.name,
+        icon: c.icon,
+      }));
+    }
+    const parsedTags = parseHashtags(hashtags);
+    if (parsedTags.length > 0) {
+      metadata.hashtags = parsedTags;
+    }
+    if (location.trim()) {
+      metadata.location = location.trim();
+    }
+
     try {
       setIsSubmitting(true);
 
-      // Upload image if selected
+      // Upload media if selected
       let imageUrl: string | undefined;
-      if (imageUri) {
-        const uploaded = await uploadImage(imageUri);
+      if (mediaUri) {
+        showToast(mediaType === "video" ? "Uploading video..." : "Uploading photo...", "info", 5000);
+        const uploaded = await uploadMedia(mediaUri);
         if (uploaded) {
           imageUrl = uploaded;
         }
@@ -268,6 +334,8 @@ export default function CreateDreamPostScreen() {
       ? dreamTitle.trim().length > 0
       : selectedGoal !== null || selectedCircle !== null;
 
+  const canPreview = canSubmit && caption.trim().length > 0;
+
   // ============================================
   // Header
   // ============================================
@@ -279,7 +347,11 @@ export default function CreateDreamPostScreen() {
         ? source === "goal"
           ? "Select Goal"
           : "Select Circle"
-        : "Compose Post";
+        : step === "compose"
+          ? "Compose Post"
+          : "Review Post";
+
+  const stepIndex = ["choose_source", "select_item", "compose", "review"].indexOf(step);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -297,28 +369,13 @@ export default function CreateDreamPostScreen() {
             )}
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{headerTitle}</Text>
-          {step === "compose" ? (
-            <TouchableOpacity
-              style={[styles.postButton, (!canSubmit || isSubmitting) && styles.postButtonDisabled]}
-              onPress={handleSubmit}
-              disabled={!canSubmit || isSubmitting}
-            >
-              {isSubmitting ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.postButtonText}>Post</Text>
-              )}
-            </TouchableOpacity>
-          ) : (
-            <View style={{ width: 70 }} />
-          )}
+          <View style={{ width: 40 }} />
         </View>
 
-        {/* Step Indicator */}
+        {/* Step Indicator — 4 dots */}
         <View style={styles.stepIndicator}>
-          {[0, 1, 2].map((i) => {
-            const stepIndex = ["choose_source", "select_item", "compose"].indexOf(step);
-            const isActive = i <= stepIndex || (source === "new_dream" && i <= 2 && stepIndex >= 0);
+          {[0, 1, 2, 3].map((i) => {
+            const isActive = i <= stepIndex || (source === "new_dream" && i >= 0 && stepIndex >= 2 && i <= stepIndex);
             return (
               <View
                 key={i}
@@ -508,7 +565,7 @@ export default function CreateDreamPostScreen() {
         )}
 
         {/* ============================================ */}
-        {/* STEP 3: Compose Post */}
+        {/* STEP 3: Compose & Tag */}
         {/* ============================================ */}
         {step === "compose" && (
           <ScrollView
@@ -627,16 +684,35 @@ export default function CreateDreamPostScreen() {
               </>
             )}
 
-            {/* Photo Picker */}
+            {/* Media Picker — with Video Preview */}
             <TouchableOpacity style={styles.photoButton} onPress={pickMedia} activeOpacity={0.7}>
-              {imageUri ? (
-                <View style={styles.photoPreview}>
-                  <Image source={{ uri: imageUri }} style={styles.photoImage} />
+              {mediaUri ? (
+                <View style={styles.mediaPreviewContainer}>
+                  {mediaType === "video" ? (
+                    <VideoPlayer
+                      uri={mediaUri}
+                      style={styles.mediaPreview}
+                      showControls
+                      thumbnailMode={false}
+                    />
+                  ) : (
+                    <View style={styles.photoPreview}>
+                      <Image source={{ uri: mediaUri }} style={styles.photoImage} />
+                      <View style={styles.mediaBadge}>
+                        <Ionicons name="image" size={12} color="#FFFFFF" />
+                        <Text style={styles.mediaBadgeText}>PHOTO</Text>
+                      </View>
+                    </View>
+                  )}
                   <TouchableOpacity
                     style={styles.photoRemove}
-                    onPress={() => setImageUri(null)}
+                    onPress={() => { setMediaUri(null); setMediaType(null); }}
                   >
-                    <Ionicons name="close-circle" size={26} color="#FF4444" />
+                    <Ionicons name="close-circle" size={28} color="#FF4444" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.changeMediaBtn} onPress={pickMedia}>
+                    <Ionicons name="swap-horizontal" size={16} color="#FFFFFF" />
+                    <Text style={styles.changeMediaText}>Change</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -663,9 +739,292 @@ export default function CreateDreamPostScreen() {
             />
             <Text style={styles.charCount}>{caption.length}/500</Text>
 
+            {/* ---- TAGGING SECTION ---- */}
+            <View style={styles.sectionDivider} />
+
+            {/* Community Tags */}
+            {myCommunities.length > 0 && (
+              <View style={styles.tagSection}>
+                <View style={styles.tagLabelRow}>
+                  <Ionicons name="people-outline" size={18} color={colors.textSecondary} />
+                  <Text style={styles.tagLabel}>Tag Communities</Text>
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.tagScrollRow}
+                >
+                  {myCommunities.map((community) => {
+                    const isSelected = selectedCommunities.some((c) => c.id === community.id);
+                    return (
+                      <TouchableOpacity
+                        key={community.id}
+                        style={[styles.communityChip, isSelected && styles.communityChipActive]}
+                        onPress={() => toggleCommunity(community)}
+                      >
+                        <Text style={styles.communityChipIcon}>{community.icon}</Text>
+                        <Text
+                          style={[
+                            styles.communityChipText,
+                            isSelected && styles.communityChipTextActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {community.name}
+                        </Text>
+                        {isSelected && (
+                          <Ionicons name="checkmark-circle" size={16} color={colors.accentTeal} />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Location */}
+            <View style={styles.tagSection}>
+              <View style={styles.tagInputRow}>
+                <Ionicons name="location-outline" size={18} color={colors.textSecondary} />
+                <TextInput
+                  style={styles.tagInput}
+                  placeholder="Add location (e.g. Atlanta, GA)"
+                  placeholderTextColor={colors.textSecondary}
+                  value={location}
+                  onChangeText={setLocation}
+                  maxLength={100}
+                />
+              </View>
+            </View>
+
+            {/* Hashtags */}
+            <View style={styles.tagSection}>
+              <View style={styles.tagInputRow}>
+                <Text style={styles.hashIcon}>#</Text>
+                <TextInput
+                  style={styles.tagInput}
+                  placeholder="Add hashtags (e.g. savings, dreams)"
+                  placeholderTextColor={colors.textSecondary}
+                  value={hashtags}
+                  onChangeText={setHashtags}
+                  maxLength={200}
+                />
+              </View>
+              {hashtags.trim().length > 0 && (
+                <View style={styles.hashtagPreviewRow}>
+                  {parseHashtags(hashtags).map((tag, idx) => (
+                    <View key={idx} style={styles.hashtagPill}>
+                      <Text style={styles.hashtagPillText}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
             {/* Visibility */}
             <View style={styles.visibilitySection}>
               <VisibilityPicker selected={visibility} onChange={setVisibility} />
+            </View>
+
+            {/* Preview Post Button */}
+            <TouchableOpacity
+              style={[styles.previewPostBtn, !canPreview && styles.previewPostBtnDisabled]}
+              onPress={() => canPreview && setStep("review")}
+              disabled={!canPreview}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="eye-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.previewPostBtnText}>Preview Post</Text>
+            </TouchableOpacity>
+
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        )}
+
+        {/* ============================================ */}
+        {/* STEP 4: Review & Post */}
+        {/* ============================================ */}
+        {step === "review" && (
+          <ScrollView
+            style={styles.content}
+            showsVerticalScrollIndicator={false}
+          >
+            <Text style={styles.stepTitle}>Review Your Post</Text>
+            <Text style={styles.stepSubtitle}>
+              This is how your post will appear in the feed
+            </Text>
+
+            {/* Post Preview Card */}
+            <View style={styles.reviewCard}>
+              {/* Author Header */}
+              <View style={styles.reviewAuthorRow}>
+                <View style={styles.reviewAvatar}>
+                  <Text style={styles.reviewAvatarText}>
+                    {visibility === "anonymous"
+                      ? "?"
+                      : (user?.name || "U").charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.reviewAuthorName}>
+                    {visibility === "anonymous" ? "Anonymous Member" : user?.name || "You"}
+                  </Text>
+                  <Text style={styles.reviewTime}>Just now</Text>
+                </View>
+                <View style={styles.reviewTypeBadge}>
+                  <Text style={styles.reviewTypeBadgeText}>
+                    {source === "goal" ? "\u{1F3AF} Goal" : source === "circle" ? "\u{1F91D} Circle" : "\u{2728} Dream"}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Caption */}
+              <Text style={styles.reviewContent}>{caption}</Text>
+
+              {/* Goal/Circle Progress Preview */}
+              {source === "goal" && selectedGoal && (() => {
+                const p = Math.round((selectedGoal.currentBalance / selectedGoal.targetAmount) * 100);
+                return (
+                  <View style={styles.reviewProgressCard}>
+                    <Text style={styles.reviewProgressEmoji}>{selectedGoal.emoji}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.reviewProgressName}>{selectedGoal.name}</Text>
+                      <Text style={styles.reviewProgressAmount}>
+                        ${selectedGoal.currentBalance.toLocaleString()} / ${selectedGoal.targetAmount.toLocaleString()}
+                      </Text>
+                    </View>
+                    <Text style={styles.reviewProgressPercent}>{p}%</Text>
+                  </View>
+                );
+              })()}
+
+              {source === "circle" && selectedCircle && (
+                <View style={styles.reviewProgressCard}>
+                  <Text style={styles.reviewProgressEmoji}>{selectedCircle.emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.reviewProgressName}>{selectedCircle.name}</Text>
+                    <Text style={styles.reviewProgressAmount}>
+                      {selectedCircle.currentMembers} members {"\u00B7"} ${selectedCircle.amount}/{selectedCircle.frequency}
+                    </Text>
+                  </View>
+                  <Text style={styles.reviewProgressPercent}>{selectedCircle.progress}%</Text>
+                </View>
+              )}
+
+              {/* Media Preview */}
+              {mediaUri && (
+                <View style={styles.reviewMediaWrap}>
+                  {mediaType === "video" ? (
+                    <VideoPlayer
+                      uri={mediaUri}
+                      style={styles.reviewMedia}
+                      showControls
+                      thumbnailMode={false}
+                    />
+                  ) : (
+                    <Image source={{ uri: mediaUri }} style={styles.reviewMedia} resizeMode="cover" />
+                  )}
+                </View>
+              )}
+
+              {/* Tags Row */}
+              {(selectedCommunities.length > 0 || parseHashtags(hashtags).length > 0) && (
+                <View style={styles.reviewTagsRow}>
+                  {selectedCommunities.map((c) => (
+                    <View key={c.id} style={styles.reviewTagPill}>
+                      <Text style={styles.reviewTagPillIcon}>{c.icon}</Text>
+                      <Text style={styles.reviewTagPillText}>{c.name}</Text>
+                    </View>
+                  ))}
+                  {parseHashtags(hashtags).map((tag, idx) => (
+                    <View key={`tag-${idx}`} style={styles.reviewHashPill}>
+                      <Text style={styles.reviewHashPillText}>{tag}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Location */}
+              {location.trim().length > 0 && (
+                <View style={styles.reviewLocationRow}>
+                  <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+                  <Text style={styles.reviewLocationText}>{location.trim()}</Text>
+                </View>
+              )}
+
+              {/* Mock Action Row */}
+              <View style={styles.reviewActions}>
+                <View style={styles.reviewActionBtn}>
+                  <Ionicons name="heart-outline" size={18} color={colors.textSecondary} />
+                  <Text style={styles.reviewActionText}>Like</Text>
+                </View>
+                <View style={styles.reviewActionBtn}>
+                  <Ionicons name="chatbubble-outline" size={18} color={colors.textSecondary} />
+                  <Text style={styles.reviewActionText}>Comment</Text>
+                </View>
+                <View style={styles.reviewActionBtn}>
+                  <Ionicons name="share-outline" size={18} color={colors.textSecondary} />
+                  <Text style={styles.reviewActionText}>Share</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Post Details Summary */}
+            <View style={styles.reviewSummary}>
+              <View style={styles.reviewSummaryRow}>
+                <Text style={styles.reviewSummaryLabel}>Visibility</Text>
+                <Text style={styles.reviewSummaryValue}>
+                  {visibility === "public" ? "\u{1F30D} Public" : visibility === "community" ? "\u{1F465} Community" : "\u{1F441}\u{FE0F}\u{200D}\u{1F5E8}\u{FE0F} Anonymous"}
+                </Text>
+              </View>
+              {selectedCommunities.length > 0 && (
+                <View style={styles.reviewSummaryRow}>
+                  <Text style={styles.reviewSummaryLabel}>Communities</Text>
+                  <Text style={styles.reviewSummaryValue}>
+                    {selectedCommunities.length} tagged
+                  </Text>
+                </View>
+              )}
+              {location.trim().length > 0 && (
+                <View style={styles.reviewSummaryRow}>
+                  <Text style={styles.reviewSummaryLabel}>Location</Text>
+                  <Text style={styles.reviewSummaryValue}>{location.trim()}</Text>
+                </View>
+              )}
+              {mediaUri && (
+                <View style={styles.reviewSummaryRow}>
+                  <Text style={styles.reviewSummaryLabel}>Media</Text>
+                  <Text style={styles.reviewSummaryValue}>
+                    {mediaType === "video" ? "\u{1F3AC} Video" : "\u{1F4F7} Photo"} attached
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Action Buttons */}
+            <View style={styles.reviewButtonRow}>
+              <TouchableOpacity
+                style={styles.editBtn}
+                onPress={() => setStep("compose")}
+              >
+                <Ionicons name="create-outline" size={18} color={colors.accentTeal} />
+                <Text style={styles.editBtnText}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitBtn, isSubmitting && { opacity: 0.6 }]}
+                onPress={handleSubmit}
+                disabled={isSubmitting}
+                activeOpacity={0.7}
+              >
+                {isSubmitting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="sparkles" size={18} color="#FFFFFF" />
+                    <Text style={styles.submitBtnText}>Post Dream</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
 
             <View style={{ height: 40 }} />
@@ -704,22 +1063,6 @@ const styles = StyleSheet.create({
     fontSize: typography.bodyLarge,
     fontWeight: typography.semibold,
     color: colors.textPrimary,
-  },
-  postButton: {
-    backgroundColor: colors.accentTeal,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.pill,
-    minWidth: 70,
-    alignItems: "center",
-  },
-  postButtonDisabled: {
-    opacity: 0.5,
-  },
-  postButtonText: {
-    color: "#FFFFFF",
-    fontSize: typography.body,
-    fontWeight: typography.semibold,
   },
 
   // Step indicator
@@ -799,7 +1142,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // Item cards (Step 2 — goals/circles)
+  // Item cards (Step 2)
   itemCard: {
     backgroundColor: colors.screenBg,
     borderRadius: radius.card,
@@ -873,7 +1216,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
 
-  // Preview card (Step 3 — selected goal/circle)
+  // Preview card (Step 3)
   previewCard: {
     backgroundColor: colors.screenBg,
     borderRadius: radius.card,
@@ -986,7 +1329,7 @@ const styles = StyleSheet.create({
     fontWeight: typography.semibold,
   },
 
-  // Photo picker
+  // Media picker
   photoButton: {
     marginBottom: spacing.lg,
   },
@@ -1007,6 +1350,16 @@ const styles = StyleSheet.create({
     fontWeight: typography.semibold,
     marginLeft: spacing.sm,
   },
+  mediaPreviewContainer: {
+    position: "relative",
+    borderRadius: radius.card,
+    overflow: "hidden",
+  },
+  mediaPreview: {
+    width: "100%",
+    aspectRatio: 4 / 3,
+    borderRadius: radius.card,
+  },
   photoPreview: {
     position: "relative",
     borderRadius: radius.card,
@@ -1014,15 +1367,50 @@ const styles = StyleSheet.create({
   },
   photoImage: {
     width: "100%",
-    height: 200,
+    height: 220,
     borderRadius: radius.card,
+  },
+  mediaBadge: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 4,
+  },
+  mediaBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
   },
   photoRemove: {
     position: "absolute",
     top: 8,
     right: 8,
     backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 13,
+    borderRadius: 14,
+  },
+  changeMediaBtn: {
+    position: "absolute",
+    bottom: 10,
+    right: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 4,
+  },
+  changeMediaText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 
   // Caption
@@ -1041,11 +1429,340 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: colors.textSecondary,
     textAlign: "right",
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
+  },
+
+  // Section divider
+  sectionDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.md,
+  },
+
+  // Tag sections
+  tagSection: {
+    marginBottom: spacing.md,
+  },
+  tagLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: spacing.sm,
+  },
+  tagLabel: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
+    color: colors.textSecondary,
+  },
+  tagScrollRow: {
+    marginBottom: spacing.xs,
+  },
+  communityChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.screenBg,
+    borderRadius: radius.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 6,
+  },
+  communityChipActive: {
+    backgroundColor: colors.tealTintBg,
+    borderColor: colors.accentTeal,
+  },
+  communityChipIcon: {
+    fontSize: 16,
+  },
+  communityChipText: {
+    fontSize: typography.labelSmall,
+    color: colors.textSecondary,
+    fontWeight: typography.medium,
+    maxWidth: 120,
+  },
+  communityChipTextActive: {
+    color: colors.accentTeal,
+    fontWeight: typography.semibold,
+  },
+  tagInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.screenBg,
+    borderRadius: radius.small,
+    paddingHorizontal: spacing.md,
+    gap: 8,
+  },
+  hashIcon: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.textSecondary,
+  },
+  tagInput: {
+    flex: 1,
+    fontSize: typography.body,
+    color: colors.textPrimary,
+    paddingVertical: spacing.md,
+  },
+  hashtagPreviewRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: spacing.sm,
+  },
+  hashtagPill: {
+    backgroundColor: colors.tealTintBg,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+  },
+  hashtagPillText: {
+    fontSize: typography.caption,
+    color: colors.accentTeal,
+    fontWeight: typography.semibold,
   },
 
   // Visibility
   visibilitySection: {
     marginTop: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+
+  // Preview Post button
+  previewPostBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accentTeal,
+    borderRadius: radius.button,
+    paddingVertical: 16,
+    gap: 8,
+  },
+  previewPostBtnDisabled: {
+    opacity: 0.4,
+  },
+  previewPostBtnText: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: "#FFFFFF",
+  },
+
+  // ============================================
+  // STEP 4: Review styles
+  // ============================================
+  reviewCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: radius.card,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: spacing.lg,
+  },
+  reviewAuthorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: spacing.md,
+  },
+  reviewAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.primaryNavy,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: spacing.md,
+  },
+  reviewAvatarText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  reviewAuthorName: {
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    color: colors.textPrimary,
+  },
+  reviewTime: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  reviewTypeBadge: {
+    backgroundColor: colors.tealTintBg,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+  },
+  reviewTypeBadgeText: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold,
+    color: colors.accentTeal,
+  },
+  reviewContent: {
+    fontSize: typography.body,
+    color: colors.textPrimary,
+    lineHeight: 22,
+    marginBottom: spacing.md,
+  },
+  reviewProgressCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.screenBg,
+    borderRadius: radius.small,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  reviewProgressEmoji: {
+    fontSize: 24,
+  },
+  reviewProgressName: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
+    color: colors.textPrimary,
+  },
+  reviewProgressAmount: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  reviewProgressPercent: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: colors.accentTeal,
+  },
+  reviewMediaWrap: {
+    borderRadius: radius.card,
+    overflow: "hidden",
+    marginBottom: spacing.md,
+  },
+  reviewMedia: {
+    width: "100%",
+    aspectRatio: 4 / 3,
+    borderRadius: radius.card,
+  },
+  reviewTagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: spacing.sm,
+  },
+  reviewTagPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.primaryNavy,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  reviewTagPillIcon: {
+    fontSize: 12,
+  },
+  reviewTagPillText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  reviewHashPill: {
+    backgroundColor: colors.tealTintBg,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  reviewHashPillText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.accentTeal,
+  },
+  reviewLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: spacing.md,
+  },
+  reviewLocationText: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+  },
+  reviewActions: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
+    marginTop: spacing.sm,
+  },
+  reviewActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  reviewActionText: {
+    fontSize: typography.bodySmall,
+    color: colors.textSecondary,
+  },
+
+  // Summary card
+  reviewSummary: {
+    backgroundColor: colors.screenBg,
+    borderRadius: radius.card,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  reviewSummaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  reviewSummaryLabel: {
+    fontSize: typography.bodySmall,
+    color: colors.textSecondary,
+  },
+  reviewSummaryValue: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
+    color: colors.textPrimary,
+  },
+
+  // Action buttons
+  reviewButtonRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  editBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.accentTeal,
+    borderRadius: radius.button,
+    paddingVertical: 16,
+    gap: 6,
+  },
+  editBtnText: {
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    color: colors.accentTeal,
+  },
+  submitBtn: {
+    flex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.accentTeal,
+    borderRadius: radius.button,
+    paddingVertical: 16,
+    gap: 8,
+  },
+  submitBtnText: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: "#FFFFFF",
   },
 });

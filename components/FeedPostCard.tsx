@@ -9,6 +9,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { FeedPost, FeedPostType } from "../context/FeedContext";
 import { colors, radius, typography, spacing } from "../theme/tokens";
+import VideoPlayer from "./VideoPlayer";
 
 type FeedPostCardProps = {
   post: FeedPost;
@@ -190,13 +191,52 @@ export default function FeedPostCard({
         </View>
       )}
 
-      {/* Image (if any) */}
-      {post.imageUrl && (
+      {/* Media (image or video) */}
+      {post.imageUrl && meta.mediaType === "video" && (
+        <View style={styles.postMediaContainer}>
+          <VideoPlayer
+            uri={post.imageUrl}
+            style={styles.postVideo}
+            thumbnailMode
+            showControls={false}
+          />
+        </View>
+      )}
+      {post.imageUrl && meta.mediaType !== "video" && (
         <Image
           source={{ uri: post.imageUrl }}
           style={styles.postImage}
           resizeMode="cover"
         />
+      )}
+
+      {/* Community Tags */}
+      {meta.communityTags && meta.communityTags.length > 0 && (
+        <View style={styles.tagsRow}>
+          {meta.communityTags.map((tag: { id: string; name: string; icon: string }) => (
+            <View key={tag.id} style={styles.communityTag}>
+              <Text style={styles.communityTagIcon}>{tag.icon}</Text>
+              <Text style={styles.communityTagText}>{tag.name}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Location */}
+      {meta.location && (
+        <View style={styles.locationRow}>
+          <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+          <Text style={styles.locationText}>{meta.location}</Text>
+        </View>
+      )}
+
+      {/* Hashtags */}
+      {meta.hashtags && meta.hashtags.length > 0 && (
+        <View style={styles.hashtagsRow}>
+          {meta.hashtags.map((tag: string, idx: number) => (
+            <Text key={idx} style={styles.hashtagText}>#{tag}</Text>
+          ))}
+        </View>
       )}
 
       {/* Footer: Like + Comment counts */}
@@ -412,6 +452,60 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: radius.small,
     marginBottom: spacing.md,
+  },
+  postMediaContainer: {
+    marginBottom: spacing.md,
+    borderRadius: radius.small,
+    overflow: "hidden",
+  },
+  postVideo: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    borderRadius: radius.small,
+  },
+  tagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: spacing.sm,
+  },
+  communityTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.tealTintBg,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    gap: 4,
+  },
+  communityTagIcon: {
+    fontSize: 12,
+  },
+  communityTagText: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold as any,
+    color: colors.accentTeal,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: spacing.sm,
+  },
+  locationText: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+  },
+  hashtagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: spacing.sm,
+  },
+  hashtagText: {
+    fontSize: typography.caption,
+    color: colors.accentTeal,
+    fontWeight: typography.semibold as any,
   },
   footer: {
     flexDirection: "row",
