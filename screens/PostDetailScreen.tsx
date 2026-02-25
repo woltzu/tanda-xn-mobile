@@ -21,6 +21,17 @@ import FeedCommentItem from "../components/FeedCommentItem";
 import { showToast } from "../components/Toast";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 
+// Blueprint engagement placeholder handlers
+const handleClonePlan = (_post: FeedPost) => {
+  showToast("Clone Plan coming soon!", "info");
+};
+const handleAccountability = (_post: FeedPost) => {
+  showToast("Accountability Link coming soon!", "info");
+};
+const handleSupport = (_post: FeedPost) => {
+  showToast("Support Dream coming soon!", "info");
+};
+
 type PostDetailRouteParams = {
   PostDetail: { postId: string };
 };
@@ -68,7 +79,7 @@ export default function PostDetailScreen() {
       const newComment = await addComment(postId, commentText.trim());
       setComments((prev) => [...prev, newComment]);
       setCommentText("");
-      showToast("Comment added!", "success");
+      showToast("Commitment posted!", "success");
       // Reload post to get updated comment count
       const updatedPost = await getPostById(postId);
       if (updatedPost) setPost(updatedPost);
@@ -170,20 +181,23 @@ export default function PostDetailScreen() {
             onAuthorPress={(userId) =>
               navigation.navigate("UserDreamProfile", { userId })
             }
+            onSupport={handleSupport}
+            onClonePlan={handleClonePlan}
+            onAccountability={handleAccountability}
             currentUserId={user?.id}
           />
 
-          {/* Comments Section */}
+          {/* Challenge Commitments Section */}
           <View style={styles.commentsHeader}>
             <Text style={styles.commentsTitle}>
-              Comments ({comments.length})
+              Challenge Commitments ({comments.length})
             </Text>
           </View>
 
           {comments.length === 0 ? (
             <View style={styles.noComments}>
               <Text style={styles.noCommentsText}>
-                No comments yet. Be the first to encourage!
+                No commitments yet. Be the first to join the challenge!
               </Text>
             </View>
           ) : (
@@ -203,7 +217,7 @@ export default function PostDetailScreen() {
         <View style={styles.commentInputContainer}>
           <TextInput
             style={styles.commentInput}
-            placeholder="Add a comment..."
+            placeholder="Make your commitment..."
             placeholderTextColor={colors.textSecondary}
             value={commentText}
             onChangeText={setCommentText}

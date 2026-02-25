@@ -12,9 +12,10 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { useFeed } from "../context/FeedContext";
+import { useFeed, FeedPost } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
 import FeedPostCard from "../components/FeedPostCard";
+import { showToast } from "../components/Toast";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 
 type DreamFeedNavigationProp = StackNavigationProp<any>;
@@ -53,6 +54,18 @@ export default function DreamFeedScreen() {
     navigation.navigate("UserDreamProfile", { userId });
   };
 
+  const handleClonePlan = (post: FeedPost) => {
+    showToast("Clone Plan coming soon!", "info");
+  };
+
+  const handleAccountability = (post: FeedPost) => {
+    showToast("Accountability Link coming soon!", "info");
+  };
+
+  const handleSupport = (post: FeedPost) => {
+    showToast("Support Dream coming soon!", "info");
+  };
+
   const renderPost = ({ item }: { item: any }) => (
     <FeedPostCard
       post={item}
@@ -61,6 +74,9 @@ export default function DreamFeedScreen() {
       onComment={handleCommentPress}
       onPress={handlePostPress}
       onAuthorPress={handleAuthorPress}
+      onSupport={handleSupport}
+      onClonePlan={handleClonePlan}
+      onAccountability={handleAccountability}
       currentUserId={user?.id}
     />
   );

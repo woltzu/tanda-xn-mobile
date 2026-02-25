@@ -55,7 +55,7 @@ export default function DreamPostCommentsScreen() {
       const newComment = await addComment(postId, commentText.trim());
       setComments((prev) => [...prev, newComment]);
       setCommentText("");
-      showToast("Comment posted!", "success");
+      showToast("Commitment posted!", "success");
     } catch (err) {
       showToast("Failed to post comment", "error");
       Alert.alert("Error", "Failed to post comment.");
@@ -75,7 +75,7 @@ export default function DreamPostCommentsScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Comments</Text>
+          <Text style={styles.headerTitle}>Challenge Commitments</Text>
           <View style={{ width: 24 }} />
         </View>
 
@@ -97,7 +97,7 @@ export default function DreamPostCommentsScreen() {
               <View style={styles.emptyState}>
                 <Text style={styles.emptyEmoji}>💬</Text>
                 <Text style={styles.emptyText}>
-                  No comments yet. Be the first to encourage!
+                  No commitments yet. Be the first to join the challenge!
                 </Text>
               </View>
             }
@@ -108,7 +108,7 @@ export default function DreamPostCommentsScreen() {
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
-            placeholder="Write a comment..."
+            placeholder="Make your commitment..."
             placeholderTextColor={colors.textSecondary}
             value={commentText}
             onChangeText={setCommentText}

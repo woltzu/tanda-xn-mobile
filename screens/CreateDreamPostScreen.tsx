@@ -866,25 +866,25 @@ export default function CreateDreamPostScreen() {
                   <Image source={{ uri: mediaUri }} style={styles.rvHeroImage} resizeMode="cover" />
                 )}
 
-                {/* Floating Side Actions — TikTok style, right side */}
+                {/* Floating Side Actions — TandaXn Blueprint engagement */}
                 <View style={styles.rvSideActions}>
                   <View style={styles.rvSideBtn}>
-                    <View style={styles.rvSideBtnCircle}>
-                      <Ionicons name="heart" size={24} color="#FF4458" />
+                    <View style={[styles.rvSideBtnCircle, { backgroundColor: "rgba(0, 198, 174, 0.3)" }]}>
+                      <Ionicons name="wallet" size={24} color={colors.accentTeal} />
                     </View>
-                    <Text style={styles.rvSideBtnLabel}>0</Text>
+                    <Text style={styles.rvSideBtnLabel}>I Saved</Text>
                   </View>
                   <View style={styles.rvSideBtn}>
                     <View style={styles.rvSideBtnCircle}>
-                      <Ionicons name="chatbubble-ellipses" size={22} color="#FFFFFF" />
+                      <Ionicons name="flag-outline" size={22} color="#FFFFFF" />
                     </View>
-                    <Text style={styles.rvSideBtnLabel}>0</Text>
+                    <Text style={styles.rvSideBtnLabel}>Challenge</Text>
                   </View>
                   <View style={styles.rvSideBtn}>
                     <View style={styles.rvSideBtnCircle}>
-                      <Ionicons name="arrow-redo" size={22} color="#FFFFFF" />
+                      <Ionicons name="copy-outline" size={22} color="#FFFFFF" />
                     </View>
-                    <Text style={styles.rvSideBtnLabel}>Share</Text>
+                    <Text style={styles.rvSideBtnLabel}>Clone</Text>
                   </View>
                   {(source === "goal" || source === "circle") && (
                     <View style={styles.rvSideBtn}>
@@ -896,9 +896,9 @@ export default function CreateDreamPostScreen() {
                   )}
                   <View style={styles.rvSideBtn}>
                     <View style={styles.rvSideBtnCircle}>
-                      <Ionicons name="bookmark" size={20} color="#FFFFFF" />
+                      <Ionicons name="people-outline" size={20} color="#FFFFFF" />
                     </View>
-                    <Text style={styles.rvSideBtnLabel}>Save</Text>
+                    <Text style={styles.rvSideBtnLabel}>Link</Text>
                   </View>
                 </View>
 

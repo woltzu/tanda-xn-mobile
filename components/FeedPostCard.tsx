@@ -19,17 +19,19 @@ type FeedPostCardProps = {
   onPress: (postId: string) => void;
   onAuthorPress?: (userId: string) => void;
   onSupport?: (post: FeedPost) => void;
+  onClonePlan?: (post: FeedPost) => void;
+  onAccountability?: (post: FeedPost) => void;
   currentUserId?: string;
 };
 
-// Post type configurations
+// Post type configurations — Blueprint vocabulary
 const POST_TYPE_CONFIG: Record<FeedPostType, { emoji: string; label: string; color: string }> = {
   dream: { emoji: "\u{2728}", label: "Dream", color: "#8B5CF6" },
-  milestone: { emoji: "\u{1F3C6}", label: "Milestone", color: "#F59E0B" },
-  contribution: { emoji: "\u{1F4B0}", label: "Contribution", color: "#10B981" },
+  milestone: { emoji: "\u{1F3C6}", label: "Savings Milestone", color: "#F59E0B" },
+  contribution: { emoji: "\u{1F4B0}", label: "Streak Update", color: "#10B981" },
   goal_created: { emoji: "\u{1F3AF}", label: "New Goal", color: "#3B82F6" },
-  goal_reached: { emoji: "\u{1F389}", label: "Goal Reached!", color: "#10B981" },
-  circle_joined: { emoji: "\u{1F91D}", label: "Joined Circle", color: "#6366F1" },
+  goal_reached: { emoji: "\u{1F389}", label: "Dream Achieved!", color: "#10B981" },
+  circle_joined: { emoji: "\u{1F91D}", label: "Group Win", color: "#6366F1" },
   payout_received: { emoji: "\u{1F4B8}", label: "Payout", color: "#059669" },
   xn_level_up: { emoji: "\u{2B06}\u{FE0F}", label: "Level Up", color: "#EC4899" },
 };
@@ -58,6 +60,8 @@ export default function FeedPostCard({
   onPress,
   onAuthorPress,
   onSupport,
+  onClonePlan,
+  onAccountability,
   currentUserId,
 }: FeedPostCardProps) {
   const config = POST_TYPE_CONFIG[post.type] || POST_TYPE_CONFIG.dream;
@@ -97,46 +101,50 @@ export default function FeedPostCard({
             aspectRatio={9 / 16}
           />
 
-          {/* Floating side action buttons — right side, thumb-friendly */}
+          {/* Floating side action buttons — TandaXn Blueprint engagement */}
           <View style={styles.sideActions}>
-            {/* Like */}
+            {/* I Saved Too (replaces Like) */}
             <TouchableOpacity
               style={styles.sideBtn}
               onPress={() => onLike(post.id)}
             >
-              <View style={styles.sideBtnCircle}>
+              <View style={[styles.sideBtnCircle, isLiked && { backgroundColor: "rgba(0, 198, 174, 0.3)" }]}>
                 <Ionicons
-                  name={isLiked ? "heart" : "heart-outline"}
+                  name={isLiked ? "wallet" : "wallet-outline"}
                   size={24}
-                  color={isLiked ? "#FF4458" : "#FFFFFF"}
+                  color={isLiked ? colors.accentTeal : "#FFFFFF"}
                 />
               </View>
-              <Text style={styles.sideBtnCount}>
+              <Text style={[styles.sideBtnCount, isLiked && { color: colors.accentTeal }]}>
                 {post.likesCount > 0 ? post.likesCount : ""}
               </Text>
             </TouchableOpacity>
 
-            {/* Comment */}
+            {/* Join Challenge (replaces Comment) */}
             <TouchableOpacity
               style={styles.sideBtn}
               onPress={() => onComment(post.id)}
             >
               <View style={styles.sideBtnCircle}>
-                <Ionicons name="chatbubble-ellipses" size={22} color="#FFFFFF" />
+                <Ionicons name="flag-outline" size={22} color="#FFFFFF" />
               </View>
               <Text style={styles.sideBtnCount}>
                 {post.commentsCount > 0 ? post.commentsCount : ""}
               </Text>
             </TouchableOpacity>
 
-            {/* Share */}
-            <View style={styles.sideBtn}>
+            {/* Clone Plan (replaces Share) */}
+            <TouchableOpacity
+              style={styles.sideBtn}
+              onPress={() => onClonePlan?.(post)}
+            >
               <View style={styles.sideBtnCircle}>
-                <Ionicons name="arrow-redo" size={22} color="#FFFFFF" />
+                <Ionicons name="copy-outline" size={22} color="#FFFFFF" />
               </View>
-            </View>
+              <Text style={styles.sideBtnCount}>Clone</Text>
+            </TouchableOpacity>
 
-            {/* Support — only for others' goal/circle posts */}
+            {/* Support Dream — only for others' goal/circle posts */}
             {(hasGoalProgress || hasCircleProgress) && !isOwnPost && onSupport && (
               <TouchableOpacity
                 style={styles.sideBtn}
@@ -145,15 +153,20 @@ export default function FeedPostCard({
                 <View style={[styles.sideBtnCircle, { backgroundColor: colors.accentTeal }]}>
                   <Ionicons name="hand-left" size={20} color="#FFFFFF" />
                 </View>
+                <Text style={styles.sideBtnCount}>Support</Text>
               </TouchableOpacity>
             )}
 
-            {/* Bookmark */}
-            <View style={styles.sideBtn}>
+            {/* Accountability Link (replaces Bookmark) */}
+            <TouchableOpacity
+              style={styles.sideBtn}
+              onPress={() => onAccountability?.(post)}
+            >
               <View style={styles.sideBtnCircle}>
-                <Ionicons name="bookmark-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="people-outline" size={20} color="#FFFFFF" />
               </View>
-            </View>
+              <Text style={styles.sideBtnCount}>Link</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Bottom overlay: author + caption */}
@@ -389,24 +402,29 @@ export default function FeedPostCard({
         </TouchableOpacity>
       )}
 
-      {/* Footer */}
+      {/* Footer — Blueprint engagement actions */}
       <View style={styles.footer}>
         <TouchableOpacity style={styles.actionButton} onPress={() => onLike(post.id)}>
           <Ionicons
-            name={isLiked ? "heart" : "heart-outline"}
+            name={isLiked ? "wallet" : "wallet-outline"}
             size={20}
-            color={isLiked ? "#EF4444" : colors.textSecondary}
+            color={isLiked ? colors.accentTeal : colors.textSecondary}
           />
-          <Text style={[styles.actionText, isLiked && { color: "#EF4444" }]}>
-            {post.likesCount > 0 ? post.likesCount : ""}
+          <Text style={[styles.actionText, isLiked && { color: colors.accentTeal }]}>
+            {post.likesCount > 0 ? `${post.likesCount}` : "I Saved Too"}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton} onPress={() => onComment(post.id)}>
-          <Ionicons name="chatbubble-outline" size={18} color={colors.textSecondary} />
+          <Ionicons name="flag-outline" size={18} color={colors.textSecondary} />
           <Text style={styles.actionText}>
-            {post.commentsCount > 0 ? post.commentsCount : ""}
+            {post.commentsCount > 0 ? `${post.commentsCount}` : "Challenge"}
           </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.actionButton} onPress={() => onClonePlan?.(post)}>
+          <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
+          <Text style={styles.actionText}>Clone</Text>
         </TouchableOpacity>
 
         {post.isAuto && (
