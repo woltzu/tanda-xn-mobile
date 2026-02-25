@@ -570,6 +570,7 @@ export default function CreateDreamPostScreen() {
         {step === "compose" && (
           <ScrollView
             style={styles.content}
+            contentContainerStyle={{ paddingBottom: 100 }}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
@@ -847,6 +848,7 @@ export default function CreateDreamPostScreen() {
         {step === "review" && (
           <ScrollView
             style={styles.content}
+            contentContainerStyle={{ paddingBottom: 120 }}
             showsVerticalScrollIndicator={false}
           >
             <Text style={styles.stepTitle}>Review Your Post</Text>
@@ -949,6 +951,26 @@ export default function CreateDreamPostScreen() {
                 <View style={styles.reviewLocationRow}>
                   <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
                   <Text style={styles.reviewLocationText}>{location.trim()}</Text>
+                </View>
+              )}
+
+              {/* Support CTA — visible to others in the feed */}
+              {(source === "goal" || source === "circle") && (
+                <View style={styles.reviewSupportCTA}>
+                  <View style={styles.reviewSupportIcon}>
+                    <Ionicons name="hand-left" size={18} color="#FFFFFF" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.reviewSupportTitle}>
+                      {source === "goal" ? "Support this Dream" : "Join this Circle"}
+                    </Text>
+                    <Text style={styles.reviewSupportSubtext}>
+                      {source === "goal"
+                        ? "Cheer them on or contribute to their goal"
+                        : "Request to join and save together"}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.accentTeal} />
                 </View>
               )}
 
@@ -1685,6 +1707,35 @@ const styles = StyleSheet.create({
   reviewLocationText: {
     fontSize: typography.caption,
     color: colors.textSecondary,
+  },
+  reviewSupportCTA: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.tealTintBg,
+    borderRadius: radius.small,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.accentTeal + "30",
+  },
+  reviewSupportIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.accentTeal,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reviewSupportTitle: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.bold as any,
+    color: colors.accentTeal,
+  },
+  reviewSupportSubtext: {
+    fontSize: typography.caption,
+    color: colors.textSecondary,
+    marginTop: 1,
   },
   reviewActions: {
     flexDirection: "row",

@@ -18,6 +18,7 @@ type FeedPostCardProps = {
   onComment: (postId: string) => void;
   onPress: (postId: string) => void;
   onAuthorPress?: (userId: string) => void;
+  onSupport?: (post: FeedPost) => void;
   currentUserId?: string;
 };
 
@@ -56,6 +57,7 @@ export default function FeedPostCard({
   onComment,
   onPress,
   onAuthorPress,
+  onSupport,
   currentUserId,
 }: FeedPostCardProps) {
   const config = POST_TYPE_CONFIG[post.type] || POST_TYPE_CONFIG.dream;
@@ -237,6 +239,23 @@ export default function FeedPostCard({
             <Text key={idx} style={styles.hashtagText}>#{tag}</Text>
           ))}
         </View>
+      )}
+
+      {/* Support CTA — for goal/circle posts from other users */}
+      {(hasGoalProgress || hasCircleProgress) && !isOwnPost && onSupport && (
+        <TouchableOpacity
+          style={styles.supportCTA}
+          onPress={() => onSupport(post)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.supportIcon}>
+            <Ionicons name="hand-left" size={16} color="#FFFFFF" />
+          </View>
+          <Text style={styles.supportText}>
+            {hasGoalProgress ? "Support this Dream" : "Join this Circle"}
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.accentTeal} />
+        </TouchableOpacity>
       )}
 
       {/* Footer: Like + Comment counts */}
@@ -506,6 +525,29 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: colors.accentTeal,
     fontWeight: typography.semibold as any,
+  },
+  supportCTA: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.tealTintBg,
+    borderRadius: radius.small,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  supportIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.accentTeal,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  supportText: {
+    flex: 1,
+    fontSize: typography.bodySmall,
+    fontWeight: typography.bold as any,
+    color: colors.accentTeal,
   },
   footer: {
     flexDirection: "row",
