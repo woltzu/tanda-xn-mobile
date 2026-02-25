@@ -142,7 +142,7 @@ export default function CreateDreamPostScreen() {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images", "videos"],
         allowsEditing: true,
-        aspect: [4, 3],
+        aspect: [9, 16], // Portrait-first (TikTok-style)
         quality: 0.8,
         videoMaxDuration: 60,
       });
@@ -152,9 +152,10 @@ export default function CreateDreamPostScreen() {
         setMediaUri(asset.uri);
         const type: MediaType = asset.type === "video" ? "video" : "image";
         setMediaType(type);
-        if (type === "video") {
-          showToast("Video selected (up to 60s)", "info");
-        }
+        showToast(
+          type === "video" ? "Video selected (up to 60s)" : "Photo selected",
+          "info"
+        );
       }
     } catch (err) {
       console.error("Media picker error:", err);
@@ -166,13 +167,26 @@ export default function CreateDreamPostScreen() {
     try {
       const response = await fetch(uri);
       const blob = await response.blob();
-      const fileExt = uri.split(".").pop()?.split("?")[0] || "jpg";
-      const fileName = `${user?.id}/${Date.now()}.${fileExt}`;
 
-      // Determine content type based on media type
+      // Smart extension detection — handles blob URLs, data URIs, and file paths
+      let fileExt: string;
+      const blobType = blob.type; // e.g. "video/mp4", "image/jpeg"
+      if (blobType && blobType.includes("/")) {
+        // Use blob's MIME type for reliable extension
+        const mimeExt = blobType.split("/")[1].replace("quicktime", "mov");
+        fileExt = mimeExt === "jpeg" ? "jpg" : mimeExt;
+      } else {
+        // Fallback to URI parsing
+        const uriExt = uri.split(".").pop()?.split("?")[0]?.toLowerCase();
+        fileExt = uriExt && uriExt.length <= 5 ? uriExt : (mediaType === "video" ? "mp4" : "jpg");
+      }
+
+      const fileName = `${user?.id}/${Date.now()}.${fileExt}`;
       const videoExts = ["mp4", "mov", "avi", "m4v", "webm"];
-      const isVideo = mediaType === "video" || videoExts.includes(fileExt.toLowerCase());
-      const contentType = isVideo ? `video/${fileExt === "mov" ? "quicktime" : fileExt}` : `image/${fileExt}`;
+      const isVideo = mediaType === "video" || videoExts.includes(fileExt);
+      const contentType = blobType || (isVideo ? `video/${fileExt === "mov" ? "quicktime" : fileExt}` : `image/${fileExt}`);
+
+      console.log(`[Upload] Uploading ${isVideo ? "video" : "image"}: ${fileName} (${contentType}, ${(blob.size / 1024 / 1024).toFixed(1)}MB)`);
 
       const { data, error } = await supabase.storage
         .from("feed-images")
@@ -182,18 +196,19 @@ export default function CreateDreamPostScreen() {
         });
 
       if (error) {
-        console.warn("[Upload] Storage error (bucket may not exist):", error.message);
-        return null;
+        console.error("[Upload] Storage error:", error.message);
+        throw new Error(error.message);
       }
 
       const { data: urlData } = supabase.storage
         .from("feed-images")
         .getPublicUrl(data.path);
 
+      console.log("[Upload] Success:", urlData.publicUrl);
       return urlData.publicUrl;
-    } catch (err) {
-      console.warn("[Upload] Media upload failed:", err);
-      return null;
+    } catch (err: any) {
+      console.error("[Upload] Media upload failed:", err);
+      throw err; // Re-throw so handleSubmit can catch and show error
     }
   };
 
@@ -311,10 +326,36 @@ export default function CreateDreamPostScreen() {
       // Upload media if selected
       let imageUrl: string | undefined;
       if (mediaUri) {
-        showToast(mediaType === "video" ? "Uploading video..." : "Uploading photo...", "info", 5000);
-        const uploaded = await uploadMedia(mediaUri);
-        if (uploaded) {
-          imageUrl = uploaded;
+        showToast(
+          mediaType === "video" ? "Uploading video..." : "Uploading photo...",
+          "info",
+          10000
+        );
+        try {
+          const uploaded = await uploadMedia(mediaUri);
+          if (uploaded) {
+            imageUrl = uploaded;
+            showToast("Upload complete!", "success");
+          }
+        } catch (uploadErr: any) {
+          // Upload failed — ask user what to do
+          const errorMsg = uploadErr?.message || "Unknown error";
+          const proceed = await new Promise<boolean>((resolve) => {
+            Alert.alert(
+              "Upload Failed",
+              `Could not upload your ${mediaType || "media"}: ${errorMsg}\n\nPost without media?`,
+              [
+                { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+                { text: "Post Anyway", onPress: () => resolve(true) },
+              ]
+            );
+          });
+          if (!proceed) {
+            setIsSubmitting(false);
+            return;
+          }
+          // Clear media metadata if posting without it
+          delete metadata.mediaType;
         }
       }
 
