@@ -45,9 +45,11 @@ export default function PostDetailScreen() {
     getPostById,
     getComments,
     toggleLike,
+    toggleSave,
     addComment,
     deletePost,
     likedPostIds,
+    savedPostIds,
   } = useFeed();
 
   const [post, setPost] = useState<FeedPost | null>(null);
@@ -171,6 +173,7 @@ export default function PostDetailScreen() {
           <FeedPostCard
             post={post}
             isLiked={likedPostIds.has(post.id)}
+            isSaved={savedPostIds.has(post.id)}
             onLike={async (id) => {
               await toggleLike(id);
               const updated = await getPostById(id);
@@ -184,6 +187,7 @@ export default function PostDetailScreen() {
             onSupport={handleSupport}
             onClonePlan={handleClonePlan}
             onAccountability={handleAccountability}
+            onSave={toggleSave}
             currentUserId={user?.id}
           />
 

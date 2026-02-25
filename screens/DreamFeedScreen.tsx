@@ -29,7 +29,9 @@ export default function DreamFeedScreen() {
     isLoadingMore,
     hasMore,
     likedPostIds,
+    savedPostIds,
     toggleLike,
+    toggleSave,
     fetchMorePosts,
     refreshFeed,
   } = useFeed();
@@ -70,6 +72,7 @@ export default function DreamFeedScreen() {
     <FeedPostCard
       post={item}
       isLiked={likedPostIds.has(item.id)}
+      isSaved={savedPostIds.has(item.id)}
       onLike={toggleLike}
       onComment={handleCommentPress}
       onPress={handlePostPress}
@@ -77,6 +80,7 @@ export default function DreamFeedScreen() {
       onSupport={handleSupport}
       onClonePlan={handleClonePlan}
       onAccountability={handleAccountability}
+      onSave={toggleSave}
       currentUserId={user?.id}
     />
   );

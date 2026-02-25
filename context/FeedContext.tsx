@@ -160,6 +160,7 @@ type FeedContextType = {
   error: string | null;
   hasMore: boolean;
   likedPostIds: Set<string>;
+  savedPostIds: Set<string>;
   fetchFeed: () => Promise<void>;
   fetchMorePosts: () => Promise<void>;
   createDreamPost: (
@@ -179,6 +180,7 @@ type FeedContextType = {
     visibility?: FeedVisibility
   ) => Promise<FeedPost | null>;
   toggleLike: (postId: string) => Promise<void>;
+  toggleSave: (postId: string) => Promise<void>;
   addComment: (postId: string, content: string) => Promise<FeedComment>;
   getComments: (postId: string) => Promise<FeedComment[]>;
   deletePost: (postId: string) => Promise<void>;
@@ -209,7 +211,44 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [likedPostIds, setLikedPostIds] = useState<Set<string>>(new Set());
+  const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
+  const profileEnsured = useRef(false);
   const lastCreatedAt = useRef<string | null>(null);
+
+  // Ensure the current auth user has a matching profiles row.
+  // Calls the DB function first; if it doesn't exist yet, falls back to direct upsert.
+  const ensureProfile = async () => {
+    if (!user?.id || profileEnsured.current) return;
+
+    try {
+      // Try RPC first (created by migration 028)
+      const { error: rpcError } = await supabase.rpc("ensure_user_profile");
+
+      if (rpcError) {
+        // Fallback: direct upsert (requires INSERT policy on profiles)
+        console.warn("ensure_user_profile RPC failed, trying direct upsert:", rpcError.message);
+        const { error: upsertError } = await supabase
+          .from("profiles")
+          .upsert(
+            {
+              id: user.id,
+              email: user.email,
+              full_name: user.name,
+            },
+            { onConflict: "id" }
+          );
+
+        if (upsertError) {
+          console.error("Profile upsert failed:", upsertError.message);
+          // Don't throw — the profile may already exist from the trigger
+        }
+      }
+
+      profileEnsured.current = true;
+    } catch (err) {
+      console.error("ensureProfile error:", err);
+    }
+  };
 
   // Fetch feed posts with pagination
   const fetchFeed = useCallback(async () => {
@@ -249,15 +288,18 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
         lastCreatedAt.current = feedPosts[feedPosts.length - 1].createdAt;
       }
 
-      // Fetch user's likes
+      // Fetch user's likes and saved posts
       if (user?.id) {
-        const { data: likesData } = await supabase
-          .from("feed_likes")
-          .select("post_id")
-          .eq("user_id", user.id);
+        const [likesRes, savedRes] = await Promise.all([
+          supabase.from("feed_likes").select("post_id").eq("user_id", user.id),
+          supabase.from("feed_saved_posts").select("post_id").eq("user_id", user.id),
+        ]);
 
-        if (likesData) {
-          setLikedPostIds(new Set(likesData.map((l: any) => l.post_id)));
+        if (likesRes.data) {
+          setLikedPostIds(new Set(likesRes.data.map((l: any) => l.post_id)));
+        }
+        if (savedRes.data) {
+          setSavedPostIds(new Set(savedRes.data.map((s: any) => s.post_id)));
         }
       }
     } catch (err) {
@@ -403,6 +445,9 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
   ): Promise<FeedPost> => {
     if (!user?.id) throw new Error("Must be logged in to create a post");
 
+    // Ensure the user has a profile row (fixes FK constraint error)
+    await ensureProfile();
+
     const { data, error: insertError } = await supabase
       .from("feed_posts")
       .insert({
@@ -445,6 +490,9 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
     if (!user?.id) return null;
 
     try {
+      // Ensure the user has a profile row
+      await ensureProfile();
+
       // Generate auto content from template
       const template = AUTO_POST_TEMPLATES[type];
       const content = template ? template(metadata) : `New activity: ${type}`;
@@ -545,6 +593,55 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
             : p
         )
       );
+    }
+  };
+
+  // Toggle save (bookmark) on a post
+  const toggleSave = async (postId: string) => {
+    if (!user?.id) return;
+
+    const isSaved = savedPostIds.has(postId);
+
+    // Optimistic update
+    setSavedPostIds((prev) => {
+      const next = new Set(prev);
+      if (isSaved) {
+        next.delete(postId);
+      } else {
+        next.add(postId);
+      }
+      return next;
+    });
+
+    try {
+      if (isSaved) {
+        const { error } = await supabase
+          .from("feed_saved_posts")
+          .delete()
+          .eq("post_id", postId)
+          .eq("user_id", user.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("feed_saved_posts").insert({
+          post_id: postId,
+          user_id: user.id,
+        });
+
+        if (error) throw error;
+      }
+    } catch (err) {
+      console.error("Error toggling save:", err);
+      // Revert optimistic update on error
+      setSavedPostIds((prev) => {
+        const next = new Set(prev);
+        if (isSaved) {
+          next.add(postId);
+        } else {
+          next.delete(postId);
+        }
+        return next;
+      });
     }
   };
 
@@ -684,11 +781,13 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
         error,
         hasMore,
         likedPostIds,
+        savedPostIds,
         fetchFeed,
         fetchMorePosts,
         createDreamPost,
         createAutoPost,
         toggleLike,
+        toggleSave,
         addComment,
         getComments,
         deletePost,

@@ -14,6 +14,7 @@ import VideoPlayer from "./VideoPlayer";
 type FeedPostCardProps = {
   post: FeedPost;
   isLiked: boolean;
+  isSaved?: boolean;
   onLike: (postId: string) => void;
   onComment: (postId: string) => void;
   onPress: (postId: string) => void;
@@ -21,6 +22,7 @@ type FeedPostCardProps = {
   onSupport?: (post: FeedPost) => void;
   onClonePlan?: (post: FeedPost) => void;
   onAccountability?: (post: FeedPost) => void;
+  onSave?: (postId: string) => void;
   currentUserId?: string;
 };
 
@@ -62,6 +64,7 @@ export default function FeedPostCard({
   onSupport,
   onClonePlan,
   onAccountability,
+  onSave,
   currentUserId,
 }: FeedPostCardProps) {
   const config = POST_TYPE_CONFIG[post.type] || POST_TYPE_CONFIG.dream;
@@ -169,6 +172,25 @@ export default function FeedPostCard({
               </View>
               <Text style={styles.sideBtnCount}>Share</Text>
             </TouchableOpacity>
+
+            {/* Save for later */}
+            {onSave && (
+              <TouchableOpacity
+                style={styles.sideBtn}
+                onPress={() => onSave(post.id)}
+              >
+                <View style={[styles.sideBtnCircle, isSaved && { backgroundColor: "rgba(245, 158, 11, 0.3)" }]}>
+                  <Ionicons
+                    name={isSaved ? "bookmark" : "bookmark-outline"}
+                    size={22}
+                    color={isSaved ? "#F59E0B" : "#FFFFFF"}
+                  />
+                </View>
+                <Text style={[styles.sideBtnCount, isSaved && { color: "#F59E0B" }]}>
+                  {isSaved ? "Saved" : "Save"}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Bottom overlay: author + caption */}
@@ -435,9 +457,25 @@ export default function FeedPostCard({
           <Text style={styles.actionText}>Clone Goal</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.actionButton, { marginRight: 0, marginLeft: "auto" }]} onPress={() => onAccountability?.(post)}>
+        <TouchableOpacity style={[styles.actionButton, { marginRight: spacing.md }]} onPress={() => onAccountability?.(post)}>
           <Ionicons name="arrow-redo" size={18} color={colors.textSecondary} />
         </TouchableOpacity>
+
+        {onSave && (
+          <TouchableOpacity
+            style={[styles.actionButton, { marginRight: 0, marginLeft: "auto" }]}
+            onPress={() => onSave(post.id)}
+          >
+            <Ionicons
+              name={isSaved ? "bookmark" : "bookmark-outline"}
+              size={18}
+              color={isSaved ? "#F59E0B" : colors.textSecondary}
+            />
+            {isSaved && (
+              <Text style={[styles.actionText, { color: "#F59E0B" }]}>Saved</Text>
+            )}
+          </TouchableOpacity>
+        )}
 
         {post.isAuto && (
           <View style={styles.autoIndicator}>
