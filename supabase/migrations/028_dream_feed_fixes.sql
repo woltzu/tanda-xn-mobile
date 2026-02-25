@@ -2,6 +2,22 @@
 -- Run this in Supabase SQL Editor: https://supabase.com/dashboard/project/fjqdkyjkwqeoafwvnjgv/sql/new
 
 -- ============================================
+-- 0. FIX: handle_new_profile_wallet() trigger
+--    The profiles table uses "id" (not "user_id").
+--    A previous migration broke this by referencing NEW.user_id.
+-- ============================================
+
+CREATE OR REPLACE FUNCTION handle_new_profile_wallet()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.wallets (user_id, balance, currency)
+  VALUES (NEW.id, 0, 'USD')
+  ON CONFLICT (user_id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================
 -- 1. ensure_user_profile() — RPC function
 --    Called by the app before creating feed posts.
 --    Guarantees the auth user has a matching profiles row.
@@ -55,15 +71,19 @@ CREATE INDEX IF NOT EXISTS idx_feed_saved_posts_post_id ON feed_saved_posts(post
 -- Enable RLS
 ALTER TABLE feed_saved_posts ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies
-CREATE POLICY "read_own_saved" ON feed_saved_posts FOR SELECT
-  USING (user_id = auth.uid());
-
-CREATE POLICY "insert_own_saved" ON feed_saved_posts FOR INSERT
-  WITH CHECK (user_id = auth.uid());
-
-CREATE POLICY "delete_own_saved" ON feed_saved_posts FOR DELETE
-  USING (user_id = auth.uid());
+-- RLS Policies (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'feed_saved_posts' AND policyname = 'read_own_saved') THEN
+    CREATE POLICY "read_own_saved" ON feed_saved_posts FOR SELECT USING (user_id = auth.uid());
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'feed_saved_posts' AND policyname = 'insert_own_saved') THEN
+    CREATE POLICY "insert_own_saved" ON feed_saved_posts FOR INSERT WITH CHECK (user_id = auth.uid());
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'feed_saved_posts' AND policyname = 'delete_own_saved') THEN
+    CREATE POLICY "delete_own_saved" ON feed_saved_posts FOR DELETE USING (user_id = auth.uid());
+  END IF;
+END $$;
 
 -- ============================================
 -- 4. Backfill: Create profiles for any auth users
