@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react";
 import {
   View,
   StyleSheet,
-  TouchableOpacity,
+  Pressable,
   ActivityIndicator,
   Text,
   ViewStyle,
@@ -17,6 +17,10 @@ interface VideoPlayerProps {
   showControls?: boolean;
   autoplay?: boolean;
   thumbnailMode?: boolean;
+  /** Disable touch overlays so scroll gestures pass through */
+  disableTouch?: boolean;
+  /** Aspect ratio override (default 4/3) */
+  aspectRatio?: number;
 }
 
 export default function VideoPlayer({
@@ -25,6 +29,8 @@ export default function VideoPlayer({
   showControls = true,
   autoplay = false,
   thumbnailMode = false,
+  disableTouch = false,
+  aspectRatio = 4 / 3,
 }: VideoPlayerProps) {
   const videoRef = useRef<Video>(null);
   const [isPlaying, setIsPlaying] = useState(autoplay);
@@ -41,7 +47,7 @@ export default function VideoPlayer({
   };
 
   const togglePlayPause = async () => {
-    if (!videoRef.current) return;
+    if (disableTouch || !videoRef.current) return;
     try {
       if (isPlaying) {
         await videoRef.current.pauseAsync();
@@ -55,7 +61,7 @@ export default function VideoPlayer({
 
   if (hasError) {
     return (
-      <View style={[styles.container, styles.errorContainer, style]}>
+      <View style={[styles.container, { aspectRatio }, styles.errorContainer, style]}>
         <Ionicons name="alert-circle-outline" size={32} color={colors.textSecondary} />
         <Text style={styles.errorText}>Video unavailable</Text>
       </View>
@@ -63,7 +69,7 @@ export default function VideoPlayer({
   }
 
   return (
-    <View style={[styles.container, style]}>
+    <View style={[styles.container, { aspectRatio }, style]}>
       <Video
         ref={videoRef}
         source={{ uri }}
@@ -79,44 +85,42 @@ export default function VideoPlayer({
         }}
       />
 
-      {/* Loading overlay */}
+      {/* Loading overlay — pointerEvents none so scroll passes through */}
       {!isLoaded && !hasError && (
-        <View style={styles.loadingOverlay}>
+        <View style={styles.loadingOverlay} pointerEvents="none">
           <ActivityIndicator size="large" color={colors.accentTeal} />
         </View>
       )}
 
       {/* Buffering indicator */}
       {isBuffering && isLoaded && (
-        <View style={styles.bufferingOverlay}>
+        <View style={styles.bufferingOverlay} pointerEvents="none">
           <ActivityIndicator size="small" color="#FFFFFF" />
         </View>
       )}
 
-      {/* Play button overlay for thumbnail mode */}
-      {thumbnailMode && isLoaded && !isPlaying && (
-        <TouchableOpacity
-          style={styles.playOverlay}
+      {/* Centered play button — only when paused and not disableTouch */}
+      {thumbnailMode && isLoaded && !isPlaying && !disableTouch && (
+        <Pressable
+          style={styles.playCenter}
           onPress={togglePlayPause}
-          activeOpacity={0.8}
         >
           <View style={styles.playButton}>
             <Ionicons name="play" size={28} color="#FFFFFF" />
           </View>
-        </TouchableOpacity>
+        </Pressable>
       )}
 
-      {/* Pause overlay (tap to pause in thumbnail mode) */}
-      {thumbnailMode && isPlaying && (
-        <TouchableOpacity
-          style={styles.playOverlay}
+      {/* Tap to pause — only when playing, not disableTouch */}
+      {thumbnailMode && isPlaying && !disableTouch && (
+        <Pressable
+          style={styles.tapOverlay}
           onPress={togglePlayPause}
-          activeOpacity={1}
         />
       )}
 
       {/* Video badge */}
-      <View style={styles.videoBadge}>
+      <View style={styles.videoBadge} pointerEvents="none">
         <Ionicons name="videocam" size={12} color="#FFFFFF" />
         <Text style={styles.videoBadgeText}>VIDEO</Text>
       </View>
@@ -127,7 +131,6 @@ export default function VideoPlayer({
 const styles = StyleSheet.create({
   container: {
     width: "100%",
-    aspectRatio: 4 / 3,
     borderRadius: radius.card,
     overflow: "hidden",
     backgroundColor: "#000000",
@@ -150,10 +153,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 6,
   },
-  playOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
+  playCenter: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    marginTop: -28,
+    marginLeft: -28,
   },
   playButton: {
     width: 56,
@@ -163,6 +168,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingLeft: 3,
+  },
+  tapOverlay: {
+    ...StyleSheet.absoluteFillObject,
   },
   videoBadge: {
     position: "absolute",

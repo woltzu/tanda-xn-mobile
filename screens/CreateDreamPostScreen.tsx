@@ -843,188 +843,180 @@ export default function CreateDreamPostScreen() {
         )}
 
         {/* ============================================ */}
-        {/* STEP 4: Review & Post */}
+        {/* STEP 4: Review & Post — TikTok-style */}
         {/* ============================================ */}
         {step === "review" && (
           <ScrollView
-            style={styles.content}
-            contentContainerStyle={{ paddingBottom: 120 }}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: 140 }}
             showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.stepTitle}>Review Your Post</Text>
-            <Text style={styles.stepSubtitle}>
-              This is how your post will appear in the feed
-            </Text>
+            {/* Media Hero — full width, with floating side actions */}
+            {mediaUri && (
+              <View style={styles.rvHeroWrap}>
+                {mediaType === "video" ? (
+                  <VideoPlayer
+                    uri={mediaUri}
+                    style={styles.rvHeroMedia}
+                    disableTouch
+                    showControls={false}
+                    aspectRatio={9 / 16}
+                  />
+                ) : (
+                  <Image source={{ uri: mediaUri }} style={styles.rvHeroImage} resizeMode="cover" />
+                )}
 
-            {/* Post Preview Card */}
-            <View style={styles.reviewCard}>
-              {/* Author Header */}
-              <View style={styles.reviewAuthorRow}>
-                <View style={styles.reviewAvatar}>
-                  <Text style={styles.reviewAvatarText}>
-                    {visibility === "anonymous"
-                      ? "?"
-                      : (user?.name || "U").charAt(0).toUpperCase()}
-                  </Text>
+                {/* Floating Side Actions — TikTok style, right side */}
+                <View style={styles.rvSideActions}>
+                  <View style={styles.rvSideBtn}>
+                    <View style={styles.rvSideBtnCircle}>
+                      <Ionicons name="heart" size={24} color="#FF4458" />
+                    </View>
+                    <Text style={styles.rvSideBtnLabel}>0</Text>
+                  </View>
+                  <View style={styles.rvSideBtn}>
+                    <View style={styles.rvSideBtnCircle}>
+                      <Ionicons name="chatbubble-ellipses" size={22} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.rvSideBtnLabel}>0</Text>
+                  </View>
+                  <View style={styles.rvSideBtn}>
+                    <View style={styles.rvSideBtnCircle}>
+                      <Ionicons name="arrow-redo" size={22} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.rvSideBtnLabel}>Share</Text>
+                  </View>
+                  {(source === "goal" || source === "circle") && (
+                    <View style={styles.rvSideBtn}>
+                      <View style={[styles.rvSideBtnCircle, { backgroundColor: colors.accentTeal }]}>
+                        <Ionicons name="hand-left" size={20} color="#FFFFFF" />
+                      </View>
+                      <Text style={styles.rvSideBtnLabel}>Support</Text>
+                    </View>
+                  )}
+                  <View style={styles.rvSideBtn}>
+                    <View style={styles.rvSideBtnCircle}>
+                      <Ionicons name="bookmark" size={20} color="#FFFFFF" />
+                    </View>
+                    <Text style={styles.rvSideBtnLabel}>Save</Text>
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.reviewAuthorName}>
-                    {visibility === "anonymous" ? "Anonymous Member" : user?.name || "You"}
-                  </Text>
-                  <Text style={styles.reviewTime}>Just now</Text>
-                </View>
-                <View style={styles.reviewTypeBadge}>
-                  <Text style={styles.reviewTypeBadgeText}>
-                    {source === "goal" ? "\u{1F3AF} Goal" : source === "circle" ? "\u{1F91D} Circle" : "\u{2728} Dream"}
-                  </Text>
-                </View>
-              </View>
 
-              {/* Caption */}
-              <Text style={styles.reviewContent}>{caption}</Text>
-
-              {/* Goal/Circle Progress Preview */}
-              {source === "goal" && selectedGoal && (() => {
-                const p = Math.round((selectedGoal.currentBalance / selectedGoal.targetAmount) * 100);
-                return (
-                  <View style={styles.reviewProgressCard}>
-                    <Text style={styles.reviewProgressEmoji}>{selectedGoal.emoji}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.reviewProgressName}>{selectedGoal.name}</Text>
-                      <Text style={styles.reviewProgressAmount}>
-                        ${selectedGoal.currentBalance.toLocaleString()} / ${selectedGoal.targetAmount.toLocaleString()}
+                {/* Bottom overlay — author + caption on the video */}
+                <View style={styles.rvOverlayBottom}>
+                  <View style={styles.rvOverlayAuthor}>
+                    <View style={styles.rvOverlayAvatar}>
+                      <Text style={styles.rvOverlayAvatarText}>
+                        {visibility === "anonymous"
+                          ? "?"
+                          : (user?.name || "U").charAt(0).toUpperCase()}
                       </Text>
                     </View>
-                    <Text style={styles.reviewProgressPercent}>{p}%</Text>
-                  </View>
-                );
-              })()}
-
-              {source === "circle" && selectedCircle && (
-                <View style={styles.reviewProgressCard}>
-                  <Text style={styles.reviewProgressEmoji}>{selectedCircle.emoji}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.reviewProgressName}>{selectedCircle.name}</Text>
-                    <Text style={styles.reviewProgressAmount}>
-                      {selectedCircle.currentMembers} members {"\u00B7"} ${selectedCircle.amount}/{selectedCircle.frequency}
+                    <Text style={styles.rvOverlayName}>
+                      {visibility === "anonymous" ? "Anonymous" : user?.name || "You"}
                     </Text>
+                    <View style={styles.rvOverlayBadge}>
+                      <Text style={styles.rvOverlayBadgeText}>
+                        {source === "goal" ? "\u{1F3AF}" : source === "circle" ? "\u{1F91D}" : "\u{2728}"}
+                      </Text>
+                    </View>
                   </View>
-                  <Text style={styles.reviewProgressPercent}>{selectedCircle.progress}%</Text>
-                </View>
-              )}
-
-              {/* Media Preview */}
-              {mediaUri && (
-                <View style={styles.reviewMediaWrap}>
-                  {mediaType === "video" ? (
-                    <VideoPlayer
-                      uri={mediaUri}
-                      style={styles.reviewMedia}
-                      showControls
-                      thumbnailMode={false}
-                    />
-                  ) : (
-                    <Image source={{ uri: mediaUri }} style={styles.reviewMedia} resizeMode="cover" />
+                  <Text style={styles.rvOverlayCaption} numberOfLines={3}>
+                    {caption}
+                  </Text>
+                  {location.trim().length > 0 && (
+                    <View style={styles.rvOverlayLocation}>
+                      <Ionicons name="location" size={12} color="#FFFFFF" />
+                      <Text style={styles.rvOverlayLocationText}>{location.trim()}</Text>
+                    </View>
+                  )}
+                  {parseHashtags(hashtags).length > 0 && (
+                    <Text style={styles.rvOverlayTags}>
+                      {parseHashtags(hashtags).join(" ")}
+                    </Text>
                   )}
                 </View>
-              )}
 
-              {/* Tags Row */}
-              {(selectedCommunities.length > 0 || parseHashtags(hashtags).length > 0) && (
-                <View style={styles.reviewTagsRow}>
-                  {selectedCommunities.map((c) => (
-                    <View key={c.id} style={styles.reviewTagPill}>
-                      <Text style={styles.reviewTagPillIcon}>{c.icon}</Text>
-                      <Text style={styles.reviewTagPillText}>{c.name}</Text>
+                {/* Goal/Circle progress overlay — bottom of media */}
+                {source === "goal" && selectedGoal && (() => {
+                  const p = Math.round((selectedGoal.currentBalance / selectedGoal.targetAmount) * 100);
+                  return (
+                    <View style={styles.rvProgressOverlay}>
+                      <Text style={styles.rvProgressEmoji}>{selectedGoal.emoji}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.rvProgressName} numberOfLines={1}>{selectedGoal.name}</Text>
+                        <View style={styles.rvProgressBarBg}>
+                          <View style={[styles.rvProgressBarFill, { width: `${Math.min(p, 100)}%` }]} />
+                        </View>
+                      </View>
+                      <Text style={styles.rvProgressPercent}>{p}%</Text>
                     </View>
-                  ))}
-                  {parseHashtags(hashtags).map((tag, idx) => (
-                    <View key={`tag-${idx}`} style={styles.reviewHashPill}>
-                      <Text style={styles.reviewHashPillText}>{tag}</Text>
+                  );
+                })()}
+                {source === "circle" && selectedCircle && (
+                  <View style={styles.rvProgressOverlay}>
+                    <Text style={styles.rvProgressEmoji}>{selectedCircle.emoji}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rvProgressName} numberOfLines={1}>{selectedCircle.name}</Text>
+                      <View style={styles.rvProgressBarBg}>
+                        <View style={[styles.rvProgressBarFill, { width: `${Math.min(selectedCircle.progress, 100)}%` }]} />
+                      </View>
                     </View>
-                  ))}
-                </View>
-              )}
-
-              {/* Location */}
-              {location.trim().length > 0 && (
-                <View style={styles.reviewLocationRow}>
-                  <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
-                  <Text style={styles.reviewLocationText}>{location.trim()}</Text>
-                </View>
-              )}
-
-              {/* Support CTA — visible to others in the feed */}
-              {(source === "goal" || source === "circle") && (
-                <View style={styles.reviewSupportCTA}>
-                  <View style={styles.reviewSupportIcon}>
-                    <Ionicons name="hand-left" size={18} color="#FFFFFF" />
+                    <Text style={styles.rvProgressPercent}>{selectedCircle.progress}%</Text>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.reviewSupportTitle}>
-                      {source === "goal" ? "Support this Dream" : "Join this Circle"}
-                    </Text>
-                    <Text style={styles.reviewSupportSubtext}>
-                      {source === "goal"
-                        ? "Cheer them on or contribute to their goal"
-                        : "Request to join and save together"}
-                    </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.accentTeal} />
-                </View>
-              )}
-
-              {/* Mock Action Row */}
-              <View style={styles.reviewActions}>
-                <View style={styles.reviewActionBtn}>
-                  <Ionicons name="heart-outline" size={18} color={colors.textSecondary} />
-                  <Text style={styles.reviewActionText}>Like</Text>
-                </View>
-                <View style={styles.reviewActionBtn}>
-                  <Ionicons name="chatbubble-outline" size={18} color={colors.textSecondary} />
-                  <Text style={styles.reviewActionText}>Comment</Text>
-                </View>
-                <View style={styles.reviewActionBtn}>
-                  <Ionicons name="share-outline" size={18} color={colors.textSecondary} />
-                  <Text style={styles.reviewActionText}>Share</Text>
-                </View>
+                )}
               </View>
-            </View>
+            )}
+
+            {/* If no media — show simple text preview */}
+            {!mediaUri && (
+              <View style={styles.rvNoMediaCard}>
+                <View style={styles.rvOverlayAuthor}>
+                  <View style={[styles.rvOverlayAvatar, { backgroundColor: colors.primaryNavy }]}>
+                    <Text style={styles.rvOverlayAvatarText}>
+                      {(user?.name || "U").charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={[styles.rvOverlayName, { color: colors.textPrimary }]}>
+                    {user?.name || "You"}
+                  </Text>
+                </View>
+                <Text style={styles.rvNoMediaCaption}>{caption}</Text>
+              </View>
+            )}
+
+            {/* Community tags (below media) */}
+            {selectedCommunities.length > 0 && (
+              <View style={styles.rvTagsSection}>
+                {selectedCommunities.map((c) => (
+                  <View key={c.id} style={styles.rvCommunityPill}>
+                    <Text style={styles.rvCommunityPillIcon}>{c.icon}</Text>
+                    <Text style={styles.rvCommunityPillText}>{c.name}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {/* Post Details Summary */}
-            <View style={styles.reviewSummary}>
-              <View style={styles.reviewSummaryRow}>
-                <Text style={styles.reviewSummaryLabel}>Visibility</Text>
-                <Text style={styles.reviewSummaryValue}>
+            <View style={styles.rvSummary}>
+              <View style={styles.rvSummaryRow}>
+                <Text style={styles.rvSummaryLabel}>Visibility</Text>
+                <Text style={styles.rvSummaryValue}>
                   {visibility === "public" ? "\u{1F30D} Public" : visibility === "community" ? "\u{1F465} Community" : "\u{1F441}\u{FE0F}\u{200D}\u{1F5E8}\u{FE0F} Anonymous"}
                 </Text>
               </View>
-              {selectedCommunities.length > 0 && (
-                <View style={styles.reviewSummaryRow}>
-                  <Text style={styles.reviewSummaryLabel}>Communities</Text>
-                  <Text style={styles.reviewSummaryValue}>
-                    {selectedCommunities.length} tagged
-                  </Text>
-                </View>
-              )}
-              {location.trim().length > 0 && (
-                <View style={styles.reviewSummaryRow}>
-                  <Text style={styles.reviewSummaryLabel}>Location</Text>
-                  <Text style={styles.reviewSummaryValue}>{location.trim()}</Text>
-                </View>
-              )}
               {mediaUri && (
-                <View style={styles.reviewSummaryRow}>
-                  <Text style={styles.reviewSummaryLabel}>Media</Text>
-                  <Text style={styles.reviewSummaryValue}>
-                    {mediaType === "video" ? "\u{1F3AC} Video" : "\u{1F4F7} Photo"} attached
+                <View style={styles.rvSummaryRow}>
+                  <Text style={styles.rvSummaryLabel}>Media</Text>
+                  <Text style={styles.rvSummaryValue}>
+                    {mediaType === "video" ? "\u{1F3AC} Video" : "\u{1F4F7} Photo"}
                   </Text>
                 </View>
               )}
             </View>
 
-            {/* Action Buttons */}
-            <View style={styles.reviewButtonRow}>
+            {/* Action Buttons — Edit & Post */}
+            <View style={styles.rvButtonRow}>
               <TouchableOpacity
                 style={styles.editBtn}
                 onPress={() => setStep("compose")}
@@ -1048,8 +1040,6 @@ export default function CreateDreamPostScreen() {
                 )}
               </TouchableOpacity>
             </View>
-
-            <View style={{ height: 40 }} />
           </ScrollView>
         )}
       </KeyboardAvoidingView>
@@ -1571,198 +1561,226 @@ const styles = StyleSheet.create({
   },
 
   // ============================================
-  // STEP 4: Review styles
+  // STEP 4: Review — TikTok-style
   // ============================================
-  reviewCard: {
-    backgroundColor: colors.cardBg,
-    borderRadius: radius.card,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    marginBottom: spacing.lg,
-  },
-  reviewAuthorRow: {
-    flexDirection: "row",
-    alignItems: "center",
+
+  // Hero media container (full-width)
+  rvHeroWrap: {
+    position: "relative",
+    width: "100%",
+    backgroundColor: "#000000",
     marginBottom: spacing.md,
   },
-  reviewAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primaryNavy,
+  rvHeroMedia: {
+    width: "100%",
+    borderRadius: 0,
+  },
+  rvHeroImage: {
+    width: "100%",
+    aspectRatio: 9 / 16,
+    maxHeight: 500,
+  },
+
+  // Floating side action buttons (right side, TikTok-style)
+  rvSideActions: {
+    position: "absolute",
+    right: 12,
+    bottom: 100,
+    alignItems: "center",
+    gap: 16,
+  },
+  rvSideBtn: {
+    alignItems: "center",
+    gap: 3,
+  },
+  rvSideBtnCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.45)",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: spacing.md,
   },
-  reviewAvatarText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  reviewAuthorName: {
-    fontSize: typography.body,
-    fontWeight: typography.semibold,
-    color: colors.textPrimary,
-  },
-  reviewTime: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-    marginTop: 1,
-  },
-  reviewTypeBadge: {
-    backgroundColor: colors.tealTintBg,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-  },
-  reviewTypeBadgeText: {
-    fontSize: typography.caption,
-    fontWeight: typography.semibold,
-    color: colors.accentTeal,
-  },
-  reviewContent: {
-    fontSize: typography.body,
-    color: colors.textPrimary,
-    lineHeight: 22,
-    marginBottom: spacing.md,
-  },
-  reviewProgressCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.screenBg,
-    borderRadius: radius.small,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    gap: spacing.sm,
-  },
-  reviewProgressEmoji: {
-    fontSize: 24,
-  },
-  reviewProgressName: {
-    fontSize: typography.bodySmall,
-    fontWeight: typography.semibold,
-    color: colors.textPrimary,
-  },
-  reviewProgressAmount: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-    marginTop: 1,
-  },
-  reviewProgressPercent: {
-    fontSize: typography.body,
-    fontWeight: typography.bold,
-    color: colors.accentTeal,
-  },
-  reviewMediaWrap: {
-    borderRadius: radius.card,
-    overflow: "hidden",
-    marginBottom: spacing.md,
-  },
-  reviewMedia: {
-    width: "100%",
-    aspectRatio: 4 / 3,
-    borderRadius: radius.card,
-  },
-  reviewTagsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginBottom: spacing.sm,
-  },
-  reviewTagPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.primaryNavy,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 4,
-  },
-  reviewTagPillIcon: {
-    fontSize: 12,
-  },
-  reviewTagPillText: {
-    fontSize: 11,
+  rvSideBtnLabel: {
+    fontSize: 10,
     fontWeight: "600",
     color: "#FFFFFF",
+    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
-  reviewHashPill: {
-    backgroundColor: colors.tealTintBg,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+
+  // Bottom overlay (author + caption on the media)
+  rvOverlayBottom: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 60,
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    paddingTop: 40,
+    background: "linear-gradient(transparent, rgba(0,0,0,0.7))",
+    // RN fallback:
+    backgroundColor: "transparent",
   },
-  reviewHashPillText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.accentTeal,
-  },
-  reviewLocationRow: {
+  rvOverlayAuthor: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    marginBottom: spacing.md,
+    gap: 8,
+    marginBottom: 8,
   },
-  reviewLocationText: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-  },
-  reviewSupportCTA: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.tealTintBg,
-    borderRadius: radius.small,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.accentTeal + "30",
-  },
-  reviewSupportIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  rvOverlayAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: colors.accentTeal,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
   },
-  reviewSupportTitle: {
-    fontSize: typography.bodySmall,
-    fontWeight: typography.bold as any,
-    color: colors.accentTeal,
+  rvOverlayAvatarText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
-  reviewSupportSubtext: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-    marginTop: 1,
+  rvOverlayName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
-  reviewActions: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.md,
-    marginTop: spacing.sm,
+  rvOverlayBadge: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
-  reviewActionBtn: {
+  rvOverlayBadgeText: {
+    fontSize: 12,
+  },
+  rvOverlayCaption: {
+    fontSize: 13,
+    color: "#FFFFFF",
+    lineHeight: 18,
+    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+    marginBottom: 6,
+  },
+  rvOverlayLocation: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
+    marginBottom: 4,
   },
-  reviewActionText: {
-    fontSize: typography.bodySmall,
-    color: colors.textSecondary,
+  rvOverlayLocationText: {
+    fontSize: 11,
+    color: "#FFFFFF",
+    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  rvOverlayTags: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.accentTeal,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 
-  // Summary card
-  reviewSummary: {
+  // Goal/Circle progress bar overlaid on media
+  rvProgressOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  rvProgressEmoji: {
+    fontSize: 20,
+  },
+  rvProgressName: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    marginBottom: 4,
+  },
+  rvProgressBarBg: {
+    height: 4,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  rvProgressBarFill: {
+    height: 4,
+    backgroundColor: colors.accentTeal,
+    borderRadius: 2,
+  },
+  rvProgressPercent: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.accentTeal,
+  },
+
+  // No media fallback
+  rvNoMediaCard: {
     backgroundColor: colors.screenBg,
     borderRadius: radius.card,
     padding: spacing.lg,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  rvNoMediaCaption: {
+    fontSize: typography.body,
+    color: colors.textPrimary,
+    lineHeight: 22,
+    marginTop: spacing.md,
+  },
+
+  // Community tags below media
+  rvTagsSection: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  rvCommunityPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.tealTintBg,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    gap: 4,
+  },
+  rvCommunityPillIcon: {
+    fontSize: 12,
+  },
+  rvCommunityPillText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.accentTeal,
+  },
+
+  // Summary
+  rvSummary: {
+    backgroundColor: colors.screenBg,
+    borderRadius: radius.card,
+    padding: spacing.lg,
+    marginHorizontal: spacing.lg,
     marginBottom: spacing.lg,
   },
-  reviewSummaryRow: {
+  rvSummaryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -1770,20 +1788,21 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  reviewSummaryLabel: {
+  rvSummaryLabel: {
     fontSize: typography.bodySmall,
     color: colors.textSecondary,
   },
-  reviewSummaryValue: {
+  rvSummaryValue: {
     fontSize: typography.bodySmall,
     fontWeight: typography.semibold,
     color: colors.textPrimary,
   },
 
-  // Action buttons
-  reviewButtonRow: {
+  // Action buttons row
+  rvButtonRow: {
     flexDirection: "row",
     gap: 12,
+    paddingHorizontal: spacing.lg,
   },
   editBtn: {
     flex: 1,

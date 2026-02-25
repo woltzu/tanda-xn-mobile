@@ -74,7 +74,148 @@ export default function FeedPostCard({
     : hasCircleProgress
       ? meta.progress
       : null;
+  const isVideo = meta.mediaType === "video" && post.imageUrl;
 
+  // ============================================
+  // VIDEO POST — TikTok-style full-width layout
+  // ============================================
+  if (isVideo) {
+    return (
+      <TouchableOpacity
+        style={styles.videoCard}
+        onPress={() => onPress(post.id)}
+        activeOpacity={0.95}
+      >
+        {/* Full-width video with floating side actions */}
+        <View style={styles.videoHero}>
+          <VideoPlayer
+            uri={post.imageUrl!}
+            style={styles.videoPlayer}
+            thumbnailMode
+            showControls={false}
+            disableTouch={false}
+            aspectRatio={9 / 16}
+          />
+
+          {/* Floating side action buttons — right side, thumb-friendly */}
+          <View style={styles.sideActions}>
+            {/* Like */}
+            <TouchableOpacity
+              style={styles.sideBtn}
+              onPress={() => onLike(post.id)}
+            >
+              <View style={styles.sideBtnCircle}>
+                <Ionicons
+                  name={isLiked ? "heart" : "heart-outline"}
+                  size={24}
+                  color={isLiked ? "#FF4458" : "#FFFFFF"}
+                />
+              </View>
+              <Text style={styles.sideBtnCount}>
+                {post.likesCount > 0 ? post.likesCount : ""}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Comment */}
+            <TouchableOpacity
+              style={styles.sideBtn}
+              onPress={() => onComment(post.id)}
+            >
+              <View style={styles.sideBtnCircle}>
+                <Ionicons name="chatbubble-ellipses" size={22} color="#FFFFFF" />
+              </View>
+              <Text style={styles.sideBtnCount}>
+                {post.commentsCount > 0 ? post.commentsCount : ""}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Share */}
+            <View style={styles.sideBtn}>
+              <View style={styles.sideBtnCircle}>
+                <Ionicons name="arrow-redo" size={22} color="#FFFFFF" />
+              </View>
+            </View>
+
+            {/* Support — only for others' goal/circle posts */}
+            {(hasGoalProgress || hasCircleProgress) && !isOwnPost && onSupport && (
+              <TouchableOpacity
+                style={styles.sideBtn}
+                onPress={() => onSupport(post)}
+              >
+                <View style={[styles.sideBtnCircle, { backgroundColor: colors.accentTeal }]}>
+                  <Ionicons name="hand-left" size={20} color="#FFFFFF" />
+                </View>
+              </TouchableOpacity>
+            )}
+
+            {/* Bookmark */}
+            <View style={styles.sideBtn}>
+              <View style={styles.sideBtnCircle}>
+                <Ionicons name="bookmark-outline" size={20} color="#FFFFFF" />
+              </View>
+            </View>
+          </View>
+
+          {/* Bottom overlay: author + caption */}
+          <View style={styles.videoOverlayBottom} pointerEvents="none">
+            <View style={styles.videoOverlayAuthor}>
+              <View style={styles.videoOverlayAvatar}>
+                {post.authorAvatar && !isAnonymous ? (
+                  <Image source={{ uri: post.authorAvatar }} style={styles.videoOverlayAvatarImg} />
+                ) : (
+                  <Text style={styles.videoOverlayAvatarText}>
+                    {isAnonymous && !isOwnPost ? "?" : displayName.charAt(0).toUpperCase()}
+                  </Text>
+                )}
+              </View>
+              <Text style={styles.videoOverlayName}>
+                {isOwnPost ? "You" : displayName}
+              </Text>
+              <View style={styles.videoOverlayTypeBadge}>
+                <Text style={{ fontSize: 11 }}>{config.emoji}</Text>
+              </View>
+            </View>
+            <Text style={styles.videoOverlayCaption} numberOfLines={2}>
+              {post.content}
+            </Text>
+            {meta.location && (
+              <View style={styles.videoOverlayLocRow}>
+                <Ionicons name="location" size={11} color="#FFFFFF" />
+                <Text style={styles.videoOverlayLocText}>{meta.location}</Text>
+              </View>
+            )}
+            {meta.hashtags && meta.hashtags.length > 0 && (
+              <Text style={styles.videoOverlayTags}>
+                {meta.hashtags.map((t: string) => `#${t}`).join(" ")}
+              </Text>
+            )}
+          </View>
+
+          {/* Goal/Circle progress bar at very bottom */}
+          {(hasGoalProgress || hasCircleProgress) && (
+            <View style={styles.videoProgressBar}>
+              <Text style={styles.videoProgressEmoji}>
+                {hasGoalProgress ? (meta.goalEmoji || "\u{1F3AF}") : (meta.circleEmoji || "\u{1F91D}")}
+              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.videoProgressName} numberOfLines={1}>
+                  {hasGoalProgress ? meta.goalName : meta.circleName}
+                </Text>
+                <View style={styles.videoProgressTrack}>
+                  <View style={[styles.videoProgressFill, { width: `${Math.min(progress || 0, 100)}%` }]} />
+                </View>
+              </View>
+              <Text style={styles.videoProgressPercent}>{progress}%</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  // ============================================
+  // NON-VIDEO POST — Standard card layout
+  // ============================================
   return (
     <TouchableOpacity
       style={styles.card}
@@ -183,7 +324,7 @@ export default function FeedPostCard({
         </View>
       )}
 
-      {/* Amount pill (if applicable and not anonymous) */}
+      {/* Amount pill */}
       {post.amount && post.amount > 0 && !(isAnonymous && !isOwnPost) && !hasGoalProgress && (
         <View style={styles.amountPill}>
           <Text style={styles.amountText}>
@@ -193,17 +334,7 @@ export default function FeedPostCard({
         </View>
       )}
 
-      {/* Media (image or video) */}
-      {post.imageUrl && meta.mediaType === "video" && (
-        <View style={styles.postMediaContainer}>
-          <VideoPlayer
-            uri={post.imageUrl}
-            style={styles.postVideo}
-            thumbnailMode
-            showControls={false}
-          />
-        </View>
-      )}
+      {/* Image (non-video) */}
       {post.imageUrl && meta.mediaType !== "video" && (
         <Image
           source={{ uri: post.imageUrl }}
@@ -241,7 +372,7 @@ export default function FeedPostCard({
         </View>
       )}
 
-      {/* Support CTA — for goal/circle posts from other users */}
+      {/* Support CTA */}
       {(hasGoalProgress || hasCircleProgress) && !isOwnPost && onSupport && (
         <TouchableOpacity
           style={styles.supportCTA}
@@ -258,12 +389,9 @@ export default function FeedPostCard({
         </TouchableOpacity>
       )}
 
-      {/* Footer: Like + Comment counts */}
+      {/* Footer */}
       <View style={styles.footer}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => onLike(post.id)}
-        >
+        <TouchableOpacity style={styles.actionButton} onPress={() => onLike(post.id)}>
           <Ionicons
             name={isLiked ? "heart" : "heart-outline"}
             size={20}
@@ -274,17 +402,13 @@ export default function FeedPostCard({
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => onComment(post.id)}
-        >
+        <TouchableOpacity style={styles.actionButton} onPress={() => onComment(post.id)}>
           <Ionicons name="chatbubble-outline" size={18} color={colors.textSecondary} />
           <Text style={styles.actionText}>
             {post.commentsCount > 0 ? post.commentsCount : ""}
           </Text>
         </TouchableOpacity>
 
-        {/* Auto-generated indicator */}
         {post.isAuto && (
           <View style={styles.autoIndicator}>
             <Ionicons name="flash-outline" size={14} color={colors.textSecondary} />
@@ -297,6 +421,178 @@ export default function FeedPostCard({
 }
 
 const styles = StyleSheet.create({
+  // ============================================
+  // VIDEO POST — TikTok-style
+  // ============================================
+  videoCard: {
+    marginHorizontal: spacing.sm,
+    marginBottom: spacing.md,
+    borderRadius: radius.card,
+    overflow: "hidden",
+    backgroundColor: "#000000",
+  },
+  videoHero: {
+    position: "relative",
+    width: "100%",
+  },
+  videoPlayer: {
+    width: "100%",
+    borderRadius: 0,
+  },
+
+  // Floating side buttons
+  sideActions: {
+    position: "absolute",
+    right: 10,
+    bottom: 80,
+    alignItems: "center",
+    gap: 14,
+  },
+  sideBtn: {
+    alignItems: "center",
+    gap: 2,
+  },
+  sideBtnCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sideBtnCount: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+
+  // Bottom overlay
+  videoOverlayBottom: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 60,
+    paddingHorizontal: 14,
+    paddingBottom: 16,
+    paddingTop: 50,
+  },
+  videoOverlayAuthor: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  videoOverlayAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.accentTeal,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+    overflow: "hidden",
+  },
+  videoOverlayAvatarImg: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
+  videoOverlayAvatarText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  videoOverlayName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  videoOverlayTypeBadge: {
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  videoOverlayCaption: {
+    fontSize: 13,
+    color: "#FFFFFF",
+    lineHeight: 18,
+    textShadowColor: "rgba(0,0,0,0.7)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+    marginBottom: 4,
+  },
+  videoOverlayLocRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    marginBottom: 3,
+  },
+  videoOverlayLocText: {
+    fontSize: 11,
+    color: "#FFFFFF",
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  videoOverlayTags: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: colors.accentTeal,
+    textShadowColor: "rgba(0,0,0,0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+
+  // Progress bar at bottom of video
+  videoProgressBar: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  videoProgressEmoji: {
+    fontSize: 18,
+  },
+  videoProgressName: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#FFFFFF",
+    marginBottom: 3,
+  },
+  videoProgressTrack: {
+    height: 3,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  videoProgressFill: {
+    height: 3,
+    backgroundColor: colors.accentTeal,
+    borderRadius: 2,
+  },
+  videoProgressPercent: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.accentTeal,
+  },
+
+  // ============================================
+  // NON-VIDEO POST — Standard card
+  // ============================================
   card: {
     backgroundColor: colors.cardBg,
     borderRadius: radius.card,
@@ -375,7 +671,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
 
-  // Progress card (goal/circle data)
+  // Progress card
   progressCard: {
     backgroundColor: colors.screenBg,
     borderRadius: radius.small,
@@ -445,7 +741,6 @@ const styles = StyleSheet.create({
     fontWeight: typography.semibold,
     color: "#8B5CF6",
   },
-
   amountPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -471,16 +766,6 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: radius.small,
     marginBottom: spacing.md,
-  },
-  postMediaContainer: {
-    marginBottom: spacing.md,
-    borderRadius: radius.small,
-    overflow: "hidden",
-  },
-  postVideo: {
-    width: "100%",
-    aspectRatio: 16 / 9,
-    borderRadius: radius.small,
   },
   tagsRow: {
     flexDirection: "row",
