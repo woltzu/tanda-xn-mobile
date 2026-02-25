@@ -107,7 +107,7 @@ export default function FeedPostCard({
 
           {/* Floating side action buttons — TandaXn engagement */}
           <View style={styles.sideActions}>
-            {/* I Saved Too */}
+            {/* I Saved Too — or save count on own post */}
             <TouchableOpacity
               style={styles.sideBtn}
               onPress={() => onLike(post.id)}
@@ -120,20 +120,24 @@ export default function FeedPostCard({
                 />
               </View>
               <Text style={[styles.sideBtnCount, isLiked && { color: colors.accentTeal }]}>
-                {post.likesCount > 0 ? post.likesCount : "Saved"}
+                {isOwnPost
+                  ? (post.likesCount > 0 ? post.likesCount : "Saves")
+                  : (post.likesCount > 0 ? post.likesCount : "Saved")}
               </Text>
             </TouchableOpacity>
 
-            {/* Join — context-aware label */}
+            {/* Comments on own post — Join on others' */}
             <TouchableOpacity
               style={styles.sideBtn}
               onPress={() => onComment(post.id)}
             >
               <View style={styles.sideBtnCircle}>
-                <Ionicons name="flag-outline" size={22} color="#FFFFFF" />
+                <Ionicons name={isOwnPost ? "chatbubble-outline" : "flag-outline"} size={22} color="#FFFFFF" />
               </View>
               <Text style={styles.sideBtnCount}>
-                {post.commentsCount > 0 ? post.commentsCount : "Join"}
+                {isOwnPost
+                  ? (post.commentsCount > 0 ? post.commentsCount : "Comments")
+                  : (post.commentsCount > 0 ? post.commentsCount : "Join")}
               </Text>
             </TouchableOpacity>
 
@@ -442,14 +446,18 @@ export default function FeedPostCard({
             color={isLiked ? colors.accentTeal : colors.textSecondary}
           />
           <Text style={[styles.actionText, isLiked && { color: colors.accentTeal }]}>
-            {post.likesCount > 0 ? `${post.likesCount} saved` : "I Saved Too"}
+            {isOwnPost
+              ? (post.likesCount > 0 ? `${post.likesCount} saves` : "0 saves")
+              : (post.likesCount > 0 ? `${post.likesCount} saved` : "I Saved Too")}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton} onPress={() => onComment(post.id)}>
-          <Ionicons name="flag-outline" size={18} color={colors.textSecondary} />
+          <Ionicons name={isOwnPost ? "chatbubble-outline" : "flag-outline"} size={18} color={colors.textSecondary} />
           <Text style={styles.actionText}>
-            {post.commentsCount > 0 ? `${post.commentsCount}` : "Join"}
+            {isOwnPost
+              ? (post.commentsCount > 0 ? `${post.commentsCount} comments` : "Comments")
+              : (post.commentsCount > 0 ? `${post.commentsCount}` : "Join")}
           </Text>
         </TouchableOpacity>
 
