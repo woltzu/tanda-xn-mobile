@@ -26,6 +26,16 @@ type FeedPostCardProps = {
   currentUserId?: string;
 };
 
+// XnScore tier helper — returns color + short label for trust badge
+const getXnScoreTier = (score: number): { color: string; label: string; icon: string } => {
+  if (score >= 90) return { color: "#8B5CF6", label: "Elite", icon: "diamond" };
+  if (score >= 75) return { color: "#3B82F6", label: "Excellent", icon: "star" };
+  if (score >= 60) return { color: "#22C55E", label: "Good", icon: "star" };
+  if (score >= 45) return { color: "#EAB308", label: "Fair", icon: "star-half-outline" };
+  if (score >= 25) return { color: "#F59E0B", label: "Building", icon: "warning" };
+  return { color: "#DC2626", label: "New", icon: "alert-circle" };
+};
+
 // Post type configurations — Blueprint vocabulary
 const POST_TYPE_CONFIG: Record<FeedPostType, { emoji: string; label: string; color: string }> = {
   dream: { emoji: "\u{2728}", label: "Dream", color: "#8B5CF6" },
@@ -213,6 +223,18 @@ export default function FeedPostCard({
               <Text style={styles.videoOverlayName}>
                 {isOwnPost ? "You" : displayName}
               </Text>
+              {post.authorXnScore !== undefined && !isAnonymous && (
+                <View style={styles.videoXnBadge}>
+                  <Ionicons
+                    name={getXnScoreTier(post.authorXnScore).icon as any}
+                    size={9}
+                    color={getXnScoreTier(post.authorXnScore).color}
+                  />
+                  <Text style={[styles.videoXnText, { color: getXnScoreTier(post.authorXnScore).color }]}>
+                    {Math.round(post.authorXnScore)}
+                  </Text>
+                </View>
+              )}
               <View style={styles.videoOverlayTypeBadge}>
                 <Text style={{ fontSize: 11 }}>{config.emoji}</Text>
               </View>
@@ -281,9 +303,23 @@ export default function FeedPostCard({
             )}
           </View>
           <View style={styles.authorInfo}>
-            <Text style={styles.authorName} numberOfLines={1}>
-              {isOwnPost ? "You" : displayName}
-            </Text>
+            <View style={styles.authorNameRow}>
+              <Text style={styles.authorName} numberOfLines={1}>
+                {isOwnPost ? "You" : displayName}
+              </Text>
+              {post.authorXnScore !== undefined && !isAnonymous && (
+                <View style={[styles.xnBadge, { backgroundColor: getXnScoreTier(post.authorXnScore).color + "18" }]}>
+                  <Ionicons
+                    name={getXnScoreTier(post.authorXnScore).icon as any}
+                    size={10}
+                    color={getXnScoreTier(post.authorXnScore).color}
+                  />
+                  <Text style={[styles.xnBadgeText, { color: getXnScoreTier(post.authorXnScore).color }]}>
+                    {Math.round(post.authorXnScore)}
+                  </Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.timeText}>{formatRelativeTime(post.createdAt)}</Text>
           </View>
         </TouchableOpacity>
@@ -591,6 +627,22 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
+  videoXnBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 2,
+  },
+  videoXnText: {
+    fontSize: 10,
+    fontWeight: "700" as const,
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   videoOverlayTypeBadge: {
     backgroundColor: "rgba(255,255,255,0.2)",
     paddingHorizontal: 5,
@@ -715,6 +767,23 @@ const styles = StyleSheet.create({
   },
   authorInfo: {
     flex: 1,
+  },
+  authorNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  xnBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 2,
+  },
+  xnBadgeText: {
+    fontSize: 10,
+    fontWeight: "700" as const,
   },
   authorName: {
     fontSize: typography.body,

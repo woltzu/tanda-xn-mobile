@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Image,
+  Share,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -23,17 +24,6 @@ import VideoPlayer from "../components/VideoPlayer";
 import { showToast } from "../components/Toast";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
-
-// Blueprint engagement placeholder handlers
-const handleClonePlan = (_post: FeedPost) => {
-  showToast("Clone Plan coming soon!", "info");
-};
-const handleAccountability = (_post: FeedPost) => {
-  showToast("Share coming soon!", "info");
-};
-const handleSupport = (_post: FeedPost) => {
-  showToast("Support Dream coming soon!", "info");
-};
 
 type PostDetailRouteParams = {
   PostDetail: { postId: string };
@@ -87,6 +77,55 @@ export default function PostDetailScreen() {
   const meta = post?.metadata || {};
   const hasGoalProgress = meta.targetAmount && meta.currentBalance !== undefined;
   const hasCircleProgress = meta.circleName && meta.progress !== undefined;
+
+  // Blueprint engagement handlers (wired to real navigation)
+  const handleClonePlan = useCallback((p: FeedPost) => {
+    const m = p.metadata || {};
+    if (m.goalName || m.targetAmount) {
+      navigation.navigate("CreateGoal", {
+        clonedGoalName: m.goalName || "My Dream",
+        clonedTargetAmount: m.targetAmount || undefined,
+        clonedEmoji: m.goalEmoji || undefined,
+      });
+      showToast("Starting a similar goal!", "success");
+    } else {
+      navigation.navigate("CreateGoal", {});
+      showToast("Create your own version!", "success");
+    }
+  }, [navigation]);
+
+  const handleAccountability = useCallback(async (p: FeedPost) => {
+    try {
+      const m = p.metadata || {};
+      const shareMessage = m.goalName
+        ? `Check out this dream on TandaXn: "${m.goalName}" — ${p.content.slice(0, 100)}`
+        : `Check out this dream on TandaXn: ${p.content.slice(0, 120)}`;
+
+      if (Platform.OS === "web") {
+        if (navigator.clipboard) {
+          await navigator.clipboard.writeText(shareMessage);
+          showToast("Link copied to clipboard!", "success");
+        }
+      } else {
+        await Share.share({ message: shareMessage, title: "TandaXn Dream" });
+      }
+    } catch {
+      // User cancelled share
+    }
+  }, []);
+
+  const handleSupport = useCallback((p: FeedPost) => {
+    const m = p.metadata || {};
+    if (m.circleId || m.circleName) {
+      navigation.navigate("JoinCircleConfirm", {
+        circleId: m.circleId || p.relatedId,
+      });
+    } else if (m.goalName) {
+      showToast("Support Dream coming soon!", "info");
+    } else {
+      showToast("Support coming soon!", "info");
+    }
+  }, [navigation]);
 
   useEffect(() => {
     loadPostAndComments();

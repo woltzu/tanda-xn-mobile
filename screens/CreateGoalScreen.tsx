@@ -35,15 +35,19 @@ export default function CreateGoalScreen() {
   const { createGoal, deposit } = useSavings();
 
   const preselectedType = route.params?.goalType;
+  // Clone Plan support: pre-fill from a cloned dream post
+  const clonedGoalName = (route.params as any)?.clonedGoalName;
+  const clonedTargetAmount = (route.params as any)?.clonedTargetAmount;
+  const clonedEmoji = (route.params as any)?.clonedEmoji;
 
   // Form state
   const [step, setStep] = useState(1);
   const [goalType, setGoalType] = useState<GoalType | null>(preselectedType || null);
-  const [goalName, setGoalName] = useState("");
-  const [targetAmount, setTargetAmount] = useState("");
+  const [goalName, setGoalName] = useState(clonedGoalName || "");
+  const [targetAmount, setTargetAmount] = useState(clonedTargetAmount ? String(clonedTargetAmount) : "");
   const [initialDeposit, setInitialDeposit] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedEmoji, setSelectedEmoji] = useState("🎯");
+  const [selectedEmoji, setSelectedEmoji] = useState(clonedEmoji || "🎯");
   const [lockTerm, setLockTerm] = useState(6); // months
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
   const [autoSavePercent, setAutoSavePercent] = useState(10);

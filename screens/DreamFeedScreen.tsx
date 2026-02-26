@@ -8,6 +8,8 @@ import {
   SafeAreaView,
   ActivityIndicator,
   RefreshControl,
+  Share,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -65,16 +67,60 @@ export default function DreamFeedScreen() {
     navigation.navigate("UserDreamProfile", { userId });
   };
 
-  const handleClonePlan = (_post: FeedPost) => {
-    showToast("Clone Plan coming soon!", "info");
+  const handleClonePlan = (post: FeedPost) => {
+    const meta = post.metadata || {};
+    if (meta.goalName || meta.targetAmount) {
+      // Navigate to CreateGoal with pre-filled data from the cloned dream
+      navigation.navigate("CreateGoal" as any, {
+        clonedGoalName: meta.goalName || "My Dream",
+        clonedTargetAmount: meta.targetAmount || undefined,
+        clonedEmoji: meta.goalEmoji || undefined,
+      });
+      showToast("Starting a similar goal!", "success");
+    } else {
+      // No goal data — go to CreateGoal with empty form
+      navigation.navigate("CreateGoal" as any, {});
+      showToast("Create your own version!", "success");
+    }
   };
 
-  const handleAccountability = (_post: FeedPost) => {
-    showToast("Share coming soon!", "info");
+  const handleAccountability = async (post: FeedPost) => {
+    try {
+      const shareMessage = post.metadata?.goalName
+        ? `Check out this dream on TandaXn: "${post.metadata.goalName}" — ${post.content.slice(0, 100)}`
+        : `Check out this dream on TandaXn: ${post.content.slice(0, 120)}`;
+
+      if (Platform.OS === "web") {
+        if (navigator.clipboard) {
+          await navigator.clipboard.writeText(shareMessage);
+          showToast("Link copied to clipboard!", "success");
+        } else {
+          showToast("Share not available on this browser", "info");
+        }
+      } else {
+        await Share.share({
+          message: shareMessage,
+          title: "TandaXn Dream",
+        });
+      }
+    } catch {
+      // User cancelled share — do nothing
+    }
   };
 
-  const handleSupport = (_post: FeedPost) => {
-    showToast("Support Dream coming soon!", "info");
+  const handleSupport = (post: FeedPost) => {
+    const meta = post.metadata || {};
+    if (meta.circleId || meta.circleName) {
+      // Navigate to join the circle
+      navigation.navigate("JoinCircleConfirm" as any, {
+        circleId: meta.circleId || post.relatedId,
+      });
+    } else if (meta.goalName) {
+      // Navigate to support the dream (send money flow)
+      showToast("Support Dream coming soon!", "info");
+    } else {
+      showToast("Support coming soon!", "info");
+    }
   };
 
   const handleFilterChange = (filter: FeedFilter) => {

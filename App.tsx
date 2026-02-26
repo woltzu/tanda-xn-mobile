@@ -360,6 +360,10 @@ function HomeStackScreen() {
       <HomeStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} />
       <HomeStack.Screen name="CreateCircleInvite" component={CreateCircleInviteScreen} />
       <HomeStack.Screen name="CreateCircleSuccess" component={CreateCircleSuccessScreen} />
+      {/* Dream screens accessible from Dashboard widget */}
+      <HomeStack.Screen name="PostDetail" component={PostDetailScreen} />
+      <HomeStack.Screen name="PostComments" component={DreamPostCommentsScreen} />
+      <HomeStack.Screen name="UserDreamProfile" component={UserDreamProfileScreen} />
     </HomeStack.Navigator>
   );
 }

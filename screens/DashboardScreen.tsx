@@ -296,13 +296,12 @@ export default function DashboardScreen() {
           <View style={{ marginTop: 12 }}>
             <DreamFeedWidget
               onViewAll={() => {
+                // Switch to Dreams tab (shows DreamFeed directly)
                 (navigation as any).navigate("Dreams");
               }}
               onPostPress={(postId) => {
-                (navigation as any).navigate("Dreams", {
-                  screen: "PostDetail",
-                  params: { postId },
-                });
+                // Open within Home stack so user stays on Dashboard tab
+                navigation.navigate("PostDetail" as any, { postId });
               }}
             />
           </View>

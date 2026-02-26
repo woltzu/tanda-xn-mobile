@@ -46,6 +46,7 @@ export type FeedPost = {
   // Joined profile data
   authorName: string;
   authorAvatar?: string;
+  authorXnScore?: number;
 };
 
 export type FeedComment = {
@@ -80,6 +81,7 @@ type FeedPostRow = {
   profiles?: {
     full_name: string | null;
     avatar_url: string | null;
+    xn_score: number | null;
   };
 };
 
@@ -117,6 +119,7 @@ const rowToPost = (row: FeedPostRow): FeedPost => ({
   createdAt: row.created_at,
   authorName: row.profiles?.full_name || "Anonymous",
   authorAvatar: row.profiles?.avatar_url || undefined,
+  authorXnScore: row.profiles?.xn_score ?? undefined,
 });
 
 const rowToComment = (row: FeedCommentRow): FeedComment => ({
@@ -268,7 +271,8 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
           *,
           profiles!feed_posts_user_id_fkey (
             full_name,
-            avatar_url
+            avatar_url,
+            xn_score
           )
         `)
         .order("created_at", { ascending: false })
@@ -323,7 +327,8 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
           *,
           profiles!feed_posts_user_id_fkey (
             full_name,
-            avatar_url
+            avatar_url,
+            xn_score
           )
         `)
         .lt("created_at", lastCreatedAt.current)
@@ -514,7 +519,8 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
           *,
           profiles!feed_posts_user_id_fkey (
             full_name,
-            avatar_url
+            avatar_url,
+            xn_score
           )
         `)
         .single();
