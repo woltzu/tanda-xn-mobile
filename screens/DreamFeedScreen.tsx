@@ -143,6 +143,7 @@ export default function DreamFeedScreen() {
       onClonePlan={handleClonePlan}
       onAccountability={handleAccountability}
       onSave={toggleSave}
+      onXnScorePress={() => navigation.navigate("XnScoreDashboard" as any)}
       currentUserId={user?.id}
     />
   );

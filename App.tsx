@@ -378,6 +378,10 @@ function DreamsStackScreen() {
       <DreamsStack.Screen name="PostComments" component={DreamPostCommentsScreen} />
       <DreamsStack.Screen name="UserDreamProfile" component={UserDreamProfileScreen} />
       <DreamsStack.Screen name="FeedSettings" component={FeedSettingsScreen} />
+      {/* Screens reachable from feed actions */}
+      <DreamsStack.Screen name="CreateGoal" component={CreateGoalScreen} />
+      <DreamsStack.Screen name="XnScoreDashboard" component={XnScoreDashboardScreen} />
+      <DreamsStack.Screen name="JoinCircleConfirm" component={JoinCircleConfirmScreen} />
     </DreamsStack.Navigator>
   );
 }

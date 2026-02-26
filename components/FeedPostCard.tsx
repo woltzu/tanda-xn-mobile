@@ -23,6 +23,7 @@ type FeedPostCardProps = {
   onClonePlan?: (post: FeedPost) => void;
   onAccountability?: (post: FeedPost) => void;
   onSave?: (postId: string) => void;
+  onXnScorePress?: () => void;
   currentUserId?: string;
 };
 
@@ -76,6 +77,7 @@ export default function FeedPostCard({
   onClonePlan,
   onAccountability,
   onSave,
+  onXnScorePress,
   currentUserId,
 }: FeedPostCardProps) {
   const config = POST_TYPE_CONFIG[post.type] || POST_TYPE_CONFIG.dream;
@@ -136,18 +138,16 @@ export default function FeedPostCard({
               </Text>
             </TouchableOpacity>
 
-            {/* Comments on own post — Join on others' */}
+            {/* Comments */}
             <TouchableOpacity
               style={styles.sideBtn}
               onPress={() => onComment(post.id)}
             >
               <View style={styles.sideBtnCircle}>
-                <Ionicons name={isOwnPost ? "chatbubble-outline" : "flag-outline"} size={22} color="#FFFFFF" />
+                <Ionicons name="chatbubble-outline" size={22} color="#FFFFFF" />
               </View>
               <Text style={styles.sideBtnCount}>
-                {isOwnPost
-                  ? (post.commentsCount > 0 ? post.commentsCount : "Comments")
-                  : (post.commentsCount > 0 ? post.commentsCount : "Join")}
+                {post.commentsCount > 0 ? post.commentsCount : "Comment"}
               </Text>
             </TouchableOpacity>
 
@@ -224,7 +224,7 @@ export default function FeedPostCard({
                 {isOwnPost ? "You" : displayName}
               </Text>
               {post.authorXnScore !== undefined && !isAnonymous && (
-                <View style={styles.videoXnBadge}>
+                <TouchableOpacity style={styles.videoXnBadge} onPress={onXnScorePress} activeOpacity={0.7}>
                   <Ionicons
                     name={getXnScoreTier(post.authorXnScore).icon as any}
                     size={9}
@@ -233,7 +233,7 @@ export default function FeedPostCard({
                   <Text style={[styles.videoXnText, { color: getXnScoreTier(post.authorXnScore).color }]}>
                     {Math.round(post.authorXnScore)}
                   </Text>
-                </View>
+                </TouchableOpacity>
               )}
               <View style={styles.videoOverlayTypeBadge}>
                 <Text style={{ fontSize: 11 }}>{config.emoji}</Text>
@@ -308,7 +308,11 @@ export default function FeedPostCard({
                 {isOwnPost ? "You" : displayName}
               </Text>
               {post.authorXnScore !== undefined && !isAnonymous && (
-                <View style={[styles.xnBadge, { backgroundColor: getXnScoreTier(post.authorXnScore).color + "18" }]}>
+                <TouchableOpacity
+                  style={[styles.xnBadge, { backgroundColor: getXnScoreTier(post.authorXnScore).color + "18" }]}
+                  onPress={onXnScorePress}
+                  activeOpacity={0.7}
+                >
                   <Ionicons
                     name={getXnScoreTier(post.authorXnScore).icon as any}
                     size={10}
@@ -317,7 +321,7 @@ export default function FeedPostCard({
                   <Text style={[styles.xnBadgeText, { color: getXnScoreTier(post.authorXnScore).color }]}>
                     {Math.round(post.authorXnScore)}
                   </Text>
-                </View>
+                </TouchableOpacity>
               )}
             </View>
             <Text style={styles.timeText}>{formatRelativeTime(post.createdAt)}</Text>
@@ -489,11 +493,9 @@ export default function FeedPostCard({
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton} onPress={() => onComment(post.id)}>
-          <Ionicons name={isOwnPost ? "chatbubble-outline" : "flag-outline"} size={18} color={colors.textSecondary} />
+          <Ionicons name="chatbubble-outline" size={18} color={colors.textSecondary} />
           <Text style={styles.actionText}>
-            {isOwnPost
-              ? (post.commentsCount > 0 ? `${post.commentsCount} comments` : "Comments")
-              : (post.commentsCount > 0 ? `${post.commentsCount}` : "Join")}
+            {post.commentsCount > 0 ? `${post.commentsCount} comments` : "Comment"}
           </Text>
         </TouchableOpacity>
 

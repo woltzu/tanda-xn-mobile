@@ -595,6 +595,7 @@ export default function PostDetailScreen() {
             onClonePlan={handleClonePlan}
             onAccountability={handleAccountability}
             onSave={toggleSave}
+            onXnScorePress={() => navigation.navigate("XnScoreDashboard" as any)}
             currentUserId={user?.id}
           />
 
