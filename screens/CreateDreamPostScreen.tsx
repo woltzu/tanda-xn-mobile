@@ -220,9 +220,26 @@ export default function CreateDreamPostScreen() {
       const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
       console.log(`[Upload] Uploading ${isVideo ? "video" : "image"}: ${fileName} (${contentType}, ${sizeMB}MB)`);
 
+      // Convert blob → ArrayBuffer for reliable upload on React Native
+      // (RN blobs hold a native file reference but bytes don't serialize through Supabase SDK)
+      let uploadBody: ArrayBuffer | Blob;
+      try {
+        const arrayBuffer = await blob.arrayBuffer();
+        if (arrayBuffer.byteLength > 0) {
+          uploadBody = arrayBuffer;
+          console.log(`[Upload] Converted to ArrayBuffer: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB`);
+        } else {
+          console.warn("[Upload] ArrayBuffer empty, falling back to blob");
+          uploadBody = blob;
+        }
+      } catch (abErr) {
+        console.warn("[Upload] ArrayBuffer conversion failed, using blob:", abErr);
+        uploadBody = blob;
+      }
+
       const { data, error } = await supabase.storage
         .from("feed-images")
-        .upload(fileName, blob, {
+        .upload(fileName, uploadBody, {
           contentType,
           upsert: false,
         });
