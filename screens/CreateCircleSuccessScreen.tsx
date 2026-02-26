@@ -92,9 +92,9 @@ export default function CreateCircleSuccessScreen() {
         emoji: getCircleEmoji(circleType),
         description: beneficiaryName
           ? isRecurring && totalCycles && totalCycles > 1
-            ? `Supporting ${beneficiaryName} for ${totalCycles} months`
+            ? `Supporting ${beneficiaryName} — ${totalCycles} contributions`
             : `Supporting ${beneficiaryName}`
-          : `${circleType} savings circle`,
+          : `${name} savings circle`,
         beneficiaryName,
         beneficiaryReason,
         isOneTime: frequency === "one-time",
@@ -172,17 +172,13 @@ export default function CreateCircleSuccessScreen() {
           </View>
 
           <Text style={styles.successTitle}>
-            {isFamilySupport
-              ? "Family Support Created! 👨‍👩‍👧‍👦"
-              : isDisasterRelief
+            {isDisasterRelief
               ? "Relief Fund Created! 🆘"
-              : "Circle Created! 🎉"}
+              : `${name.length > 20 ? name.slice(0, 20) + "…" : name} Created! ${circleEmoji}`}
           </Text>
           <Text style={styles.successSubtitle}>
-            {isFamilySupport && beneficiaryName
-              ? `Supporting ${beneficiaryName}${isRecurring && totalCycles ? ` for ${totalCycles} months` : ""}`
-              : isDisasterRelief && beneficiaryName
-              ? `Emergency relief for ${beneficiaryName}`
+            {beneficiaryName
+              ? `Supporting ${beneficiaryName}${isRecurring && totalCycles ? ` — ${totalCycles} contributions` : ""}`
               : `${name} is ready to go`}
           </Text>
         </LinearGradient>
@@ -202,13 +198,13 @@ export default function CreateCircleSuccessScreen() {
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>${amount}</Text>
                 <Text style={styles.statLabel}>
-                  {isFamilySupport && isRecurring ? "per month" : "per cycle"}
+                  per {frequency === "biweekly" ? "2 wks" : frequency === "weekly" ? "week" : frequency === "daily" ? "day" : "cycle"}
                 </Text>
               </View>
               <View style={styles.statItem}>
                 <Text style={styles.statValue}>{memberCount}+</Text>
                 <Text style={styles.statLabel}>
-                  {isFamilySupport || isDisasterRelief ? "supporters" : "members"}
+                  {beneficiaryName ? "supporters" : "members"}
                 </Text>
               </View>
               <View style={[styles.statItem, styles.statItemHighlight]}>
@@ -216,18 +212,18 @@ export default function CreateCircleSuccessScreen() {
                   ${monthlyPayout.toLocaleString()}+
                 </Text>
                 <Text style={styles.statLabel}>
-                  {isFamilySupport && isRecurring ? "monthly" : isDisasterRelief ? "total relief" : "pot size"}
+                  {isRecurring ? `per ${frequency === "biweekly" ? "2 wks" : frequency === "weekly" ? "week" : "cycle"}` : isDisasterRelief ? "total relief" : "pot size"}
                 </Text>
               </View>
             </View>
 
-            {/* Recurring Family Support Info */}
-            {isFamilySupport && isRecurring && totalCycles && totalCycles > 1 && (
+            {/* Recurring Support Info */}
+            {isRecurring && totalCycles && totalCycles > 1 && (
               <View style={styles.recurringInfoContainer}>
                 <View style={styles.recurringInfoRow}>
                   <Ionicons name="repeat" size={16} color="#00C6AE" />
                   <Text style={styles.recurringInfoText}>
-                    {totalCycles} months of support
+                    {totalCycles} contributions
                   </Text>
                 </View>
                 <View style={styles.recurringTotalRow}>

@@ -48,13 +48,34 @@ const isFamilySupportCircle = (type: string) => type === "family-support";
 // Helper to check if this is a disaster relief circle
 const isDisasterReliefCircle = (type: string) => type === "beneficiary";
 
-// Duration options for beneficiary circles (in months)
+// Duration options for beneficiary circles (in number of contributions)
 const durationOptions = [
-  { months: 1, label: "1 Month", description: "Single month support" },
-  { months: 3, label: "3 Months", description: "Quarterly support" },
-  { months: 6, label: "6 Months", description: "Half-year support" },
-  { months: 12, label: "12 Months", description: "Full year support" },
+  { count: 1, label: "1" },
+  { count: 3, label: "3" },
+  { count: 6, label: "6" },
+  { count: 12, label: "12" },
 ];
+
+// Calculate actual timespan from contributions + frequency
+const getTimespan = (contributions: number, freq: string): string => {
+  switch (freq) {
+    case "daily": return `${contributions} day${contributions > 1 ? "s" : ""}`;
+    case "weekly": return `${contributions} week${contributions > 1 ? "s" : ""}`;
+    case "biweekly": return `${contributions * 2} week${contributions * 2 > 1 ? "s" : ""}`;
+    case "monthly": return `${contributions} month${contributions > 1 ? "s" : ""}`;
+    default: return `${contributions} cycle${contributions > 1 ? "s" : ""}`;
+  }
+};
+
+const getFrequencyUnit = (freq: string): string => {
+  switch (freq) {
+    case "daily": return "day";
+    case "weekly": return "week";
+    case "biweekly": return "2 weeks";
+    case "monthly": return "month";
+    default: return "cycle";
+  }
+};
 
 export default function CreateCircleDetailsScreen() {
   const navigation = useNavigation<CreateCircleDetailsNavigationProp>();
@@ -192,7 +213,7 @@ export default function CreateCircleDetailsScreen() {
         circleType,
         name: name.trim(),
         amount: parsedAmount,
-        frequency: isFamilySupport && totalCycles > 1 ? "monthly" : frequency, // Recurring family support is always monthly
+        frequency, // Respect the user's chosen frequency (biweekly, weekly, etc.)
         memberCount: parsedMemberCount,
         beneficiaryName: showBeneficiary && beneficiaryName.trim() ? beneficiaryName.trim() : undefined,
         beneficiaryReason: showBeneficiary && beneficiaryReason.trim() ? beneficiaryReason.trim() : undefined,
@@ -433,9 +454,9 @@ export default function CreateCircleDetailsScreen() {
                   <Ionicons name="calendar" size={24} color="#00C6AE" />
                 </View>
                 <View style={styles.durationHeaderText}>
-                  <Text style={styles.label}>Support Duration</Text>
+                  <Text style={styles.label}>Number of Contributions</Text>
                   <Text style={styles.labelDesc}>
-                    How many months will the family support {beneficiaryName || "this person"}?
+                    How many times will each member contribute to support {beneficiaryName || "this person"}?
                   </Text>
                 </View>
               </View>
@@ -443,26 +464,26 @@ export default function CreateCircleDetailsScreen() {
               <View style={styles.durationOptionsGrid}>
                 {durationOptions.map((option) => (
                   <TouchableOpacity
-                    key={option.months}
+                    key={option.count}
                     style={[
                       styles.durationOption,
-                      totalCycles === option.months && styles.durationOptionSelected,
+                      totalCycles === option.count && styles.durationOptionSelected,
                     ]}
-                    onPress={() => setTotalCycles(option.months)}
+                    onPress={() => setTotalCycles(option.count)}
                   >
                     <Text style={[
                       styles.durationMonths,
-                      totalCycles === option.months && styles.durationMonthsSelected,
+                      totalCycles === option.count && styles.durationMonthsSelected,
                     ]}>
-                      {option.months}
+                      {option.count}
                     </Text>
                     <Text style={[
                       styles.durationLabel,
-                      totalCycles === option.months && styles.durationLabelSelected,
+                      totalCycles === option.count && styles.durationLabelSelected,
                     ]}>
-                      {option.months === 1 ? "Month" : "Months"}
+                      {option.count === 1 ? "Time" : "Times"}
                     </Text>
-                    {totalCycles === option.months && (
+                    {totalCycles === option.count && (
                       <View style={styles.durationCheck}>
                         <Ionicons name="checkmark" size={12} color="#FFFFFF" />
                       </View>
@@ -486,9 +507,9 @@ export default function CreateCircleDetailsScreen() {
                   <Ionicons name="repeat" size={18} color="#00897B" />
                   <Text style={styles.recurringNoticeText}>
                     <Text style={styles.boldText}>Recurring support: </Text>
-                    Members contribute monthly for {totalCycles} months.
+                    Members contribute every {getFrequencyUnit(frequency)} for {totalCycles} contributions ({getTimespan(totalCycles, frequency)}).
                     {beneficiaryName ? ` ${beneficiaryName}` : " The beneficiary"} receives
-                    ${totalPot.toLocaleString()} each month (${totalPayoutAllCycles.toLocaleString()} total).
+                    ${totalPot.toLocaleString()} each {getFrequencyUnit(frequency)} (${totalPayoutAllCycles.toLocaleString()} total).
                   </Text>
                 </View>
               )}
@@ -628,7 +649,7 @@ export default function CreateCircleDetailsScreen() {
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>
                 {isFamilySupport && totalCycles > 1
-                  ? "Family Support Summary"
+                  ? "Support Plan"
                   : isDisasterRelief
                   ? "Disaster Relief Summary"
                   : isOneTime
@@ -648,14 +669,14 @@ export default function CreateCircleDetailsScreen() {
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>
-                  {isFamilySupport && totalCycles > 1 ? "Monthly contribution" : "Each contribution"}
+                  {isFamilySupport && totalCycles > 1 ? `Each contribution (every ${getFrequencyUnit(frequency)})` : "Each contribution"}
                 </Text>
                 <Text style={styles.summaryValue}>${parsedAmount}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>
                   {isFamilySupport && totalCycles > 1
-                    ? "Monthly payout"
+                    ? `Payout per ${getFrequencyUnit(frequency)}`
                     : isOneTime || isDisasterRelief
                     ? "Total collection"
                     : "Pot each cycle"}
@@ -669,9 +690,9 @@ export default function CreateCircleDetailsScreen() {
               {isFamilySupport && (
                 <>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Support duration</Text>
+                    <Text style={styles.summaryLabel}>Contributions</Text>
                     <Text style={styles.summaryValue}>
-                      {totalCycles} {totalCycles === 1 ? "month" : "months"}
+                      {totalCycles}× ({getTimespan(totalCycles, frequency)})
                     </Text>
                   </View>
                   {totalCycles > 1 && (
@@ -704,9 +725,9 @@ export default function CreateCircleDetailsScreen() {
               <View style={styles.summaryTip}>
                 <Text style={styles.summaryTipText}>
                   {isFamilySupport && totalCycles > 1
-                    ? `💝 ${beneficiaryName || "Your family member"} receives $${totalPot.toLocaleString()}/month for ${totalCycles} months — one setup, continuous support!`
+                    ? `💝 ${beneficiaryName || "The beneficiary"} receives $${totalPot.toLocaleString()} every ${getFrequencyUnit(frequency)} for ${totalCycles} contributions (${getTimespan(totalCycles, frequency)}) — one setup, continuous support!`
                     : isFamilySupport
-                    ? `💝 ${beneficiaryName || "Your family member"} will receive $${totalPot.toLocaleString()} this month from ${parsedMemberCount} supporters`
+                    ? `💝 ${beneficiaryName || "The beneficiary"} will receive $${totalPot.toLocaleString()} from ${parsedMemberCount} supporters`
                     : isDisasterRelief
                     ? `🆘 Emergency relief: $${totalPot.toLocaleString()} collected for ${beneficiaryName || "disaster relief"}`
                     : isOneTime && beneficiaryName

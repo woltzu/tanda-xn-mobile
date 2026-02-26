@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  TextInput,
   Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -266,15 +267,15 @@ export default function CreateCircleScheduleScreen() {
             <View style={styles.recurringSummaryCard}>
               <View style={styles.recurringSummaryHeader}>
                 <Ionicons name="repeat" size={20} color="#00C6AE" />
-                <Text style={styles.recurringSummaryTitle}>Family Support Plan</Text>
+                <Text style={styles.recurringSummaryTitle}>Support Plan</Text>
               </View>
               <View style={styles.recurringSummaryContent}>
                 <View style={styles.recurringSummaryRow}>
-                  <Text style={styles.recurringSummaryLabel}>Duration</Text>
-                  <Text style={styles.recurringSummaryValue}>{totalCycles} months</Text>
+                  <Text style={styles.recurringSummaryLabel}>Contributions</Text>
+                  <Text style={styles.recurringSummaryValue}>{totalCycles}× ({getFrequencyLabel()})</Text>
                 </View>
                 <View style={styles.recurringSummaryRow}>
-                  <Text style={styles.recurringSummaryLabel}>Monthly payout</Text>
+                  <Text style={styles.recurringSummaryLabel}>Payout per {getFrequencyLabel()}</Text>
                   <Text style={styles.recurringSummaryValue}>${monthlyPayout.toLocaleString()}</Text>
                 </View>
                 <View style={styles.recurringSummaryRow}>
@@ -288,7 +289,7 @@ export default function CreateCircleScheduleScreen() {
                 </View>
               </View>
               <Text style={styles.recurringSummaryNote}>
-                💡 One setup — members contribute monthly until all {totalCycles} cycles complete
+                💡 One setup — members contribute every {getFrequencyLabel()} until all {totalCycles} contributions complete
               </Text>
             </View>
           )}
@@ -304,31 +305,80 @@ export default function CreateCircleScheduleScreen() {
                 : "First contribution deadline for Cycle 1"}
             </Text>
 
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Ionicons name="calendar-outline" size={20} color="#0A2342" />
-              <Text style={styles.dateButtonText}>
-                {startDate
-                  ? startDate.toLocaleDateString("en-US", {
-                      weekday: "long",
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })
-                  : "Select a date"}
-              </Text>
-            </TouchableOpacity>
+            {Platform.OS === "web" ? (
+              // Web: use native HTML date input (DateTimePicker doesn't work on web)
+              <View style={styles.dateButton}>
+                <Ionicons name="calendar-outline" size={20} color="#0A2342" />
+                <TextInput
+                  style={[styles.dateButtonText, { flex: 1, outlineStyle: "none" } as any]}
+                  value={startDate
+                    ? startDate.toLocaleDateString("en-US", {
+                        weekday: "long",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })
+                    : ""}
+                  placeholder="Select a date"
+                  placeholderTextColor="#9CA3AF"
+                  onFocus={(e: any) => {
+                    // Create a hidden HTML date input and trigger it
+                    const input = document.createElement("input");
+                    input.type = "date";
+                    input.min = minDate.toISOString().split("T")[0];
+                    input.style.position = "absolute";
+                    input.style.opacity = "0";
+                    input.style.pointerEvents = "none";
+                    document.body.appendChild(input);
+                    input.addEventListener("change", () => {
+                      if (input.value) {
+                        const [year, month, day] = input.value.split("-").map(Number);
+                        setStartDate(new Date(year, month - 1, day));
+                      }
+                      document.body.removeChild(input);
+                    });
+                    input.addEventListener("blur", () => {
+                      setTimeout(() => {
+                        if (document.body.contains(input)) document.body.removeChild(input);
+                      }, 200);
+                    });
+                    input.showPicker?.();
+                    input.click();
+                    e.target.blur();
+                  }}
+                  editable={true}
+                  showSoftInputOnFocus={false}
+                />
+              </View>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.dateButton}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Ionicons name="calendar-outline" size={20} color="#0A2342" />
+                  <Text style={styles.dateButtonText}>
+                    {startDate
+                      ? startDate.toLocaleDateString("en-US", {
+                          weekday: "long",
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })
+                      : "Select a date"}
+                  </Text>
+                </TouchableOpacity>
 
-            {showDatePicker && (
-              <DateTimePicker
-                value={startDate || minDate}
-                mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={handleDateChange}
-                minimumDate={minDate}
-              />
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={startDate || minDate}
+                    mode="date"
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    onChange={handleDateChange}
+                    minimumDate={minDate}
+                  />
+                )}
+              </>
             )}
 
             {startDate && (
