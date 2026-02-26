@@ -220,21 +220,91 @@ export default function CreateDreamPostScreen() {
       const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
       console.log(`[Upload] Uploading ${isVideo ? "video" : "image"}: ${fileName} (${contentType}, ${sizeMB}MB)`);
 
-      // Convert blob → ArrayBuffer for reliable upload on React Native
-      // (RN blobs hold a native file reference but bytes don't serialize through Supabase SDK)
-      let uploadBody: ArrayBuffer | Blob;
-      try {
-        const arrayBuffer = await blob.arrayBuffer();
-        if (arrayBuffer.byteLength > 0) {
-          uploadBody = arrayBuffer;
-          console.log(`[Upload] Converted to ArrayBuffer: ${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB`);
-        } else {
-          console.warn("[Upload] ArrayBuffer empty, falling back to blob");
-          uploadBody = blob;
+      // Platform-specific upload:
+      // - Web: blob works fine with Supabase SDK
+      // - React Native: blob.arrayBuffer() unavailable, Supabase SDK sends 0 bytes
+      //   → use FileReader to get real bytes, then upload ArrayBuffer
+      let uploadBody: ArrayBuffer | Uint8Array | Blob = blob;
+
+      if (Platform.OS !== "web") {
+        // React Native: read blob bytes via FileReader
+        try {
+          const bytes = await new Promise<Uint8Array>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              if (reader.result && reader.result instanceof ArrayBuffer) {
+                resolve(new Uint8Array(reader.result));
+              } else {
+                reject(new Error("FileReader did not return ArrayBuffer"));
+              }
+            };
+            reader.onerror = () => reject(reader.error || new Error("FileReader failed"));
+            reader.readAsArrayBuffer(blob);
+          });
+
+          if (bytes.byteLength > 0) {
+            uploadBody = bytes;
+            console.log(`[Upload] FileReader got ${(bytes.byteLength / 1024 / 1024).toFixed(1)}MB`);
+          } else {
+            console.warn("[Upload] FileReader returned 0 bytes, trying base64 decode...");
+            // Fallback: read as base64 data URL then decode
+            const base64 = await new Promise<string>((resolve, reject) => {
+              const r2 = new FileReader();
+              r2.onload = () => {
+                const dataUrl = r2.result as string;
+                const b64 = dataUrl.split(",")[1];
+                if (b64) resolve(b64);
+                else reject(new Error("No base64 data in data URL"));
+              };
+              r2.onerror = () => reject(r2.error || new Error("FileReader base64 failed"));
+              r2.readAsDataURL(blob);
+            });
+            const binaryStr = atob(base64);
+            const uint8 = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) {
+              uint8[i] = binaryStr.charCodeAt(i);
+            }
+            uploadBody = uint8;
+            console.log(`[Upload] Base64 decode got ${(uint8.byteLength / 1024 / 1024).toFixed(1)}MB`);
+          }
+        } catch (convErr: any) {
+          console.warn("[Upload] Byte conversion failed:", convErr.message);
+          // Last resort: upload via REST API with FormData (RN native file streaming)
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.access_token) throw new Error("No auth session");
+
+            const formData = new FormData();
+            formData.append("", {
+              uri: uri,
+              name: fileName.split("/").pop() || `upload.${fileExt}`,
+              type: contentType,
+            } as any);
+
+            const restUrl = `https://fjqdkyjkwqeoafwvnjgv.supabase.co/storage/v1/object/feed-images/${fileName}`;
+            const restRes = await fetch(restUrl, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              body: formData,
+            });
+
+            if (!restRes.ok) {
+              const errText = await restRes.text();
+              throw new Error(`REST upload failed (${restRes.status}): ${errText}`);
+            }
+
+            const { data: urlData } = supabase.storage
+              .from("feed-images")
+              .getPublicUrl(fileName);
+            console.log("[Upload] REST API Success:", urlData.publicUrl);
+            return urlData.publicUrl;
+          } catch (restErr: any) {
+            console.error("[Upload] REST API fallback failed:", restErr.message);
+            throw restErr;
+          }
         }
-      } catch (abErr) {
-        console.warn("[Upload] ArrayBuffer conversion failed, using blob:", abErr);
-        uploadBody = blob;
       }
 
       const { data, error } = await supabase.storage
