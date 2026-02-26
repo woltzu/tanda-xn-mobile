@@ -16,13 +16,13 @@ import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useFeed, FeedPost } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
+import { useCircles } from "../context/CirclesContext";
+import { useFilteredFeed, FeedFilter } from "../hooks/useFilteredFeed";
 import FeedPostCard from "../components/FeedPostCard";
 import { showToast } from "../components/Toast";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 
 type DreamFeedNavigationProp = StackNavigationProp<any>;
-
-type FeedFilter = "for_you" | "following" | "trending";
 
 const FILTER_TABS: { key: FeedFilter; label: string; icon: string }[] = [
   { key: "for_you", label: "For You", icon: "sparkles" },
@@ -46,8 +46,11 @@ export default function DreamFeedScreen() {
     refreshFeed,
   } = useFeed();
 
+  const { networkUserIds } = useCircles();
+
   const [refreshing, setRefreshing] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FeedFilter>("for_you");
+  const filteredPosts = useFilteredFeed(posts, activeFilter, networkUserIds);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -116,8 +119,16 @@ export default function DreamFeedScreen() {
         circleId: meta.circleId || post.relatedId,
       });
     } else if (meta.goalName) {
-      // Navigate to support the dream (send money flow)
-      showToast("Support Dream coming soon!", "info");
+      // Navigate to support the dream
+      navigation.navigate("SupportDream" as any, {
+        postId: post.id,
+        authorName: post.authorName,
+        authorAvatar: post.authorAvatar,
+        goalName: meta.goalName,
+        goalEmoji: meta.goalEmoji || "🎯",
+        targetAmount: meta.targetAmount || 0,
+        currentBalance: meta.currentBalance || 0,
+      });
     } else {
       showToast("Support coming soon!", "info");
     }
@@ -125,9 +136,6 @@ export default function DreamFeedScreen() {
 
   const handleFilterChange = (filter: FeedFilter) => {
     setActiveFilter(filter);
-    if (filter !== "for_you") {
-      showToast(`${filter === "following" ? "Following" : "Trending"} feed coming soon!`, "info");
-    }
   };
 
   const renderPost = ({ item }: { item: FeedPost }) => (
@@ -160,6 +168,38 @@ export default function DreamFeedScreen() {
 
   const renderEmpty = () => {
     if (isLoading) return null;
+
+    if (activeFilter === "following") {
+      return (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyEmoji}>{"\u{1F465}"}</Text>
+          <Text style={styles.emptyTitle}>No Posts From Your Network</Text>
+          <Text style={styles.emptySubtitle}>
+            Join a savings circle to see posts from your community members here.
+          </Text>
+          <TouchableOpacity
+            style={styles.emptyButton}
+            onPress={() => navigation.navigate("CirclesTab" as any)}
+          >
+            <Ionicons name="people" size={18} color="#FFFFFF" />
+            <Text style={styles.emptyButtonText}>Browse Circles</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (activeFilter === "trending") {
+      return (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyEmoji}>{"\u{1F525}"}</Text>
+          <Text style={styles.emptyTitle}>No Trending Posts Yet</Text>
+          <Text style={styles.emptySubtitle}>
+            When posts get likes and comments, the most popular ones will appear here.
+          </Text>
+        </View>
+      );
+    }
+
     return (
       <View style={styles.emptyState}>
         <Text style={styles.emptyEmoji}>{"\u{2728}"}</Text>
@@ -243,13 +283,13 @@ export default function DreamFeedScreen() {
         </View>
       ) : (
         <FlatList
-          data={posts}
+          data={filteredPosts}
           renderItem={renderPost}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.feedContent}
           showsVerticalScrollIndicator={false}
           onEndReached={() => {
-            if (hasMore && !isLoadingMore) {
+            if (activeFilter === "for_you" && hasMore && !isLoadingMore) {
               fetchMorePosts();
             }
           }}

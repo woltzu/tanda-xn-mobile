@@ -173,7 +173,7 @@ export default function CreateCircleSuccessScreen() {
 
           <Text style={styles.successTitle}>
             {isDisasterRelief
-              ? "Relief Fund Created! 🆘"
+              ? "Fundraise Created! 🆘"
               : `${name.length > 20 ? name.slice(0, 20) + "…" : name} Created! ${circleEmoji}`}
           </Text>
           <Text style={styles.successSubtitle}>
@@ -212,7 +212,7 @@ export default function CreateCircleSuccessScreen() {
                   ${monthlyPayout.toLocaleString()}+
                 </Text>
                 <Text style={styles.statLabel}>
-                  {isRecurring ? `per ${frequency === "biweekly" ? "2 wks" : frequency === "weekly" ? "week" : "cycle"}` : isDisasterRelief ? "total relief" : "pot size"}
+                  {isRecurring ? `per ${frequency === "biweekly" ? "2 wks" : frequency === "weekly" ? "week" : "cycle"}` : isDisasterRelief ? "total raised" : "pot size"}
                 </Text>
               </View>
             </View>

@@ -39,13 +39,13 @@ type ContactItem = {
 const quickAmounts = [50, 100, 200, 500];
 const quickSizes = [5, 6, 8, 10, 12];
 
-// Helper to check if this is a family support, goal-based, or beneficiary circle (can have beneficiary)
+// Helper to check if this is a single beneficiary, shared goal, or flexible fundraise circle (can have beneficiary)
 const hasBeneficiary = (type: string) => type === "family-support" || type === "goal" || type === "beneficiary";
 // Helper to check if this circle type supports one-time option
 const supportsOneTime = (type: string) => type === "family-support" || type === "goal" || type === "beneficiary";
-// Helper to check if this is a family support circle (supports recurring payouts)
+// Helper to check if this is a single beneficiary circle (supports recurring payouts)
 const isFamilySupportCircle = (type: string) => type === "family-support";
-// Helper to check if this is a disaster relief circle
+// Helper to check if this is a flexible fundraise circle
 const isDisasterReliefCircle = (type: string) => type === "beneficiary";
 
 // Duration options for beneficiary circles (in number of contributions)
@@ -278,7 +278,7 @@ export default function CreateCircleDetailsScreen() {
             <Text style={styles.charCount}>{name.length}/30</Text>
           </View>
 
-          {/* Elder Community Selection - For Disaster Relief circles only */}
+          {/* Elder Community Selection - For Flexible Fundraise circles only */}
           {isDisasterRelief && isElder && elderProfile?.status === "approved" && elderCommunities.length > 0 && (
             <View style={styles.card}>
               <View style={styles.elderBadge}>
@@ -293,7 +293,7 @@ export default function CreateCircleDetailsScreen() {
                 <View style={styles.beneficiaryHeaderText}>
                   <Text style={styles.label}>Target Community</Text>
                   <Text style={styles.labelDesc}>
-                    As an Elder, you can create disaster relief for your communities
+                    As an Elder, you can create fundraises for your communities
                   </Text>
                 </View>
               </View>
@@ -333,7 +333,7 @@ export default function CreateCircleDetailsScreen() {
             </View>
           )}
 
-          {/* Beneficiary Section - For Family Support and Goal-Based circles */}
+          {/* Beneficiary Section - For Single Beneficiary, Shared Goal, and Flexible Fundraise circles */}
           {showBeneficiary && (
             <View style={styles.card}>
               <View style={styles.beneficiaryHeader}>
@@ -434,7 +434,7 @@ export default function CreateCircleDetailsScreen() {
             </View>
           )}
 
-          {/* One-Time Notice - When one-time is selected (not for family support or disaster relief) */}
+          {/* One-Time Notice - When one-time is selected (not for single beneficiary or flexible fundraise) */}
           {isOneTime && showBeneficiary && !isFamilySupport && !isDisasterRelief && (
             <View style={styles.oneTimeNotice}>
               <Ionicons name="information-circle" size={18} color="#00897B" />
@@ -446,7 +446,7 @@ export default function CreateCircleDetailsScreen() {
             </View>
           )}
 
-          {/* Duration Selector - For Family Support circles only */}
+          {/* Duration Selector - For Single Beneficiary circles only */}
           {isFamilySupport && (
             <View style={styles.card}>
               <View style={styles.durationHeader}>
@@ -651,7 +651,7 @@ export default function CreateCircleDetailsScreen() {
                 {isFamilySupport && totalCycles > 1
                   ? "Support Plan"
                   : isDisasterRelief
-                  ? "Disaster Relief Summary"
+                  ? "Fundraise Summary"
                   : isOneTime
                   ? "Collection Summary"
                   : "Circle Summary"}
@@ -729,7 +729,7 @@ export default function CreateCircleDetailsScreen() {
                     : isFamilySupport
                     ? `💝 ${beneficiaryName || "The beneficiary"} will receive $${totalPot.toLocaleString()} from ${parsedMemberCount} supporters`
                     : isDisasterRelief
-                    ? `🆘 Emergency relief: $${totalPot.toLocaleString()} collected for ${beneficiaryName || "disaster relief"}`
+                    ? `🆘 Fundraise: $${totalPot.toLocaleString()} to be raised for ${beneficiaryName || "the cause"}`
                     : isOneTime && beneficiaryName
                     ? `💝 ${beneficiaryName} will receive $${totalPot.toLocaleString()} once all ${parsedMemberCount} contributors chip in`
                     : isOneTime
@@ -782,7 +782,7 @@ export default function CreateCircleDetailsScreen() {
             </View>
 
             <Text style={styles.durationModalSubtitle}>
-              Select how many months to support {beneficiaryName || "the beneficiary"}
+              Select how many {frequency === "monthly" ? "months" : "contributions"} to support {beneficiaryName || "the beneficiary"}
             </Text>
 
             <View style={styles.durationSliderContainer}>
@@ -797,8 +797,13 @@ export default function CreateCircleDetailsScreen() {
                 <View style={styles.durationSliderValue}>
                   <Text style={styles.durationSliderNumber}>{totalCycles}</Text>
                   <Text style={styles.durationSliderLabel}>
-                    {totalCycles === 1 ? "Month" : "Months"}
+                    {totalCycles === 1 ? "Time" : "Times"}
                   </Text>
+                  {frequency !== "monthly" && (
+                    <Text style={styles.durationSliderHintSmall}>
+                      = {getTimespan(totalCycles, frequency)}
+                    </Text>
+                  )}
                 </View>
 
                 <TouchableOpacity
@@ -809,19 +814,19 @@ export default function CreateCircleDetailsScreen() {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.durationSliderHint}>Range: 1-24 months</Text>
+              <Text style={styles.durationSliderHint}>Range: 1-24 {frequency === "monthly" ? "months" : "contributions"}</Text>
             </View>
 
             {parsedAmount > 0 && isValidMemberCount && (
               <View style={styles.durationModalSummary}>
                 <View style={styles.durationModalSummaryRow}>
-                  <Text style={styles.durationModalSummaryLabel}>Monthly payout</Text>
+                  <Text style={styles.durationModalSummaryLabel}>Payout per {getFrequencyUnit(frequency)}</Text>
                   <Text style={styles.durationModalSummaryValue}>
                     ${totalPot.toLocaleString()}
                   </Text>
                 </View>
                 <View style={styles.durationModalSummaryRow}>
-                  <Text style={styles.durationModalSummaryLabel}>Total over {totalCycles} months</Text>
+                  <Text style={styles.durationModalSummaryLabel}>Total over {getTimespan(totalCycles, frequency)}</Text>
                   <Text style={styles.durationModalSummaryValueHighlight}>
                     ${totalPayoutAllCycles.toLocaleString()}
                   </Text>
@@ -1625,6 +1630,11 @@ const styles = StyleSheet.create({
   durationSliderLabel: {
     fontSize: 16,
     color: "#6B7280",
+  },
+  durationSliderHintSmall: {
+    fontSize: 11,
+    color: "#00C6AE",
+    marginTop: 2,
   },
   durationSliderHint: {
     fontSize: 12,

@@ -21,14 +21,16 @@ type JoinCircleSuccessRouteProp = RouteProp<RootStackParamList, "JoinCircleSucce
 const getCircleTypeLabel = (type: string): string => {
   switch (type) {
     case "traditional":
-      return "Traditional Tanda";
+      return "Rotating Pot";
     case "family-support":
-      return "Family Support";
+      return "Single Beneficiary";
     case "goal":
     case "goal-based":
-      return "Goal-Based Circle";
+      return "Shared Goal";
     case "emergency":
-      return "Emergency Fund";
+      return "Emergency Pool";
+    case "beneficiary":
+      return "Flexible Fundraise";
     default:
       return "Savings Circle";
   }

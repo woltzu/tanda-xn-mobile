@@ -1037,9 +1037,9 @@ export default function CreateDreamPostScreen() {
                     </View>
                     <View style={styles.rvSideBtn}>
                       <View style={styles.rvSideBtnCircle}>
-                        <Ionicons name="flag-outline" size={20} color="#FFFFFF" />
+                        <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
                       </View>
-                      <Text style={styles.rvSideBtnLabel}>Join</Text>
+                      <Text style={styles.rvSideBtnLabel}>Comment</Text>
                     </View>
                     <View style={styles.rvSideBtn}>
                       <View style={styles.rvSideBtnCircle}>

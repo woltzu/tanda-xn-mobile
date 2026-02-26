@@ -121,7 +121,15 @@ export default function PostDetailScreen() {
         circleId: m.circleId || p.relatedId,
       });
     } else if (m.goalName) {
-      showToast("Support Dream coming soon!", "info");
+      navigation.navigate("SupportDream" as any, {
+        postId: p.id,
+        authorName: p.authorName,
+        authorAvatar: p.authorAvatar,
+        goalName: m.goalName,
+        goalEmoji: m.goalEmoji || "🎯",
+        targetAmount: m.targetAmount || 0,
+        currentBalance: m.currentBalance || 0,
+      });
     } else {
       showToast("Support coming soon!", "info");
     }
@@ -586,7 +594,7 @@ export default function PostDetailScreen() {
               const updated = await getPostById(id);
               if (updated) setPost(updated);
             }}
-            onComment={() => {}}
+            onComment={(id) => navigation.navigate("PostComments" as any, { postId: id })}
             onPress={() => {}}
             onAuthorPress={(userId) =>
               navigation.navigate("UserDreamProfile", { userId })

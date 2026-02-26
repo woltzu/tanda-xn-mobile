@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -7,7 +7,8 @@ import {
   Text,
   ViewStyle,
 } from "react-native";
-import { Video, ResizeMode, AVPlaybackStatus } from "expo-av";
+import { VideoView, useVideoPlayer } from "expo-video";
+import { useEvent, useEventListener } from "expo";
 import { Ionicons } from "@expo/vector-icons";
 import { colors, radius } from "../theme/tokens";
 
@@ -32,32 +33,49 @@ export default function VideoPlayer({
   disableTouch = false,
   aspectRatio = 4 / 3,
 }: VideoPlayerProps) {
-  const videoRef = useRef<Video>(null);
-  const [isPlaying, setIsPlaying] = useState(autoplay);
-  const [isBuffering, setIsBuffering] = useState(false);
   const [hasError, setHasError] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
 
-  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (status.isLoaded) {
-      setIsLoaded(true);
-      setIsPlaying(status.isPlaying);
-      setIsBuffering(status.isBuffering);
+  // Create player instance with expo-video hook
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false;
+    if (autoplay) {
+      p.play();
     }
-  };
+  });
 
-  const togglePlayPause = async () => {
-    if (disableTouch || !videoRef.current) return;
+  // Track playing state reactively
+  const { isPlaying } = useEvent(player, "playingChange", {
+    isPlaying: player.playing,
+  });
+
+  // Track player status (idle → loading → readyToPlay → error)
+  const { status } = useEvent(player, "statusChange", {
+    status: player.status,
+  });
+
+  const isLoaded = status === "readyToPlay";
+  const isBuffering = status === "loading";
+
+  // Listen for errors
+  useEventListener(player, "statusChange", ({ status: newStatus, error }) => {
+    if (newStatus === "error") {
+      console.warn("[VideoPlayer] Error:", error);
+      setHasError(true);
+    }
+  });
+
+  const togglePlayPause = useCallback(() => {
+    if (disableTouch) return;
     try {
       if (isPlaying) {
-        await videoRef.current.pauseAsync();
+        player.pause();
       } else {
-        await videoRef.current.playAsync();
+        player.play();
       }
     } catch (err) {
       console.warn("[VideoPlayer] Play/pause error:", err);
     }
-  };
+  }, [disableTouch, isPlaying, player]);
 
   if (hasError) {
     return (
@@ -70,19 +88,11 @@ export default function VideoPlayer({
 
   return (
     <View style={[styles.container, { aspectRatio }, style]}>
-      <Video
-        ref={videoRef}
-        source={{ uri }}
+      <VideoView
+        player={player}
         style={styles.video}
-        resizeMode={ResizeMode.CONTAIN}
-        shouldPlay={autoplay}
-        isLooping={false}
-        useNativeControls={showControls && !thumbnailMode}
-        onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
-        onError={(err) => {
-          console.warn("[VideoPlayer] Error:", err);
-          setHasError(true);
-        }}
+        contentFit="contain"
+        nativeControls={showControls && !thumbnailMode}
       />
 
       {/* Loading overlay — pointerEvents none so scroll passes through */}

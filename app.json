@@ -44,7 +44,10 @@
               "pathPrefix": "/invite"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -57,7 +60,8 @@
     "plugins": [
       "expo-secure-store",
       "@react-native-community/datetimepicker",
-      "expo-barcode-scanner"
+      "expo-barcode-scanner",
+      "expo-video"
     ]
   }
 }

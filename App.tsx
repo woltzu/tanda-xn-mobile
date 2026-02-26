@@ -121,6 +121,7 @@ import PostDetailScreen from "./screens/PostDetailScreen";
 import DreamPostCommentsScreen from "./screens/DreamPostCommentsScreen";
 import UserDreamProfileScreen from "./screens/UserDreamProfileScreen";
 import FeedSettingsScreen from "./screens/FeedSettingsScreen";
+import SupportDreamScreen from "./screens/SupportDreamScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -292,6 +293,16 @@ export type RootStackParamList = {
   PostComments: { postId: string };
   UserDreamProfile: { userId: string };
   FeedSettings: undefined;
+  // Support Dream Flow
+  SupportDream: {
+    postId: string;
+    authorName: string;
+    authorAvatar?: string;
+    goalName: string;
+    goalEmoji: string;
+    targetAmount: number;
+    currentBalance: number;
+  };
 };
 
 export type TabParamList = {
@@ -364,6 +375,8 @@ function HomeStackScreen() {
       <HomeStack.Screen name="PostDetail" component={PostDetailScreen} />
       <HomeStack.Screen name="PostComments" component={DreamPostCommentsScreen} />
       <HomeStack.Screen name="UserDreamProfile" component={UserDreamProfileScreen} />
+      {/* Feed action screen reachable from PostDetail */}
+      <HomeStack.Screen name="JoinCircleConfirm" component={JoinCircleConfirmScreen} />
     </HomeStack.Navigator>
   );
 }
@@ -382,6 +395,8 @@ function DreamsStackScreen() {
       <DreamsStack.Screen name="CreateGoal" component={CreateGoalScreen} />
       <DreamsStack.Screen name="XnScoreDashboard" component={XnScoreDashboardScreen} />
       <DreamsStack.Screen name="JoinCircleConfirm" component={JoinCircleConfirmScreen} />
+      <DreamsStack.Screen name="SupportDream" component={SupportDreamScreen} />
+      <DreamsStack.Screen name="WalletTransactionSuccess" component={WalletTransactionSuccessScreen} />
     </DreamsStack.Navigator>
   );
 }

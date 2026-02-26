@@ -68,11 +68,11 @@ export default function CreateCircleScheduleScreen() {
 
   // Check if this is a one-time collection (based on frequency selection, not circle type)
   const isOneTime = frequency === "one-time";
-  // Check if this is a family support circle (supports recurring payouts)
+  // Check if this is a single beneficiary circle (supports recurring payouts)
   const isFamilySupport = circleType === "family-support";
-  // Check if this is a disaster relief circle
+  // Check if this is a flexible fundraise circle
   const isDisasterRelief = circleType === "beneficiary";
-  // Check if this circle has a beneficiary (Family Support, Goal-Based, and Disaster Relief can have beneficiaries)
+  // Check if this circle has a beneficiary (Single Beneficiary, Shared Goal, and Flexible Fundraise can have beneficiaries)
   const hasBeneficiary = isFamilySupport || circleType === "goal" || isDisasterRelief;
 
   // Calculate totals for beneficiary circles
@@ -83,6 +83,7 @@ export default function CreateCircleScheduleScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [rotationMethod, setRotationMethod] = useState("xnscore");
   const [gracePeriodDays, setGracePeriodDays] = useState("2");
+  const [showAllCycles, setShowAllCycles] = useState(false);
   const [contributionDeadlines, setContributionDeadlines] = useState<
     Array<{ cycle: number; date: string; fullDate: Date }>
   >([]);
@@ -99,7 +100,8 @@ export default function CreateCircleScheduleScreen() {
     const deadlines = [];
     const start = new Date(startDate);
 
-    for (let i = 0; i < Math.min(memberCount, 6); i++) {
+    const numCycles = totalCycles || memberCount;
+    for (let i = 0; i < numCycles; i++) {
       const deadline = new Date(start);
 
       switch (frequency) {
@@ -219,9 +221,9 @@ export default function CreateCircleScheduleScreen() {
             <View style={styles.infoTextContainer}>
               <Text style={styles.infoTitle}>
                 {isFamilySupport && isRecurring
-                  ? "How Family Support Works"
+                  ? "How Single Beneficiary Works"
                   : isDisasterRelief
-                  ? "How Disaster Relief Works"
+                  ? "How Flexible Fundraise Works"
                   : isOneTime
                   ? "How This Collection Works"
                   : "How Payouts Work"}
@@ -436,8 +438,8 @@ export default function CreateCircleScheduleScreen() {
             </View>
           </View>
 
-          {/* Rotation Method - Only for recurring circles */}
-          {!isOneTime && (
+          {/* Rotation Method - Only for recurring circles without a fixed beneficiary */}
+          {!isOneTime && !hasBeneficiary && (
             <View style={styles.card}>
               <Text style={styles.label}>Rotation Order Method</Text>
               <Text style={styles.labelDesc}>
@@ -503,7 +505,7 @@ export default function CreateCircleScheduleScreen() {
                 Payout releases automatically when all {memberCount} members contribute
               </Text>
 
-              {contributionDeadlines.map((item, idx) => (
+              {(showAllCycles ? contributionDeadlines : contributionDeadlines.slice(0, 6)).map((item, idx) => (
                 <View key={idx} style={styles.scheduleItem}>
                   <View
                     style={[
@@ -526,8 +528,22 @@ export default function CreateCircleScheduleScreen() {
                 </View>
               ))}
 
-              {memberCount > 6 && (
-                <Text style={styles.scheduleMore}>+{memberCount - 6} more cycles</Text>
+              {contributionDeadlines.length > 6 && (
+                <TouchableOpacity
+                  style={styles.scheduleExpandButton}
+                  onPress={() => setShowAllCycles(!showAllCycles)}
+                >
+                  <Text style={styles.scheduleExpandText}>
+                    {showAllCycles
+                      ? "Show less"
+                      : `Show all ${contributionDeadlines.length} cycles`}
+                  </Text>
+                  <Ionicons
+                    name={showAllCycles ? "chevron-up" : "chevron-down"}
+                    size={14}
+                    color="#00C6AE"
+                  />
+                </TouchableOpacity>
               )}
 
               <View style={styles.autoPayoutBadge}>
@@ -865,11 +881,20 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.5)",
     marginTop: 2,
   },
-  scheduleMore: {
-    fontSize: 11,
-    color: "rgba(255,255,255,0.5)",
-    textAlign: "center",
+  scheduleExpandButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
     marginTop: 4,
+    backgroundColor: "rgba(0,198,174,0.15)",
+    borderRadius: 8,
+  },
+  scheduleExpandText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#00C6AE",
   },
   autoPayoutBadge: {
     marginTop: 14,

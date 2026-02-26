@@ -12,25 +12,25 @@ export default function CreateCircleStartScreen() {
   const circleTypes = [
     {
       id: "traditional",
-      name: "Traditional Tanda",
+      name: "Rotating Pot",
       emoji: "🔄",
-      description: "Classic rotating savings. Each member contributes, one member receives the pot each cycle.",
+      description: "Classic ROSCA. Members contribute equally, one member receives the full pot each cycle.",
       features: ["Equal contributions", "Rotating payouts", "Fixed schedule"],
       popular: true,
     },
     {
       id: "goal",
-      name: "Goal-Based Circle",
+      name: "Shared Goal",
       emoji: "🎯",
-      description: "Everyone saves toward a shared goal. Funds released when target is reached.",
-      features: ["Shared target", "Flexible amounts", "Group motivation"],
+      description: "Everyone saves toward a common target. Funds are used together when the goal is reached.",
+      features: ["Shared target", "Flexible amounts", "One-time or recurring"],
       popular: false,
     },
     {
       id: "emergency",
-      name: "Emergency Fund Circle",
+      name: "Emergency Pool",
       emoji: "🛡️",
-      description: "Build emergency funds together. Members can request funds when needed.",
+      description: "Members contribute to a communal fund. Anyone can request withdrawals when needed.",
       features: ["Safety net", "Request-based", "Community support"],
       popular: false,
     },
@@ -135,7 +135,7 @@ export default function CreateCircleStartScreen() {
           }}
         >
           <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#0A2342" }}>
-            Choose Circle Type
+            Choose how money moves
           </h3>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
