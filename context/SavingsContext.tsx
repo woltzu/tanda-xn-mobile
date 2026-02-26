@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createAutoPost } from "../lib/autoPost";
 import { supabase } from "../lib/supabase";
@@ -226,6 +226,9 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<GoalTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Ref keeps goals in sync for same-tick reads (avoids React state timing issues)
+  const goalsRef = useRef<SavingsGoal[]>([]);
+
   // Load data on mount
   useEffect(() => {
     loadData();
@@ -239,9 +242,12 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
       ]);
 
       if (goalsData) {
-        setGoals(JSON.parse(goalsData));
+        const parsed = JSON.parse(goalsData);
+        goalsRef.current = parsed;
+        setGoals(parsed);
       } else {
         // New users start with no goals - empty state encourages them to create their own
+        goalsRef.current = [];
         setGoals([]);
       }
 
@@ -256,6 +262,7 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
   };
 
   const saveGoals = async (newGoals: SavingsGoal[]) => {
+    goalsRef.current = newGoals; // Sync ref immediately (before React re-render)
     setGoals(newGoals);
     await AsyncStorage.setItem(STORAGE_KEY_GOALS, JSON.stringify(newGoals));
   };
@@ -382,7 +389,7 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
   };
 
   const updateGoal = async (goalId: string, updates: Partial<SavingsGoal>) => {
-    const updated = goals.map(g =>
+    const updated = goalsRef.current.map(g =>
       g.id === goalId
         ? { ...g, ...updates, updatedAt: new Date().toISOString() }
         : g
@@ -391,7 +398,7 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
   };
 
   const closeGoal = async (goalId: string) => {
-    const goal = goals.find(g => g.id === goalId);
+    const goal = goalsRef.current.find(g => g.id === goalId);
     if (!goal) return;
 
     // For locked goals, check if matured
@@ -426,7 +433,8 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
     amount: number,
     description?: string
   ): Promise<GoalTransaction> => {
-    const goal = goals.find(g => g.id === goalId);
+    // Use ref for immediate reads (state may not have updated yet after createGoal)
+    const goal = goalsRef.current.find(g => g.id === goalId);
     if (!goal) throw new Error("Goal not found");
 
     const typeConfig = GOAL_TYPES[goal.type];
@@ -511,7 +519,7 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
     amount: number,
     description?: string
   ): Promise<GoalTransaction> => {
-    const goal = goals.find(g => g.id === goalId);
+    const goal = goalsRef.current.find(g => g.id === goalId);
     if (!goal) throw new Error("Goal not found");
 
     if (amount > goal.currentBalance) {
@@ -555,8 +563,9 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
     toGoalId: string,
     amount: number
   ) => {
-    const fromGoal = goals.find(g => g.id === fromGoalId);
-    const toGoal = goals.find(g => g.id === toGoalId);
+    const currentGoals = goalsRef.current;
+    const fromGoal = currentGoals.find(g => g.id === fromGoalId);
+    const toGoal = currentGoals.find(g => g.id === toGoalId);
 
     if (!fromGoal || !toGoal) throw new Error("Goal not found");
     if (amount > fromGoal.currentBalance) throw new Error("Insufficient balance");
@@ -587,7 +596,7 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
       sourceGoalId: fromGoalId,
     };
 
-    const updatedGoals = goals.map(g => {
+    const updatedGoals = currentGoals.map(g => {
       if (g.id === fromGoalId) return { ...g, currentBalance: fromNewBalance, updatedAt: now };
       if (g.id === toGoalId) return { ...g, currentBalance: toNewBalance, updatedAt: now };
       return g;
