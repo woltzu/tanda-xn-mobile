@@ -345,7 +345,8 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
     const now = new Date().toISOString();
 
     // Calculate priority - highest priority (lowest number) for emergency funds with replenish
-    const existingPriorities = goals
+    const currentGoals = goalsRef.current;
+    const existingPriorities = currentGoals
       .filter(g => g.autoSaveEnabled && g.status === "active")
       .map(g => g.autoSavePriority || 99);
     const maxPriority = existingPriorities.length > 0 ? Math.max(...existingPriorities) : 0;
@@ -369,7 +370,7 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
       updatedAt: now,
     };
 
-    await saveGoals([...goals, newGoal]);
+    await saveGoals([...currentGoals, newGoal]);
 
     // Auto-post: New savings goal created (fire-and-forget, never blocks goal creation)
     try {
