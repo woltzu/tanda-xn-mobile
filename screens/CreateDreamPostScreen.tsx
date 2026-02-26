@@ -70,6 +70,7 @@ export default function CreateDreamPostScreen() {
   const [caption, setCaption] = useState("");
   const [mediaUri, setMediaUri] = useState<string | null>(null);
   const [mediaType, setMediaType] = useState<MediaType>(null);
+  const [mediaBlob, setMediaBlob] = useState<Blob | null>(null); // Captured at pick time
   const [visibility, setVisibility] = useState<FeedVisibility>("public");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -152,6 +153,25 @@ export default function CreateDreamPostScreen() {
         setMediaUri(asset.uri);
         const type: MediaType = asset.type === "video" ? "video" : "image";
         setMediaType(type);
+
+        // Immediately capture the blob at pick time to prevent web blob URL revocation.
+        // On web, blob URLs can be garbage-collected before upload time → empty file.
+        try {
+          const response = await fetch(asset.uri);
+          const blob = await response.blob();
+          if (blob.size > 0) {
+            setMediaBlob(blob);
+            const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+            console.log(`[Media] Captured ${type}: ${sizeMB}MB, type: ${blob.type}`);
+          } else {
+            console.warn("[Media] Blob is empty — file may not have been captured correctly");
+            setMediaBlob(null);
+          }
+        } catch (blobErr) {
+          console.warn("[Media] Failed to pre-capture blob:", blobErr);
+          setMediaBlob(null);
+        }
+
         showToast(
           type === "video" ? "Video selected (up to 60s)" : "Photo selected",
           "info"
@@ -165,18 +185,29 @@ export default function CreateDreamPostScreen() {
 
   const uploadMedia = async (uri: string): Promise<string | null> => {
     try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
+      // Use pre-captured blob (from pick time) or fetch as fallback
+      let blob: Blob;
+      if (mediaBlob && mediaBlob.size > 0) {
+        blob = mediaBlob;
+        console.log(`[Upload] Using pre-captured blob: ${(blob.size / 1024 / 1024).toFixed(1)}MB`);
+      } else {
+        console.log("[Upload] No pre-captured blob, fetching from URI...");
+        const response = await fetch(uri);
+        blob = await response.blob();
+      }
+
+      // Reject empty files
+      if (!blob || blob.size === 0) {
+        throw new Error("File is empty (0 bytes). Please try selecting the media again.");
+      }
 
       // Smart extension detection — handles blob URLs, data URIs, and file paths
       let fileExt: string;
       const blobType = blob.type; // e.g. "video/mp4", "image/jpeg"
       if (blobType && blobType.includes("/")) {
-        // Use blob's MIME type for reliable extension
         const mimeExt = blobType.split("/")[1].replace("quicktime", "mov");
         fileExt = mimeExt === "jpeg" ? "jpg" : mimeExt;
       } else {
-        // Fallback to URI parsing
         const uriExt = uri.split(".").pop()?.split("?")[0]?.toLowerCase();
         fileExt = uriExt && uriExt.length <= 5 ? uriExt : (mediaType === "video" ? "mp4" : "jpg");
       }
@@ -186,7 +217,8 @@ export default function CreateDreamPostScreen() {
       const isVideo = mediaType === "video" || videoExts.includes(fileExt);
       const contentType = blobType || (isVideo ? `video/${fileExt === "mov" ? "quicktime" : fileExt}` : `image/${fileExt}`);
 
-      console.log(`[Upload] Uploading ${isVideo ? "video" : "image"}: ${fileName} (${contentType}, ${(blob.size / 1024 / 1024).toFixed(1)}MB)`);
+      const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+      console.log(`[Upload] Uploading ${isVideo ? "video" : "image"}: ${fileName} (${contentType}, ${sizeMB}MB)`);
 
       const { data, error } = await supabase.storage
         .from("feed-images")
@@ -208,7 +240,7 @@ export default function CreateDreamPostScreen() {
       return urlData.publicUrl;
     } catch (err: any) {
       console.error("[Upload] Media upload failed:", err);
-      throw err; // Re-throw so handleSubmit can catch and show error
+      throw err;
     }
   };
 
