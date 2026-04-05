@@ -18,6 +18,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { InsurancePoolEngine } from './InsurancePoolEngine';
 import {
   addDays,
   addWeeks,
@@ -1341,6 +1342,20 @@ export class CycleProgressionEngine {
           xn_score_bonus: memberDefaults === 0 ? 10 : 0,
         },
       });
+    }
+
+    // Insurance pool: create rollover vote if pool has balance
+    try {
+      const pool = await InsurancePoolEngine.getPoolStatus(circle.id);
+      if (pool && pool.balanceCents > 0) {
+        await InsurancePoolEngine.createRolloverProposal(circle.id);
+        console.log(
+          `[CycleEngine] Created insurance pool rollover proposal for circle ${circle.id} ` +
+          `(pool balance: $${(pool.balanceCents / 100).toFixed(2)})`
+        );
+      }
+    } catch (poolError) {
+      console.error('[CycleEngine] Insurance pool distribution failed (non-fatal):', poolError);
     }
 
     console.log(`[CycleEngine] Circle ${circle.id} completed after ${circle.total_cycles} cycles`);

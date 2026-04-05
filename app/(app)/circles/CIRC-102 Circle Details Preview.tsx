@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   ArrowLeft,
   Share2,
@@ -17,48 +17,121 @@ import {
   CheckCircle,
   Award,
 } from "lucide-react"
+import { useCircles, Circle, CircleMember } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { useCircleParams, goBack, navigateToCircleScreen } from "./useCircleParams"
 
 export default function CircleDetailsPreview() {
   const [isSaved, setIsSaved] = useState(false)
+  const [circle, setCircle] = useState<Circle | null>(null)
+  const [members, setMembers] = useState<CircleMember[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const circle = {
-    id: "c1",
-    name: "Diaspora Family Fund",
-    type: "family",
-    description:
-      "A trusted savings circle for families supporting loved ones back home. We pool our resources monthly and take turns receiving the full pot. Built on trust, transparency, and the tradition of community savings.",
-    members: 8,
-    maxMembers: 12,
-    contribution: 200,
-    frequency: "monthly",
-    totalPool: 2400,
-    minScore: 50,
-    verified: true,
-    createdAt: "Aug 2024",
-    location: "USA → Kenya",
-    nextPayout: "Jan 15, 2025",
-    currentCycle: 3,
-    totalCycles: 12,
-    successRate: 98,
-    avgMemberScore: 74,
-    elder: {
-      name: "Grace M.",
-      score: 92,
-      circlesOverseen: 12,
-    },
-    rules: [
-      "Pay by the 5th of each month",
-      "2-day grace period for late payments",
-      "10% penalty for defaults",
-      "Elder mediation for disputes",
-    ],
-    memberAvatars: ["G", "M", "S", "J", "A", "K", "T", "R"],
+  const { circleId } = useCircleParams()
+  const { getCircleById, getCircleMembers, generateInviteCode, browseCircles } = useCircles()
+  const { user } = useAuth()
+
+  useEffect(() => {
+    if (!circleId) return
+
+    const loadData = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        // Try getCircleById first, then search browseCircles
+        let found = getCircleById(circleId)
+        if (!found) {
+          found = browseCircles.find((c) => c.id === circleId) || null
+        }
+        if (!found) {
+          setError("Circle not found")
+          setLoading(false)
+          return
+        }
+        setCircle(found)
+
+        // Load members
+        const membersData = await getCircleMembers(circleId)
+        setMembers(membersData)
+      } catch (err: any) {
+        setError(err.message || "Failed to load circle")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [circleId])
+
+  // Compute derived values from real data
+  const userXnScore = user?.xnScore ?? 0
+  const isLoggedIn = !!user
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        }}
+      >
+        <p style={{ fontSize: "16px", color: "#666" }}>Loading circle...</p>
+      </div>
+    )
   }
 
-  const userXnScore = 72
-  const isLoggedIn = true
-  const spotsLeft = circle.maxMembers - circle.members
-  const canJoin = userXnScore >= circle.minScore && spotsLeft > 0
+  if (error || !circle) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          gap: "16px",
+        }}
+      >
+        <AlertCircle size={40} color="#DC2626" />
+        <p style={{ fontSize: "16px", color: "#DC2626" }}>{error || "Circle not found"}</p>
+        <button
+          onClick={() => goBack()}
+          style={{
+            padding: "10px 24px",
+            borderRadius: "10px",
+            border: "none",
+            background: "#0A2342",
+            color: "#FFFFFF",
+            fontSize: "14px",
+            cursor: "pointer",
+          }}
+        >
+          Go Back
+        </button>
+      </div>
+    )
+  }
+
+  // Compute display values from real circle + members data
+  const spotsLeft = circle.memberCount - circle.currentMembers
+  const minScore = circle.minScore ?? 0
+  const canJoin = userXnScore >= minScore && spotsLeft > 0
+  const totalPool = circle.amount * circle.memberCount
+  const successRate = circle.progress > 0 ? Math.round(circle.progress) : null
+  const avgMemberScore =
+    members.length > 0
+      ? Math.round(members.reduce((sum, m) => sum + m.xnScore, 0) / members.length)
+      : null
+  const elder = members.find((m) => m.role === "elder" || m.role === "creator")
+  const memberAvatars = members.map((m) => m.name.charAt(0).toUpperCase())
+  const circleType = circle.type === "traditional" ? "family" : circle.type === "goal-based" ? "work" : circle.type === "family-support" ? "family" : circle.type
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -75,10 +148,24 @@ export default function CircleDetailsPreview() {
     }
   }
 
-  const typeColor = getTypeColor(circle.type)
+  const typeColor = getTypeColor(circleType)
 
   const handleSave = () => {
     setIsSaved(!isSaved)
+  }
+
+  const handleShare = async () => {
+    try {
+      const code = generateInviteCode(circle)
+      await navigator.clipboard.writeText(code)
+      alert("Invite code copied to clipboard!")
+    } catch {
+      alert("Could not copy invite code")
+    }
+  }
+
+  const handleJoin = () => {
+    navigateToCircleScreen("CIRC-107 Join Circle Confirmation", { circleId: circle.id })
   }
 
   return (
@@ -108,7 +195,7 @@ export default function CircleDetailsPreview() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.15)",
               border: "none",
@@ -147,7 +234,7 @@ export default function CircleDetailsPreview() {
               />
             </button>
             <button
-              onClick={() => console.log("Share")}
+              onClick={handleShare}
               style={{
                 background: "rgba(255,255,255,0.15)",
                 border: "none",
@@ -178,7 +265,7 @@ export default function CircleDetailsPreview() {
               textTransform: "capitalize",
             }}
           >
-            {circle.type}
+            {circleType}
           </span>
           {circle.verified && (
             <span
@@ -203,13 +290,15 @@ export default function CircleDetailsPreview() {
         <h1 style={{ margin: "0 0 8px 0", fontSize: "28px", fontWeight: "700" }}>{circle.name}</h1>
 
         <div style={{ display: "flex", alignItems: "center", gap: "12px", opacity: 0.9 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            <MapPin size={14} />
-            <span style={{ fontSize: "13px" }}>{circle.location}</span>
-          </div>
+          {circle.location && (
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <MapPin size={14} />
+              <span style={{ fontSize: "13px" }}>{circle.location}</span>
+            </div>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
             <Calendar size={14} />
-            <span style={{ fontSize: "13px" }}>Since {circle.createdAt}</span>
+            <span style={{ fontSize: "13px" }}>Since {new Date(circle.createdAt).toLocaleDateString("en-US", { month: "short", year: "numeric" })}</span>
           </div>
         </div>
       </div>
@@ -233,7 +322,7 @@ export default function CircleDetailsPreview() {
           }}
         >
           <DollarSign size={18} color="#00C6AE" style={{ marginBottom: "4px" }} />
-          <p style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#0A2342" }}>${circle.contribution}</p>
+          <p style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#0A2342" }}>${circle.amount}</p>
           <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#666" }}>
             per {circle.frequency === "monthly" ? "month" : circle.frequency === "biweekly" ? "2 weeks" : "week"}
           </p>
@@ -250,7 +339,7 @@ export default function CircleDetailsPreview() {
         >
           <Users size={18} color="#3B82F6" style={{ marginBottom: "4px" }} />
           <p style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#0A2342" }}>
-            {circle.members}/{circle.maxMembers}
+            {circle.currentMembers}/{circle.memberCount}
           </p>
           <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#666" }}>members</p>
         </div>
@@ -266,7 +355,7 @@ export default function CircleDetailsPreview() {
         >
           <TrendingUp size={18} color="#10B981" style={{ marginBottom: "4px" }} />
           <p style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#0A2342" }}>
-            ${circle.totalPool.toLocaleString()}
+            ${totalPool.toLocaleString()}
           </p>
           <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#666" }}>pool size</p>
         </div>
@@ -285,7 +374,7 @@ export default function CircleDetailsPreview() {
           }}
         >
           <h3 style={{ margin: "0 0 12px 0", fontSize: "16px", fontWeight: "600", color: "#0A2342" }}>About</h3>
-          <p style={{ margin: 0, fontSize: "14px", color: "#444", lineHeight: "1.6" }}>{circle.description}</p>
+          <p style={{ margin: 0, fontSize: "14px", color: "#444", lineHeight: "1.6" }}>{circle.description || "No description provided."}</p>
         </div>
 
         {/* Quick Stats */}
@@ -321,7 +410,7 @@ export default function CircleDetailsPreview() {
               </div>
               <div>
                 <p style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#0A2342" }}>
-                  {circle.successRate}%
+                  {successRate !== null ? `${successRate}%` : "N/A"}
                 </p>
                 <p style={{ margin: 0, fontSize: "11px", color: "#666" }}>Success Rate</p>
               </div>
@@ -343,7 +432,7 @@ export default function CircleDetailsPreview() {
               </div>
               <div>
                 <p style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#0A2342" }}>
-                  {circle.avgMemberScore}
+                  {avgMemberScore !== null ? avgMemberScore : "N/A"}
                 </p>
                 <p style={{ margin: 0, fontSize: "11px", color: "#666" }}>Avg XnScore</p>
               </div>
@@ -364,7 +453,9 @@ export default function CircleDetailsPreview() {
                 <Clock size={20} color="#F59E0B" />
               </div>
               <div>
-                <p style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#0A2342" }}>{circle.nextPayout}</p>
+                <p style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#0A2342" }}>
+                  {circle.startDate ? new Date(circle.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "TBD"}
+                </p>
                 <p style={{ margin: 0, fontSize: "11px", color: "#666" }}>Next Payout</p>
               </div>
             </div>
@@ -385,7 +476,7 @@ export default function CircleDetailsPreview() {
               </div>
               <div>
                 <p style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#0A2342" }}>
-                  {circle.currentCycle}/{circle.totalCycles}
+                  {circle.currentCycle ?? 1}/{circle.totalCycles ?? circle.memberCount}
                 </p>
                 <p style={{ margin: 0, fontSize: "11px", color: "#666" }}>Cycle</p>
               </div>
@@ -394,7 +485,7 @@ export default function CircleDetailsPreview() {
         </div>
 
         {/* Elder Info */}
-        {circle.elder && (
+        {elder && (
           <div
             style={{
               background: "linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)",
@@ -422,9 +513,9 @@ export default function CircleDetailsPreview() {
                 <p style={{ margin: "0 0 2px 0", fontSize: "11px", color: "#92400E", fontWeight: "600" }}>
                   CIRCLE ELDER
                 </p>
-                <p style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#78350F" }}>{circle.elder.name}</p>
+                <p style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#78350F" }}>{elder.name}</p>
                 <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#92400E" }}>
-                  XnScore {circle.elder.score} • {circle.elder.circlesOverseen} circles overseen
+                  XnScore {elder.xnScore}
                 </p>
               </div>
               <ChevronRight size={20} color="#92400E" />
@@ -456,7 +547,7 @@ export default function CircleDetailsPreview() {
             <div>
               <h3 style={{ margin: "0 0 8px 0", fontSize: "16px", fontWeight: "600", color: "#0A2342" }}>Members</h3>
               <div style={{ display: "flex", alignItems: "center" }}>
-                {circle.memberAvatars.slice(0, 5).map((initial, idx) => (
+                {memberAvatars.slice(0, 5).map((initial, idx) => (
                   <div
                     key={idx}
                     style={{
@@ -477,7 +568,7 @@ export default function CircleDetailsPreview() {
                     {initial}
                   </div>
                 ))}
-                {circle.members > 5 && (
+                {circle.currentMembers > 5 && (
                   <div
                     style={{
                       width: "32px",
@@ -494,7 +585,7 @@ export default function CircleDetailsPreview() {
                       color: "#666",
                     }}
                   >
-                    +{circle.members - 5}
+                    +{circle.currentMembers - 5}
                   </div>
                 )}
               </div>
@@ -530,17 +621,20 @@ export default function CircleDetailsPreview() {
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            {circle.rules.slice(0, 3).map((rule, idx) => (
+            {[
+              `Pay by the ${circle.gracePeriodDays > 0 ? circle.gracePeriodDays + "th" : "due date"} of each ${circle.frequency === "monthly" ? "month" : "cycle"}`,
+              `${circle.gracePeriodDays}-day grace period for late payments`,
+              "10% penalty for defaults",
+              "Elder mediation for disputes",
+            ].slice(0, 3).map((rule, idx) => (
               <div key={idx} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <CheckCircle size={14} color="#10B981" />
                 <span style={{ fontSize: "13px", color: "#444" }}>{rule}</span>
               </div>
             ))}
-            {circle.rules.length > 3 && (
-              <span style={{ fontSize: "13px", color: "#00C6AE", fontWeight: "600", marginLeft: "22px" }}>
-                +{circle.rules.length - 3} more rules
-              </span>
-            )}
+            <span style={{ fontSize: "13px", color: "#00C6AE", fontWeight: "600", marginLeft: "22px" }}>
+              +1 more rules
+            </span>
           </div>
         </button>
 
@@ -635,7 +729,7 @@ export default function CircleDetailsPreview() {
         </button>
 
         {/* Requirement Warning */}
-        {userXnScore < circle.minScore && (
+        {userXnScore < minScore && (
           <div
             style={{
               background: "#FEF2F2",
@@ -651,7 +745,7 @@ export default function CircleDetailsPreview() {
             <div>
               <p style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#DC2626" }}>XnScore too low</p>
               <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#991B1B" }}>
-                You need {circle.minScore} XnScore to join. Yours is {userXnScore}.
+                You need {minScore} XnScore to join. Yours is {userXnScore}.
               </p>
             </div>
           </div>
@@ -678,14 +772,20 @@ export default function CircleDetailsPreview() {
                 {spotsLeft} spot{spotsLeft !== 1 ? "s" : ""} remaining
               </p>
               <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#0A2342" }}>
-                ${circle.contribution}
+                ${circle.amount}
                 <span style={{ fontSize: "13px", fontWeight: "400", color: "#666" }}>
                   /{circle.frequency === "monthly" ? "month" : "2wk"}
                 </span>
               </p>
             </div>
             <button
-              onClick={() => console.log(isLoggedIn ? (canJoin ? "Join" : "Score too low") : "Login")}
+              onClick={() => {
+                if (!isLoggedIn) {
+                  window.location.href = "/login"
+                } else if (canJoin) {
+                  handleJoin()
+                }
+              }}
               disabled={isLoggedIn && !canJoin}
               style={{
                 padding: "16px 40px",

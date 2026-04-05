@@ -2,14 +2,23 @@
 
 import { useState } from "react"
 import { TabBarInline } from "../../../components/TabBar"
+import { useSavings } from "@/context/SavingsContext"
+import { useAuth } from "@/context/AuthContext"
+import { useGoalParams, navigateToGoalScreen, goBack } from "./useGoalParams"
 
 export default function GoalDetailScreen() {
+  const { user } = useAuth()
+  const { goalId } = useGoalParams()
+  const { getGoalById, getGoalTransactions, deposit, deleteGoal, isLoading, goals: allGoals } = useSavings()
+
   const [showMenu, setShowMenu] = useState(false)
   const [showAutoSaveModal, setShowAutoSaveModal] = useState(false)
   const [showAddFundsModal, setShowAddFundsModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string | null>(null)
   const [depositAmount, setDepositAmount] = useState("")
+  const [isDepositing, setIsDepositing] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Payment methods available
   const paymentMethods = [
@@ -21,27 +30,51 @@ export default function GoalDetailScreen() {
     { id: "apple", name: "Apple Pay", icon: "🍎", balance: null, type: "digital" },
   ]
 
-  // Goal data
-  const goal = {
-    id: "g1",
-    name: "Emergency Fund",
-    emoji: "🛡️",
-    description: "3 months of expenses for unexpected situations",
-    targetAmount: 5000,
-    currentAmount: 3200,
-    tier: "emergency",
-    deadline: "2025-06-30",
-    monthlyContribution: 400,
-    autoContribute: true,
-    createdAt: "2024-09-15",
+  // Load goal from context
+  const savingsGoal = goalId ? getGoalById(goalId) : undefined
+  const recentActivityRaw = goalId ? getGoalTransactions(goalId) : []
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#F5F7FA" }}>
+        <p style={{ fontSize: "16px", color: "#6B7280" }}>Loading goal...</p>
+      </div>
+    )
   }
 
-  const recentActivity = [
-    { id: 1, type: "deposit", amount: 400, date: "Dec 15, 2024", source: "Auto-Save" },
-    { id: 2, type: "deposit", amount: 400, date: "Nov 15, 2024", source: "Auto-Save" },
-    { id: 3, type: "deposit", amount: 200, date: "Nov 1, 2024", source: "Manual" },
-    { id: 4, type: "deposit", amount: 400, date: "Oct 15, 2024", source: "Auto-Save" },
-  ]
+  // Not found state
+  if (!savingsGoal) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", background: "#F5F7FA", gap: "16px" }}>
+        <p style={{ fontSize: "16px", color: "#6B7280" }}>Goal not found</p>
+        <button onClick={() => goBack()} style={{ padding: "12px 24px", borderRadius: "10px", border: "none", background: "#00C6AE", color: "#FFFFFF", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}>Go Back</button>
+      </div>
+    )
+  }
+
+  // Map SavingsGoal to the local shape the template uses
+  const goal = {
+    id: savingsGoal.id,
+    name: savingsGoal.name,
+    emoji: savingsGoal.emoji,
+    description: "",
+    targetAmount: savingsGoal.targetAmount,
+    currentAmount: savingsGoal.currentBalance,
+    tier: savingsGoal.type,
+    deadline: savingsGoal.maturityDate || "",
+    monthlyContribution: 0,
+    autoContribute: savingsGoal.autoSaveEnabled,
+    createdAt: savingsGoal.createdAt,
+  }
+
+  const recentActivity = recentActivityRaw.slice(0, 10).map((t) => ({
+    id: t.id,
+    type: t.type,
+    amount: Math.abs(t.amount),
+    date: new Date(t.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    source: t.description || t.type,
+  }))
 
   // Tier system
   const tiers = {
@@ -68,13 +101,15 @@ export default function GoalDetailScreen() {
     },
   }
 
-  const tierInfo = tiers[goal.tier as keyof typeof tiers]
-  const progress = Math.round((goal.currentAmount / goal.targetAmount) * 100)
+  const tierInfo = tiers[goal.tier as keyof typeof tiers] || tiers.flexible
+  const progress = goal.targetAmount > 0 ? Math.round((goal.currentAmount / goal.targetAmount) * 100) : 0
   const remaining = goal.targetAmount - goal.currentAmount
   const penaltyAmount = Math.round((goal.currentAmount * tierInfo.penalty) / 100)
 
   // Calculate days remaining
-  const daysRemaining = Math.ceil((new Date(goal.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+  const daysRemaining = goal.deadline
+    ? Math.ceil((new Date(goal.deadline).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    : 0
 
   // Milestones
   const milestones = [
@@ -110,7 +145,7 @@ export default function GoalDetailScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -128,7 +163,7 @@ export default function GoalDetailScreen() {
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             {/* Edit Goal Button */}
             <button
-              onClick={() => console.log("Navigate to Edit Goal")}
+              onClick={() => navigateToGoalScreen("033-GOAL-004-EditGoal", { goalId: goal.id })}
               style={{
                 background: "rgba(255,255,255,0.1)",
                 border: "none",
@@ -344,7 +379,7 @@ export default function GoalDetailScreen() {
 
           {/* Milestones */}
           <button
-            onClick={() => console.log("View Milestones")}
+            onClick={() => navigateToGoalScreen("035-GOAL-006-GoalMilestones", { goalId: goal.id })}
             style={{
               width: "100%",
               padding: "12px",
@@ -392,7 +427,7 @@ export default function GoalDetailScreen() {
 
         {/* Tier Card */}
         <button
-          onClick={() => console.log("Upgrade Tier")}
+          onClick={() => navigateToGoalScreen("036-GOAL-T01-TierSelection", { goalId: goal.id })}
           style={{
             width: "100%",
             background: "#FFFFFF",
@@ -487,7 +522,7 @@ export default function GoalDetailScreen() {
 
         {/* View Progress Button */}
         <button
-          onClick={() => console.log("View Progress")}
+          onClick={() => navigateToGoalScreen("034-GOAL-005-GoalProgress", { goalId: goal.id })}
           style={{
             width: "100%",
             background: "#FFFFFF",
@@ -560,7 +595,9 @@ export default function GoalDetailScreen() {
                     <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#9CA3AF" }}>{activity.date}</p>
                   </div>
                 </div>
-                <span style={{ fontSize: "14px", fontWeight: "600", color: "#00C6AE" }}>+${activity.amount}</span>
+                <span style={{ fontSize: "14px", fontWeight: "600", color: activity.type === "withdrawal" || activity.type === "transfer_out" ? "#EF4444" : "#00C6AE" }}>
+                  {activity.type === "withdrawal" || activity.type === "transfer_out" ? "-" : "+"}${activity.amount.toLocaleString()}
+                </span>
               </div>
             ))}
           </div>
@@ -582,7 +619,7 @@ export default function GoalDetailScreen() {
         }}
       >
         <button
-          onClick={() => console.log("Withdraw")}
+          onClick={() => navigateToGoalScreen("040-GOAL-T05-WithdrawalAmount", { goalId: goal.id })}
           style={{
             flex: 1,
             padding: "16px",
@@ -1010,13 +1047,22 @@ export default function GoalDetailScreen() {
 
             {/* Deposit Button */}
             <button
-              onClick={() => {
-                console.log("Deposit", depositAmount, "from", selectedPaymentMethod)
-                setShowAddFundsModal(false)
-                setSelectedPaymentMethod(null)
-                setDepositAmount("")
+              onClick={async () => {
+                if (!goalId || !depositAmount || Number(depositAmount) <= 0) return
+                setIsDepositing(true)
+                try {
+                  await deposit(goalId, parseFloat(depositAmount), `Deposit from ${selectedPaymentMethod || "wallet"}`)
+                  setShowAddFundsModal(false)
+                  setSelectedPaymentMethod(null)
+                  setDepositAmount("")
+                } catch (error) {
+                  console.error("Deposit failed:", error)
+                  alert("Deposit failed. Please try again.")
+                } finally {
+                  setIsDepositing(false)
+                }
               }}
-              disabled={!selectedPaymentMethod || !depositAmount || Number(depositAmount) <= 0}
+              disabled={!selectedPaymentMethod || !depositAmount || Number(depositAmount) <= 0 || isDepositing}
               style={{
                 width: "100%",
                 padding: "16px",
@@ -1029,7 +1075,7 @@ export default function GoalDetailScreen() {
                 cursor: selectedPaymentMethod && depositAmount && Number(depositAmount) > 0 ? "pointer" : "not-allowed",
               }}
             >
-              Deposit ${depositAmount || "0"} to Goal
+              {isDepositing ? "Processing..." : `Deposit $${depositAmount || "0"} to Goal`}
             </button>
           </div>
         </div>
@@ -1155,23 +1201,35 @@ export default function GoalDetailScreen() {
                 Keep Goal
               </button>
               <button
-                onClick={() => {
-                  console.log("Delete goal, return", goal.currentAmount > 0 ? goal.currentAmount * 0.98 : 0, "to wallet")
-                  setShowDeleteModal(false)
+                onClick={async () => {
+                  if (!goalId) return
+                  setIsDeleting(true)
+                  try {
+                    await deleteGoal(goalId)
+                    setShowDeleteModal(false)
+                    goBack()
+                  } catch (error) {
+                    console.error("Delete failed:", error)
+                    alert("Failed to delete goal. Please try again.")
+                  } finally {
+                    setIsDeleting(false)
+                  }
                 }}
+                disabled={isDeleting}
                 style={{
                   flex: 1,
                   padding: "14px",
                   borderRadius: "12px",
                   border: "none",
-                  background: "#DC2626",
+                  background: isDeleting ? "#F87171" : "#DC2626",
                   fontSize: "15px",
                   fontWeight: "600",
                   color: "#FFFFFF",
-                  cursor: "pointer",
+                  cursor: isDeleting ? "not-allowed" : "pointer",
+                  opacity: isDeleting ? 0.7 : 1,
                 }}
               >
-                {goal.currentAmount > 0 ? "Delete & Withdraw" : "Delete Goal"}
+                {isDeleting ? "Deleting..." : goal.currentAmount > 0 ? "Delete & Withdraw" : "Delete Goal"}
               </button>
             </div>
           </div>

@@ -1,102 +1,98 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useCircles, CIRCLE_TYPES } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { goBack, navigateToCircleScreen } from "./useCircleParams"
+import { supabase } from "../../../lib/supabase"
 
 export default function BrowseCirclesScreen() {
   const [searchQuery, setSearchQuery] = useState("")
   const [activeCategory, setActiveCategory] = useState("all")
 
-  // Mock data
-  const circles = [
-    {
-      id: "c1",
-      name: "Diaspora Family Fund",
-      type: "family",
-      members: 8,
-      maxMembers: 12,
-      contribution: 200,
-      frequency: "monthly",
-      totalPool: 2400,
-      minScore: 50,
-      featured: true,
-      verified: true,
-      description: "Supporting families back home together",
-      location: "USA → Kenya",
-      nextPayout: "Jan 15",
-    },
-    {
-      id: "c2",
-      name: "Tech Workers Savings",
-      type: "work",
-      members: 6,
-      maxMembers: 8,
-      contribution: 500,
-      frequency: "biweekly",
-      totalPool: 3000,
-      minScore: 65,
-      featured: true,
-      verified: true,
-      description: "Bay Area tech professionals",
-      location: "San Francisco",
-      nextPayout: "Jan 8",
-    },
-    {
-      id: "c3",
-      name: "Brooklyn Community Circle",
-      type: "community",
-      members: 10,
-      maxMembers: 12,
-      contribution: 100,
-      frequency: "weekly",
-      totalPool: 1000,
-      minScore: 40,
-      featured: false,
-      verified: true,
-      description: "Local savings for local dreams",
-      location: "Brooklyn, NY",
-      nextPayout: "Dec 30",
-    },
-    {
-      id: "c4",
-      name: "New Parents Support",
-      type: "family",
-      members: 5,
-      maxMembers: 8,
-      contribution: 150,
-      frequency: "monthly",
-      totalPool: 750,
-      minScore: 45,
-      featured: false,
-      verified: false,
-      description: "Saving for our children's future",
-      location: "Nationwide",
-      nextPayout: "Jan 20",
-    },
-    {
-      id: "c5",
-      name: "Nurses United Fund",
-      type: "work",
-      members: 11,
-      maxMembers: 12,
-      contribution: 250,
-      frequency: "monthly",
-      totalPool: 2750,
-      minScore: 55,
-      featured: false,
-      verified: true,
-      description: "Healthcare workers saving together",
-      location: "Houston, TX",
-      nextPayout: "Jan 5",
-    },
-  ]
+  const { browseCircles, isLoading, error } = useCircles()
+  const { user } = useAuth()
 
-  const userXnScore = 72
+  // Fetch XnScore from profiles table
+  const [userXnScore, setUserXnScore] = useState<number>(0)
+  useEffect(() => {
+    if (!user?.id) return
+    const fetchScore = async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("xn_score")
+        .eq("id", user.id)
+        .single()
+      if (data?.xn_score != null) {
+        setUserXnScore(data.xn_score)
+      } else {
+        // Fallback to auth context score
+        setUserXnScore(user.xnScore ?? 0)
+      }
+    }
+    fetchScore()
+  }, [user?.id, user?.xnScore])
+
+  // Map browseCircles to the local display shape the UI expects
+  const circles = browseCircles.map((circle) => {
+    const freqLabel =
+      circle.frequency === "monthly"
+        ? "monthly"
+        : circle.frequency === "biweekly"
+          ? "biweekly"
+          : circle.frequency === "weekly"
+            ? "weekly"
+            : circle.frequency === "daily"
+              ? "daily"
+              : "monthly"
+
+    // Format nextPayout from startDate
+    let nextPayout = "TBD"
+    if (circle.startDate) {
+      try {
+        const d = new Date(circle.startDate)
+        if (!isNaN(d.getTime())) {
+          nextPayout = d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+        }
+      } catch {
+        nextPayout = "TBD"
+      }
+    }
+
+    // Map circle type to UI category
+    let uiType = "community"
+    const t = circle.type
+    if (t === "traditional" || t === "family-support" || t === "beneficiary") {
+      uiType = "family"
+    } else if (t === "goal-based" || t === "goal") {
+      uiType = "work"
+    } else if (t === "emergency") {
+      uiType = "community"
+    }
+
+    return {
+      id: circle.id,
+      name: circle.name,
+      type: uiType,
+      members: circle.currentMembers,
+      maxMembers: circle.memberCount,
+      contribution: circle.amount,
+      frequency: freqLabel,
+      totalPool: circle.amount * circle.currentMembers,
+      minScore: circle.minScore ?? 0,
+      featured: circle.verified === true,
+      verified: circle.verified === true,
+      description: circle.description ?? "",
+      location: circle.location ?? "",
+      nextPayout,
+    }
+  })
 
   const categories = [
-    { id: "all", label: "All", icon: "✨" },
-    { id: "family", label: "Family", icon: "👥" },
-    { id: "work", label: "Work", icon: "📈" },
-    { id: "community", label: "Community", icon: "📍" },
-    { id: "friends", label: "Friends", icon: "⭐" },
+    { id: "all", label: "All", icon: "\u2728" },
+    { id: "family", label: "Family", icon: "\uD83D\uDC65" },
+    { id: "work", label: "Work", icon: "\uD83D\uDCC8" },
+    { id: "community", label: "Community", icon: "\uD83D\uDCCD" },
+    { id: "friends", label: "Friends", icon: "\u2B50" },
   ]
 
   const getTypeColor = (type: string) => {
@@ -132,7 +128,9 @@ export default function BrowseCirclesScreen() {
 
     return (
       <button
-        onClick={() => console.log("Circle clicked:", circle.id)}
+        onClick={() =>
+          navigateToCircleScreen("CIRC-102 Circle Details Preview", { circleId: circle.id })
+        }
         style={{
           width: featured ? "280px" : "100%",
           flexShrink: featured ? 0 : 1,
@@ -318,6 +316,83 @@ export default function BrowseCirclesScreen() {
     )
   }
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "4px solid #E0E0E0",
+              borderTop: "4px solid #00C6AE",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 16px",
+            }}
+          />
+          <p style={{ color: "#666", fontSize: "15px" }}>Loading circles...</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        }}
+      >
+        <div
+          style={{
+            textAlign: "center",
+            padding: "24px",
+            background: "#FEF2F2",
+            borderRadius: "16px",
+            border: "1px solid #FECACA",
+            maxWidth: "320px",
+          }}
+        >
+          <svg
+            width="40"
+            height="40"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#DC2626"
+            strokeWidth="2"
+            style={{ marginBottom: "12px" }}
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="15" y1="9" x2="9" y2="15" />
+            <line x1="9" y1="9" x2="15" y2="15" />
+          </svg>
+          <h3 style={{ margin: "0 0 8px 0", fontSize: "16px", color: "#DC2626" }}>
+            Something went wrong
+          </h3>
+          <p style={{ margin: 0, fontSize: "14px", color: "#666" }}>{error}</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       style={{
@@ -345,7 +420,7 @@ export default function BrowseCirclesScreen() {
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <button
-              onClick={() => console.log("Back")}
+              onClick={() => goBack()}
               style={{
                 background: "rgba(255,255,255,0.1)",
                 border: "none",
@@ -363,7 +438,7 @@ export default function BrowseCirclesScreen() {
           </div>
 
           <button
-            onClick={() => console.log("Filter")}
+            onClick={() => {/* Filter — future feature */}}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -506,7 +581,7 @@ export default function BrowseCirclesScreen() {
                   gap: "8px",
                 }}
               >
-                <span>✨</span>
+                <span>{"\u2728"}</span>
                 Featured
               </h2>
             </div>
@@ -598,7 +673,7 @@ export default function BrowseCirclesScreen() {
 
       {/* Create Circle FAB */}
       <button
-        onClick={() => console.log("Create circle")}
+        onClick={() => navigateToCircleScreen("CIRC-201 Create Circle Start")}
         style={{
           position: "fixed",
           bottom: "24px",

@@ -1,18 +1,26 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useCreateCircleWizard } from "../../../context/CreateCircleWizardContext"
+import { goBack, navigateToCircleScreen } from "./useCircleParams"
 
 export default function CreateCircleScheduleScreen() {
+  const wizard = useCreateCircleWizard()
+
+  // Read circle details from wizard state (set in previous step)
   const circleDetails = {
-    name: "Family Savings",
-    amount: 200,
-    frequency: "monthly",
-    memberCount: 6,
+    name: wizard.state.name || "Circle",
+    amount: wizard.state.amount || 0,
+    frequency: wizard.state.frequency || "monthly",
+    memberCount: wizard.state.memberCount || 6,
   }
 
-  const [startDate, setStartDate] = useState("")
-  const [rotationMethod, setRotationMethod] = useState("xnscore")
-  const [gracePeriodDays, setGracePeriodDays] = useState("2")
+  // Initialize from wizard state so values are preserved on back/forward
+  const [startDate, setStartDate] = useState(wizard.state.startDate || "")
+  const [rotationMethod, setRotationMethod] = useState(wizard.state.rotationMethod || "xnscore")
+  const [gracePeriodDays, setGracePeriodDays] = useState(
+    wizard.state.gracePeriodDays != null ? wizard.state.gracePeriodDays.toString() : "2"
+  )
   const [contributionDeadlines, setContributionDeadlines] = useState<
     Array<{ cycle: number; date: string; fullDate: Date }>
   >([])
@@ -21,21 +29,21 @@ export default function CreateCircleScheduleScreen() {
     {
       id: "xnscore",
       name: "By XnScore",
-      emoji: "⭐",
+      emoji: "\u2B50",
       description: "Highest XnScore members get earliest payouts. Rewards reliable savers.",
       recommended: true,
     },
     {
       id: "random",
       name: "Random Draw",
-      emoji: "🎲",
+      emoji: "\uD83C\uDFB2",
       description: "Fair random selection at circle start. Everyone has equal chance.",
       recommended: false,
     },
     {
       id: "manual",
       name: "Manual Assignment",
-      emoji: "📋",
+      emoji: "\uD83D\uDCCB",
       description: "You (as admin) assign the order. Good for agreed arrangements.",
       recommended: false,
     },
@@ -109,6 +117,16 @@ export default function CreateCircleScheduleScreen() {
 
   const canContinue = startDate && rotationMethod
 
+  const handleContinue = () => {
+    if (!canContinue) return
+    wizard.updateFields({
+      startDate,
+      gracePeriodDays: Number.parseInt(gracePeriodDays),
+      rotationMethod,
+    })
+    navigateToCircleScreen("CIRC-204 Create Circle Invite")
+  }
+
   return (
     <div
       style={{
@@ -135,7 +153,7 @@ export default function CreateCircleScheduleScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -184,7 +202,7 @@ export default function CreateCircleScheduleScreen() {
           }}
         >
           <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
-            <span style={{ fontSize: "20px" }}>💡</span>
+            <span style={{ fontSize: "20px" }}>&#x1F4A1;</span>
             <div>
               <p style={{ margin: "0 0 6px 0", fontSize: "13px", fontWeight: "600", color: "#065F46" }}>
                 How Payouts Work
@@ -232,7 +250,7 @@ export default function CreateCircleScheduleScreen() {
           />
           {startDate && (
             <p style={{ margin: "10px 0 0 0", fontSize: "12px", color: "#00897B" }}>
-              ✓ Contributions due every {getFrequencyLabel()} starting{" "}
+              Contributions due every {getFrequencyLabel()} starting{" "}
               {new Date(startDate).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
             </p>
           )}
@@ -289,7 +307,7 @@ export default function CreateCircleScheduleScreen() {
           }}
         >
           <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
-            <span style={{ fontSize: "20px" }}>⚠️</span>
+            <span style={{ fontSize: "20px" }}>&#x26A0;&#xFE0F;</span>
             <div>
               <p style={{ margin: "0 0 6px 0", fontSize: "13px", fontWeight: "600", color: "#92400E" }}>
                 Missing Contributions
@@ -470,7 +488,7 @@ export default function CreateCircleScheduleScreen() {
                 gap: "8px",
               }}
             >
-              <span style={{ fontSize: "16px" }}>⚡</span>
+              <span style={{ fontSize: "16px" }}>&#x26A1;</span>
               <p style={{ margin: 0, fontSize: "11px", color: "#00C6AE", lineHeight: 1.4 }}>
                 <strong>Auto-Payout:</strong> As soon as all members pay, the pot is released to that cycle's recipient
               </p>
@@ -492,14 +510,7 @@ export default function CreateCircleScheduleScreen() {
         }}
       >
         <button
-          onClick={() =>
-            console.log("Continue", {
-              startDate,
-              rotationMethod,
-              gracePeriodDays: Number.parseInt(gracePeriodDays),
-              contributionDeadlines,
-            })
-          }
+          onClick={handleContinue}
           disabled={!canContinue}
           style={{
             width: "100%",

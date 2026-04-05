@@ -377,6 +377,64 @@ export default function DashboardScreen() {
             <CommunitySuggestionBubble />
           )}
 
+          {/* SECTION 4.3 — PAYOUT COUNTDOWN + MARKETPLACE */}
+          {myCircles.length > 0 && (
+            <TouchableOpacity
+              style={styles.payoutCountdownCard}
+              onPress={() => navigation.navigate("Marketplace" as any)}
+              accessibilityLabel="Payout countdown and marketplace"
+              accessibilityRole="button"
+            >
+              <View style={styles.payoutCountdownLeft}>
+                <View style={[styles.payoutCountdownIcon, { backgroundColor: "#FEF3C7" }]}>
+                  <Ionicons name="time" size={22} color="#F59E0B" />
+                </View>
+                <View>
+                  <Text style={styles.payoutCountdownLabel}>PAYOUT IN</Text>
+                  <Text style={styles.payoutCountdownDays}>
+                    {(() => {
+                      const nextPayout = new Date();
+                      nextPayout.setDate(nextPayout.getDate() + 14);
+                      const diffDays = Math.ceil((nextPayout.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                      return `${diffDays} days`;
+                    })()}
+                  </Text>
+                  <Text style={styles.payoutCountdownHint}>
+                    ${(myCircles[0]?.amount * myCircles[0]?.currentMembers || 0).toLocaleString()} from {myCircles[0]?.name || "Circle"}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.payoutCountdownRight}>
+                <View style={[styles.marketplacePill, { backgroundColor: colors.tealTintBg }]}>
+                  <Ionicons name="storefront" size={14} color={colors.accentTeal} />
+                  <Text style={[styles.marketplacePillText, { color: colors.accentTeal }]}>Book & pay on payout day</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {/* SECTION 4.4 — MARKETPLACE QUICK ACCESS */}
+          <TouchableOpacity
+            style={styles.marketplaceCard}
+            onPress={() => navigation.navigate("Marketplace" as any)}
+            accessibilityLabel="Browse marketplace"
+            accessibilityRole="button"
+          >
+            <View style={styles.marketplaceCardLeft}>
+              <View style={[styles.marketplaceIconBg, { backgroundColor: "#F0FDFB" }]}>
+                <Ionicons name="storefront" size={22} color={colors.accentTeal} />
+              </View>
+              <View>
+                <Text style={styles.marketplaceCardTitle}>Marketplace</Text>
+                <Text style={styles.marketplaceCardDesc}>
+                  Diaspora services with member discounts
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
+
           {/* SECTION 4.5 — ADVANCE PAYOUT (REQUEST EARLY PAYOUT) */}
           {myCircles.length > 0 && advanceTier !== "none" && (
             <TouchableOpacity
@@ -1223,6 +1281,97 @@ const styles = StyleSheet.create({
   },
 
   // SECTION 4.5 — ADVANCE PAYOUT CARD
+  // ── Payout Countdown + Marketplace ──
+  payoutCountdownCard: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    backgroundColor: "#FFFBEB",
+    borderRadius: radius.card,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  payoutCountdownLeft: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    flex: 1,
+    gap: 12,
+  },
+  payoutCountdownIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  payoutCountdownLabel: {
+    fontSize: 10,
+    fontWeight: "600" as const,
+    color: "#92400E",
+    letterSpacing: 0.5,
+  },
+  payoutCountdownDays: {
+    fontSize: 18,
+    fontWeight: "700" as const,
+    color: "#D97706",
+  },
+  payoutCountdownHint: {
+    fontSize: 11,
+    color: "#B45309",
+    marginTop: 2,
+  },
+  payoutCountdownRight: {
+    alignItems: "flex-end" as const,
+    gap: 6,
+  },
+  marketplacePill: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+  },
+  marketplacePillText: {
+    fontSize: 11,
+    fontWeight: "600" as const,
+  },
+  marketplaceCard: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    justifyContent: "space-between" as const,
+    backgroundColor: colors.cardBg,
+    borderRadius: radius.card,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  marketplaceCardLeft: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    flex: 1,
+    gap: 12,
+  },
+  marketplaceIconBg: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+  },
+  marketplaceCardTitle: {
+    fontSize: 15,
+    fontWeight: "600" as const,
+    color: colors.primaryNavy,
+  },
+  marketplaceCardDesc: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
   advancePayoutCard: {
     flexDirection: "row",
     alignItems: "center",

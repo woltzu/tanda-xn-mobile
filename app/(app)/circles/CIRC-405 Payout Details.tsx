@@ -1,32 +1,51 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { useCircles } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { useCircleParams, goBack } from "./useCircleParams"
+
+import type { Circle, PayoutScheduleEntry, CircleMember } from "../../../context/CirclesContext"
+
 export default function PayoutDetailsScreen() {
-  const payout = {
-    id: "payout_123",
-    circleName: "Family Savings",
-    cycle: 2,
-    member: "Kwame Mensah",
-    memberAvatar: "K",
-    amount: 1200,
-    status: "completed",
-    scheduledDate: "Dec 15, 2024",
-    completedDate: "Dec 15, 2024",
-    completedTime: "3:45 PM",
-    transactionId: "PAY-2024-1215-54321",
-    contributions: [
-      { member: "Franck (You)", avatar: "F", amount: 200, date: "Dec 5" },
-      { member: "Amara O.", avatar: "A", amount: 200, date: "Dec 3" },
-      { member: "Kwame M.", avatar: "K", amount: 200, date: "Dec 4" },
-      { member: "Marie C.", avatar: "M", amount: 200, date: "Dec 2" },
-      { member: "David N.", avatar: "D", amount: 200, date: "Dec 6" },
-      { member: "Samuel O.", avatar: "S", amount: 200, date: "Dec 5" },
-    ],
-  }
+  const { circleId, cycleNumber } = useCircleParams()
+  const { getCircleById, getPayoutSchedule, getCircleMembers } = useCircles()
+  const { user } = useAuth()
 
-  const isMyPayout = false
+  const [circle, setCircle] = useState<Circle | undefined>(undefined)
+  const [payout, setPayout] = useState<PayoutScheduleEntry | null>(null)
+  const [members, setMembers] = useState<CircleMember[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const getStatusStyle = () => {
-    switch (payout.status) {
+  useEffect(() => {
+    if (!circleId) return
+
+    const loadData = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const circleData = getCircleById(circleId)
+        setCircle(circleData)
+
+        const schedule = await getPayoutSchedule(circleId)
+        const entry = schedule.find((s) => s.cycleNumber === cycleNumber)
+        setPayout(entry || null)
+
+        const membersList = await getCircleMembers(circleId)
+        setMembers(membersList)
+      } catch (err: any) {
+        setError(err.message || "Failed to load payout details")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadData()
+  }, [circleId, cycleNumber])
+
+  const getStatusStyle = (status: string) => {
+    switch (status) {
       case "completed":
         return { bg: "#F0FDFB", color: "#00897B", label: "Completed" }
       case "upcoming":
@@ -34,11 +53,84 @@ export default function PayoutDetailsScreen() {
       case "scheduled":
         return { bg: "#F5F7FA", color: "#6B7280", label: "Scheduled" }
       default:
-        return { bg: "#F5F7FA", color: "#6B7280", label: payout.status }
+        return { bg: "#F5F7FA", color: "#6B7280", label: status }
     }
   }
 
-  const statusStyle = getStatusStyle()
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "4px solid #E5E7EB",
+              borderTopColor: "#00C6AE",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 16px auto",
+            }}
+          />
+          <p style={{ color: "#6B7280", fontSize: "14px" }}>Loading payout details...</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !payout) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "20px",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <p style={{ color: "#DC2626", fontSize: "14px", marginBottom: "12px" }}>
+            {error || "Payout details not found"}
+          </p>
+          <button
+            onClick={() => goBack()}
+            style={{
+              padding: "10px 20px",
+              background: "#0A2342",
+              color: "#FFFFFF",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "14px",
+            }}
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const isMyPayout = payout.isCurrentUser
+  const statusStyle = getStatusStyle(payout.status)
+  const contributionAmount = circle?.amount || 0
+  const formattedScheduledDate = payout.scheduledDate
+    ? new Date(payout.scheduledDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "TBD"
+  const memberAvatar = payout.recipientName ? payout.recipientName.charAt(0).toUpperCase() : "?"
 
   return (
     <div
@@ -66,7 +158,7 @@ export default function PayoutDetailsScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -83,7 +175,7 @@ export default function PayoutDetailsScreen() {
           <div style={{ flex: 1 }}>
             <h1 style={{ margin: 0, fontSize: "20px", fontWeight: "700" }}>Payout Details</h1>
             <p style={{ margin: "4px 0 0 0", fontSize: "13px", opacity: 0.8 }}>
-              {payout.circleName} • Cycle {payout.cycle}
+              {circle?.name || "Circle"} • Cycle {payout.cycleNumber}
             </p>
           </div>
           <span
@@ -124,10 +216,10 @@ export default function PayoutDetailsScreen() {
               fontSize: "28px",
             }}
           >
-            {payout.memberAvatar}
+            {memberAvatar}
           </div>
           <h2 style={{ margin: "0 0 4px 0", fontSize: "18px", fontWeight: "700" }}>
-            {payout.member}
+            {payout.recipientName}
             {isMyPayout && <span style={{ color: "#00C6AE" }}> (You)</span>}
           </h2>
           <p style={{ margin: "0 0 16px 0", fontSize: "13px", opacity: 0.8 }}>Payout Recipient</p>
@@ -168,7 +260,7 @@ export default function PayoutDetailsScreen() {
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <span style={{ fontSize: "13px", color: "#6B7280" }}>Completed</span>
                   <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>
-                    {payout.completedDate} at {payout.completedTime}
+                    {formattedScheduledDate}
                   </span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
@@ -181,23 +273,23 @@ export default function PayoutDetailsScreen() {
                       fontFamily: "monospace",
                     }}
                   >
-                    {payout.transactionId}
+                    {payout.id}
                   </span>
                 </div>
               </>
             ) : (
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ fontSize: "13px", color: "#6B7280" }}>Scheduled Date</span>
-                <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>{payout.scheduledDate}</span>
+                <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>{formattedScheduledDate}</span>
               </div>
             )}
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontSize: "13px", color: "#6B7280" }}>Circle</span>
-              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>{payout.circleName}</span>
+              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>{circle?.name || "Circle"}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontSize: "13px", color: "#6B7280" }}>Cycle</span>
-              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>{payout.cycle}</span>
+              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>{payout.cycleNumber}</span>
             </div>
           </div>
         </div>
@@ -213,45 +305,60 @@ export default function PayoutDetailsScreen() {
           }}
         >
           <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>
-            Contributions ({payout.contributions.length})
+            Contributions ({members.length})
           </h3>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            {payout.contributions.map((contrib, idx) => (
-              <div
-                key={idx}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "12px",
-                  padding: "10px",
-                  background: contrib.member.includes("You") ? "#F0FDFB" : "#F5F7FA",
-                  borderRadius: "10px",
-                }}
-              >
+            {members.map((member, idx) => {
+              const avatar = member.name ? member.name.charAt(0).toUpperCase() : "?"
+              return (
                 <div
+                  key={member.id || idx}
                   style={{
-                    width: "36px",
-                    height: "36px",
-                    borderRadius: "50%",
-                    background: contrib.member.includes("You") ? "#00C6AE" : "#0A2342",
-                    color: "#FFFFFF",
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    fontWeight: "600",
-                    fontSize: "14px",
+                    gap: "12px",
+                    padding: "10px",
+                    background: member.isCurrentUser ? "#F0FDFB" : "#F5F7FA",
+                    borderRadius: "10px",
                   }}
                 >
-                  {contrib.avatar}
+                  <div
+                    style={{
+                      width: "36px",
+                      height: "36px",
+                      borderRadius: "50%",
+                      background: member.isCurrentUser ? "#00C6AE" : "#0A2342",
+                      color: "#FFFFFF",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontWeight: "600",
+                      fontSize: "14px",
+                    }}
+                  >
+                    {avatar}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>
+                      {member.isCurrentUser ? `${member.name} (You)` : member.name}
+                    </p>
+                    <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#6B7280" }}>
+                      {member.hasPaid ? "Paid" : "Pending"}
+                    </p>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      color: member.hasPaid ? "#00C6AE" : "#6B7280",
+                    }}
+                  >
+                    ${contributionAmount}
+                  </span>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <p style={{ margin: 0, fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>{contrib.member}</p>
-                  <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#6B7280" }}>{contrib.date}</p>
-                </div>
-                <span style={{ fontSize: "14px", fontWeight: "600", color: "#00C6AE" }}>${contrib.amount}</span>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Total */}
@@ -293,7 +400,7 @@ export default function PayoutDetailsScreen() {
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
             <span style={{ fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>
-              Message {payout.member.split(" ")[0]}
+              Message {payout.recipientName.split(" ")[0]}
             </span>
           </button>
         )}
@@ -323,7 +430,7 @@ export default function PayoutDetailsScreen() {
             <path d="M12 16v-4M12 8h.01" />
           </svg>
           <p style={{ margin: 0, fontSize: "12px", color: "#065F46", lineHeight: 1.5 }}>
-            Each cycle, all {payout.contributions.length} members contribute equally. The full pot goes to the scheduled
+            Each cycle, all {members.length} members contribute equally. The full pot goes to the scheduled
             recipient. Everyone receives exactly what they contributed over the full cycle.
           </p>
         </div>

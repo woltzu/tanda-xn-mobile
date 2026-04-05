@@ -2,111 +2,86 @@
 
 import { useState } from "react"
 import { ArrowLeft, Plus, X, TrendingUp, Star, CheckCircle, XCircle, Sparkles } from "lucide-react"
+import { useCircles, type Circle } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { goBack, navigateToCircleScreen } from "./useCircleParams"
 
 export default function CircleComparisonScreen() {
+  const { browseCircles, isLoading } = useCircles()
+  const { user } = useAuth()
   const [highlightMetric, setHighlightMetric] = useState<string | null>(null)
 
-  const selectedCircles = [
-    {
-      id: "c1",
-      name: "Diaspora Family Fund",
-      type: "family",
-      contribution: 200,
-      frequency: "monthly",
-      totalPool: 2400,
-      members: 8,
-      maxMembers: 12,
-      minScore: 50,
-      avgScore: 74,
-      successRate: 98,
-      nextPayout: "Jan 15",
-      verified: true,
-      elder: "Grace M.",
-      pros: ["High success rate", "Verified circle", "Experienced Elder"],
-      cons: ["Higher contribution", "Longer wait for payout"],
-    },
-    {
-      id: "c2",
-      name: "Brooklyn Savers",
-      type: "community",
-      contribution: 100,
-      frequency: "weekly",
-      totalPool: 1000,
-      members: 10,
-      maxMembers: 10,
-      minScore: 40,
-      avgScore: 65,
-      successRate: 92,
-      nextPayout: "Dec 30",
-      verified: true,
-      elder: "Marcus T.",
-      pros: ["Lower contribution", "Faster payouts", "Local community"],
-      cons: ["Full - waitlist only", "Lower pool amount"],
-    },
-    {
-      id: "c3",
-      name: "Tech Workers Fund",
-      type: "work",
-      contribution: 500,
-      frequency: "biweekly",
-      totalPool: 4000,
-      members: 6,
-      maxMembers: 8,
-      minScore: 65,
-      avgScore: 82,
-      successRate: 100,
-      nextPayout: "Jan 8",
-      verified: true,
-      elder: "Sarah K.",
-      pros: ["Highest pool", "Perfect track record", "Professional network"],
-      cons: ["High min score", "Large contribution"],
-    },
-  ]
+  // Seed from first 3 browseCircles; user can remove/swap
+  const [selectedCircles, setSelectedCircles] = useState<Circle[]>(() =>
+    browseCircles.slice(0, 3)
+  )
 
-  const userXnScore = 72
+  // Sync once browseCircles arrive (they may load after mount)
+  const [seeded, setSeeded] = useState(false)
+  if (!seeded && browseCircles.length > 0 && selectedCircles.length === 0) {
+    setSelectedCircles(browseCircles.slice(0, 3))
+    setSeeded(true)
+  }
+
+  const userXnScore = user?.xnScore ?? 72
   const maxCompare = 3
 
   const getTypeColor = (type: string) => {
     switch (type) {
-      case "family":
+      case "family-support":
+      case "beneficiary":
         return { bg: "#F0FDFB", text: "#00897B" }
-      case "work":
+      case "traditional":
         return { bg: "#F5F7FA", text: "#0A2342" }
-      case "community":
+      case "goal-based":
+      case "goal":
         return { bg: "#FEF3C7", text: "#D97706" }
+      case "emergency":
+        return { bg: "#FEE2E2", text: "#DC2626" }
       default:
         return { bg: "#F3F4F6", text: "#6B7280" }
     }
   }
 
   const getBestValue = (metric: string) => {
+    if (selectedCircles.length === 0) return null
     switch (metric) {
-      case "contribution":
-        return Math.min(...selectedCircles.map((c) => c.contribution))
+      case "amount":
+        return Math.min(...selectedCircles.map((c) => c.amount))
       case "pool":
-        return Math.max(...selectedCircles.map((c) => c.totalPool))
-      case "successRate":
-        return Math.max(...selectedCircles.map((c) => c.successRate))
-      case "avgScore":
-        return Math.max(...selectedCircles.map((c) => c.avgScore))
+        return Math.max(...selectedCircles.map((c) => c.amount * c.memberCount))
+      case "progress":
+        return Math.max(...selectedCircles.map((c) => c.progress))
       case "minScore":
-        return Math.min(...selectedCircles.map((c) => c.minScore))
+        return Math.min(...selectedCircles.map((c) => c.minScore ?? 0))
       default:
         return null
     }
   }
 
-  const isBestValue = (circle: any, metric: string, value: number) => {
+  const isBestValue = (_circle: Circle, metric: string, value: number) => {
     const best = getBestValue(metric)
-    if (metric === "contribution" || metric === "minScore") {
-      return value === best
-    }
+    if (best === null) return false
     return value === best
   }
 
-  const canJoin = (circle: any) => {
-    const spotsLeft = circle.maxMembers - circle.members
-    return userXnScore >= circle.minScore && spotsLeft > 0
+  const canJoin = (circle: Circle) => {
+    const spotsLeft = circle.memberCount - circle.currentMembers
+    return userXnScore >= (circle.minScore ?? 0) && spotsLeft > 0
+  }
+
+  const removeCircle = (circleId: string) => {
+    setSelectedCircles((prev) => prev.filter((c) => c.id !== circleId))
+  }
+
+  const addCircle = () => {
+    // Find first browse circle not already selected
+    const available = browseCircles.filter(
+      (bc) => !selectedCircles.find((sc) => sc.id === bc.id)
+    )
+    if (available.length > 0) {
+      setSelectedCircles((prev) => [...prev, available[0]])
+    }
   }
 
   // Find recommended circle based on user profile
@@ -114,10 +89,9 @@ export default function CircleComparisonScreen() {
     const eligible = selectedCircles.filter((c) => canJoin(c))
     if (eligible.length === 0) return null
 
-    // Score each circle based on factors
     const scored = eligible.map((c) => ({
       ...c,
-      score: c.successRate + c.avgScore - c.contribution / 10,
+      score: c.progress + (c.minScore ?? 0) - c.amount / 10,
     }))
 
     return scored.sort((a, b) => b.score - a.score)[0]
@@ -125,22 +99,64 @@ export default function CircleComparisonScreen() {
 
   const recommended = getRecommendation()
 
-  const comparisonMetrics = [
+  type CompMetric = {
+    key: string
+    label: string
+    format: (v: any, c: Circle) => string | number
+  }
+
+  const comparisonMetrics: CompMetric[] = [
     {
-      key: "contribution",
+      key: "amount",
       label: "Contribution",
-      format: (v: number, c: any) =>
-        `$${v}/${c.frequency === "monthly" ? "mo" : c.frequency === "biweekly" ? "2wk" : "wk"}`,
+      format: (v: number, c: Circle) =>
+        `$${v}/${c.frequency === "monthly" ? "mo" : c.frequency === "biweekly" ? "2wk" : c.frequency === "weekly" ? "wk" : c.frequency}`,
     },
-    { key: "totalPool", label: "Pool Size", format: (v: number) => `$${v.toLocaleString()}` },
+    { key: "pool", label: "Pool Size", format: (_v: any, c: Circle) => `$${(c.amount * c.memberCount).toLocaleString()}` },
     { key: "frequency", label: "Frequency", format: (v: string) => v.charAt(0).toUpperCase() + v.slice(1) },
-    { key: "members", label: "Members", format: (v: number, c: any) => `${v}/${c.maxMembers}` },
-    { key: "minScore", label: "Min Score", format: (v: number) => v },
-    { key: "avgScore", label: "Avg Score", format: (v: number) => v },
-    { key: "successRate", label: "Success Rate", format: (v: number) => `${v}%` },
-    { key: "nextPayout", label: "Next Payout", format: (v: string) => v },
-    { key: "elder", label: "Elder", format: (v: string) => v },
+    { key: "members", label: "Members", format: (_v: any, c: Circle) => `${c.currentMembers}/${c.memberCount}` },
+    { key: "minScore", label: "Min Score", format: (_v: any, c: Circle) => c.minScore ?? "N/A" },
+    { key: "progress", label: "Progress", format: (v: number) => `${v}%` },
+    { key: "rotationMethod", label: "Rotation", format: (v: string) => v.charAt(0).toUpperCase() + v.slice(1) },
   ]
+
+  const getMetricValue = (circle: Circle, key: string): any => {
+    switch (key) {
+      case "amount":
+        return circle.amount
+      case "pool":
+        return circle.amount * circle.memberCount
+      case "frequency":
+        return circle.frequency
+      case "members":
+        return circle.currentMembers
+      case "minScore":
+        return circle.minScore ?? 0
+      case "progress":
+        return circle.progress
+      case "rotationMethod":
+        return circle.rotationMethod
+      default:
+        return ""
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        }}
+      >
+        <p style={{ color: "#666", fontSize: "16px" }}>Loading circles...</p>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -167,7 +183,7 @@ export default function CircleComparisonScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -218,7 +234,7 @@ export default function CircleComparisonScreen() {
             >
               {/* Remove Button */}
               <button
-                onClick={() => console.log("Remove circle")}
+                onClick={() => removeCircle(circle.id)}
                 style={{
                   position: "absolute",
                   top: "8px",
@@ -313,7 +329,7 @@ export default function CircleComparisonScreen() {
         {/* Add Circle Button */}
         {selectedCircles.length < maxCompare && (
           <button
-            onClick={() => console.log("Add circle")}
+            onClick={addCircle}
             style={{
               minWidth: "100px",
               background: "#FFFFFF",
@@ -335,149 +351,76 @@ export default function CircleComparisonScreen() {
       </div>
 
       {/* Comparison Table */}
-      <div style={{ padding: "0 20px" }}>
-        <div
-          style={{
-            background: "#FFFFFF",
-            borderRadius: "16px",
-            overflow: "hidden",
-            border: "1px solid #E0E0E0",
-          }}
-        >
-          {comparisonMetrics.map((metric, idx) => (
-            <div
-              key={metric.key}
-              style={{
-                display: "flex",
-                borderBottom: idx < comparisonMetrics.length - 1 ? "1px solid #F5F7FA" : "none",
-              }}
-            >
-              {/* Metric Label */}
+      {selectedCircles.length > 0 && (
+        <div style={{ padding: "0 20px" }}>
+          <div
+            style={{
+              background: "#FFFFFF",
+              borderRadius: "16px",
+              overflow: "hidden",
+              border: "1px solid #E0E0E0",
+            }}
+          >
+            {comparisonMetrics.map((metric, idx) => (
               <div
+                key={metric.key}
                 style={{
-                  width: "100px",
-                  padding: "14px 12px",
-                  background: "#F5F7FA",
-                  fontSize: "12px",
-                  fontWeight: "600",
-                  color: "#666",
-                  flexShrink: 0,
+                  display: "flex",
+                  borderBottom: idx < comparisonMetrics.length - 1 ? "1px solid #F5F7FA" : "none",
                 }}
               >
-                {metric.label}
+                {/* Metric Label */}
+                <div
+                  style={{
+                    width: "100px",
+                    padding: "14px 12px",
+                    background: "#F5F7FA",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    color: "#666",
+                    flexShrink: 0,
+                  }}
+                >
+                  {metric.label}
+                </div>
+
+                {/* Values */}
+                {selectedCircles.map((circle) => {
+                  const value = getMetricValue(circle, metric.key)
+                  const isBest =
+                    ["amount", "pool", "progress", "minScore"].includes(metric.key) &&
+                    isBestValue(circle, metric.key, value)
+
+                  return (
+                    <div
+                      key={circle.id}
+                      style={{
+                        flex: 1,
+                        padding: "14px 8px",
+                        fontSize: "13px",
+                        fontWeight: isBest ? "700" : "500",
+                        color: isBest ? "#00C6AE" : "#0A2342",
+                        textAlign: "center",
+                        background: isBest ? "#F0FDFB" : "transparent",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      {metric.format(value, circle)}
+                      {isBest && <CheckCircle size={12} color="#00C6AE" />}
+                    </div>
+                  )
+                })}
               </div>
-
-              {/* Values */}
-              {selectedCircles.map((circle) => {
-                const value = (circle as any)[metric.key]
-                const isBest =
-                  ["contribution", "totalPool", "successRate", "avgScore", "minScore"].includes(metric.key) &&
-                  isBestValue(circle, metric.key, value)
-
-                return (
-                  <div
-                    key={circle.id}
-                    style={{
-                      flex: 1,
-                      padding: "14px 8px",
-                      fontSize: "13px",
-                      fontWeight: isBest ? "700" : "500",
-                      color: isBest ? "#00C6AE" : "#0A2342",
-                      textAlign: "center",
-                      background: isBest ? "#F0FDFB" : "transparent",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "4px",
-                    }}
-                  >
-                    {metric.format(value, circle)}
-                    {isBest && <CheckCircle size={12} color="#00C6AE" />}
-                  </div>
-                )
-              })}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* Pros & Cons */}
-      <div style={{ padding: "20px" }}>
-        <h3 style={{ margin: "0 0 12px 0", fontSize: "16px", fontWeight: "600", color: "#0A2342" }}>Pros & Cons</h3>
-
-        <div
-          style={{
-            display: "flex",
-            gap: "12px",
-            overflowX: "auto",
-            paddingBottom: "8px",
-          }}
-        >
-          {selectedCircles.map((circle) => (
-            <div
-              key={circle.id}
-              style={{
-                minWidth: "200px",
-                flex: 1,
-                background: "#FFFFFF",
-                borderRadius: "14px",
-                padding: "14px",
-                border: "1px solid #E0E0E0",
-              }}
-            >
-              <p
-                style={{
-                  margin: "0 0 12px 0",
-                  fontSize: "13px",
-                  fontWeight: "600",
-                  color: "#0A2342",
-                }}
-              >
-                {circle.name}
-              </p>
-
-              {/* Pros */}
-              <div style={{ marginBottom: "12px" }}>
-                {circle.pros.map((pro, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      marginBottom: "6px",
-                    }}
-                  >
-                    <CheckCircle size={12} color="#00C6AE" />
-                    <span style={{ fontSize: "12px", color: "#444" }}>{pro}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Cons */}
-              <div>
-                {circle.cons.map((con, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      marginBottom: "6px",
-                    }}
-                  >
-                    <XCircle size={12} color="#EF4444" />
-                    <span style={{ fontSize: "12px", color: "#444" }}>{con}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* Eligibility Check */}
-      <div style={{ padding: "0 20px 20px 20px" }}>
+      <div style={{ padding: "20px" }}>
         <div
           style={{
             background: "#F0FDFB",
@@ -520,12 +463,16 @@ export default function CircleComparisonScreen() {
         >
           {selectedCircles.map((circle) => {
             const eligible = canJoin(circle)
-            const spotsLeft = circle.maxMembers - circle.members
+            const spotsLeft = circle.memberCount - circle.currentMembers
 
             return (
               <button
                 key={circle.id}
-                onClick={() => console.log(eligible ? "Join circle" : "View details")}
+                onClick={() =>
+                  eligible
+                    ? navigateToCircleScreen("CIRC-105 Circle Rules & Terms", { circleId: circle.id })
+                    : navigateToCircleScreen("CIRC-102 Circle Detail", { circleId: circle.id })
+                }
                 style={{
                   flex: 1,
                   minWidth: "100px",
@@ -544,7 +491,7 @@ export default function CircleComparisonScreen() {
                 }}
               >
                 <span style={{ fontSize: "11px", opacity: 0.8 }}>{circle.name.split(" ").slice(0, 2).join(" ")}</span>
-                {spotsLeft > 0 ? (eligible ? "Join" : `Need ${circle.minScore} Score`) : "Full"}
+                {spotsLeft > 0 ? (eligible ? "Join" : `Need ${circle.minScore ?? 0} Score`) : "Full"}
               </button>
             )
           })}

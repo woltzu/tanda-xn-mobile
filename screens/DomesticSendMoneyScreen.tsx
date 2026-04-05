@@ -19,6 +19,7 @@ import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useWallet } from "../context/WalletContext";
+import { usePayment } from "../context/PaymentContext";
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 
@@ -128,6 +129,7 @@ const COUNTRY_FLAG = "\u{1F1F3}\u{1F1EC}";
 export default function DomesticSendMoneyScreen() {
   const navigation = useNavigation<NavProp>();
   const { balance, sendMoney } = useWallet();
+  const { paymentMethods, createDeposit, presentPaymentSheet } = usePayment();
   const userBalance = balance;
 
   // State
@@ -157,6 +159,9 @@ export default function DomesticSendMoneyScreen() {
   // Amount
   const [amount, setAmount] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Funding source
+  const [fundingSource, setFundingSource] = useState<"wallet" | string>("wallet");
 
   // Derived
   const currentMethod = METHOD_OPTIONS[selectedMethod];
@@ -247,6 +252,20 @@ export default function DomesticSendMoneyScreen() {
 
     setIsProcessing(true);
     try {
+      // If paying from a Stripe payment method, charge first
+      if (fundingSource !== "wallet") {
+        const { clientSecret } = await createDeposit(
+          Math.round(numericAmount * 100),
+          "NGN"
+        );
+        const { success, error } = await presentPaymentSheet(clientSecret);
+        if (!success) {
+          Alert.alert("Payment Failed", error || "Payment was not completed.");
+          setIsProcessing(false);
+          return;
+        }
+      }
+
       const name = recipientTab === "recent" ? selectedRecipient?.name || "" : recipientName;
       const method = `Domestic - ${currentMethod?.name || ""}`;
 
@@ -669,6 +688,48 @@ export default function DomesticSendMoneyScreen() {
         </ScrollView>
 
         {/* ============================== */}
+        {/* PAY FROM                       */}
+        {/* ============================== */}
+        <View style={styles.payFromContainer}>
+          <Text style={styles.payFromTitle}>Pay From</Text>
+
+          {/* Wallet option */}
+          <TouchableOpacity
+            style={[styles.payFromOption, fundingSource === "wallet" && styles.payFromOptionSelected]}
+            onPress={() => setFundingSource("wallet")}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.payFromRadio, fundingSource === "wallet" && styles.payFromRadioSelected]}>
+              {fundingSource === "wallet" && <View style={styles.payFromRadioDot} />}
+            </View>
+            <Ionicons name="wallet" size={20} color={fundingSource === "wallet" ? "#00C6AE" : "#6B7280"} />
+            <View style={styles.payFromInfo}>
+              <Text style={[styles.payFromLabel, fundingSource === "wallet" && styles.payFromLabelSelected]}>TandaXn Wallet</Text>
+              <Text style={styles.payFromSub}>{CURRENCY_SYMBOL}{formatCurrency(userBalance)} available</Text>
+            </View>
+          </TouchableOpacity>
+
+          {/* Saved Stripe payment methods */}
+          {paymentMethods.map((pm) => (
+            <TouchableOpacity
+              key={pm.id}
+              style={[styles.payFromOption, fundingSource === pm.id && styles.payFromOptionSelected]}
+              onPress={() => setFundingSource(pm.id)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.payFromRadio, fundingSource === pm.id && styles.payFromRadioSelected]}>
+                {fundingSource === pm.id && <View style={styles.payFromRadioDot} />}
+              </View>
+              <Ionicons name={pm.icon as any} size={20} color={fundingSource === pm.id ? "#00C6AE" : "#6B7280"} />
+              <View style={styles.payFromInfo}>
+                <Text style={[styles.payFromLabel, fundingSource === pm.id && styles.payFromLabelSelected]}>{pm.label}</Text>
+                {pm.isDefault && <Text style={styles.payFromDefault}>Default</Text>}
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* ============================== */}
         {/* SEND BUTTON                    */}
         {/* ============================== */}
         <View style={styles.bottomBar}>
@@ -898,4 +959,18 @@ const styles = StyleSheet.create({
   modalOptionEmoji: { fontSize: 20 },
   modalOptionText: { flex: 1, fontSize: 14, fontWeight: "500", color: "#0A2342" },
   modalOptionSub: { fontSize: 11, color: "#6B7280", marginTop: 2 },
+
+  // Pay From
+  payFromContainer: { paddingHorizontal: 20, paddingVertical: 12 },
+  payFromTitle: { fontSize: 14, fontWeight: "600", color: "#0A2342", marginBottom: 10 },
+  payFromOption: { flexDirection: "row" as const, alignItems: "center" as const, gap: 12, padding: 14, backgroundColor: "#FFFFFF", borderRadius: 12, borderWidth: 1, borderColor: "#E5E7EB", marginBottom: 8 },
+  payFromOptionSelected: { backgroundColor: "#F0FDFB", borderWidth: 2, borderColor: "#00C6AE" },
+  payFromRadio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: "#D1D5DB", alignItems: "center" as const, justifyContent: "center" as const },
+  payFromRadioSelected: { borderColor: "#00C6AE" },
+  payFromRadioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#00C6AE" },
+  payFromInfo: { flex: 1 },
+  payFromLabel: { fontSize: 14, fontWeight: "500" as const, color: "#0A2342" },
+  payFromLabelSelected: { fontWeight: "600" as const, color: "#00897B" },
+  payFromSub: { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  payFromDefault: { fontSize: 10, fontWeight: "600" as const, color: "#00C6AE", marginTop: 2 },
 });

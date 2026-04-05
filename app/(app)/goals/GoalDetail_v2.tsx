@@ -1,41 +1,167 @@
 "use client"
-
-import { useState } from "react"
+import { useSavings } from "@/context/SavingsContext"
+import { useGoalParams, navigateToGoalScreen, goBack } from "./useGoalParams"
+import { useState, useEffect, useMemo } from "react"
 
 export default function GoalDetailScreen() {
   const [showAllActivity, setShowAllActivity] = useState(false)
+  const [isDepositModalOpen, setIsDepositModalOpen] = useState(false)
+  const [depositAmount, setDepositAmount] = useState("")
+  const [isDepositing, setIsDepositing] = useState(false)
+  const [depositError, setDepositError] = useState<string | null>(null)
 
-  // Mock data
-  const goal = {
-    id: "g1",
-    name: "First Home in Ghana",
-    emoji: "🏠",
-    balance: 5000,
-    target: 15000,
-    interestEarned: 31.42,
-    interestRate: 4.0,
-    dailyInterest: 0.55,
-    startDate: "Oct 15, 2024",
-    targetDate: "Dec 2026",
-    monthlyContribution: 400,
-    autoDeposit: true,
-    linkedCircle: "Home Buyers Circle",
+  const { goalId } = useGoalParams()
+  const {
+    getGoalById,
+    getGoalTransactions,
+    calculateInterest,
+    deposit,
+    isLoading,
+  } = useSavings()
+
+  const goal = goalId ? getGoalById(goalId) : undefined
+  const goalTransactions = goalId ? getGoalTransactions(goalId) : []
+  const pendingInterest = goalId ? calculateInterest(goalId) : 0
+
+  // Map transactions to display format
+  const recentActivity = useMemo(() => {
+    return goalTransactions.map((tx) => {
+      let type: "interest" | "deposit" | "withdrawal" = "deposit"
+      if (tx.type === "interest_credit") type = "interest"
+      else if (tx.type === "withdrawal" || tx.type === "transfer_out") type = "withdrawal"
+
+      const date = new Date(tx.createdAt)
+      const today = new Date()
+      const isToday = date.toDateString() === today.toDateString()
+      const dateStr = isToday
+        ? "Today"
+        : date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+
+      return {
+        type,
+        desc: tx.description,
+        amount: Math.abs(tx.amount),
+        date: dateStr,
+        isNegative: tx.type === "withdrawal" || tx.type === "transfer_out",
+      }
+    })
+  }, [goalTransactions])
+
+  const isInterestUnlocked = goal ? goal.interestUnlocked > 0 : false
+
+  const handleDeposit = async () => {
+    if (!goalId || !depositAmount) return
+    const amount = Number.parseFloat(depositAmount)
+    if (isNaN(amount) || amount <= 0) return
+
+    setIsDepositing(true)
+    setDepositError(null)
+    try {
+      await deposit(goalId, amount, "Manual deposit")
+      setDepositAmount("")
+      setIsDepositModalOpen(false)
+    } catch (err: any) {
+      setDepositError(err.message || "Deposit failed. Please try again.")
+    } finally {
+      setIsDepositing(false)
+    }
   }
 
-  const isInterestUnlocked = false
+  // Loading state
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "3px solid #E5E7EB",
+              borderTopColor: "#00C6AE",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 12px auto",
+            }}
+          />
+          <p style={{ color: "#6B7280", fontSize: "14px" }}>Loading goal...</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    )
+  }
 
-  const recentActivity = [
-    { type: "interest", desc: "Daily interest", amount: 0.55, date: "Today" },
-    { type: "deposit", desc: "Circle payout", amount: 2000, date: "Jan 5" },
-    { type: "interest", desc: "Daily interest", amount: 0.41, date: "Jan 4" },
-    { type: "deposit", desc: "Auto-deposit", amount: 400, date: "Jan 1" },
-    { type: "interest", desc: "Monthly interest", amount: 15.2, date: "Dec 31" },
-  ]
+  // Error state - goal not found
+  if (!goal) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        }}
+      >
+        <div style={{ textAlign: "center", padding: "20px" }}>
+          <p style={{ fontSize: "48px", marginBottom: "12px" }}>😕</p>
+          <p style={{ color: "#0A2342", fontSize: "18px", fontWeight: "600", margin: "0 0 8px 0" }}>
+            Goal not found
+          </p>
+          <p style={{ color: "#6B7280", fontSize: "14px", margin: "0 0 20px 0" }}>
+            The savings goal could not be loaded.
+          </p>
+          <button
+            onClick={() => goBack()}
+            style={{
+              padding: "12px 24px",
+              borderRadius: "12px",
+              border: "none",
+              background: "#00C6AE",
+              color: "#FFFFFF",
+              fontSize: "14px",
+              fontWeight: "600",
+              cursor: "pointer",
+            }}
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    )
+  }
 
-  const progressPercent = Math.min((goal.balance / goal.target) * 100, 100)
-  const totalWithInterest = goal.balance + goal.interestEarned
-  const remainingAmount = goal.target - goal.balance
-  const monthsRemaining = Math.ceil(remainingAmount / goal.monthlyContribution)
+  const interestRate = goal.interestRate * 100 // Convert decimal to display percentage
+  const dailyInterest = (goal.currentBalance * goal.interestRate) / 365
+  const totalWithInterest = goal.currentBalance + goal.interestEarned + pendingInterest
+  const progressPercent = goal.targetAmount > 0 ? Math.min((goal.currentBalance / goal.targetAmount) * 100, 100) : 0
+  const remainingAmount = Math.max(goal.targetAmount - goal.currentBalance, 0)
+
+  // Estimate months remaining (rough estimate)
+  // Look at recent deposits to estimate monthly contribution
+  const recentDeposits = goalTransactions.filter(tx => tx.type === "deposit" || tx.type === "auto_deposit")
+  const monthlyContribution = recentDeposits.length > 0
+    ? recentDeposits.reduce((sum, tx) => sum + Math.abs(tx.amount), 0) / Math.max(1, Math.ceil(
+        (Date.now() - new Date(goal.createdAt).getTime()) / (1000 * 60 * 60 * 24 * 30)
+      ))
+    : 0
+  const monthsRemaining = monthlyContribution > 0 ? Math.ceil(remainingAmount / monthlyContribution) : null
+
+  const startDate = new Date(goal.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+
+  // Auto-save linked circles info
+  const linkedCircle = goal.autoSaveEnabled && goal.autoSaveFromCircles.length > 0
+    ? `${goal.autoSaveFromCircles.length} circle${goal.autoSaveFromCircles.length > 1 ? "s" : ""} linked`
+    : null
 
   return (
     <div
@@ -57,7 +183,7 @@ export default function GoalDetailScreen() {
         {/* Top Bar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -107,7 +233,7 @@ export default function GoalDetailScreen() {
             <div style={{ textAlign: "center" }}>
               <p style={{ margin: 0, fontSize: "10px", opacity: 0.6 }}>Saved</p>
               <p style={{ margin: "2px 0 0 0", fontSize: "14px", fontWeight: "600" }}>
-                ${goal.balance.toLocaleString()}
+                ${goal.currentBalance.toLocaleString()}
               </p>
             </div>
             <div style={{ width: "1px", background: "rgba(255,255,255,0.2)" }} />
@@ -121,7 +247,7 @@ export default function GoalDetailScreen() {
             <div style={{ textAlign: "center" }}>
               <p style={{ margin: 0, fontSize: "10px", opacity: 0.6 }}>Target</p>
               <p style={{ margin: "2px 0 0 0", fontSize: "14px", fontWeight: "600" }}>
-                ${goal.target.toLocaleString()}
+                ${goal.targetAmount.toLocaleString()}
               </p>
             </div>
           </div>
@@ -192,7 +318,7 @@ export default function GoalDetailScreen() {
                 </div>
                 <p style={{ margin: 0, fontSize: "28px", fontWeight: "700" }}>${goal.interestEarned.toFixed(2)}</p>
                 <p style={{ margin: "4px 0 0 0", fontSize: "11px", opacity: 0.8 }}>
-                  +${goal.dailyInterest.toFixed(2)}/day • {goal.interestRate}% APY
+                  +${dailyInterest.toFixed(2)}/day • {interestRate}% APY
                 </p>
               </div>
 
@@ -254,10 +380,22 @@ export default function GoalDetailScreen() {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
             {[
-              { label: "Monthly saving", value: `$${goal.monthlyContribution}`, icon: "📅" },
-              { label: "Months to goal", value: `~${monthsRemaining}`, icon: "🎯" },
-              { label: "Started", value: goal.startDate, icon: "🚀" },
-              { label: "Target date", value: goal.targetDate, icon: "📆" },
+              {
+                label: "Monthly saving",
+                value: monthlyContribution > 0 ? `$${Math.round(monthlyContribution)}` : "N/A",
+                icon: "📅",
+              },
+              {
+                label: "Months to goal",
+                value: monthsRemaining !== null ? `~${monthsRemaining}` : "N/A",
+                icon: "🎯",
+              },
+              { label: "Started", value: startDate, icon: "🚀" },
+              {
+                label: "Goal type",
+                value: goal.type.charAt(0).toUpperCase() + goal.type.slice(1),
+                icon: goal.type === "locked" ? "🔒" : goal.type === "emergency" ? "🛡️" : "💰",
+              },
             ].map((stat, idx) => (
               <div
                 key={idx}
@@ -283,7 +421,7 @@ export default function GoalDetailScreen() {
         </div>
 
         {/* Linked Circle */}
-        {goal.linkedCircle ? (
+        {linkedCircle ? (
           <div
             style={{
               background: "#FFFFFF",
@@ -309,9 +447,9 @@ export default function GoalDetailScreen() {
                   <span style={{ fontSize: "16px" }}>🔄</span>
                 </div>
                 <div>
-                  <p style={{ margin: 0, fontSize: "11px", color: "#6B7280" }}>Linked Circle</p>
+                  <p style={{ margin: 0, fontSize: "11px", color: "#6B7280" }}>Auto-Save</p>
                   <p style={{ margin: "2px 0 0 0", fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>
-                    {goal.linkedCircle}
+                    {linkedCircle}
                   </p>
                 </div>
               </div>
@@ -325,7 +463,7 @@ export default function GoalDetailScreen() {
                   borderRadius: "6px",
                 }}
               >
-                Payouts → This Goal
+                {goal.autoSavePercent}% of Payouts
               </span>
             </div>
           </div>
@@ -365,60 +503,74 @@ export default function GoalDetailScreen() {
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
             <h3 style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>Recent Activity</h3>
-            <button
-              onClick={() => setShowAllActivity(!showAllActivity)}
-              style={{
-                background: "none",
-                border: "none",
-                color: "#00C6AE",
-                fontSize: "12px",
-                fontWeight: "600",
-                cursor: "pointer",
-              }}
-            >
-              {showAllActivity ? "Show Less" : "See All"}
-            </button>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            {(showAllActivity ? recentActivity : recentActivity.slice(0, 4)).map((item, idx) => (
-              <div
-                key={idx}
+            {recentActivity.length > 4 && (
+              <button
+                onClick={() => setShowAllActivity(!showAllActivity)}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "10px",
-                  background: "#F5F7FA",
-                  borderRadius: "10px",
+                  background: "none",
+                  border: "none",
+                  color: "#00C6AE",
+                  fontSize: "12px",
+                  fontWeight: "600",
+                  cursor: "pointer",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <div
+                {showAllActivity ? "Show Less" : "See All"}
+              </button>
+            )}
+          </div>
+
+          {recentActivity.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "20px 0" }}>
+              <p style={{ margin: 0, fontSize: "13px", color: "#6B7280" }}>No activity yet</p>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {(showAllActivity ? recentActivity : recentActivity.slice(0, 4)).map((item, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "10px",
+                    background: "#F5F7FA",
+                    borderRadius: "10px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div
+                      style={{
+                        width: "32px",
+                        height: "32px",
+                        borderRadius: "8px",
+                        background: item.type === "interest" ? "#F0FDFB" : item.type === "withdrawal" ? "#FEF2F2" : "#EFF6FF",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "14px",
+                      }}
+                    >
+                      {item.type === "interest" ? "📈" : item.type === "withdrawal" ? "📤" : "💰"}
+                    </div>
+                    <div>
+                      <p style={{ margin: 0, fontSize: "13px", fontWeight: "500", color: "#0A2342" }}>{item.desc}</p>
+                      <p style={{ margin: "1px 0 0 0", fontSize: "10px", color: "#6B7280" }}>{item.date}</p>
+                    </div>
+                  </div>
+                  <span
                     style={{
-                      width: "32px",
-                      height: "32px",
-                      borderRadius: "8px",
-                      background: item.type === "interest" ? "#F0FDFB" : "#EFF6FF",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      fontSize: "14px",
+                      fontSize: "13px",
+                      fontWeight: "600",
+                      color: item.isNegative ? "#DC2626" : "#059669",
                     }}
                   >
-                    {item.type === "interest" ? "📈" : "💰"}
-                  </div>
-                  <div>
-                    <p style={{ margin: 0, fontSize: "13px", fontWeight: "500", color: "#0A2342" }}>{item.desc}</p>
-                    <p style={{ margin: "1px 0 0 0", fontSize: "10px", color: "#6B7280" }}>{item.date}</p>
-                  </div>
+                    {item.isNegative ? "-" : "+"}${item.amount.toFixed(2)}
+                  </span>
                 </div>
-                <span style={{ fontSize: "13px", fontWeight: "600", color: "#059669" }}>
-                  +${item.amount.toFixed(2)}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Why Goals Earn Interest */}
@@ -438,12 +590,135 @@ export default function GoalDetailScreen() {
               Why does this earn interest?
             </p>
             <p style={{ margin: "4px 0 0 0", fontSize: "11px", color: "#047857", lineHeight: 1.5 }}>
-              Money in Goals is <strong>at rest</strong>, so it earns {goal.interestRate}% APY. Circle funds{" "}
+              Money in Goals is <strong>at rest</strong>, so it earns {interestRate}% APY. Circle funds{" "}
               <strong>rotate</strong> between members, so they don't earn interest until you move payouts here.
             </p>
           </div>
         </div>
       </div>
+
+      {/* Deposit Modal */}
+      {isDepositModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              background: "#FFFFFF",
+              borderRadius: "20px",
+              padding: "24px",
+              width: "100%",
+              maxWidth: "400px",
+            }}
+          >
+            <h2 style={{ margin: "0 0 16px 0", fontSize: "20px", fontWeight: "700", color: "#0A2342" }}>
+              Add Money to {goal.name}
+            </h2>
+
+            {depositError && (
+              <div
+                style={{
+                  background: "#FEF2F2",
+                  borderRadius: "8px",
+                  padding: "10px",
+                  marginBottom: "12px",
+                  border: "1px solid #FECACA",
+                }}
+              >
+                <p style={{ margin: 0, fontSize: "12px", color: "#DC2626" }}>{depositError}</p>
+              </div>
+            )}
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                background: "#F5F7FA",
+                borderRadius: "12px",
+                padding: "4px 16px",
+                marginBottom: "16px",
+              }}
+            >
+              <span style={{ fontSize: "24px", fontWeight: "300", color: "#6B7280" }}>$</span>
+              <input
+                type="number"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                placeholder="0"
+                style={{
+                  flex: 1,
+                  padding: "12px 0 12px 8px",
+                  border: "none",
+                  fontSize: "28px",
+                  fontWeight: "700",
+                  color: "#0A2342",
+                  outline: "none",
+                  background: "transparent",
+                  fontFamily: "inherit",
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={() => {
+                  setIsDepositModalOpen(false)
+                  setDepositAmount("")
+                  setDepositError(null)
+                }}
+                style={{
+                  flex: 1,
+                  padding: "14px",
+                  borderRadius: "12px",
+                  border: "1px solid #E5E7EB",
+                  background: "#FFFFFF",
+                  fontSize: "15px",
+                  fontWeight: "600",
+                  color: "#0A2342",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeposit}
+                disabled={isDepositing || !depositAmount || Number.parseFloat(depositAmount) <= 0}
+                style={{
+                  flex: 1,
+                  padding: "14px",
+                  borderRadius: "12px",
+                  border: "none",
+                  background: depositAmount && Number.parseFloat(depositAmount) > 0
+                    ? "#00C6AE"
+                    : "#E5E7EB",
+                  fontSize: "15px",
+                  fontWeight: "600",
+                  color: depositAmount && Number.parseFloat(depositAmount) > 0
+                    ? "#FFFFFF"
+                    : "#6B7280",
+                  cursor: depositAmount && Number.parseFloat(depositAmount) > 0
+                    ? "pointer"
+                    : "not-allowed",
+                }}
+              >
+                {isDepositing ? "Adding..." : "Add Money"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Actions */}
       <div
@@ -460,7 +735,7 @@ export default function GoalDetailScreen() {
         }}
       >
         <button
-          onClick={() => console.log("Add Money")}
+          onClick={() => setIsDepositModalOpen(true)}
           style={{
             flex: 1,
             padding: "14px",
@@ -476,7 +751,7 @@ export default function GoalDetailScreen() {
           Add Money
         </button>
         <button
-          onClick={() => console.log("Withdraw")}
+          onClick={() => navigateToGoalScreen("040-GOAL-T05-WithdrawalAmount", { goalId: goal.id })}
           style={{
             flex: 1,
             padding: "14px",

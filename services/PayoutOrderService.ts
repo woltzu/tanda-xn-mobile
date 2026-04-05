@@ -247,6 +247,51 @@ export class PayoutOrderService {
   }
 
   // ============================================================================
+  // PUBLIC: GET SCOREABLE MEMBERS (used by DynamicPayoutOrderingEngine)
+  // ============================================================================
+
+  /**
+   * Exposes the scoring pipeline WITHOUT assigning positions.
+   * Returns scored members with component scores and constraints,
+   * allowing the stability optimizer to evaluate candidate orderings.
+   */
+  async getScoreableMembers(circleId: string): Promise<{
+    scoredMembers: ScoredMember[];
+    circle: any;
+    config: AlgorithmConfig;
+  }> {
+    const { data: circle, error: circleError } = await supabase
+      .from("circles")
+      .select("*")
+      .eq("id", circleId)
+      .single();
+
+    if (circleError || !circle) {
+      throw new Error("Circle not found");
+    }
+
+    const { data: memberships, error: membersError } = await supabase
+      .from("circle_members")
+      .select(`
+        *,
+        profile:profiles(id, full_name, xn_score, created_at, is_verified)
+      `)
+      .eq("circle_id", circleId)
+      .eq("status", "active");
+
+    if (membersError || !memberships || memberships.length === 0) {
+      throw new Error("No active members found");
+    }
+
+    await this.loadCircleConfig(circleId, circle.community_id);
+
+    const memberProfiles = await this.gatherMemberProfiles(memberships, circleId, circle.community_id);
+    const scoredMembers = this.calculateScores(memberProfiles, circle);
+
+    return { scoredMembers, circle, config: { ...this.config } };
+  }
+
+  // ============================================================================
   // MAIN ALGORITHM - DETERMINE PAYOUT ORDER
   // ============================================================================
 

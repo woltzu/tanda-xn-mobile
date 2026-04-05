@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   View,
   Text,
@@ -6,108 +6,92 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
+  Linking,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
+import { usePayment, SavedPaymentMethod } from "../context/PaymentContext";
 
 type LinkedAccountsNavigationProp = StackNavigationProp<RootStackParamList>;
 
-interface LinkedAccount {
-  id: string;
-  type: "bank" | "card";
-  name: string;
-  last4: string;
-  logo: string;
-  isPrimary: boolean;
-  verified: boolean;
-}
-
 export default function LinkedAccountsScreen() {
   const navigation = useNavigation<LinkedAccountsNavigationProp>();
+  const {
+    paymentMethods,
+    isLoadingMethods,
+    isOnboarded,
+    setupConnectedAccount,
+    removePaymentMethod,
+    setDefaultPaymentMethod,
+    refreshPaymentMethods,
+  } = usePayment();
 
-  const [accounts] = useState<LinkedAccount[]>([
-    {
-      id: "1",
-      type: "bank",
-      name: "Chase Checking",
-      last4: "4521",
-      logo: "business",
-      isPrimary: true,
-      verified: true,
-    },
-    {
-      id: "2",
-      type: "bank",
-      name: "Bank of America",
-      last4: "8734",
-      logo: "business",
-      isPrimary: false,
-      verified: true,
-    },
-    {
-      id: "3",
-      type: "card",
-      name: "Visa",
-      last4: "9876",
-      logo: "card",
-      isPrimary: false,
-      verified: true,
-    },
-  ]);
+  const bankAccounts = paymentMethods.filter((m) => m.type === "us_bank_account");
+  const cardAccounts = paymentMethods.filter((m) => m.type !== "us_bank_account");
 
-  const handleAddBank = () => {
-    Alert.alert(
-      "Link Bank Account",
-      "You'll be securely connected to your bank through Plaid.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Continue", onPress: () => console.log("Open Plaid") },
-      ]
-    );
+  const handleAddBank = async () => {
+    try {
+      const onboardingUrl = await setupConnectedAccount("tandaxn://linked-accounts");
+      if (onboardingUrl) {
+        await Linking.openURL(onboardingUrl);
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Failed to start bank account setup.");
+    }
   };
 
   const handleAddCard = () => {
     Alert.alert(
-      "Add Debit Card",
-      "Add a debit card for instant transfers.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Continue", onPress: () => console.log("Open card form") },
-      ]
+      "Add Card",
+      "Card collection coming soon \u2014 use Add Funds to save a card.",
+      [{ text: "OK" }]
     );
   };
 
-  const handleSetPrimary = (accountId: string) => {
+  const handleSetPrimary = (method: SavedPaymentMethod) => {
     Alert.alert(
       "Set as Primary",
-      "This account will be used for automatic payments and payouts.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Confirm", onPress: () => console.log("Set primary:", accountId) },
-      ]
-    );
-  };
-
-  const handleRemoveAccount = (account: LinkedAccount) => {
-    Alert.alert(
-      "Remove Account",
-      `Are you sure you want to remove ${account.name} (****${account.last4})?`,
+      `Use ${method.label} for automatic payments and payouts?`,
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => console.log("Remove:", account.id),
+          text: "Confirm",
+          onPress: async () => {
+            try {
+              await setDefaultPaymentMethod(method.id);
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Failed to set default payment method.");
+            }
+          },
         },
       ]
     );
   };
 
-  const bankAccounts = accounts.filter((a) => a.type === "bank");
-  const cardAccounts = accounts.filter((a) => a.type === "card");
+  const handleRemoveAccount = (method: SavedPaymentMethod) => {
+    Alert.alert(
+      "Remove Account",
+      `Are you sure you want to remove ${method.label}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await removePaymentMethod(method.id);
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Failed to remove payment method.");
+            }
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -132,176 +116,225 @@ export default function LinkedAccountsScreen() {
 
         {/* Content */}
         <View style={styles.content}>
-          {/* Bank Accounts */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Bank Accounts</Text>
-              <TouchableOpacity style={styles.addButton} onPress={handleAddBank}>
-                <Ionicons name="add" size={18} color="#00C6AE" />
-                <Text style={styles.addButtonText}>Add Bank</Text>
-              </TouchableOpacity>
-            </View>
+          {/* Onboarding Banner */}
+          {!isOnboarded && (
+            <TouchableOpacity style={styles.onboardingBanner} onPress={handleAddBank}>
+              <View style={styles.onboardingIcon}>
+                <Ionicons name="warning" size={20} color="#F59E0B" />
+              </View>
+              <View style={styles.onboardingContent}>
+                <Text style={styles.onboardingTitle}>
+                  Complete Account Setup
+                </Text>
+                <Text style={styles.onboardingText}>
+                  Finish Stripe onboarding to enable payouts and bank transfers.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#6B7280" />
+            </TouchableOpacity>
+          )}
 
-            {bankAccounts.length > 0 ? (
-              <View style={styles.card}>
-                {bankAccounts.map((account, index) => (
-                  <View
-                    key={account.id}
-                    style={[
-                      styles.accountItem,
-                      index < bankAccounts.length - 1 && styles.borderBottom,
-                    ]}
-                  >
-                    <View style={styles.accountIcon}>
-                      <Ionicons name="business" size={24} color="#0A2342" />
-                    </View>
-                    <View style={styles.accountContent}>
-                      <View style={styles.accountTitleRow}>
-                        <Text style={styles.accountName}>{account.name}</Text>
-                        {account.isPrimary && (
-                          <View style={styles.primaryBadge}>
-                            <Text style={styles.primaryBadgeText}>PRIMARY</Text>
+          {/* Loading State */}
+          {isLoadingMethods ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#00C6AE" />
+              <Text style={styles.loadingText}>Loading payment methods...</Text>
+            </View>
+          ) : (
+            <>
+              {/* Bank Accounts */}
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Bank Accounts</Text>
+                  <TouchableOpacity style={styles.addButton} onPress={handleAddBank}>
+                    <Ionicons name="add" size={18} color="#00C6AE" />
+                    <Text style={styles.addButtonText}>Add Bank</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {bankAccounts.length > 0 ? (
+                  <View style={styles.card}>
+                    {bankAccounts.map((method, index) => (
+                      <View
+                        key={method.id}
+                        style={[
+                          styles.accountItem,
+                          index < bankAccounts.length - 1 && styles.borderBottom,
+                        ]}
+                      >
+                        <View style={styles.accountIcon}>
+                          <Ionicons
+                            name={method.icon as any}
+                            size={24}
+                            color="#0A2342"
+                          />
+                        </View>
+                        <View style={styles.accountContent}>
+                          <View style={styles.accountTitleRow}>
+                            <Text style={styles.accountName}>{method.label}</Text>
+                            {method.isDefault && (
+                              <View style={styles.primaryBadge}>
+                                <Text style={styles.primaryBadgeText}>PRIMARY</Text>
+                              </View>
+                            )}
                           </View>
-                        )}
-                      </View>
-                      <Text style={styles.accountNumber}>
-                        ****{account.last4}
-                      </Text>
-                      {account.verified && (
-                        <View style={styles.verifiedRow}>
-                          <Ionicons
-                            name="shield-checkmark"
-                            size={12}
-                            color="#00C6AE"
-                          />
-                          <Text style={styles.verifiedText}>Verified</Text>
+                          {method.bankLast4 && (
+                            <Text style={styles.accountNumber}>
+                              ****{method.bankLast4}
+                            </Text>
+                          )}
+                          <View style={styles.verifiedRow}>
+                            <Ionicons
+                              name="shield-checkmark"
+                              size={12}
+                              color="#00C6AE"
+                            />
+                            <Text style={styles.verifiedText}>Verified</Text>
+                          </View>
                         </View>
-                      )}
-                    </View>
+                        <TouchableOpacity
+                          style={styles.moreButton}
+                          onPress={() => {
+                            Alert.alert(
+                              method.label,
+                              method.bankLast4 ? `****${method.bankLast4}` : undefined,
+                              [
+                                { text: "Cancel", style: "cancel" },
+                                !method.isDefault
+                                  ? {
+                                      text: "Set as Primary",
+                                      onPress: () => handleSetPrimary(method),
+                                    }
+                                  : null,
+                                {
+                                  text: "Remove",
+                                  style: "destructive",
+                                  onPress: () => handleRemoveAccount(method),
+                                },
+                              ].filter(Boolean) as any
+                            );
+                          }}
+                        >
+                          <Ionicons
+                            name="ellipsis-vertical"
+                            size={18}
+                            color="#6B7280"
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.emptyCard}>
+                    <Ionicons name="business-outline" size={40} color="#9CA3AF" />
+                    <Text style={styles.emptyText}>No bank accounts linked</Text>
                     <TouchableOpacity
-                      style={styles.moreButton}
-                      onPress={() => {
-                        Alert.alert(
-                          account.name,
-                          `****${account.last4}`,
-                          [
-                            { text: "Cancel", style: "cancel" },
-                            !account.isPrimary && {
-                              text: "Set as Primary",
-                              onPress: () => handleSetPrimary(account.id),
-                            },
-                            {
-                              text: "Remove",
-                              style: "destructive",
-                              onPress: () => handleRemoveAccount(account),
-                            },
-                          ].filter(Boolean) as any
-                        );
-                      }}
+                      style={styles.emptyButton}
+                      onPress={handleAddBank}
                     >
-                      <Ionicons
-                        name="ellipsis-vertical"
-                        size={18}
-                        color="#6B7280"
-                      />
+                      <Text style={styles.emptyButtonText}>Link a Bank</Text>
                     </TouchableOpacity>
                   </View>
-                ))}
+                )}
               </View>
-            ) : (
-              <View style={styles.emptyCard}>
-                <Ionicons name="business-outline" size={40} color="#9CA3AF" />
-                <Text style={styles.emptyText}>No bank accounts linked</Text>
-                <TouchableOpacity
-                  style={styles.emptyButton}
-                  onPress={handleAddBank}
-                >
-                  <Text style={styles.emptyButtonText}>Link a Bank</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
 
-          {/* Debit Cards */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Debit Cards</Text>
-              <TouchableOpacity style={styles.addButton} onPress={handleAddCard}>
-                <Ionicons name="add" size={18} color="#00C6AE" />
-                <Text style={styles.addButtonText}>Add Card</Text>
-              </TouchableOpacity>
-            </View>
+              {/* Cards & Other Methods */}
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Cards & Other</Text>
+                  <TouchableOpacity style={styles.addButton} onPress={handleAddCard}>
+                    <Ionicons name="add" size={18} color="#00C6AE" />
+                    <Text style={styles.addButtonText}>Add Card</Text>
+                  </TouchableOpacity>
+                </View>
 
-            {cardAccounts.length > 0 ? (
-              <View style={styles.card}>
-                {cardAccounts.map((account, index) => (
-                  <View
-                    key={account.id}
-                    style={[
-                      styles.accountItem,
-                      index < cardAccounts.length - 1 && styles.borderBottom,
-                    ]}
-                  >
-                    <View style={[styles.accountIcon, { backgroundColor: "#EFF6FF" }]}>
-                      <Ionicons name="card" size={24} color="#3B82F6" />
-                    </View>
-                    <View style={styles.accountContent}>
-                      <View style={styles.accountTitleRow}>
-                        <Text style={styles.accountName}>{account.name}</Text>
-                      </View>
-                      <Text style={styles.accountNumber}>
-                        ****{account.last4}
-                      </Text>
-                      {account.verified && (
-                        <View style={styles.verifiedRow}>
+                {cardAccounts.length > 0 ? (
+                  <View style={styles.card}>
+                    {cardAccounts.map((method, index) => (
+                      <View
+                        key={method.id}
+                        style={[
+                          styles.accountItem,
+                          index < cardAccounts.length - 1 && styles.borderBottom,
+                        ]}
+                      >
+                        <View style={[styles.accountIcon, { backgroundColor: "#EFF6FF" }]}>
                           <Ionicons
-                            name="shield-checkmark"
-                            size={12}
-                            color="#00C6AE"
+                            name={method.icon as any}
+                            size={24}
+                            color="#3B82F6"
                           />
-                          <Text style={styles.verifiedText}>Verified</Text>
                         </View>
-                      )}
-                    </View>
+                        <View style={styles.accountContent}>
+                          <View style={styles.accountTitleRow}>
+                            <Text style={styles.accountName}>{method.label}</Text>
+                            {method.isDefault && (
+                              <View style={styles.primaryBadge}>
+                                <Text style={styles.primaryBadgeText}>PRIMARY</Text>
+                              </View>
+                            )}
+                          </View>
+                          {method.cardLast4 && (
+                            <Text style={styles.accountNumber}>
+                              ****{method.cardLast4}
+                            </Text>
+                          )}
+                          <View style={styles.verifiedRow}>
+                            <Ionicons
+                              name="shield-checkmark"
+                              size={12}
+                              color="#00C6AE"
+                            />
+                            <Text style={styles.verifiedText}>Verified</Text>
+                          </View>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.moreButton}
+                          onPress={() => {
+                            Alert.alert(
+                              method.label,
+                              method.cardLast4 ? `****${method.cardLast4}` : undefined,
+                              [
+                                { text: "Cancel", style: "cancel" },
+                                !method.isDefault
+                                  ? {
+                                      text: "Set as Primary",
+                                      onPress: () => handleSetPrimary(method),
+                                    }
+                                  : null,
+                                {
+                                  text: "Remove",
+                                  style: "destructive",
+                                  onPress: () => handleRemoveAccount(method),
+                                },
+                              ].filter(Boolean) as any
+                            );
+                          }}
+                        >
+                          <Ionicons
+                            name="ellipsis-vertical"
+                            size={18}
+                            color="#6B7280"
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                ) : (
+                  <View style={styles.emptyCard}>
+                    <Ionicons name="card-outline" size={40} color="#9CA3AF" />
+                    <Text style={styles.emptyText}>No cards added</Text>
                     <TouchableOpacity
-                      style={styles.moreButton}
-                      onPress={() => {
-                        Alert.alert(
-                          account.name,
-                          `****${account.last4}`,
-                          [
-                            { text: "Cancel", style: "cancel" },
-                            {
-                              text: "Remove",
-                              style: "destructive",
-                              onPress: () => handleRemoveAccount(account),
-                            },
-                          ]
-                        );
-                      }}
+                      style={styles.emptyButton}
+                      onPress={handleAddCard}
                     >
-                      <Ionicons
-                        name="ellipsis-vertical"
-                        size={18}
-                        color="#6B7280"
-                      />
+                      <Text style={styles.emptyButtonText}>Add a Card</Text>
                     </TouchableOpacity>
                   </View>
-                ))}
+                )}
               </View>
-            ) : (
-              <View style={styles.emptyCard}>
-                <Ionicons name="card-outline" size={40} color="#9CA3AF" />
-                <Text style={styles.emptyText}>No cards added</Text>
-                <TouchableOpacity
-                  style={styles.emptyButton}
-                  onPress={handleAddCard}
-                >
-                  <Text style={styles.emptyButtonText}>Add a Card</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
+            </>
+          )}
 
           {/* Security Note */}
           <View style={styles.securityCard}>
@@ -367,6 +400,49 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
     paddingBottom: 40,
+  },
+  onboardingBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFBEB",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    padding: 14,
+    marginBottom: 20,
+    gap: 12,
+  },
+  onboardingIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(245,158,11,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  onboardingContent: {
+    flex: 1,
+  },
+  onboardingTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#92400E",
+    marginBottom: 2,
+  },
+  onboardingText: {
+    fontSize: 12,
+    color: "#A16207",
+    lineHeight: 17,
+  },
+  loadingContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: "#6B7280",
+    marginTop: 12,
   },
   section: {
     marginBottom: 24,

@@ -19,6 +19,7 @@ import { RootStackParamList } from "../App";
 import { useAdvance, AdvanceRequest } from "../context/AdvanceContext";
 import { useWallet } from "../context/WalletContext";
 import { useCurrency } from "../context/CurrencyContext";
+import { usePayment, SavedPaymentMethod } from "../context/PaymentContext";
 
 type AdvanceRepaymentRouteProp = RouteProp<RootStackParamList, "AdvanceRepayment">;
 type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -30,11 +31,12 @@ export default function AdvanceRepaymentScreen() {
   const { getAdvanceById, makeRepayment } = useAdvance();
   const { balance } = useWallet();
   const { formatAmount, CURRENCIES } = useCurrency();
+  const { paymentMethods, createDeposit, presentPaymentSheet } = usePayment();
 
   const [advance, setAdvance] = useState<AdvanceRequest | undefined>();
   const [amount, setAmount] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<"wallet" | "card">("wallet");
+  const [paymentMethod, setPaymentMethod] = useState<"wallet" | string>("wallet");
 
   useEffect(() => {
     const adv = getAdvanceById(advanceId);
@@ -70,7 +72,25 @@ export default function AdvanceRepaymentScreen() {
 
     setIsProcessing(true);
     try {
-      await makeRepayment(advanceId, parsedAmount);
+      if (paymentMethod === "wallet") {
+        // Existing wallet flow
+        await makeRepayment(advanceId, parsedAmount);
+      } else {
+        // Stripe payment method flow
+        const { clientSecret } = await createDeposit(
+          Math.round(parsedAmount * 100),
+          advance.currency,
+        );
+        const { success, error } = await presentPaymentSheet(clientSecret);
+        if (!success) {
+          if (error && error !== "Payment canceled") {
+            Alert.alert("Payment Failed", error);
+          }
+          return;
+        }
+        // Stripe payment succeeded, record the repayment
+        await makeRepayment(advanceId, parsedAmount);
+      }
 
       const updatedAdvance = getAdvanceById(advanceId);
       const isFullyPaid = updatedAdvance?.status === "completed";
@@ -247,29 +267,34 @@ export default function AdvanceRepaymentScreen() {
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[
-                styles.paymentOption,
-                paymentMethod === "card" && styles.paymentOptionSelected,
-              ]}
-              onPress={() => setPaymentMethod("card")}
-            >
-              <View style={styles.paymentOptionLeft}>
-                <View style={[styles.paymentIcon, { backgroundColor: "#DBEAFE" }]}>
-                  <Ionicons name="card" size={20} color="#3B82F6" />
+            {paymentMethods.map((method: SavedPaymentMethod) => (
+              <TouchableOpacity
+                key={method.id}
+                style={[
+                  styles.paymentOption,
+                  paymentMethod === method.id && styles.paymentOptionSelected,
+                ]}
+                onPress={() => setPaymentMethod(method.id)}
+              >
+                <View style={styles.paymentOptionLeft}>
+                  <View style={[styles.paymentIcon, { backgroundColor: "#DBEAFE" }]}>
+                    <Ionicons name={method.icon as any} size={20} color="#3B82F6" />
+                  </View>
+                  <View style={styles.paymentInfo}>
+                    <Text style={styles.paymentTitle}>{method.label}</Text>
+                    {method.isDefault && (
+                      <Text style={styles.paymentBalance}>Default</Text>
+                    )}
+                  </View>
                 </View>
-                <View style={styles.paymentInfo}>
-                  <Text style={styles.paymentTitle}>Debit/Credit Card</Text>
-                  <Text style={styles.paymentBalance}>Visa ending in ****4242</Text>
+                <View style={[
+                  styles.radioOuter,
+                  paymentMethod === method.id && styles.radioOuterSelected,
+                ]}>
+                  {paymentMethod === method.id && <View style={styles.radioInner} />}
                 </View>
-              </View>
-              <View style={[
-                styles.radioOuter,
-                paymentMethod === "card" && styles.radioOuterSelected,
-              ]}>
-                {paymentMethod === "card" && <View style={styles.radioInner} />}
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            ))}
 
             {paymentMethod === "wallet" && walletBalance < parsedAmount && parsedAmount > 0 && (
               <View style={styles.warningBox}>

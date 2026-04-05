@@ -1,4 +1,7 @@
 "use client"
+import { useSavings } from "@/context/SavingsContext"
+import { useWithdrawalWizard } from "@/context/WithdrawalWizardContext"
+import { useGoalParams, navigateToGoalScreen, goBack } from "./useGoalParams"
 import { ArrowLeft, Check, AlertTriangle, Shield, Lock, Unlock } from "lucide-react"
 import { useState } from "react"
 
@@ -16,36 +19,36 @@ const colors = {
 export default function WithdrawalReviewScreen() {
   const [confirmed, setConfirmed] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const goal = {
-    name: "Emergency Fund",
-    emoji: "🛡️",
-    tier: "emergency",
-    currentAmount: 3200,
-  }
+  const { goalId } = useGoalParams()
+  const { state, updateFields } = useWithdrawalWizard()
+  const { withdraw } = useSavings()
 
-  const withdrawalAmount = 1000
-  const penaltyAmount = 20
-  const receiveAmount = 980
-  const reason = "Medical"
+  // Derive tier display info from penalty percent
+  const tierDisplay = state.penaltyPercent >= 5
+    ? { name: "Locked", penalty: state.penaltyPercent, color: "#8B5CF6", icon: Lock }
+    : state.penaltyPercent > 0
+      ? { name: "Emergency", penalty: state.penaltyPercent, color: "#3B82F6", icon: Shield }
+      : { name: "Flexible", penalty: 0, color: "#10B981", icon: Unlock }
 
-  const tiers = {
-    flexible: { name: "Flexible", penalty: 0, color: "#10B981", icon: Unlock },
-    emergency: { name: "Emergency", penalty: 2, color: "#3B82F6", icon: Shield },
-    locked: { name: "Locked", penalty: 7, color: "#8B5CF6", icon: Lock },
-  }
-
-  const tierInfo = tiers[goal.tier]
-  const TierIcon = tierInfo.icon
-  const remainingBalance = goal.currentAmount - withdrawalAmount
+  const TierIcon = tierDisplay.icon
 
   const handleConfirm = async () => {
     setIsProcessing(true)
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    console.log("Withdrawal confirmed")
+    setError(null)
+    try {
+      const tx = await withdraw(state.goalId!, state.amount, `Withdrawal: ${state.reason}`)
+      updateFields({ transactionId: tx.id })
+      navigateToGoalScreen("043-GOAL-T08-WithdrawalSuccess", { goalId: state.goalId! })
+    } catch (err: any) {
+      setError(err.message || "Withdrawal failed. Please try again.")
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
-  const canConfirm = tierInfo.penalty === 0 || confirmed
+  const canConfirm = tierDisplay.penalty === 0 || confirmed
 
   const steps = [
     { num: 1, label: "Amount", completed: true, active: false },
@@ -53,6 +56,47 @@ export default function WithdrawalReviewScreen() {
     { num: 3, label: "Review", completed: false, active: true },
     { num: 4, label: "Done", completed: false, active: false },
   ]
+
+  // If wizard state is empty (user navigated directly), show error
+  if (!state.goalId || state.amount === 0) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: colors.background,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        }}
+      >
+        <div style={{ textAlign: "center", padding: "20px" }}>
+          <p style={{ fontSize: "48px", marginBottom: "12px" }}>😕</p>
+          <p style={{ color: colors.primaryNavy, fontSize: "18px", fontWeight: "600", margin: "0 0 8px 0" }}>
+            No withdrawal in progress
+          </p>
+          <p style={{ color: colors.textSecondary, fontSize: "14px", margin: "0 0 20px 0" }}>
+            Please start from the withdrawal amount screen.
+          </p>
+          <button
+            onClick={() => goBack()}
+            style={{
+              padding: "12px 24px",
+              borderRadius: "12px",
+              border: "none",
+              background: colors.accentTeal,
+              color: "#FFFFFF",
+              fontSize: "14px",
+              fontWeight: "600",
+              cursor: "pointer",
+            }}
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -70,7 +114,7 @@ export default function WithdrawalReviewScreen() {
         <div style={{ padding: "12px 20px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <button
-              onClick={() => console.log("Back")}
+              onClick={() => goBack()}
               style={{
                 background: "rgba(255,255,255,0.1)",
                 border: "none",
@@ -143,6 +187,30 @@ export default function WithdrawalReviewScreen() {
 
       {/* Content */}
       <div style={{ padding: "20px" }}>
+        {/* Error Banner */}
+        {error && (
+          <div
+            style={{
+              background: "#FEF2F2",
+              borderRadius: "12px",
+              padding: "14px",
+              marginBottom: "16px",
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              border: "1px solid #FECACA",
+            }}
+          >
+            <AlertTriangle size={20} color="#DC2626" />
+            <div>
+              <p style={{ margin: 0, fontSize: "13px", fontWeight: "600", color: "#DC2626" }}>
+                Withdrawal Failed
+              </p>
+              <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#991B1B" }}>{error}</p>
+            </div>
+          </div>
+        )}
+
         {/* Main Amount Card */}
         <div
           style={{
@@ -156,11 +224,11 @@ export default function WithdrawalReviewScreen() {
         >
           <p style={{ margin: "0 0 8px 0", fontSize: "13px", color: colors.textSecondary }}>You'll receive</p>
           <p style={{ margin: 0, fontSize: "48px", fontWeight: "700", color: colors.accentTeal }}>
-            ${receiveAmount.toLocaleString()}
+            ${state.receiveAmount.toLocaleString()}
           </p>
-          {tierInfo.penalty > 0 && (
+          {tierDisplay.penalty > 0 && (
             <p style={{ margin: "8px 0 0 0", fontSize: "13px", color: colors.warningAmber }}>
-              After ${penaltyAmount} penalty
+              After ${state.penaltyAmount} penalty
             </p>
           )}
         </div>
@@ -187,8 +255,8 @@ export default function WithdrawalReviewScreen() {
           >
             <span style={{ fontSize: "14px", color: colors.textSecondary }}>From</span>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "20px" }}>{goal.emoji}</span>
-              <span style={{ fontSize: "14px", fontWeight: "600", color: colors.primaryNavy }}>{goal.name}</span>
+              <span style={{ fontSize: "20px" }}>{state.goalEmoji}</span>
+              <span style={{ fontSize: "14px", fontWeight: "600", color: colors.primaryNavy }}>{state.goalName}</span>
             </div>
           </div>
 
@@ -204,12 +272,12 @@ export default function WithdrawalReviewScreen() {
           >
             <span style={{ fontSize: "14px", color: colors.textSecondary }}>Withdrawal</span>
             <span style={{ fontSize: "14px", fontWeight: "600", color: colors.primaryNavy }}>
-              ${withdrawalAmount.toLocaleString()}
+              ${state.amount.toLocaleString()}
             </span>
           </div>
 
           {/* Penalty - Only show if applicable */}
-          {tierInfo.penalty > 0 && (
+          {tierDisplay.penalty > 0 && (
             <div
               style={{
                 padding: "16px",
@@ -222,10 +290,10 @@ export default function WithdrawalReviewScreen() {
             >
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <AlertTriangle size={16} color={colors.warningAmber} />
-                <span style={{ fontSize: "14px", color: "#92400E" }}>Penalty ({tierInfo.penalty}%)</span>
+                <span style={{ fontSize: "14px", color: "#92400E" }}>Penalty ({tierDisplay.penalty}%)</span>
               </div>
               <span style={{ fontSize: "14px", fontWeight: "600", color: colors.warningAmber }}>
-                -${penaltyAmount.toLocaleString()}
+                -${state.penaltyAmount.toLocaleString()}
               </span>
             </div>
           )}
@@ -241,7 +309,7 @@ export default function WithdrawalReviewScreen() {
             }}
           >
             <span style={{ fontSize: "14px", color: colors.textSecondary }}>Reason</span>
-            <span style={{ fontSize: "14px", fontWeight: "500", color: colors.primaryNavy }}>{reason}</span>
+            <span style={{ fontSize: "14px", fontWeight: "500", color: colors.primaryNavy }}>{state.reason}</span>
           </div>
 
           {/* Remaining Balance */}
@@ -255,7 +323,7 @@ export default function WithdrawalReviewScreen() {
           >
             <span style={{ fontSize: "14px", color: colors.textSecondary }}>Remaining balance</span>
             <span style={{ fontSize: "14px", fontWeight: "600", color: colors.primaryNavy }}>
-              ${remainingBalance.toLocaleString()}
+              ${state.remainingBalance.toLocaleString()}
             </span>
           </div>
         </div>
@@ -288,7 +356,7 @@ export default function WithdrawalReviewScreen() {
         </div>
 
         {/* Confirmation Checkbox - Only for penalty tiers */}
-        {tierInfo.penalty > 0 && (
+        {tierDisplay.penalty > 0 && (
           <label
             style={{
               display: "flex",
@@ -320,7 +388,7 @@ export default function WithdrawalReviewScreen() {
               {confirmed && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
             </div>
             <span style={{ fontSize: "13px", color: colors.textSecondary, lineHeight: "1.5" }}>
-              I understand a <strong style={{ color: colors.warningAmber }}>${penaltyAmount} penalty</strong> will be
+              I understand a <strong style={{ color: colors.warningAmber }}>${state.penaltyAmount} penalty</strong> will be
               deducted from my withdrawal
             </span>
           </label>

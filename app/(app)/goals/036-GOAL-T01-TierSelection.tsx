@@ -11,7 +11,10 @@ import {
   Lock,
   Unlock,
   AlertTriangle,
+  Loader2,
 } from "lucide-react"
+import { useSavings } from "@/context/SavingsContext"
+import { useGoalParams, navigateToGoalScreen, goBack } from "./useGoalParams"
 
 const COLORS = {
   navy: "#0A2342",
@@ -25,67 +28,183 @@ const COLORS = {
   error: "#EF4444",
 }
 
+/** Derive the 3-tier concept from DB goal type properties */
+const deriveTierFromType = (goalType: { lock_period_days: number; early_withdrawal_penalty_percent: number }): "flexible" | "emergency" | "locked" => {
+  if (goalType.lock_period_days >= 365 && goalType.early_withdrawal_penalty_percent >= 5) return "locked"
+  if (goalType.lock_period_days > 0 || goalType.early_withdrawal_penalty_percent > 0) return "emergency"
+  return "flexible"
+}
+
+const TIER_ICON_MAP: Record<string, JSX.Element> = {
+  flexible: <Unlock size={28} color={COLORS.teal} />,
+  emergency: <Shield size={28} color={COLORS.teal} />,
+  locked: <Lock size={28} color={COLORS.teal} />,
+}
+
+const TIER_META: Record<string, { valueProposition: string; benefits: string[]; tradeoffs: string[]; bestFor: string }> = {
+  flexible: {
+    valueProposition: "Convenience & Tracking",
+    benefits: ["Withdraw any amount, anytime", "No early withdrawal penalty", "Track progress without commitment"],
+    tradeoffs: ["Easier to break your savings habit", "No behavioral commitment device"],
+    bestFor: "Short-term goals, travel funds, gadgets",
+  },
+  emergency: {
+    valueProposition: "Protection & Discipline",
+    benefits: [
+      "Small penalty discourages impulse withdrawals",
+      "Still accessible in true emergencies",
+      "Builds savings discipline",
+    ],
+    tradeoffs: ["Small fee if you withdraw early", "Requires more commitment"],
+    bestFor: "Rainy day funds, medical reserves, buffer savings",
+  },
+  locked: {
+    valueProposition: "Powerful Commitment",
+    benefits: [
+      "Strongest protection against impulse spending",
+      "Penalty is a real deterrent",
+      "Best for big, important goals",
+    ],
+    tradeoffs: ["Limited withdrawal at once", "Notice period to downgrade tier", "Penalty on early withdrawals"],
+    bestFor: "Down payments, weddings, major life purchases",
+  },
+}
+
 export default function TierSelectionScreen() {
-  const [selectedTier, setSelectedTier] = useState("flexible")
+  const { goalId } = useGoalParams()
+  const { getGoalById, getGoalTypesList, upgradeTier, isLoading: contextLoading } = useSavings()
+
+  const [selectedTier, setSelectedTier] = useState<string | null>(null)
   const [showComparison, setShowComparison] = useState(false)
+  const [isUpgrading, setIsUpgrading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const currentTier = null
-  const goalName = "Emergency Fund"
+  const goal = goalId ? getGoalById(goalId) : undefined
+  const goalName = goal?.name || "Savings Goal"
+  const currentTierCode = goal?.savingsGoalTypeCode || null
 
-  const tiers = [
-    {
-      id: "flexible",
-      name: "Flexible Goal",
-      icon: <Unlock size={28} color={COLORS.teal} />,
-      penalty: "0%",
-      penaltyValue: 0,
-      withdrawLimit: "100%",
-      lockPeriod: "None",
-      valueProposition: "Convenience & Tracking",
-      description: "Full access to your money anytime. No penalties, no restrictions.",
-      benefits: ["Withdraw any amount, anytime", "No early withdrawal penalty", "Track progress without commitment"],
-      tradeoffs: ["Easier to break your savings habit", "No behavioral commitment device"],
-      bestFor: "Short-term goals, travel funds, gadgets",
-    },
-    {
-      id: "emergency",
-      name: "Emergency Fund",
-      icon: <Shield size={28} color={COLORS.teal} />,
-      penalty: "2%",
-      penaltyValue: 2,
-      withdrawLimit: "100%",
-      lockPeriod: "None",
-      valueProposition: "Protection & Discipline",
-      description: "A small penalty creates a behavioral speed bump to protect your savings.",
-      benefits: [
-        "2% penalty discourages impulse withdrawals",
-        "Still accessible in true emergencies",
-        "Builds savings discipline",
-      ],
-      tradeoffs: ["Small fee if you withdraw early", "Requires more commitment"],
-      bestFor: "Rainy day funds, medical reserves, buffer savings",
-    },
-    {
-      id: "locked",
-      name: "Locked Saving",
-      icon: <Lock size={28} color={COLORS.teal} />,
-      penalty: "5%",
-      penaltyValue: 5,
-      withdrawLimit: "25%",
-      lockPeriod: "30 days notice",
-      valueProposition: "Powerful Commitment",
-      description: "Maximum savings power. The penalty makes breaking your commitment costly.",
-      benefits: [
-        "Strongest protection against impulse spending",
-        "5% penalty is a real deterrent",
-        "Best for big, important goals",
-      ],
-      tradeoffs: ["Max 25% withdrawal at once", "30-day notice to downgrade tier", "5% penalty on early withdrawals"],
-      bestFor: "Down payments, weddings, major life purchases",
-    },
-  ]
+  // Build tier options from DB goal types, grouped by derived tier
+  const allGoalTypes = getGoalTypesList()
 
-  const selectedTierData = tiers.find((t) => t.id === selectedTier)
+  // Group goal types by derived tier and pick the representative one for each tier
+  const tierGroups: Record<string, typeof allGoalTypes> = {}
+  allGoalTypes.forEach((gt) => {
+    const tier = deriveTierFromType(gt)
+    if (!tierGroups[tier]) tierGroups[tier] = []
+    tierGroups[tier].push(gt)
+  })
+
+  // Build display tiers in order
+  const tierOrder: Array<"flexible" | "emergency" | "locked"> = ["flexible", "emergency", "locked"]
+  const tiers = tierOrder
+    .filter((t) => tierGroups[t] && tierGroups[t].length > 0)
+    .map((tierKey) => {
+      const group = tierGroups[tierKey]
+      // Use the first type in the group as the representative
+      const rep = group[0]
+      const penalty = rep.early_withdrawal_penalty_percent
+      const lockDays = rep.lock_period_days
+      const meta = TIER_META[tierKey] || TIER_META.flexible
+
+      return {
+        id: tierKey,
+        code: rep.code,
+        name: rep.name,
+        icon: TIER_ICON_MAP[tierKey] || <Unlock size={28} color={COLORS.teal} />,
+        penalty: `${penalty}%`,
+        penaltyValue: penalty,
+        withdrawLimit: lockDays >= 365 ? "25%" : "100%",
+        lockPeriod: lockDays > 0 ? `${lockDays} days` : "None",
+        valueProposition: meta.valueProposition,
+        description: rep.description || meta.bestFor,
+        benefits: meta.benefits,
+        tradeoffs: meta.tradeoffs,
+        bestFor: meta.bestFor,
+        // All type codes in this tier group (for the upgrade call)
+        typeCodes: group.map((g) => g.code),
+      }
+    })
+
+  // Default selected tier to current goal's tier or first option
+  if (selectedTier === null && tiers.length > 0) {
+    const currentTierKey = goal?.type || tiers[0].id
+    // Use setTimeout-free approach: set during render if needed
+    // We'll handle this with a check
+  }
+  const effectiveSelectedTier = selectedTier || goal?.type || (tiers.length > 0 ? tiers[0].id : "flexible")
+  const selectedTierData = tiers.find((t) => t.id === effectiveSelectedTier)
+
+  // Handle tier upgrade
+  const handleSelectTier = async () => {
+    if (!goalId || !selectedTierData) return
+    setError(null)
+    setIsUpgrading(true)
+    try {
+      await upgradeTier(goalId, selectedTierData.code)
+      goBack()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to update tier")
+    } finally {
+      setIsUpgrading(false)
+    }
+  }
+
+  // Loading state
+  if (contextLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: COLORS.offWhite,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: "12px",
+        }}
+      >
+        <Loader2 size={32} color={COLORS.teal} style={{ animation: "spin 1s linear infinite" }} />
+        <p style={{ color: COLORS.gray, fontSize: "14px" }}>Loading tier options...</p>
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+
+  // Error: no goal found
+  if (goalId && !goal) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: COLORS.offWhite,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: "12px",
+          padding: "20px",
+        }}
+      >
+        <AlertTriangle size={32} color={COLORS.error} />
+        <p style={{ color: COLORS.navy, fontSize: "16px", fontWeight: "600" }}>Goal not found</p>
+        <button
+          onClick={() => goBack()}
+          style={{
+            padding: "12px 24px",
+            borderRadius: "10px",
+            border: "none",
+            background: COLORS.teal,
+            color: COLORS.white,
+            cursor: "pointer",
+            fontSize: "14px",
+            fontWeight: "600",
+          }}
+        >
+          Go Back
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -112,7 +231,7 @@ export default function TierSelectionScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -133,6 +252,25 @@ export default function TierSelectionScreen() {
 
       {/* Content */}
       <div style={{ padding: "20px" }}>
+        {/* Error Banner */}
+        {error && (
+          <div
+            style={{
+              background: `${COLORS.error}15`,
+              borderRadius: "12px",
+              padding: "12px 16px",
+              marginBottom: "16px",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              border: `1px solid ${COLORS.error}30`,
+            }}
+          >
+            <AlertTriangle size={18} color={COLORS.error} />
+            <p style={{ margin: 0, fontSize: "13px", color: COLORS.error }}>{error}</p>
+          </div>
+        )}
+
         {/* Explainer */}
         <div
           style={{
@@ -167,8 +305,8 @@ export default function TierSelectionScreen() {
           }}
         >
           {tiers.map((tier) => {
-            const isSelected = selectedTier === tier.id
-            const isCurrent = currentTier === tier.id
+            const isSelected = effectiveSelectedTier === tier.id
+            const isCurrent = currentTierCode ? tier.typeCodes.includes(currentTierCode) : false
 
             return (
               <button
@@ -389,12 +527,16 @@ export default function TierSelectionScreen() {
               ))}
             </div>
 
-            {/* Rows */}
+            {/* Rows - built from DB data */}
             {[
-              { label: "Penalty", values: ["0%", "2%", "5%"] },
-              { label: "Max Withdraw", values: ["100%", "100%", "25%"] },
-              { label: "Lock Period", values: ["None", "None", "30 days"] },
-              { label: "Best For", values: ["Short-term", "Protection", "Long-term"] },
+              { label: "Penalty", values: tiers.map((t) => t.penalty) },
+              { label: "Max Withdraw", values: tiers.map((t) => t.withdrawLimit) },
+              { label: "Lock Period", values: tiers.map((t) => t.lockPeriod) },
+              { label: "Best For", values: tiers.map((t) => {
+                if (t.id === "flexible") return "Short-term"
+                if (t.id === "emergency") return "Protection"
+                return "Long-term"
+              }) },
             ].map((row, idx) => (
               <div
                 key={row.label}
@@ -524,26 +666,40 @@ export default function TierSelectionScreen() {
         }}
       >
         <button
-          onClick={() => console.log("Select tier:", selectedTier)}
+          onClick={handleSelectTier}
+          disabled={isUpgrading}
           style={{
             width: "100%",
             padding: "16px",
             borderRadius: "14px",
             border: "none",
-            background: COLORS.teal,
+            background: isUpgrading ? COLORS.lightGray : COLORS.teal,
             fontSize: "16px",
             fontWeight: "600",
             color: COLORS.white,
-            cursor: "pointer",
+            cursor: isUpgrading ? "not-allowed" : "pointer",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: "8px",
+            opacity: isUpgrading ? 0.7 : 1,
           }}
         >
-          {currentTier === selectedTier ? "Keep Current Type" : `Select ${selectedTierData?.name}`}
-          <ChevronRight size={20} />
+          {isUpgrading ? (
+            <>
+              <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
+              Updating...
+            </>
+          ) : currentTierCode && selectedTierData?.typeCodes.includes(currentTierCode) ? (
+            "Keep Current Type"
+          ) : (
+            <>
+              Select {selectedTierData?.name}
+              <ChevronRight size={20} />
+            </>
+          )}
         </button>
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
     </div>
   )

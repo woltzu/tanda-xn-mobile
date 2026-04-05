@@ -4,6 +4,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { v4 as uuidv4 } from 'uuid';
+import { InsurancePoolEngine } from './InsurancePoolEngine';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -69,6 +70,7 @@ export interface CircleResolution {
   method: string;
   shortfallAmount: number;
   amountFromReserve: number;
+  amountFromInsurancePool: number;
   amountFromRedistribution: number;
   recipientReduction: number;
   actualPayout: number;
@@ -629,6 +631,60 @@ export class DefaultCascadeHandler {
       throw new Error('Failed to create resolution record');
     }
 
+    // ── Insurance Pool Coverage (runs BEFORE reserve/redistribution) ──
+    let insurancePoolCoverage = 0;
+    let insuranceClaimId: string | null = null;
+    try {
+      const poolResult = await InsurancePoolEngine.processCoverage(defaultRecord.id);
+      insurancePoolCoverage = poolResult.approvedCents / 100; // cents → dollars
+      insuranceClaimId = poolResult.claimId;
+
+      if (insurancePoolCoverage > 0) {
+        // Reduce shortfall by pool coverage
+        resolution.shortfall_amount -= insurancePoolCoverage;
+
+        // Update resolution record with pool coverage
+        await supabase
+          .from('circle_default_resolutions')
+          .update({
+            amount_from_insurance_pool: insurancePoolCoverage,
+            insurance_claim_id: insuranceClaimId,
+          })
+          .eq('id', resolution.id);
+
+        await this.logCascadeEvent(cascadeId, defaultRecord.id, 'insurance_pool_coverage', 'circle', defaultRecord.circle_id, {
+          coverageAmount: insurancePoolCoverage,
+          claimId: insuranceClaimId,
+          remainingShortfall: resolution.shortfall_amount,
+        });
+
+        // If pool fully covered the shortfall, resolve immediately
+        if (resolution.shortfall_amount <= 0) {
+          await supabase
+            .from('circle_default_resolutions')
+            .update({
+              actual_payout_amount: resolution.original_payout_amount,
+              payout_reduction: 0,
+              resolution_status: 'resolved',
+              resolved_at: new Date().toISOString(),
+            })
+            .eq('id', resolution.id);
+
+          return {
+            method: 'insurance_pool_full_cover',
+            shortfallAmount: defaultRecord.total_owed,
+            amountFromReserve: 0,
+            amountFromInsurancePool: insurancePoolCoverage,
+            amountFromRedistribution: 0,
+            recipientReduction: 0,
+            actualPayout: resolution.original_payout_amount,
+          };
+        }
+      }
+    } catch (poolError) {
+      console.error('[DefaultCascade] Insurance pool coverage failed (non-fatal):', poolError);
+    }
+
     let result: CircleResolution;
 
     switch (policy) {
@@ -699,6 +755,7 @@ export class DefaultCascadeHandler {
       method: 'reduced_payout',
       shortfallAmount: resolution.shortfall_amount,
       amountFromReserve: 0,
+      amountFromInsurancePool: insurancePoolCoverage || 0,
       amountFromRedistribution: 0,
       recipientReduction: reduction,
       actualPayout
@@ -755,6 +812,7 @@ export class DefaultCascadeHandler {
         method: 'reserve_full_cover',
         shortfallAmount: resolution.shortfall_amount,
         amountFromReserve: resolution.shortfall_amount,
+        amountFromInsurancePool: 0,
         amountFromRedistribution: 0,
         recipientReduction: 0,
         actualPayout: resolution.original_payout_amount
@@ -819,6 +877,7 @@ export class DefaultCascadeHandler {
       method: 'reserve_partial_cover',
       shortfallAmount: resolution.shortfall_amount,
       amountFromReserve: maxReserveCover,
+      amountFromInsurancePool: 0,
       amountFromRedistribution: 0,
       recipientReduction: reduction,
       actualPayout
@@ -902,6 +961,7 @@ export class DefaultCascadeHandler {
       method: 'redistribution_pending',
       shortfallAmount: resolution.shortfall_amount,
       amountFromReserve: 0,
+      amountFromInsurancePool: insurancePoolCoverage || 0,
       amountFromRedistribution: 0, // Pending
       recipientReduction: 0, // TBD
       actualPayout: resolution.original_payout_amount, // TBD
@@ -964,6 +1024,7 @@ export class DefaultCascadeHandler {
         method: 'hybrid_partial',
         shortfallAmount: resolution.shortfall_amount,
         amountFromReserve: reserveCover,
+        amountFromInsurancePool: 0,
         amountFromRedistribution: 0,
         recipientReduction: remainingShortfall,
         actualPayout
@@ -1021,6 +1082,7 @@ export class DefaultCascadeHandler {
       method: 'hybrid_pending',
       shortfallAmount: resolution.shortfall_amount,
       amountFromReserve: reserveCover,
+      amountFromInsurancePool: 0,
       amountFromRedistribution: 0,
       recipientReduction: 0,
       actualPayout: resolution.original_payout_amount,

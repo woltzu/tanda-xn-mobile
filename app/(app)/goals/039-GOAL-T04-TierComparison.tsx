@@ -1,7 +1,22 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowLeft, Unlock, Shield, Lock, Check, X, HelpCircle, ChevronDown, ChevronUp, ArrowRight } from "lucide-react"
+import {
+  ArrowLeft,
+  Unlock,
+  Shield,
+  Lock,
+  Check,
+  X,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  ArrowRight,
+  Loader2,
+  AlertTriangle,
+} from "lucide-react"
+import { useSavings } from "@/context/SavingsContext"
+import { useGoalParams, navigateToGoalScreen, goBack } from "./useGoalParams"
 
 // Brand Colors
 const colors = {
@@ -15,85 +30,140 @@ const colors = {
   flexibleGreen: "#10B981",
   emergencyBlue: "#3B82F6",
   lockedPurple: "#8B5CF6",
+  error: "#EF4444",
+}
+
+/** Derive the 3-tier concept from DB goal type properties */
+const deriveTierFromType = (goalType: { lock_period_days: number; early_withdrawal_penalty_percent: number }): "flexible" | "emergency" | "locked" => {
+  if (goalType.lock_period_days >= 365 && goalType.early_withdrawal_penalty_percent >= 5) return "locked"
+  if (goalType.lock_period_days > 0 || goalType.early_withdrawal_penalty_percent > 0) return "emergency"
+  return "flexible"
+}
+
+const TIER_COLORS: Record<string, { color: string; bgColor: string; lightBg: string }> = {
+  flexible: { color: colors.flexibleGreen, bgColor: "#D1FAE5", lightBg: "#F0FDF4" },
+  emergency: { color: colors.emergencyBlue, bgColor: "#DBEAFE", lightBg: "#EFF6FF" },
+  locked: { color: colors.lockedPurple, bgColor: "#EDE9FE", lightBg: "#F5F3FF" },
+}
+
+const TIER_ICONS: Record<string, typeof Unlock> = {
+  flexible: Unlock,
+  emergency: Shield,
+  locked: Lock,
+}
+
+const TIER_SUBTITLES: Record<string, string> = {
+  flexible: "Freedom & Tracking",
+  emergency: "Smart Accountability",
+  locked: "Maximum Commitment",
+}
+
+const TIER_SUCCESS_RATES: Record<string, string> = {
+  flexible: "72%",
+  emergency: "85%",
+  locked: "93%",
+}
+
+const TIER_XN_BONUS: Record<string, string> = {
+  flexible: "+0",
+  emergency: "+1",
+  locked: "+3",
+}
+
+const TIER_FEATURES: Record<string, Array<{ text: string; included: boolean }>> = {
+  flexible: [
+    { text: "Withdraw anytime", included: true },
+    { text: "No questions asked", included: true },
+    { text: "Basic goal tracking", included: true },
+    { text: "XnScore bonus", included: false },
+    { text: "Priority circle matching", included: false },
+  ],
+  emergency: [
+    { text: "Withdraw with reason", included: true },
+    { text: "Small fee = pause to think", included: true },
+    { text: "Advanced goal tracking", included: true },
+    { text: "XnScore on completion", included: true },
+    { text: "Priority circle matching", included: false },
+  ],
+  locked: [
+    { text: "Locked until goal date", included: true },
+    { text: "Strong penalty = commitment", included: true },
+    { text: "Premium goal tracking", included: true },
+    { text: "XnScore on completion", included: true },
+    { text: "Priority circle matching", included: true },
+  ],
+}
+
+const TIER_BEST_FOR: Record<string, string> = {
+  flexible: "Short-term goals, vacation funds, flexible savings",
+  emergency: "Emergency funds, planned purchases, mid-term goals",
+  locked: "Home down payment, retirement, major life goals",
+}
+
+const TIER_WHO_SHOULD_USE: Record<string, string> = {
+  flexible: "People who want tracking without restrictions",
+  emergency: "People who want a small barrier to impulse spending",
+  locked: "Serious savers who want maximum accountability",
 }
 
 export default function TierComparisonScreen() {
+  const { goalId } = useGoalParams()
+  const { getGoalById, getGoalTypesList, isLoading: contextLoading } = useSavings()
+
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null)
   const [selectedTier, setSelectedTier] = useState<string | null>(null)
-  const currentTier = null // null if selecting for new goal
 
-  const tiers = [
-    {
-      id: "flexible",
-      name: "Flexible",
-      subtitle: "Freedom & Tracking",
-      icon: "💰",
-      lucideIcon: Unlock,
-      color: colors.flexibleGreen,
-      bgColor: "#D1FAE5",
-      lightBg: "#F0FDF4",
-      penalty: "0%",
-      penaltyDesc: "No penalty",
-      xnBonus: "+0",
-      successRate: "72%",
-      features: [
-        { text: "Withdraw anytime", included: true },
-        { text: "No questions asked", included: true },
-        { text: "Basic goal tracking", included: true },
-        { text: "XnScore bonus", included: false },
-        { text: "Priority circle matching", included: false },
-      ],
-      bestFor: "Short-term goals, vacation funds, flexible savings",
-      whoShouldUse: "People who want tracking without restrictions",
-    },
-    {
-      id: "emergency",
-      name: "Emergency Fund",
-      subtitle: "Smart Accountability",
-      icon: "🛡️",
-      lucideIcon: Shield,
-      color: colors.emergencyBlue,
-      bgColor: "#DBEAFE",
-      lightBg: "#EFF6FF",
-      penalty: "2%",
-      penaltyDesc: "Small speed bump",
-      xnBonus: "+1",
-      successRate: "85%",
-      recommended: true,
-      features: [
-        { text: "Withdraw with reason", included: true },
-        { text: "2% fee = pause to think", included: true },
-        { text: "Advanced goal tracking", included: true },
-        { text: "+1 XnScore on completion", included: true },
-        { text: "Priority circle matching", included: false },
-      ],
-      bestFor: "Emergency funds, planned purchases, mid-term goals",
-      whoShouldUse: "People who want a small barrier to impulse spending",
-    },
-    {
-      id: "locked",
-      name: "Locked Saving",
-      subtitle: "Maximum Commitment",
-      icon: "🔒",
-      lucideIcon: Lock,
-      color: colors.lockedPurple,
-      bgColor: "#EDE9FE",
-      lightBg: "#F5F3FF",
-      penalty: "7%",
-      penaltyDesc: "Strong commitment",
-      xnBonus: "+3",
-      successRate: "93%",
-      features: [
-        { text: "Locked until goal date", included: true },
-        { text: "7% = powerful commitment", included: true },
-        { text: "Premium goal tracking", included: true },
-        { text: "+3 XnScore on completion", included: true },
-        { text: "Priority circle matching", included: true },
-      ],
-      bestFor: "Home down payment, retirement, major life goals",
-      whoShouldUse: "Serious savers who want maximum accountability",
-    },
-  ]
+  const goal = goalId ? getGoalById(goalId) : undefined
+  const currentTierCode = goal?.savingsGoalTypeCode || null
+
+  // Build tiers from DB data
+  const allGoalTypes = getGoalTypesList()
+
+  // Group goal types by derived tier
+  const tierGroups: Record<string, typeof allGoalTypes> = {}
+  allGoalTypes.forEach((gt) => {
+    const tier = deriveTierFromType(gt)
+    if (!tierGroups[tier]) tierGroups[tier] = []
+    tierGroups[tier].push(gt)
+  })
+
+  // Build display tiers in order
+  const tierOrder: Array<"flexible" | "emergency" | "locked"> = ["flexible", "emergency", "locked"]
+  const tiers = tierOrder
+    .filter((t) => tierGroups[t] && tierGroups[t].length > 0)
+    .map((tierKey) => {
+      const group = tierGroups[tierKey]
+      const rep = group[0]
+      const penalty = rep.early_withdrawal_penalty_percent
+      const tierColors = TIER_COLORS[tierKey] || TIER_COLORS.flexible
+      const LucideIcon = TIER_ICONS[tierKey] || Unlock
+
+      return {
+        id: tierKey,
+        code: rep.code,
+        name: rep.name,
+        subtitle: TIER_SUBTITLES[tierKey] || "",
+        icon: rep.emoji || (tierKey === "flexible" ? "💰" : tierKey === "emergency" ? "🛡️" : "🔒"),
+        lucideIcon: LucideIcon,
+        color: tierColors.color,
+        bgColor: tierColors.bgColor,
+        lightBg: tierColors.lightBg,
+        penalty: `${penalty}%`,
+        penaltyDesc: penalty === 0 ? "No penalty" : penalty <= 3 ? "Small speed bump" : "Strong commitment",
+        xnBonus: TIER_XN_BONUS[tierKey] || "+0",
+        successRate: TIER_SUCCESS_RATES[tierKey] || "72%",
+        recommended: tierKey === "emergency",
+        features: TIER_FEATURES[tierKey] || TIER_FEATURES.flexible,
+        bestFor: rep.description || TIER_BEST_FOR[tierKey] || "",
+        whoShouldUse: TIER_WHO_SHOULD_USE[tierKey] || "",
+        typeCodes: group.map((g) => g.code),
+      }
+    })
+
+  // Determine current tier (derived) from the goal's type code
+  const currentTier = currentTierCode
+    ? tiers.find((t) => t.typeCodes.includes(currentTierCode))?.id || null
+    : null
 
   const faqs = [
     {
@@ -102,11 +172,11 @@ export default function TierComparisonScreen() {
     },
     {
       q: "What counts as an 'emergency' for Emergency Fund tier?",
-      a: "You select a reason when withdrawing (medical, job loss, car repair, etc.). We don't verify - the 2% fee is simply a 'speed bump' to make you pause and consider if it's truly necessary.",
+      a: "You select a reason when withdrawing (medical, job loss, car repair, etc.). We don't verify - the fee is simply a 'speed bump' to make you pause and consider if it's truly necessary.",
     },
     {
       q: "What happens if I REALLY need money from Locked tier?",
-      a: "You can still withdraw, but you'll pay the 7% penalty. This is designed to be painful enough to prevent impulse withdrawals while still providing an emergency escape valve.",
+      a: "You can still withdraw, but you'll pay the penalty. This is designed to be painful enough to prevent impulse withdrawals while still providing an emergency escape valve.",
     },
     {
       q: "How does the XnScore bonus work?",
@@ -117,6 +187,40 @@ export default function TierComparisonScreen() {
       a: "Locked tier users reach their goals 93% of the time, compared to 85% for Emergency Fund and 72% for Flexible. The accountability makes a real difference!",
     },
   ]
+
+  // Navigate to upgrade screen based on selected tier
+  const handleSelectTier = () => {
+    if (!selectedTier || !goalId) return
+    if (selectedTier === "emergency") {
+      navigateToGoalScreen("037-GOAL-T02-TierUpgrade", { goalId })
+    } else if (selectedTier === "locked") {
+      navigateToGoalScreen("038-GOAL-T03-TierUpgrade", { goalId })
+    } else {
+      // Flexible - navigate to tier selection
+      navigateToGoalScreen("036-GOAL-T01-TierSelection", { goalId })
+    }
+  }
+
+  // Loading state
+  if (contextLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: colors.background,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: "12px",
+        }}
+      >
+        <Loader2 size={32} color={colors.accentTeal} style={{ animation: "spin 1s linear infinite" }} />
+        <p style={{ color: colors.textSecondary, fontSize: "14px" }}>Loading tier comparison...</p>
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -149,7 +253,7 @@ export default function TierComparisonScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255, 255, 255, 0.1)",
               border: "none",
@@ -252,7 +356,7 @@ export default function TierComparisonScreen() {
                       letterSpacing: "0.5px",
                     }}
                   >
-                    ⭐ Recommended
+                    Recommended
                   </div>
                 )}
 
@@ -492,18 +596,27 @@ export default function TierComparisonScreen() {
             border: `1px solid ${colors.borders}`,
           }}
         >
+          {/* Build comparison rows from DB data */}
           {[
-            { label: "Withdrawal", values: ["Anytime", "With reason", "At goal date"] },
-            { label: "Penalty", values: ["0%", "2%", "7%"] },
-            { label: "XnScore Bonus", values: ["+0", "+1", "+3"] },
-            { label: "Can Downgrade", values: ["—", "No", "No"] },
-            { label: "Success Rate", values: ["72%", "85%", "93%"] },
+            {
+              label: "Withdrawal",
+              values: tiers.map((t) =>
+                t.id === "flexible" ? "Anytime" : t.id === "emergency" ? "With reason" : "At goal date"
+              ),
+            },
+            { label: "Penalty", values: tiers.map((t) => t.penalty) },
+            { label: "XnScore Bonus", values: tiers.map((t) => t.xnBonus) },
+            {
+              label: "Can Downgrade",
+              values: tiers.map((t) => (t.id === "flexible" ? "—" : "No")),
+            },
+            { label: "Success Rate", values: tiers.map((t) => t.successRate) },
           ].map((row, idx) => (
             <div
               key={idx}
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr 1fr",
+                gridTemplateColumns: `1fr ${tiers.map(() => "1fr").join(" ")}`,
                 borderBottom: idx < 4 ? `1px solid ${colors.background}` : "none",
               }}
             >
@@ -532,7 +645,7 @@ export default function TierComparisonScreen() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    background: selectedTier === tiers[i].id ? tiers[i].lightBg : "transparent",
+                    background: selectedTier === tiers[i]?.id ? tiers[i]?.lightBg : "transparent",
                   }}
                 >
                   {value}
@@ -624,7 +737,7 @@ export default function TierComparisonScreen() {
         </div>
       </div>
 
-      {/* Fixed Bottom - Only show if selecting tier */}
+      {/* Fixed Bottom - Only show if selecting tier (no current tier or selecting for upgrade) */}
       {currentTier === null && (
         <div
           style={{
@@ -640,7 +753,7 @@ export default function TierComparisonScreen() {
           }}
         >
           <button
-            onClick={() => selectedTier && console.log("Select tier:", selectedTier)}
+            onClick={handleSelectTier}
             disabled={!selectedTier}
             style={{
               width: "100%",

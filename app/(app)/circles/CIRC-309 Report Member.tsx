@@ -1,26 +1,36 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useCircles } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { useCircleParams, goBack, navigateToCircleScreen } from "./useCircleParams"
 
 export default function ReportMemberScreen() {
-  const member = {
-    id: "user_789",
-    name: "Samuel Osei",
-    avatar: "S",
-    xnScore: 75,
-  }
+  const { circleId, memberId } = useCircleParams()
+  const { getCircleMembers, getCircleById, reportMember } = useCircles()
+  const { user } = useAuth()
 
-  const circle = {
-    name: "Diaspora Family Fund",
-    elder: {
-      name: "Grace M.",
-      avatar: "G",
-    },
-  }
-
+  const [member, setMember] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [selectedReason, setSelectedReason] = useState<string | null>(null)
   const [details, setDetails] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null)
+
+  const circle = circleId ? getCircleById(circleId) : undefined
+
+  useEffect(() => {
+    if (!circleId || !memberId) return
+    setIsLoading(true)
+    getCircleMembers(circleId)
+      .then((members) => {
+        // memberId here is the odictId/user_id passed from the Member Profile screen
+        const found = members.find((m: any) => m.odictId === memberId || m.id === memberId)
+        setMember(found || null)
+      })
+      .catch((err) => console.error("Failed to load member:", err))
+      .finally(() => setIsLoading(false))
+  }, [circleId, memberId])
 
   const reasons = [
     {
@@ -64,13 +74,56 @@ export default function ReportMemberScreen() {
   const canSubmit = selectedReason && details.length >= 20
 
   const handleSubmit = async () => {
-    if (!canSubmit) return
+    if (!canSubmit || !circleId || !memberId) return
     setIsSubmitting(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setIsSubmitting(false)
-    console.log("Report submitted:", { memberId: member.id, reason: selectedReason, details })
+    setFeedback(null)
+    try {
+      await reportMember(circleId, memberId, selectedReason!, details)
+      setFeedback({ type: "success", message: "Report submitted successfully. The Circle Elder will review it." })
+      // Reset form
+      setSelectedReason(null)
+      setDetails("")
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "Failed to submit report" })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
+
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "3px solid #E5E7EB",
+              borderTop: "3px solid #00C6AE",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 16px auto",
+            }}
+          />
+          <p style={{ color: "#6B7280", fontSize: "14px" }}>Loading...</p>
+        </div>
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+
+  const memberName = member?.name || "Member"
+  const memberAvatar = member?.name?.charAt(0)?.toUpperCase() || "?"
+  const memberXnScore = member?.xnScore || 0
 
   return (
     <div
@@ -97,7 +150,7 @@ export default function ReportMemberScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -117,6 +170,24 @@ export default function ReportMemberScreen() {
 
       {/* Content */}
       <div style={{ padding: "20px" }}>
+        {/* Feedback Banner */}
+        {feedback && (
+          <div
+            style={{
+              padding: "14px",
+              borderRadius: "12px",
+              marginBottom: "16px",
+              background: feedback.type === "success" ? "#F0FDFB" : "#FEE2E2",
+              color: feedback.type === "success" ? "#065F46" : "#991B1B",
+              fontSize: "13px",
+              textAlign: "center",
+              fontWeight: "600",
+            }}
+          >
+            {feedback.message}
+          </div>
+        )}
+
         {/* Member Being Reported */}
         <div
           style={{
@@ -149,11 +220,11 @@ export default function ReportMemberScreen() {
                 fontSize: "18px",
               }}
             >
-              {member.avatar}
+              {memberAvatar}
             </div>
             <div style={{ flex: 1 }}>
-              <p style={{ margin: 0, fontSize: "15px", fontWeight: "600", color: "#0A2342" }}>{member.name}</p>
-              <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6B7280" }}>{circle.name}</p>
+              <p style={{ margin: 0, fontSize: "15px", fontWeight: "600", color: "#0A2342" }}>{memberName}</p>
+              <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6B7280" }}>{circle?.name || "Circle"}</p>
             </div>
             <span
               style={{
@@ -165,12 +236,12 @@ export default function ReportMemberScreen() {
                 color: "#6B7280",
               }}
             >
-              ⭐ {member.xnScore}
+              ⭐ {memberXnScore}
             </span>
           </div>
         </div>
 
-        {/* Report to Elder Info */}
+        {/* Report Info */}
         <div
           style={{
             background: "#F0FDFB",
@@ -196,11 +267,11 @@ export default function ReportMemberScreen() {
               fontSize: "14px",
             }}
           >
-            {circle.elder.avatar}
+            E
           </div>
           <div>
             <p style={{ margin: 0, fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>
-              Report goes to: {circle.elder.name}
+              Report goes to Circle Elder
             </p>
             <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#6B7280" }}>
               Circle Elder will review within 48 hours

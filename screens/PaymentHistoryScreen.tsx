@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,9 +6,18 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useAuth } from "../context/AuthContext";
+import { usePayment } from "../context/PaymentContext";
+import {
+  StripeConnectEngine,
+  PaymentIntent,
+} from "../services/StripeConnectEngine";
 
 type PaymentStatus = "completed" | "pending" | "missed" | "upcoming";
 
@@ -22,6 +31,7 @@ interface Payment {
   method?: string;
   transactionId?: string;
   recipientName?: string;
+  clientSecret?: string;
 }
 
 interface PaymentHistoryParams {
@@ -29,74 +39,48 @@ interface PaymentHistoryParams {
   circleId?: string;
 }
 
-// Mock payment data - in real app this would come from API
-const mockPayments: Payment[] = [
-  {
-    id: "1",
-    cycleNumber: 1,
-    amount: 100,
-    dueDate: "2025-01-15",
-    paidDate: "2025-01-14",
-    status: "completed",
-    method: "Bank Transfer",
-    transactionId: "TXN-001-ABC123",
-    recipientName: "Marie K.",
-  },
-  {
-    id: "2",
-    cycleNumber: 2,
-    amount: 100,
-    dueDate: "2025-02-15",
-    paidDate: "2025-02-15",
-    status: "completed",
-    method: "Mobile Money",
-    transactionId: "TXN-002-DEF456",
-    recipientName: "Jean P.",
-  },
-  {
-    id: "3",
-    cycleNumber: 3,
-    amount: 100,
-    dueDate: "2025-03-15",
-    paidDate: "2025-03-16",
-    status: "completed",
-    method: "Bank Transfer",
-    transactionId: "TXN-003-GHI789",
-    recipientName: "You",
-  },
-  {
-    id: "4",
-    cycleNumber: 4,
-    amount: 100,
-    dueDate: "2025-04-15",
-    status: "missed",
-    recipientName: "Paul M.",
-  },
-  {
-    id: "5",
-    cycleNumber: 5,
-    amount: 100,
-    dueDate: "2025-05-15",
-    status: "pending",
-    recipientName: "Sarah L.",
-  },
-  {
-    id: "6",
-    cycleNumber: 6,
-    amount: 100,
-    dueDate: "2025-06-15",
-    status: "upcoming",
-    recipientName: "David N.",
-  },
-  {
-    id: "7",
-    cycleNumber: 7,
-    amount: 100,
-    dueDate: "2025-07-15",
-    status: "upcoming",
-    recipientName: "Emma T.",
-  },
-];
+/**
+ * Map a Stripe PaymentIntentStatus to the local PaymentStatus used by the UI.
+ */
+function mapStripeStatus(
+  stripeStatus: PaymentIntent["status"]
+): PaymentStatus {
+  switch (stripeStatus) {
+    case "succeeded":
+      return "completed";
+    case "processing":
+    case "requires_action":
+    case "requires_confirmation":
+    case "requires_payment_method":
+      return "pending";
+    case "canceled":
+    case "failed":
+      return "missed";
+    default:
+      return "pending";
+  }
+}
+
+/**
+ * Convert a PaymentIntent from the database into the local Payment shape
+ * used by the existing UI components.
+ */
+function mapPaymentIntentToPayment(
+  pi: PaymentIntent,
+  index: number
+): Payment {
+  return {
+    id: pi.id,
+    cycleNumber: index + 1,
+    amount: pi.amountCents / 100,
+    dueDate: pi.createdAt,
+    paidDate: pi.status === "succeeded" ? pi.updatedAt : undefined,
+    status: mapStripeStatus(pi.status),
+    method: pi.paymentMethodId ?? undefined,
+    transactionId: pi.stripePaymentIntentId,
+    clientSecret: pi.clientSecret ?? undefined,
+  };
+}
 
 export default function PaymentHistoryScreen() {
   const navigation = useNavigation();
@@ -104,13 +88,49 @@ export default function PaymentHistoryScreen() {
   const params = (route.params as PaymentHistoryParams) || {};
   const circleName = params.circleName || "Family Savings Circle";
 
+  const { user } = useAuth();
+  const { presentPaymentSheet } = usePayment();
+
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<"all" | PaymentStatus>("all");
   const [expandedPayment, setExpandedPayment] = useState<string | null>(null);
 
+  // ── Fetch payment history ─────────────────────────────────────────────────
+
+  const fetchPayments = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const intents = await StripeConnectEngine.getMemberPaymentHistory(
+        user.id
+      );
+      setPayments(intents.map(mapPaymentIntentToPayment));
+    } catch (err) {
+      console.error("Failed to fetch payment history:", err);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      await fetchPayments();
+      setLoading(false);
+    })();
+  }, [fetchPayments]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchPayments();
+    setRefreshing(false);
+  }, [fetchPayments]);
+
+  // ── Derived data ──────────────────────────────────────────────────────────
+
   const filteredPayments =
     filter === "all"
-      ? mockPayments
-      : mockPayments.filter((p) => p.status === filter);
+      ? payments
+      : payments.filter((p) => p.status === filter);
 
   const getStatusColor = (status: PaymentStatus) => {
     switch (status) {
@@ -167,12 +187,12 @@ export default function PaymentHistoryScreen() {
   };
 
   const calculateSummary = () => {
-    const completed = mockPayments.filter(
+    const completed = payments.filter(
       (p) => p.status === "completed"
     ).length;
-    const missed = mockPayments.filter((p) => p.status === "missed").length;
-    const pending = mockPayments.filter((p) => p.status === "pending").length;
-    const totalPaid = mockPayments
+    const missed = payments.filter((p) => p.status === "missed").length;
+    const pending = payments.filter((p) => p.status === "pending").length;
+    const totalPaid = payments
       .filter((p) => p.status === "completed")
       .reduce((sum, p) => sum + p.amount, 0);
 
@@ -184,6 +204,34 @@ export default function PaymentHistoryScreen() {
   const toggleExpand = (paymentId: string) => {
     setExpandedPayment(expandedPayment === paymentId ? null : paymentId);
   };
+
+  // ── Pay Now handler ───────────────────────────────────────────────────────
+
+  const handlePayNow = useCallback(
+    async (payment: Payment) => {
+      if (!payment.clientSecret) {
+        Alert.alert(
+          "Payment unavailable",
+          "No payment session found. Please try again later."
+        );
+        return;
+      }
+      try {
+        const result = await presentPaymentSheet(payment.clientSecret);
+        if (result.success) {
+          Alert.alert("Success", "Payment completed successfully!");
+          await fetchPayments();
+        } else if (result.error) {
+          Alert.alert("Payment failed", result.error);
+        }
+      } catch (err: any) {
+        Alert.alert("Error", err?.message ?? "Something went wrong.");
+      }
+    },
+    [presentPaymentSheet, fetchPayments]
+  );
+
+  // ── Render helpers ────────────────────────────────────────────────────────
 
   const renderPaymentCard = (payment: Payment) => {
     const isExpanded = expandedPayment === payment.id;
@@ -206,12 +254,12 @@ export default function PaymentHistoryScreen() {
             <View style={styles.paymentInfo}>
               <Text style={styles.paymentTitle}>Cycle {payment.cycleNumber}</Text>
               <Text style={styles.paymentRecipient}>
-                To: {payment.recipientName}
+                To: {payment.recipientName ?? "N/A"}
               </Text>
             </View>
           </View>
           <View style={styles.paymentRight}>
-            <Text style={styles.paymentAmount}>${payment.amount}</Text>
+            <Text style={styles.paymentAmount}>${payment.amount.toFixed(2)}</Text>
             <View style={[styles.statusBadge, { backgroundColor: `${statusColor}20` }]}>
               <Ionicons
                 name={getStatusIcon(payment.status)}
@@ -254,7 +302,10 @@ export default function PaymentHistoryScreen() {
               </View>
             )}
             {payment.status === "pending" && (
-              <TouchableOpacity style={styles.payNowButton}>
+              <TouchableOpacity
+                style={styles.payNowButton}
+                onPress={() => handlePayNow(payment)}
+              >
                 <Ionicons name="card-outline" size={18} color="#FFFFFF" />
                 <Text style={styles.payNowText}>Pay Now</Text>
               </TouchableOpacity>
@@ -281,6 +332,34 @@ export default function PaymentHistoryScreen() {
     );
   };
 
+  // ── Loading state ─────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#1F2937" />
+          </TouchableOpacity>
+          <View style={styles.headerContent}>
+            <Text style={styles.headerTitle}>Payment History</Text>
+            <Text style={styles.headerSubtitle}>{circleName}</Text>
+          </View>
+          <View style={styles.downloadButton} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2563EB" />
+          <Text style={styles.loadingText}>Loading payment history...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Main render ───────────────────────────────────────────────────────────
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -300,12 +379,25 @@ export default function PaymentHistoryScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#2563EB"]}
+            tintColor="#2563EB"
+          />
+        }
+      >
         {/* Summary Cards */}
         <View style={styles.summaryContainer}>
           <View style={[styles.summaryCard, styles.summaryCardPrimary]}>
             <Text style={styles.summaryLabel}>Total Contributed</Text>
-            <Text style={styles.summaryValueLarge}>${summary.totalPaid}</Text>
+            <Text style={styles.summaryValueLarge}>
+              ${summary.totalPaid.toFixed(2)}
+            </Text>
             <Text style={styles.summarySubtext}>
               {summary.completed} payments completed
             </Text>
@@ -437,6 +529,16 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: "#6B7280",
   },
   summaryContainer: {
     padding: 16,

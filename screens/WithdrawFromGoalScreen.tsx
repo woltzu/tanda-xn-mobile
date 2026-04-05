@@ -16,6 +16,7 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useSavings, GOAL_TYPES } from "../context/SavingsContext";
+import { usePayment } from "../context/PaymentContext";
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 type WithdrawRouteProp = RouteProp<RootStackParamList, "WithdrawFromGoal">;
@@ -26,11 +27,16 @@ export default function WithdrawFromGoalScreen() {
   const { goalId } = route.params;
 
   const { getGoalById, withdraw } = useSavings();
+  const { isOnboarded, paymentMethods } = usePayment();
   const goal = getGoalById(goalId);
 
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [withdrawTo, setWithdrawTo] = useState<"wallet" | "bank">("wallet");
+
+  const bankAccounts = paymentMethods.filter((m) => m.type === "us_bank_account");
+  const hasBankAccount = isOnboarded && bankAccounts.length > 0;
 
   if (!goal) {
     return (
@@ -111,11 +117,15 @@ export default function WithdrawFromGoalScreen() {
     setIsProcessing(true);
     try {
       await withdraw(goalId, withdrawAmount, reason || "Withdrawal");
+      const bankNote =
+        withdrawTo === "bank"
+          ? "\n\nFunds will be transferred to your bank account within 1-3 business days."
+          : "";
       Alert.alert(
         "Withdrawal Successful!",
         isEmergencyFund
-          ? `Your withdrawal of ${formatCurrency(withdrawAmount)} is being processed. Funds will be available within 24-48 hours.`
-          : `${formatCurrency(netAmount)} has been withdrawn from "${goal.name}"`,
+          ? `Your withdrawal of ${formatCurrency(withdrawAmount)} is being processed. Funds will be available within 24-48 hours.${bankNote}`
+          : `${formatCurrency(netAmount)} has been withdrawn from "${goal.name}"${bankNote}`,
         [
           {
             text: "Done",
@@ -245,6 +255,53 @@ export default function WithdrawFromGoalScreen() {
               placeholderTextColor="#9CA3AF"
               multiline
             />
+          </View>
+
+          {/* Withdraw To */}
+          <View style={styles.withdrawToSection}>
+            <Text style={styles.sectionLabel}>WITHDRAW TO</Text>
+            <View style={styles.withdrawToCard}>
+              {/* Wallet Option */}
+              <TouchableOpacity
+                style={styles.withdrawToOption}
+                onPress={() => setWithdrawTo("wallet")}
+              >
+                <View style={styles.withdrawToRadio}>
+                  {withdrawTo === "wallet" && <View style={styles.withdrawToRadioInner} />}
+                </View>
+                <View style={[styles.withdrawToIconContainer, { backgroundColor: "#E0F7F5" }]}>
+                  <Ionicons name="wallet-outline" size={20} color="#00C6AE" />
+                </View>
+                <View style={styles.withdrawToDetails}>
+                  <Text style={styles.withdrawToLabel}>TandaXn Wallet</Text>
+                  <Text style={styles.withdrawToSub}>Instant</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Bank Account Option */}
+              {hasBankAccount && (
+                <TouchableOpacity
+                  style={[
+                    styles.withdrawToOption,
+                    { borderTopWidth: 1, borderTopColor: "#E5E7EB" },
+                  ]}
+                  onPress={() => setWithdrawTo("bank")}
+                >
+                  <View style={styles.withdrawToRadio}>
+                    {withdrawTo === "bank" && <View style={styles.withdrawToRadioInner} />}
+                  </View>
+                  <View style={[styles.withdrawToIconContainer, { backgroundColor: "#EEF2FF" }]}>
+                    <Ionicons name="business-outline" size={20} color="#0A2342" />
+                  </View>
+                  <View style={styles.withdrawToDetails}>
+                    <Text style={styles.withdrawToLabel}>
+                      {bankAccounts[0].label || "Bank Account"}
+                    </Text>
+                    <Text style={styles.withdrawToSub}>1-3 business days</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
           {/* Summary */}
@@ -520,6 +577,59 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB",
     minHeight: 80,
     textAlignVertical: "top",
+  },
+  withdrawToSection: {
+    marginBottom: 20,
+  },
+  withdrawToCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    overflow: "hidden",
+  },
+  withdrawToOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  withdrawToRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#00C6AE",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  withdrawToRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#00C6AE",
+  },
+  withdrawToIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  withdrawToDetails: {
+    flex: 1,
+  },
+  withdrawToLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0A2342",
+  },
+  withdrawToSub: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
   },
   summaryCard: {
     backgroundColor: "#FFFFFF",

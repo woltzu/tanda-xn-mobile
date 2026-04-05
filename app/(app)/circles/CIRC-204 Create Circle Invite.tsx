@@ -1,15 +1,13 @@
 "use client"
 
 import { useState } from "react"
+import { useCreateCircleWizard } from "../../../context/CreateCircleWizardContext"
+import { goBack, navigateToCircleScreen } from "./useCircleParams"
 
 export default function CreateCircleInviteScreen() {
-  const circleDetails = {
-    name: "Family Savings",
-    amount: 200,
-    frequency: "monthly",
-    size: 6,
-  }
+  const wizard = useCreateCircleWizard()
 
+  // Contact list stays as local mock (phone contacts are device-level)
   const contacts = [
     { id: 1, name: "Amara Okafor", phone: "+1 (404) 555-0123", avatar: "A", xnScore: 78 },
     { id: 2, name: "Kwame Mensah", phone: "+1 (470) 555-0456", avatar: "K", xnScore: 85 },
@@ -21,7 +19,15 @@ export default function CreateCircleInviteScreen() {
     { id: 8, name: "James Kimani", phone: "+1 (470) 555-5678", avatar: "J", xnScore: 79 },
   ]
 
-  const [selectedMembers, setSelectedMembers] = useState<number[]>([])
+  // Initialize from wizard state if user already selected contacts previously
+  const getInitialSelected = (): number[] => {
+    if (wizard.state.invitedMembers && wizard.state.invitedMembers.length > 0) {
+      return wizard.state.invitedMembers.map((m) => m.id)
+    }
+    return []
+  }
+
+  const [selectedMembers, setSelectedMembers] = useState<number[]>(getInitialSelected())
   const [searchQuery, setSearchQuery] = useState("")
 
   const filteredContacts = contacts.filter(
@@ -41,6 +47,22 @@ export default function CreateCircleInviteScreen() {
     if (score >= 70) return "#0A2342"
     if (score >= 50) return "#D97706"
     return "#DC2626"
+  }
+
+  const handleContinue = () => {
+    if (selectedMembers.length > 0) {
+      // Map selected IDs to contact objects for wizard state
+      const selectedContacts = contacts
+        .filter((c) => selectedMembers.includes(c.id))
+        .map((c) => ({ id: c.id, name: c.name, phone: c.phone }))
+      wizard.updateField("invitedMembers", selectedContacts)
+    }
+    navigateToCircleScreen("CIRC-205 Create Circle Review")
+  }
+
+  const handleSkip = () => {
+    // Skip without setting invitedMembers
+    navigateToCircleScreen("CIRC-205 Create Circle Review")
   }
 
   return (
@@ -69,7 +91,7 @@ export default function CreateCircleInviteScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -125,7 +147,7 @@ export default function CreateCircleInviteScreen() {
               {selectedMembers.length} member{selectedMembers.length !== 1 ? "s" : ""} selected
             </p>
             <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6B7280" }}>
-              You + {selectedMembers.length} = {selectedMembers.length + 1} total • No limit
+              You + {selectedMembers.length} = {selectedMembers.length + 1} total - No limit
             </p>
           </div>
           <div
@@ -135,7 +157,7 @@ export default function CreateCircleInviteScreen() {
               borderRadius: "8px",
             }}
           >
-            <span style={{ fontSize: "18px", fontWeight: "700", color: "#00C6AE" }}>∞</span>
+            <span style={{ fontSize: "18px", fontWeight: "700", color: "#00C6AE" }}>&infin;</span>
           </div>
         </div>
 
@@ -276,7 +298,7 @@ export default function CreateCircleInviteScreen() {
                           color: getScoreColor(contact.xnScore),
                         }}
                       >
-                        ⭐ {contact.xnScore}
+                        {contact.xnScore}
                       </span>
                     </div>
                     <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#6B7280" }}>{contact.phone}</p>
@@ -357,7 +379,7 @@ export default function CreateCircleInviteScreen() {
         }}
       >
         <button
-          onClick={() => console.log("Continue", selectedMembers)}
+          onClick={selectedMembers.length > 0 ? handleContinue : handleSkip}
           style={{
             width: "100%",
             padding: "16px",

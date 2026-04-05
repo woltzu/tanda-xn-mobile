@@ -9,6 +9,7 @@ import React, {
 import { Platform } from "react-native";
 import { supabase } from "../lib/supabase";
 import { Session, User as SupabaseUser } from "@supabase/supabase-js";
+import { eventService } from "../services/EventService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as Linking from "expo-linking";
@@ -33,6 +34,7 @@ type AuthContextType = {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
+  isAuthenticated: boolean;
   isLocked: boolean;
   biometricsEnabled: boolean;
   biometricsAvailable: boolean;
@@ -286,8 +288,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(data.session);
       setUser(formatUser(data.user));
       setIsLocked(false);
-    } catch (error) {
+      eventService.trackAuth('login', 'success', 'email');
+    } catch (error: any) {
       console.error("Sign in error:", error);
+      eventService.trackAuth('login', 'failure', 'email', {
+        code: error?.code,
+        message: error?.message,
+      });
       throw error;
     } finally {
       setIsLoading(false);
@@ -303,8 +310,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
 
       if (error) throw error;
-    } catch (error) {
+      eventService.trackAuth('login', 'success', 'phone_otp');
+    } catch (error: any) {
       console.error("Phone sign in error:", error);
+      eventService.trackAuth('login', 'failure', 'phone_otp', {
+        code: error?.code,
+        message: error?.message,
+      });
       throw error;
     } finally {
       setIsLoading(false);
@@ -326,8 +338,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(data.session);
       setUser(formatUser(data.user));
       setIsLocked(false);
-    } catch (error) {
+      eventService.trackAuth('login', 'success', 'otp_verify');
+    } catch (error: any) {
       console.error("OTP verification error:", error);
+      eventService.trackAuth('login', 'failure', 'otp_verify', {
+        code: error?.code,
+        message: error?.message,
+      });
       throw error;
     } finally {
       setIsLoading(false);
@@ -338,14 +355,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOut = async () => {
     setIsLoading(true);
     try {
+      eventService.trackAuth('logout', 'success');
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
 
       setSession(null);
       setUser(null);
       setIsLocked(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Sign out error:", error);
+      eventService.trackAuth('logout', 'failure', undefined, {
+        code: error?.code,
+        message: error?.message,
+      });
       throw error;
     } finally {
       setIsLoading(false);
@@ -384,8 +406,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(formatUser(data.user));
         setIsLocked(false);
       }
-    } catch (error) {
+      eventService.trackAuth('signup', 'success', 'email');
+    } catch (error: any) {
       console.error("Sign up error:", error);
+      eventService.trackAuth('signup', 'failure', 'email', {
+        code: error?.code,
+        message: error?.message,
+      });
       throw error;
     } finally {
       setIsLoading(false);
@@ -449,6 +476,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         user,
         session,
         isLoading,
+        isAuthenticated: !!session && !!user,
         isLocked,
         biometricsEnabled,
         biometricsAvailable,

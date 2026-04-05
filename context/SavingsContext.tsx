@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "./AuthContext";
 
 /**
  * TANDAXN SAVINGS GOALS SYSTEM
@@ -14,6 +15,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
  * - Auto-save from circle payouts
  * - Goal tracking with targets and milestones
  * - Transfer between goal types
+ *
+ * Data Layer: Supabase (savings_goal_types, user_savings_goals, savings_transactions)
+ * Amounts: DB stores cents (BIGINT), context exposes dollars (number)
  */
 
 // ==================== TYPES ====================
@@ -70,17 +74,21 @@ export interface SavingsGoal {
   // For locked goals
   lockDurationMonths?: number;
   maturityDate?: string;
-  earlyWithdrawalPenalty?: number; // Percentage penalty
+  earlyWithdrawalPenalty?: number; // Percentage penalty as decimal (0.10 = 10%)
 
   // Auto-save settings
   autoSaveEnabled: boolean;
   autoSavePercent: number;     // Percent of payouts to auto-save
   autoSaveFromCircles: string[]; // Circle IDs to auto-save from
   autoSavePriority: number;    // Priority order (1 = highest, used for replenishment)
-  autoReplenish: boolean;      // Auto-replenish from payouts when below target (for emergency funds)
+  autoReplenish: boolean;      // Auto-replenish from payouts when below target
 
   // Milestones
   milestones: GoalMilestone[];
+
+  // DB reference
+  savingsGoalTypeId?: string;
+  savingsGoalTypeCode?: string;
 
   // Metadata
   createdAt: string;
@@ -96,7 +104,148 @@ export interface GoalMilestone {
   celebrated: boolean;
 }
 
-// ==================== GOAL TYPE CONFIGS ====================
+// ==================== DB ROW TYPES ====================
+
+type SavingsGoalTypeRow = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  interest_rate: number;
+  interest_frequency: string;
+  minimum_balance_cents: number;
+  lock_period_days: number;
+  early_withdrawal_penalty_percent: number;
+  icon: string | null;
+  emoji: string | null;
+  color: string | null;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+};
+
+type UserSavingsGoalRow = {
+  id: string;
+  user_id: string;
+  wallet_id: string;
+  savings_goal_type_id: string;
+  name: string;
+  emoji: string | null;
+  target_amount_cents: number | null;
+  target_date: string | null;
+  current_balance_cents: number;
+  total_deposits_cents: number;
+  total_withdrawals_cents: number;
+  total_interest_earned_cents: number;
+  last_interest_accrual_at: string | null;
+  accrued_interest_cents: number;
+  locked_until: string | null;
+  goal_status: string;
+  last_deposit_at: string | null;
+  completed_at: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  savings_goal_types?: SavingsGoalTypeRow;
+};
+
+type SavingsTransactionRow = {
+  id: string;
+  savings_goal_id: string;
+  user_id: string;
+  transaction_type: string;
+  source: string | null;
+  amount_cents: number;
+  balance_before_cents: number;
+  balance_after_cents: number;
+  wallet_transaction_id: string | null;
+  transaction_status: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+// ==================== TRANSFORM HELPERS ====================
+
+const centsToDollars = (cents: number | null): number => (cents ?? 0) / 100;
+const dollarsToCents = (dollars: number): number => Math.round(dollars * 100);
+
+/** Derive the 3-tier concept from DB goal type properties */
+const deriveTierFromType = (goalType: SavingsGoalTypeRow): GoalType => {
+  if (goalType.lock_period_days >= 365 && goalType.early_withdrawal_penalty_percent >= 5) return "locked";
+  if (goalType.lock_period_days > 0 || goalType.early_withdrawal_penalty_percent > 0) return "emergency";
+  return "flexible";
+};
+
+/** Generate milestone objects from balance/target */
+const generateMilestones = (currentBalance: number, targetAmount: number, createdAt: string): GoalMilestone[] => {
+  const progress = targetAmount > 0 ? (currentBalance / targetAmount) * 100 : 0;
+  return [25, 50, 75, 100].map((pct, i) => ({
+    id: `m${i + 1}`,
+    targetPercent: pct,
+    reachedAt: progress >= pct ? createdAt : undefined,
+    celebrated: progress >= pct,
+  }));
+};
+
+/** Transform DB row to app SavingsGoal */
+const rowToGoal = (row: UserSavingsGoalRow): SavingsGoal => {
+  const goalType = row.savings_goal_types;
+  const tier = goalType ? deriveTierFromType(goalType) : "flexible";
+  const meta = (row.metadata || {}) as Record<string, unknown>;
+
+  return {
+    id: row.id,
+    userId: row.user_id,
+    name: row.name,
+    emoji: row.emoji || goalType?.emoji || "🎯",
+    type: tier,
+    status: row.goal_status as GoalStatus,
+    currency: "USD",
+    currentBalance: centsToDollars(row.current_balance_cents),
+    targetAmount: centsToDollars(row.target_amount_cents),
+    interestRate: goalType?.interest_rate ?? 0,
+    interestEarned: centsToDollars(row.total_interest_earned_cents),
+    interestUnlocked: centsToDollars(row.accrued_interest_cents),
+    lastInterestDate: row.last_interest_accrual_at || row.created_at,
+    lockDurationMonths: goalType ? Math.round(goalType.lock_period_days / 30) : undefined,
+    maturityDate: row.locked_until || undefined,
+    earlyWithdrawalPenalty: goalType ? goalType.early_withdrawal_penalty_percent / 100 : undefined,
+    autoSaveEnabled: Boolean(meta.autoSaveEnabled),
+    autoSavePercent: (meta.autoSavePercent as number) || 0,
+    autoSaveFromCircles: (meta.autoSaveFromCircles as string[]) || [],
+    autoSavePriority: (meta.autoSavePriority as number) || 99,
+    autoReplenish: Boolean(meta.autoReplenish),
+    milestones: generateMilestones(
+      centsToDollars(row.current_balance_cents),
+      centsToDollars(row.target_amount_cents),
+      row.created_at
+    ),
+    savingsGoalTypeId: row.savings_goal_type_id,
+    savingsGoalTypeCode: goalType?.code,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at || undefined,
+  };
+};
+
+/** Transform DB row to app GoalTransaction */
+const rowToTransaction = (row: SavingsTransactionRow): GoalTransaction => {
+  const meta = row.metadata || {};
+  return {
+    id: row.id,
+    goalId: row.savings_goal_id,
+    type: row.transaction_type as TransactionType,
+    amount: centsToDollars(row.amount_cents),
+    balanceAfter: centsToDollars(row.balance_after_cents),
+    description: row.source || row.transaction_type,
+    createdAt: row.created_at,
+    sourceGoalId: (meta as Record<string, string>).sourceGoalId,
+    destinationGoalId: (meta as Record<string, string>).destinationGoalId,
+  };
+};
+
+// ==================== GOAL TYPE CONFIGS (kept for UI reference) ====================
 
 export const GOAL_TYPES = {
   flexible: {
@@ -107,9 +256,9 @@ export const GOAL_TYPES = {
     emoji: "💰",
     color: "#10B981",
     bgColor: "#D1FAE5",
-    interestRate: 0.02,        // 2% APY
+    interestRate: 0.02,
     minDeposit: 5,
-    maxWithdrawDelay: 0,       // Instant
+    maxWithdrawDelay: 0,
     withdrawalPenalty: 0,
     features: [
       "Withdraw anytime",
@@ -126,9 +275,9 @@ export const GOAL_TYPES = {
     emoji: "🛡️",
     color: "#F59E0B",
     bgColor: "#FEF3C7",
-    interestRate: 0.035,       // 3.5% APY
+    interestRate: 0.035,
     minDeposit: 10,
-    maxWithdrawDelay: 48,      // 48 hours
+    maxWithdrawDelay: 48,
     withdrawalPenalty: 0,
     features: [
       "24-48hr withdrawal delay",
@@ -145,10 +294,10 @@ export const GOAL_TYPES = {
     emoji: "🔒",
     color: "#6366F1",
     bgColor: "#EEF2FF",
-    interestRate: 0.05,        // 5-7% APY based on term
+    interestRate: 0.05,
     minDeposit: 50,
-    maxWithdrawDelay: null,    // Until maturity
-    withdrawalPenalty: 0.10,   // 10% early withdrawal penalty
+    maxWithdrawDelay: null,
+    withdrawalPenalty: 0.10,
     features: [
       "Highest interest (5-7% APY)",
       "Fixed maturity date",
@@ -183,13 +332,28 @@ interface SavingsContextType {
   goals: SavingsGoal[];
   transactions: GoalTransaction[];
   isLoading: boolean;
+  goalTypes: SavingsGoalTypeRow[];
 
   // CRUD Operations
-  createGoal: (goal: Omit<SavingsGoal, "id" | "createdAt" | "updatedAt" | "interestEarned" | "interestUnlocked" | "lastInterestDate" | "milestones" | "status" | "autoSavePriority" | "autoReplenish"> & { autoSavePriority?: number; autoReplenish?: boolean }) => Promise<SavingsGoal>;
+  createGoal: (goal: {
+    name: string;
+    emoji?: string;
+    type: GoalType;
+    currency?: string;
+    currentBalance?: number;
+    targetAmount: number;
+    autoSaveEnabled?: boolean;
+    autoSavePercent?: number;
+    autoSaveFromCircles?: string[];
+    autoReplenish?: boolean;
+    lockDurationMonths?: number;
+    goalTypeCode?: string;
+  }) => Promise<SavingsGoal>;
   updateGoal: (goalId: string, updates: Partial<SavingsGoal>) => Promise<void>;
   closeGoal: (goalId: string) => Promise<void>;
   pauseGoal: (goalId: string) => Promise<void>;
   resumeGoal: (goalId: string) => Promise<void>;
+  deleteGoal: (goalId: string) => Promise<void>;
 
   // Transactions
   deposit: (goalId: string, amount: number, description?: string) => Promise<GoalTransaction>;
@@ -209,185 +373,208 @@ interface SavingsContextType {
   calculateInterest: (goalId: string) => number;
   getProjectedBalance: (goalId: string, months: number) => number;
 
+  // Tier management
+  getGoalTypesList: () => SavingsGoalTypeRow[];
+  upgradeTier: (goalId: string, newTypeCode: string) => Promise<void>;
+
   // Auto-save
-  processAutoSave: (circleId: string, payoutAmount: number) => Promise<void>;
+  processAutoSave: (circleId: string, payoutAmount: number) => Promise<number>;
+
+  // Refresh
+  refreshGoals: () => Promise<void>;
 }
 
 const SavingsContext = createContext<SavingsContextType | null>(null);
 
-const STORAGE_KEY_GOALS = "@tandaxn_savings_goals";
-const STORAGE_KEY_TRANSACTIONS = "@tandaxn_savings_transactions";
-const MOCK_USER_ID = "user_001";
+/** Maps tier + optional category to a DB savings_goal_types code */
+const mapToGoalTypeCode = (tier: GoalType, goalTypeCode?: string): string => {
+  if (goalTypeCode) return goalTypeCode;
+  if (tier === "locked") return "locked";
+  if (tier === "emergency") return "emergency";
+  return "general";
+};
 
 export function SavingsProvider({ children }: { children: ReactNode }) {
+  const { user, session } = useAuth();
   const [goals, setGoals] = useState<SavingsGoal[]>([]);
   const [transactions, setTransactions] = useState<GoalTransaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [goalTypes, setGoalTypes] = useState<SavingsGoalTypeRow[]>([]);
+  const [walletId, setWalletId] = useState<string | null>(null);
 
-  // Load data on mount
-  useEffect(() => {
-    loadData();
-  }, []);
+  // ==================== DATA LOADING ====================
 
-  const loadData = async () => {
+  const fetchGoals = useCallback(async () => {
+    if (!session || !user?.id) {
+      setGoals([]);
+      setTransactions([]);
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const [goalsData, transactionsData] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEY_GOALS),
-        AsyncStorage.getItem(STORAGE_KEY_TRANSACTIONS),
-      ]);
+      setIsLoading(true);
 
-      if (goalsData) {
-        setGoals(JSON.parse(goalsData));
-      } else {
-        // New users start with no goals - empty state encourages them to create their own
-        setGoals([]);
-      }
+      // Fetch goal types (reference table)
+      const { data: typesData } = await supabase
+        .from("savings_goal_types")
+        .select("*")
+        .eq("is_active", true)
+        .order("display_order");
+      if (typesData) setGoalTypes(typesData);
 
-      if (transactionsData) {
-        setTransactions(JSON.parse(transactionsData));
-      }
+      // Fetch user's wallet
+      const { data: walletData } = await supabase
+        .from("user_wallets")
+        .select("id")
+        .eq("user_id", user.id)
+        .limit(1)
+        .single();
+      if (walletData) setWalletId(walletData.id);
+
+      // Fetch goals with joined type info
+      const { data: goalsData, error: goalsError } = await supabase
+        .from("user_savings_goals")
+        .select("*, savings_goal_types(*)")
+        .eq("user_id", user.id)
+        .neq("goal_status", "closed")
+        .order("created_at", { ascending: false });
+
+      if (goalsError) throw goalsError;
+      setGoals((goalsData || []).map(rowToGoal));
+
+      // Fetch transactions
+      const { data: txData } = await supabase
+        .from("savings_transactions")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(500);
+      setTransactions((txData || []).map(rowToTransaction));
     } catch (error) {
       console.error("Failed to load savings data:", error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [session, user?.id]);
 
-  const saveGoals = async (newGoals: SavingsGoal[]) => {
-    setGoals(newGoals);
-    await AsyncStorage.setItem(STORAGE_KEY_GOALS, JSON.stringify(newGoals));
-  };
+  // Load data + real-time subscription
+  useEffect(() => {
+    if (!session) return;
+    fetchGoals();
 
-  const saveTransactions = async (newTransactions: GoalTransaction[]) => {
-    setTransactions(newTransactions);
-    await AsyncStorage.setItem(STORAGE_KEY_TRANSACTIONS, JSON.stringify(newTransactions));
-  };
+    const channel = supabase
+      .channel("savings-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_savings_goals" }, () => fetchGoals())
+      .on("postgres_changes", { event: "*", schema: "public", table: "savings_transactions" }, () => fetchGoals())
+      .subscribe();
 
-  const createSampleGoals = (): SavingsGoal[] => {
-    const now = new Date().toISOString();
-    return [
-      {
-        id: "goal_sample_1",
-        userId: MOCK_USER_ID,
-        name: "First Home in Ghana",
-        emoji: "🏠",
-        type: "locked",
-        status: "active",
-        currency: "USD",
-        currentBalance: 5000,
-        targetAmount: 15000,
-        interestRate: 0.065,
-        interestEarned: 31.42,
-        interestUnlocked: 0,
-        lastInterestDate: now,
-        lockDurationMonths: 12,
-        maturityDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-        earlyWithdrawalPenalty: 0.10,
-        autoSaveEnabled: true,
-        autoSavePercent: 20,
-        autoSaveFromCircles: [],
-        autoSavePriority: 2,
-        autoReplenish: false,
-        milestones: [
-          { id: "m1", targetPercent: 25, reachedAt: now, celebrated: true },
-          { id: "m2", targetPercent: 50, celebrated: false },
-          { id: "m3", targetPercent: 75, celebrated: false },
-          { id: "m4", targetPercent: 100, celebrated: false },
-        ],
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: "goal_sample_2",
-        userId: MOCK_USER_ID,
-        name: "Emergency Fund",
-        emoji: "🛡️",
-        type: "emergency",
-        status: "active",
-        currency: "USD",
-        currentBalance: 2500,
-        targetAmount: 5000,
-        interestRate: 0.035,
-        interestEarned: 16.41,
-        interestUnlocked: 16.41,
-        lastInterestDate: now,
-        autoSaveEnabled: true,
-        autoSavePercent: 15,
-        autoSaveFromCircles: [],
-        autoSavePriority: 1,
-        autoReplenish: true,
-        milestones: [
-          { id: "m1", targetPercent: 25, reachedAt: now, celebrated: true },
-          { id: "m2", targetPercent: 50, reachedAt: now, celebrated: true },
-          { id: "m3", targetPercent: 75, celebrated: false },
-          { id: "m4", targetPercent: 100, celebrated: false },
-        ],
-        createdAt: now,
-        updatedAt: now,
-      },
-    ];
-  };
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session, fetchGoals]);
 
   // ==================== CRUD OPERATIONS ====================
 
-  const createGoal = async (
-    goalData: Omit<SavingsGoal, "id" | "createdAt" | "updatedAt" | "interestEarned" | "interestUnlocked" | "lastInterestDate" | "milestones" | "status" | "autoSavePriority" | "autoReplenish"> & { autoSavePriority?: number; autoReplenish?: boolean }
-  ): Promise<SavingsGoal> => {
-    const now = new Date().toISOString();
+  const createGoal = async (goalData: {
+    name: string;
+    emoji?: string;
+    type: GoalType;
+    currency?: string;
+    currentBalance?: number;
+    targetAmount: number;
+    autoSaveEnabled?: boolean;
+    autoSavePercent?: number;
+    autoSaveFromCircles?: string[];
+    autoReplenish?: boolean;
+    lockDurationMonths?: number;
+    goalTypeCode?: string;
+  }): Promise<SavingsGoal> => {
+    if (!user?.id) throw new Error("Must be logged in");
+    if (!walletId) throw new Error("No wallet found. Please set up a wallet first.");
 
-    // Calculate priority - highest priority (lowest number) for emergency funds with replenish
-    const existingPriorities = goals
-      .filter(g => g.autoSaveEnabled && g.status === "active")
-      .map(g => g.autoSavePriority || 99);
-    const maxPriority = existingPriorities.length > 0 ? Math.max(...existingPriorities) : 0;
+    const typeCode = mapToGoalTypeCode(goalData.type, goalData.goalTypeCode);
+    const matchingType = goalTypes.find(t => t.code === typeCode);
+    if (!matchingType) throw new Error(`Invalid goal type: ${typeCode}`);
 
-    const newGoal: SavingsGoal = {
-      ...goalData,
-      id: `goal_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      status: "active",
-      interestEarned: 0,
-      interestUnlocked: 0,
-      lastInterestDate: now,
-      autoSavePriority: goalData.autoSavePriority ?? (goalData.autoReplenish ? 1 : maxPriority + 1),
-      autoReplenish: goalData.autoReplenish ?? false,
-      milestones: [
-        { id: "m1", targetPercent: 25, celebrated: false },
-        { id: "m2", targetPercent: 50, celebrated: false },
-        { id: "m3", targetPercent: 75, celebrated: false },
-        { id: "m4", targetPercent: 100, celebrated: false },
-      ],
-      createdAt: now,
-      updatedAt: now,
-    };
+    // Calculate locked_until for locked goals
+    let lockedUntil: string | null = null;
+    if (goalData.type === "locked" && goalData.lockDurationMonths) {
+      const maturity = new Date();
+      maturity.setMonth(maturity.getMonth() + goalData.lockDurationMonths);
+      lockedUntil = maturity.toISOString().split("T")[0];
+    }
 
-    await saveGoals([...goals, newGoal]);
-    return newGoal;
+    // Build metadata for auto-save settings
+    const metadata: Record<string, unknown> = {};
+    if (goalData.autoSaveEnabled) metadata.autoSaveEnabled = true;
+    if (goalData.autoSavePercent) metadata.autoSavePercent = goalData.autoSavePercent;
+    if (goalData.autoSaveFromCircles?.length) metadata.autoSaveFromCircles = goalData.autoSaveFromCircles;
+    if (goalData.autoReplenish) metadata.autoReplenish = true;
+
+    const { data, error } = await supabase
+      .from("user_savings_goals")
+      .insert({
+        user_id: user.id,
+        wallet_id: walletId,
+        savings_goal_type_id: matchingType.id,
+        name: goalData.name,
+        emoji: goalData.emoji || null,
+        target_amount_cents: dollarsToCents(goalData.targetAmount),
+        current_balance_cents: dollarsToCents(goalData.currentBalance || 0),
+        total_deposits_cents: dollarsToCents(goalData.currentBalance || 0),
+        locked_until: lockedUntil,
+        goal_status: "active",
+        metadata,
+      })
+      .select("*, savings_goal_types(*)")
+      .single();
+
+    if (error) throw new Error(error.message);
+    return rowToGoal(data);
   };
 
   const updateGoal = async (goalId: string, updates: Partial<SavingsGoal>) => {
-    const updated = goals.map(g =>
-      g.id === goalId
-        ? { ...g, ...updates, updatedAt: new Date().toISOString() }
-        : g
-    );
-    await saveGoals(updated);
+    if (!user?.id) throw new Error("Must be logged in");
+
+    const dbUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.emoji !== undefined) dbUpdates.emoji = updates.emoji;
+    if (updates.targetAmount !== undefined) dbUpdates.target_amount_cents = dollarsToCents(updates.targetAmount);
+    if (updates.status !== undefined) dbUpdates.goal_status = updates.status;
+    if (updates.completedAt !== undefined) dbUpdates.completed_at = updates.completedAt;
+
+    // Update auto-save settings in metadata
+    if (updates.autoSaveEnabled !== undefined || updates.autoSavePercent !== undefined ||
+        updates.autoSaveFromCircles !== undefined || updates.autoReplenish !== undefined) {
+      const goal = goals.find(g => g.id === goalId);
+      const currentMeta = goal ? {
+        autoSaveEnabled: goal.autoSaveEnabled,
+        autoSavePercent: goal.autoSavePercent,
+        autoSaveFromCircles: goal.autoSaveFromCircles,
+        autoSavePriority: goal.autoSavePriority,
+        autoReplenish: goal.autoReplenish,
+      } : {};
+      dbUpdates.metadata = {
+        ...currentMeta,
+        ...(updates.autoSaveEnabled !== undefined && { autoSaveEnabled: updates.autoSaveEnabled }),
+        ...(updates.autoSavePercent !== undefined && { autoSavePercent: updates.autoSavePercent }),
+        ...(updates.autoSaveFromCircles !== undefined && { autoSaveFromCircles: updates.autoSaveFromCircles }),
+        ...(updates.autoReplenish !== undefined && { autoReplenish: updates.autoReplenish }),
+      };
+    }
+
+    const { error } = await supabase
+      .from("user_savings_goals")
+      .update(dbUpdates)
+      .eq("id", goalId)
+      .eq("user_id", user.id);
+
+    if (error) throw new Error(error.message);
   };
 
   const closeGoal = async (goalId: string) => {
-    const goal = goals.find(g => g.id === goalId);
-    if (!goal) return;
-
-    // For locked goals, check if matured
-    if (goal.type === "locked" && goal.maturityDate) {
-      const now = new Date();
-      const maturity = new Date(goal.maturityDate);
-      if (now < maturity) {
-        // Apply early withdrawal penalty
-        const penalty = goal.currentBalance * (goal.earlyWithdrawalPenalty || 0.10);
-        // Penalty would be deducted in withdrawal
-      }
-    }
-
     await updateGoal(goalId, {
       status: "closed",
       closedAt: new Date().toISOString(),
@@ -402,6 +589,19 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
     await updateGoal(goalId, { status: "active" });
   };
 
+  const deleteGoal = async (goalId: string) => {
+    const goal = goals.find(g => g.id === goalId);
+    if (!goal) return;
+
+    // If has balance, create a withdrawal transaction first
+    if (goal.currentBalance > 0) {
+      await withdraw(goalId, goal.currentBalance, "Goal deletion - funds returned to wallet");
+    }
+
+    // Soft delete by setting status to closed
+    await closeGoal(goalId);
+  };
+
   // ==================== TRANSACTIONS ====================
 
   const deposit = async (
@@ -409,56 +609,57 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
     amount: number,
     description?: string
   ): Promise<GoalTransaction> => {
+    if (!user?.id) throw new Error("Must be logged in");
     const goal = goals.find(g => g.id === goalId);
     if (!goal) throw new Error("Goal not found");
 
-    const typeConfig = GOAL_TYPES[goal.type];
-    if (amount < typeConfig.minDeposit) {
-      throw new Error(`Minimum deposit is $${typeConfig.minDeposit}`);
-    }
+    const amountCents = dollarsToCents(amount);
+    const balanceBeforeCents = dollarsToCents(goal.currentBalance);
+    const balanceAfterCents = balanceBeforeCents + amountCents;
 
-    const newBalance = goal.currentBalance + amount;
-    const now = new Date().toISOString();
+    // Insert transaction
+    const { data: txData, error: txError } = await supabase
+      .from("savings_transactions")
+      .insert({
+        savings_goal_id: goalId,
+        user_id: user.id,
+        transaction_type: "deposit",
+        source: description || "Deposit",
+        amount_cents: amountCents,
+        balance_before_cents: balanceBeforeCents,
+        balance_after_cents: balanceAfterCents,
+      })
+      .select()
+      .single();
 
-    // Create transaction
-    const transaction: GoalTransaction = {
-      id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      goalId,
-      type: "deposit",
-      amount,
-      balanceAfter: newBalance,
-      description: description || "Deposit",
-      createdAt: now,
-    };
+    if (txError) throw new Error(txError.message);
 
     // Update goal balance
-    const updatedGoal: Partial<SavingsGoal> = {
-      currentBalance: newBalance,
-      updatedAt: now,
+    const newTotalDeposits = dollarsToCents(goal.currentBalance) + amountCents;
+    const goalUpdate: Record<string, unknown> = {
+      current_balance_cents: balanceAfterCents,
+      total_deposits_cents: (goal as unknown as { totalDeposits?: number }).totalDeposits
+        ? dollarsToCents((goal as unknown as { totalDeposits: number }).totalDeposits) + amountCents
+        : amountCents,
+      last_deposit_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
 
-    // Check milestones
-    const progress = (newBalance / goal.targetAmount) * 100;
-    const updatedMilestones = goal.milestones.map(m => {
-      if (!m.reachedAt && progress >= m.targetPercent) {
-        return { ...m, reachedAt: now };
-      }
-      return m;
-    });
-    updatedGoal.milestones = updatedMilestones;
-
     // Check if goal completed
-    if (newBalance >= goal.targetAmount && goal.status === "active") {
-      updatedGoal.status = "completed";
-      updatedGoal.completedAt = now;
+    const targetCents = dollarsToCents(goal.targetAmount);
+    if (balanceAfterCents >= targetCents && goal.status === "active") {
+      goalUpdate.goal_status = "completed";
+      goalUpdate.completed_at = new Date().toISOString();
     }
 
-    await Promise.all([
-      updateGoal(goalId, updatedGoal),
-      saveTransactions([...transactions, transaction]),
-    ]);
+    const { error: updateError } = await supabase
+      .from("user_savings_goals")
+      .update(goalUpdate)
+      .eq("id", goalId);
 
-    return transaction;
+    if (updateError) throw new Error(updateError.message);
+
+    return rowToTransaction(txData);
   };
 
   const withdraw = async (
@@ -466,6 +667,7 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
     amount: number,
     description?: string
   ): Promise<GoalTransaction> => {
+    if (!user?.id) throw new Error("Must be logged in");
     const goal = goals.find(g => g.id === goalId);
     if (!goal) throw new Error("Goal not found");
 
@@ -473,36 +675,56 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
       throw new Error("Insufficient balance");
     }
 
-    // Check if locked goal and not matured
+    let actualAmount = amount;
+
+    // Apply early withdrawal penalty for locked goals not yet matured
     if (goal.type === "locked" && goal.maturityDate) {
       const now = new Date();
       const maturity = new Date(goal.maturityDate);
       if (now < maturity) {
-        // Apply early withdrawal penalty
         const penalty = amount * (goal.earlyWithdrawalPenalty || 0.10);
-        amount = amount - penalty;
+        actualAmount = amount - penalty;
       }
     }
 
-    const newBalance = goal.currentBalance - amount;
-    const nowStr = new Date().toISOString();
+    const amountCents = dollarsToCents(actualAmount);
+    const balanceBeforeCents = dollarsToCents(goal.currentBalance);
+    const balanceAfterCents = balanceBeforeCents - dollarsToCents(amount); // Deduct full amount from balance
 
-    const transaction: GoalTransaction = {
-      id: `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      goalId,
-      type: "withdrawal",
-      amount: -amount,
-      balanceAfter: newBalance,
-      description: description || "Withdrawal",
-      createdAt: nowStr,
-    };
+    const { data: txData, error: txError } = await supabase
+      .from("savings_transactions")
+      .insert({
+        savings_goal_id: goalId,
+        user_id: user.id,
+        transaction_type: "withdrawal",
+        source: description || "Withdrawal",
+        amount_cents: -amountCents, // Negative for withdrawal
+        balance_before_cents: balanceBeforeCents,
+        balance_after_cents: balanceAfterCents,
+        metadata: {
+          requestedAmount: dollarsToCents(amount),
+          penaltyAmount: dollarsToCents(amount - actualAmount),
+          netAmount: amountCents,
+        },
+      })
+      .select()
+      .single();
 
-    await Promise.all([
-      updateGoal(goalId, { currentBalance: newBalance }),
-      saveTransactions([...transactions, transaction]),
-    ]);
+    if (txError) throw new Error(txError.message);
 
-    return transaction;
+    // Update goal balance
+    const { error: updateError } = await supabase
+      .from("user_savings_goals")
+      .update({
+        current_balance_cents: balanceAfterCents,
+        total_withdrawals_cents: dollarsToCents(amount),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", goalId);
+
+    if (updateError) throw new Error(updateError.message);
+
+    return rowToTransaction(txData);
   };
 
   const transfer = async (
@@ -510,48 +732,65 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
     toGoalId: string,
     amount: number
   ) => {
+    if (!user?.id) throw new Error("Must be logged in");
     const fromGoal = goals.find(g => g.id === fromGoalId);
     const toGoal = goals.find(g => g.id === toGoalId);
 
     if (!fromGoal || !toGoal) throw new Error("Goal not found");
     if (amount > fromGoal.currentBalance) throw new Error("Insufficient balance");
 
+    const amountCents = dollarsToCents(amount);
+    const fromBalanceBefore = dollarsToCents(fromGoal.currentBalance);
+    const fromBalanceAfter = fromBalanceBefore - amountCents;
+    const toBalanceBefore = dollarsToCents(toGoal.currentBalance);
+    const toBalanceAfter = toBalanceBefore + amountCents;
+
+    // Insert both transactions
+    const { error: txError } = await supabase
+      .from("savings_transactions")
+      .insert([
+        {
+          savings_goal_id: fromGoalId,
+          user_id: user.id,
+          transaction_type: "transfer_out",
+          source: `Transfer to ${toGoal.name}`,
+          amount_cents: -amountCents,
+          balance_before_cents: fromBalanceBefore,
+          balance_after_cents: fromBalanceAfter,
+          metadata: { destinationGoalId: toGoalId },
+        },
+        {
+          savings_goal_id: toGoalId,
+          user_id: user.id,
+          transaction_type: "transfer_in",
+          source: `Transfer from ${fromGoal.name}`,
+          amount_cents: amountCents,
+          balance_before_cents: toBalanceBefore,
+          balance_after_cents: toBalanceAfter,
+          metadata: { sourceGoalId: fromGoalId },
+        },
+      ]);
+
+    if (txError) throw new Error(txError.message);
+
+    // Update both goal balances
     const now = new Date().toISOString();
-    const fromNewBalance = fromGoal.currentBalance - amount;
-    const toNewBalance = toGoal.currentBalance + amount;
+    const { error: fromError } = await supabase
+      .from("user_savings_goals")
+      .update({ current_balance_cents: fromBalanceAfter, updated_at: now })
+      .eq("id", fromGoalId);
 
-    const outTransaction: GoalTransaction = {
-      id: `txn_${Date.now()}_out`,
-      goalId: fromGoalId,
-      type: "transfer_out",
-      amount: -amount,
-      balanceAfter: fromNewBalance,
-      description: `Transfer to ${toGoal.name}`,
-      createdAt: now,
-      destinationGoalId: toGoalId,
-    };
+    const { error: toError } = await supabase
+      .from("user_savings_goals")
+      .update({
+        current_balance_cents: toBalanceAfter,
+        last_deposit_at: now,
+        updated_at: now,
+      })
+      .eq("id", toGoalId);
 
-    const inTransaction: GoalTransaction = {
-      id: `txn_${Date.now()}_in`,
-      goalId: toGoalId,
-      type: "transfer_in",
-      amount,
-      balanceAfter: toNewBalance,
-      description: `Transfer from ${fromGoal.name}`,
-      createdAt: now,
-      sourceGoalId: fromGoalId,
-    };
-
-    const updatedGoals = goals.map(g => {
-      if (g.id === fromGoalId) return { ...g, currentBalance: fromNewBalance, updatedAt: now };
-      if (g.id === toGoalId) return { ...g, currentBalance: toNewBalance, updatedAt: now };
-      return g;
-    });
-
-    await Promise.all([
-      saveGoals(updatedGoals),
-      saveTransactions([...transactions, outTransaction, inTransaction]),
-    ]);
+    if (fromError) throw new Error(fromError.message);
+    if (toError) throw new Error(toError.message);
   };
 
   // ==================== QUERIES ====================
@@ -559,10 +798,10 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
   const getGoalById = (goalId: string) => goals.find(g => g.id === goalId);
 
   const getGoalsByType = (type: GoalType) =>
-    goals.filter(g => g.userId === MOCK_USER_ID && g.type === type);
+    goals.filter(g => g.type === type);
 
   const getActiveGoals = () =>
-    goals.filter(g => g.userId === MOCK_USER_ID && ["active", "paused"].includes(g.status));
+    goals.filter(g => ["active", "paused"].includes(g.status));
 
   const getGoalTransactions = (goalId: string) =>
     transactions
@@ -573,18 +812,14 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
 
   const getTotalSavings = () =>
     goals
-      .filter(g => g.userId === MOCK_USER_ID && g.status !== "closed")
+      .filter(g => g.status !== "closed")
       .reduce((sum, g) => sum + g.currentBalance, 0);
 
   const getTotalInterestEarned = () =>
-    goals
-      .filter(g => g.userId === MOCK_USER_ID)
-      .reduce((sum, g) => sum + g.interestEarned, 0);
+    goals.reduce((sum, g) => sum + g.interestEarned, 0);
 
   const getTotalInterestUnlocked = () =>
-    goals
-      .filter(g => g.userId === MOCK_USER_ID)
-      .reduce((sum, g) => sum + g.interestUnlocked, 0);
+    goals.reduce((sum, g) => sum + g.interestUnlocked, 0);
 
   const calculateInterest = (goalId: string): number => {
     const goal = goals.find(g => g.id === goalId);
@@ -594,7 +829,6 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
       (Date.now() - new Date(goal.lastInterestDate).getTime()) / (1000 * 60 * 60 * 24)
     );
 
-    // Daily interest rate
     const dailyRate = goal.interestRate / 365;
     return goal.currentBalance * dailyRate * daysSinceLastCalc;
   };
@@ -603,37 +837,60 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return 0;
 
-    // Compound interest formula: A = P(1 + r/n)^(nt)
-    const n = 12; // Monthly compounding
+    const n = 12;
     const t = months / 12;
     return goal.currentBalance * Math.pow(1 + goal.interestRate / n, n * t);
   };
 
+  // ==================== TIER MANAGEMENT ====================
+
+  const getGoalTypesList = () => goalTypes;
+
+  const upgradeTier = async (goalId: string, newTypeCode: string) => {
+    if (!user?.id) throw new Error("Must be logged in");
+    const newType = goalTypes.find(t => t.code === newTypeCode);
+    if (!newType) throw new Error(`Invalid tier: ${newTypeCode}`);
+
+    // Calculate locked_until for locked tier
+    let lockedUntil: string | null = null;
+    if (newType.lock_period_days > 0) {
+      const maturity = new Date();
+      maturity.setDate(maturity.getDate() + newType.lock_period_days);
+      lockedUntil = maturity.toISOString().split("T")[0];
+    }
+
+    const { error } = await supabase
+      .from("user_savings_goals")
+      .update({
+        savings_goal_type_id: newType.id,
+        locked_until: lockedUntil,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", goalId)
+      .eq("user_id", user.id);
+
+    if (error) throw new Error(error.message);
+  };
+
   // ==================== AUTO-SAVE ====================
 
-  const processAutoSave = async (circleId: string, payoutAmount: number) => {
+  const processAutoSave = async (circleId: string, payoutAmount: number): Promise<number> => {
     let remainingPayout = payoutAmount;
 
-    // Get all eligible goals for auto-save
     const eligibleGoals = goals.filter(
       g =>
-        g.userId === MOCK_USER_ID &&
         g.autoSaveEnabled &&
         (g.autoSaveFromCircles.length === 0 || g.autoSaveFromCircles.includes(circleId)) &&
         g.status === "active"
     );
 
-    // Sort by priority (lower number = higher priority)
-    // Goals with autoReplenish that are below target get highest priority
     const sortedGoals = [...eligibleGoals].sort((a, b) => {
-      // First prioritize replenish goals that are below target
       const aReplenishNeeded = a.autoReplenish && a.currentBalance < a.targetAmount;
       const bReplenishNeeded = b.autoReplenish && b.currentBalance < b.targetAmount;
 
       if (aReplenishNeeded && !bReplenishNeeded) return -1;
       if (!aReplenishNeeded && bReplenishNeeded) return 1;
 
-      // Then sort by priority number
       return (a.autoSavePriority || 99) - (b.autoSavePriority || 99);
     });
 
@@ -642,7 +899,6 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
 
       let autoSaveAmount = (payoutAmount * goal.autoSavePercent) / 100;
 
-      // For replenish goals, cap at the amount needed to reach target
       if (goal.autoReplenish && goal.currentBalance < goal.targetAmount) {
         const amountNeeded = goal.targetAmount - goal.currentBalance;
         autoSaveAmount = Math.min(autoSaveAmount, amountNeeded, remainingPayout);
@@ -655,14 +911,14 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
           goal.id,
           autoSaveAmount,
           goal.autoReplenish
-            ? `Auto-replenish from circle payout`
-            : `Auto-save from circle payout`
+            ? "Auto-replenish from circle payout"
+            : "Auto-save from circle payout"
         );
         remainingPayout -= autoSaveAmount;
       }
     }
 
-    return remainingPayout; // Return remaining payout that wasn't auto-saved
+    return remainingPayout;
   };
 
   return (
@@ -671,11 +927,13 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
         goals,
         transactions,
         isLoading,
+        goalTypes,
         createGoal,
         updateGoal,
         closeGoal,
         pauseGoal,
         resumeGoal,
+        deleteGoal,
         deposit,
         withdraw,
         transfer,
@@ -688,7 +946,10 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
         getTotalInterestUnlocked,
         calculateInterest,
         getProjectedBalance,
+        getGoalTypesList,
+        upgradeTier,
         processAutoSave,
+        refreshGoals: fetchGoals,
       }}
     >
       {children}

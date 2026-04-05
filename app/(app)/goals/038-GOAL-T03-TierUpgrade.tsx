@@ -15,7 +15,10 @@ import {
   Calculator,
   Users,
   Target,
+  Loader2,
 } from "lucide-react"
+import { useSavings } from "@/context/SavingsContext"
+import { useGoalParams, goBack } from "./useGoalParams"
 
 // Brand Colors
 const colors = {
@@ -29,18 +32,38 @@ const colors = {
   lockedPurple: "#8B5CF6",
   emergencyBlue: "#3B82F6",
   successGreen: "#10B981",
+  error: "#EF4444",
 }
 
 export default function TierUpgradeScreen() {
+  const { goalId } = useGoalParams()
+  const { getGoalById, getGoalTypesList, upgradeTier, isLoading: contextLoading } = useSavings()
+
   const [selectedLockOption, setSelectedLockOption] = useState<string | null>(null)
   const [showPenaltyCalculator, setShowPenaltyCalculator] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
-  const [calculatorAmount, setCalculatorAmount] = useState(5400)
+  const [isUpgrading, setIsUpgrading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const goalName = "Down Payment Fund"
-  const currentAmount = 5400
-  const targetAmount = 15000
-  const currentTargetDate = "2026-12-31"
+  const goal = goalId ? getGoalById(goalId) : undefined
+  const goalName = goal?.name || "Savings Goal"
+  const currentAmount = goal?.currentBalance || 0
+  const targetAmount = goal?.targetAmount || 0
+
+  const allGoalTypes = getGoalTypesList()
+
+  // Find current tier type and locked tier type from DB
+  const currentGoalType = allGoalTypes.find((t) => t.code === goal?.savingsGoalTypeCode)
+  const lockedType = allGoalTypes.find((t) => t.code === "locked")
+
+  const currentPenaltyPercent = currentGoalType?.early_withdrawal_penalty_percent || 2
+  const newPenaltyPercent = lockedType?.early_withdrawal_penalty_percent || 7
+  const lockPeriodDays = lockedType?.lock_period_days || 365
+
+  const [calculatorAmount, setCalculatorAmount] = useState(currentAmount > 0 ? currentAmount : 5400)
+
+  // Calculate target date from goal metadata or default
+  const currentTargetDate = goal?.maturityDate || new Date(Date.now() + lockPeriodDays * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
 
   // Lock duration options
   const lockOptions = [
@@ -87,12 +110,83 @@ export default function TierUpgradeScreen() {
     return diff > 0 ? diff : 0
   }
 
-  // Penalty calculations
-  const currentPenalty = currentAmount * 0.02
-  const newPenalty = currentAmount * 0.07
+  // Penalty calculations from DB data
+  const currentPenalty = currentAmount * (currentPenaltyPercent / 100)
+  const newPenalty = currentAmount * (newPenaltyPercent / 100)
 
   const selectedOption = lockOptions.find((o) => o.id === selectedLockOption)
   const canProceed = selectedLockOption && agreedToTerms
+
+  const handleUpgrade = async () => {
+    if (!goalId || !canProceed) return
+    setError(null)
+    setIsUpgrading(true)
+    try {
+      await upgradeTier(goalId, "locked")
+      goBack()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to upgrade tier")
+    } finally {
+      setIsUpgrading(false)
+    }
+  }
+
+  // Loading state
+  if (contextLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: colors.background,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: "12px",
+        }}
+      >
+        <Loader2 size={32} color={colors.accentTeal} style={{ animation: "spin 1s linear infinite" }} />
+        <p style={{ color: colors.textSecondary, fontSize: "14px" }}>Loading upgrade details...</p>
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+
+  // Error: no goal found
+  if (goalId && !goal) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: colors.background,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: "12px",
+          padding: "20px",
+        }}
+      >
+        <AlertTriangle size={32} color={colors.error} />
+        <p style={{ color: colors.primaryNavy, fontSize: "16px", fontWeight: "600" }}>Goal not found</p>
+        <button
+          onClick={() => goBack()}
+          style={{
+            padding: "12px 24px",
+            borderRadius: "10px",
+            border: "none",
+            background: colors.accentTeal,
+            color: "#FFFFFF",
+            cursor: "pointer",
+            fontSize: "14px",
+            fontWeight: "600",
+          }}
+        >
+          Go Back
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -125,7 +219,7 @@ export default function TierUpgradeScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255, 255, 255, 0.1)",
               border: "none",
@@ -160,7 +254,7 @@ export default function TierUpgradeScreen() {
                 color: "rgba(255,255,255,0.7)",
               }}
             >
-              {goalName} • ${currentAmount.toLocaleString()} saved
+              {goalName} {currentAmount > 0 ? `• $${currentAmount.toLocaleString()} saved` : ""}
             </p>
           </div>
         </div>
@@ -185,10 +279,14 @@ export default function TierUpgradeScreen() {
                 minWidth: "120px",
               }}
             >
-              <div style={{ fontSize: "28px", marginBottom: "6px" }}>🛡️</div>
+              <div style={{ fontSize: "28px", marginBottom: "6px" }}>{currentGoalType?.emoji || "🛡️"}</div>
               <p style={{ margin: 0, fontSize: "12px", color: "rgba(255,255,255,0.6)" }}>Current</p>
-              <p style={{ margin: "2px 0 0 0", fontSize: "14px", fontWeight: "600", color: "#FFFFFF" }}>Emergency</p>
-              <p style={{ margin: "4px 0 0 0", fontSize: "11px", color: colors.emergencyBlue }}>2% penalty</p>
+              <p style={{ margin: "2px 0 0 0", fontSize: "14px", fontWeight: "600", color: "#FFFFFF" }}>
+                {currentGoalType?.name || "Emergency"}
+              </p>
+              <p style={{ margin: "4px 0 0 0", fontSize: "11px", color: colors.emergencyBlue }}>
+                {currentPenaltyPercent}% penalty
+              </p>
             </div>
 
             {/* Arrow */}
@@ -217,10 +315,14 @@ export default function TierUpgradeScreen() {
                 boxShadow: "0 8px 24px rgba(139, 92, 246, 0.4)",
               }}
             >
-              <div style={{ fontSize: "28px", marginBottom: "6px" }}>🔒</div>
+              <div style={{ fontSize: "28px", marginBottom: "6px" }}>{lockedType?.emoji || "🔒"}</div>
               <p style={{ margin: 0, fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>Upgrade to</p>
-              <p style={{ margin: "2px 0 0 0", fontSize: "14px", fontWeight: "600", color: "#FFFFFF" }}>Locked</p>
-              <p style={{ margin: "4px 0 0 0", fontSize: "11px", color: "#E9D5FF" }}>7% penalty</p>
+              <p style={{ margin: "2px 0 0 0", fontSize: "14px", fontWeight: "600", color: "#FFFFFF" }}>
+                {lockedType?.name || "Locked"}
+              </p>
+              <p style={{ margin: "4px 0 0 0", fontSize: "11px", color: "#E9D5FF" }}>
+                {newPenaltyPercent}% penalty
+              </p>
             </div>
           </div>
         </div>
@@ -228,6 +330,25 @@ export default function TierUpgradeScreen() {
 
       {/* Content */}
       <div style={{ padding: "20px" }}>
+        {/* Error Banner */}
+        {error && (
+          <div
+            style={{
+              background: `${colors.error}15`,
+              borderRadius: "12px",
+              padding: "12px 16px",
+              marginBottom: "16px",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              border: `1px solid ${colors.error}30`,
+            }}
+          >
+            <AlertTriangle size={18} color={colors.error} />
+            <p style={{ margin: 0, fontSize: "13px", color: colors.error }}>{error}</p>
+          </div>
+        )}
+
         {/* Why Locked? Quick Stats */}
         <div
           style={{
@@ -523,8 +644,12 @@ export default function TierUpgradeScreen() {
                   borderRadius: "8px",
                 }}
               >
-                <span style={{ fontSize: "14px", color: "#9CA3AF", textDecoration: "line-through" }}>2%</span>
-                <span style={{ fontSize: "16px", fontWeight: "700", color: colors.warningAmber }}>→ 7%</span>
+                <span style={{ fontSize: "14px", color: "#9CA3AF", textDecoration: "line-through" }}>
+                  {currentPenaltyPercent}%
+                </span>
+                <span style={{ fontSize: "16px", fontWeight: "700", color: colors.warningAmber }}>
+                  → {newPenaltyPercent}%
+                </span>
               </div>
             </div>
 
@@ -545,7 +670,7 @@ export default function TierUpgradeScreen() {
                 }}
               >
                 <p style={{ margin: 0, fontSize: "11px", color: "#92400E", marginBottom: "4px" }}>
-                  Current Penalty (2%)
+                  Current Penalty ({currentPenaltyPercent}%)
                 </p>
                 <p
                   style={{
@@ -567,7 +692,9 @@ export default function TierUpgradeScreen() {
                   textAlign: "center",
                 }}
               >
-                <p style={{ margin: 0, fontSize: "11px", color: "#92400E", marginBottom: "4px" }}>New Penalty (7%)</p>
+                <p style={{ margin: 0, fontSize: "11px", color: "#92400E", marginBottom: "4px" }}>
+                  New Penalty ({newPenaltyPercent}%)
+                </p>
                 <p
                   style={{
                     margin: 0,
@@ -659,9 +786,11 @@ export default function TierUpgradeScreen() {
                   </p>
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <p style={{ margin: 0, fontSize: "12px", color: colors.textSecondary }}>7% Penalty Would Be</p>
+                  <p style={{ margin: 0, fontSize: "12px", color: colors.textSecondary }}>
+                    {newPenaltyPercent}% Penalty Would Be
+                  </p>
                   <p style={{ margin: "2px 0 0 0", fontSize: "20px", fontWeight: "700", color: colors.warningAmber }}>
-                    ${(calculatorAmount * 0.07).toLocaleString()}
+                    ${(calculatorAmount * (newPenaltyPercent / 100)).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -703,7 +832,7 @@ export default function TierUpgradeScreen() {
               {
                 icon: AlertTriangle,
                 title: "Emergency Access",
-                description: "You CAN still withdraw, but you'll pay the 7% penalty",
+                description: `You CAN still withdraw, but you'll pay the ${newPenaltyPercent}% penalty`,
                 color: colors.warningAmber,
               },
               {
@@ -793,7 +922,7 @@ export default function TierUpgradeScreen() {
               lineHeight: "1.5",
             }}
           >
-            <strong>Why 7%?</strong> Research shows that a meaningful penalty (but not too harsh) is the most effective
+            <strong>Why {newPenaltyPercent}%?</strong> Research shows that a meaningful penalty (but not too harsh) is the most effective
             commitment device. It's enough to make you think twice, but still accessible in a true emergency.
           </p>
         </div>
@@ -853,26 +982,26 @@ export default function TierUpgradeScreen() {
               locked
               {selectedOption ? ` until ${formatDate(selectedOption.date)}` : ""}
             </strong>{" "}
-            and early withdrawal incurs a <strong style={{ color: colors.warningAmber }}>7% penalty</strong>
+            and early withdrawal incurs a <strong style={{ color: colors.warningAmber }}>{newPenaltyPercent}% penalty</strong>
           </span>
         </label>
 
         <button
-          onClick={() => console.log("Upgrade confirmed")}
-          disabled={!canProceed}
+          onClick={handleUpgrade}
+          disabled={!canProceed || isUpgrading}
           style={{
             width: "100%",
             padding: "16px",
             borderRadius: "14px",
             border: "none",
-            background: canProceed
+            background: canProceed && !isUpgrading
               ? `linear-gradient(135deg, ${colors.lockedPurple} 0%, #7C3AED 100%)`
               : colors.borders,
             fontSize: "16px",
             fontWeight: "600",
-            color: canProceed ? "#FFFFFF" : colors.textSecondary,
-            cursor: canProceed ? "pointer" : "not-allowed",
-            boxShadow: canProceed ? "0 8px 24px rgba(139, 92, 246, 0.3)" : "none",
+            color: canProceed && !isUpgrading ? "#FFFFFF" : colors.textSecondary,
+            cursor: canProceed && !isUpgrading ? "pointer" : "not-allowed",
+            boxShadow: canProceed && !isUpgrading ? "0 8px 24px rgba(139, 92, 246, 0.3)" : "none",
             fontFamily: "inherit",
             display: "flex",
             alignItems: "center",
@@ -881,12 +1010,21 @@ export default function TierUpgradeScreen() {
             transition: "all 0.2s ease",
           }}
         >
-          <Lock size={18} />
-          {canProceed
-            ? `Lock Until ${selectedOption ? formatDate(selectedOption.date) : ""}`
-            : selectedLockOption
-              ? "Confirm Above to Continue"
-              : "Select a Lock Period First"}
+          {isUpgrading ? (
+            <>
+              <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
+              Upgrading...
+            </>
+          ) : (
+            <>
+              <Lock size={18} />
+              {canProceed
+                ? `Lock Until ${selectedOption ? formatDate(selectedOption.date) : ""}`
+                : selectedLockOption
+                  ? "Confirm Above to Continue"
+                  : "Select a Lock Period First"}
+            </>
+          )}
         </button>
 
         <p
@@ -899,6 +1037,7 @@ export default function TierUpgradeScreen() {
         >
           This action cannot be undone
         </p>
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
     </div>
   )

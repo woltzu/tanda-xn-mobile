@@ -1,5 +1,8 @@
 "use client"
+import { useWithdrawalWizard } from "@/context/WithdrawalWizardContext"
+import { useGoalParams, navigateToGoalScreen } from "./useGoalParams"
 import { Check, Copy, Clock, ArrowRight } from "lucide-react"
+import { useState } from "react"
 
 // Brand Colors
 const colors = {
@@ -13,28 +16,28 @@ const colors = {
 }
 
 export default function WithdrawalSuccessScreen() {
-  const goal = {
-    name: "Emergency Fund",
-    emoji: "🛡️",
-    tier: "emergency",
-  }
+  const [copied, setCopied] = useState(false)
 
-  const withdrawalAmount = 1000
-  const receiveAmount = 980
-  const penaltyAmount = 20
-  const remainingBalance = 2200
-  const transactionId = "TXN-2024-12345"
-
-  const tiers = {
-    flexible: { name: "Flexible", penalty: 0 },
-    emergency: { name: "Emergency", penalty: 2 },
-    locked: { name: "Locked", penalty: 7 },
-  }
-
-  const tierInfo = tiers[goal.tier]
+  const { goalId } = useGoalParams()
+  const { state, resetWizard } = useWithdrawalWizard()
 
   const copyTransactionId = () => {
-    navigator.clipboard?.writeText(transactionId)
+    if (state.transactionId) {
+      navigator.clipboard?.writeText(state.transactionId)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  const handleDone = () => {
+    resetWizard()
+    navigateToGoalScreen("030-GOAL-001-GoalsDashboard")
+  }
+
+  const handleViewGoal = () => {
+    const gId = state.goalId
+    resetWizard()
+    navigateToGoalScreen("031-GOAL-002-GoalDetail", { goalId: gId! })
   }
 
   // Progress steps - all completed
@@ -44,6 +47,47 @@ export default function WithdrawalSuccessScreen() {
     { num: 3, label: "Review", completed: true },
     { num: 4, label: "Done", completed: true },
   ]
+
+  // If wizard state is empty (user navigated directly), show error
+  if (!state.goalId || state.amount === 0) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: colors.background,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        }}
+      >
+        <div style={{ textAlign: "center", padding: "20px" }}>
+          <p style={{ fontSize: "48px", marginBottom: "12px" }}>😕</p>
+          <p style={{ color: colors.primaryNavy, fontSize: "18px", fontWeight: "600", margin: "0 0 8px 0" }}>
+            No withdrawal data
+          </p>
+          <p style={{ color: colors.textSecondary, fontSize: "14px", margin: "0 0 20px 0" }}>
+            The withdrawal session has expired.
+          </p>
+          <button
+            onClick={() => navigateToGoalScreen("030-GOAL-001-GoalsDashboard")}
+            style={{
+              padding: "12px 24px",
+              borderRadius: "12px",
+              border: "none",
+              background: colors.accentTeal,
+              color: "#FFFFFF",
+              fontSize: "14px",
+              fontWeight: "600",
+              cursor: "pointer",
+            }}
+          >
+            Go to Dashboard
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -122,7 +166,7 @@ export default function WithdrawalSuccessScreen() {
             <Check size={40} color="#FFFFFF" strokeWidth={3} />
           </div>
           <h1 style={{ margin: "0 0 8px 0", fontSize: "24px", fontWeight: "700", color: "#FFFFFF" }}>
-            Withdrawal Complete! 🎉
+            Withdrawal Complete!
           </h1>
           <p style={{ margin: 0, fontSize: "14px", color: "rgba(255,255,255,0.7)" }}>Your funds are on the way</p>
         </div>
@@ -144,11 +188,11 @@ export default function WithdrawalSuccessScreen() {
         >
           <p style={{ margin: "0 0 4px 0", fontSize: "13px", color: colors.textSecondary }}>Amount received</p>
           <p style={{ margin: 0, fontSize: "44px", fontWeight: "700", color: colors.accentTeal }}>
-            ${receiveAmount.toLocaleString()}
+            ${state.receiveAmount.toLocaleString()}
           </p>
-          {tierInfo.penalty > 0 && (
+          {state.penaltyAmount > 0 && (
             <p style={{ margin: "8px 0 0 0", fontSize: "12px", color: colors.warningAmber }}>
-              ${penaltyAmount} penalty applied
+              ${state.penaltyAmount} penalty applied
             </p>
           )}
         </div>
@@ -175,8 +219,8 @@ export default function WithdrawalSuccessScreen() {
           >
             <span style={{ fontSize: "13px", color: colors.textSecondary }}>From</span>
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span style={{ fontSize: "18px" }}>{goal.emoji}</span>
-              <span style={{ fontSize: "13px", fontWeight: "600", color: colors.primaryNavy }}>{goal.name}</span>
+              <span style={{ fontSize: "18px" }}>{state.goalEmoji}</span>
+              <span style={{ fontSize: "13px", fontWeight: "600", color: colors.primaryNavy }}>{state.goalName}</span>
             </div>
           </div>
 
@@ -192,7 +236,7 @@ export default function WithdrawalSuccessScreen() {
           >
             <span style={{ fontSize: "13px", color: colors.textSecondary }}>Withdrawn</span>
             <span style={{ fontSize: "13px", fontWeight: "600", color: colors.primaryNavy }}>
-              ${withdrawalAmount.toLocaleString()}
+              ${state.amount.toLocaleString()}
             </span>
           </div>
 
@@ -219,8 +263,10 @@ export default function WithdrawalSuccessScreen() {
                 fontFamily: "inherit",
               }}
             >
-              <span style={{ fontSize: "12px", fontWeight: "500", color: colors.primaryNavy }}>{transactionId}</span>
-              <Copy size={14} color={colors.textSecondary} />
+              <span style={{ fontSize: "12px", fontWeight: "500", color: colors.primaryNavy }}>
+                {state.transactionId ? state.transactionId.slice(0, 16) + "..." : "N/A"}
+              </span>
+              <Copy size={14} color={copied ? colors.accentTeal : colors.textSecondary} />
             </button>
           </div>
         </div>
@@ -250,12 +296,12 @@ export default function WithdrawalSuccessScreen() {
                 fontSize: "22px",
               }}
             >
-              {goal.emoji}
+              {state.goalEmoji}
             </div>
             <div>
               <p style={{ margin: 0, fontSize: "12px", color: colors.textSecondary }}>Remaining in goal</p>
               <p style={{ margin: "2px 0 0 0", fontSize: "20px", fontWeight: "700", color: colors.primaryNavy }}>
-                ${remainingBalance.toLocaleString()}
+                ${state.remainingBalance.toLocaleString()}
               </p>
             </div>
           </div>
@@ -349,7 +395,7 @@ export default function WithdrawalSuccessScreen() {
         }}
       >
         <button
-          onClick={() => console.log("Done")}
+          onClick={handleDone}
           style={{
             width: "100%",
             padding: "18px",
@@ -369,7 +415,7 @@ export default function WithdrawalSuccessScreen() {
         </button>
 
         <button
-          onClick={() => console.log("View History")}
+          onClick={handleViewGoal}
           style={{
             width: "100%",
             padding: "14px",
@@ -387,7 +433,7 @@ export default function WithdrawalSuccessScreen() {
             gap: "6px",
           }}
         >
-          View Withdrawal History
+          View Goal
           <ArrowRight size={16} />
         </button>
       </div>

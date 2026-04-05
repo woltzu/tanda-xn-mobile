@@ -16,6 +16,7 @@ import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
 import { useXnScore } from "../context/XnScoreContext";
 import { useWallet } from "../context/WalletContext";
+import { usePayment } from "../context/PaymentContext";
 import { useCurrency, CURRENCIES } from "../context/CurrencyContext";
 import { CurrencySelector, QuickCurrencyPicker } from "../components/CurrencySelector";
 import { ExchangeRateDisplay, FXRiskWarning } from "../components/ExchangeRateDisplay";
@@ -31,36 +32,45 @@ type PaymentMethod = {
   available: boolean;
 };
 
-const paymentMethods: PaymentMethod[] = [
-  {
-    id: "wallet",
-    name: "TandaXn Wallet",
-    icon: "wallet",
-    description: "Pay from your wallet balance",
-    available: true,
-  },
-  {
-    id: "bank",
-    name: "Bank Transfer",
-    icon: "business",
-    description: "Transfer from your bank account",
-    available: true,
-  },
-  {
-    id: "debit",
-    name: "Debit Card",
-    icon: "card",
-    description: "Pay with your debit card",
-    available: true,
-  },
-  {
-    id: "mobile",
-    name: "Mobile Money",
-    icon: "phone-portrait",
-    description: "M-Pesa, MTN Mobile Money, etc.",
-    available: true,
-  },
-];
+const WALLET_METHOD: PaymentMethod = {
+  id: "wallet",
+  name: "TandaXn Wallet",
+  icon: "wallet",
+  description: "Pay from your wallet balance",
+  available: true,
+};
+
+const getStripeMethodIcon = (type: string): keyof typeof Ionicons.glyphMap => {
+  switch (type) {
+    case "card": return "card";
+    case "us_bank_account": return "business";
+    case "link": return "link";
+    case "cashapp": return "cash";
+    case "apple_pay": return "logo-apple";
+    case "google_pay": return "logo-google";
+    default: return "card";
+  }
+};
+
+const formatStripeMethodName = (pm: any): string => {
+  if (pm.brand && pm.last4) {
+    const brand = pm.brand.charAt(0).toUpperCase() + pm.brand.slice(1);
+    return `${brand} •••• ${pm.last4}`;
+  }
+  if (pm.bankName && pm.last4) {
+    return `${pm.bankName} •••• ${pm.last4}`;
+  }
+  if (pm.last4) return `•••• ${pm.last4}`;
+  return pm.type === "us_bank_account" ? "Bank Account" : "Card";
+};
+
+const formatStripeMethodDescription = (pm: any): string => {
+  if (pm.expMonth && pm.expYear) {
+    return `Expires ${String(pm.expMonth).padStart(2, "0")}/${pm.expYear}`;
+  }
+  if (pm.bankName) return pm.bankName;
+  return pm.type === "us_bank_account" ? "Bank account" : "Saved payment method";
+};
 
 const getFrequencyLabel = (frequency: string): string => {
   switch (frequency) {
@@ -87,12 +97,28 @@ export default function MakeContributionScreen() {
   const { user } = useAuth();
   const { processContribution } = useXnScore();
   const { currencies, getCurrencyBalance, makeContribution } = useWallet();
+  const { paymentMethods: stripePaymentMethods, createContribution, presentPaymentSheet, isStripeReady } = usePayment();
   const { primaryCurrency, convert, getExchangeRate, formatCurrency } = useCurrency();
 
   const [selectedMethod, setSelectedMethod] = useState<string>("wallet");
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentCurrency, setPaymentCurrency] = useState<string>(primaryCurrency);
   const [showCurrencyOptions, setShowCurrencyOptions] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  // Merge wallet option with saved Stripe payment methods
+  const paymentMethods: PaymentMethod[] = useMemo(() => {
+    const stripeMapped: PaymentMethod[] = (stripePaymentMethods || [])
+      .filter((pm: any) => pm.status === "active")
+      .map((pm: any) => ({
+        id: pm.stripePaymentMethodId || pm.id,
+        name: formatStripeMethodName(pm),
+        icon: getStripeMethodIcon(pm.type),
+        description: formatStripeMethodDescription(pm),
+        available: true,
+      }));
+    return [WALLET_METHOD, ...stripeMapped];
+  }, [stripePaymentMethods]);
 
   // Find the circle
   const circle = [...circles, ...myCircles, ...browseCircles].find((c) => c.id === circleId);
@@ -212,49 +238,87 @@ export default function MakeContributionScreen() {
   const daysUntilDue = getDaysUntilDue();
 
   const handleConfirmPayment = async () => {
-    if (selectedMethod === "wallet" && !hasEnoughBalance) {
-      Alert.alert(
-        "Insufficient Balance",
-        `Your ${paymentCurrency} wallet balance is not enough for this contribution. Please add funds or choose a different payment method.`,
-        [{ text: "OK" }]
-      );
-      return;
-    }
+    setPaymentError(null);
 
-    setIsProcessing(true);
+    if (selectedMethod === "wallet") {
+      // Wallet payment path
+      if (!hasEnoughBalance) {
+        Alert.alert(
+          "Insufficient Balance",
+          `Your ${paymentCurrency} wallet balance is not enough for this contribution. Please add funds or choose a different payment method.`,
+          [{ text: "OK" }]
+        );
+        return;
+      }
 
-    try {
-      // Process the contribution with currency conversion if cross-border
-      const transactionId = await makeContribution(
-        paymentAmount,
-        paymentCurrency,
-        circleId,
-        circle.name,
-        isCrossBorder ? circleCurrency : undefined,
-        isCrossBorder ? exchangeInfo?.rate : undefined
-      );
+      setIsProcessing(true);
+      try {
+        const transactionId = await makeContribution(
+          paymentAmount,
+          paymentCurrency,
+          circleId,
+          circle.name,
+          isCrossBorder ? circleCurrency : undefined,
+          isCrossBorder ? exchangeInfo?.rate : undefined
+        );
 
-      // Determine if payment is on time or early
-      const isEarly = daysUntilDue > 2;
-      const isOnTime = daysUntilDue >= 0;
+        const isEarly = daysUntilDue > 2;
+        const isOnTime = daysUntilDue >= 0;
+        await processContribution(circleId, isOnTime, isEarly);
 
-      // Process contribution for XnScore
-      await processContribution(circleId, isOnTime, isEarly);
+        navigation.navigate("ContributionSuccess", {
+          circleId,
+          amount: isCrossBorder ? paymentAmount : amount,
+          transactionId,
+        });
+      } catch (error) {
+        Alert.alert(
+          "Payment Failed",
+          "There was an error processing your payment. Please try again.",
+          [{ text: "OK" }]
+        );
+      } finally {
+        setIsProcessing(false);
+      }
+    } else {
+      // Stripe payment method path
+      setIsProcessing(true);
+      try {
+        const amountCents = Math.round(paymentAmount * 100);
+        const currency = paymentCurrency.toLowerCase();
+        const cycleId = `cycle-${cycleInfo.cycleNumber}`;
 
-      // Navigate to success screen
-      navigation.navigate("ContributionSuccess", {
-        circleId,
-        amount: isCrossBorder ? paymentAmount : amount,
-        transactionId,
-      });
-    } catch (error) {
-      Alert.alert(
-        "Payment Failed",
-        "There was an error processing your payment. Please try again.",
-        [{ text: "OK" }]
-      );
-    } finally {
-      setIsProcessing(false);
+        const { clientSecret } = await createContribution(
+          amountCents,
+          currency,
+          circleId,
+          cycleId,
+          selectedMethod // stripePaymentMethodId
+        );
+
+        if (clientSecret) {
+          const { error } = await presentPaymentSheet(clientSecret);
+          if (error) {
+            setPaymentError(error.message || "Your payment could not be processed.");
+            return;
+          }
+        }
+
+        const isEarly = daysUntilDue > 2;
+        const isOnTime = daysUntilDue >= 0;
+        await processContribution(circleId, isOnTime, isEarly);
+
+        navigation.navigate("ContributionSuccess", {
+          circleId,
+          amount: isCrossBorder ? paymentAmount : amount,
+          transactionId: clientSecret || "stripe-pending",
+        });
+      } catch (error: any) {
+        const message = error?.message || "There was an error processing your payment. Please try again.";
+        setPaymentError(message);
+      } finally {
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -402,6 +466,17 @@ export default function MakeContributionScreen() {
                 <Text style={styles.beneficiaryLabel}>Supporting</Text>
                 <Text style={styles.beneficiaryName}>{circle.beneficiaryName}</Text>
               </View>
+            </View>
+          )}
+
+          {/* Payment Error Banner */}
+          {paymentError && (
+            <View style={styles.errorBanner}>
+              <Ionicons name="alert-circle" size={18} color="#DC2626" />
+              <Text style={styles.errorBannerText}>{paymentError}</Text>
+              <TouchableOpacity onPress={() => setPaymentError(null)}>
+                <Ionicons name="close-circle" size={18} color="#DC2626" />
+              </TouchableOpacity>
             </View>
           )}
 
@@ -989,6 +1064,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FEF2F2",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#DC2626",
+    lineHeight: 17,
   },
   errorContainer: {
     flex: 1,

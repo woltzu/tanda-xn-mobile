@@ -1,22 +1,75 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { useCircles } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { useCircleParams, goBack, navigateToCircleScreen } from "./useCircleParams"
+import type { Circle } from "../../../context/CirclesContext"
+
 export default function ContributionSuccessScreen() {
+  const { circleId } = useCircleParams()
+  const { getCircleById } = useCircles()
+
+  const [circle, setCircle] = useState<Circle | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!circleId) {
+      setLoading(false)
+      return
+    }
+    const c = getCircleById(circleId)
+    if (c) setCircle(c)
+    setLoading(false)
+  }, [circleId, getCircleById])
+
   const contribution = {
-    id: "contrib_12345",
-    circleName: "Family Savings",
-    amount: 200,
-    cycle: 3,
-    date: "Jan 5, 2025",
-    time: "2:34 PM",
+    amount: circle?.amount || 0,
+    circleName: circle?.name || "Circle",
+    cycle: circle?.currentCycle || 1,
+    date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    time: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
     paymentMethod: "TandaXn Wallet",
-    transactionId: "TXN-2025-0105-12345",
+    transactionId: `TXN-${Date.now()}`,
   }
+
   const circleStats = {
-    totalContributed: 600,
-    cyclesCompleted: 3,
-    nextPayout: "Feb 15, 2025",
+    totalContributed: (circle?.amount || 0) * (circle?.currentCycle || 1),
+    cyclesCompleted: circle?.currentCycle || 1,
   }
+
   const xnScoreBonus = 2
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "3px solid #E5E7EB",
+              borderTop: "3px solid #00C6AE",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 16px auto",
+            }}
+          />
+          <p style={{ color: "#6B7280", fontSize: "14px" }}>Loading...</p>
+          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -66,7 +119,7 @@ export default function ContributionSuccessScreen() {
           </div>
         </div>
 
-        <h1 style={{ margin: "0 0 8px 0", fontSize: "26px", fontWeight: "700" }}>Contribution Sent! 🎉</h1>
+        <h1 style={{ margin: "0 0 8px 0", fontSize: "26px", fontWeight: "700" }}>Contribution Sent!</h1>
         <p style={{ margin: 0, fontSize: "15px", opacity: 0.9 }}>
           ${contribution.amount} to {contribution.circleName}
         </p>
@@ -110,7 +163,7 @@ export default function ContributionSuccessScreen() {
                 fontSize: "28px",
               }}
             >
-              ✓
+              {"\u2713"}
             </div>
           </div>
 
@@ -168,7 +221,7 @@ export default function ContributionSuccessScreen() {
               fontSize: "22px",
             }}
           >
-            ⭐
+            {"\u2B50"}
           </div>
           <div style={{ flex: 1 }}>
             <p style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>XnScore Bonus!</p>
@@ -229,12 +282,12 @@ export default function ContributionSuccessScreen() {
               fontSize: "20px",
             }}
           >
-            💰
+            {"\uD83D\uDCB0"}
           </div>
           <div style={{ flex: 1 }}>
-            <p style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#FFFFFF" }}>Your Payout is Coming</p>
+            <p style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#FFFFFF" }}>Keep Contributing!</p>
             <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>
-              Scheduled for {circleStats.nextPayout}
+              Your payout is coming up. Stay on track!
             </p>
           </div>
         </div>
@@ -256,7 +309,7 @@ export default function ContributionSuccessScreen() {
         }}
       >
         <button
-          onClick={() => console.log("View Circle")}
+          onClick={() => circleId && navigateToCircleScreen("CIRC-301 Circle Dashboard", { circleId })}
           style={{
             width: "100%",
             padding: "16px",
@@ -269,9 +322,29 @@ export default function ContributionSuccessScreen() {
             cursor: "pointer",
           }}
         >
-          View Circle
+          Back to Circle
         </button>
         <div style={{ display: "flex", gap: "10px" }}>
+          <button
+            onClick={() => circleId && navigateToCircleScreen("CIRC-401 Contributions History", { circleId })}
+            style={{
+              flex: 1,
+              padding: "14px",
+              borderRadius: "12px",
+              border: "1px solid #E5E7EB",
+              background: "#FFFFFF",
+              fontSize: "14px",
+              fontWeight: "600",
+              color: "#0A2342",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+            }}
+          >
+            View History
+          </button>
           <button
             onClick={() => console.log("Share Receipt")}
             style={{
@@ -298,22 +371,6 @@ export default function ContributionSuccessScreen() {
               <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
             </svg>
             Share
-          </button>
-          <button
-            onClick={() => console.log("Done")}
-            style={{
-              flex: 1,
-              padding: "14px",
-              borderRadius: "12px",
-              border: "1px solid #E5E7EB",
-              background: "#FFFFFF",
-              fontSize: "14px",
-              fontWeight: "600",
-              color: "#0A2342",
-              cursor: "pointer",
-            }}
-          >
-            Done
           </button>
         </div>
       </div>

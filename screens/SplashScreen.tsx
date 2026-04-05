@@ -10,14 +10,26 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
+import { useAuth } from "../context/AuthContext";
 
 type SplashScreenNavigationProp = StackNavigationProp<RootStackParamList, "Splash">;
 
 export default function SplashScreen() {
   const navigation = useNavigation<SplashScreenNavigationProp>();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
+
+  // Auto-redirect to MainTabs if user already has an active session
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "MainTabs" }],
+      });
+    }
+  }, [authLoading, isAuthenticated]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

@@ -1,20 +1,99 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { useCreateCircleWizard } from "../../../context/CreateCircleWizardContext"
+import { useCircles } from "../../../context/CirclesContext"
+import { useCircleParams, navigateToCircleScreen } from "./useCircleParams"
+
 export default function CreateCircleSuccessScreen() {
-  const circle = {
-    id: "circle_123",
-    name: "Family Savings",
-    amount: 200,
-    size: 6,
-    startDate: "2025-01-15",
-    inviteCode: "FAMILY2025",
-  }
-  const invitesSent = 3
+  const { circleId } = useCircleParams()
+  const { getCircleById, generateInviteCode } = useCircles()
+  const { resetWizard } = useCreateCircleWizard()
+
+  const [isLoading, setIsLoading] = useState(true)
+  const [inviteCode, setInviteCode] = useState("")
+  const [copied, setCopied] = useState(false)
+
+  const circle = circleId ? getCircleById(circleId) : undefined
+
+  // Reset wizard state on mount and set loading state
+  useEffect(() => {
+    resetWizard()
+    // Give a moment for circle data to load from context
+    const timer = setTimeout(() => setIsLoading(false), 500)
+    return () => clearTimeout(timer)
+  }, [resetWizard])
+
+  // Generate invite code when circle is available
+  useEffect(() => {
+    if (circle) {
+      const code = generateInviteCode(circle)
+      setInviteCode(code)
+    }
+  }, [circle, generateInviteCode])
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     return date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
   }
+
+  const handleCopyInviteCode = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteCode)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Fallback for older browsers
+      const textArea = document.createElement("textarea")
+      textArea.value = inviteCode
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand("copy")
+      document.body.removeChild(textArea)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "48px",
+              height: "48px",
+              border: "4px solid #E5E7EB",
+              borderTop: "4px solid #00C6AE",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 16px auto",
+            }}
+          />
+          <p style={{ margin: 0, fontSize: "14px", color: "#6B7280" }}>Loading your circle...</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    )
+  }
+
+  // Fallback values if circle hasn't loaded yet
+  const circleName = circle?.name || "Your Circle"
+  const circleAmount = circle?.amount || 0
+  const circleSize = circle?.memberCount || 0
+  const circleStartDate = circle?.startDate || ""
+  const displayInviteCode = inviteCode || circle?.inviteCode || ""
+  const invitesSent = circle?.invitedMembers?.length || 0
 
   return (
     <div
@@ -64,8 +143,8 @@ export default function CreateCircleSuccessScreen() {
           </div>
         </div>
 
-        <h1 style={{ margin: "0 0 8px 0", fontSize: "26px", fontWeight: "700" }}>Circle Created! 🎉</h1>
-        <p style={{ margin: 0, fontSize: "15px", opacity: 0.9 }}>{circle.name} is ready to go</p>
+        <h1 style={{ margin: "0 0 8px 0", fontSize: "26px", fontWeight: "700" }}>Circle Created!</h1>
+        <p style={{ margin: 0, fontSize: "15px", opacity: 0.9 }}>{circleName} is ready to go</p>
       </div>
 
       {/* Content */}
@@ -94,11 +173,11 @@ export default function CreateCircleSuccessScreen() {
               fontSize: "28px",
             }}
           >
-            🔄
+            {circle?.emoji || "\uD83D\uDD04"}
           </div>
-          <h2 style={{ margin: "0 0 4px 0", fontSize: "20px", fontWeight: "700", color: "#0A2342" }}>{circle.name}</h2>
+          <h2 style={{ margin: "0 0 4px 0", fontSize: "20px", fontWeight: "700", color: "#0A2342" }}>{circleName}</h2>
           <p style={{ margin: "0 0 16px 0", fontSize: "13px", color: "#6B7280" }}>
-            Starting {formatDate(circle.startDate)}
+            {circleStartDate ? `Starting ${formatDate(circleStartDate)}` : "Start date pending"}
           </p>
 
           <div
@@ -116,7 +195,7 @@ export default function CreateCircleSuccessScreen() {
                 borderRadius: "12px",
               }}
             >
-              <p style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#0A2342" }}>${circle.amount}</p>
+              <p style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#0A2342" }}>${circleAmount}</p>
               <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#6B7280" }}>per cycle</p>
             </div>
             <div
@@ -127,7 +206,7 @@ export default function CreateCircleSuccessScreen() {
                 borderRadius: "12px",
               }}
             >
-              <p style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#0A2342" }}>{circle.size}+</p>
+              <p style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#0A2342" }}>{circleSize}+</p>
               <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#6B7280" }}>members</p>
             </div>
             <div
@@ -139,25 +218,31 @@ export default function CreateCircleSuccessScreen() {
               }}
             >
               <p style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#00C6AE" }}>
-                ${(circle.amount * circle.size).toLocaleString()}+
+                ${(circleAmount * circleSize).toLocaleString()}+
               </p>
               <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#6B7280" }}>pot size</p>
             </div>
           </div>
 
           {/* Invite Code */}
-          <div
-            style={{
-              background: "#0A2342",
-              borderRadius: "12px",
-              padding: "16px",
-            }}
-          >
-            <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>Circle Invite Code</p>
-            <p style={{ margin: 0, fontSize: "24px", fontWeight: "700", color: "#FFFFFF", letterSpacing: "2px" }}>
-              {circle.inviteCode}
-            </p>
-          </div>
+          {displayInviteCode && (
+            <div
+              style={{
+                background: "#0A2342",
+                borderRadius: "12px",
+                padding: "16px",
+                cursor: "pointer",
+              }}
+              onClick={handleCopyInviteCode}
+            >
+              <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>
+                Circle Invite Code {copied ? "(Copied!)" : "(Tap to copy)"}
+              </p>
+              <p style={{ margin: 0, fontSize: "24px", fontWeight: "700", color: "#FFFFFF", letterSpacing: "2px" }}>
+                {displayInviteCode}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Invites Sent */}
@@ -255,7 +340,7 @@ export default function CreateCircleSuccessScreen() {
                   Make your first contribution
                 </p>
                 <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#6B7280" }}>
-                  Due on {formatDate(circle.startDate)}
+                  {circleStartDate ? `Due on ${formatDate(circleStartDate)}` : "Due on start date"}
                 </p>
               </div>
             </div>
@@ -299,7 +384,11 @@ export default function CreateCircleSuccessScreen() {
         }}
       >
         <button
-          onClick={() => console.log("View Circle")}
+          onClick={() => {
+            if (circleId) {
+              navigateToCircleScreen("CIRC-301 Circle Dashboard", { circleId })
+            }
+          }}
           style={{
             width: "100%",
             padding: "16px",
@@ -312,11 +401,11 @@ export default function CreateCircleSuccessScreen() {
             cursor: "pointer",
           }}
         >
-          View Circle
+          Go to Dashboard
         </button>
         <div style={{ display: "flex", gap: "10px" }}>
           <button
-            onClick={() => console.log("Invite More")}
+            onClick={handleCopyInviteCode}
             style={{
               flex: 1,
               padding: "14px",
@@ -329,10 +418,10 @@ export default function CreateCircleSuccessScreen() {
               cursor: "pointer",
             }}
           >
-            Invite More
+            {copied ? "Copied!" : "Share Invite"}
           </button>
           <button
-            onClick={() => console.log("Done")}
+            onClick={() => navigateToCircleScreen("CIRC-101 Browse Circles")}
             style={{
               flex: 1,
               padding: "14px",

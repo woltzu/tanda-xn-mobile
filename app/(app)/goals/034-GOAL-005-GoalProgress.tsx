@@ -1,47 +1,110 @@
 "use client"
 
+import { useSavings } from "@/context/SavingsContext"
+import { useAuth } from "@/context/AuthContext"
+import { useGoalParams, goBack } from "./useGoalParams"
+
 export default function GoalProgressScreen() {
-  const goal = {
-    id: "g1",
-    name: "Emergency Fund",
-    emoji: "🛡️",
-    targetAmount: 5000,
-    currentAmount: 3200,
-    tier: "emergency",
-    deadline: "2025-06-30",
-    monthlyContribution: 400,
+  const { user } = useAuth()
+  const { goalId } = useGoalParams()
+  const { getGoalById, getGoalTransactions, isLoading, goals: allGoals } = useSavings()
+
+  // Load goal from context
+  const savingsGoal = goalId ? getGoalById(goalId) : undefined
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#F5F7FA" }}>
+        <p style={{ fontSize: "16px", color: "#6B7280" }}>Loading progress...</p>
+      </div>
+    )
   }
 
-  const monthlyData = [
-    { month: "Jul", amount: 400 },
-    { month: "Aug", amount: 350 },
-    { month: "Sep", amount: 400 },
-    { month: "Oct", amount: 450 },
-    { month: "Nov", amount: 600 },
-    { month: "Dec", amount: 400 },
-  ]
+  // Not found
+  if (!savingsGoal) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", background: "#F5F7FA", gap: "16px" }}>
+        <p style={{ fontSize: "16px", color: "#6B7280" }}>Goal not found</p>
+        <button onClick={() => goBack()} style={{ padding: "12px 24px", borderRadius: "10px", border: "none", background: "#00C6AE", color: "#FFFFFF", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}>Go Back</button>
+      </div>
+    )
+  }
+
+  const goal = {
+    id: savingsGoal.id,
+    name: savingsGoal.name,
+    emoji: savingsGoal.emoji,
+    targetAmount: savingsGoal.targetAmount,
+    currentAmount: savingsGoal.currentBalance,
+    tier: savingsGoal.type,
+    deadline: savingsGoal.maturityDate || "",
+    monthlyContribution: 0,
+  }
+
+  // Derive monthly chart data from real transactions
+  const txns = goalId ? getGoalTransactions(goalId) : []
+  const depositTxns = txns.filter((t) => t.type === "deposit" || t.type === "auto_deposit" || t.type === "transfer_in")
+
+  // Group deposits by month (last 6 months)
+  const now = new Date()
+  const monthlyDataMap: Record<string, number> = {}
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+    monthlyDataMap[key] = 0
+  }
+  depositTxns.forEach((t) => {
+    const d = new Date(t.createdAt)
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+    if (monthlyDataMap[key] !== undefined) {
+      monthlyDataMap[key] += t.amount
+    }
+  })
+
+  const monthlyData = Object.entries(monthlyDataMap).map(([key, amount]) => {
+    const [year, month] = key.split("-")
+    const d = new Date(parseInt(year), parseInt(month) - 1)
+    return {
+      month: d.toLocaleDateString("en-US", { month: "short" }),
+      amount: Math.round(amount),
+    }
+  })
+
+  // Derive contribution sources from transactions
+  const autoSaveTotal = txns.filter((t) => t.type === "auto_deposit").reduce((s, t) => s + t.amount, 0)
+  const manualTotal = txns.filter((t) => t.type === "deposit").reduce((s, t) => s + t.amount, 0)
+  const transferTotal = txns.filter((t) => t.type === "transfer_in").reduce((s, t) => s + t.amount, 0)
+  const totalContributions = autoSaveTotal + manualTotal + transferTotal
 
   const contributionSources = [
-    { source: "Auto-Save", amount: 2000, percent: 62.5 },
-    { source: "Manual", amount: 800, percent: 25 },
-    { source: "Circle Payouts", amount: 400, percent: 12.5 },
-  ]
+    { source: "Auto-Save", amount: Math.round(autoSaveTotal), percent: totalContributions > 0 ? Math.round((autoSaveTotal / totalContributions) * 100) : 0 },
+    { source: "Manual", amount: Math.round(manualTotal), percent: totalContributions > 0 ? Math.round((manualTotal / totalContributions) * 100) : 0 },
+    { source: "Transfers", amount: Math.round(transferTotal), percent: totalContributions > 0 ? Math.round((transferTotal / totalContributions) * 100) : 0 },
+  ].filter((s) => s.amount > 0)
 
-  const progress = Math.round((goal.currentAmount / goal.targetAmount) * 100)
+  // If no contribution sources, show a default
+  if (contributionSources.length === 0) {
+    contributionSources.push({ source: "No deposits yet", amount: 0, percent: 100 })
+  }
+
+  const progress = goal.targetAmount > 0 ? Math.round((goal.currentAmount / goal.targetAmount) * 100) : 0
   const remaining = goal.targetAmount - goal.currentAmount
 
   // Calculate projections
-  const avgMonthly = Math.round(monthlyData.reduce((a, b) => a + b.amount, 0) / monthlyData.length)
-  const monthsToGoal = Math.ceil(remaining / avgMonthly)
+  const totalMonthlyAmount = monthlyData.reduce((a, b) => a + b.amount, 0)
+  const nonZeroMonths = monthlyData.filter((d) => d.amount > 0).length
+  const avgMonthly = nonZeroMonths > 0 ? Math.round(totalMonthlyAmount / nonZeroMonths) : 0
+  const monthsToGoal = avgMonthly > 0 ? Math.ceil(remaining / avgMonthly) : 999
 
   const projectedDate = new Date()
   projectedDate.setMonth(projectedDate.getMonth() + monthsToGoal)
 
-  const deadlineDate = new Date(goal.deadline)
+  const deadlineDate = goal.deadline ? new Date(goal.deadline) : new Date(9999, 0)
   const isOnTrack = projectedDate <= deadlineDate
 
   // Max value for chart scaling
-  const maxAmount = Math.max(...monthlyData.map((d) => d.amount))
+  const maxAmount = Math.max(...monthlyData.map((d) => d.amount), 1)
 
   return (
     <div
@@ -69,7 +132,7 @@ export default function GoalProgressScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",

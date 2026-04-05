@@ -1,6 +1,6 @@
 # TandaXn Systems Status Tracker
 
-**Last Updated:** February 16, 2026
+**Last Updated:** March 25, 2026
 **Project:** TandaXn - Digital Tontine Platform
 
 ---
@@ -24,7 +24,7 @@
 | 🟢 | Financial Profiles | 006 | User financial data tracking |
 | 🟢 | Circle Matching Algorithm | 007 | Match users to compatible circles |
 | 🟢 | Contribution Scheduling | 011 | Auto-schedule member contributions |
-| 🟢 | Cycle Progression Engine | 012 | State machine: scheduled → collecting → payout → closed |
+| 🟢 | Cycle Progression Engine | 012 | State machine: scheduled > collecting > payout > closed |
 | 🟢 | Payout Order Algorithm | 010 | Position assignment (XnScore-based, random, hybrid, need-based) |
 | 🟢 | Payout Execution Engine | 015 | Wallet credits, bank transfers, split payouts |
 | 🟢 | Late Contribution Handling | 013 | Grace periods, penalties, escalation ladder |
@@ -32,6 +32,9 @@
 | 🟢 | Circle Dissolution | 016 | Voting, pro-rata refunds, objection windows |
 | 🟢 | Member Removal Mid-Circle | 017 | Exit fees, settlement calculations |
 | 🟢 | Position Swapping | 018 | Swap requests, elder approval, execution |
+| 🟢 | Partial Contributions | 048 | 50/25/25 split, insurance pool coverage, catch-up scheduling |
+| 🟢 | Substitute Member System | 049 | Temporary member replacement, eligibility checks, handback |
+| 🟢 | Circle Insurance Pool | 041 | Premium collection, coverage claims, fund management |
 
 ---
 
@@ -42,6 +45,8 @@
 | 🟢 | Initial XnScore Calculation | 019 | Base score (20), fraud signals, vouching system |
 | 🟢 | XnScore Decay & Growth | 020 | Inactivity decay, tenure bonuses, recovery periods |
 | 🟢 | XnScore Factor Breakdown | 021 | 5-factor display, improvement tips, caching |
+| 🟢 | Honor Score System | 037-038 | Behavioral trust scoring, realignment rules |
+| 🟢 | Scoring Pipeline Orchestrator | 036 | Multi-engine score aggregation, weighted pipeline |
 
 ### XnScore Components (All 🟢 Installed)
 - Payment History Score (35 pts max)
@@ -62,11 +67,11 @@
 | 🟢 | Monthly Payment System | 024 | Payment obligations, autopay, reminders, XnScore integration |
 
 ### Creditworthiness 5 Pillars (All 🟢 Installed)
-1. XnScore (40% weight) → Maps to credit score 300-850
-2. Circle Health (15%) → Quality of circles participated
-3. Loan History (20%) → Previous loan performance
-4. Capacity (determines max amount) → Contribution history, wallet, savings
-5. Community Collateral (adjusts APR) → Vouches, elder guarantee, co-signer
+1. XnScore (40% weight) > Maps to credit score 300-850
+2. Circle Health (15%) > Quality of circles participated
+3. Loan History (20%) > Previous loan performance
+4. Capacity (determines max amount) > Contribution history, wallet, savings
+5. Community Collateral (adjusts APR) > Vouches, elder guarantee, co-signer
 
 ### Risk Grades
 | Grade | Score Range | APR Range | Max Loan |
@@ -79,16 +84,81 @@
 
 ---
 
-## 4. SECURITY
+## 4. SECURITY & COMPLIANCE
 
 | Status | System | Migration | Description |
 |--------|--------|-----------|-------------|
 | 🟢 | Row Level Security (RLS) | 025 | RLS enabled on all critical tables |
-| 🟡 | Security Definer Views | — | 40+ views need SECURITY INVOKER (low priority) |
+| 🟢 | Sanctions Screening | 044 | OFAC/EU/UN watchlist checks, batch screening, PEP detection |
+| 🟢 | AML Monitoring | 045 | Transaction velocity rules, suspicious activity detection, SAR generation |
+| 🟢 | KYC Verification (Persona) | 053 | Document + liveness verification, webhook processing, A/B testing |
+| 🟢 | KYC Fallback Intelligence | 053 | 7-signal risk scoring, tier-based gate checks, escalation triggers |
+| 🟡 | Security Definer Views | -- | 40+ views need SECURITY INVOKER (low priority) |
+
+### KYC Tier System (🟢 Installed)
+| Tier | Risk Level | Max Contribution | Max Withdrawal | Requirements |
+|------|-----------|-----------------|---------------|-------------|
+| 0 | High Risk (0-40) | $0 | $0 | Browse only |
+| 1 | Medium Risk (41-65) | $100 | $0 | Can join circles |
+| 2 | Lower Risk (66-80) | $300 | $200 | Full KYC in 30 days |
+| 3 | Low Risk (81-100) | $500 | $500 | Full KYC in 60 days |
+| 4 | Fully Verified | Unlimited | Unlimited | Persona KYC approved |
 
 ---
 
-## 5. SCHEDULED JOBS (Edge Functions + Cron)
+## 5. AI & INTELLIGENCE SYSTEMS
+
+| Status | System | Migration | Description |
+|--------|--------|-----------|-------------|
+| 🟢 | Explainable AI Decisions | 046 | Decision transparency, audit trails, member-facing explanations |
+| 🟢 | Cron AI Trigger Infrastructure | 050 | Intelligent job scheduling, adaptive frequency, ML-driven triggers |
+| 🟢 | AI Recommendation Feedback | 051 | User feedback loops, recommendation accuracy tracking, model retraining signals |
+| 🟢 | Circle Match History ML Seed | 052 | Historical match data for ML training, outcome labeling, feature engineering |
+
+---
+
+## 6. GOVERNANCE & DEMOCRACY
+
+| Status | System | Migration | Description |
+|--------|--------|-----------|-------------|
+| 🟢 | Circle Democracy | 039 | Proposals, voting, quorum rules, elder moderation |
+| 🟢 | Graduated Entry | 040 | Progressive access tiers, contribution limits by stage |
+| 🟢 | Dynamic Payout Ordering | 042 | Need-based reordering, fairness scoring, priority algorithms |
+
+---
+
+## 7. TOKEN & ECONOMY
+
+| Status | System | Migration | Description |
+|--------|--------|-----------|-------------|
+| 🟢 | Token Incentive System | 028 | XN token rewards, staking, redemption, activity-based earning |
+| 🟢 | API White-Label | 029 | Multi-tenant API, partner branding, usage metering |
+| 🟢 | Token/API Cron Schedules | 030 | Automated token distribution, API usage aggregation |
+
+---
+
+## 8. CONTEXT & PROFILES
+
+| Status | System | Migration | Description |
+|--------|--------|-----------|-------------|
+| 🟢 | Savings Context Support | 031 | Savings goals, target tracking, savings circles |
+| 🟢 | Elder Context Support | 032 | Elder dashboard context, community oversight tools |
+| 🟢 | Feature Gate System | 033 | Feature flags, gradual rollouts, A/B testing infrastructure |
+| 🟢 | User Event Tracking | 034 | Behavioral event logging, analytics pipeline |
+| 🟢 | Member Financial Profiles | 035 | Extended financial data, income verification signals |
+
+---
+
+## 9. LEGAL & NOTIFICATIONS
+
+| Status | System | Migration | Description |
+|--------|--------|-----------|-------------|
+| 🟢 | Legal Terms Simplifier | 047 | Plain-language legal documents, 15-language support, version tracking |
+| 🟢 | Notification Priority Engine | 043 | Smart notification routing, urgency scoring, channel selection |
+
+---
+
+## 10. SCHEDULED JOBS (Edge Functions + Cron)
 
 | Status | Function | Schedule | Description |
 |--------|----------|----------|-------------|
@@ -103,14 +173,14 @@
 | 🟢 | `cleanup-expired-reservations` | Daily 02:00 UTC | Release expired wallet reservations |
 | 🟢 | `expire-swap-requests` | Hourly (:30) | Expire unanswered position swap requests |
 
-**Edge Functions:** ✅ All 10 deployed
-**Cron Schedules:** ✅ All 17 pg_cron jobs active (10 TandaXn + 7 system)
-**Cron Log Table:** ✅ Migration 026 applied
-**Cron Setup:** ✅ Migration 027 applied
+**Edge Functions:** All 10 deployed
+**Cron Schedules:** All 17 pg_cron jobs active (10 TandaXn + 7 system)
+**Cron Log Table:** Migration 026 applied
+**Cron Setup:** Migration 027 applied
 
 ---
 
-## 6. EXTERNAL INTEGRATIONS
+## 11. EXTERNAL INTEGRATIONS
 
 ### Payment & Banking
 | Status | Integration | Priority | Description |
@@ -122,7 +192,7 @@
 ### Identity & Security
 | Status | Integration | Priority | Description |
 |--------|-------------|----------|-------------|
-| 🔴 | KYC/Identity Verification | **CRITICAL** | Verify user identity (passport, ID, selfie) |
+| 🟢 | KYC/Identity Verification | **CRITICAL** | Persona integration (document + liveness), fallback risk scoring |
 | 🔴 | Phone Verification | HIGH | OTP verification for phone numbers |
 | 🔴 | Two-Factor Authentication | HIGH | 2FA for sensitive operations |
 
@@ -136,35 +206,31 @@
 
 ---
 
-## 7. ADDITIONAL FEATURES
+## 12. REMAINING FEATURES
 
 ### High Priority
 | Status | Feature | Description |
 |--------|---------|-------------|
-| 🔴 | Fraud Detection Algorithm | Velocity checks, suspicious pattern detection, device fingerprinting |
 | 🔴 | Dispute Resolution System | Handle member disputes, arbitration workflow |
 | 🔴 | Admin Dashboard | Circle management, user management, analytics |
 
 ### Medium Priority
 | Status | Feature | Description |
 |--------|---------|-------------|
-| 🔴 | Comprehensive Audit Logging | Full audit trail for compliance |
 | 🔴 | Reporting & Analytics | Circle health reports, user activity reports |
-| 🔴 | Document Upload | KYC documents, proof of emergency, etc. |
 | 🔴 | Chat/Messaging System | In-app messaging between circle members |
 
 ### Low Priority
 | Status | Feature | Description |
 |--------|---------|-------------|
-| 🔴 | Referral System | Invite tracking, referral bonuses |
 | 🔴 | Achievement/Badge System | Gamification, milestones |
 | 🔴 | Multi-Currency Support | Currency conversion, multi-currency wallets |
-| 🔴 | Multi-Language Support | i18n for different languages |
 
 ---
 
-## 8. TYPESCRIPT SERVICES (33 files)
+## 13. TYPESCRIPT SERVICES (54 files)
 
+### Original Core Services (33 files)
 | Status | File | Description |
 |--------|------|-------------|
 | 🟢 | `services/AffordabilityService.ts` | Contribution affordability checks |
@@ -201,10 +267,36 @@
 | 🟢 | `services/XnScoreEngine.ts` | XnScore calculations & updates |
 | 🟢 | `services/index.ts` | Service exports |
 
+### Phase 0 & Phase 1 Services (21 files) -- NEW
+| Status | File | Description |
+|--------|------|-------------|
+| 🟢 | `services/TokenService.ts` | XN token rewards, staking, redemption |
+| 🟢 | `services/MemberProfileService.ts` | Extended member profiles, financial signals |
+| 🟢 | `services/EventService.ts` | Behavioral event logging, analytics pipeline |
+| 🟢 | `services/HonorScoreEngine.ts` | Behavioral trust scoring, honor tiers |
+| 🟢 | `services/ScoringPipelineService.ts` | Multi-engine score aggregation pipeline |
+| 🟢 | `services/CircleDemocracyEngine.ts` | Proposals, voting, quorum, elder moderation |
+| 🟢 | `services/GraduatedEntryEngine.ts` | Progressive access, contribution limits by stage |
+| 🟢 | `services/InsurancePoolEngine.ts` | Premium collection, coverage claims, fund mgmt |
+| 🟢 | `services/DynamicPayoutOrderingEngine.ts` | Need-based reordering, fairness algorithms |
+| 🟢 | `services/NotificationPriorityEngine.ts` | Smart notification routing, urgency scoring |
+| 🟢 | `services/SanctionsScreeningEngine.ts` | OFAC/EU/UN watchlist, PEP detection |
+| 🟢 | `services/AmlMonitoringEngine.ts` | Transaction velocity rules, SAR generation |
+| 🟢 | `services/ExplainableAIEngine.ts` | Decision transparency, audit trails |
+| 🟢 | `services/LegalDocumentEngine.ts` | Plain-language legal docs, 15-language support |
+| 🟢 | `services/PartialContributionEngine.ts` | 50/25/25 split, insurance pool coverage |
+| 🟢 | `services/SubstituteMemberEngine.ts` | Temporary member replacement, handback |
+| 🟢 | `services/CronAIJobEngine.ts` | Intelligent cron scheduling, adaptive frequency |
+| 🟢 | `services/AIRecommendationFeedbackEngine.ts` | Feedback loops, recommendation accuracy |
+| 🟢 | `services/CircleMatchHistoryEngine.ts` | ML training data, outcome labeling |
+| 🟢 | `services/KYCVerificationEngine.ts` | Persona KYC, webhooks, admin review, A/B testing |
+| 🟢 | `services/KYCFallbackEngine.ts` | 7-signal risk scoring, gate checks, escalations |
+
 ---
 
-## 9. REACT HOOKS (21 files)
+## 14. REACT HOOKS (42 files)
 
+### Original Core Hooks (22 files)
 | Status | File | Description |
 |--------|------|-------------|
 | 🟢 | `hooks/useAffordability.ts` | Affordability data & queries |
@@ -230,10 +322,35 @@
 | 🟢 | `hooks/useXnScore.ts` | XnScore data & mutations |
 | 🟢 | `hooks/index.ts` | Hook exports |
 
+### Phase 0 & Phase 1 Hooks (20 files) -- NEW
+| Status | File | Description |
+|--------|------|-------------|
+| 🟢 | `hooks/useHonorScore.ts` | Honor score data, tier display, refresh |
+| 🟢 | `hooks/useScoringPipeline.ts` | Pipeline status, multi-engine scores |
+| 🟢 | `hooks/useCircleDemocracy.ts` | Proposals, voting, quorum tracking |
+| 🟢 | `hooks/useGraduatedEntry.ts` | Entry tier, progression, eligibility |
+| 🟢 | `hooks/useInsurancePool.ts` | Pool balance, claims, premium tracking |
+| 🟢 | `hooks/useDynamicPayoutOrdering.ts` | Payout order, fairness scores |
+| 🟢 | `hooks/useNotificationPriority.ts` | Notification queue, priority routing |
+| 🟢 | `hooks/useSanctionsScreening.ts` | Screening status, match results |
+| 🟢 | `hooks/useAmlMonitoring.ts` | Alert queue, rule triggers, SAR status |
+| 🟢 | `hooks/useExplainableAI.ts` | Decision explanations, audit trails |
+| 🟢 | `hooks/useLegalDocuments.ts` | Legal terms, acceptance tracking, i18n |
+| 🟢 | `hooks/usePartialContribution.ts` | Eligibility, activation, catch-up tracking |
+| 🟢 | `hooks/useSubstituteMember.ts` | Substitute search, assignment, handback |
+| 🟢 | `hooks/useCronAIJobs.ts` | AI job status, scheduling, results |
+| 🟢 | `hooks/useAIRecommendationFeedback.ts` | Feedback submission, accuracy stats |
+| 🟢 | `hooks/useCircleMatchHistory.ts` | Match history, outcome labels, ML data |
+| 🟢 | `hooks/useKYCVerification.ts` | KYC status, documents, admin review, dashboard |
+| 🟢 | `hooks/useKYCFallback.ts` | Fallback score, gate checks, escalations |
+| 🟢 | `hooks/useEventTracker.ts` | Event logging, analytics queries |
+| 🟢 | `hooks/useMemberProfile.ts` | Extended profile data, financial signals |
+
 ---
 
-## 10. DATABASE MIGRATIONS REFERENCE
+## 15. DATABASE MIGRATIONS REFERENCE
 
+### Core Migrations (001-027)
 | # | Migration File | Status | Description |
 |---|----------------|--------|-------------|
 | 001-004 | Core setup | 🟢 | Tables, profiles, wallets |
@@ -261,79 +378,171 @@
 | 026 | cron_job_logs | 🟢 | Cron logging & notifications table |
 | 027 | setup_cron_schedules | 🟢 | pg_cron schedules for all edge functions |
 
+### Phase 0 Migrations (028-038) -- NEW
+| # | Migration File | Status | Description |
+|---|----------------|--------|-------------|
+| 028 | token_incentives | 🟢 | XN token system, staking, redemption |
+| 029 | api_white_label | 🟢 | Multi-tenant API, partner branding |
+| 030 | token_api_cron_schedules | 🟢 | Token distribution + API usage cron |
+| 031 | savings_context_support | 🟢 | Savings goals, target tracking |
+| 032 | elder_context_support | 🟢 | Elder dashboard, community oversight |
+| 033 | feature_gates | 🟢 | Feature flags, gradual rollouts |
+| 034 | user_events | 🟢 | Behavioral event logging |
+| 035 | member_financial_profiles | 🟢 | Extended financial signals |
+| 036 | scoring_pipeline | 🟢 | Multi-engine score aggregation |
+| 037 | honor_scores | 🟢 | Behavioral trust scoring |
+| 038 | honor_score_realignment | 🟢 | Honor score normalization rules |
+
+### Phase 1 Migrations (039-053) -- NEW
+| # | Migration File | Status | Description |
+|---|----------------|--------|-------------|
+| 039 | circle_democracy | 🟢 | Proposals, voting, quorum |
+| 040 | graduated_entry | 🟢 | Progressive access tiers |
+| 041 | circle_insurance_pool | 🟢 | Insurance premiums, coverage claims |
+| 042 | dynamic_payout_ordering | 🟢 | Need-based reordering, fairness |
+| 043 | notification_priority_engine | 🟢 | Smart notification routing |
+| 044 | sanctions_screening | 🟢 | OFAC/EU/UN watchlist, PEP |
+| 045 | aml_monitoring | 🟢 | Transaction rules, SAR generation |
+| 046 | explainable_ai_decisions | 🟢 | Decision transparency, audits |
+| 047 | legal_terms_simplifier | 🟢 | Plain-language legal docs, 15 languages |
+| 048 | partial_contributions | 🟢 | 50/25/25 split, catch-up scheduling |
+| 049 | substitute_member_system | 🟢 | Temporary replacements, handback |
+| 050 | cron_ai_trigger_infrastructure | 🟢 | Intelligent job scheduling |
+| 051 | ai_recommendation_feedback_loop | 🟢 | Feedback loops, model retraining |
+| 052 | circle_match_history_ml_seed | 🟢 | ML training data, outcome labeling |
+| 053 | kyc_verification_system | 🟢 | KYC Persona + fallback risk scoring (9 tables, 22 indexes, 13 RLS, 4 triggers) |
+
 ---
 
-## 11. SUMMARY DASHBOARD
+## 16. SUMMARY DASHBOARD
 
 | Category | 🟢 Done | 🟡 Partial | 🔴 Needed | Total |
 |----------|---------|------------|-----------|-------|
-| Core Tontine Systems | 13 | 0 | 0 | 13 |
-| XnScore Systems | 3 | 0 | 0 | 3 |
+| Core Tontine Systems | 16 | 0 | 0 | 16 |
+| XnScore & Scoring Systems | 5 | 0 | 0 | 5 |
 | Lending Systems | 3 | 0 | 0 | 3 |
-| Security | 1 | 1 | 0 | 2 |
+| Security & Compliance | 5 | 1 | 0 | 6 |
+| AI & Intelligence | 4 | 0 | 0 | 4 |
+| Governance & Democracy | 3 | 0 | 0 | 3 |
+| Token & Economy | 3 | 0 | 0 | 3 |
+| Context & Profiles | 5 | 0 | 0 | 5 |
+| Legal & Notifications | 2 | 0 | 0 | 2 |
 | Edge Functions + Cron | 10 | 0 | 0 | 10 |
 | Cron Infrastructure | 2 | 0 | 0 | 2 |
-| External Integrations | 0 | 0 | 10 | 10 |
-| Additional Features | 0 | 0 | 11 | 11 |
-| TypeScript Services | 33 | 0 | 0 | 33 |
-| React Hooks | 22 | 0 | 0 | 22 |
-| **TOTAL** | **87** | **1** | **21** | **109** |
+| External Integrations | 1 | 0 | 9 | 10 |
+| Remaining Features | 0 | 0 | 6 | 6 |
+| TypeScript Services | 54 | 0 | 0 | 54 |
+| React Hooks | 42 | 0 | 0 | 42 |
+| **TOTAL** | **155** | **1** | **15** | **171** |
 
-### Completion: **81%** (87/109 systems)
+### Completion: **91%** (155/171 systems)
 
 ---
 
-## 12. WHAT CHANGED SINCE v1 (Feb 13 → Feb 16)
+## 17. WHAT CHANGED (v2 Feb 16 > v3 Mar 25)
 
 | Change | Details |
 |--------|---------|
-| ✅ Migration 026 applied | `cron_job_logs` + `notifications` tables created |
-| ✅ Migration 027 applied | All 17 pg_cron schedules active |
-| ✅ 10 Edge Functions deployed | All cron functions live on Supabase |
-| ✅ Services count corrected | 33 TypeScript services (was showing 4) |
-| ✅ Hooks count corrected | 22 React hooks (was showing 2) |
-| 📊 Completion updated | 56% → **81%** (accurate service/hook inventory) |
+| +26 migrations deployed | Migrations 028-053 (Phase 0 + Phase 1 dependency map) |
+| +21 new services | Token, scoring, democracy, insurance, sanctions, AML, AI, KYC engines |
+| +20 new hooks | Matching hook files for all Phase 0/1 services (5 hooks each) |
+| KYC system built | #44 Persona integration + #207 fallback scoring (9 DB tables, 2 engines) |
+| Sanctions + AML built | OFAC/EU/UN screening + transaction monitoring + SAR generation |
+| AI pipeline built | Explainable AI, cron AI triggers, recommendation feedback, ML training seeds |
+| Circle enhancements | Democracy voting, graduated entry, insurance pool, dynamic ordering |
+| Partial contributions | 50/25/25 split mode with insurance pool coverage |
+| Substitute members | Temporary replacement during member absence |
+| Legal compliance | 15-language legal docs, FinCEN 5-year retention, consent tracking |
+| Service count | 33 > **54** (+21 services) |
+| Hook count | 22 > **42** (+20 hooks) |
+| Migration count | 27 > **53** (+26 migrations) |
+| Completion | 81% > **91%** |
 
 ---
 
-## 13. CRITICAL PATH TO MVP
+## 18. CRITICAL PATH TO MVP
 
-### Phase 1: Core Infrastructure ✅ COMPLETE
+### Phase 1: Core Infrastructure 🟢 COMPLETE
 - [x] Database schema (Migrations 001-025)
 - [x] Core algorithms (circle, payout, XnScore)
 - [x] Lending system (creditworthiness, interest, payments)
 - [x] Security (RLS)
 
-### Phase 2: Edge Functions + Cron ✅ COMPLETE
+### Phase 2: Edge Functions + Cron 🟢 COMPLETE
 - [x] All 10 edge functions deployed
 - [x] All cron schedules active (Migration 027)
 - [x] Cron logging infrastructure (Migration 026)
 
-### Phase 3: TypeScript Layer ✅ COMPLETE
-- [x] 33 service files covering all business logic
-- [x] 22 React hooks for UI integration
+### Phase 3: TypeScript Layer 🟢 COMPLETE
+- [x] 33 core service files covering all business logic
+- [x] 22 core React hooks for UI integration
 
-### Phase 4: External Integrations 🔴 NOT STARTED
+### Phase 4: Advanced Systems (Dependency Map) 🟢 COMPLETE
+- [x] Phase 0 foundation: Feature gates, events, profiles, scoring pipeline, honor, tokens, API (028-038)
+- [x] Phase 1 advanced: Democracy, insurance, sanctions, AML, AI, legal, KYC (039-053)
+- [x] 21 new services + 20 new hooks for all Phase 0/1 systems
+- [x] Full KYC system: Persona provider + fallback risk scoring
+
+### Phase 5: External Integrations 🟡 IN PROGRESS
+- [x] KYC/Identity Verification (Persona + Fallback)
 - [ ] Payment gateway (Stripe/Flutterwave)
 - [ ] Push notifications (Firebase/Expo)
-- [ ] KYC verification
-- [ ] Bank verification
+- [ ] Bank verification (Plaid)
+- [ ] Phone verification (OTP)
+- [ ] Email service (Resend/SendGrid)
+- [ ] SMS service (Twilio/Africa's Talking)
 
-### Phase 5: Polish 🔴 NOT STARTED
+### Phase 6: Polish 🔴 NOT STARTED
 - [ ] Admin dashboard
-- [ ] Fraud detection
-- [ ] Full notification system (email/SMS)
 - [ ] Dispute resolution
+- [ ] Chat/messaging system
+- [ ] Reporting & analytics
+- [ ] Achievement/badge system
+- [ ] Multi-currency support
 
 ---
 
-## 14. RECOMMENDED NEXT STEPS
+## 19. RECOMMENDED NEXT STEPS
 
-1. **Immediate**: Payment gateway integration (Stripe or Flutterwave)
-2. **Week 1**: Push notifications (Expo Push / Firebase)
-3. **Week 2**: KYC/Bank verification
-4. **Week 3**: Admin dashboard basics
-5. **Week 4**: Full notification pipeline (email + SMS)
+### Immediate Priority (Payment Infrastructure)
+1. **Payment Gateway Integration** -- Stripe Connect or Flutterwave
+   - Deposit flow (card, bank transfer, mobile money)
+   - Withdrawal flow (bank payout, mobile money)
+   - Webhook processing for payment status
+   - Idempotency + retry logic
+   - *Why first:* No money movement possible without this. Blocks all real testing.
+
+2. **Bank Verification** -- Plaid or manual
+   - Account ownership verification
+   - Micro-deposit verification fallback
+   - *Why second:* Required before any bank payouts can execute.
+
+### Week 1-2 (Notification Pipeline)
+3. **Push Notifications** -- Expo Push / Firebase Cloud Messaging
+   - Device token registration
+   - NotificationPriorityEngine already built (Migration 043) -- just needs delivery transport
+   - Critical alerts: payment due, payout received, KYC deadline
+
+4. **Email Service** -- Resend or SendGrid
+   - Transactional emails (receipts, reminders, KYC prompts)
+   - Template system with 15-language support (LegalDocumentEngine already handles i18n)
+
+5. **SMS Service** -- Twilio or Africa's Talking
+   - OTP verification
+   - Critical payment reminders
+   - Fallback for push notification failures
+
+### Week 3-4 (Admin + Polish)
+6. **Admin Dashboard** -- React admin panel
+   - KYC admin review queue (hooks already built: `useKYCAdminReviewQueue`)
+   - AML alert management (hooks built: `useAmlMonitoring`)
+   - Circle health overview
+   - Member management
+
+7. **Dispute Resolution System**
+   - Member-to-member disputes
+   - Elder arbitration workflow
+   - Appeals process
 
 ---
 

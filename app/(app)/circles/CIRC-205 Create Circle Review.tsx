@@ -1,46 +1,74 @@
 "use client"
 
 import { useState } from "react"
+import { useCreateCircleWizard } from "../../../context/CreateCircleWizardContext"
+import { useCircles, CIRCLE_TYPES } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { goBack, navigateToCircleScreen } from "./useCircleParams"
 
-export default function CreateCircleInviteScreen() {
-  const circleDetails = {
-    name: "Family Savings",
-    amount: 200,
-    frequency: "monthly",
-    size: 6,
-  }
+export default function CreateCircleReviewScreen() {
+  const wizard = useCreateCircleWizard()
+  const { createCircle } = useCircles()
+  const { user } = useAuth()
+  const [isCreating, setIsCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
-  const contacts = [
-    { id: 1, name: "Amara Okafor", phone: "+1 (404) 555-0123", avatar: "A", xnScore: 78 },
-    { id: 2, name: "Kwame Mensah", phone: "+1 (470) 555-0456", avatar: "K", xnScore: 85 },
-    { id: 3, name: "Fatima Hassan", phone: "+1 (678) 555-0789", avatar: "F", xnScore: 72 },
-    { id: 4, name: "David Nguyen", phone: "+1 (404) 555-0321", avatar: "D", xnScore: 68 },
-    { id: 5, name: "Marie Claire", phone: "+1 (470) 555-0654", avatar: "M", xnScore: 81 },
-    { id: 6, name: "Samuel Osei", phone: "+1 (678) 555-0987", avatar: "S", xnScore: 75 },
-    { id: 7, name: "Grace Adeyemi", phone: "+1 (404) 555-1234", avatar: "G", xnScore: 82 },
-    { id: 8, name: "James Kimani", phone: "+1 (470) 555-5678", avatar: "J", xnScore: 79 },
-  ]
+  const state = wizard.state
 
-  const [selectedMembers, setSelectedMembers] = useState<number[]>([])
-  const [searchQuery, setSearchQuery] = useState("")
+  // Get circle type display info
+  const circleTypeInfo = state.type ? (CIRCLE_TYPES as Record<string, any>)[state.type] : null
 
-  const filteredContacts = contacts.filter(
-    (c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.phone.includes(searchQuery),
-  )
-
-  const toggleMember = (memberId: number) => {
-    if (selectedMembers.includes(memberId)) {
-      setSelectedMembers(selectedMembers.filter((id) => id !== memberId))
-    } else {
-      setSelectedMembers([...selectedMembers, memberId])
+  const getFrequencyLabel = (freq: string) => {
+    switch (freq) {
+      case "daily": return "Daily"
+      case "weekly": return "Weekly"
+      case "biweekly": return "Bi-weekly"
+      case "monthly": return "Monthly"
+      default: return freq
     }
   }
 
-  const getScoreColor = (score: number) => {
-    if (score >= 85) return "#00C6AE"
-    if (score >= 70) return "#0A2342"
-    if (score >= 50) return "#D97706"
-    return "#DC2626"
+  const getRotationLabel = (method: string) => {
+    switch (method) {
+      case "xnscore": return "By XnScore"
+      case "random": return "Random Draw"
+      case "manual": return "Manual Assignment"
+      default: return method
+    }
+  }
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return "Not set"
+    const date = new Date(dateStr)
+    return date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })
+  }
+
+  const totalPot = state.amount * state.memberCount
+
+  const handleCreateCircle = async () => {
+    setIsCreating(true)
+    setCreateError(null)
+    try {
+      const circle = await createCircle({
+        name: state.name,
+        type: state.type as any,
+        amount: state.amount,
+        frequency: state.frequency as any,
+        memberCount: state.memberCount,
+        startDate: state.startDate,
+        rotationMethod: state.rotationMethod,
+        gracePeriodDays: state.gracePeriodDays,
+        invitedMembers: state.invitedMembers,
+        emoji: state.emoji || circleTypeInfo?.emoji || "",
+        description: state.description || "",
+        createdBy: user?.id || "",
+      })
+      navigateToCircleScreen("CIRC-206 Create Circle Success", { circleId: circle.id })
+    } catch (err: any) {
+      setCreateError(err.message || "Failed to create circle. Please try again.")
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   return (
@@ -49,7 +77,7 @@ export default function CreateCircleInviteScreen() {
         minHeight: "100vh",
         background: "#F5F7FA",
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-        paddingBottom: "120px",
+        paddingBottom: "140px",
       }}
     >
       {/* Header - Navy */}
@@ -69,11 +97,12 @@ export default function CreateCircleInviteScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
+            disabled={isCreating}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
-              cursor: "pointer",
+              cursor: isCreating ? "not-allowed" : "pointer",
               padding: "8px",
               borderRadius: "10px",
               display: "flex",
@@ -84,8 +113,8 @@ export default function CreateCircleInviteScreen() {
             </svg>
           </button>
           <div style={{ flex: 1 }}>
-            <h1 style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#FFFFFF" }}>Invite Members</h1>
-            <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "rgba(255,255,255,0.8)" }}>Step 3 of 4</p>
+            <h1 style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#FFFFFF" }}>Review & Create</h1>
+            <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "rgba(255,255,255,0.8)" }}>Step 4 of 4</p>
           </div>
         </div>
 
@@ -98,7 +127,7 @@ export default function CreateCircleInviteScreen() {
                 flex: 1,
                 height: "4px",
                 borderRadius: "2px",
-                background: step <= 3 ? "#00C6AE" : "rgba(255,255,255,0.3)",
+                background: "#00C6AE",
               }}
             />
           ))}
@@ -107,150 +136,154 @@ export default function CreateCircleInviteScreen() {
 
       {/* Content */}
       <div style={{ padding: "20px" }}>
-        {/* Selection Count */}
+        {/* Circle Type & Name */}
         <div
           style={{
             background: "#FFFFFF",
-            borderRadius: "14px",
-            padding: "16px",
+            borderRadius: "16px",
+            padding: "20px",
             marginBottom: "16px",
             border: "1px solid #E5E7EB",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
+            textAlign: "center",
           }}
         >
-          <div>
-            <p style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>
-              {selectedMembers.length} member{selectedMembers.length !== 1 ? "s" : ""} selected
-            </p>
-            <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6B7280" }}>
-              You + {selectedMembers.length} = {selectedMembers.length + 1} total • No limit
-            </p>
-          </div>
           <div
             style={{
+              width: "56px",
+              height: "56px",
+              borderRadius: "14px",
               background: "#F0FDFB",
-              padding: "8px 12px",
-              borderRadius: "8px",
-            }}
-          >
-            <span style={{ fontSize: "18px", fontWeight: "700", color: "#00C6AE" }}>∞</span>
-          </div>
-        </div>
-
-        {/* Share Link Option */}
-        <button
-          onClick={() => console.log("Share Link")}
-          style={{
-            width: "100%",
-            background: "#F0FDFB",
-            borderRadius: "14px",
-            padding: "16px",
-            marginBottom: "16px",
-            border: "1px solid #00C6AE",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            textAlign: "left",
-          }}
-        >
-          <div
-            style={{
-              width: "44px",
-              height: "44px",
-              borderRadius: "10px",
-              background: "#00C6AE",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              margin: "0 auto 12px auto",
+              fontSize: "28px",
             }}
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2">
-              <circle cx="18" cy="5" r="3" />
-              <circle cx="6" cy="12" r="3" />
-              <circle cx="18" cy="19" r="3" />
-              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-            </svg>
+            {circleTypeInfo?.emoji || "\uD83D\uDD04"}
           </div>
-          <div style={{ flex: 1 }}>
-            <p style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>Share Invite Link</p>
-            <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6B7280" }}>
-              Anyone with the link can request to join
-            </p>
-          </div>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00C6AE" strokeWidth="2">
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
+          <h2 style={{ margin: "0 0 4px 0", fontSize: "20px", fontWeight: "700", color: "#0A2342" }}>
+            {state.name || "Untitled Circle"}
+          </h2>
+          <p style={{ margin: 0, fontSize: "13px", color: "#6B7280" }}>
+            {circleTypeInfo?.name || state.type || "Circle"}
+          </p>
+        </div>
 
-        {/* Search */}
+        {/* Financial Summary */}
+        <div
+          style={{
+            background: "#0A2342",
+            borderRadius: "14px",
+            padding: "16px",
+            marginBottom: "16px",
+          }}
+        >
+          <h4 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600", color: "#FFFFFF" }}>
+            Financial Summary
+          </h4>
+          <div style={{ display: "flex", gap: "12px", marginBottom: "12px" }}>
+            <div style={{ flex: 1, padding: "12px", background: "rgba(255,255,255,0.1)", borderRadius: "10px" }}>
+              <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#FFFFFF" }}>${state.amount}</p>
+              <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "rgba(255,255,255,0.6)" }}>per cycle</p>
+            </div>
+            <div style={{ flex: 1, padding: "12px", background: "rgba(255,255,255,0.1)", borderRadius: "10px" }}>
+              <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#FFFFFF" }}>{state.memberCount}</p>
+              <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "rgba(255,255,255,0.6)" }}>members</p>
+            </div>
+            <div style={{ flex: 1, padding: "12px", background: "rgba(0,198,174,0.2)", borderRadius: "10px" }}>
+              <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#00C6AE" }}>
+                ${totalPot.toLocaleString()}
+              </p>
+              <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "rgba(255,255,255,0.6)" }}>pot size</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Details Summary */}
         <div
           style={{
             background: "#FFFFFF",
             borderRadius: "16px",
             padding: "16px",
+            marginBottom: "16px",
             border: "1px solid #E5E7EB",
           }}
         >
+          <h4 style={{ margin: "0 0 14px 0", fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>
+            Circle Details
+          </h4>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "13px", color: "#6B7280" }}>Frequency</span>
+              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>
+                {getFrequencyLabel(state.frequency)}
+              </span>
+            </div>
+            <div style={{ height: "1px", background: "#F3F4F6" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "13px", color: "#6B7280" }}>Start Date</span>
+              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>
+                {formatDate(state.startDate)}
+              </span>
+            </div>
+            <div style={{ height: "1px", background: "#F3F4F6" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "13px", color: "#6B7280" }}>Rotation Method</span>
+              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>
+                {getRotationLabel(state.rotationMethod)}
+              </span>
+            </div>
+            <div style={{ height: "1px", background: "#F3F4F6" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "13px", color: "#6B7280" }}>Grace Period</span>
+              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>
+                {state.gracePeriodDays === 0 ? "None" : `${state.gracePeriodDays} day${state.gracePeriodDays > 1 ? "s" : ""}`}
+              </span>
+            </div>
+            <div style={{ height: "1px", background: "#F3F4F6" }} />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: "13px", color: "#6B7280" }}>Invites Pending</span>
+              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>
+                {state.invitedMembers.length > 0
+                  ? `${state.invitedMembers.length} member${state.invitedMembers.length > 1 ? "s" : ""}`
+                  : "None yet"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Invited Members List (if any) */}
+        {state.invitedMembers.length > 0 && (
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              padding: "12px 14px",
-              background: "#F5F7FA",
-              borderRadius: "10px",
+              background: "#FFFFFF",
+              borderRadius: "16px",
+              padding: "16px",
               marginBottom: "16px",
+              border: "1px solid #E5E7EB",
             }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search contacts..."
-              style={{
-                flex: 1,
-                border: "none",
-                background: "transparent",
-                fontSize: "14px",
-                outline: "none",
-              }}
-            />
-          </div>
-
-          {/* Contacts List */}
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "400px", overflowY: "auto" }}>
-            {filteredContacts.map((contact) => {
-              const isSelected = selectedMembers.includes(contact.id)
-
-              return (
-                <button
-                  key={contact.id}
-                  onClick={() => toggleMember(contact.id)}
+            <h4 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>
+              Invited Members
+            </h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {state.invitedMembers.map((member) => (
+                <div
+                  key={member.id}
                   style={{
-                    width: "100%",
-                    padding: "12px",
-                    background: isSelected ? "#F0FDFB" : "#F5F7FA",
-                    borderRadius: "12px",
-                    border: isSelected ? "2px solid #00C6AE" : "1px solid transparent",
-                    cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
-                    gap: "12px",
-                    textAlign: "left",
+                    gap: "10px",
+                    padding: "10px",
+                    background: "#F5F7FA",
+                    borderRadius: "10px",
                   }}
                 >
                   <div
                     style={{
-                      width: "44px",
-                      height: "44px",
+                      width: "36px",
+                      height: "36px",
                       borderRadius: "50%",
                       background: "#0A2342",
                       color: "#FFFFFF",
@@ -258,68 +291,58 @@ export default function CreateCircleInviteScreen() {
                       alignItems: "center",
                       justifyContent: "center",
                       fontWeight: "600",
-                      fontSize: "16px",
+                      fontSize: "14px",
                     }}
                   >
-                    {contact.avatar}
+                    {member.name.charAt(0)}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <p style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>{contact.name}</p>
-                      <span
-                        style={{
-                          background: "#F5F7FA",
-                          padding: "2px 6px",
-                          borderRadius: "4px",
-                          fontSize: "10px",
-                          fontWeight: "700",
-                          color: getScoreColor(contact.xnScore),
-                        }}
-                      >
-                        ⭐ {contact.xnScore}
-                      </span>
-                    </div>
-                    <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#6B7280" }}>{contact.phone}</p>
+                    <p style={{ margin: 0, fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>{member.name}</p>
+                    <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#6B7280" }}>{member.phone}</p>
                   </div>
-                  {isSelected ? (
-                    <div
-                      style={{
-                        width: "24px",
-                        height: "24px",
-                        borderRadius: "50%",
-                        background: "#00C6AE",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        width: "24px",
-                        height: "24px",
-                        borderRadius: "50%",
-                        border: "2px solid #D1D5DB",
-                      }}
-                    />
-                  )}
-                </button>
-              )
-            })}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Tip */}
+        {/* Error Display */}
+        {createError && (
+          <div
+            style={{
+              background: "#FEF2F2",
+              borderRadius: "12px",
+              padding: "14px",
+              marginBottom: "16px",
+              border: "1px solid #FCA5A5",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "10px",
+            }}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#DC2626"
+              strokeWidth="2"
+              style={{ marginTop: "2px", flexShrink: 0 }}
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <p style={{ margin: 0, fontSize: "13px", color: "#DC2626", lineHeight: 1.5 }}>{createError}</p>
+          </div>
+        )}
+
+        {/* Trust Note */}
         <div
           style={{
             background: "#F0FDFB",
             borderRadius: "12px",
             padding: "14px",
-            marginTop: "16px",
             display: "flex",
             alignItems: "flex-start",
             gap: "10px",
@@ -334,17 +357,15 @@ export default function CreateCircleInviteScreen() {
             strokeWidth="2"
             style={{ marginTop: "2px", flexShrink: 0 }}
           >
-            <circle cx="12" cy="12" r="10" />
-            <path d="M12 16v-4M12 8h.01" />
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
           <p style={{ margin: 0, fontSize: "12px", color: "#065F46", lineHeight: 1.5 }}>
-            <strong>Tip:</strong> Invite members with higher XnScores for a more reliable circle. There's no limit - you
-            can invite as many members as you want!
+            <strong>Protected by TandaXn:</strong> Your circle will be protected against individual member defaults once active.
           </p>
         </div>
       </div>
 
-      {/* Continue Button */}
+      {/* Create Button */}
       <div
         style={{
           position: "fixed",
@@ -357,22 +378,21 @@ export default function CreateCircleInviteScreen() {
         }}
       >
         <button
-          onClick={() => console.log("Continue", selectedMembers)}
+          onClick={handleCreateCircle}
+          disabled={isCreating}
           style={{
             width: "100%",
             padding: "16px",
             borderRadius: "14px",
             border: "none",
-            background: "#00C6AE",
+            background: isCreating ? "#9CA3AF" : "#00C6AE",
             fontSize: "16px",
             fontWeight: "600",
             color: "#FFFFFF",
-            cursor: "pointer",
+            cursor: isCreating ? "not-allowed" : "pointer",
           }}
         >
-          {selectedMembers.length > 0
-            ? `Continue with ${selectedMembers.length} invite${selectedMembers.length > 1 ? "s" : ""}`
-            : "Skip for Now"}
+          {isCreating ? "Creating Circle..." : "Create Circle"}
         </button>
       </div>
     </div>

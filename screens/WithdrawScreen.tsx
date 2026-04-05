@@ -8,6 +8,8 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,6 +17,7 @@ import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useWallet } from "../context/WalletContext";
+import { usePayment } from "../context/PaymentContext";
 
 type WithdrawNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -72,12 +75,19 @@ const WITHDRAW_METHODS: WithdrawMethod[] = [
 export default function WithdrawScreen() {
   const navigation = useNavigation<WithdrawNavigationProp>();
   const { balance, withdraw } = useWallet();
+  const { paymentMethods, createWithdrawal, isOnboarded, setupConnectedAccount } = usePayment();
   const [amount, setAmount] = useState("");
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSettingUpAccount, setIsSettingUpAccount] = useState(false);
+
+  // Filter to bank accounts only for withdrawals
+  const bankAccounts = paymentMethods.filter((pm: any) => pm.type === "us_bank_account");
 
   const numericAmount = parseFloat(amount) || 0;
-  const selectedMethodData = WITHDRAW_METHODS.find((m) => m.id === selectedMethod);
+  const selectedBankAccount = bankAccounts.find((m: any) => m.id === selectedMethod);
+  // Fall back to hardcoded data for fee/time display when using real methods
+  const selectedMethodData = WITHDRAW_METHODS.find((m) => m.id === "bank");
 
   const getFee = () => {
     if (!selectedMethodData || !selectedMethodData.fee) return 0;
@@ -97,23 +107,43 @@ export default function WithdrawScreen() {
     setAmount(balance.toString());
   };
 
+  const handleSetupAccount = async () => {
+    setIsSettingUpAccount(true);
+    try {
+      await setupConnectedAccount();
+    } catch (error: any) {
+      Alert.alert("Setup Failed", error?.message || "Could not set up your payout account.");
+    } finally {
+      setIsSettingUpAccount(false);
+    }
+  };
+
   const handleContinue = async () => {
     if (!canContinue) return;
 
     setIsProcessing(true);
     try {
-      // Withdraw from wallet context
-      await withdraw(numericAmount, selectedMethodData?.name || "");
+      const amountCents = Math.round(numericAmount * 100);
+
+      // Create withdrawal via Stripe
+      const result = await createWithdrawal(amountCents, "usd");
+
+      // Withdrawal succeeded - update local wallet state
+      await withdraw(numericAmount, selectedBankAccount?.us_bank_account?.bank_name || "Bank Account");
 
       // Navigate to success screen
       navigation.navigate("WalletTransactionSuccess", {
         type: "withdraw",
         amount: numericAmount,
-        method: selectedMethodData?.name || "",
-        transactionId: `TXN${Date.now()}`,
+        method: selectedBankAccount?.us_bank_account?.bank_name || "Bank Account",
+        transactionId: result?.transactionId || `TXN${Date.now()}`,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error withdrawing:", error);
+      Alert.alert(
+        "Withdrawal Failed",
+        error?.message || "Something went wrong. Please try again."
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -179,66 +209,117 @@ export default function WithdrawScreen() {
             )}
           </View>
 
+          {/* Onboarding Banner */}
+          {!isOnboarded && (
+            <View style={{
+              backgroundColor: "#FFF7ED",
+              borderRadius: 14,
+              padding: 16,
+              marginBottom: 20,
+              borderWidth: 1,
+              borderColor: "#FDBA74",
+              flexDirection: "row",
+              alignItems: "center",
+            }}>
+              <Ionicons name="alert-circle-outline" size={22} color="#EA580C" style={{ marginRight: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontWeight: "600", color: "#9A3412", marginBottom: 4 }}>
+                  Payout account required
+                </Text>
+                <Text style={{ fontSize: 13, color: "#C2410C", marginBottom: 10 }}>
+                  Set up your payout account to withdraw funds to your bank.
+                </Text>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: "#EA580C",
+                    borderRadius: 8,
+                    paddingVertical: 10,
+                    alignItems: "center",
+                  }}
+                  onPress={handleSetupAccount}
+                  disabled={isSettingUpAccount}
+                >
+                  {isSettingUpAccount ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#FFFFFF" }}>
+                      Set Up Payout Account
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {/* Withdraw Methods */}
           <View style={styles.methodsSection}>
             <Text style={styles.sectionTitle}>Withdraw To</Text>
-            {WITHDRAW_METHODS.map((method) => (
-              <TouchableOpacity
-                key={method.id}
-                style={[
-                  styles.methodCard,
-                  selectedMethod === method.id && styles.methodCardSelected,
-                  !method.available && styles.methodCardDisabled,
-                ]}
-                onPress={() => method.available && setSelectedMethod(method.id)}
-                disabled={!method.available}
-              >
-                <View style={styles.methodLeft}>
-                  <View
-                    style={[
-                      styles.methodIcon,
-                      selectedMethod === method.id && styles.methodIconSelected,
-                    ]}
-                  >
-                    <Ionicons
-                      name={method.icon}
-                      size={22}
-                      color={selectedMethod === method.id ? "#00C6AE" : "#6B7280"}
-                    />
-                  </View>
-                  <View style={styles.methodInfo}>
-                    <View style={styles.methodNameRow}>
-                      <Text style={styles.methodName}>{method.name}</Text>
-                      {method.lastUsed && (
-                        <View style={styles.lastUsedBadge}>
-                          <Text style={styles.lastUsedText}>Last used</Text>
-                        </View>
-                      )}
+            {bankAccounts.length > 0 ? (
+              bankAccounts.map((method: any) => (
+                <TouchableOpacity
+                  key={method.id}
+                  style={[
+                    styles.methodCard,
+                    selectedMethod === method.id && styles.methodCardSelected,
+                  ]}
+                  onPress={() => setSelectedMethod(method.id)}
+                >
+                  <View style={styles.methodLeft}>
+                    <View
+                      style={[
+                        styles.methodIcon,
+                        selectedMethod === method.id && styles.methodIconSelected,
+                      ]}
+                    >
+                      <Ionicons
+                        name="business-outline"
+                        size={22}
+                        color={selectedMethod === method.id ? "#00C6AE" : "#6B7280"}
+                      />
                     </View>
-                    <Text style={styles.methodDescription}>{method.description}</Text>
+                    <View style={styles.methodInfo}>
+                      <View style={styles.methodNameRow}>
+                        <Text style={styles.methodName}>
+                          {method.us_bank_account?.bank_name || "Bank Account"}
+                        </Text>
+                      </View>
+                      <Text style={styles.methodDescription}>
+                        ****{method.us_bank_account?.last4 || ""}
+                      </Text>
+                    </View>
                   </View>
-                </View>
-                <View style={styles.methodRight}>
-                  <View style={styles.methodDetails}>
-                    <Text style={styles.methodFee}>{method.fee}</Text>
-                    <Text style={styles.methodTime}>{method.processingTime}</Text>
+                  <View style={styles.methodRight}>
+                    <View style={styles.methodDetails}>
+                      <Text style={styles.methodFee}>Free</Text>
+                      <Text style={styles.methodTime}>1-3 business days</Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.radioOuter,
+                        selectedMethod === method.id && styles.radioOuterSelected,
+                      ]}
+                    >
+                      {selectedMethod === method.id && <View style={styles.radioInner} />}
+                    </View>
                   </View>
-                  <View
-                    style={[
-                      styles.radioOuter,
-                      selectedMethod === method.id && styles.radioOuterSelected,
-                    ]}
-                  >
-                    {selectedMethod === method.id && <View style={styles.radioInner} />}
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              ))
+            ) : (
+              <View style={{ paddingVertical: 20, alignItems: "center" }}>
+                <Ionicons name="business-outline" size={32} color="#D1D5DB" />
+                <Text style={{ fontSize: 14, color: "#6B7280", marginTop: 8, textAlign: "center" }}>
+                  No bank accounts linked yet
+                </Text>
+              </View>
+            )}
 
             {/* Add New Method */}
-            <TouchableOpacity style={styles.addMethodButton}>
+            <TouchableOpacity
+              style={styles.addMethodButton}
+              onPress={() => navigation.navigate("AddPaymentMethod" as any)}
+            >
               <Ionicons name="add-circle-outline" size={22} color="#00C6AE" />
-              <Text style={styles.addMethodText}>Add New Withdrawal Method</Text>
+              <Text style={styles.addMethodText}>Add New Bank Account</Text>
             </TouchableOpacity>
           </View>
 

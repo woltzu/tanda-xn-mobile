@@ -1,6 +1,9 @@
 "use client"
+import { useSavings } from "@/context/SavingsContext"
+import { useWithdrawalWizard } from "@/context/WithdrawalWizardContext"
+import { useGoalParams, navigateToGoalScreen, goBack } from "./useGoalParams"
 import { ArrowLeft, ChevronRight } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 // Brand Colors
 const colors = {
@@ -15,33 +18,50 @@ const colors = {
 
 export default function WithdrawalAmountScreen() {
   const [amount, setAmount] = useState("")
+  const [isInitialized, setIsInitialized] = useState(false)
 
-  const goal = {
-    id: "g1",
-    name: "Emergency Fund",
-    emoji: "🛡️",
-    currentAmount: 3200,
-    tier: "emergency",
-  }
+  const { goalId } = useGoalParams()
+  const { getGoalById, isLoading: savingsLoading } = useSavings()
+  const { state, updateFields, initFromGoal } = useWithdrawalWizard()
 
-  const tiers = {
-    flexible: { name: "Flexible", penalty: 0, color: "#10B981" },
-    emergency: { name: "Emergency", penalty: 2, color: "#3B82F6" },
-    locked: { name: "Locked", penalty: 7, color: "#8B5CF6" },
-  }
+  // Load goal from context and initialize wizard
+  useEffect(() => {
+    if (!goalId || isInitialized) return
+    const goal = getGoalById(goalId)
+    if (goal) {
+      initFromGoal({
+        id: goal.id,
+        name: goal.name,
+        emoji: goal.emoji,
+        type: goal.type,
+        currentBalance: goal.currentBalance,
+        earlyWithdrawalPenalty: goal.earlyWithdrawalPenalty,
+      })
+      setIsInitialized(true)
+    }
+  }, [goalId, getGoalById, initFromGoal, isInitialized])
 
-  const tierInfo = tiers[goal.tier]
   const withdrawAmount = Number.parseFloat(amount) || 0
-  const penaltyAmount = Math.round((withdrawAmount * tierInfo.penalty) / 100)
+  const penaltyAmount = Math.round((withdrawAmount * state.penaltyPercent) / 100)
   const receiveAmount = withdrawAmount - penaltyAmount
 
   const quickAmounts = [
-    { label: "25%", value: Math.round(goal.currentAmount * 0.25) },
-    { label: "50%", value: Math.round(goal.currentAmount * 0.5) },
-    { label: "All", value: goal.currentAmount },
+    { label: "25%", value: Math.round(state.currentBalance * 0.25) },
+    { label: "50%", value: Math.round(state.currentBalance * 0.5) },
+    { label: "All", value: state.currentBalance },
   ]
 
-  const isValid = withdrawAmount > 0 && withdrawAmount <= goal.currentAmount
+  const isValid = withdrawAmount > 0 && withdrawAmount <= state.currentBalance
+
+  const handleContinue = () => {
+    updateFields({
+      amount: withdrawAmount,
+      penaltyAmount,
+      receiveAmount,
+      remainingBalance: state.currentBalance - withdrawAmount,
+    })
+    navigateToGoalScreen("041-GOAL-T06-WithdrawalReason", { goalId: state.goalId! })
+  }
 
   const steps = [
     { num: 1, label: "Amount", active: true },
@@ -49,6 +69,86 @@ export default function WithdrawalAmountScreen() {
     { num: 3, label: "Review", active: false },
     { num: 4, label: "Done", active: false },
   ]
+
+  // Loading state
+  if (savingsLoading || (!isInitialized && goalId)) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: colors.background,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: `3px solid ${colors.borders}`,
+              borderTopColor: colors.accentTeal,
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 12px auto",
+            }}
+          />
+          <p style={{ color: colors.textSecondary, fontSize: "14px" }}>Loading goal...</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state - goal not found
+  if (!goalId || (!savingsLoading && isInitialized && !state.goalId)) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: colors.background,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        }}
+      >
+        <div style={{ textAlign: "center", padding: "20px" }}>
+          <p style={{ fontSize: "48px", marginBottom: "12px" }}>😕</p>
+          <p style={{ color: colors.primaryNavy, fontSize: "18px", fontWeight: "600", margin: "0 0 8px 0" }}>
+            Goal not found
+          </p>
+          <p style={{ color: colors.textSecondary, fontSize: "14px", margin: "0 0 20px 0" }}>
+            The savings goal could not be loaded.
+          </p>
+          <button
+            onClick={() => goBack()}
+            style={{
+              padding: "12px 24px",
+              borderRadius: "12px",
+              border: "none",
+              background: colors.accentTeal,
+              color: "#FFFFFF",
+              fontSize: "14px",
+              fontWeight: "600",
+              cursor: "pointer",
+            }}
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Derive tier display info from penalty percent
+  const tierDisplay = state.penaltyPercent >= 5
+    ? { name: "Locked", color: "#8B5CF6" }
+    : state.penaltyPercent > 0
+      ? { name: "Emergency", color: "#3B82F6" }
+      : { name: "Flexible", color: "#10B981" }
 
   return (
     <div
@@ -66,7 +166,7 @@ export default function WithdrawalAmountScreen() {
         <div style={{ padding: "12px 20px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <button
-              onClick={() => console.log("Back")}
+              onClick={() => goBack()}
               style={{
                 background: "rgba(255,255,255,0.1)",
                 border: "none",
@@ -80,7 +180,7 @@ export default function WithdrawalAmountScreen() {
             </button>
             <div>
               <h1 style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#FFFFFF" }}>
-                Withdraw from {goal.name}
+                Withdraw from {state.goalName}
               </h1>
             </div>
           </div>
@@ -165,18 +265,18 @@ export default function WithdrawalAmountScreen() {
               margin: "0 auto 12px auto",
             }}
           >
-            {goal.emoji}
+            {state.goalEmoji}
           </div>
           <p style={{ margin: "0 0 4px 0", fontSize: "13px", color: colors.textSecondary }}>Available Balance</p>
           <p style={{ margin: 0, fontSize: "36px", fontWeight: "700", color: colors.primaryNavy }}>
-            ${goal.currentAmount.toLocaleString()}
+            ${state.currentBalance.toLocaleString()}
           </p>
           <div
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: "6px",
-              background: tierInfo.color + "15",
+              background: tierDisplay.color + "15",
               padding: "6px 12px",
               borderRadius: "20px",
               marginTop: "12px",
@@ -187,11 +287,11 @@ export default function WithdrawalAmountScreen() {
                 width: "8px",
                 height: "8px",
                 borderRadius: "50%",
-                background: tierInfo.color,
+                background: tierDisplay.color,
               }}
             />
-            <span style={{ fontSize: "12px", fontWeight: "600", color: tierInfo.color }}>
-              {tierInfo.name} • {tierInfo.penalty}% penalty
+            <span style={{ fontSize: "12px", fontWeight: "600", color: tierDisplay.color }}>
+              {tierDisplay.name} • {state.penaltyPercent}% penalty
             </span>
           </div>
         </div>
@@ -226,7 +326,7 @@ export default function WithdrawalAmountScreen() {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0"
-              max={goal.currentAmount}
+              max={state.currentBalance}
               style={{
                 flex: 1,
                 padding: "16px 0 16px 8px",
@@ -282,15 +382,15 @@ export default function WithdrawalAmountScreen() {
         {withdrawAmount > 0 && (
           <div
             style={{
-              background: tierInfo.penalty > 0 ? "#FEF3C7" : "#F0FDF4",
+              background: state.penaltyPercent > 0 ? "#FEF3C7" : "#F0FDF4",
               borderRadius: "16px",
               padding: "16px",
-              border: `1px solid ${tierInfo.penalty > 0 ? "#FDE68A" : "#BBF7D0"}`,
+              border: `1px solid ${state.penaltyPercent > 0 ? "#FDE68A" : "#BBF7D0"}`,
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <p style={{ margin: 0, fontSize: "12px", color: tierInfo.penalty > 0 ? "#92400E" : "#166534" }}>
+                <p style={{ margin: 0, fontSize: "12px", color: state.penaltyPercent > 0 ? "#92400E" : "#166534" }}>
                   You'll receive
                 </p>
                 <p
@@ -298,15 +398,15 @@ export default function WithdrawalAmountScreen() {
                     margin: "4px 0 0 0",
                     fontSize: "28px",
                     fontWeight: "700",
-                    color: tierInfo.penalty > 0 ? "#D97706" : "#16A34A",
+                    color: state.penaltyPercent > 0 ? "#D97706" : "#16A34A",
                   }}
                 >
                   ${receiveAmount.toLocaleString()}
                 </p>
               </div>
-              {tierInfo.penalty > 0 && (
+              {state.penaltyPercent > 0 && (
                 <div style={{ textAlign: "right" }}>
-                  <p style={{ margin: 0, fontSize: "11px", color: "#92400E" }}>Penalty ({tierInfo.penalty}%)</p>
+                  <p style={{ margin: 0, fontSize: "11px", color: "#92400E" }}>Penalty ({state.penaltyPercent}%)</p>
                   <p style={{ margin: "2px 0 0 0", fontSize: "16px", fontWeight: "600", color: "#D97706" }}>
                     -${penaltyAmount.toLocaleString()}
                   </p>
@@ -331,9 +431,7 @@ export default function WithdrawalAmountScreen() {
         }}
       >
         <button
-          onClick={() =>
-            console.log("Continue with", { amount: withdrawAmount, penalty: penaltyAmount, receive: receiveAmount })
-          }
+          onClick={handleContinue}
           disabled={!isValid}
           style={{
             width: "100%",

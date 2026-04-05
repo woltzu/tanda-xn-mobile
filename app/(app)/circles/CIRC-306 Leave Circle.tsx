@@ -1,26 +1,78 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useCircles } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { useCircleParams, goBack, navigateToCircleScreen } from "./useCircleParams"
 
 export default function LeaveCircle() {
-  const circle = {
-    name: "Family Savings",
-    amount: 200,
-    totalContributed: 600,
-    currentCycle: 3,
-    totalCycles: 6,
-    estimatedEndDate: "Apr 15, 2025",
-  }
+  const { circleId } = useCircleParams()
+  const { getCircleById, leaveCircle } = useCircles()
+  const { user } = useAuth()
 
-  const user = {
-    fullName: "Franck Kengne",
-  }
-
+  const [isLoading, setIsLoading] = useState(true)
+  const [isLeaving, setIsLeaving] = useState(false)
   const [confirmName, setConfirmName] = useState("")
   const [understood, setUnderstood] = useState(false)
 
-  const isNameMatch = confirmName.trim().toLowerCase() === user.fullName.toLowerCase()
+  const circle = circleId ? getCircleById(circleId) : undefined
+
+  useEffect(() => {
+    // Circle data comes from context synchronously via getCircleById
+    setIsLoading(false)
+  }, [circleId])
+
+  const fullName = user?.name || "User"
+  const isNameMatch = confirmName.trim().toLowerCase() === fullName.toLowerCase()
   const canConfirm = understood && isNameMatch
+
+  const handleLeave = async () => {
+    if (!circleId || !canConfirm) return
+    setIsLeaving(true)
+    try {
+      await leaveCircle(circleId)
+      navigateToCircleScreen("CIRC-101 Browse Circles")
+    } catch (err: any) {
+      console.error("Failed to leave circle:", err)
+      setIsLeaving(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "3px solid #E5E7EB",
+              borderTop: "3px solid #00C6AE",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 16px auto",
+            }}
+          />
+          <p style={{ color: "#6B7280", fontSize: "14px" }}>Loading...</p>
+        </div>
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+
+  const circleName = circle?.name || "Circle"
+  const amount = circle?.amount || 0
+  const currentCycle = circle?.currentCycle || 1
+  const totalCycles = circle?.totalCycles || circle?.memberCount || 6
 
   return (
     <div
@@ -47,7 +99,7 @@ export default function LeaveCircle() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -117,7 +169,7 @@ export default function LeaveCircle() {
             border: "1px solid #E5E7EB",
           }}
         >
-          <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>{circle.name}</h3>
+          <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>{circleName}</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             <div
               style={{
@@ -128,8 +180,8 @@ export default function LeaveCircle() {
                 borderRadius: "8px",
               }}
             >
-              <span style={{ fontSize: "13px", color: "#6B7280" }}>Your Total Contributions</span>
-              <span style={{ fontSize: "13px", fontWeight: "700", color: "#00C6AE" }}>${circle.totalContributed}</span>
+              <span style={{ fontSize: "13px", color: "#6B7280" }}>Contribution Amount</span>
+              <span style={{ fontSize: "13px", fontWeight: "700", color: "#00C6AE" }}>${amount}</span>
             </div>
             <div
               style={{
@@ -142,7 +194,7 @@ export default function LeaveCircle() {
             >
               <span style={{ fontSize: "13px", color: "#6B7280" }}>Current Cycle</span>
               <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>
-                {circle.currentCycle} of {circle.totalCycles}
+                {currentCycle} of {totalCycles}
               </span>
             </div>
             <div
@@ -154,8 +206,10 @@ export default function LeaveCircle() {
                 borderRadius: "8px",
               }}
             >
-              <span style={{ fontSize: "13px", color: "#6B7280" }}>Circle End Date</span>
-              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>{circle.estimatedEndDate}</span>
+              <span style={{ fontSize: "13px", color: "#6B7280" }}>Start Date</span>
+              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>
+                {circle?.startDate ? new Date(circle.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "TBD"}
+              </span>
             </div>
           </div>
         </div>
@@ -198,7 +252,7 @@ export default function LeaveCircle() {
                   You will receive your contributions back
                 </p>
                 <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6B7280" }}>
-                  Your ${circle.totalContributed} will be refunded to your TandaXn wallet
+                  Your contributions will be refunded to your TandaXn wallet
                 </p>
               </div>
             </div>
@@ -227,7 +281,7 @@ export default function LeaveCircle() {
                   Refund is processed when the circle ends
                 </p>
                 <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6B7280" }}>
-                  Expected refund date: <strong>{circle.estimatedEndDate}</strong>
+                  Expected when the circle completes all cycles
                 </p>
               </div>
             </div>
@@ -293,31 +347,6 @@ export default function LeaveCircle() {
           </div>
         </div>
 
-        {/* Refund Summary */}
-        <div
-          style={{
-            background: "#0A2342",
-            borderRadius: "14px",
-            padding: "16px",
-            marginBottom: "16px",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <p style={{ margin: 0, fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>Amount to be refunded</p>
-              <p style={{ margin: "4px 0 0 0", fontSize: "24px", fontWeight: "700", color: "#00C6AE" }}>
-                ${circle.totalContributed}
-              </p>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <p style={{ margin: 0, fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>Expected date</p>
-              <p style={{ margin: "4px 0 0 0", fontSize: "14px", fontWeight: "600", color: "#FFFFFF" }}>
-                {circle.estimatedEndDate}
-              </p>
-            </div>
-          </div>
-        </div>
-
         {/* Confirmation Checkbox */}
         <button
           onClick={() => setUnderstood(!understood)}
@@ -354,8 +383,7 @@ export default function LeaveCircle() {
             )}
           </div>
           <span style={{ fontSize: "13px", color: "#0A2342", textAlign: "left", lineHeight: 1.4 }}>
-            I understand that I will receive my ${circle.totalContributed} refund when the circle ends on{" "}
-            {circle.estimatedEndDate}, and I will not receive a payout from this circle.
+            I understand that I will receive my refund when the circle ends, and I will not receive a payout from this circle.
           </span>
         </button>
 
@@ -372,7 +400,7 @@ export default function LeaveCircle() {
             Digital Signature
           </h3>
           <p style={{ margin: "0 0 12px 0", fontSize: "12px", color: "#6B7280" }}>
-            Type your full name to confirm: <strong>{user.fullName}</strong>
+            Type your full name to confirm: <strong>{fullName}</strong>
           </p>
           <input
             type="text"
@@ -392,7 +420,7 @@ export default function LeaveCircle() {
           />
           {confirmName && !isNameMatch && (
             <p style={{ margin: "8px 0 0 0", fontSize: "12px", color: "#DC2626" }}>
-              Name doesn&apos;t match. Please type exactly: {user.fullName}
+              Name doesn&apos;t match. Please type exactly: {fullName}
             </p>
           )}
           {isNameMatch && (
@@ -430,7 +458,7 @@ export default function LeaveCircle() {
         }}
       >
         <button
-          onClick={() => console.log("Cancel")}
+          onClick={() => goBack()}
           style={{
             flex: 1,
             padding: "16px",
@@ -446,21 +474,21 @@ export default function LeaveCircle() {
           Cancel
         </button>
         <button
-          onClick={() => console.log("Confirm leave")}
-          disabled={!canConfirm}
+          onClick={handleLeave}
+          disabled={!canConfirm || isLeaving}
           style={{
             flex: 1,
             padding: "16px",
             borderRadius: "14px",
             border: "none",
-            background: canConfirm ? "#DC2626" : "#E5E7EB",
+            background: canConfirm && !isLeaving ? "#DC2626" : "#E5E7EB",
             fontSize: "16px",
             fontWeight: "600",
-            color: canConfirm ? "#FFFFFF" : "#9CA3AF",
-            cursor: canConfirm ? "pointer" : "not-allowed",
+            color: canConfirm && !isLeaving ? "#FFFFFF" : "#9CA3AF",
+            cursor: canConfirm && !isLeaving ? "pointer" : "not-allowed",
           }}
         >
-          Leave Circle
+          {isLeaving ? "Leaving..." : "Leave Circle"}
         </button>
       </div>
     </div>

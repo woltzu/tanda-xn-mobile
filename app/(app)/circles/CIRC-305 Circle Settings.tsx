@@ -1,33 +1,108 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useCircles } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { useCircleParams, goBack, navigateToCircleScreen } from "./useCircleParams"
 
 export default function CircleSettings() {
-  const circle = {
-    id: "circle_123",
-    name: "Family Savings",
-    description: "Monthly savings with the family",
-    amount: 200,
-    frequency: "monthly",
-    size: 6,
-    status: "active",
-    inviteCode: "FAMILY2025",
-    isAdmin: true,
-    createdAt: "Oct 15, 2024",
-  }
+  const { circleId } = useCircleParams()
+  const { getCircleById, getUserRole, updateCircle } = useCircles()
+  const { user } = useAuth()
+
+  const [isLoading, setIsLoading] = useState(true)
+  const [role, setRole] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null)
+
+  const circle = circleId ? getCircleById(circleId) : undefined
+  const isAdmin = role === "creator" || role === "admin"
 
   const [settings, setSettings] = useState({
     notifications: true,
     reminderDays: 3,
     autoContribute: false,
     allowLatePayments: true,
-    gracePeriodDays: 2,
+    gracePeriodDays: circle?.gracePeriodDays || 2,
     lateFeePercent: 10,
+    description: circle?.description || "",
   })
+
+  useEffect(() => {
+    if (!circleId) return
+    setIsLoading(true)
+    getUserRole(circleId)
+      .then((r) => setRole(r))
+      .catch((err) => console.error("Failed to load role:", err))
+      .finally(() => setIsLoading(false))
+  }, [circleId])
+
+  useEffect(() => {
+    if (circle) {
+      setSettings((prev) => ({
+        ...prev,
+        gracePeriodDays: circle.gracePeriodDays || 2,
+        description: circle.description || "",
+      }))
+    }
+  }, [circle])
 
   const toggleSetting = (key: string) => {
     setSettings((prev) => ({ ...prev, [key]: !prev[key as keyof typeof prev] }))
   }
+
+  const handleSaveSettings = async () => {
+    if (!circleId || !isAdmin) return
+    setIsSaving(true)
+    setFeedback(null)
+    try {
+      await updateCircle(circleId, {
+        description: settings.description,
+        gracePeriodDays: settings.gracePeriodDays,
+      })
+      setFeedback({ type: "success", message: "Settings saved!" })
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "Failed to save settings" })
+    } finally {
+      setIsSaving(false)
+      setTimeout(() => setFeedback(null), 3000)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "3px solid #E5E7EB",
+              borderTop: "3px solid #00C6AE",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 16px auto",
+            }}
+          />
+          <p style={{ color: "#6B7280", fontSize: "14px" }}>Loading settings...</p>
+        </div>
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+
+  const createdDate = circle?.createdAt
+    ? new Date(circle.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "Unknown"
 
   return (
     <div
@@ -54,7 +129,7 @@ export default function CircleSettings() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -74,6 +149,24 @@ export default function CircleSettings() {
 
       {/* Content */}
       <div style={{ padding: "20px" }}>
+        {/* Feedback Banner */}
+        {feedback && (
+          <div
+            style={{
+              padding: "12px",
+              borderRadius: "10px",
+              marginBottom: "16px",
+              background: feedback.type === "success" ? "#F0FDFB" : "#FEE2E2",
+              color: feedback.type === "success" ? "#065F46" : "#991B1B",
+              fontSize: "13px",
+              textAlign: "center",
+              fontWeight: "600",
+            }}
+          >
+            {feedback.message}
+          </div>
+        )}
+
         {/* Circle Info */}
         <div
           style={{
@@ -86,15 +179,12 @@ export default function CircleSettings() {
         >
           <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600", color: "#6B7280" }}>CIRCLE INFO</h3>
 
-          <button
-            onClick={() => console.log("Edit name")}
+          <div
             style={{
               width: "100%",
               padding: "14px",
               background: "#F5F7FA",
               borderRadius: "10px",
-              border: "none",
-              cursor: circle.isAdmin ? "pointer" : "default",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
@@ -104,45 +194,48 @@ export default function CircleSettings() {
             <div style={{ textAlign: "left" }}>
               <p style={{ margin: 0, fontSize: "12px", color: "#6B7280" }}>Name</p>
               <p style={{ margin: "4px 0 0 0", fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>
-                {circle.name}
+                {circle?.name || "---"}
               </p>
             </div>
-            {circle.isAdmin && (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            )}
-          </button>
+          </div>
 
-          <button
-            onClick={() => console.log("Edit description")}
-            style={{
-              width: "100%",
-              padding: "14px",
-              background: "#F5F7FA",
-              borderRadius: "10px",
-              border: "none",
-              cursor: circle.isAdmin ? "pointer" : "default",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "8px",
-            }}
-          >
-            <div style={{ textAlign: "left" }}>
+          {isAdmin ? (
+            <div style={{ marginBottom: "8px" }}>
+              <div style={{ padding: "14px", background: "#F5F7FA", borderRadius: "10px" }}>
+                <p style={{ margin: "0 0 6px 0", fontSize: "12px", color: "#6B7280" }}>Description</p>
+                <input
+                  type="text"
+                  value={settings.description}
+                  onChange={(e) => setSettings((prev) => ({ ...prev, description: e.target.value }))}
+                  placeholder="Add a description..."
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "6px",
+                    border: "1px solid #E5E7EB",
+                    fontSize: "14px",
+                    boxSizing: "border-box",
+                    outline: "none",
+                  }}
+                />
+              </div>
+            </div>
+          ) : (
+            <div
+              style={{
+                width: "100%",
+                padding: "14px",
+                background: "#F5F7FA",
+                borderRadius: "10px",
+                marginBottom: "8px",
+              }}
+            >
               <p style={{ margin: 0, fontSize: "12px", color: "#6B7280" }}>Description</p>
               <p style={{ margin: "4px 0 0 0", fontSize: "14px", color: "#0A2342" }}>
-                {circle.description || "No description"}
+                {circle?.description || "No description"}
               </p>
             </div>
-            {circle.isAdmin && (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            )}
-          </button>
+          )}
 
           <div
             style={{
@@ -157,16 +250,22 @@ export default function CircleSettings() {
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontSize: "12px", color: "#6B7280" }}>Contribution</span>
               <span style={{ fontSize: "12px", fontWeight: "600", color: "#0A2342" }}>
-                ${circle.amount} {circle.frequency}
+                ${circle?.amount || 0} {circle?.frequency || ""}
               </span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontSize: "12px", color: "#6B7280" }}>Circle Size</span>
-              <span style={{ fontSize: "12px", fontWeight: "600", color: "#0A2342" }}>{circle.size} members</span>
+              <span style={{ fontSize: "12px", fontWeight: "600", color: "#0A2342" }}>{circle?.memberCount || 0} members</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "12px", color: "#6B7280" }}>Start Date</span>
+              <span style={{ fontSize: "12px", fontWeight: "600", color: "#0A2342" }}>
+                {circle?.startDate ? new Date(circle.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "TBD"}
+              </span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontSize: "12px", color: "#6B7280" }}>Created</span>
-              <span style={{ fontSize: "12px", fontWeight: "600", color: "#0A2342" }}>{circle.createdAt}</span>
+              <span style={{ fontSize: "12px", fontWeight: "600", color: "#0A2342" }}>{createdDate}</span>
             </div>
           </div>
         </div>
@@ -199,11 +298,15 @@ export default function CircleSettings() {
               }}
             >
               <p style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#0A2342", letterSpacing: "2px" }}>
-                {circle.inviteCode}
+                {circle?.inviteCode || "---"}
               </p>
             </div>
             <button
-              onClick={() => console.log("Share invite")}
+              onClick={() => {
+                if (circle?.inviteCode) {
+                  navigator.clipboard?.writeText(circle.inviteCode)
+                }
+              }}
               style={{
                 padding: "14px 20px",
                 background: "#00C6AE",
@@ -298,7 +401,7 @@ export default function CircleSettings() {
         </div>
 
         {/* Admin Settings */}
-        {circle.isAdmin && (
+        {isAdmin && (
           <div
             style={{
               background: "#FFFFFF",
@@ -359,7 +462,7 @@ export default function CircleSettings() {
               </div>
 
               <button
-                onClick={() => console.log("Manage members")}
+                onClick={() => navigateToCircleScreen("CIRC-308 Pending Join Requests", { circleId: circleId! })}
                 style={{
                   width: "100%",
                   padding: "14px",
@@ -372,10 +475,30 @@ export default function CircleSettings() {
                   alignItems: "center",
                 }}
               >
-                <span style={{ fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>Manage Members</span>
+                <span style={{ fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>Manage Requests</span>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2">
                   <polyline points="9 18 15 12 9 6" />
                 </svg>
+              </button>
+
+              {/* Save button for admin changes */}
+              <button
+                onClick={handleSaveSettings}
+                disabled={isSaving}
+                style={{
+                  width: "100%",
+                  padding: "14px",
+                  background: isSaving ? "#E5E7EB" : "#00C6AE",
+                  borderRadius: "10px",
+                  border: "none",
+                  cursor: isSaving ? "not-allowed" : "pointer",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  color: isSaving ? "#9CA3AF" : "#FFFFFF",
+                  marginTop: "4px",
+                }}
+              >
+                {isSaving ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>
@@ -394,7 +517,7 @@ export default function CircleSettings() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             {/* Edit Circle - Only for Admin/Creator */}
-            {circle.isAdmin && (
+            {isAdmin && (
               <button
                 onClick={() => console.log("Edit circle")}
                 style={{
@@ -424,7 +547,7 @@ export default function CircleSettings() {
 
             {/* Leave Circle */}
             <button
-              onClick={() => console.log("Leave circle")}
+              onClick={() => navigateToCircleScreen("CIRC-306 Leave Circle", { circleId: circleId! })}
               style={{
                 width: "100%",
                 padding: "14px",
@@ -451,7 +574,7 @@ export default function CircleSettings() {
             </button>
 
             {/* Delete Circle - Only for Admin/Creator */}
-            {circle.isAdmin && (
+            {isAdmin && (
               <>
                 <button
                   onClick={() => console.log("Delete circle")}

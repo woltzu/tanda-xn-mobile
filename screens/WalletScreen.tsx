@@ -15,6 +15,7 @@ import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useWallet, Transaction } from "../context/WalletContext";
+import { usePayment } from "../context/PaymentContext";
 import { useCurrency, CURRENCIES } from "../context/CurrencyContext";
 import { RateTicker } from "../components/ExchangeRateDisplay";
 import { CurrencySelector } from "../components/CurrencySelector";
@@ -24,6 +25,7 @@ type WalletScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 export default function WalletScreen() {
   const navigation = useNavigation<WalletScreenNavigationProp>();
   const { balance, currencies, transactions, addCurrencyWallet } = useWallet();
+  const { paymentMethods, isOnboarded, isLoadingMethods } = usePayment();
   const { formatCurrency: formatCurrencyAmount, refreshRates, isLoadingRates, lastUpdated, autoRefreshEnabled, setAutoRefreshEnabled } = useCurrency();
   const [showBalance, setShowBalance] = useState(true);
   const [showAddCurrencyModal, setShowAddCurrencyModal] = useState(false);
@@ -292,6 +294,60 @@ export default function WalletScreen() {
                   onPress={() => setShowAddCurrencyModal(true)}
                 >
                   <Text style={styles.emptyButtonText}>Add a currency</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* Payment Methods */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Payment Methods</Text>
+              <TouchableOpacity onPress={() => navigation.navigate("LinkedAccounts" as any)}>
+                <Text style={styles.manageText}>Manage</Text>
+              </TouchableOpacity>
+            </View>
+
+            {!isOnboarded && (
+              <TouchableOpacity
+                style={styles.payoutBanner}
+                onPress={() => navigation.navigate("LinkedAccounts" as any)}
+              >
+                <View style={styles.payoutBannerLeft}>
+                  <Ionicons name="flash" size={18} color="#FFFFFF" />
+                  <Text style={styles.payoutBannerText}>Set up payouts to receive money</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+
+            {paymentMethods.length > 0 ? (
+              paymentMethods.slice(0, 3).map((method) => (
+                <View key={method.id} style={styles.pmCard}>
+                  <View style={styles.pmCardLeft}>
+                    <View style={styles.pmIconContainer}>
+                      <Ionicons name={method.icon as any} size={20} color="#0A2342" />
+                    </View>
+                    <Text style={styles.pmLabel}>{method.label}</Text>
+                    {method.isDefault && (
+                      <View style={styles.pmDefaultBadge}>
+                        <Text style={styles.pmDefaultText}>Default</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+                </View>
+              ))
+            ) : (
+              <View style={styles.pmEmptyState}>
+                <Ionicons name="card-outline" size={36} color="#D1D5DB" />
+                <Text style={styles.pmEmptyText}>No payment methods yet</Text>
+                <TouchableOpacity
+                  style={styles.pmAddButton}
+                  onPress={() => navigation.navigate("LinkedAccounts" as any)}
+                >
+                  <Ionicons name="add" size={16} color="#FFFFFF" />
+                  <Text style={styles.pmAddButtonText}>Add Card</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -861,6 +917,93 @@ const styles = StyleSheet.create({
   },
   floatingHelpText: {
     fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  payoutBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#00C6AE",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+  },
+  payoutBannerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  payoutBannerText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  pmCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  pmCardLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  pmIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#F5F7FA",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pmLabel: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#0A2342",
+  },
+  pmDefaultBadge: {
+    backgroundColor: "rgba(0,198,174,0.15)",
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+  },
+  pmDefaultText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#00C6AE",
+  },
+  pmEmptyState: {
+    alignItems: "center",
+    paddingVertical: 24,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  pmEmptyText: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  pmAddButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#00C6AE",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  pmAddButtonText: {
+    fontSize: 13,
     fontWeight: "600",
     color: "#FFFFFF",
   },

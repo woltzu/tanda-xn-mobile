@@ -1,82 +1,68 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { useCircles } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { useCircleParams, goBack, navigateToCircleScreen } from "./useCircleParams"
+
 export default function CircleMembers() {
-  const circle = {
-    name: "Family Savings",
-    size: 6,
-    currentCycle: 3,
-    isAdmin: true,
+  const { circleId } = useCircleParams()
+  const { getCircleMembers, getCircleById } = useCircles()
+  const { user } = useAuth()
+
+  const [members, setMembers] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  const circle = circleId ? getCircleById(circleId) : undefined
+
+  useEffect(() => {
+    if (!circleId) return
+    setIsLoading(true)
+    getCircleMembers(circleId)
+      .then((data) => setMembers(data))
+      .catch((err) => console.error("Failed to load members:", err))
+      .finally(() => setIsLoading(false))
+  }, [circleId])
+
+  const isAdmin = circle?.createdBy === user?.id
+
+  const getStatusBadge = (member: any) => {
+    if (member.hasPaid) return { bg: "#F0FDFB", color: "#00897B", label: "Paid" }
+    return { bg: "#FEF3C7", color: "#D97706", label: "Due" }
   }
 
-  const members = [
-    {
-      id: 1,
-      name: "Franck (You)",
-      avatar: "F",
-      status: "contributed",
-      xnScore: 72,
-      payoutPosition: 4,
-      totalContributed: 600,
-      isAdmin: true,
-    },
-    {
-      id: 2,
-      name: "Amara Okafor",
-      avatar: "A",
-      status: "received",
-      xnScore: 78,
-      payoutPosition: 1,
-      totalContributed: 600,
-      payoutReceived: true,
-    },
-    {
-      id: 3,
-      name: "Kwame Mensah",
-      avatar: "K",
-      status: "received",
-      xnScore: 85,
-      payoutPosition: 2,
-      totalContributed: 600,
-      payoutReceived: true,
-    },
-    {
-      id: 4,
-      name: "Marie Claire",
-      avatar: "M",
-      status: "contributed",
-      xnScore: 81,
-      payoutPosition: 3,
-      totalContributed: 600,
-    },
-    {
-      id: 5,
-      name: "David Nguyen",
-      avatar: "D",
-      status: "pending",
-      xnScore: 68,
-      payoutPosition: 5,
-      totalContributed: 400,
-    },
-    { id: 6, name: "Samuel Osei", avatar: "S", status: "late", xnScore: 75, payoutPosition: 6, totalContributed: 400 },
-  ]
+  const sortedMembers = [...members].sort((a, b) => a.position - b.position)
 
-  const getStatusBadge = (status: string, payoutReceived?: boolean) => {
-    if (payoutReceived) return { bg: "#F0FDFB", color: "#00897B", label: "Received Payout" }
-    switch (status) {
-      case "contributed":
-        return { bg: "#F0FDFB", color: "#00897B", label: "Paid" }
-      case "pending":
-        return { bg: "#FEF3C7", color: "#D97706", label: "Due" }
-      case "late":
-        return { bg: "#FEE2E2", color: "#DC2626", label: "Late" }
-      case "received":
-        return { bg: "#F0FDFB", color: "#00897B", label: "Received Payout" }
-      default:
-        return { bg: "#F5F7FA", color: "#6B7280", label: status }
-    }
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "3px solid #E5E7EB",
+              borderTop: "3px solid #00C6AE",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 16px auto",
+            }}
+          />
+          <p style={{ color: "#6B7280", fontSize: "14px" }}>Loading members...</p>
+        </div>
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
   }
-
-  const sortedMembers = [...members].sort((a, b) => a.payoutPosition - b.payoutPosition)
 
   return (
     <div
@@ -84,7 +70,7 @@ export default function CircleMembers() {
         minHeight: "100vh",
         background: "#F5F7FA",
         fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-        paddingBottom: circle.isAdmin ? "100px" : "40px",
+        paddingBottom: isAdmin ? "100px" : "40px",
       }}
     >
       {/* Header - Navy */}
@@ -103,7 +89,7 @@ export default function CircleMembers() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -120,7 +106,7 @@ export default function CircleMembers() {
           <div style={{ flex: 1 }}>
             <h1 style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#FFFFFF" }}>Members</h1>
             <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "rgba(255,255,255,0.8)" }}>
-              {circle.name} • {members.length} members
+              {circle?.name || "Circle"} • {members.length} members
             </p>
           </div>
         </div>
@@ -159,14 +145,20 @@ export default function CircleMembers() {
           }}
         >
           {sortedMembers.map((member, idx) => {
-            const statusStyle = getStatusBadge(member.status, member.payoutReceived)
-            const isPastPayout = member.payoutPosition < circle.currentCycle
-            const isCurrentPayout = member.payoutPosition === circle.currentCycle
+            const statusStyle = getStatusBadge(member)
+            const currentCycle = circle?.currentCycle || 1
+            const isPastPayout = member.position < currentCycle
+            const isCurrentPayout = member.position === currentCycle
 
             return (
               <button
                 key={member.id}
-                onClick={() => console.log("Member:", member.name)}
+                onClick={() =>
+                  navigateToCircleScreen("CIRC-303 Member Profile", {
+                    circleId: circleId!,
+                    memberId: member.id,
+                  })
+                }
                 style={{
                   width: "100%",
                   padding: "14px",
@@ -193,14 +185,14 @@ export default function CircleMembers() {
                       fontSize: "14px",
                     }}
                   >
-                    {isPastPayout ? "✓" : member.payoutPosition}
+                    {isPastPayout ? "✓" : member.position}
                   </div>
                   <div
                     style={{
                       width: "44px",
                       height: "44px",
                       borderRadius: "50%",
-                      background: member.name.includes("You") ? "#00C6AE" : "#0A2342",
+                      background: member.isCurrentUser ? "#00C6AE" : "#0A2342",
                       color: "#FFFFFF",
                       display: "flex",
                       alignItems: "center",
@@ -210,8 +202,8 @@ export default function CircleMembers() {
                       position: "relative",
                     }}
                   >
-                    {member.avatar}
-                    {member.isAdmin && (
+                    {member.name?.charAt(0)?.toUpperCase() || "?"}
+                    {member.role === "creator" && (
                       <div
                         style={{
                           position: "absolute",
@@ -233,7 +225,9 @@ export default function CircleMembers() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                      <span style={{ fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>{member.name}</span>
+                      <span style={{ fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>
+                        {member.name}{member.isCurrentUser ? " (You)" : ""}
+                      </span>
                       <span
                         style={{
                           background: "#F5F7FA",
@@ -248,7 +242,7 @@ export default function CircleMembers() {
                       </span>
                     </div>
                     <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6B7280" }}>
-                      ${member.totalContributed} contributed
+                      Position #{member.position} • {member.role}
                     </p>
                   </div>
                   <div style={{ textAlign: "right" }}>
@@ -278,7 +272,7 @@ export default function CircleMembers() {
       </div>
 
       {/* Admin Actions */}
-      {circle.isAdmin && (
+      {isAdmin && (
         <div
           style={{
             position: "fixed",
@@ -291,7 +285,7 @@ export default function CircleMembers() {
           }}
         >
           <button
-            onClick={() => console.log("Invite members")}
+            onClick={() => navigateToCircleScreen("CIRC-304 Invite to Circle", { circleId: circleId! })}
             style={{
               width: "100%",
               padding: "16px",

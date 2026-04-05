@@ -10,6 +10,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { InsurancePoolEngine } from './InsurancePoolEngine';
 import {
   differenceInDays,
   parseISO,
@@ -193,6 +194,22 @@ export class ContributionProcessingService {
         days_late: daysLate,
         message: `Failed to update contribution: ${updateError.message}`,
       };
+    }
+
+    // Insurance pool withholding (non-fatal — contribution succeeds even if this fails)
+    try {
+      const withholdingResult = await InsurancePoolEngine.processWithholding(
+        contribution.id,
+        Math.round(payload.amount * 100) // convert dollars to cents
+      );
+      if (withholdingResult.withheldCents > 0) {
+        console.log(
+          `[ContributionProcessing] Insurance pool withheld: ${withholdingResult.withheldCents} cents ` +
+          `(${((withholdingResult.rateApplied || 0) * 100).toFixed(2)}% rate)`
+        );
+      }
+    } catch (poolError) {
+      console.error(`[ContributionProcessing] Insurance pool withholding failed (non-fatal):`, poolError);
     }
 
     // Log the event

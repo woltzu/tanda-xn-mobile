@@ -2,6 +2,11 @@
 
 import { useState } from "react"
 import { ArrowLeft, DollarSign, Calendar, ChevronRight, CheckCircle, Info, Wallet, Target, Building2, Smartphone, CreditCard, Plus, Minus } from "lucide-react"
+import { useSavings } from "@/context/SavingsContext"
+import { useAuth } from "@/context/AuthContext"
+import { navigateToGoalScreen, goBack } from "./useGoalParams"
+
+import type { GoalType } from "@/context/SavingsContext"
 
 // Brand Colors
 const COLORS = {
@@ -17,7 +22,11 @@ const COLORS = {
 }
 
 export default function AddNewGoalScreen() {
+  const { user } = useAuth()
+  const { createGoal, isLoading: contextLoading } = useSavings()
+
   const [step, setStep] = useState(1)
+  const [isCreating, setIsCreating] = useState(false)
   const [goal, setGoal] = useState({
     type: null as string | null,
     name: "",
@@ -80,11 +89,45 @@ export default function AddNewGoalScreen() {
     }
   }
 
-  const handleNext = () => {
+  // Map suggested goal type IDs to DB tier + goalTypeCode
+  const goalTypeMapping: Record<string, { tier: GoalType; goalTypeCode?: string; emoji: string }> = {
+    emergency: { tier: "emergency", goalTypeCode: "emergency", emoji: "🛡️" },
+    family: { tier: "flexible", goalTypeCode: "general", emoji: "🏠" },
+    travel: { tier: "flexible", goalTypeCode: "general", emoji: "✈️" },
+    education: { tier: "flexible", goalTypeCode: "general", emoji: "🎓" },
+    business: { tier: "flexible", goalTypeCode: "general", emoji: "💼" },
+    wedding: { tier: "flexible", goalTypeCode: "general", emoji: "💍" },
+    car: { tier: "flexible", goalTypeCode: "general", emoji: "🚗" },
+    custom: { tier: "flexible", goalTypeCode: "general", emoji: "🎯" },
+  }
+
+  const handleNext = async () => {
     if (step < totalSteps) {
       setStep(step + 1)
     } else {
-      console.log("Goal created:", goal)
+      // Final step: create the goal
+      setIsCreating(true)
+      try {
+        const mapping = goalTypeMapping[goal.type || "custom"] || goalTypeMapping.custom
+        const selectedGoalType = suggestedGoals.find((g) => g.id === goal.type)
+
+        await createGoal({
+          name: goal.name || selectedGoalType?.name || "My Goal",
+          emoji: mapping.emoji,
+          type: mapping.tier,
+          targetAmount: parseFloat(goal.targetAmount) || 0,
+          autoSaveEnabled: goal.payoutAllocation > 0,
+          autoSavePercent: goal.payoutAllocation,
+          goalTypeCode: mapping.goalTypeCode,
+        })
+
+        navigateToGoalScreen("030-GOAL-001-GoalsDashboard")
+      } catch (error) {
+        console.error("Failed to create goal:", error)
+        alert(`Failed to create goal: ${error instanceof Error ? error.message : "Unknown error"}`)
+      } finally {
+        setIsCreating(false)
+      }
     }
   }
 
@@ -113,7 +156,7 @@ export default function AddNewGoalScreen() {
           }}
         >
           <button
-            onClick={() => (step > 1 ? setStep(step - 1) : console.log("Back"))}
+            onClick={() => (step > 1 ? setStep(step - 1) : goBack())}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -678,25 +721,26 @@ export default function AddNewGoalScreen() {
       >
         <button
           onClick={handleNext}
-          disabled={!canProceed()}
+          disabled={!canProceed() || isCreating}
           style={{
             width: "100%",
             padding: "16px",
             borderRadius: "14px",
             border: "none",
-            background: canProceed() ? COLORS.teal : COLORS.lightGray,
+            background: canProceed() && !isCreating ? COLORS.teal : COLORS.lightGray,
             fontSize: "16px",
             fontWeight: "600",
-            color: canProceed() ? COLORS.white : COLORS.gray,
-            cursor: canProceed() ? "pointer" : "not-allowed",
+            color: canProceed() && !isCreating ? COLORS.white : COLORS.gray,
+            cursor: canProceed() && !isCreating ? "pointer" : "not-allowed",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: "8px",
+            opacity: isCreating ? 0.7 : 1,
           }}
         >
-          {step === totalSteps ? "Create Goal" : "Continue"}
-          <ChevronRight size={20} />
+          {isCreating ? "Creating Goal..." : step === totalSteps ? "Create Goal" : "Continue"}
+          {!isCreating && <ChevronRight size={20} />}
         </button>
       </div>
     </div>

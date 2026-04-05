@@ -1,26 +1,51 @@
 "use client"
 
-export default function FamilyCircleHubScreen() {
-  const circles = [
-    {
-      id: "fc1",
-      name: "Mama & Papa Support",
-      beneficiary: "Mama Françoise",
-      beneficiaryFlag: "🇨🇲",
-      members: [
-        { id: "m1", name: "You", avatar: "👤", contributed: true, amount: 100 },
-        { id: "m2", name: "Marcel", avatar: "👤", contributed: true, amount: 100 },
-        { id: "m3", name: "Claire", avatar: "👤", contributed: true, amount: 100 },
-        { id: "m4", name: "Pierre", avatar: "👤", contributed: false, amount: 0 },
-      ],
-      goal: 400,
-      collected: 300,
-      nextSendDate: "Feb 1, 2025",
-      frequency: "Monthly",
-    },
-  ]
+import { useCircles } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
 
-  const totalSavedOnFees = 47.88
+export default function FamilyCircleHubScreen() {
+  const { myCircles, isLoading } = useCircles()
+  const { user } = useAuth()
+
+  // Filter to family-type circles
+  const familyCircles = myCircles.filter(
+    (c) => c.type === "beneficiary" || c.type === "family-support" || c.type === "traditional"
+  )
+
+  const handleBack = () => {
+    if (typeof window !== "undefined") {
+      window.history.back()
+    }
+  }
+
+  const handleCircleClick = (circleId: string) => {
+    if (typeof window !== "undefined") {
+      window.location.href = `/circles/CIRC-301 Dashboard?circleId=${circleId}`
+    }
+  }
+
+  const handleCreateCircle = () => {
+    if (typeof window !== "undefined") {
+      window.location.href = "/circles/CIRC-201 Create Circle Start"
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <p style={{ color: "#666", fontSize: "16px" }}>Loading family circles...</p>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -41,6 +66,7 @@ export default function FamilyCircleHubScreen() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "24px" }}>
           <button
+            onClick={handleBack}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -85,11 +111,11 @@ export default function FamilyCircleHubScreen() {
               fontSize: "24px",
             }}
           >
-            💰
+            {String.fromCodePoint(0x1f4b0)}
           </div>
           <div>
-            <p style={{ margin: 0, fontSize: "24px", fontWeight: "700" }}>${totalSavedOnFees.toFixed(2)}</p>
-            <p style={{ margin: "2px 0 0 0", fontSize: "12px", opacity: 0.9 }}>Saved on fees with Family Circles</p>
+            <p style={{ margin: 0, fontSize: "24px", fontWeight: "700" }}>{familyCircles.length}</p>
+            <p style={{ margin: "2px 0 0 0", fontSize: "12px", opacity: 0.9 }}>Active Family Circle{familyCircles.length !== 1 ? "s" : ""}</p>
           </div>
         </div>
       </div>
@@ -124,7 +150,7 @@ export default function FamilyCircleHubScreen() {
                   fontSize: "18px",
                 }}
               >
-                👨‍👩‍👧‍👦
+                {String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467, 0x200d, 0x1f466)}
               </div>
               <p style={{ margin: 0, fontSize: "11px", color: "#6B7280", lineHeight: 1.4 }}>Invite siblings to join</p>
             </div>
@@ -142,7 +168,7 @@ export default function FamilyCircleHubScreen() {
                   fontSize: "18px",
                 }}
               >
-                💵
+                {String.fromCodePoint(0x1f4b5)}
               </div>
               <p style={{ margin: 0, fontSize: "11px", color: "#6B7280", lineHeight: 1.4 }}>
                 Each contributes their share
@@ -162,7 +188,7 @@ export default function FamilyCircleHubScreen() {
                   fontSize: "18px",
                 }}
               >
-                ✈️
+                {String.fromCodePoint(0x2708, 0xfe0f)}
               </div>
               <p style={{ margin: 0, fontSize: "11px", color: "#6B7280", lineHeight: 1.4 }}>One transfer, one fee!</p>
             </div>
@@ -170,18 +196,19 @@ export default function FamilyCircleHubScreen() {
         </div>
 
         {/* Active Circles */}
-        {circles.length > 0 ? (
+        {familyCircles.length > 0 ? (
           <div>
             <h3 style={{ margin: "0 0 12px 0", fontSize: "12px", fontWeight: "600", color: "#6B7280" }}>
               YOUR CIRCLES
             </h3>
-            {circles.map((circle) => {
-              const progress = (circle.collected / circle.goal) * 100
-              const contributedCount = circle.members.filter((m) => m.contributed).length
+            {familyCircles.map((circle) => {
+              const progress = circle.progress
+              const spotsInfo = `${circle.currentMembers}/${circle.memberCount}`
 
               return (
                 <button
                   key={circle.id}
+                  onClick={() => handleCircleClick(circle.id)}
                   style={{
                     width: "100%",
                     background: "#FFFFFF",
@@ -202,22 +229,27 @@ export default function FamilyCircleHubScreen() {
                     }}
                   >
                     <div>
-                      <p style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#0A2342" }}>{circle.name}</p>
-                      <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#6B7280" }}>
-                        To: {circle.beneficiary} {circle.beneficiaryFlag}
+                      <p style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#0A2342" }}>
+                        {circle.emoji} {circle.name}
                       </p>
+                      {circle.beneficiaryName && (
+                        <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#6B7280" }}>
+                          To: {circle.beneficiaryName} {circle.beneficiaryCountry ? `(${circle.beneficiaryCountry})` : ""}
+                        </p>
+                      )}
                     </div>
                     <span
                       style={{
                         padding: "4px 10px",
-                        background: contributedCount === circle.members.length ? "#F0FDFB" : "#FEF3C7",
-                        color: contributedCount === circle.members.length ? "#00897B" : "#D97706",
+                        background: circle.status === "active" ? "#F0FDFB" : "#FEF3C7",
+                        color: circle.status === "active" ? "#00897B" : "#D97706",
                         fontSize: "11px",
                         fontWeight: "600",
                         borderRadius: "6px",
+                        textTransform: "capitalize",
                       }}
                     >
-                      {contributedCount}/{circle.members.length} ready
+                      {circle.status}
                     </span>
                   </div>
 
@@ -225,7 +257,7 @@ export default function FamilyCircleHubScreen() {
                   <div style={{ marginBottom: "12px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
                       <span style={{ fontSize: "12px", color: "#6B7280" }}>
-                        ${circle.collected} of ${circle.goal}
+                        ${circle.amount} x {circle.currentMembers} members
                       </span>
                       <span style={{ fontSize: "12px", fontWeight: "600", color: "#00C6AE" }}>
                         {Math.round(progress)}%
@@ -243,35 +275,7 @@ export default function FamilyCircleHubScreen() {
                     </div>
                   </div>
 
-                  {/* Members */}
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-                    <div style={{ display: "flex" }}>
-                      {circle.members.slice(0, 4).map((member, idx) => (
-                        <div
-                          key={member.id}
-                          style={{
-                            width: "28px",
-                            height: "28px",
-                            borderRadius: "50%",
-                            background: member.contributed ? "#00C6AE" : "#E5E7EB",
-                            border: "2px solid #FFFFFF",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            marginLeft: idx > 0 ? "-8px" : 0,
-                            fontSize: "12px",
-                          }}
-                        >
-                          {member.contributed ? "✓" : ""}
-                        </div>
-                      ))}
-                    </div>
-                    <span style={{ fontSize: "11px", color: "#6B7280" }}>
-                      {circle.members.map((m) => m.name).join(", ")}
-                    </span>
-                  </div>
-
-                  {/* Next Send */}
+                  {/* Members & Details */}
                   <div
                     style={{
                       padding: "10px",
@@ -281,8 +285,12 @@ export default function FamilyCircleHubScreen() {
                       justifyContent: "space-between",
                     }}
                   >
-                    <span style={{ fontSize: "12px", color: "#6B7280" }}>Next send: {circle.nextSendDate}</span>
-                    <span style={{ fontSize: "12px", fontWeight: "600", color: "#0A2342" }}>{circle.frequency}</span>
+                    <span style={{ fontSize: "12px", color: "#6B7280" }}>
+                      Members: {spotsInfo} {circle.currentCycle ? `| Cycle ${circle.currentCycle}` : ""}
+                    </span>
+                    <span style={{ fontSize: "12px", fontWeight: "600", color: "#0A2342", textTransform: "capitalize" }}>
+                      {circle.frequency}
+                    </span>
                   </div>
                 </button>
               )
@@ -311,7 +319,7 @@ export default function FamilyCircleHubScreen() {
                 fontSize: "28px",
               }}
             >
-              👨‍👩‍👧‍👦
+              {String.fromCodePoint(0x1f468, 0x200d, 0x1f469, 0x200d, 0x1f467, 0x200d, 0x1f466)}
             </div>
             <p style={{ margin: "0 0 8px 0", fontSize: "16px", fontWeight: "600", color: "#0A2342" }}>
               No Family Circles Yet
@@ -334,6 +342,7 @@ export default function FamilyCircleHubScreen() {
         }}
       >
         <button
+          onClick={handleCreateCircle}
           style={{
             width: "100%",
             padding: "16px",

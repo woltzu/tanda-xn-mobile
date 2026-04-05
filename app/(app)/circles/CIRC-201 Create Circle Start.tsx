@@ -1,40 +1,48 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useCreateCircleWizard } from "../../../context/CreateCircleWizardContext"
+import { CIRCLE_TYPES } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { goBack, navigateToCircleScreen } from "./useCircleParams"
+import { supabase } from "../../../lib/supabase"
 
 export default function CreateCircleStartScreen() {
-  const [selectedType, setSelectedType] = useState<string | null>(null)
+  const { user } = useAuth()
+  const wizard = useCreateCircleWizard()
+  const [selectedType, setSelectedType] = useState<string | null>(wizard.state.type)
+  const [userXnScore, setUserXnScore] = useState<number>(50)
 
-  const userXnScore = 72
+  // Fetch real XnScore from profiles table
+  useEffect(() => {
+    const fetchXnScore = async () => {
+      if (!user) return
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("xn_score")
+          .eq("id", user.id)
+          .single()
+        if (!error && data?.xn_score != null) {
+          setUserXnScore(data.xn_score)
+        }
+      } catch (err) {
+        console.error("Error fetching XnScore:", err)
+      }
+    }
+    fetchXnScore()
+  }, [user])
+
   const minScoreRequired = 60
   const canCreate = userXnScore >= minScoreRequired
 
-  const circleTypes = [
-    {
-      id: "traditional",
-      name: "Traditional Tanda",
-      emoji: "🔄",
-      description: "Classic rotating savings. Each member contributes, one member receives the pot each cycle.",
-      features: ["Equal contributions", "Rotating payouts", "Fixed schedule"],
-      popular: true,
-    },
-    {
-      id: "goal",
-      name: "Goal-Based Circle",
-      emoji: "🎯",
-      description: "Everyone saves toward a shared goal. Funds released when target is reached.",
-      features: ["Shared target", "Flexible amounts", "Group motivation"],
-      popular: false,
-    },
-    {
-      id: "emergency",
-      name: "Emergency Fund Circle",
-      emoji: "🛡️",
-      description: "Build emergency funds together. Members can request funds when needed.",
-      features: ["Safety net", "Request-based", "Community support"],
-      popular: false,
-    },
-  ]
+  const circleTypes = Object.values(CIRCLE_TYPES)
+
+  const handleContinue = () => {
+    if (!selectedType || !canCreate) return
+    wizard.updateField("type", selectedType)
+    navigateToCircleScreen("CIRC-202 Create Circle Details")
+  }
 
   return (
     <div
@@ -62,7 +70,7 @@ export default function CreateCircleStartScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -332,7 +340,7 @@ export default function CreateCircleStartScreen() {
         }}
       >
         <button
-          onClick={() => console.log("Continue with", selectedType)}
+          onClick={handleContinue}
           disabled={!selectedType || !canCreate}
           style={{
             width: "100%",

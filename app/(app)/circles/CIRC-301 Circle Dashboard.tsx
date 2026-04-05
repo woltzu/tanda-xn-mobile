@@ -1,40 +1,149 @@
 "use client"
 
+import { useCircles } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { useCircleParams, goBack } from "./useCircleParams"
+import { useState, useEffect } from "react"
+
 export default function CircleDashboard() {
-  const circle = {
-    id: "circle_123",
-    name: "Family Savings",
-    status: "active",
-    type: "traditional",
-    amount: 200,
-    frequency: "monthly",
-    size: 6,
-    currentCycle: 3,
-    totalCycles: 6,
-    potAmount: 1200,
-    nextPayoutDate: "Jan 15, 2025",
-    nextPayoutMember: "Marie C.",
-    isAdmin: true,
+  const { circleId } = useCircleParams()
+  const { getCircleById, getCircleMembers, getMyContributionStatus, getUserRole } = useCircles()
+  const { user } = useAuth()
+
+  const [circle, setCircle] = useState<any>(null)
+  const [members, setMembers] = useState<any[]>([])
+  const [myStatus, setMyStatus] = useState<any>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!circleId) {
+      setLoading(false)
+      return
+    }
+
+    const loadData = async () => {
+      try {
+        const foundCircle = getCircleById(circleId)
+        setCircle(foundCircle || null)
+
+        const loadedMembers = await getCircleMembers(circleId)
+        setMembers(loadedMembers)
+
+        const status = await getMyContributionStatus(circleId)
+        setMyStatus(status)
+
+        const role = await getUserRole(circleId)
+        setIsAdmin(role === "creator" || role === "admin")
+      } catch (err) {
+        console.error("Error loading circle dashboard:", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [circleId])
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <p style={{ color: "#6B7280", fontSize: "16px" }}>Loading circle...</p>
+      </div>
+    )
   }
 
-  const myStatus = {
-    hasContributed: true,
-    nextContributionDue: "Jan 10, 2025",
-    myPayoutPosition: 4,
-    totalContributed: 600,
-    payoutReceived: false,
+  if (!circle) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: "12px",
+        }}
+      >
+        <p style={{ color: "#6B7280", fontSize: "16px" }}>Circle not found</p>
+        <button
+          onClick={() => goBack()}
+          style={{
+            background: "#00C6AE",
+            color: "#FFFFFF",
+            border: "none",
+            borderRadius: "10px",
+            padding: "10px 24px",
+            fontSize: "14px",
+            fontWeight: "600",
+            cursor: "pointer",
+          }}
+        >
+          Go Back
+        </button>
+      </div>
+    )
   }
 
-  const members = [
-    { id: 1, name: "You (Admin)", avatar: "F", status: "contributed", xnScore: 75, payoutPosition: 4 },
-    { id: 2, name: "Amara O.", avatar: "A", status: "contributed", xnScore: 78, payoutPosition: 1 },
-    { id: 3, name: "Kwame M.", avatar: "K", status: "pending", xnScore: 85, payoutPosition: 2 },
-    { id: 4, name: "Marie C.", avatar: "M", status: "contributed", xnScore: 81, payoutPosition: 3 },
-    { id: 5, name: "David N.", avatar: "D", status: "contributed", xnScore: 68, payoutPosition: 5 },
-    { id: 6, name: "Samuel O.", avatar: "S", status: "late", xnScore: 75, payoutPosition: 6 },
-  ]
+  // Map circle data
+  const size = circle.currentMembers || 0
+  const currentCycle = circle.currentCycle || 1
+  const totalCycles = circle.totalCycles || circle.memberCount || 1
+  const potAmount = circle.amount * size
+  const progressPercent = totalCycles > 0 ? (currentCycle / totalCycles) * 100 : 0
 
-  const progressPercent = (circle.currentCycle / circle.totalCycles) * 100
+  // Map contribution status
+  const hasContributed = myStatus?.currentCyclePaid || false
+  const totalContributed = myStatus?.totalContributed || 0
+  const myPayoutPosition = myStatus?.position || 0
+  const payoutReceived = myStatus?.payoutReceived || false
+  const nextContributionDue = myStatus?.nextDueDate
+    ? new Date(myStatus.nextDueDate).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "N/A"
+
+  // Map members for display
+  const mappedMembers = members.map((m) => ({
+    id: m.id,
+    name: m.isCurrentUser ? `You${isAdmin ? " (Admin)" : ""}` : m.name,
+    avatar: m.name ? m.name.charAt(0).toUpperCase() : "?",
+    status: m.hasPaid ? "contributed" : "pending",
+    xnScore: m.xnScore,
+    payoutPosition: m.position,
+    isCurrentUser: m.isCurrentUser,
+  }))
+
+  // Navigation handlers
+  const handleNavigate = (label: string) => {
+    switch (label) {
+      case "Members":
+        window.location.href = "/circles/CIRC-302 Circle Members?circleId=" + circleId
+        break
+      case "History":
+        window.location.href = "/circles/CIRC-401 Contributions History?circleId=" + circleId
+        break
+      case "Payouts":
+        window.location.href = "/circles/CIRC-404 Payout Schedule?circleId=" + circleId
+        break
+      case "Chat":
+        window.location.href = "/circles/CIRC-307 Circle Chat?circleId=" + circleId
+        break
+    }
+  }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -75,7 +184,7 @@ export default function CircleDashboard() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -92,7 +201,7 @@ export default function CircleDashboard() {
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
               <h1 style={{ margin: 0, fontSize: "20px", fontWeight: "700" }}>{circle.name}</h1>
-              {circle.isAdmin && (
+              {isAdmin && (
                 <span
                   style={{
                     background: "#00C6AE",
@@ -107,11 +216,13 @@ export default function CircleDashboard() {
               )}
             </div>
             <p style={{ margin: "4px 0 0 0", fontSize: "13px", opacity: 0.8 }}>
-              Cycle {circle.currentCycle} of {circle.totalCycles}
+              Cycle {currentCycle} of {totalCycles}
             </p>
           </div>
           <button
-            onClick={() => console.log("Settings")}
+            onClick={() => {
+              window.location.href = "/circles/CIRC-305 Circle Settings?circleId=" + circleId
+            }}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -158,13 +269,15 @@ export default function CircleDashboard() {
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: "12px" }}>
             <div>
-              <p style={{ margin: 0, fontSize: "18px", fontWeight: "700" }}>${circle.potAmount.toLocaleString()}</p>
+              <p style={{ margin: 0, fontSize: "18px", fontWeight: "700" }}>${potAmount.toLocaleString()}</p>
               <p style={{ margin: "2px 0 0 0", fontSize: "11px", opacity: 0.7 }}>Current pot</p>
             </div>
             <div style={{ textAlign: "right" }}>
-              <p style={{ margin: 0, fontSize: "14px", fontWeight: "600" }}>{circle.nextPayoutMember}</p>
+              <p style={{ margin: 0, fontSize: "14px", fontWeight: "600" }}>
+                {mappedMembers.find((m) => m.payoutPosition === currentCycle)?.name || "TBD"}
+              </p>
               <p style={{ margin: "2px 0 0 0", fontSize: "11px", opacity: 0.7 }}>
-                Next payout: {circle.nextPayoutDate}
+                Next payout: {nextContributionDue}
               </p>
             </div>
           </div>
@@ -187,13 +300,13 @@ export default function CircleDashboard() {
           <div style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
             <div style={{ flex: 1, padding: "12px", background: "#F5F7FA", borderRadius: "10px" }}>
               <p style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#0A2342" }}>
-                ${myStatus.totalContributed}
+                ${totalContributed}
               </p>
               <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#6B7280" }}>Contributed</p>
             </div>
             <div style={{ flex: 1, padding: "12px", background: "#F5F7FA", borderRadius: "10px" }}>
               <p style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#0A2342" }}>
-                #{myStatus.myPayoutPosition}
+                #{myPayoutPosition}
               </p>
               <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#6B7280" }}>Payout position</p>
             </div>
@@ -201,7 +314,7 @@ export default function CircleDashboard() {
               style={{
                 flex: 1,
                 padding: "12px",
-                background: myStatus.hasContributed ? "#F0FDFB" : "#FEF3C7",
+                background: hasContributed ? "#F0FDFB" : "#FEF3C7",
                 borderRadius: "10px",
               }}
             >
@@ -210,18 +323,20 @@ export default function CircleDashboard() {
                   margin: 0,
                   fontSize: "16px",
                   fontWeight: "700",
-                  color: myStatus.hasContributed ? "#00897B" : "#D97706",
+                  color: hasContributed ? "#00897B" : "#D97706",
                 }}
               >
-                {myStatus.hasContributed ? "✓ Paid" : "Due"}
+                {hasContributed ? "✓ Paid" : "Due"}
               </p>
               <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#6B7280" }}>This cycle</p>
             </div>
           </div>
 
-          {!myStatus.hasContributed && (
+          {!hasContributed && (
             <button
-              onClick={() => console.log("Contribute")}
+              onClick={() => {
+                window.location.href = "/circles/CIRC-402 Make Contribution?circleId=" + circleId
+              }}
               style={{
                 width: "100%",
                 padding: "14px",
@@ -256,7 +371,7 @@ export default function CircleDashboard() {
           ].map((item) => (
             <button
               key={item.id}
-              onClick={() => console.log(item.label)}
+              onClick={() => handleNavigate(item.label)}
               style={{
                 background: "#FFFFFF",
                 borderRadius: "12px",
@@ -308,10 +423,12 @@ export default function CircleDashboard() {
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
             <h3 style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>
-              Members ({members.length})
+              Members ({mappedMembers.length})
             </h3>
             <button
-              onClick={() => console.log("View All Members")}
+              onClick={() => {
+                window.location.href = "/circles/CIRC-302 Circle Members?circleId=" + circleId
+              }}
               style={{
                 background: "none",
                 border: "none",
@@ -326,7 +443,7 @@ export default function CircleDashboard() {
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-            {members.slice(0, 4).map((member) => {
+            {mappedMembers.slice(0, 4).map((member) => {
               const statusStyle = getStatusBadge(member.status)
               return (
                 <div
@@ -345,7 +462,7 @@ export default function CircleDashboard() {
                       width: "36px",
                       height: "36px",
                       borderRadius: "50%",
-                      background: member.name.includes("You") ? "#00C6AE" : "#0A2342",
+                      background: member.isCurrentUser ? "#00C6AE" : "#0A2342",
                       color: "#FFFFFF",
                       display: "flex",
                       alignItems: "center",
@@ -377,9 +494,11 @@ export default function CircleDashboard() {
                 </div>
               )
             })}
-            {members.length > 4 && (
+            {mappedMembers.length > 4 && (
               <button
-                onClick={() => console.log("View All Members")}
+                onClick={() => {
+                  window.location.href = "/circles/CIRC-302 Circle Members?circleId=" + circleId
+                }}
                 style={{
                   padding: "10px",
                   background: "none",
@@ -389,7 +508,7 @@ export default function CircleDashboard() {
                   cursor: "pointer",
                 }}
               >
-                +{members.length - 4} more members
+                +{mappedMembers.length - 4} more members
               </button>
             )}
           </div>
@@ -397,7 +516,7 @@ export default function CircleDashboard() {
       </div>
 
       {/* Bottom Action */}
-      {!myStatus.hasContributed && (
+      {!hasContributed && (
         <div
           style={{
             position: "fixed",
@@ -410,7 +529,9 @@ export default function CircleDashboard() {
           }}
         >
           <button
-            onClick={() => console.log("Contribute")}
+            onClick={() => {
+              window.location.href = "/circles/CIRC-402 Make Contribution?circleId=" + circleId
+            }}
             style={{
               width: "100%",
               padding: "16px",

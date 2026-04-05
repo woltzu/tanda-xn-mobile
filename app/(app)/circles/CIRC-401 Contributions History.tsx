@@ -1,32 +1,81 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useCircles } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { useCircleParams, goBack, navigateToCircleScreen } from "./useCircleParams"
+import type { Circle, ContributionRecord } from "../../../context/CirclesContext"
 
 export default function CircleContributionsScreen() {
-  const circle = { name: "Family Savings", amount: 200, currentCycle: 3 }
-  const contributions = [
-    {
-      id: 1,
-      cycle: 3,
-      member: "Franck (You)",
-      avatar: "F",
-      amount: 200,
-      date: "Jan 5, 2025",
-      status: "completed",
-      isYou: true,
-    },
-    { id: 2, cycle: 3, member: "Amara O.", avatar: "A", amount: 200, date: "Jan 4, 2025", status: "completed" },
-    { id: 3, cycle: 3, member: "Marie C.", avatar: "M", amount: 200, date: "Jan 3, 2025", status: "completed" },
-    { id: 4, cycle: 3, member: "David N.", avatar: "D", amount: 200, date: null, status: "pending" },
-    { id: 5, cycle: 3, member: "Kwame M.", avatar: "K", amount: 200, date: null, status: "pending" },
-    { id: 6, cycle: 3, member: "Samuel O.", avatar: "S", amount: 200, date: "Jan 8, 2025", status: "late" },
-  ]
-  const stats = { totalCollected: 3600, thisMonth: 600, onTimeRate: 85 }
+  const { circleId } = useCircleParams()
+  const { getCircleById, getContributions } = useCircles()
 
+  const [circle, setCircle] = useState<Circle | null>(null)
+  const [contributions, setContributions] = useState<ContributionRecord[]>([])
   const [selectedCycle, setSelectedCycle] = useState("all")
-  const cycles = ["all", ...Array.from({ length: circle.currentCycle }, (_, i) => circle.currentCycle - i)]
-  const filteredContributions =
-    selectedCycle === "all" ? contributions : contributions.filter((c) => c.cycle === Number.parseInt(selectedCycle))
+  const [loading, setLoading] = useState(true)
+
+  // Load circle data
+  useEffect(() => {
+    if (!circleId) return
+    const c = getCircleById(circleId)
+    if (c) setCircle(c)
+  }, [circleId, getCircleById])
+
+  // Load contributions when circle or selected cycle changes
+  useEffect(() => {
+    if (!circleId) return
+    let cancelled = false
+
+    const load = async () => {
+      setLoading(true)
+      try {
+        const cycleFilter = selectedCycle === "all" ? undefined : Number(selectedCycle)
+        const contribs = await getContributions(circleId, cycleFilter)
+        if (!cancelled) setContributions(contribs)
+      } catch (err) {
+        console.error("Failed to load contributions:", err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [circleId, selectedCycle, getContributions])
+
+  // Compute stats from real contributions
+  const totalCollected = contributions
+    .filter((c) => c.status === "completed")
+    .reduce((sum, c) => sum + c.amount, 0)
+
+  const totalContribs = contributions.length
+  const onTimeCount = contributions.filter((c) => c.status === "completed" && !c.isLate).length
+  const onTimeRate = totalContribs > 0 ? Math.round((onTimeCount / totalContribs) * 100) : 0
+
+  // For "this cycle" stat, sum completed contributions in the current cycle
+  const currentCycleNumber = circle?.currentCycle || 1
+  const thisCycleAmount = contributions
+    .filter((c) => c.cycleNumber === currentCycleNumber && c.status === "completed")
+    .reduce((sum, c) => sum + c.amount, 0)
+
+  // Generate cycle filter tabs
+  const cycles: (string | number)[] = ["all", ...Array.from({ length: currentCycleNumber }, (_, i) => currentCycleNumber - i)]
+
+  // Map contributions to UI shape
+  const filteredContributions = contributions.map((c) => ({
+    id: c.id,
+    cycle: c.cycleNumber,
+    member: c.isCurrentUser ? `${c.userName} (You)` : c.userName,
+    avatar: (c.userName || "M").charAt(0).toUpperCase(),
+    amount: c.amount,
+    date: c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null,
+    status: c.status === "completed" && c.isLate ? "late" : c.status === "completed" ? "completed" : c.status === "pending" ? "pending" : c.status,
+    isYou: c.isCurrentUser,
+  }))
+
+  // Expected amount for the current cycle (circle amount * member count)
+  const expectedThisCycle = circle ? circle.amount * (circle.currentMembers || circle.memberCount) : 0
 
   const getStatusStyle = (status: string) => {
     switch (status) {
@@ -39,6 +88,37 @@ export default function CircleContributionsScreen() {
       default:
         return { bg: "#F5F7FA", color: "#6B7280", label: status }
     }
+  }
+
+  if (loading && !circle) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "3px solid #E5E7EB",
+              borderTop: "3px solid #00C6AE",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 16px auto",
+            }}
+          />
+          <p style={{ color: "#6B7280", fontSize: "14px" }}>Loading contributions...</p>
+          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -60,7 +140,7 @@ export default function CircleContributionsScreen() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -76,7 +156,7 @@ export default function CircleContributionsScreen() {
           </button>
           <div style={{ flex: 1 }}>
             <h1 style={{ margin: 0, fontSize: "20px", fontWeight: "700" }}>Contributions</h1>
-            <p style={{ margin: "4px 0 0 0", fontSize: "13px", opacity: 0.8 }}>{circle.name}</p>
+            <p style={{ margin: "4px 0 0 0", fontSize: "13px", opacity: 0.8 }}>{circle?.name || "Circle"}</p>
           </div>
         </div>
 
@@ -91,7 +171,7 @@ export default function CircleContributionsScreen() {
               textAlign: "center",
             }}
           >
-            <p style={{ margin: 0, fontSize: "18px", fontWeight: "700" }}>${stats.totalCollected.toLocaleString()}</p>
+            <p style={{ margin: 0, fontSize: "18px", fontWeight: "700" }}>${totalCollected.toLocaleString()}</p>
             <p style={{ margin: "2px 0 0 0", fontSize: "10px", opacity: 0.7 }}>Total Collected</p>
           </div>
           <div
@@ -103,7 +183,7 @@ export default function CircleContributionsScreen() {
               textAlign: "center",
             }}
           >
-            <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#00C6AE" }}>${stats.thisMonth}</p>
+            <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#00C6AE" }}>${thisCycleAmount}</p>
             <p style={{ margin: "2px 0 0 0", fontSize: "10px", opacity: 0.7 }}>This Cycle</p>
           </div>
           <div
@@ -115,7 +195,7 @@ export default function CircleContributionsScreen() {
               textAlign: "center",
             }}
           >
-            <p style={{ margin: 0, fontSize: "18px", fontWeight: "700" }}>{stats.onTimeRate}%</p>
+            <p style={{ margin: 0, fontSize: "18px", fontWeight: "700" }}>{onTimeRate}%</p>
             <p style={{ margin: "2px 0 0 0", fontSize: "10px", opacity: 0.7 }}>On-Time Rate</p>
           </div>
         </div>
@@ -158,7 +238,23 @@ export default function CircleContributionsScreen() {
 
         {/* Contributions List */}
         <div style={{ background: "#FFFFFF", borderRadius: "16px", padding: "12px", border: "1px solid #E5E7EB" }}>
-          {filteredContributions.length > 0 ? (
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "40px 20px" }}>
+              <div
+                style={{
+                  width: "30px",
+                  height: "30px",
+                  border: "3px solid #E5E7EB",
+                  borderTop: "3px solid #00C6AE",
+                  borderRadius: "50%",
+                  animation: "spin 1s linear infinite",
+                  margin: "0 auto 12px auto",
+                }}
+              />
+              <p style={{ margin: 0, fontSize: "14px", color: "#6B7280" }}>Loading...</p>
+              <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+            </div>
+          ) : filteredContributions.length > 0 ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               {filteredContributions.map((contribution) => {
                 const statusStyle = getStatusStyle(contribution.status)
@@ -194,7 +290,7 @@ export default function CircleContributionsScreen() {
                           {contribution.member}
                         </p>
                         <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#6B7280" }}>
-                          {contribution.date || "Due Jan 10, 2025"}
+                          {contribution.date || "Pending"}
                           {selectedCycle === "all" && (
                             <span style={{ color: "#9CA3AF" }}> • Cycle {contribution.cycle}</span>
                           )}
@@ -242,13 +338,13 @@ export default function CircleContributionsScreen() {
             <div>
               <p style={{ margin: 0, fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>Expected this cycle</p>
               <p style={{ margin: "4px 0 0 0", fontSize: "20px", fontWeight: "700", color: "#FFFFFF" }}>
-                ${(circle.amount * 6).toLocaleString()}
+                ${expectedThisCycle.toLocaleString()}
               </p>
             </div>
             <div style={{ textAlign: "right" }}>
               <p style={{ margin: 0, fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>Collected</p>
               <p style={{ margin: "4px 0 0 0", fontSize: "20px", fontWeight: "700", color: "#00C6AE" }}>
-                ${stats.thisMonth}
+                ${thisCycleAmount}
               </p>
             </div>
           </div>
@@ -263,7 +359,7 @@ export default function CircleContributionsScreen() {
           >
             <div
               style={{
-                width: `${(stats.thisMonth / (circle.amount * 6)) * 100}%`,
+                width: `${expectedThisCycle > 0 ? (thisCycleAmount / expectedThisCycle) * 100 : 0}%`,
                 height: "100%",
                 background: "#00C6AE",
                 borderRadius: "3px",

@@ -4,15 +4,21 @@ import { TabBarInline } from "../../../components/TabBar"
 
 export default function NoCirclesEmptyState() {
   const handleJoinCircle = () => {
-    console.log("Browse circles")
+    if (typeof window !== "undefined") {
+      window.location.href = "/circles/CIRC-101 Browse Circles"
+    }
   }
 
   const handleCreateCircle = () => {
-    console.log("Create circle")
+    if (typeof window !== "undefined") {
+      window.location.href = "/circles/CIRC-201 Create Circle Start"
+    }
   }
 
   const handleLearnMore = () => {
-    console.log("Learn more")
+    if (typeof window !== "undefined") {
+      window.location.href = "/circles/CIRC-103 Circle Type Explainer"
+    }
   }
 
   return (

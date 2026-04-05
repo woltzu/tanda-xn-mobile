@@ -1,20 +1,88 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import { useCircles, Circle } from "../../../context/CirclesContext"
+import { useCircleParams, goBack, navigateToCircleScreen } from "./useCircleParams"
+
 export default function JoinCircleSuccessScreen() {
-  const circle = {
-    id: "circle_456",
-    name: "Diaspora Family Fund",
-    emoji: "👨‍👩‍👧‍👦",
-    contribution: 200,
-    frequency: "monthly",
-    firstDueDate: "Jan 25, 2025",
-    payoutPosition: 9,
-    totalMembers: 12,
-    potAmount: 2400,
-    estimatedPayoutDate: "Sep 25, 2025",
-  }
+  const [circle, setCircle] = useState<Circle | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const { circleId } = useCircleParams()
+  const { getCircleById, generateInviteCode, browseCircles } = useCircles()
+
+  useEffect(() => {
+    if (!circleId) return
+
+    try {
+      let found = getCircleById(circleId)
+      if (!found) {
+        found = browseCircles.find((c) => c.id === circleId) || null
+      }
+      if (!found) {
+        setError("Circle not found")
+      } else {
+        setCircle(found)
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to load circle")
+    } finally {
+      setLoading(false)
+    }
+  }, [circleId])
 
   const xnScoreBonus = 5
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        }}
+      >
+        <p style={{ fontSize: "16px", color: "#666" }}>Loading...</p>
+      </div>
+    )
+  }
+
+  if (error || !circle) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          gap: "16px",
+        }}
+      >
+        <p style={{ fontSize: "16px", color: "#DC2626" }}>{error || "Circle not found"}</p>
+        <button
+          onClick={() => navigateToCircleScreen("CIRC-101 Browse Circles")}
+          style={{
+            padding: "10px 24px",
+            borderRadius: "10px",
+            border: "none",
+            background: "#0A2342",
+            color: "#FFFFFF",
+            fontSize: "14px",
+            cursor: "pointer",
+          }}
+        >
+          Browse Circles
+        </button>
+      </div>
+    )
+  }
 
   const getFrequencyLabel = () => {
     switch (circle.frequency) {
@@ -29,6 +97,47 @@ export default function JoinCircleSuccessScreen() {
       default:
         return circle.frequency
     }
+  }
+
+  const payoutPosition = circle.myPosition ?? circle.currentMembers
+  const potAmount = circle.amount * circle.memberCount
+
+  // Estimate first due date from start date or fallback
+  const firstDueDate = circle.startDate
+    ? new Date(circle.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    : "TBD"
+
+  // Estimate payout date based on position and frequency
+  const getEstimatedPayoutDate = () => {
+    if (!circle.startDate) return "TBD"
+    const start = new Date(circle.startDate)
+    const monthsOffset = payoutPosition - 1
+    if (circle.frequency === "monthly") {
+      start.setMonth(start.getMonth() + monthsOffset)
+    } else if (circle.frequency === "biweekly") {
+      start.setDate(start.getDate() + monthsOffset * 14)
+    } else if (circle.frequency === "weekly") {
+      start.setDate(start.getDate() + monthsOffset * 7)
+    }
+    return start.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  }
+
+  const handleViewCircle = () => {
+    navigateToCircleScreen("CIRC-301 Circle Dashboard", { circleId: circle.id })
+  }
+
+  const handleInviteFriends = async () => {
+    try {
+      const code = generateInviteCode(circle)
+      await navigator.clipboard.writeText(code)
+      alert("Invite code copied to clipboard!")
+    } catch {
+      alert("Could not copy invite code")
+    }
+  }
+
+  const handleDone = () => {
+    navigateToCircleScreen("CIRC-101 Browse Circles")
   }
 
   return (
@@ -79,7 +188,7 @@ export default function JoinCircleSuccessScreen() {
           </div>
         </div>
 
-        <h1 style={{ margin: "0 0 8px 0", fontSize: "26px", fontWeight: "700" }}>Welcome to the Circle! 🎉</h1>
+        <h1 style={{ margin: "0 0 8px 0", fontSize: "26px", fontWeight: "700" }}>Welcome to the Circle!</h1>
         <p style={{ margin: 0, fontSize: "15px", opacity: 0.9 }}>You've joined {circle.name}</p>
       </div>
 
@@ -128,7 +237,7 @@ export default function JoinCircleSuccessScreen() {
                 borderRadius: "10px",
               }}
             >
-              <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#0A2342" }}>${circle.contribution}</p>
+              <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#0A2342" }}>${circle.amount}</p>
               <p style={{ margin: "2px 0 0 0", fontSize: "10px", color: "#6B7280" }}>{getFrequencyLabel()}</p>
             </div>
             <div
@@ -140,7 +249,7 @@ export default function JoinCircleSuccessScreen() {
               }}
             >
               <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#0A2342" }}>
-                #{circle.payoutPosition}
+                #{payoutPosition}
               </p>
               <p style={{ margin: "2px 0 0 0", fontSize: "10px", color: "#6B7280" }}>your position</p>
             </div>
@@ -153,7 +262,7 @@ export default function JoinCircleSuccessScreen() {
               }}
             >
               <p style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: "#00C6AE" }}>
-                ${circle.potAmount.toLocaleString()}
+                ${potAmount.toLocaleString()}
               </p>
               <p style={{ margin: "2px 0 0 0", fontSize: "10px", color: "#6B7280" }}>payout</p>
             </div>
@@ -169,7 +278,7 @@ export default function JoinCircleSuccessScreen() {
           >
             <p style={{ margin: 0, fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>Your estimated payout date</p>
             <p style={{ margin: "4px 0 0 0", fontSize: "18px", fontWeight: "700", color: "#00C6AE" }}>
-              {circle.estimatedPayoutDate}
+              {getEstimatedPayoutDate()}
             </p>
           </div>
         </div>
@@ -198,7 +307,7 @@ export default function JoinCircleSuccessScreen() {
               fontSize: "22px",
             }}
           >
-            ⭐
+            *
           </div>
           <div style={{ flex: 1 }}>
             <p style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>XnScore Bonus!</p>
@@ -242,7 +351,7 @@ export default function JoinCircleSuccessScreen() {
                   Make your first contribution
                 </p>
                 <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#6B7280" }}>
-                  Due by <strong>{circle.firstDueDate}</strong>
+                  Due by <strong>{firstDueDate}</strong>
                 </p>
               </div>
             </div>
@@ -267,7 +376,7 @@ export default function JoinCircleSuccessScreen() {
                   Meet your circle members
                 </p>
                 <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#6B7280" }}>
-                  {circle.totalMembers} people saving together with you
+                  {circle.memberCount} people saving together with you
                 </p>
               </div>
             </div>
@@ -290,7 +399,7 @@ export default function JoinCircleSuccessScreen() {
               <div>
                 <p style={{ margin: 0, fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>Wait for your payout</p>
                 <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#6B7280" }}>
-                  You're #{circle.payoutPosition} in line for ${circle.potAmount.toLocaleString()}
+                  You're #{payoutPosition} in line for ${potAmount.toLocaleString()}
                 </p>
               </div>
             </div>
@@ -322,7 +431,7 @@ export default function JoinCircleSuccessScreen() {
           </svg>
           <div>
             <p style={{ margin: 0, fontSize: "13px", fontWeight: "600", color: "#92400E" }}>
-              First payment due: {circle.firstDueDate}
+              First payment due: {firstDueDate}
             </p>
             <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#B45309" }}>
               Set up auto-pay to never miss a contribution!
@@ -347,7 +456,7 @@ export default function JoinCircleSuccessScreen() {
         }}
       >
         <button
-          onClick={() => console.log("View Circle")}
+          onClick={handleViewCircle}
           style={{
             width: "100%",
             padding: "16px",
@@ -365,7 +474,7 @@ export default function JoinCircleSuccessScreen() {
         </button>
         <div style={{ display: "flex", gap: "10px" }}>
           <button
-            onClick={() => console.log("Invite Friends")}
+            onClick={handleInviteFriends}
             style={{
               flex: 1,
               padding: "14px",
@@ -392,7 +501,7 @@ export default function JoinCircleSuccessScreen() {
             Invite Friends
           </button>
           <button
-            onClick={() => console.log("Done")}
+            onClick={handleDone}
             style={{
               flex: 1,
               padding: "14px",

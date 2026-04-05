@@ -1,12 +1,17 @@
 "use client"
 
 import { useState } from "react"
+import { useCreateCircleWizard } from "../../../context/CreateCircleWizardContext"
+import { goBack, navigateToCircleScreen } from "./useCircleParams"
 
 export default function CreateCircleDetailsScreen() {
-  const [name, setName] = useState("")
-  const [amount, setAmount] = useState("")
-  const [frequency, setFrequency] = useState("monthly")
-  const [memberCount, setMemberCount] = useState("")
+  const wizard = useCreateCircleWizard()
+
+  // Initialize form fields from wizard state so values are preserved on back/forward
+  const [name, setName] = useState(wizard.state.name || "")
+  const [amount, setAmount] = useState(wizard.state.amount ? wizard.state.amount.toString() : "")
+  const [frequency, setFrequency] = useState(wizard.state.frequency || "monthly")
+  const [memberCount, setMemberCount] = useState(wizard.state.memberCount ? wizard.state.memberCount.toString() : "")
 
   const frequencies = [
     { id: "daily", label: "Daily", description: "Every day" },
@@ -19,10 +24,10 @@ export default function CreateCircleDetailsScreen() {
   const quickSizes = [5, 6, 8, 10, 12]
 
   const parsedMemberCount = Number.parseInt(memberCount) || 0
-  const totalPot = Number.parseFloat(amount || 0) * parsedMemberCount
+  const totalPot = Number.parseFloat(amount || "0") * parsedMemberCount
 
   const getCycleDuration = () => {
-    if (parsedMemberCount === 0) return "—"
+    if (parsedMemberCount === 0) return "\u2014"
     switch (frequency) {
       case "daily":
         return `${parsedMemberCount} days`
@@ -41,6 +46,17 @@ export default function CreateCircleDetailsScreen() {
   const isValidAmount = Number.parseFloat(amount) >= 10
   const isValidName = name.trim().length >= 3
   const canContinue = isValidName && isValidAmount && isValidMemberCount
+
+  const handleContinue = () => {
+    if (!canContinue) return
+    wizard.updateFields({
+      name,
+      amount: Number.parseFloat(amount),
+      frequency,
+      memberCount: parsedMemberCount,
+    })
+    navigateToCircleScreen("CIRC-203 Create Circle Schedule")
+  }
 
   return (
     <div
@@ -68,7 +84,7 @@ export default function CreateCircleDetailsScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -173,7 +189,7 @@ export default function CreateCircleDetailsScreen() {
               marginBottom: "12px",
             }}
           >
-            <span style={{ fontSize: "24px" }}>👥</span>
+            <span style={{ fontSize: "24px" }}>&#x1F465;</span>
             <input
               type="number"
               value={memberCount}
@@ -225,7 +241,7 @@ export default function CreateCircleDetailsScreen() {
             </p>
           )}
           {!memberCount && (
-            <p style={{ margin: "8px 0 0 0", fontSize: "12px", color: "#6B7280" }}>Min: 3 members • Max: 50 members</p>
+            <p style={{ margin: "8px 0 0 0", fontSize: "12px", color: "#6B7280" }}>Min: 3 members - Max: 50 members</p>
           )}
         </div>
 
@@ -296,7 +312,7 @@ export default function CreateCircleDetailsScreen() {
               </button>
             ))}
           </div>
-          <p style={{ margin: "12px 0 0 0", fontSize: "12px", color: "#6B7280" }}>Min: $10 • Max: $500 per cycle</p>
+          <p style={{ margin: "12px 0 0 0", fontSize: "12px", color: "#6B7280" }}>Min: $10 - Max: $500 per cycle</p>
         </div>
 
         {/* Frequency */}
@@ -405,7 +421,7 @@ export default function CreateCircleDetailsScreen() {
               }}
             >
               <p style={{ margin: 0, fontSize: "11px", color: "#00C6AE", lineHeight: 1.4 }}>
-                💡 Payout happens automatically once all {parsedMemberCount} members contribute each cycle
+                Payout happens automatically once all {parsedMemberCount} members contribute each cycle
               </p>
             </div>
           </div>
@@ -425,14 +441,7 @@ export default function CreateCircleDetailsScreen() {
         }}
       >
         <button
-          onClick={() =>
-            console.log("Continue", {
-              name,
-              amount: Number.parseFloat(amount),
-              frequency,
-              memberCount: parsedMemberCount,
-            })
-          }
+          onClick={handleContinue}
           disabled={!canContinue}
           style={{
             width: "100%",

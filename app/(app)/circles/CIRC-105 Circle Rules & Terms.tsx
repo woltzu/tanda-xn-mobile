@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   ArrowLeft,
   DollarSign,
@@ -14,32 +14,32 @@ import {
   Users,
   FileText,
 } from "lucide-react"
+import { useCircles } from "../../../context/CirclesContext"
+import { useCircleParams, goBack, navigateToCircleScreen } from "./useCircleParams"
 
 export default function CircleRulesScreen() {
   const [expandedSection, setExpandedSection] = useState("payment")
   const [agreed, setAgreed] = useState(false)
 
+  const { circleId } = useCircleParams()
+  const { getCircleById, isLoading } = useCircles()
+
+  // Load circle data if circleId is available
+  const circleData = circleId ? getCircleById(circleId) : null
+
+  // Build display values from real data or defaults
   const circle = {
-    name: "Diaspora Family Fund",
-    type: "family",
-    contribution: 200,
-    frequency: "monthly",
-    maxMembers: 12,
-    totalPool: 2400,
-    paymentDue: "5th of each month",
-    gracePeriod: 2,
+    name: circleData?.name ?? "Circle Rules & Terms",
+    type: circleData?.type ?? "traditional",
+    contribution: circleData?.amount ?? 200,
+    frequency: circleData?.frequency ?? "monthly",
+    maxMembers: circleData?.memberCount ?? 12,
+    totalPool: circleData ? circleData.amount * circleData.memberCount : 2400,
+    gracePeriod: circleData?.gracePeriodDays ?? 2,
     latePenalty: 10,
     defaultPenalty: 10,
-    minScore: 50,
-    elder: {
-      name: "Grace M.",
-      responsibilities: [
-        "Mediating disputes between members",
-        "Approving new member applications",
-        "Managing payout order adjustments",
-        "Handling emergency situations",
-      ],
-    },
+    minScore: circleData?.minScore ?? 50,
+    rotationMethod: circleData?.rotationMethod ?? "xnscore",
   }
 
   const sections = [
@@ -54,8 +54,8 @@ export default function CircleRulesScreen() {
           description: `Each member contributes $${circle.contribution} per ${circle.frequency === "monthly" ? "month" : circle.frequency === "biweekly" ? "two weeks" : "week"}.`,
         },
         {
-          title: "Payment Due Date",
-          description: `Contributions are due by the ${circle.paymentDue}.`,
+          title: "Payment Schedule",
+          description: `Contributions are collected on a ${circle.frequency} basis.`,
         },
         {
           title: "Payment Methods",
@@ -124,11 +124,11 @@ export default function CircleRulesScreen() {
       rules: [
         {
           title: "Payout Amount",
-          description: `Each recipient receives the full pool of $${circle.totalPool} (${circle.maxMembers} × $${circle.contribution}).`,
+          description: `Each recipient receives the full pool of $${circle.totalPool.toLocaleString()} (${circle.maxMembers} x $${circle.contribution}).`,
         },
         {
           title: "Payout Order",
-          description: "Payout order is determined by XnScore at circle start. Higher scores get earlier positions.",
+          description: `Payout order is determined by ${circle.rotationMethod === "xnscore" ? "XnScore at circle start. Higher scores get earlier positions." : circle.rotationMethod === "random" ? "random selection at circle start." : "manual assignment by the Elder."}`,
         },
         {
           title: "Payout Schedule",
@@ -148,11 +148,11 @@ export default function CircleRulesScreen() {
       rules: [
         {
           title: "Circle Elder",
-          description: `${circle.elder.name} serves as the Elder for this circle.`,
+          description: "Each circle has an appointed Elder who oversees operations.",
         },
         {
           title: "Elder Responsibilities",
-          description: circle.elder.responsibilities.join(". ") + ".",
+          description: "Mediating disputes between members. Approving new member applications. Managing payout order adjustments. Handling emergency situations.",
         },
         {
           title: "Dispute Resolution",
@@ -216,7 +216,7 @@ export default function CircleRulesScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -260,12 +260,12 @@ export default function CircleRulesScreen() {
           <div>
             <p style={{ margin: "0 0 2px 0", fontSize: "11px", opacity: 0.7 }}>Contribution</p>
             <p style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>
-              ${circle.contribution}/{circle.frequency === "monthly" ? "mo" : "2wk"}
+              ${circle.contribution}/{circle.frequency === "monthly" ? "mo" : circle.frequency === "biweekly" ? "2wk" : "wk"}
             </p>
           </div>
           <div>
             <p style={{ margin: "0 0 2px 0", fontSize: "11px", opacity: 0.7 }}>Pool Size</p>
-            <p style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>${circle.totalPool}</p>
+            <p style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>${circle.totalPool.toLocaleString()}</p>
           </div>
           <div>
             <p style={{ margin: "0 0 2px 0", fontSize: "11px", opacity: 0.7 }}>Grace Period</p>
@@ -446,7 +446,13 @@ export default function CircleRulesScreen() {
         </label>
 
         <button
-          onClick={() => console.log("Agree and continue")}
+          onClick={() => {
+            if (circleId) {
+              navigateToCircleScreen("CIRC-107 Join Circle Confirmation", { circleId })
+            } else {
+              navigateToCircleScreen("CIRC-107 Join Circle Confirmation")
+            }
+          }}
           disabled={!agreed}
           style={{
             width: "100%",

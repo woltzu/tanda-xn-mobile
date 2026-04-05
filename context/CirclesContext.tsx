@@ -75,6 +75,52 @@ export type CircleActivity = {
   isCurrentUser: boolean;
 };
 
+export type ContributionRecord = {
+  id: string;
+  userId: string;
+  userName: string;
+  amount: number;
+  cycleNumber: number;
+  status: "pending" | "completed" | "late" | "defaulted" | "failed";
+  paymentMethod: string;
+  createdAt: string;
+  isCurrentUser: boolean;
+  isLate: boolean;
+  daysLate: number;
+  lateFee: number;
+};
+
+export type PayoutScheduleEntry = {
+  id: string;
+  cycleNumber: number;
+  recipientId: string;
+  recipientName: string;
+  scheduledDate: string;
+  amount: number;
+  status: string;
+  isCurrentUser: boolean;
+  positionInRotation: number;
+};
+
+export type MyContributionStatus = {
+  hasPaid: boolean;
+  totalContributed: number;
+  position: number;
+  role: "creator" | "admin" | "elder" | "member";
+  payoutReceived: boolean;
+  currentCyclePaid: boolean;
+  nextDueDate: string | null;
+};
+
+export type InvitedMemberRecord = {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  status: "pending" | "accepted" | "declined";
+  createdAt: string;
+};
+
 // Database row type (snake_case)
 type CircleRow = {
   id: string;
@@ -163,6 +209,20 @@ type CirclesContextType = {
   getCircleMembers: (circleId: string) => Promise<CircleMember[]>;
   getCircleActivities: (circleId: string) => Promise<CircleActivity[]>;
   makeContribution: (circleId: string, amount: number) => Promise<void>;
+  // New methods for screen integration
+  getCircleById: (circleId: string) => Circle | undefined;
+  getContributions: (circleId: string, cycle?: number) => Promise<ContributionRecord[]>;
+  getMyContributionStatus: (circleId: string) => Promise<MyContributionStatus>;
+  getPayoutSchedule: (circleId: string) => Promise<PayoutScheduleEntry[]>;
+  updateCircle: (circleId: string, data: Partial<Circle>) => Promise<void>;
+  getPendingMembers: (circleId: string) => Promise<CircleMember[]>;
+  approveMember: (memberId: string) => Promise<void>;
+  rejectMember: (memberId: string) => Promise<void>;
+  reportMember: (circleId: string, userId: string, reason: string, description: string) => Promise<void>;
+  requestEmergencyWithdrawal: (circleId: string, reason: string, amount: number) => Promise<void>;
+  getInvitedMembers: (circleId: string) => Promise<InvitedMemberRecord[]>;
+  inviteMember: (circleId: string, name: string, phone: string, email?: string) => Promise<void>;
+  getUserRole: (circleId: string) => Promise<"creator" | "admin" | "elder" | "member" | null>;
 };
 
 const CirclesContext = createContext<CirclesContextType | undefined>(undefined);
@@ -752,6 +812,20 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
         (profilesData || []).map((p: any) => [p.id, p])
       );
 
+      // Fetch current cycle contributions to determine hasPaid status
+      const circleData = circles.find(c => c.id === circleId);
+      const currentCycle = circleData?.currentCycle || 1;
+      const { data: cycleContributions } = await supabase
+        .from("contributions")
+        .select("user_id")
+        .eq("circle_id", circleId)
+        .eq("cycle_number", currentCycle)
+        .eq("status", "completed");
+
+      const paidUserIds = new Set(
+        (cycleContributions || []).map((c: any) => c.user_id)
+      );
+
       // Combine member data with profile data
       const members: CircleMember[] = membersData.map((member: any) => {
         const profile = profilesMap.get(member.user_id);
@@ -767,7 +841,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
           role: member.role || "member",
           status: member.status || "active",
           xnScore: profile?.xn_score || 50,
-          hasPaid: false, // TODO: Check contributions table
+          hasPaid: paidUserIds.has(member.user_id),
           joinedAt: member.joined_at,
           isCurrentUser,
         };
@@ -904,11 +978,15 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
   const makeContribution = async (circleId: string, amount: number): Promise<void> => {
     if (!user) throw new Error("User not authenticated");
 
+    // Get current cycle from circle data
+    const circle = circles.find(c => c.id === circleId);
+    const cycleNumber = circle?.currentCycle || 1;
+
     const { error } = await supabase.from("contributions").insert({
       circle_id: circleId,
       user_id: user.id,
       amount,
-      cycle_number: 1, // TODO: Get current cycle from circle
+      cycle_number: cycleNumber,
       status: "completed",
       payment_method: "wallet",
     });
@@ -964,6 +1042,403 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     return null;
   };
 
+  // ================================================================
+  // NEW METHODS — Screen Integration
+  // ================================================================
+
+  // Synchronous lookup from in-memory circles, fallback to browseCircles
+  const getCircleById = (circleId: string): Circle | undefined => {
+    return circles.find(c => c.id === circleId)
+      || defaultBrowseCircles.find(c => c.id === circleId);
+  };
+
+  // Fetch contributions for a circle, optionally filtered by cycle
+  const getContributions = async (circleId: string, cycle?: number): Promise<ContributionRecord[]> => {
+    try {
+      let query = supabase
+        .from("contributions")
+        .select(`
+          id, user_id, amount, cycle_number, status, payment_method,
+          created_at, is_late, days_late, late_fee
+        `)
+        .eq("circle_id", circleId)
+        .order("created_at", { ascending: false });
+
+      if (cycle !== undefined) {
+        query = query.eq("cycle_number", cycle);
+      }
+
+      const { data, error: fetchError } = await query;
+
+      if (fetchError) {
+        console.error("Error fetching contributions:", fetchError);
+        return [];
+      }
+
+      if (!data || data.length === 0) return [];
+
+      // Get profiles for all user_ids
+      const userIds = [...new Set(data.map((c: any) => c.user_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", userIds);
+
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+      return data.map((row: any) => {
+        const profile = profileMap.get(row.user_id);
+        const isCurrentUser = row.user_id === user?.id;
+        return {
+          id: row.id,
+          userId: row.user_id,
+          userName: isCurrentUser ? "You" : (profile?.full_name || profile?.email || "Member"),
+          amount: row.amount,
+          cycleNumber: row.cycle_number,
+          status: row.status,
+          paymentMethod: row.payment_method || "wallet",
+          createdAt: row.created_at,
+          isCurrentUser,
+          isLate: row.is_late || false,
+          daysLate: row.days_late || 0,
+          lateFee: row.late_fee || 0,
+        };
+      });
+    } catch (err) {
+      console.error("Error in getContributions:", err);
+      return [];
+    }
+  };
+
+  // Get current user's contribution status for a specific circle
+  const getMyContributionStatus = async (circleId: string): Promise<MyContributionStatus> => {
+    const defaultStatus: MyContributionStatus = {
+      hasPaid: false,
+      totalContributed: 0,
+      position: 0,
+      role: "member",
+      payoutReceived: false,
+      currentCyclePaid: false,
+      nextDueDate: null,
+    };
+
+    if (!user?.id) return defaultStatus;
+
+    try {
+      // Get member record
+      const { data: memberData } = await supabase
+        .from("circle_members")
+        .select("position, role, payout_received, total_amount_paid")
+        .eq("circle_id", circleId)
+        .eq("user_id", user.id)
+        .single();
+
+      if (!memberData) return defaultStatus;
+
+      // Get circle current cycle
+      const circle = circles.find(c => c.id === circleId);
+      const currentCycle = circle?.currentCycle || 1;
+
+      // Check if paid this cycle
+      const { data: cyclePaid } = await supabase
+        .from("contributions")
+        .select("id")
+        .eq("circle_id", circleId)
+        .eq("user_id", user.id)
+        .eq("cycle_number", currentCycle)
+        .eq("status", "completed")
+        .limit(1);
+
+      // Get total contributed
+      const { data: totalData } = await supabase
+        .from("contributions")
+        .select("amount")
+        .eq("circle_id", circleId)
+        .eq("user_id", user.id)
+        .eq("status", "completed");
+
+      const totalContributed = (totalData || []).reduce((sum: number, c: any) => sum + c.amount, 0);
+
+      // Get next due date from contribution_schedules
+      const { data: nextSchedule } = await supabase
+        .from("contribution_schedules")
+        .select("due_date")
+        .eq("circle_id", circleId)
+        .in("status", ["upcoming", "active"])
+        .order("due_date", { ascending: true })
+        .limit(1);
+
+      return {
+        hasPaid: (cyclePaid && cyclePaid.length > 0) || false,
+        totalContributed,
+        position: memberData.position || 0,
+        role: memberData.role || "member",
+        payoutReceived: memberData.payout_received || false,
+        currentCyclePaid: (cyclePaid && cyclePaid.length > 0) || false,
+        nextDueDate: nextSchedule?.[0]?.due_date || null,
+      };
+    } catch (err) {
+      console.error("Error in getMyContributionStatus:", err);
+      return defaultStatus;
+    }
+  };
+
+  // Fetch payout schedule for a circle
+  const getPayoutSchedule = async (circleId: string): Promise<PayoutScheduleEntry[]> => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("payout_schedules")
+        .select("id, cycle_number, recipient_id, scheduled_date, position_in_rotation, status")
+        .eq("circle_id", circleId)
+        .order("cycle_number", { ascending: true });
+
+      if (fetchError) {
+        console.error("Error fetching payout schedule:", fetchError);
+        return [];
+      }
+
+      if (!data || data.length === 0) return [];
+
+      // Get profiles for recipients
+      const recipientIds = [...new Set(data.map((p: any) => p.recipient_id).filter(Boolean))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", recipientIds);
+
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+      const circle = circles.find(c => c.id === circleId);
+      const payoutAmount = circle ? circle.amount * circle.currentMembers : 0;
+
+      return data.map((row: any) => {
+        const profile = profileMap.get(row.recipient_id);
+        const isCurrentUser = row.recipient_id === user?.id;
+        return {
+          id: row.id,
+          cycleNumber: row.cycle_number,
+          recipientId: row.recipient_id,
+          recipientName: isCurrentUser ? "You" : (profile?.full_name || profile?.email || "TBD"),
+          scheduledDate: row.scheduled_date,
+          amount: payoutAmount,
+          status: row.status || "scheduled",
+          isCurrentUser,
+          positionInRotation: row.position_in_rotation || row.cycle_number,
+        };
+      });
+    } catch (err) {
+      console.error("Error in getPayoutSchedule:", err);
+      return [];
+    }
+  };
+
+  // Update circle settings (admin only)
+  const updateCircle = async (circleId: string, data: Partial<Circle>): Promise<void> => {
+    if (!user?.id) throw new Error("Must be logged in");
+
+    const rowData = circleToRow(data);
+    const { error: updateError } = await supabase
+      .from("circles")
+      .update(rowData)
+      .eq("id", circleId);
+
+    if (updateError) {
+      console.error("Error updating circle:", updateError);
+      throw new Error(updateError.message);
+    }
+
+    // Real-time subscription will update local state
+  };
+
+  // Get pending join requests for a circle
+  const getPendingMembers = async (circleId: string): Promise<CircleMember[]> => {
+    try {
+      const { data: membersData, error: membersError } = await supabase
+        .from("circle_members")
+        .select("id, user_id, position, role, status, joined_at")
+        .eq("circle_id", circleId)
+        .eq("status", "pending")
+        .order("joined_at", { ascending: true });
+
+      if (membersError || !membersData) return [];
+
+      const userIds = membersData.map((m: any) => m.user_id);
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, phone, xn_score")
+        .in("id", userIds);
+
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+
+      return membersData.map((member: any) => {
+        const profile = profileMap.get(member.user_id);
+        return {
+          id: member.id,
+          odictId: member.user_id,
+          name: profile?.full_name || profile?.email || "Unknown",
+          email: profile?.email,
+          phone: profile?.phone,
+          position: member.position || 0,
+          role: member.role || "member",
+          status: member.status,
+          xnScore: profile?.xn_score || 50,
+          hasPaid: false,
+          joinedAt: member.joined_at,
+          isCurrentUser: member.user_id === user?.id,
+        };
+      });
+    } catch (err) {
+      console.error("Error in getPendingMembers:", err);
+      return [];
+    }
+  };
+
+  // Approve a pending member
+  const approveMember = async (memberId: string): Promise<void> => {
+    const { error: approveError } = await supabase
+      .from("circle_members")
+      .update({ status: "active" })
+      .eq("id", memberId);
+
+    if (approveError) {
+      console.error("Error approving member:", approveError);
+      throw new Error(approveError.message);
+    }
+  };
+
+  // Reject a pending member
+  const rejectMember = async (memberId: string): Promise<void> => {
+    const { error: rejectError } = await supabase
+      .from("circle_members")
+      .delete()
+      .eq("id", memberId);
+
+    if (rejectError) {
+      console.error("Error rejecting member:", rejectError);
+      throw new Error(rejectError.message);
+    }
+  };
+
+  // Report a member (creates dispute)
+  const reportMember = async (
+    circleId: string,
+    userId: string,
+    reason: string,
+    description: string
+  ): Promise<void> => {
+    if (!user?.id) throw new Error("Must be logged in");
+
+    const { error: reportError } = await supabase.from("disputes").insert({
+      reporter_user_id: user.id,
+      against_user_id: userId,
+      circle_id: circleId,
+      type: reason,
+      title: `Report: ${reason}`,
+      description,
+      priority: "medium",
+      status: "open",
+    });
+
+    if (reportError) {
+      console.error("Error reporting member:", reportError);
+      throw new Error(reportError.message);
+    }
+  };
+
+  // Request emergency withdrawal
+  const requestEmergencyWithdrawal = async (
+    circleId: string,
+    reason: string,
+    amount: number
+  ): Promise<void> => {
+    if (!user?.id) throw new Error("Must be logged in");
+
+    const { error: withdrawError } = await supabase.from("payout_requests").insert({
+      user_id: user.id,
+      amount,
+      currency: "USD",
+      status: "pending",
+      requires_approval: true,
+      notes: `Emergency withdrawal: ${reason}`,
+    });
+
+    if (withdrawError) {
+      console.error("Error requesting withdrawal:", withdrawError);
+      throw new Error(withdrawError.message);
+    }
+  };
+
+  // Get invited members for a circle
+  const getInvitedMembers = async (circleId: string): Promise<InvitedMemberRecord[]> => {
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("invited_members")
+        .select("id, name, phone, email, status, created_at")
+        .eq("circle_id", circleId)
+        .order("created_at", { ascending: false });
+
+      if (fetchError) {
+        console.error("Error fetching invited members:", fetchError);
+        return [];
+      }
+
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        phone: row.phone,
+        email: row.email,
+        status: row.status,
+        createdAt: row.created_at,
+      }));
+    } catch (err) {
+      console.error("Error in getInvitedMembers:", err);
+      return [];
+    }
+  };
+
+  // Invite a member to a circle
+  const inviteMember = async (
+    circleId: string,
+    name: string,
+    phone: string,
+    email?: string
+  ): Promise<void> => {
+    if (!user?.id) throw new Error("Must be logged in");
+
+    const { error: inviteError } = await supabase.from("invited_members").insert({
+      circle_id: circleId,
+      invited_by: user.id,
+      name,
+      phone,
+      email: email || null,
+      status: "pending",
+    });
+
+    if (inviteError) {
+      console.error("Error inviting member:", inviteError);
+      throw new Error(inviteError.message);
+    }
+  };
+
+  // Get current user's role in a circle
+  const getUserRole = async (
+    circleId: string
+  ): Promise<"creator" | "admin" | "elder" | "member" | null> => {
+    if (!user?.id) return null;
+
+    try {
+      const { data } = await supabase
+        .from("circle_members")
+        .select("role")
+        .eq("circle_id", circleId)
+        .eq("user_id", user.id)
+        .single();
+
+      return data?.role || null;
+    } catch {
+      return null;
+    }
+  };
+
   return (
     <CirclesContext.Provider
       value={{
@@ -981,6 +1456,19 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
         getCircleMembers,
         getCircleActivities,
         makeContribution,
+        getCircleById,
+        getContributions,
+        getMyContributionStatus,
+        getPayoutSchedule,
+        updateCircle,
+        getPendingMembers,
+        approveMember,
+        rejectMember,
+        reportMember,
+        requestEmergencyWithdrawal,
+        getInvitedMembers,
+        inviteMember,
+        getUserRole,
       }}
     >
       {children}

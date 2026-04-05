@@ -5,8 +5,9 @@ import { NavigationContainer, CommonActions } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-import { View, TouchableWithoutFeedback } from "react-native";
+import { View, TouchableWithoutFeedback, AppState } from "react-native";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { eventService } from "./services/EventService";
 import { PreferencesProvider } from "./context/PreferencesContext";
 import { useInactivityLock } from "./hooks/useInactivityLock";
 import LockScreen from "./screens/LockScreen";
@@ -104,14 +105,26 @@ import { XnScoreProvider } from "./context/XnScoreContext";
 import { TrustProvider } from "./context/TrustContext";
 import { AdvanceProvider } from "./context/AdvanceContext";
 import { SavingsProvider } from "./context/SavingsContext";
+import { WithdrawalWizardProvider } from "./context/WithdrawalWizardContext";
 import { CommunityProvider } from "./context/CommunityContext";
 import { ElderProvider } from "./context/ElderContext";
+import { FeatureGateProvider } from "./context/FeatureGateContext";
+import { MemberProfileProvider } from "./context/MemberProfileContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import { OnboardingProvider } from "./context/OnboardingContext";
 import CircleInviteScreen from "./screens/CircleInviteScreen";
 import ForgotPasswordScreen from "./screens/ForgotPasswordScreen";
 import ResetPasswordScreen from "./screens/ResetPasswordScreen";
 import { linkingConfig } from "./lib/deepLinking";
+import { PaymentProvider } from './context/PaymentContext';
+// Marketplace Screens (Migration 057)
+import MarketplaceScreen from "./screens/MarketplaceScreen";
+import StoreDetailScreen from "./screens/StoreDetailScreen";
+import StoreApplicationScreen from "./screens/StoreApplicationScreen";
+import BulkInvitesScreen from "./screens/BulkInvitesScreen";
+import BookServiceScreen from "./screens/BookServiceScreen";
+import OwnerDashboardScreen from "./screens/OwnerDashboardScreen";
+import MarketInsightScreen from "./screens/MarketInsightScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -276,6 +289,21 @@ export type RootStackParamList = {
   // Invite Screens (Deep Linking)
   CircleInvite: { circleId: string; name?: string; emoji?: string; inviter?: string; inviterName?: string; contribution?: number; frequency?: string; members?: number };
   CommunityInvite: { communityId: string; name?: string; icon?: string; inviter?: string; inviterName?: string; members?: number };
+  // Marketplace Flow (Migration 057)
+  Marketplace: undefined;
+  StoreDetail: { storeId: string; nextPayoutDate?: string; payoutAmount?: number; circleId?: string; circleName?: string };
+  StoreApplication: undefined;
+  BulkInvites: { storeId: string; storeName?: string; ownerName?: string };
+  BookService: {
+    storeId: string; storeName: string; storeEmoji: string;
+    serviceId?: string; serviceName: string;
+    originalAmountCents: number; discountAmountCents: number; finalAmountCents: number;
+    memberDiscountPct: number; nextPayoutDate?: string; payoutAmount?: number;
+    circleId?: string; circleName?: string; canPayOnPayoutDay?: boolean;
+  };
+  OwnerDashboard: { storeId: string };
+  MarketInsight: { city?: string; category?: string };
+  RequestProvider: undefined;
 };
 
 export type TabParamList = {
@@ -342,6 +370,14 @@ function HomeStackScreen() {
       <HomeStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} />
       <HomeStack.Screen name="CreateCircleInvite" component={CreateCircleInviteScreen} />
       <HomeStack.Screen name="CreateCircleSuccess" component={CreateCircleSuccessScreen} />
+      {/* Marketplace (Migration 057) */}
+      <HomeStack.Screen name="Marketplace" component={MarketplaceScreen} />
+      <HomeStack.Screen name="StoreDetail" component={StoreDetailScreen} />
+      <HomeStack.Screen name="StoreApplication" component={StoreApplicationScreen} />
+      <HomeStack.Screen name="BulkInvites" component={BulkInvitesScreen} />
+      <HomeStack.Screen name="BookService" component={BookServiceScreen} />
+      <HomeStack.Screen name="OwnerDashboard" component={OwnerDashboardScreen} />
+      <HomeStack.Screen name="MarketInsight" component={MarketInsightScreen} />
     </HomeStack.Navigator>
   );
 }
@@ -431,6 +467,18 @@ function ProfileStackScreen() {
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// NAVIGATION HELPER - Extract active route name from nested navigators
+// ══════════════════════════════════════════════════════════════════════════════
+function getActiveRouteName(state: any): string | undefined {
+  if (!state) return undefined;
+  const route = state.routes[state.index];
+  if (route.state) {
+    return getActiveRouteName(route.state);
+  }
+  return route.name;
+}
+
 // Component that wraps the app content and handles inactivity lock
 function AppContent() {
   const { isAuthenticated, isLocked, lockApp } = useAuth();
@@ -440,6 +488,22 @@ function AppContent() {
     isAuthenticated,
     isLocked,
   });
+
+  // ── Event Logging: App lifecycle tracking ──────────────────────────────
+  React.useEffect(() => {
+    eventService.startSession();
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        eventService.startSession();
+      } else if (nextState === 'background' || nextState === 'inactive') {
+        eventService.endSession();
+      }
+    });
+    return () => {
+      subscription.remove();
+      eventService.endSession();
+    };
+  }, []);
 
   // If user is authenticated but locked, show lock screen
   if (isAuthenticated && isLocked) {
@@ -546,6 +610,7 @@ export default function App() {
   return (
     <PreferencesProvider>
       <AuthProvider>
+        <PaymentProvider>
         <CurrencyProvider>
           <CirclesProvider>
             <WalletProvider>
@@ -553,17 +618,31 @@ export default function App() {
                 <TrustProvider>
                   <AdvanceProvider>
                     <SavingsProvider>
+                      <WithdrawalWizardProvider>
                       <CommunityProvider>
                         <ElderProvider>
+                        <FeatureGateProvider>
+                        <MemberProfileProvider>
                           <NotificationProvider>
                             <OnboardingProvider>
-                              <NavigationContainer linking={linkingConfig}>
+                              <NavigationContainer
+                                linking={linkingConfig}
+                                onStateChange={(state) => {
+                                  const currentRoute = getActiveRouteName(state);
+                                  if (currentRoute) {
+                                    eventService.trackScreenView(currentRoute);
+                                  }
+                                }}
+                              >
                                 <AppContent />
                               </NavigationContainer>
                             </OnboardingProvider>
                           </NotificationProvider>
+                        </MemberProfileProvider>
+                        </FeatureGateProvider>
                         </ElderProvider>
                       </CommunityProvider>
+                      </WithdrawalWizardProvider>
                     </SavingsProvider>
                   </AdvanceProvider>
                 </TrustProvider>
@@ -571,6 +650,7 @@ export default function App() {
             </WalletProvider>
           </CirclesProvider>
         </CurrencyProvider>
+        </PaymentProvider>
       </AuthProvider>
     </PreferencesProvider>
   );

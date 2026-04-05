@@ -15,17 +15,12 @@ import {
   TrendingUp,
   X,
 } from "lucide-react"
+import { goBack, navigateToCircleScreen } from "./useCircleParams"
 
 export default function CircleFAQScreen() {
   const [searchQuery, setSearchQuery] = useState("")
   const [expandedCategory, setExpandedCategory] = useState("Payments")
   const [expandedQuestion, setExpandedQuestion] = useState<string | null>(null)
-
-  const circle = {
-    name: "Diaspora Family Fund",
-    contribution: 200,
-    frequency: "monthly",
-  }
 
   const faqs = [
     {
@@ -180,7 +175,7 @@ export default function CircleFAQScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -194,7 +189,7 @@ export default function CircleFAQScreen() {
           </button>
           <div>
             <h1 style={{ margin: "0 0 2px 0", fontSize: "22px", fontWeight: "700", color: "#FFFFFF" }}>Circle FAQ</h1>
-            <p style={{ margin: 0, fontSize: "13px", color: "rgba(255,255,255,0.8)" }}>{circle.name}</p>
+            <p style={{ margin: 0, fontSize: "13px", color: "rgba(255,255,255,0.8)" }}>Frequently Asked Questions</p>
           </div>
         </div>
 
@@ -455,7 +450,7 @@ export default function CircleFAQScreen() {
             <p style={{ margin: 0, fontSize: "12px", color: "#666" }}>Our support team is here to help</p>
           </div>
           <button
-            onClick={() => console.log("Contact support")}
+            onClick={() => navigateToCircleScreen("CIRC-103 Circle Type Explainer")}
             style={{
               padding: "10px 20px",
               background: "#00C6AE",

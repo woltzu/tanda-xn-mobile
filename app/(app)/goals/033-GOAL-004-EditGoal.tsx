@@ -1,7 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ArrowLeft, Save, Info, ChevronRight, DollarSign, Calendar, Shield, Lock, Unlock } from "lucide-react"
+import { useSavings } from "@/context/SavingsContext"
+import { useAuth } from "@/context/AuthContext"
+import { useGoalParams, navigateToGoalScreen, goBack } from "./useGoalParams"
 
 // Brand Colors
 const COLORS = {
@@ -17,19 +20,66 @@ const COLORS = {
 }
 
 export default function EditGoalScreen() {
+  const { user } = useAuth()
+  const { goalId } = useGoalParams()
+  const { getGoalById, updateGoal: updateGoalContext, isLoading, goals: allGoals } = useSavings()
+  const [isSaving, setIsSaving] = useState(false)
+  const [initialized, setInitialized] = useState(false)
+
   const [goal, setGoal] = useState({
-    id: "g1",
-    name: "Emergency Fund",
-    emoji: "🛡️",
-    description: "3 months of expenses for unexpected situations",
-    targetAmount: 5000,
-    currentAmount: 3200,
-    tier: "emergency",
-    deadline: "2025-06-30",
-    monthlyContribution: 400,
-    autoContribute: true,
+    id: "",
+    name: "",
+    emoji: "🎯",
+    description: "",
+    targetAmount: 0,
+    currentAmount: 0,
+    tier: "flexible",
+    deadline: "",
+    monthlyContribution: 0,
+    autoContribute: false,
   })
   const [hasChanges, setHasChanges] = useState(false)
+
+  // Load goal data from context
+  useEffect(() => {
+    if (goalId && !initialized) {
+      const savingsGoal = getGoalById(goalId)
+      if (savingsGoal) {
+        setGoal({
+          id: savingsGoal.id,
+          name: savingsGoal.name,
+          emoji: savingsGoal.emoji,
+          description: "",
+          targetAmount: savingsGoal.targetAmount,
+          currentAmount: savingsGoal.currentBalance,
+          tier: savingsGoal.type,
+          deadline: savingsGoal.maturityDate || "",
+          monthlyContribution: 0,
+          autoContribute: savingsGoal.autoSaveEnabled,
+        })
+        setInitialized(true)
+      }
+    }
+  }, [goalId, allGoals, initialized, getGoalById])
+
+  // Loading state
+  if (isLoading && !initialized) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: COLORS.offWhite }}>
+        <p style={{ fontSize: "16px", color: COLORS.gray }}>Loading goal...</p>
+      </div>
+    )
+  }
+
+  // Not found
+  if (!isLoading && goalId && !getGoalById(goalId) && !initialized) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", background: COLORS.offWhite, gap: "16px" }}>
+        <p style={{ fontSize: "16px", color: COLORS.gray }}>Goal not found</p>
+        <button onClick={() => goBack()} style={{ padding: "12px 24px", borderRadius: "10px", border: "none", background: COLORS.teal, color: COLORS.white, fontSize: "14px", fontWeight: "600", cursor: "pointer" }}>Go Back</button>
+      </div>
+    )
+  }
 
   const tiers = {
     flexible: {
@@ -71,9 +121,23 @@ export default function EditGoalScreen() {
 
   const currentTier = tiers[goal.tier as keyof typeof tiers] || tiers.flexible
 
-  const handleSave = () => {
-    if (hasChanges) {
-      console.log("Saving goal:", goal)
+  const handleSave = async () => {
+    if (!hasChanges || !goalId) return
+    setIsSaving(true)
+    try {
+      await updateGoalContext(goalId, {
+        name: goal.name,
+        emoji: goal.emoji,
+        targetAmount: goal.targetAmount,
+        autoSaveEnabled: goal.autoContribute,
+      })
+      setHasChanges(false)
+      goBack()
+    } catch (error) {
+      console.error("Failed to save goal:", error)
+      alert(`Failed to save: ${error instanceof Error ? error.message : "Unknown error"}`)
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -102,7 +166,7 @@ export default function EditGoalScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -485,7 +549,7 @@ export default function EditGoalScreen() {
 
         {/* Current Tier */}
         <button
-          onClick={() => console.log("Upgrade tier")}
+          onClick={() => goalId && navigateToGoalScreen("036-GOAL-T01-TierSelection", { goalId })}
           style={{
             width: "100%",
             background: COLORS.white,
@@ -558,25 +622,26 @@ export default function EditGoalScreen() {
       >
         <button
           onClick={handleSave}
-          disabled={!hasChanges}
+          disabled={!hasChanges || isSaving}
           style={{
             width: "100%",
             padding: "16px",
             borderRadius: "14px",
             border: "none",
-            background: hasChanges ? COLORS.teal : COLORS.lightGray,
+            background: hasChanges && !isSaving ? COLORS.teal : COLORS.lightGray,
             fontSize: "16px",
             fontWeight: "600",
-            color: hasChanges ? COLORS.white : COLORS.gray,
-            cursor: hasChanges ? "pointer" : "not-allowed",
+            color: hasChanges && !isSaving ? COLORS.white : COLORS.gray,
+            cursor: hasChanges && !isSaving ? "pointer" : "not-allowed",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             gap: "8px",
+            opacity: isSaving ? 0.7 : 1,
           }}
         >
           <Save size={20} />
-          Save Changes
+          {isSaving ? "Saving..." : "Save Changes"}
         </button>
       </div>
     </div>

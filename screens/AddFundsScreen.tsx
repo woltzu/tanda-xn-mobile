@@ -8,6 +8,8 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,6 +17,7 @@ import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useWallet } from "../context/WalletContext";
+import { usePayment } from "../context/PaymentContext";
 
 type AddFundsNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -79,12 +82,27 @@ const QUICK_AMOUNTS = [25, 50, 100, 250, 500];
 export default function AddFundsScreen() {
   const navigation = useNavigation<AddFundsNavigationProp>();
   const { addFunds } = useWallet();
+  const { paymentMethods, isLoadingMethods, createDeposit, presentPaymentSheet, isStripeReady } = usePayment();
   const [amount, setAmount] = useState("");
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
+  const [selectedSavedMethodId, setSelectedSavedMethodId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const numericAmount = parseFloat(amount) || 0;
   const selectedMethodData = FUNDING_METHODS.find((m) => m.id === selectedMethod);
+
+  // Map funding method types to Stripe payment method types
+  const methodTypeMap: Record<string, string> = {
+    bank: "us_bank_account",
+    debit: "card",
+    mobile: "card",
+    apple_pay: "card",
+  };
+
+  // Filter saved payment methods based on selected funding type
+  const savedMethodsForType = selectedMethod
+    ? paymentMethods.filter((pm: any) => pm.type === methodTypeMap[selectedMethod])
+    : [];
 
   const getFee = () => {
     if (!selectedMethodData) return 0;
@@ -106,18 +124,40 @@ export default function AddFundsScreen() {
 
     setIsProcessing(true);
     try {
-      // Add funds to wallet context
+      const amountCents = Math.round(numericAmount * 100);
+
+      // Create deposit via Stripe
+      const { clientSecret, transactionId } = await createDeposit(
+        amountCents,
+        "usd",
+        selectedSavedMethodId || undefined
+      );
+
+      if (clientSecret) {
+        // Present the Stripe payment sheet
+        const { error } = await presentPaymentSheet(clientSecret);
+        if (error) {
+          Alert.alert("Payment Failed", error.message || "Your payment could not be processed.");
+          return;
+        }
+      }
+
+      // Payment succeeded - update local wallet state
       await addFunds(numericAmount, selectedMethodData?.name || "");
 
-      // Navigate to success screen
+      // Navigate to success screen with real transaction info
       navigation.navigate("WalletTransactionSuccess", {
         type: "add",
         amount: numericAmount,
         method: selectedMethodData?.name || "",
-        transactionId: `TXN${Date.now()}`,
+        transactionId: transactionId || `TXN${Date.now()}`,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error adding funds:", error);
+      Alert.alert(
+        "Deposit Failed",
+        error?.message || "Something went wrong. Please try again."
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -250,6 +290,74 @@ export default function AddFundsScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* Saved Payment Methods for Selected Type */}
+          {selectedMethod && (
+            <View style={styles.methodsSection}>
+              <Text style={styles.sectionTitle}>Your Saved Methods</Text>
+              {isLoadingMethods ? (
+                <ActivityIndicator size="small" color="#00C6AE" style={{ marginVertical: 16 }} />
+              ) : savedMethodsForType.length > 0 ? (
+                <>
+                  {savedMethodsForType.map((pm: any) => (
+                    <TouchableOpacity
+                      key={pm.id}
+                      style={[
+                        styles.methodCard,
+                        selectedSavedMethodId === pm.id && styles.methodCardSelected,
+                      ]}
+                      onPress={() => setSelectedSavedMethodId(
+                        selectedSavedMethodId === pm.id ? null : pm.id
+                      )}
+                    >
+                      <View style={styles.methodLeft}>
+                        <View
+                          style={[
+                            styles.methodIcon,
+                            { backgroundColor: "#F0F4FF" },
+                            selectedSavedMethodId === pm.id && styles.methodIconSelected,
+                          ]}
+                        >
+                          <Ionicons
+                            name={pm.type === "us_bank_account" ? "business-outline" : "card-outline"}
+                            size={22}
+                            color={selectedSavedMethodId === pm.id ? "#00C6AE" : "#3B82F6"}
+                          />
+                        </View>
+                        <View style={styles.methodInfo}>
+                          <Text style={styles.methodName}>
+                            {pm.card?.brand?.toUpperCase() || pm.us_bank_account?.bank_name || pm.type}
+                          </Text>
+                          <Text style={styles.methodDescription}>
+                            ****{pm.card?.last4 || pm.us_bank_account?.last4 || ""}
+                          </Text>
+                        </View>
+                      </View>
+                      <View
+                        style={[
+                          styles.radioOuter,
+                          selectedSavedMethodId === pm.id && styles.radioOuterSelected,
+                        ]}
+                      >
+                        {selectedSavedMethodId === pm.id && <View style={styles.radioInner} />}
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </>
+              ) : (
+                <View style={{ paddingVertical: 12, alignItems: "center" }}>
+                  <Text style={{ fontSize: 13, color: "#6B7280", marginBottom: 8 }}>
+                    No saved methods for this type
+                  </Text>
+                  <TouchableOpacity onPress={() => navigation.navigate("AddPaymentMethod" as any)}>
+                    <Text style={{ fontSize: 14, fontWeight: "600", color: "#00C6AE" }}>
+                      + Add a payment method
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Summary */}
           {numericAmount >= 10 && selectedMethod && (

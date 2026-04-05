@@ -1,34 +1,108 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useCircles, Circle, CircleMember } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { useCircleParams, goBack, navigateToCircleScreen } from "./useCircleParams"
 
 export default function JoinCircleConfirmationScreen() {
   const [agreedToRules, setAgreedToRules] = useState(false)
   const [agreedToCommitment, setAgreedToCommitment] = useState(false)
+  const [circle, setCircle] = useState<Circle | null>(null)
+  const [elder, setElder] = useState<CircleMember | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [isJoining, setIsJoining] = useState(false)
+  const [joinError, setJoinError] = useState<string | null>(null)
 
-  const circle = {
-    id: "circle_456",
-    name: "Diaspora Family Fund",
-    type: "family",
-    emoji: "👨‍👩‍👧‍👦",
-    contribution: 200,
-    frequency: "monthly",
-    totalMembers: 12,
-    currentMembers: 8,
-    potAmount: 2400,
-    startDate: "Jan 20, 2025",
-    estimatedPayoutPosition: 9,
-    elder: {
-      name: "Grace M.",
-      avatar: "G",
-      xnScore: 92,
-    },
-    gracePeriod: 2,
-    latePenalty: 10,
+  const { circleId } = useCircleParams()
+  const { getCircleById, getCircleMembers, joinCircle, browseCircles } = useCircles()
+  const { user } = useAuth()
+
+  useEffect(() => {
+    if (!circleId) return
+
+    const loadData = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        let found = getCircleById(circleId)
+        if (!found) {
+          found = browseCircles.find((c) => c.id === circleId) || null
+        }
+        if (!found) {
+          setError("Circle not found")
+          setLoading(false)
+          return
+        }
+        setCircle(found)
+
+        // Load members to find elder
+        const membersData = await getCircleMembers(circleId)
+        const elderMember = membersData.find((m) => m.role === "elder" || m.role === "creator") || null
+        setElder(elderMember)
+      } catch (err: any) {
+        setError(err.message || "Failed to load circle")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadData()
+  }, [circleId])
+
+  const userXnScore = user?.xnScore ?? 0
+  const canJoin = agreedToRules && agreedToCommitment
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        }}
+      >
+        <p style={{ fontSize: "16px", color: "#666" }}>Loading...</p>
+      </div>
+    )
   }
 
-  const userXnScore = 72
-  const canJoin = agreedToRules && agreedToCommitment
+  if (error || !circle) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          gap: "16px",
+        }}
+      >
+        <p style={{ fontSize: "16px", color: "#DC2626" }}>{error || "Circle not found"}</p>
+        <button
+          onClick={() => goBack()}
+          style={{
+            padding: "10px 24px",
+            borderRadius: "10px",
+            border: "none",
+            background: "#0A2342",
+            color: "#FFFFFF",
+            fontSize: "14px",
+            cursor: "pointer",
+          }}
+        >
+          Go Back
+        </button>
+      </div>
+    )
+  }
 
   const getFrequencyLabel = () => {
     switch (circle.frequency) {
@@ -45,8 +119,22 @@ export default function JoinCircleConfirmationScreen() {
     }
   }
 
-  const getTotalCommitment = () => {
-    return circle.contribution * circle.totalMembers
+  const totalCommitment = circle.amount * circle.memberCount
+  const latePenalty = 10
+  const estimatedPayoutPosition = circle.currentMembers + 1
+
+  const handleConfirmJoin = async () => {
+    if (!circleId) return
+    setIsJoining(true)
+    setJoinError(null)
+    try {
+      await joinCircle(circleId)
+      navigateToCircleScreen("CIRC-108 Join Circle Success", { circleId })
+    } catch (err: any) {
+      setJoinError(err.message || "Failed to join circle")
+    } finally {
+      setIsJoining(false)
+    }
   }
 
   return (
@@ -75,7 +163,7 @@ export default function JoinCircleConfirmationScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -121,7 +209,7 @@ export default function JoinCircleConfirmationScreen() {
           </div>
           <h2 style={{ margin: "0 0 4px 0", fontSize: "20px", fontWeight: "700" }}>{circle.name}</h2>
           <p style={{ margin: "0 0 16px 0", fontSize: "13px", opacity: 0.8 }}>
-            {circle.currentMembers}/{circle.totalMembers} members • Starts {circle.startDate}
+            {circle.currentMembers}/{circle.memberCount} members {circle.startDate ? `• Starts ${new Date(circle.startDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}
           </p>
 
           <div
@@ -138,7 +226,7 @@ export default function JoinCircleConfirmationScreen() {
                 padding: "12px",
               }}
             >
-              <p style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#00C6AE" }}>${circle.contribution}</p>
+              <p style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: "#00C6AE" }}>${circle.amount}</p>
               <p style={{ margin: "2px 0 0 0", fontSize: "10px", opacity: 0.7 }}>per {getFrequencyLabel()}</p>
             </div>
             <div
@@ -149,7 +237,7 @@ export default function JoinCircleConfirmationScreen() {
                 padding: "12px",
               }}
             >
-              <p style={{ margin: 0, fontSize: "20px", fontWeight: "700" }}>${circle.potAmount.toLocaleString()}</p>
+              <p style={{ margin: 0, fontSize: "20px", fontWeight: "700" }}>${(circle.amount * circle.memberCount).toLocaleString()}</p>
               <p style={{ margin: "2px 0 0 0", fontSize: "10px", opacity: 0.7 }}>payout amount</p>
             </div>
           </div>
@@ -195,11 +283,11 @@ export default function JoinCircleConfirmationScreen() {
                 fontSize: "18px",
               }}
             >
-              #{circle.estimatedPayoutPosition}
+              #{estimatedPayoutPosition}
             </div>
             <div style={{ flex: 1 }}>
               <p style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>
-                Position {circle.estimatedPayoutPosition} of {circle.totalMembers}
+                Position {estimatedPayoutPosition} of {circle.memberCount}
               </p>
               <p style={{ margin: "4px 0 0 0", fontSize: "12px", color: "#6B7280" }}>
                 Based on your XnScore of {userXnScore}
@@ -207,7 +295,7 @@ export default function JoinCircleConfirmationScreen() {
             </div>
           </div>
           <p style={{ margin: "12px 0 0 0", fontSize: "11px", color: "#6B7280" }}>
-            💡 Higher XnScore = earlier payout position
+            Higher XnScore = earlier payout position
           </p>
         </div>
 
@@ -235,7 +323,7 @@ export default function JoinCircleConfirmationScreen() {
               }}
             >
               <span style={{ fontSize: "13px", color: "#6B7280" }}>Contribution per cycle</span>
-              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>${circle.contribution}</span>
+              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>${circle.amount}</span>
             </div>
             <div
               style={{
@@ -248,7 +336,7 @@ export default function JoinCircleConfirmationScreen() {
             >
               <span style={{ fontSize: "13px", color: "#6B7280" }}>Total commitment</span>
               <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>
-                ${getTotalCommitment().toLocaleString()}
+                ${totalCommitment.toLocaleString()}
               </span>
             </div>
             <div
@@ -261,7 +349,7 @@ export default function JoinCircleConfirmationScreen() {
               }}
             >
               <span style={{ fontSize: "13px", color: "#6B7280" }}>Grace period</span>
-              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>{circle.gracePeriod} days</span>
+              <span style={{ fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>{circle.gracePeriodDays} days</span>
             </div>
             <div
               style={{
@@ -273,7 +361,7 @@ export default function JoinCircleConfirmationScreen() {
               }}
             >
               <span style={{ fontSize: "13px", color: "#92400E" }}>Late payment penalty</span>
-              <span style={{ fontSize: "13px", fontWeight: "600", color: "#D97706" }}>{circle.latePenalty}%</span>
+              <span style={{ fontSize: "13px", fontWeight: "600", color: "#D97706" }}>{latePenalty}%</span>
             </div>
           </div>
         </div>
@@ -313,10 +401,10 @@ export default function JoinCircleConfirmationScreen() {
                 fontSize: "16px",
               }}
             >
-              {circle.elder.avatar}
+              {elder ? elder.name.charAt(0).toUpperCase() : "?"}
             </div>
             <div style={{ flex: 1 }}>
-              <p style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>{circle.elder.name}</p>
+              <p style={{ margin: 0, fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>{elder ? elder.name : "TBD"}</p>
               <p style={{ margin: "2px 0 0 0", fontSize: "12px", color: "#6B7280" }}>Oversees this circle</p>
             </div>
             <span
@@ -329,10 +417,32 @@ export default function JoinCircleConfirmationScreen() {
                 color: "#00C6AE",
               }}
             >
-              ⭐ {circle.elder.xnScore}
+              {elder ? elder.xnScore : "--"}
             </span>
           </div>
         </div>
+
+        {/* Join Error */}
+        {joinError && (
+          <div
+            style={{
+              background: "#FEF2F2",
+              borderRadius: "12px",
+              padding: "14px",
+              marginBottom: "16px",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" style={{ flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+            <p style={{ margin: 0, fontSize: "13px", color: "#DC2626" }}>{joinError}</p>
+          </div>
+        )}
 
         {/* Agreements */}
         <div
@@ -434,7 +544,7 @@ export default function JoinCircleConfirmationScreen() {
                 )}
               </div>
               <span style={{ fontSize: "13px", color: "#0A2342", lineHeight: 1.4 }}>
-                I commit to making ${circle.contribution} contributions every {getFrequencyLabel()} for the full
+                I commit to making ${circle.amount} contributions every {getFrequencyLabel()} for the full
                 duration of this circle
               </span>
             </button>
@@ -455,22 +565,22 @@ export default function JoinCircleConfirmationScreen() {
         }}
       >
         <button
-          onClick={() => console.log("Join circle")}
-          disabled={!canJoin}
+          onClick={handleConfirmJoin}
+          disabled={!canJoin || isJoining}
           style={{
             width: "100%",
             padding: "16px",
             borderRadius: "14px",
             border: "none",
-            background: canJoin ? "linear-gradient(135deg, #00C6AE 0%, #00A896 100%)" : "#E5E7EB",
+            background: canJoin && !isJoining ? "linear-gradient(135deg, #00C6AE 0%, #00A896 100%)" : "#E5E7EB",
             fontSize: "16px",
             fontWeight: "600",
-            color: canJoin ? "#FFFFFF" : "#9CA3AF",
-            cursor: canJoin ? "pointer" : "not-allowed",
-            boxShadow: canJoin ? "0 8px 24px rgba(0, 198, 174, 0.3)" : "none",
+            color: canJoin && !isJoining ? "#FFFFFF" : "#9CA3AF",
+            cursor: canJoin && !isJoining ? "pointer" : "not-allowed",
+            boxShadow: canJoin && !isJoining ? "0 8px 24px rgba(0, 198, 174, 0.3)" : "none",
           }}
         >
-          Join {circle.name}
+          {isJoining ? "Joining..." : `Join ${circle.name}`}
         </button>
       </div>
     </div>

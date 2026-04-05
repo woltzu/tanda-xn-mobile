@@ -1,22 +1,91 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useCircles } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { useCircleParams, goBack, navigateToCircleScreen } from "./useCircleParams"
 
 export default function InviteToCircle() {
-  const circle = {
-    name: "Family Savings",
-    inviteCode: "FAMILY2025",
-    inviteLink: "https://tandaxn.com/join/FAMILY2025",
-    size: 6,
-    currentMembers: 4,
-  }
+  const { circleId } = useCircleParams()
+  const { getCircleById, getInvitedMembers, inviteMember, generateInviteCode } = useCircles()
+  const { user } = useAuth()
 
   const [copied, setCopied] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [invitedMembers, setInvitedMembers] = useState<any[]>([])
+  const [inviteName, setInviteName] = useState("")
+  const [invitePhone, setInvitePhone] = useState("")
+  const [isSending, setIsSending] = useState(false)
+  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null)
+
+  const circle = circleId ? getCircleById(circleId) : undefined
+  const inviteCode = circle ? generateInviteCode(circle) : ""
+  const inviteLink = `https://tandaxn.com/join/${inviteCode}`
+
+  useEffect(() => {
+    if (!circleId) return
+    setIsLoading(true)
+    getInvitedMembers(circleId)
+      .then((data) => setInvitedMembers(data))
+      .catch((err) => console.error("Failed to load invited members:", err))
+      .finally(() => setIsLoading(false))
+  }, [circleId])
 
   const handleCopy = (type: string, value: string) => {
     navigator.clipboard?.writeText(value)
     setCopied(type)
     setTimeout(() => setCopied(null), 2000)
+  }
+
+  const handleSendInvite = async () => {
+    if (!circleId || !inviteName.trim() || !invitePhone.trim()) return
+    setIsSending(true)
+    setFeedback(null)
+    try {
+      await inviteMember(circleId, inviteName.trim(), invitePhone.trim())
+      setFeedback({ type: "success", message: `Invite sent to ${inviteName}!` })
+      setInviteName("")
+      setInvitePhone("")
+      // Refresh the invited members list
+      const updated = await getInvitedMembers(circleId)
+      setInvitedMembers(updated)
+    } catch (err: any) {
+      setFeedback({ type: "error", message: err?.message || "Failed to send invite" })
+    } finally {
+      setIsSending(false)
+      setTimeout(() => setFeedback(null), 3000)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "3px solid #E5E7EB",
+              borderTop: "3px solid #00C6AE",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 16px auto",
+            }}
+          />
+          <p style={{ color: "#6B7280", fontSize: "14px" }}>Loading...</p>
+        </div>
+        <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
   }
 
   return (
@@ -45,7 +114,7 @@ export default function InviteToCircle() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -61,7 +130,7 @@ export default function InviteToCircle() {
           </button>
           <div style={{ flex: 1 }}>
             <h1 style={{ margin: 0, fontSize: "20px", fontWeight: "700" }}>Invite Members</h1>
-            <p style={{ margin: "4px 0 0 0", fontSize: "13px", opacity: 0.8 }}>{circle.name}</p>
+            <p style={{ margin: "4px 0 0 0", fontSize: "13px", opacity: 0.8 }}>{circle?.name || "Circle"}</p>
           </div>
         </div>
 
@@ -91,9 +160,9 @@ export default function InviteToCircle() {
             👥
           </div>
           <div>
-            <p style={{ margin: 0, fontSize: "16px", fontWeight: "600" }}>{circle.currentMembers} members</p>
+            <p style={{ margin: 0, fontSize: "16px", fontWeight: "600" }}>{circle?.currentMembers || 0} members</p>
             <p style={{ margin: "4px 0 0 0", fontSize: "12px", opacity: 0.8 }}>
-              No limit - invite as many as you want!
+              {invitedMembers.length} invited so far
             </p>
           </div>
         </div>
@@ -122,10 +191,10 @@ export default function InviteToCircle() {
               letterSpacing: "4px",
             }}
           >
-            {circle.inviteCode}
+            {inviteCode || "---"}
           </p>
           <button
-            onClick={() => handleCopy("code", circle.inviteCode)}
+            onClick={() => handleCopy("code", inviteCode)}
             style={{
               padding: "12px 24px",
               background: copied === "code" ? "#00C6AE" : "#F5F7FA",
@@ -187,10 +256,10 @@ export default function InviteToCircle() {
                 whiteSpace: "nowrap",
               }}
             >
-              {circle.inviteLink}
+              {inviteLink}
             </div>
             <button
-              onClick={() => handleCopy("link", circle.inviteLink)}
+              onClick={() => handleCopy("link", inviteLink)}
               style={{
                 padding: "12px 16px",
                 background: copied === "link" ? "#00C6AE" : "#0A2342",
@@ -206,6 +275,149 @@ export default function InviteToCircle() {
             </button>
           </div>
         </div>
+
+        {/* Send Invite Form */}
+        <div
+          style={{
+            background: "#FFFFFF",
+            borderRadius: "16px",
+            padding: "16px",
+            marginBottom: "16px",
+            border: "1px solid #E5E7EB",
+          }}
+        >
+          <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>Send Invite</h3>
+          <input
+            type="text"
+            placeholder="Name"
+            value={inviteName}
+            onChange={(e) => setInviteName(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "8px",
+              border: "1px solid #E5E7EB",
+              fontSize: "14px",
+              marginBottom: "8px",
+              boxSizing: "border-box",
+              outline: "none",
+            }}
+          />
+          <input
+            type="tel"
+            placeholder="Phone number"
+            value={invitePhone}
+            onChange={(e) => setInvitePhone(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "8px",
+              border: "1px solid #E5E7EB",
+              fontSize: "14px",
+              marginBottom: "12px",
+              boxSizing: "border-box",
+              outline: "none",
+            }}
+          />
+          <button
+            onClick={handleSendInvite}
+            disabled={isSending || !inviteName.trim() || !invitePhone.trim()}
+            style={{
+              width: "100%",
+              padding: "14px",
+              background: isSending || !inviteName.trim() || !invitePhone.trim() ? "#E5E7EB" : "#00C6AE",
+              borderRadius: "10px",
+              border: "none",
+              cursor: isSending || !inviteName.trim() || !invitePhone.trim() ? "not-allowed" : "pointer",
+              fontSize: "14px",
+              fontWeight: "600",
+              color: isSending || !inviteName.trim() || !invitePhone.trim() ? "#9CA3AF" : "#FFFFFF",
+            }}
+          >
+            {isSending ? "Sending..." : "Send Invite"}
+          </button>
+
+          {feedback && (
+            <div
+              style={{
+                marginTop: "12px",
+                padding: "10px",
+                borderRadius: "8px",
+                background: feedback.type === "success" ? "#F0FDFB" : "#FEE2E2",
+                color: feedback.type === "success" ? "#065F46" : "#991B1B",
+                fontSize: "13px",
+                textAlign: "center",
+              }}
+            >
+              {feedback.message}
+            </div>
+          )}
+        </div>
+
+        {/* Already Invited Members */}
+        {invitedMembers.length > 0 && (
+          <div
+            style={{
+              background: "#FFFFFF",
+              borderRadius: "16px",
+              padding: "16px",
+              marginBottom: "16px",
+              border: "1px solid #E5E7EB",
+            }}
+          >
+            <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: "600", color: "#0A2342" }}>
+              Invited ({invitedMembers.length})
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {invitedMembers.map((inv: any) => (
+                <div
+                  key={inv.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "12px",
+                    padding: "10px",
+                    background: "#F5F7FA",
+                    borderRadius: "8px",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "36px",
+                      height: "36px",
+                      borderRadius: "50%",
+                      background: "#0A2342",
+                      color: "#FFFFFF",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontWeight: "600",
+                      fontSize: "14px",
+                    }}
+                  >
+                    {inv.name?.charAt(0)?.toUpperCase() || "?"}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>{inv.name}</p>
+                    <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#6B7280" }}>{inv.phone}</p>
+                  </div>
+                  <span
+                    style={{
+                      padding: "4px 8px",
+                      borderRadius: "6px",
+                      fontSize: "11px",
+                      fontWeight: "600",
+                      background: inv.status === "accepted" ? "#F0FDFB" : inv.status === "declined" ? "#FEE2E2" : "#FEF3C7",
+                      color: inv.status === "accepted" ? "#00897B" : inv.status === "declined" ? "#DC2626" : "#D97706",
+                    }}
+                  >
+                    {inv.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Share Options */}
         <div
@@ -275,31 +487,6 @@ export default function InviteToCircle() {
             </button>
           </div>
         </div>
-
-        {/* Invite from Contacts */}
-        <button
-          onClick={() => console.log("Invite from contacts")}
-          style={{
-            width: "100%",
-            padding: "16px",
-            background: "#00C6AE",
-            borderRadius: "14px",
-            border: "none",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "10px",
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2">
-            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-            <circle cx="8.5" cy="7" r="4" />
-            <line x1="20" y1="8" x2="20" y2="14" />
-            <line x1="23" y1="11" x2="17" y2="11" />
-          </svg>
-          <span style={{ fontSize: "16px", fontWeight: "600", color: "#FFFFFF" }}>Invite from Contacts</span>
-        </button>
 
         {/* Info */}
         <div

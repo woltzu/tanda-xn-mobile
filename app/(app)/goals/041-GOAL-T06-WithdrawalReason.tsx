@@ -1,4 +1,6 @@
 "use client"
+import { useWithdrawalWizard } from "@/context/WithdrawalWizardContext"
+import { useGoalParams, navigateToGoalScreen, goBack } from "./useGoalParams"
 import { ArrowLeft, ChevronRight, Check } from "lucide-react"
 import { useState } from "react"
 
@@ -14,19 +16,10 @@ const colors = {
 }
 
 export default function WithdrawalReasonScreen() {
-  const [selectedReason, setSelectedReason] = useState(null)
+  const [selectedReason, setSelectedReason] = useState<string | null>(null)
 
-  const goal = {
-    id: "g1",
-    name: "Emergency Fund",
-    emoji: "🛡️",
-    currentAmount: 3200,
-    tier: "emergency",
-  }
-
-  const withdrawalAmount = 1000
-  const penaltyAmount = 20
-  const receiveAmount = 980
+  const { goalId } = useGoalParams()
+  const { state, updateField } = useWithdrawalWizard()
 
   const reasons = [
     { id: "emergency", icon: "🚨", label: "Emergency" },
@@ -37,15 +30,22 @@ export default function WithdrawalReasonScreen() {
     { id: "goal_change", icon: "🎯", label: "Plans Changed" },
   ]
 
-  const tiers = {
-    flexible: { name: "Flexible", penalty: 0, color: "#10B981" },
-    emergency: { name: "Emergency", penalty: 2, color: "#3B82F6" },
-    locked: { name: "Locked", penalty: 7, color: "#8B5CF6" },
-  }
-
-  const tierInfo = tiers[goal.tier]
+  // Derive tier display info from penalty percent
+  const tierDisplay = state.penaltyPercent >= 5
+    ? { name: "Locked", penalty: state.penaltyPercent, color: "#8B5CF6" }
+    : state.penaltyPercent > 0
+      ? { name: "Emergency", penalty: state.penaltyPercent, color: "#3B82F6" }
+      : { name: "Flexible", penalty: 0, color: "#10B981" }
 
   const canContinue = selectedReason !== null
+
+  const handleContinue = () => {
+    if (selectedReason) {
+      const reasonLabel = reasons.find(r => r.id === selectedReason)?.label || selectedReason
+      updateField("reason", reasonLabel)
+      navigateToGoalScreen("042-GOAL-T07-WithdrawalReview", { goalId: state.goalId! })
+    }
+  }
 
   const steps = [
     { num: 1, label: "Amount", completed: true, active: false },
@@ -53,6 +53,47 @@ export default function WithdrawalReasonScreen() {
     { num: 3, label: "Review", completed: false, active: false },
     { num: 4, label: "Done", completed: false, active: false },
   ]
+
+  // If wizard state is empty (user navigated directly), redirect back
+  if (!state.goalId || state.amount === 0) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: colors.background,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        }}
+      >
+        <div style={{ textAlign: "center", padding: "20px" }}>
+          <p style={{ fontSize: "48px", marginBottom: "12px" }}>😕</p>
+          <p style={{ color: colors.primaryNavy, fontSize: "18px", fontWeight: "600", margin: "0 0 8px 0" }}>
+            No withdrawal in progress
+          </p>
+          <p style={{ color: colors.textSecondary, fontSize: "14px", margin: "0 0 20px 0" }}>
+            Please start from the withdrawal amount screen.
+          </p>
+          <button
+            onClick={() => goBack()}
+            style={{
+              padding: "12px 24px",
+              borderRadius: "12px",
+              border: "none",
+              background: colors.accentTeal,
+              color: "#FFFFFF",
+              fontSize: "14px",
+              fontWeight: "600",
+              cursor: "pointer",
+            }}
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -70,7 +111,7 @@ export default function WithdrawalReasonScreen() {
         <div style={{ padding: "12px 20px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <button
-              onClick={() => console.log("Back")}
+              onClick={() => goBack()}
               style={{
                 background: "rgba(255,255,255,0.1)",
                 border: "none",
@@ -174,19 +215,19 @@ export default function WithdrawalReasonScreen() {
                 fontSize: "22px",
               }}
             >
-              {goal.emoji}
+              {state.goalEmoji}
             </div>
             <div>
               <p style={{ margin: 0, fontSize: "13px", color: colors.textSecondary }}>Withdrawing</p>
               <p style={{ margin: "2px 0 0 0", fontSize: "20px", fontWeight: "700", color: colors.primaryNavy }}>
-                ${withdrawalAmount.toLocaleString()}
+                ${state.amount.toLocaleString()}
               </p>
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
             <p style={{ margin: 0, fontSize: "12px", color: colors.textSecondary }}>You'll get</p>
             <p style={{ margin: "2px 0 0 0", fontSize: "18px", fontWeight: "700", color: colors.accentTeal }}>
-              ${receiveAmount.toLocaleString()}
+              ${state.receiveAmount.toLocaleString()}
             </p>
           </div>
         </div>
@@ -250,7 +291,7 @@ export default function WithdrawalReasonScreen() {
           ))}
         </div>
 
-        {tierInfo.penalty > 0 && (
+        {tierDisplay.penalty > 0 && (
           <div
             style={{
               background: "#FEF3C7",
@@ -264,7 +305,7 @@ export default function WithdrawalReasonScreen() {
           >
             <span style={{ fontSize: "20px" }}>💡</span>
             <p style={{ margin: 0, fontSize: "12px", color: "#92400E", lineHeight: "1.5" }}>
-              <strong>${penaltyAmount}</strong> penalty will be applied. Consider if this is truly necessary.
+              <strong>${state.penaltyAmount}</strong> penalty will be applied. Consider if this is truly necessary.
             </p>
           </div>
         )}
@@ -284,7 +325,7 @@ export default function WithdrawalReasonScreen() {
         }}
       >
         <button
-          onClick={() => console.log("Continue with reason:", selectedReason)}
+          onClick={handleContinue}
           disabled={!canContinue}
           style={{
             width: "100%",

@@ -1,23 +1,21 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useCircles } from "../../../context/CirclesContext"
+import { useAuth } from "../../../context/AuthContext"
+import { useCircleParams, goBack } from "./useCircleParams"
+
+import type { Circle, MyContributionStatus } from "../../../context/CirclesContext"
 
 export default function EmergencyWithdrawalScreen() {
-  const circle = {
-    name: "Diaspora Family Fund",
-    contribution: 200,
-    myTotalContributed: 600,
-    myPayoutPosition: 4,
-    currentCycle: 3,
-    totalCycles: 6,
-    estimatedPayout: 1200,
-    estimatedPayoutDate: "Feb 15, 2025",
-    elder: {
-      name: "Grace M.",
-      avatar: "G",
-    },
-  }
-  const maxWithdrawable = 600
+  const { circleId } = useCircleParams()
+  const { getCircleById, getMyContributionStatus, requestEmergencyWithdrawal } = useCircles()
+  const { user } = useAuth()
+
+  const [circle, setCircle] = useState<Circle | undefined>(undefined)
+  const [myStatus, setMyStatus] = useState<MyContributionStatus | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const [amount, setAmount] = useState("")
   const [reason, setReason] = useState<string | null>(null)
@@ -25,6 +23,32 @@ export default function EmergencyWithdrawalScreen() {
   const [hasDocument, setHasDocument] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submitSuccess, setSubmitSuccess] = useState(false)
+
+  useEffect(() => {
+    if (!circleId) return
+
+    const loadData = async () => {
+      setIsLoading(true)
+      setLoadError(null)
+      try {
+        const circleData = getCircleById(circleId)
+        setCircle(circleData)
+
+        const status = await getMyContributionStatus(circleId)
+        setMyStatus(status)
+      } catch (err: any) {
+        setLoadError(err.message || "Failed to load data")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadData()
+  }, [circleId])
+
+  const maxWithdrawable = myStatus?.totalContributed || 0
 
   const reasons = [
     {
@@ -64,16 +88,138 @@ export default function EmergencyWithdrawalScreen() {
   const canSubmit = isValidAmount && reason && details.length >= 20 && agreedToTerms
 
   const handleSubmit = async () => {
-    if (!canSubmit) return
+    if (!canSubmit || !circleId || !reason) return
     setIsSubmitting(true)
-    console.log("Submitting emergency request:", {
-      amount: requestedAmount,
-      reason,
-      details,
-      hasDocument,
-    })
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setIsSubmitting(false)
+    setSubmitError(null)
+    try {
+      await requestEmergencyWithdrawal(circleId, reason, requestedAmount)
+      setSubmitSuccess(true)
+    } catch (err: any) {
+      setSubmitError(err.message || "Failed to submit emergency request")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div
+            style={{
+              width: "40px",
+              height: "40px",
+              border: "4px solid #E5E7EB",
+              borderTopColor: "#00C6AE",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite",
+              margin: "0 auto 16px auto",
+            }}
+          />
+          <p style={{ color: "#6B7280", fontSize: "14px" }}>Loading...</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        </div>
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "20px",
+        }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <p style={{ color: "#DC2626", fontSize: "14px", marginBottom: "12px" }}>{loadError}</p>
+          <button
+            onClick={() => goBack()}
+            style={{
+              padding: "10px 20px",
+              background: "#0A2342",
+              color: "#FFFFFF",
+              border: "none",
+              borderRadius: "8px",
+              cursor: "pointer",
+              fontSize: "14px",
+            }}
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (submitSuccess) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#F5F7FA",
+          fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "20px",
+        }}
+      >
+        <div style={{ textAlign: "center", maxWidth: "320px" }}>
+          <div
+            style={{
+              width: "64px",
+              height: "64px",
+              borderRadius: "50%",
+              background: "#F0FDFB",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 16px auto",
+            }}
+          >
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#00C6AE" strokeWidth="2">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </div>
+          <h2 style={{ margin: "0 0 8px 0", fontSize: "20px", fontWeight: "700", color: "#0A2342" }}>
+            Request Submitted
+          </h2>
+          <p style={{ margin: "0 0 24px 0", fontSize: "14px", color: "#6B7280", lineHeight: 1.5 }}>
+            Your emergency withdrawal request for ${requestedAmount.toLocaleString()} has been submitted for review.
+          </p>
+          <button
+            onClick={() => goBack()}
+            style={{
+              padding: "14px 32px",
+              background: "#0A2342",
+              color: "#FFFFFF",
+              border: "none",
+              borderRadius: "12px",
+              cursor: "pointer",
+              fontSize: "16px",
+              fontWeight: "600",
+            }}
+          >
+            Back to Circle
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -102,7 +248,7 @@ export default function EmergencyWithdrawalScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",
@@ -118,7 +264,7 @@ export default function EmergencyWithdrawalScreen() {
           </button>
           <div style={{ flex: 1 }}>
             <h1 style={{ margin: 0, fontSize: "20px", fontWeight: "700" }}>Emergency Request</h1>
-            <p style={{ margin: "4px 0 0 0", fontSize: "13px", opacity: 0.8 }}>{circle.name}</p>
+            <p style={{ margin: "4px 0 0 0", fontSize: "13px", opacity: 0.8 }}>{circle?.name || "Circle"}</p>
           </div>
         </div>
 
@@ -136,7 +282,7 @@ export default function EmergencyWithdrawalScreen() {
             ${maxWithdrawable.toLocaleString()}
           </p>
           <p style={{ margin: "8px 0 0 0", fontSize: "11px", opacity: 0.7 }}>
-            Based on your contributions of ${circle.myTotalContributed}
+            Based on your contributions of ${myStatus?.totalContributed || 0}
           </p>
         </div>
       </div>
@@ -182,6 +328,27 @@ export default function EmergencyWithdrawalScreen() {
             </p>
           </div>
         </div>
+
+        {/* Submit Error */}
+        {submitError && (
+          <div
+            style={{
+              background: "#FEF2F2",
+              borderRadius: "12px",
+              padding: "14px",
+              marginBottom: "16px",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" style={{ flexShrink: 0 }}>
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 8v4M12 16h.01" />
+            </svg>
+            <p style={{ margin: 0, fontSize: "13px", color: "#DC2626" }}>{submitError}</p>
+          </div>
+        )}
 
         {/* Amount Input */}
         <div
@@ -254,7 +421,7 @@ export default function EmergencyWithdrawalScreen() {
 
           {requestedAmount > maxWithdrawable && (
             <p style={{ margin: "12px 0 0 0", fontSize: "12px", color: "#DC2626" }}>
-              ⚠️ Amount exceeds your available balance
+              Amount exceeds your available balance
             </p>
           )}
         </div>
@@ -413,11 +580,11 @@ export default function EmergencyWithdrawalScreen() {
               fontSize: "14px",
             }}
           >
-            {circle.elder.avatar}
+            E
           </div>
           <div>
             <p style={{ margin: 0, fontSize: "13px", fontWeight: "600", color: "#0A2342" }}>
-              Reviewed by: {circle.elder.name}
+              Reviewed by: Circle Elder
             </p>
             <p style={{ margin: "2px 0 0 0", fontSize: "11px", color: "#6B7280" }}>
               Usually responds within 24-48 hours

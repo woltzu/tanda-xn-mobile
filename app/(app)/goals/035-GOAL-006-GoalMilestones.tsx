@@ -1,15 +1,45 @@
 "use client"
 
+import { useSavings } from "@/context/SavingsContext"
+import { useAuth } from "@/context/AuthContext"
+import { useGoalParams, goBack } from "./useGoalParams"
+
 export default function GoalMilestonesScreen() {
-  const goal = {
-    name: "Emergency Fund",
-    emoji: "🛡️",
-    targetAmount: 5000,
-    currentAmount: 3200,
-    tier: "emergency",
+  const { user } = useAuth()
+  const { goalId } = useGoalParams()
+  const { getGoalById, isLoading, goals: allGoals } = useSavings()
+
+  // Load goal from context
+  const savingsGoal = goalId ? getGoalById(goalId) : undefined
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#F5F7FA" }}>
+        <p style={{ fontSize: "16px", color: "#6B7280" }}>Loading milestones...</p>
+      </div>
+    )
   }
 
-  const progress = Math.round((goal.currentAmount / goal.targetAmount) * 100)
+  // Not found
+  if (!savingsGoal) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", height: "100vh", background: "#F5F7FA", gap: "16px" }}>
+        <p style={{ fontSize: "16px", color: "#6B7280" }}>Goal not found</p>
+        <button onClick={() => goBack()} style={{ padding: "12px 24px", borderRadius: "10px", border: "none", background: "#00C6AE", color: "#FFFFFF", fontSize: "14px", fontWeight: "600", cursor: "pointer" }}>Go Back</button>
+      </div>
+    )
+  }
+
+  const goal = {
+    name: savingsGoal.name,
+    emoji: savingsGoal.emoji,
+    targetAmount: savingsGoal.targetAmount,
+    currentAmount: savingsGoal.currentBalance,
+    tier: savingsGoal.type,
+  }
+
+  const progress = goal.targetAmount > 0 ? Math.round((goal.currentAmount / goal.targetAmount) * 100) : 0
 
   const milestones = [
     {
@@ -78,7 +108,7 @@ export default function GoalMilestonesScreen() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.1)",
               border: "none",

@@ -3,9 +3,6 @@ import { useState } from "react"
 import {
   ArrowLeft,
   Users,
-  Briefcase,
-  Heart,
-  Globe,
   HelpCircle,
   ChevronDown,
   ChevronUp,
@@ -14,67 +11,20 @@ import {
   TrendingUp,
   CheckCircle,
 } from "lucide-react"
+import { CIRCLE_TYPES } from "../../../context/CirclesContext"
+import { goBack, navigateToCircleScreen } from "./useCircleParams"
 
 export default function CircleTypeExplainer() {
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null)
 
-  const circleTypes = [
-    {
-      id: "family",
-      icon: Heart,
-      name: "Family Circles",
-      color: "#3B82F6",
-      bgColor: "#DBEAFE",
-      description: "Perfect for relatives pooling resources to support each other or send money back home.",
-      features: [
-        "Trusted family members only",
-        "Flexible contribution schedules",
-        "Great for diaspora remittances",
-        "Elder oversight recommended",
-      ],
-      idealFor: "Families, relatives, close-knit groups",
-    },
-    {
-      id: "work",
-      icon: Briefcase,
-      name: "Work Circles",
-      color: "#10B981",
-      bgColor: "#D1FAE5",
-      description: "Colleagues and professionals saving together with structured schedules.",
-      features: [
-        "Verified workplace groups",
-        "Higher contribution limits",
-        "Strict payment schedules",
-        "Professional accountability",
-      ],
-      idealFor: "Coworkers, professional networks, industry groups",
-    },
-    {
-      id: "community",
-      icon: Globe,
-      name: "Community Circles",
-      color: "#F59E0B",
-      bgColor: "#FEF3C7",
-      description: "Local or cultural communities saving together for shared goals.",
-      features: [
-        "Open to community members",
-        "Cultural traditions respected",
-        "Local meetup options",
-        "Community elder facilitation",
-      ],
-      idealFor: "Neighborhood groups, cultural associations, religious communities",
-    },
-    {
-      id: "friends",
-      icon: Users,
-      name: "Friends Circles",
-      color: "#8B5CF6",
-      bgColor: "#EDE9FE",
-      description: "Casual savings groups among trusted friends.",
-      features: ["Invite-only membership", "Flexible rules", "Social accountability", "Fun and supportive"],
-      idealFor: "Friend groups, social clubs, hobby groups",
-    },
-  ]
+  // Map CIRCLE_TYPES to the display format
+  const circleTypes = Object.values(CIRCLE_TYPES).map((ct) => ({
+    id: ct.id,
+    emoji: ct.emoji,
+    name: ct.name,
+    description: ct.description,
+    features: ct.features,
+  }))
 
   const faqs = [
     {
@@ -130,7 +80,7 @@ export default function CircleTypeExplainer() {
           }}
         >
           <button
-            onClick={() => console.log("Back")}
+            onClick={() => goBack()}
             style={{
               background: "rgba(255,255,255,0.15)",
               border: "none",
@@ -302,95 +252,88 @@ export default function CircleTypeExplainer() {
         </h3>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {circleTypes.map((type) => {
-            const Icon = type.icon
-            return (
+          {circleTypes.map((type) => (
+            <div
+              key={type.id}
+              style={{
+                background: "#FFFFFF",
+                borderRadius: "16px",
+                padding: "16px",
+                border: "1px solid #E0E0E0",
+              }}
+            >
               <div
-                key={type.id}
                 style={{
-                  background: "#FFFFFF",
-                  borderRadius: "16px",
-                  padding: "16px",
-                  border: "1px solid #E0E0E0",
+                  display: "flex",
+                  alignItems: "start",
+                  gap: "12px",
+                  marginBottom: "12px",
                 }}
               >
                 <div
                   style={{
+                    width: "44px",
+                    height: "44px",
+                    borderRadius: "12px",
+                    background: "#F0FDFB",
                     display: "flex",
-                    alignItems: "start",
-                    gap: "12px",
-                    marginBottom: "12px",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    fontSize: "22px",
                   }}
                 >
-                  <div
+                  {type.emoji}
+                </div>
+                <div>
+                  <h4
                     style={{
-                      width: "44px",
-                      height: "44px",
-                      borderRadius: "12px",
-                      background: type.bgColor,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
+                      margin: "0 0 4px 0",
+                      fontSize: "16px",
+                      fontWeight: "700",
+                      color: "#0A2342",
                     }}
                   >
-                    <Icon size={22} color={type.color} />
-                  </div>
-                  <div>
-                    <h4
-                      style={{
-                        margin: "0 0 4px 0",
-                        fontSize: "16px",
-                        fontWeight: "700",
-                        color: "#0A2342",
-                      }}
-                    >
-                      {type.name}
-                    </h4>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: "13px",
-                        color: "#666",
-                        lineHeight: "1.4",
-                      }}
-                    >
-                      {type.description}
-                    </p>
-                  </div>
+                    {type.name}
+                  </h4>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "13px",
+                      color: "#666",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    {type.description}
+                  </p>
                 </div>
-
-                <div
-                  style={{
-                    background: "#F5F7FA",
-                    borderRadius: "10px",
-                    padding: "12px",
-                    marginBottom: "12px",
-                  }}
-                >
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                    {type.features.map((feature, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px",
-                        }}
-                      >
-                        <CheckCircle size={12} color="#10B981" />
-                        <span style={{ fontSize: "12px", color: "#444" }}>{feature}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <p style={{ margin: 0, fontSize: "12px", color: "#666" }}>
-                  <span style={{ fontWeight: "600" }}>Ideal for:</span> {type.idealFor}
-                </p>
               </div>
-            )
-          })}
+
+              <div
+                style={{
+                  background: "#F5F7FA",
+                  borderRadius: "10px",
+                  padding: "12px",
+                }}
+              >
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {type.features.map((feature, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      <CheckCircle size={12} color="#10B981" />
+                      <span style={{ fontSize: "12px", color: "#444" }}>{feature}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -475,7 +418,7 @@ export default function CircleTypeExplainer() {
       {/* CTA */}
       <div style={{ padding: "0 20px 20px 20px" }}>
         <button
-          onClick={() => console.log("Browse Circles")}
+          onClick={() => navigateToCircleScreen("CIRC-101 Browse Circles")}
           style={{
             width: "100%",
             padding: "16px",

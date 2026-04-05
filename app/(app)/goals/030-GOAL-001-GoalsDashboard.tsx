@@ -21,99 +21,117 @@ import {
   HelpCircle,
 } from "lucide-react"
 import { TabBarInline } from "../../../components/TabBar"
+import { useSavings, GOAL_TYPES } from "@/context/SavingsContext"
+import { useAuth } from "@/context/AuthContext"
+import { navigateToGoalScreen, goBack } from "./useGoalParams"
 
 export default function GoalsDashboard() {
+  const { user } = useAuth()
+  const { goals: savingsGoals, getActiveGoals, getTotalSavings, deleteGoal, isLoading, getGoalTransactions } = useSavings()
+
   const [activeCategory, setActiveCategory] = useState("all")
-  const [goalToDelete, setGoalToDelete] = useState<number | null>(null)
+  const [goalToDelete, setGoalToDelete] = useState<string | null>(null)
   const [showHelpModal, setShowHelpModal] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
-  const [goals, setGoals] = useState([
-    {
-      id: 1,
-      name: "Home Down Payment",
-      icon: "home",
-      category: "housing",
-      targetAmount: 50000,
-      currentAmount: 12500,
-      tier: 2,
-      tierName: "Committed",
-      color: "#3B82F6",
-      deadline: "Dec 2026",
-      monthlyTarget: 1500,
-      lastDeposit: "Dec 26",
-      streakDays: 45,
-    },
-    {
-      id: 2,
-      name: "Kids Education",
-      icon: "education",
-      category: "education",
-      targetAmount: 25000,
-      currentAmount: 8200,
-      tier: 1,
-      tierName: "Flexible",
-      color: "#8B5CF6",
-      deadline: "Aug 2028",
-      monthlyTarget: 500,
-      lastDeposit: "Dec 20",
-      streakDays: 30,
-    },
-    {
-      id: 3,
-      name: "Family Visit to Kenya",
-      icon: "travel",
-      category: "travel",
-      targetAmount: 5000,
-      currentAmount: 3200,
-      tier: 3,
-      tierName: "Locked",
-      color: "#F59E0B",
-      deadline: "Jun 2025",
-      monthlyTarget: 400,
-      lastDeposit: "Dec 28",
-      streakDays: 60,
-    },
-    {
-      id: 4,
-      name: "Emergency Fund",
-      icon: "emergency",
-      category: "emergency",
-      targetAmount: 10000,
-      currentAmount: 4500,
-      tier: 1,
-      tierName: "Flexible",
-      color: "#EF4444",
-      deadline: null,
-      monthlyTarget: 300,
-      lastDeposit: "Dec 15",
-      streakDays: 20,
-    },
-  ])
+  // Map SavingsGoal to dashboard display format
+  const goals = savingsGoals.map((g) => {
+    const tierConfig = GOAL_TYPES[g.type] || GOAL_TYPES.flexible
+    const tierNumber = g.type === "flexible" ? 1 : g.type === "emergency" ? 2 : 3
+    const tierName = g.type === "flexible" ? "Flexible" : g.type === "emergency" ? "Emergency" : "Locked"
 
-  const totalSavings = goals.reduce((sum, g) => sum + g.currentAmount, 0)
-  const monthlyGrowth = 850
+    // Derive a category from goal name/emoji for filtering
+    let category = "other"
+    const nameLower = g.name.toLowerCase()
+    if (nameLower.includes("home") || nameLower.includes("house") || nameLower.includes("rent")) category = "housing"
+    else if (nameLower.includes("education") || nameLower.includes("school") || nameLower.includes("tuition")) category = "education"
+    else if (nameLower.includes("travel") || nameLower.includes("trip") || nameLower.includes("visit") || nameLower.includes("vacation")) category = "travel"
+    else if (nameLower.includes("emergency") || nameLower.includes("medical") || nameLower.includes("health")) category = "emergency"
 
-  const handleDeleteGoal = (goalId: number) => {
-    const goal = goals.find(g => g.id === goalId)
-    if (!goal) return
+    // Derive icon from category
+    let icon = "default"
+    if (category === "housing") icon = "home"
+    else if (category === "education") icon = "education"
+    else if (category === "travel") icon = "travel"
+    else if (category === "emergency") icon = "emergency"
 
-    // If goal has funds, calculate fee
-    if (goal.currentAmount > 0) {
-      const fee = goal.currentAmount * 0.02
-      const returnAmount = goal.currentAmount - fee
-      console.log(`Deleting goal ${goalId}, returning $${returnAmount.toFixed(2)} to wallet (fee: $${fee.toFixed(2)})`)
-    } else {
-      console.log(`Deleting goal ${goalId} with no funds - no fee`)
+    return {
+      id: g.id,
+      name: g.name,
+      emoji: g.emoji,
+      icon,
+      category,
+      targetAmount: g.targetAmount,
+      currentAmount: g.currentBalance,
+      tier: tierNumber,
+      tierName,
+      color: tierConfig.color,
+      deadline: g.maturityDate ? new Date(g.maturityDate).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : null,
+      monthlyTarget: 0,
+      lastDeposit: g.updatedAt ? new Date(g.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "",
+      streakDays: 0,
     }
+  })
 
-    setGoals(goals.filter(g => g.id !== goalId))
-    setGoalToDelete(null)
+  const totalSavings = getTotalSavings()
+
+  // Calculate monthly growth from transactions this month
+  const now = new Date()
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  let monthlyGrowth = 0
+  savingsGoals.forEach((g) => {
+    const txns = getGoalTransactions(g.id)
+    txns.forEach((t) => {
+      if (new Date(t.createdAt) >= startOfMonth && (t.type === "deposit" || t.type === "auto_deposit")) {
+        monthlyGrowth += t.amount
+      }
+    })
+  })
+
+  const handleDeleteGoal = async (goalId: string) => {
+    setIsDeleting(true)
+    try {
+      await deleteGoal(goalId)
+      setGoalToDelete(null)
+    } catch (error) {
+      console.error("Failed to delete goal:", error)
+      alert("Failed to delete goal. Please try again.")
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
-  const upcomingMilestones = [
-    { goalName: "Family Visit to Kenya", milestone: "75% reached", daysAway: 12 },
-    { goalName: "Home Down Payment", milestone: "$15,000", daysAway: 28 },
-  ]
+  // Derive upcoming milestones from real goals
+  const upcomingMilestones = savingsGoals
+    .filter((g) => g.status === "active" && g.targetAmount > 0)
+    .map((g) => {
+      const progress = (g.currentBalance / g.targetAmount) * 100
+      const nextMilestonePercent = [25, 50, 75, 100].find((p) => progress < p)
+      if (!nextMilestonePercent) return null
+      const amountNeeded = (g.targetAmount * nextMilestonePercent) / 100 - g.currentBalance
+      // Rough estimate: assume avg monthly deposit
+      const txns = getGoalTransactions(g.id)
+      const deposits = txns.filter((t) => t.type === "deposit" || t.type === "auto_deposit")
+      const avgMonthly = deposits.length > 0 ? deposits.reduce((s, t) => s + t.amount, 0) / Math.max(1, deposits.length) : 0
+      const daysAway = avgMonthly > 0 ? Math.ceil((amountNeeded / avgMonthly) * 30) : 999
+      return {
+        goalName: g.name,
+        milestone: `${nextMilestonePercent}% ($${((g.targetAmount * nextMilestonePercent) / 100).toLocaleString()})`,
+        daysAway,
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => (a?.daysAway ?? 999) - (b?.daysAway ?? 999))
+    .slice(0, 3) as { goalName: string; milestone: string; daysAway: number }[]
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", background: "#F5F7FA" }}>
+        <p style={{ fontSize: "16px", color: "#6B7280" }}>Loading goals...</p>
+      </div>
+    )
+  }
 
   const categories = [
     { id: "all", label: "All Goals", icon: Target },
@@ -197,7 +215,7 @@ export default function GoalsDashboard() {
               <HelpCircle size={20} color="#FFFFFF" />
             </button>
             <button
-              onClick={() => console.log("Add Goal")}
+              onClick={() => navigateToGoalScreen("032-GOAL-003-AddNewGoal")}
               style={{
                 background: "rgba(0, 198, 174, 0.2)",
                 border: "1px solid rgba(0, 198, 174, 0.4)",
@@ -246,9 +264,9 @@ export default function GoalsDashboard() {
             <div style={{ width: "1px", background: "rgba(255,255,255,0.2)" }} />
             <div>
               <p style={{ margin: 0, fontSize: "24px", fontWeight: "700" }}>
-                {Math.max(...goals.map((g) => g.streakDays))}
+                ${monthlyGrowth > 0 ? `+${monthlyGrowth.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "0"}
               </p>
-              <p style={{ margin: 0, fontSize: "12px", opacity: 0.7 }}>Day Streak</p>
+              <p style={{ margin: 0, fontSize: "12px", opacity: 0.7 }}>This Month</p>
             </div>
           </div>
         </div>
@@ -359,7 +377,7 @@ export default function GoalsDashboard() {
             return (
               <button
                 key={goal.id}
-                onClick={() => console.log("View goal", goal.id)}
+                onClick={() => navigateToGoalScreen("031-GOAL-002-GoalDetail", { goalId: goal.id })}
                 style={{
                   width: "100%",
                   background: "#FFFFFF",
@@ -482,12 +500,14 @@ export default function GoalsDashboard() {
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     <TrendingUp size={14} color="#10B981" />
-                    <span style={{ fontSize: "12px", color: "#666" }}>${goal.monthlyTarget}/mo target</span>
+                    <span style={{ fontSize: "12px", color: "#666" }}>{goal.tierName}</span>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <Award size={14} color="#F59E0B" />
-                    <span style={{ fontSize: "12px", color: "#666" }}>{goal.streakDays} day streak</span>
-                  </div>
+                  {goal.lastDeposit && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Award size={14} color="#F59E0B" />
+                      <span style={{ fontSize: "12px", color: "#666" }}>Last: {goal.lastDeposit}</span>
+                    </div>
+                  )}
                   <span
                     style={{
                       fontSize: "14px",
@@ -517,7 +537,7 @@ export default function GoalsDashboard() {
             <h3 style={{ margin: "0 0 8px 0", fontSize: "16px", color: "#0A2342" }}>No goals in this category</h3>
             <p style={{ margin: "0 0 16px 0", fontSize: "14px", color: "#666" }}>Add a new goal to start saving</p>
             <button
-              onClick={() => console.log("Add Goal")}
+              onClick={() => navigateToGoalScreen("032-GOAL-003-AddNewGoal")}
               style={{
                 background: "#00C6AE",
                 color: "#FFFFFF",
@@ -565,7 +585,7 @@ export default function GoalsDashboard() {
             onClick={(e) => e.stopPropagation()}
           >
             {(() => {
-              const goal = goals.find(g => g.id === goalToDelete)
+              const goal = goals.find((g: typeof goals[0]) => g.id === goalToDelete)
               if (!goal) return null
 
               const hasFunds = goal.currentAmount > 0
@@ -658,19 +678,21 @@ export default function GoalsDashboard() {
                     </button>
                     <button
                       onClick={() => handleDeleteGoal(goal.id)}
+                      disabled={isDeleting}
                       style={{
                         flex: 1,
                         padding: "14px",
                         borderRadius: "12px",
                         border: "none",
-                        background: "#DC2626",
+                        background: isDeleting ? "#F87171" : "#DC2626",
                         fontSize: "15px",
                         fontWeight: "600",
                         color: "#FFFFFF",
-                        cursor: "pointer",
+                        cursor: isDeleting ? "not-allowed" : "pointer",
+                        opacity: isDeleting ? 0.7 : 1,
                       }}
                     >
-                      {hasFunds ? "Delete & Withdraw" : "Delete"}
+                      {isDeleting ? "Deleting..." : hasFunds ? "Delete & Withdraw" : "Delete"}
                     </button>
                   </div>
                 </>

@@ -16,6 +16,7 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useSavings, GOAL_TYPES } from "../context/SavingsContext";
+import { usePayment } from "../context/PaymentContext";
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 type DepositRouteProp = RouteProp<RootStackParamList, "DepositToGoal">;
@@ -28,6 +29,7 @@ export default function DepositToGoalScreen() {
   const { goalId } = route.params;
 
   const { getGoalById, getActiveGoals, deposit } = useSavings();
+  const { paymentMethods, createDeposit, presentPaymentSheet } = usePayment();
   const goal = getGoalById(goalId);
   const activeGoals = getActiveGoals();
 
@@ -35,6 +37,7 @@ export default function DepositToGoalScreen() {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [fundingSource, setFundingSource] = useState<"wallet" | string>("wallet");
 
   const selectedGoal = getGoalById(selectedGoalId);
   const typeConfig = selectedGoal ? GOAL_TYPES[selectedGoal.type] : null;
@@ -59,6 +62,23 @@ export default function DepositToGoalScreen() {
 
     setIsProcessing(true);
     try {
+      if (fundingSource !== "wallet") {
+        // Pay via Stripe
+        const { error: depositError } = await createDeposit(
+          Math.round(depositAmount * 100),
+          "usd"
+        );
+        if (depositError) {
+          Alert.alert("Error", depositError.message || "Failed to create payment");
+          return;
+        }
+        const { error: sheetError } = await presentPaymentSheet();
+        if (sheetError) {
+          Alert.alert("Payment Cancelled", sheetError.message || "Payment was not completed");
+          return;
+        }
+      }
+      // Credit the savings goal (wallet direct or after Stripe success)
       await deposit(selectedGoalId, depositAmount, note || "Deposit");
       Alert.alert(
         "Deposit Successful!",
@@ -237,6 +257,64 @@ export default function DepositToGoalScreen() {
                 </Text>
               </TouchableOpacity>
             )}
+          </View>
+
+          {/* Pay From */}
+          <View style={styles.payFromSection}>
+            <Text style={styles.sectionLabel}>PAY FROM</Text>
+            <View style={styles.payFromCard}>
+              {/* Wallet Option */}
+              <TouchableOpacity
+                style={styles.payFromOption}
+                onPress={() => setFundingSource("wallet")}
+              >
+                <View style={styles.payFromRadio}>
+                  {fundingSource === "wallet" && <View style={styles.payFromRadioInner} />}
+                </View>
+                <View style={[styles.payFromIconContainer, { backgroundColor: "#E0F7F5" }]}>
+                  <Ionicons name="wallet-outline" size={20} color="#00C6AE" />
+                </View>
+                <View style={styles.payFromDetails}>
+                  <Text style={styles.payFromLabel}>TandaXn Wallet</Text>
+                  <Text style={styles.payFromSub}>Instant</Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Stripe Payment Methods */}
+              {paymentMethods.map((method) => (
+                <TouchableOpacity
+                  key={method.id}
+                  style={[
+                    styles.payFromOption,
+                    { borderTopWidth: 1, borderTopColor: "#E5E7EB" },
+                  ]}
+                  onPress={() => setFundingSource(method.id)}
+                >
+                  <View style={styles.payFromRadio}>
+                    {fundingSource === method.id && <View style={styles.payFromRadioInner} />}
+                  </View>
+                  <View style={[styles.payFromIconContainer, { backgroundColor: "#EEF2FF" }]}>
+                    <Ionicons
+                      name={
+                        method.type === "card"
+                          ? "card-outline"
+                          : method.type === "us_bank_account"
+                          ? "business-outline"
+                          : "cash-outline"
+                      }
+                      size={20}
+                      color="#0A2342"
+                    />
+                  </View>
+                  <View style={styles.payFromDetails}>
+                    <Text style={styles.payFromLabel}>{method.label}</Text>
+                    {method.isDefault && (
+                      <Text style={styles.payFromSub}>Default</Text>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
 
           {/* Note */}
@@ -512,6 +590,59 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#10B981",
+  },
+  payFromSection: {
+    marginBottom: 20,
+  },
+  payFromCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    overflow: "hidden",
+  },
+  payFromOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  payFromRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#00C6AE",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  payFromRadioInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#00C6AE",
+  },
+  payFromIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  payFromDetails: {
+    flex: 1,
+  },
+  payFromLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0A2342",
+  },
+  payFromSub: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
   },
   noteSection: {
     marginBottom: 20,
