@@ -9,6 +9,7 @@ import React, {
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
 import { RealtimeChannel } from "@supabase/supabase-js";
+import { createAutoPost } from "../lib/autoPost";
 
 export type CircleType = "traditional" | "goal-based" | "emergency" | "family-support" | "goal" | "beneficiary";
 
@@ -161,34 +162,34 @@ type CircleRow = {
 export const CIRCLE_TYPES = {
   traditional: {
     id: "traditional",
-    name: "Traditional Tanda",
+    name: "Rotating Pot",
     emoji: "🔄",
-    description: "Classic rotating savings. Each member contributes, one member receives the pot each cycle.",
+    description: "Classic ROSCA. Members contribute equally, one member receives the full pot each cycle.",
     features: ["Equal contributions", "Rotating payouts", "Fixed schedule"],
     popular: true,
   },
   "goal-based": {
     id: "goal-based",
-    name: "Goal-Based Circle",
+    name: "Shared Goal",
     emoji: "🎯",
-    description: "Everyone saves toward a shared goal. Funds released when target is reached.",
-    features: ["Shared target", "Flexible amounts", "Group motivation"],
+    description: "Everyone saves toward a common target. Funds are used together when the goal is reached.",
+    features: ["Shared target", "Flexible amounts", "One-time or recurring"],
     popular: false,
   },
   emergency: {
     id: "emergency",
-    name: "Emergency Fund Circle",
+    name: "Emergency Pool",
     emoji: "🛡️",
-    description: "Build emergency funds together. Members can request funds when needed.",
+    description: "Members contribute to a communal fund. Anyone can request withdrawals when needed.",
     features: ["Safety net", "Request-based", "Community support"],
     popular: false,
   },
   beneficiary: {
     id: "beneficiary",
-    name: "Beneficiary Support",
+    name: "Flexible Fundraise",
     emoji: "💝",
-    description: "Support someone in need. All contributions go to a designated beneficiary each cycle.",
-    features: ["Single recipient", "Community giving", "Recurring support"],
+    description: "One-time campaign for a specific cause. Anyone can contribute any amount.",
+    features: ["Community fundraising", "Any amount", "One-time campaign"],
     popular: false,
     isNew: true,
   },
@@ -200,6 +201,7 @@ type CirclesContextType = {
   browseCircles: Circle[];
   isLoading: boolean;
   error: string | null;
+  networkUserIds: Set<string>;
   createCircle: (circleData: Omit<Circle, "id" | "createdAt" | "status" | "currentMembers" | "progress">) => Promise<Circle>;
   joinCircle: (circleId: string) => Promise<void>;
   refreshCircles: () => Promise<void>;
@@ -475,6 +477,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
   const { user, session } = useAuth();
   const [circles, setCircles] = useState<Circle[]>([]);
   const [myCircleIds, setMyCircleIds] = useState<Set<string>>(new Set());
+  const [networkUserIds, setNetworkUserIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -519,6 +522,22 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
       // Track which circles user is a member of
       const memberIds = new Set((membershipsData || []).map((m: { circle_id: string }) => m.circle_id));
       setMyCircleIds(memberIds);
+
+      // Fetch all user IDs from the user's circles (network = people in your circles)
+      if (memberIds.size > 0) {
+        const circleIdArray = Array.from(memberIds);
+        const { data: networkData } = await supabase
+          .from("circle_members")
+          .select("user_id")
+          .in("circle_id", circleIdArray)
+          .neq("user_id", user?.id || "");
+
+        if (networkData) {
+          setNetworkUserIds(new Set(networkData.map((m: any) => m.user_id)));
+        }
+      } else {
+        setNetworkUserIds(new Set());
+      }
     } catch (err) {
       console.error("Error in fetchCircles:", err);
       setError(err instanceof Error ? err.message : "Failed to fetch circles");
@@ -714,6 +733,18 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     }
 
     setMyCircleIds((prev) => new Set([...prev, circleId]));
+
+    // Auto-post: Joined a circle (fire-and-forget, never blocks join)
+    try {
+      if (user?.id) {
+        const joinedCircle = circles.find(c => c.id === circleId);
+        createAutoPost(user.id, "circle_joined", circleId, "circle", {
+          circleName: joinedCircle?.name || "a savings circle",
+        });
+      }
+    } catch (autoPostErr) {
+      console.warn("[AutoPost] Failed to auto-post circle join:", autoPostErr);
+    }
   };
 
   // Leave a circle
@@ -994,6 +1025,19 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     if (error) {
       console.error("Error making contribution:", error);
       throw new Error("Failed to make contribution");
+    }
+
+    // Auto-post: Made a contribution (fire-and-forget)
+    try {
+      if (user?.id) {
+        const circle = circles.find(c => c.id === circleId);
+        createAutoPost(user.id, "contribution", circleId, "circle", {
+          circleName: circle?.name || "a savings circle",
+          amount,
+        });
+      }
+    } catch (autoPostErr) {
+      console.warn("[AutoPost] Failed to auto-post contribution:", autoPostErr);
     }
 
     // Refresh circles to update data
@@ -1447,6 +1491,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
         browseCircles,
         isLoading,
         error,
+        networkUserIds,
         createCircle,
         joinCircle,
         refreshCircles,

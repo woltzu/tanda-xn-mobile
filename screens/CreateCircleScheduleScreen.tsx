@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  TextInput,
   Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -67,11 +68,11 @@ export default function CreateCircleScheduleScreen() {
 
   // Check if this is a one-time collection (based on frequency selection, not circle type)
   const isOneTime = frequency === "one-time";
-  // Check if this is a family support circle (supports recurring payouts)
+  // Check if this is a single beneficiary circle (supports recurring payouts)
   const isFamilySupport = circleType === "family-support";
-  // Check if this is a disaster relief circle
+  // Check if this is a flexible fundraise circle
   const isDisasterRelief = circleType === "beneficiary";
-  // Check if this circle has a beneficiary (Family Support, Goal-Based, and Disaster Relief can have beneficiaries)
+  // Check if this circle has a beneficiary (Single Beneficiary, Shared Goal, and Flexible Fundraise can have beneficiaries)
   const hasBeneficiary = isFamilySupport || circleType === "goal" || isDisasterRelief;
 
   // Calculate totals for beneficiary circles
@@ -82,6 +83,7 @@ export default function CreateCircleScheduleScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [rotationMethod, setRotationMethod] = useState("xnscore");
   const [gracePeriodDays, setGracePeriodDays] = useState("2");
+  const [showAllCycles, setShowAllCycles] = useState(false);
   const [contributionDeadlines, setContributionDeadlines] = useState<
     Array<{ cycle: number; date: string; fullDate: Date }>
   >([]);
@@ -98,7 +100,8 @@ export default function CreateCircleScheduleScreen() {
     const deadlines = [];
     const start = new Date(startDate);
 
-    for (let i = 0; i < Math.min(memberCount, 6); i++) {
+    const numCycles = totalCycles || memberCount;
+    for (let i = 0; i < numCycles; i++) {
       const deadline = new Date(start);
 
       switch (frequency) {
@@ -218,9 +221,9 @@ export default function CreateCircleScheduleScreen() {
             <View style={styles.infoTextContainer}>
               <Text style={styles.infoTitle}>
                 {isFamilySupport && isRecurring
-                  ? "How Family Support Works"
+                  ? "How Single Beneficiary Works"
                   : isDisasterRelief
-                  ? "How Disaster Relief Works"
+                  ? "How Flexible Fundraise Works"
                   : isOneTime
                   ? "How This Collection Works"
                   : "How Payouts Work"}
@@ -266,15 +269,15 @@ export default function CreateCircleScheduleScreen() {
             <View style={styles.recurringSummaryCard}>
               <View style={styles.recurringSummaryHeader}>
                 <Ionicons name="repeat" size={20} color="#00C6AE" />
-                <Text style={styles.recurringSummaryTitle}>Family Support Plan</Text>
+                <Text style={styles.recurringSummaryTitle}>Support Plan</Text>
               </View>
               <View style={styles.recurringSummaryContent}>
                 <View style={styles.recurringSummaryRow}>
-                  <Text style={styles.recurringSummaryLabel}>Duration</Text>
-                  <Text style={styles.recurringSummaryValue}>{totalCycles} months</Text>
+                  <Text style={styles.recurringSummaryLabel}>Contributions</Text>
+                  <Text style={styles.recurringSummaryValue}>{totalCycles}× ({getFrequencyLabel()})</Text>
                 </View>
                 <View style={styles.recurringSummaryRow}>
-                  <Text style={styles.recurringSummaryLabel}>Monthly payout</Text>
+                  <Text style={styles.recurringSummaryLabel}>Payout per {getFrequencyLabel()}</Text>
                   <Text style={styles.recurringSummaryValue}>${monthlyPayout.toLocaleString()}</Text>
                 </View>
                 <View style={styles.recurringSummaryRow}>
@@ -288,7 +291,7 @@ export default function CreateCircleScheduleScreen() {
                 </View>
               </View>
               <Text style={styles.recurringSummaryNote}>
-                💡 One setup — members contribute monthly until all {totalCycles} cycles complete
+                💡 One setup — members contribute every {getFrequencyLabel()} until all {totalCycles} contributions complete
               </Text>
             </View>
           )}
@@ -304,31 +307,80 @@ export default function CreateCircleScheduleScreen() {
                 : "First contribution deadline for Cycle 1"}
             </Text>
 
-            <TouchableOpacity
-              style={styles.dateButton}
-              onPress={() => setShowDatePicker(true)}
-            >
-              <Ionicons name="calendar-outline" size={20} color="#0A2342" />
-              <Text style={styles.dateButtonText}>
-                {startDate
-                  ? startDate.toLocaleDateString("en-US", {
-                      weekday: "long",
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })
-                  : "Select a date"}
-              </Text>
-            </TouchableOpacity>
+            {Platform.OS === "web" ? (
+              // Web: use native HTML date input (DateTimePicker doesn't work on web)
+              <View style={styles.dateButton}>
+                <Ionicons name="calendar-outline" size={20} color="#0A2342" />
+                <TextInput
+                  style={[styles.dateButtonText, { flex: 1, outlineStyle: "none" } as any]}
+                  value={startDate
+                    ? startDate.toLocaleDateString("en-US", {
+                        weekday: "long",
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })
+                    : ""}
+                  placeholder="Select a date"
+                  placeholderTextColor="#9CA3AF"
+                  onFocus={(e: any) => {
+                    // Create a hidden HTML date input and trigger it
+                    const input = document.createElement("input");
+                    input.type = "date";
+                    input.min = minDate.toISOString().split("T")[0];
+                    input.style.position = "absolute";
+                    input.style.opacity = "0";
+                    input.style.pointerEvents = "none";
+                    document.body.appendChild(input);
+                    input.addEventListener("change", () => {
+                      if (input.value) {
+                        const [year, month, day] = input.value.split("-").map(Number);
+                        setStartDate(new Date(year, month - 1, day));
+                      }
+                      document.body.removeChild(input);
+                    });
+                    input.addEventListener("blur", () => {
+                      setTimeout(() => {
+                        if (document.body.contains(input)) document.body.removeChild(input);
+                      }, 200);
+                    });
+                    input.showPicker?.();
+                    input.click();
+                    e.target.blur();
+                  }}
+                  editable={true}
+                  showSoftInputOnFocus={false}
+                />
+              </View>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.dateButton}
+                  onPress={() => setShowDatePicker(true)}
+                >
+                  <Ionicons name="calendar-outline" size={20} color="#0A2342" />
+                  <Text style={styles.dateButtonText}>
+                    {startDate
+                      ? startDate.toLocaleDateString("en-US", {
+                          weekday: "long",
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })
+                      : "Select a date"}
+                  </Text>
+                </TouchableOpacity>
 
-            {showDatePicker && (
-              <DateTimePicker
-                value={startDate || minDate}
-                mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={handleDateChange}
-                minimumDate={minDate}
-              />
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={startDate || minDate}
+                    mode="date"
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    onChange={handleDateChange}
+                    minimumDate={minDate}
+                  />
+                )}
+              </>
             )}
 
             {startDate && (
@@ -386,8 +438,8 @@ export default function CreateCircleScheduleScreen() {
             </View>
           </View>
 
-          {/* Rotation Method - Only for recurring circles */}
-          {!isOneTime && (
+          {/* Rotation Method - Only for recurring circles without a fixed beneficiary */}
+          {!isOneTime && !hasBeneficiary && (
             <View style={styles.card}>
               <Text style={styles.label}>Rotation Order Method</Text>
               <Text style={styles.labelDesc}>
@@ -453,7 +505,7 @@ export default function CreateCircleScheduleScreen() {
                 Payout releases automatically when all {memberCount} members contribute
               </Text>
 
-              {contributionDeadlines.map((item, idx) => (
+              {(showAllCycles ? contributionDeadlines : contributionDeadlines.slice(0, 6)).map((item, idx) => (
                 <View key={idx} style={styles.scheduleItem}>
                   <View
                     style={[
@@ -476,8 +528,22 @@ export default function CreateCircleScheduleScreen() {
                 </View>
               ))}
 
-              {memberCount > 6 && (
-                <Text style={styles.scheduleMore}>+{memberCount - 6} more cycles</Text>
+              {contributionDeadlines.length > 6 && (
+                <TouchableOpacity
+                  style={styles.scheduleExpandButton}
+                  onPress={() => setShowAllCycles(!showAllCycles)}
+                >
+                  <Text style={styles.scheduleExpandText}>
+                    {showAllCycles
+                      ? "Show less"
+                      : `Show all ${contributionDeadlines.length} cycles`}
+                  </Text>
+                  <Ionicons
+                    name={showAllCycles ? "chevron-up" : "chevron-down"}
+                    size={14}
+                    color="#00C6AE"
+                  />
+                </TouchableOpacity>
               )}
 
               <View style={styles.autoPayoutBadge}>
@@ -815,11 +881,20 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.5)",
     marginTop: 2,
   },
-  scheduleMore: {
-    fontSize: 11,
-    color: "rgba(255,255,255,0.5)",
-    textAlign: "center",
+  scheduleExpandButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
     marginTop: 4,
+    backgroundColor: "rgba(0,198,174,0.15)",
+    borderRadius: 8,
+  },
+  scheduleExpandText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#00C6AE",
   },
   autoPayoutBadge: {
     marginTop: 14,

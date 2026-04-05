@@ -18,47 +18,47 @@ type CreateCircleStartNavigationProp = StackNavigationProp<RootStackParamList>;
 const circleTypes = [
   {
     id: "traditional",
-    name: "Traditional Tanda",
+    name: "Rotating Pot",
     emoji: "🔄",
     description:
-      "Classic rotating savings. Each member contributes equally on a fixed schedule, and one member receives the pot each cycle.",
+      "Classic ROSCA. Members contribute equally on a schedule. Each cycle, one member receives the full pot.",
     features: ["Equal contribution", "Rotating payouts", "Fixed schedule"],
     popular: true,
   },
   {
     id: "family-support",
-    name: "Family Support",
+    name: "Single Beneficiary",
     emoji: "👨‍👩‍👧‍👦",
     description:
-      "Support a family member or friend. Pick the beneficiary and choose one-time, recurring monthly (1-24 months), or ongoing support.",
-    features: ["Multi-month payouts", "Pick beneficiary", "Flexible duration"],
+      "One person receives all contributions. Can be one-time or recurring. Perfect for trips, gifts, or family support.",
+    features: ["Pick beneficiary", "Flexible duration", "One-time or recurring"],
     popular: false,
     isNew: true,
   },
   {
     id: "beneficiary",
-    name: "Disaster Relief",
+    name: "Flexible Fundraise",
     emoji: "🆘",
     description:
-      "Fundraise for communities affected by disasters. Rally your community to provide emergency support when it's needed most.",
-    features: ["Emergency support", "Community fundraising", "One-time relief"],
+      "One-time campaign for a specific cause. Rally your community and anyone can contribute any amount.",
+    features: ["Community fundraising", "Any amount", "One-time campaign"],
     popular: false,
   },
   {
     id: "goal",
-    name: "Goal-Based Circle",
+    name: "Shared Goal",
     emoji: "🎯",
     description:
-      "Save together toward a shared goal like a funeral fund, wedding, or group purchase. One-time or recurring.",
+      "Everyone saves toward a common target. Funds are used together when the goal is reached.",
     features: ["Shared target", "Flexible amounts", "One-time or recurring"],
     popular: false,
   },
   {
     id: "emergency",
-    name: "Emergency Fund Circle",
+    name: "Emergency Pool",
     emoji: "🛡️",
     description:
-      "Build emergency funds together. Members can request funds when unexpected situations arise.",
+      "Members contribute to a communal fund. Anyone can request withdrawals when needed, with group approval.",
     features: ["Safety net", "Request-based", "Community support"],
     popular: false,
   },
@@ -131,7 +131,7 @@ export default function CreateCircleStartScreen() {
         <View style={styles.content}>
           {/* Circle Types */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Choose Circle Type</Text>
+            <Text style={styles.cardTitle}>Choose how money moves</Text>
 
             {circleTypes.map((type) => (
               <TouchableOpacity

@@ -64,6 +64,7 @@ interface OnboardingContextType {
   tooltips: TooltipData[];
   dismissTooltip: (tooltipId: string) => void;
   showNextTooltip: () => void;
+  skipAllTooltips: (screen?: string) => void;
 
   // Invite handling
   pendingInvite: InviteData | null;
@@ -420,9 +421,17 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   };
 
   const showNextTooltip = () => {
-    if (activeTooltip) {
-      dismissTooltip(activeTooltip.id);
-    }
+    // The current tooltip is already dismissed by the component's onDismiss handler.
+    // The next unshown tooltip becomes activeTooltip automatically (derived value).
+    // No additional dismiss needed here — doing so would skip the next tooltip.
+  };
+
+  const skipAllTooltips = (screen?: string) => {
+    const updatedTooltips = tooltips.map(tip =>
+      (!screen || tip.screen === screen) ? { ...tip, shown: true } : tip
+    );
+    setTooltips(updatedTooltips);
+    saveTooltipsState(updatedTooltips);
   };
 
   const clearPendingInvite = () => {
@@ -467,6 +476,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         tooltips,
         dismissTooltip,
         showNextTooltip,
+        skipAllTooltips,
         pendingInvite,
         setPendingInvite,
         clearPendingInvite,

@@ -1,5 +1,5 @@
 import "react-native-gesture-handler";
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
 import { NavigationContainer, CommonActions } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
@@ -308,6 +308,7 @@ export type RootStackParamList = {
 
 export type TabParamList = {
   Home: undefined;
+  Dreams: undefined;
   Wallet: undefined;
   Circles: undefined;
   Profile: undefined;
@@ -316,6 +317,7 @@ export type TabParamList = {
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 const HomeStack = createStackNavigator();
+const DreamsStack = createStackNavigator();
 const WalletStack = createStackNavigator();
 const CirclesStack = createStackNavigator();
 const ProfileStack = createStackNavigator();
@@ -379,6 +381,26 @@ function HomeStackScreen() {
       <HomeStack.Screen name="OwnerDashboard" component={OwnerDashboardScreen} />
       <HomeStack.Screen name="MarketInsight" component={MarketInsightScreen} />
     </HomeStack.Navigator>
+  );
+}
+
+// Dreams Tab Stack
+function DreamsStackScreen() {
+  return (
+    <DreamsStack.Navigator screenOptions={{ headerShown: false }}>
+      <DreamsStack.Screen name="DreamFeed" component={DreamFeedScreen} />
+      <DreamsStack.Screen name="CreateDreamPost" component={CreateDreamPostScreen} />
+      <DreamsStack.Screen name="PostDetail" component={PostDetailScreen} />
+      <DreamsStack.Screen name="PostComments" component={DreamPostCommentsScreen} />
+      <DreamsStack.Screen name="UserDreamProfile" component={UserDreamProfileScreen} />
+      <DreamsStack.Screen name="FeedSettings" component={FeedSettingsScreen} />
+      {/* Screens reachable from feed actions */}
+      <DreamsStack.Screen name="CreateGoal" component={CreateGoalScreen} />
+      <DreamsStack.Screen name="XnScoreDashboard" component={XnScoreDashboardScreen} />
+      <DreamsStack.Screen name="JoinCircleConfirm" component={JoinCircleConfirmScreen} />
+      <DreamsStack.Screen name="SupportDream" component={SupportDreamScreen} />
+      <DreamsStack.Screen name="WalletTransactionSuccess" component={WalletTransactionSuccessScreen} />
+    </DreamsStack.Navigator>
   );
 }
 
@@ -569,6 +591,8 @@ function MainTabs() {
 
           if (route.name === "Home") {
             iconName = focused ? "home" : "home-outline";
+          } else if (route.name === "Dreams") {
+            iconName = focused ? "sparkles" : "sparkles-outline";
           } else if (route.name === "Wallet") {
             iconName = focused ? "wallet" : "wallet-outline";
           } else if (route.name === "Circles") {
@@ -599,6 +623,7 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Home" component={HomeStackScreen} />
+      <Tab.Screen name="Dreams" component={DreamsStackScreen} />
       <Tab.Screen name="Wallet" component={WalletStackScreen} />
       <Tab.Screen name="Circles" component={CirclesStackScreen} />
       <Tab.Screen name="Profile" component={ProfileStackScreen} />
@@ -607,6 +632,24 @@ function MainTabs() {
 }
 
 export default function App() {
+  const [toast, setToast] = useState<{
+    visible: boolean;
+    message: string;
+    type: ToastType;
+    duration?: number;
+  }>({ visible: false, message: "", type: "success" });
+
+  // Register global toast handler on mount
+  React.useEffect(() => {
+    registerToastHandler(({ message, type, duration }) => {
+      setToast({ visible: true, message, type, duration });
+    });
+  }, []);
+
+  const dismissToast = useCallback(() => {
+    setToast((prev) => ({ ...prev, visible: false }));
+  }, []);
+
   return (
     <PreferencesProvider>
       <AuthProvider>

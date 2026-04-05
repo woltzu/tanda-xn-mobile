@@ -143,7 +143,7 @@ export default function CreateCircleStartScreen() {
           }}
         >
           <h3 style={{ margin: "0 0 16px 0", fontSize: "16px", fontWeight: "600", color: "#0A2342" }}>
-            Choose Circle Type
+            Choose how money moves
           </h3>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>

@@ -21,7 +21,7 @@ const { width } = Dimensions.get("window");
 const circleTypeExplanations = [
   {
     id: "traditional",
-    name: "Traditional Tanda",
+    name: "Rotating Pot",
     emoji: "🔄",
     color: "#00C6AE",
     howItWorks: [
@@ -47,15 +47,15 @@ const circleTypeExplanations = [
   },
   {
     id: "family-support",
-    name: "Family Support",
+    name: "Single Beneficiary",
     emoji: "👨‍👩‍👧‍👦",
     color: "#6366F1",
     howItWorks: [
-      "Choose a beneficiary (mom, cousin, friend in need)",
-      "Invite family/friends to contribute",
-      "Select one-time collection OR recurring schedule",
+      "Choose one person to receive all funds (family, friend, organizer)",
+      "Invite people to contribute on a schedule",
+      "Select one-time collection OR recurring contributions",
       "All funds go directly to the beneficiary",
-      "Perfect for supporting loved ones back home",
+      "Great for trips, gifts, family support, or business launches",
     ],
     example: {
       members: 5,
@@ -65,22 +65,22 @@ const circleTypeExplanations = [
       duration: "Ongoing or one-time",
     },
     benefits: [
-      "Direct support: Funds go to someone you care about",
-      "Flexible: One-time for emergencies, recurring for ongoing support",
+      "Flexible: Support anyone for any reason",
+      "One-time or recurring: Choose what fits the situation",
       "Transparent: Everyone sees where money goes",
-      "Diaspora-friendly: Perfect for supporting family abroad",
+      "Versatile: Trips, gifts, family support, business launches",
     ],
   },
   {
     id: "goal",
-    name: "Goal-Based Circle",
+    name: "Shared Goal",
     emoji: "🎯",
     color: "#F59E0B",
     howItWorks: [
-      "Set a shared goal (funeral fund, wedding, group purchase)",
+      "Set a common target (group vacation, wedding, community project)",
       "Choose a target amount and deadline",
       "Members contribute until the goal is reached",
-      "Can be one-time (funeral) or recurring (monthly savings)",
+      "Can be one-time or recurring monthly savings",
       "Funds released when target is achieved",
     ],
     example: {
@@ -99,12 +99,12 @@ const circleTypeExplanations = [
   },
   {
     id: "emergency",
-    name: "Emergency Fund Circle",
+    name: "Emergency Pool",
     emoji: "🛡️",
     color: "#EF4444",
     howItWorks: [
-      "Members contribute regularly to build a shared fund",
-      "When emergencies arise, members can request funds",
+      "Members contribute regularly to build a communal fund",
+      "When unexpected situations arise, members can request funds",
       "Requests are reviewed by the group or elder",
       "Approved requests receive funds from the pool",
       "Continuous protection for all members",

@@ -19,6 +19,7 @@ interface OnboardingTooltipProps {
   targetPosition?: { x: number; y: number; width: number; height: number };
   onDismiss: () => void;
   onNext?: () => void;
+  onSkipAll?: () => void;
   isLastTooltip?: boolean;
   currentIndex?: number;
   totalCount?: number;
@@ -29,6 +30,7 @@ export function OnboardingTooltip({
   targetPosition,
   onDismiss,
   onNext,
+  onSkipAll,
   isLastTooltip = false,
   currentIndex = 0,
   totalCount = 1,
@@ -70,7 +72,7 @@ export function OnboardingTooltip({
     ).start();
   }, []);
 
-  const handleDismiss = () => {
+  const animateOut = (callback: () => void) => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 0,
@@ -83,15 +85,28 @@ export function OnboardingTooltip({
         useNativeDriver: true,
       }),
     ]).start(() => {
-      onDismiss();
+      callback();
     });
   };
 
-  const handleNext = () => {
-    if (onNext) {
-      handleDismiss();
-      setTimeout(onNext, 250);
+  const handleDismiss = () => {
+    // "Skip all" — dismiss all remaining tooltips for this screen
+    if (onSkipAll) {
+      animateOut(() => onSkipAll());
+    } else {
+      animateOut(() => onDismiss());
     }
+  };
+
+  const handleNext = () => {
+    // Animate out, then dismiss current tooltip — the next one appears automatically
+    animateOut(() => {
+      if (onNext) {
+        onNext();
+      } else {
+        onDismiss();
+      }
+    });
   };
 
   // Calculate tooltip position based on target
@@ -142,7 +157,7 @@ export function OnboardingTooltip({
   return (
     <Modal transparent visible animationType="none">
       <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
-        {/* Semi-transparent backdrop */}
+        {/* Semi-transparent backdrop — tap to skip all */}
         <TouchableOpacity
           style={styles.backdrop}
           activeOpacity={1}
@@ -263,25 +278,33 @@ export function OnboardingTooltip({
 
 // Wrapper component that uses the onboarding context
 export function OnboardingTooltipManager({ screen }: { screen: string }) {
-  const { activeTooltip, tooltips, dismissTooltip, showNextTooltip } = useOnboarding();
+  const { tooltips, dismissTooltip, showNextTooltip, skipAllTooltips } = useOnboarding();
 
-  // Filter tooltips for current screen
-  const screenTooltips = tooltips.filter(t => t.screen === screen && !t.shown);
-  const currentTooltip = screenTooltips.sort((a, b) => a.order - b.order)[0];
+  // All tooltips for this screen (for progress tracking)
+  const allScreenTooltips = tooltips
+    .filter(t => t.screen === screen)
+    .sort((a, b) => a.order - b.order);
+
+  // Unshown tooltips for this screen
+  const unshownTooltips = allScreenTooltips.filter(t => !t.shown);
+  const currentTooltip = unshownTooltips[0];
 
   if (!currentTooltip) return null;
 
-  const currentIndex = screenTooltips.findIndex(t => t.id === currentTooltip.id);
-  const isLast = currentIndex === screenTooltips.length - 1;
+  // Calculate index relative to ALL tooltips for this screen (not just unshown)
+  const currentIndex = allScreenTooltips.findIndex(t => t.id === currentTooltip.id);
+  const totalCount = allScreenTooltips.length;
+  const isLast = unshownTooltips.length === 1;
 
   return (
     <OnboardingTooltip
       tooltip={currentTooltip}
       onDismiss={() => dismissTooltip(currentTooltip.id)}
-      onNext={showNextTooltip}
+      onNext={() => dismissTooltip(currentTooltip.id)}
+      onSkipAll={() => skipAllTooltips(screen)}
       isLastTooltip={isLast}
       currentIndex={currentIndex}
-      totalCount={screenTooltips.length}
+      totalCount={totalCount}
     />
   );
 }

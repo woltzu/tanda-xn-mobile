@@ -39,22 +39,43 @@ type ContactItem = {
 const quickAmounts = [50, 100, 200, 500];
 const quickSizes = [5, 6, 8, 10, 12];
 
-// Helper to check if this is a family support, goal-based, or beneficiary circle (can have beneficiary)
+// Helper to check if this is a single beneficiary, shared goal, or flexible fundraise circle (can have beneficiary)
 const hasBeneficiary = (type: string) => type === "family-support" || type === "goal" || type === "beneficiary";
 // Helper to check if this circle type supports one-time option
 const supportsOneTime = (type: string) => type === "family-support" || type === "goal" || type === "beneficiary";
-// Helper to check if this is a family support circle (supports recurring payouts)
+// Helper to check if this is a single beneficiary circle (supports recurring payouts)
 const isFamilySupportCircle = (type: string) => type === "family-support";
-// Helper to check if this is a disaster relief circle
+// Helper to check if this is a flexible fundraise circle
 const isDisasterReliefCircle = (type: string) => type === "beneficiary";
 
-// Duration options for beneficiary circles (in months)
+// Duration options for beneficiary circles (in number of contributions)
 const durationOptions = [
-  { months: 1, label: "1 Month", description: "Single month support" },
-  { months: 3, label: "3 Months", description: "Quarterly support" },
-  { months: 6, label: "6 Months", description: "Half-year support" },
-  { months: 12, label: "12 Months", description: "Full year support" },
+  { count: 1, label: "1" },
+  { count: 3, label: "3" },
+  { count: 6, label: "6" },
+  { count: 12, label: "12" },
 ];
+
+// Calculate actual timespan from contributions + frequency
+const getTimespan = (contributions: number, freq: string): string => {
+  switch (freq) {
+    case "daily": return `${contributions} day${contributions > 1 ? "s" : ""}`;
+    case "weekly": return `${contributions} week${contributions > 1 ? "s" : ""}`;
+    case "biweekly": return `${contributions * 2} week${contributions * 2 > 1 ? "s" : ""}`;
+    case "monthly": return `${contributions} month${contributions > 1 ? "s" : ""}`;
+    default: return `${contributions} cycle${contributions > 1 ? "s" : ""}`;
+  }
+};
+
+const getFrequencyUnit = (freq: string): string => {
+  switch (freq) {
+    case "daily": return "day";
+    case "weekly": return "week";
+    case "biweekly": return "2 weeks";
+    case "monthly": return "month";
+    default: return "cycle";
+  }
+};
 
 export default function CreateCircleDetailsScreen() {
   const navigation = useNavigation<CreateCircleDetailsNavigationProp>();
@@ -192,7 +213,7 @@ export default function CreateCircleDetailsScreen() {
         circleType,
         name: name.trim(),
         amount: parsedAmount,
-        frequency: isFamilySupport && totalCycles > 1 ? "monthly" : frequency, // Recurring family support is always monthly
+        frequency, // Respect the user's chosen frequency (biweekly, weekly, etc.)
         memberCount: parsedMemberCount,
         beneficiaryName: showBeneficiary && beneficiaryName.trim() ? beneficiaryName.trim() : undefined,
         beneficiaryReason: showBeneficiary && beneficiaryReason.trim() ? beneficiaryReason.trim() : undefined,
@@ -257,7 +278,7 @@ export default function CreateCircleDetailsScreen() {
             <Text style={styles.charCount}>{name.length}/30</Text>
           </View>
 
-          {/* Elder Community Selection - For Disaster Relief circles only */}
+          {/* Elder Community Selection - For Flexible Fundraise circles only */}
           {isDisasterRelief && isElder && elderProfile?.status === "approved" && elderCommunities.length > 0 && (
             <View style={styles.card}>
               <View style={styles.elderBadge}>
@@ -272,7 +293,7 @@ export default function CreateCircleDetailsScreen() {
                 <View style={styles.beneficiaryHeaderText}>
                   <Text style={styles.label}>Target Community</Text>
                   <Text style={styles.labelDesc}>
-                    As an Elder, you can create disaster relief for your communities
+                    As an Elder, you can create fundraises for your communities
                   </Text>
                 </View>
               </View>
@@ -312,7 +333,7 @@ export default function CreateCircleDetailsScreen() {
             </View>
           )}
 
-          {/* Beneficiary Section - For Family Support and Goal-Based circles */}
+          {/* Beneficiary Section - For Single Beneficiary, Shared Goal, and Flexible Fundraise circles */}
           {showBeneficiary && (
             <View style={styles.card}>
               <View style={styles.beneficiaryHeader}>
@@ -413,7 +434,7 @@ export default function CreateCircleDetailsScreen() {
             </View>
           )}
 
-          {/* One-Time Notice - When one-time is selected (not for family support or disaster relief) */}
+          {/* One-Time Notice - When one-time is selected (not for single beneficiary or flexible fundraise) */}
           {isOneTime && showBeneficiary && !isFamilySupport && !isDisasterRelief && (
             <View style={styles.oneTimeNotice}>
               <Ionicons name="information-circle" size={18} color="#00897B" />
@@ -425,7 +446,7 @@ export default function CreateCircleDetailsScreen() {
             </View>
           )}
 
-          {/* Duration Selector - For Family Support circles only */}
+          {/* Duration Selector - For Single Beneficiary circles only */}
           {isFamilySupport && (
             <View style={styles.card}>
               <View style={styles.durationHeader}>
@@ -433,9 +454,9 @@ export default function CreateCircleDetailsScreen() {
                   <Ionicons name="calendar" size={24} color="#00C6AE" />
                 </View>
                 <View style={styles.durationHeaderText}>
-                  <Text style={styles.label}>Support Duration</Text>
+                  <Text style={styles.label}>Number of Contributions</Text>
                   <Text style={styles.labelDesc}>
-                    How many months will the family support {beneficiaryName || "this person"}?
+                    How many times will each member contribute to support {beneficiaryName || "this person"}?
                   </Text>
                 </View>
               </View>
@@ -443,26 +464,26 @@ export default function CreateCircleDetailsScreen() {
               <View style={styles.durationOptionsGrid}>
                 {durationOptions.map((option) => (
                   <TouchableOpacity
-                    key={option.months}
+                    key={option.count}
                     style={[
                       styles.durationOption,
-                      totalCycles === option.months && styles.durationOptionSelected,
+                      totalCycles === option.count && styles.durationOptionSelected,
                     ]}
-                    onPress={() => setTotalCycles(option.months)}
+                    onPress={() => setTotalCycles(option.count)}
                   >
                     <Text style={[
                       styles.durationMonths,
-                      totalCycles === option.months && styles.durationMonthsSelected,
+                      totalCycles === option.count && styles.durationMonthsSelected,
                     ]}>
-                      {option.months}
+                      {option.count}
                     </Text>
                     <Text style={[
                       styles.durationLabel,
-                      totalCycles === option.months && styles.durationLabelSelected,
+                      totalCycles === option.count && styles.durationLabelSelected,
                     ]}>
-                      {option.months === 1 ? "Month" : "Months"}
+                      {option.count === 1 ? "Time" : "Times"}
                     </Text>
-                    {totalCycles === option.months && (
+                    {totalCycles === option.count && (
                       <View style={styles.durationCheck}>
                         <Ionicons name="checkmark" size={12} color="#FFFFFF" />
                       </View>
@@ -486,9 +507,9 @@ export default function CreateCircleDetailsScreen() {
                   <Ionicons name="repeat" size={18} color="#00897B" />
                   <Text style={styles.recurringNoticeText}>
                     <Text style={styles.boldText}>Recurring support: </Text>
-                    Members contribute monthly for {totalCycles} months.
+                    Members contribute every {getFrequencyUnit(frequency)} for {totalCycles} contributions ({getTimespan(totalCycles, frequency)}).
                     {beneficiaryName ? ` ${beneficiaryName}` : " The beneficiary"} receives
-                    ${totalPot.toLocaleString()} each month (${totalPayoutAllCycles.toLocaleString()} total).
+                    ${totalPot.toLocaleString()} each {getFrequencyUnit(frequency)} (${totalPayoutAllCycles.toLocaleString()} total).
                   </Text>
                 </View>
               )}
@@ -628,9 +649,9 @@ export default function CreateCircleDetailsScreen() {
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>
                 {isFamilySupport && totalCycles > 1
-                  ? "Family Support Summary"
+                  ? "Support Plan"
                   : isDisasterRelief
-                  ? "Disaster Relief Summary"
+                  ? "Fundraise Summary"
                   : isOneTime
                   ? "Collection Summary"
                   : "Circle Summary"}
@@ -648,14 +669,14 @@ export default function CreateCircleDetailsScreen() {
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>
-                  {isFamilySupport && totalCycles > 1 ? "Monthly contribution" : "Each contribution"}
+                  {isFamilySupport && totalCycles > 1 ? `Each contribution (every ${getFrequencyUnit(frequency)})` : "Each contribution"}
                 </Text>
                 <Text style={styles.summaryValue}>${parsedAmount}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>
                   {isFamilySupport && totalCycles > 1
-                    ? "Monthly payout"
+                    ? `Payout per ${getFrequencyUnit(frequency)}`
                     : isOneTime || isDisasterRelief
                     ? "Total collection"
                     : "Pot each cycle"}
@@ -669,9 +690,9 @@ export default function CreateCircleDetailsScreen() {
               {isFamilySupport && (
                 <>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Support duration</Text>
+                    <Text style={styles.summaryLabel}>Contributions</Text>
                     <Text style={styles.summaryValue}>
-                      {totalCycles} {totalCycles === 1 ? "month" : "months"}
+                      {totalCycles}× ({getTimespan(totalCycles, frequency)})
                     </Text>
                   </View>
                   {totalCycles > 1 && (
@@ -704,11 +725,11 @@ export default function CreateCircleDetailsScreen() {
               <View style={styles.summaryTip}>
                 <Text style={styles.summaryTipText}>
                   {isFamilySupport && totalCycles > 1
-                    ? `💝 ${beneficiaryName || "Your family member"} receives $${totalPot.toLocaleString()}/month for ${totalCycles} months — one setup, continuous support!`
+                    ? `💝 ${beneficiaryName || "The beneficiary"} receives $${totalPot.toLocaleString()} every ${getFrequencyUnit(frequency)} for ${totalCycles} contributions (${getTimespan(totalCycles, frequency)}) — one setup, continuous support!`
                     : isFamilySupport
-                    ? `💝 ${beneficiaryName || "Your family member"} will receive $${totalPot.toLocaleString()} this month from ${parsedMemberCount} supporters`
+                    ? `💝 ${beneficiaryName || "The beneficiary"} will receive $${totalPot.toLocaleString()} from ${parsedMemberCount} supporters`
                     : isDisasterRelief
-                    ? `🆘 Emergency relief: $${totalPot.toLocaleString()} collected for ${beneficiaryName || "disaster relief"}`
+                    ? `🆘 Fundraise: $${totalPot.toLocaleString()} to be raised for ${beneficiaryName || "the cause"}`
                     : isOneTime && beneficiaryName
                     ? `💝 ${beneficiaryName} will receive $${totalPot.toLocaleString()} once all ${parsedMemberCount} contributors chip in`
                     : isOneTime
@@ -761,7 +782,7 @@ export default function CreateCircleDetailsScreen() {
             </View>
 
             <Text style={styles.durationModalSubtitle}>
-              Select how many months to support {beneficiaryName || "the beneficiary"}
+              Select how many {frequency === "monthly" ? "months" : "contributions"} to support {beneficiaryName || "the beneficiary"}
             </Text>
 
             <View style={styles.durationSliderContainer}>
@@ -776,8 +797,13 @@ export default function CreateCircleDetailsScreen() {
                 <View style={styles.durationSliderValue}>
                   <Text style={styles.durationSliderNumber}>{totalCycles}</Text>
                   <Text style={styles.durationSliderLabel}>
-                    {totalCycles === 1 ? "Month" : "Months"}
+                    {totalCycles === 1 ? "Time" : "Times"}
                   </Text>
+                  {frequency !== "monthly" && (
+                    <Text style={styles.durationSliderHintSmall}>
+                      = {getTimespan(totalCycles, frequency)}
+                    </Text>
+                  )}
                 </View>
 
                 <TouchableOpacity
@@ -788,19 +814,19 @@ export default function CreateCircleDetailsScreen() {
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.durationSliderHint}>Range: 1-24 months</Text>
+              <Text style={styles.durationSliderHint}>Range: 1-24 {frequency === "monthly" ? "months" : "contributions"}</Text>
             </View>
 
             {parsedAmount > 0 && isValidMemberCount && (
               <View style={styles.durationModalSummary}>
                 <View style={styles.durationModalSummaryRow}>
-                  <Text style={styles.durationModalSummaryLabel}>Monthly payout</Text>
+                  <Text style={styles.durationModalSummaryLabel}>Payout per {getFrequencyUnit(frequency)}</Text>
                   <Text style={styles.durationModalSummaryValue}>
                     ${totalPot.toLocaleString()}
                   </Text>
                 </View>
                 <View style={styles.durationModalSummaryRow}>
-                  <Text style={styles.durationModalSummaryLabel}>Total over {totalCycles} months</Text>
+                  <Text style={styles.durationModalSummaryLabel}>Total over {getTimespan(totalCycles, frequency)}</Text>
                   <Text style={styles.durationModalSummaryValueHighlight}>
                     ${totalPayoutAllCycles.toLocaleString()}
                   </Text>
@@ -1604,6 +1630,11 @@ const styles = StyleSheet.create({
   durationSliderLabel: {
     fontSize: 16,
     color: "#6B7280",
+  },
+  durationSliderHintSmall: {
+    fontSize: 11,
+    color: "#00C6AE",
+    marginTop: 2,
   },
   durationSliderHint: {
     fontSize: 12,

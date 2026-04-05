@@ -11,7 +11,9 @@ import {
   Share,
   TextInput,
   Switch,
+  Platform,
 } from "react-native";
+import { showToast } from "../components/Toast";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -70,6 +72,8 @@ export default function GoalDetailsScreen() {
   const [showTransactionHistoryModal, setShowTransactionHistoryModal] = useState(false);
   const [showGoalTermsModal, setShowGoalTermsModal] = useState(false);
   const [showAutoDepositModal, setShowAutoDepositModal] = useState(false);
+  const [showCloseConfirmModal, setShowCloseConfirmModal] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
   // Calculator state
   const [calcMonthlyDeposit, setCalcMonthlyDeposit] = useState("100");
@@ -161,29 +165,40 @@ export default function GoalDetailsScreen() {
   };
 
   const handlePauseResume = async () => {
-    if (goal.status === "paused") {
-      await resumeGoal(goalId);
-    } else {
-      await pauseGoal(goalId);
+    try {
+      if (goal.status === "paused") {
+        await resumeGoal(goalId);
+        showToast("Goal resumed!", "success");
+      } else {
+        await pauseGoal(goalId);
+        showToast("Goal paused", "info");
+      }
+    } catch (err) {
+      showToast("Action failed", "error");
     }
   };
 
   const handleCloseGoal = () => {
-    Alert.alert(
-      "Close Goal",
-      "Are you sure you want to close this goal? Any remaining balance will need to be withdrawn first.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Close Goal",
-          style: "destructive",
-          onPress: async () => {
-            await closeGoal(goalId);
-            navigation.goBack();
-          },
-        },
-      ]
-    );
+    setShowCloseConfirmModal(true);
+  };
+
+  const confirmCloseGoal = async () => {
+    try {
+      setIsClosing(true);
+      await closeGoal(goalId);
+      setShowCloseConfirmModal(false);
+      showToast("Goal closed successfully", "success");
+      // Small delay to let state update propagate before navigating back
+      setTimeout(() => {
+        navigation.goBack();
+      }, 300);
+    } catch (err) {
+      console.error("Failed to close goal:", err);
+      showToast("Failed to close goal", "error");
+      setShowCloseConfirmModal(false);
+    } finally {
+      setIsClosing(false);
+    }
   };
 
   // Share progress handler
@@ -1400,6 +1415,58 @@ export default function GoalDetailsScreen() {
             >
               <Text style={styles.modalButtonText}>Cancel</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      {/* Close Goal Confirmation Modal */}
+      <Modal
+        visible={showCloseConfirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !isClosing && setShowCloseConfirmModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { maxWidth: 360 }]}>
+            <View style={{ alignItems: "center", padding: 24, paddingBottom: 0 }}>
+              <View style={{
+                width: 56, height: 56, borderRadius: 28,
+                backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center",
+                marginBottom: 16,
+              }}>
+                <Ionicons name="warning" size={28} color="#DC2626" />
+              </View>
+              <Text style={[styles.modalTitle, { textAlign: "center" }]}>Close Goal</Text>
+              <Text style={{
+                fontSize: 14, color: "#6B7280", textAlign: "center",
+                marginTop: 8, lineHeight: 20,
+              }}>
+                Are you sure you want to close "{goal?.name}"? Any remaining balance will need to be withdrawn first.
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 12, padding: 20 }}>
+              <TouchableOpacity
+                style={[styles.modalButton, {
+                  flex: 1, backgroundColor: "#F3F4F6", marginHorizontal: 0, marginBottom: 0,
+                }]}
+                onPress={() => setShowCloseConfirmModal(false)}
+                disabled={isClosing}
+              >
+                <Text style={[styles.modalButtonText, { color: "#6B7280" }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, {
+                  flex: 1, backgroundColor: "#DC2626", marginHorizontal: 0, marginBottom: 0,
+                  opacity: isClosing ? 0.6 : 1,
+                }]}
+                onPress={confirmCloseGoal}
+                disabled={isClosing}
+              >
+                <Text style={styles.modalButtonText}>
+                  {isClosing ? "Closing..." : "Close Goal"}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
