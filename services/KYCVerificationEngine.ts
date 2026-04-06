@@ -22,7 +22,7 @@
 //   - Webhook: inquiry.completed, inquiry.failed, inquiry.marked-for-review
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { supabase } from './supabase';
+import { supabase } from '../lib/supabase';
 
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import { lateContributionHandler, LateContribution, LateContributionSummary } from '@/services/LateContributionHandler';
 import { paymentPlanService, PaymentPlan, PaymentPlanInstallment } from '@/services/PaymentPlanService';
 import { autoRetryService, AutoRetryConfig, AutoRetryHistory } from '@/services/AutoRetryService';

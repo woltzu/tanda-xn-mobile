@@ -125,6 +125,25 @@ import BulkInvitesScreen from "./screens/BulkInvitesScreen";
 import BookServiceScreen from "./screens/BookServiceScreen";
 import OwnerDashboardScreen from "./screens/OwnerDashboardScreen";
 import MarketInsightScreen from "./screens/MarketInsightScreen";
+// Feature Screens (AI Engines + Circle Management)
+import StressScoreDashboardScreen from "./screens/StressScoreDashboardScreen";
+import MoodInsightsScreen from "./screens/MoodInsightsScreen";
+import ConflictAlertScreen from "./screens/ConflictAlertScreen";
+import InsurancePoolScreen from "./screens/InsurancePoolScreen";
+import PartialContributionScreen from "./screens/PartialContributionScreen";
+import PositionSwapScreen from "./screens/PositionSwapScreen";
+import CycleTimelineScreen from "./screens/CycleTimelineScreen";
+import ScoreBreakdownScreen from "./screens/ScoreBreakdownScreen";
+import CreditProfileScreen from "./screens/CreditProfileScreen";
+import DefaultRecoveryScreen from "./screens/DefaultRecoveryScreen";
+import CircleVotingScreen from "./screens/CircleVotingScreen";
+import GraduatedEntryScreen from "./screens/GraduatedEntryScreen";
+import KYCVerificationScreen from "./screens/KYCVerificationScreen";
+import EarlyInterventionScreen from "./screens/EarlyInterventionScreen";
+import CrossCircleLendingScreen from "./screens/CrossCircleLendingScreen";
+import DynamicPayoutScreen from "./screens/DynamicPayoutScreen";
+import LegalDocumentsScreen from "./screens/LegalDocumentsScreen";
+import CircleVisualizerScreen from "./screens/CircleVisualizerScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -304,6 +323,25 @@ export type RootStackParamList = {
   OwnerDashboard: { storeId: string };
   MarketInsight: { city?: string; category?: string };
   RequestProvider: undefined;
+  // Feature Screens (AI Engines + Circle Management)
+  StressScoreDashboard: undefined;
+  MoodInsights: undefined;
+  ConflictAlert: { circleId: string };
+  InsurancePool: { circleId: string };
+  PartialContribution: { circleId: string; cycleId?: string };
+  PositionSwap: { circleId: string };
+  CycleTimeline: { circleId: string };
+  ScoreBreakdown: undefined;
+  CreditProfile: undefined;
+  DefaultRecovery: undefined;
+  CircleVoting: { circleId: string };
+  GraduatedEntry: undefined;
+  KYCVerification: undefined;
+  EarlyIntervention: undefined;
+  CrossCircleLending: undefined;
+  DynamicPayout: { circleId: string };
+  LegalDocuments: undefined;
+  CircleVisualizer: { circleId: string };
 };
 
 export type TabParamList = {
@@ -380,6 +418,17 @@ function HomeStackScreen() {
       <HomeStack.Screen name="BookService" component={BookServiceScreen} />
       <HomeStack.Screen name="OwnerDashboard" component={OwnerDashboardScreen} />
       <HomeStack.Screen name="MarketInsight" component={MarketInsightScreen} />
+      {/* AI / Financial Insight Screens */}
+      <HomeStack.Screen name="StressScoreDashboard" component={StressScoreDashboardScreen} />
+      <HomeStack.Screen name="MoodInsights" component={MoodInsightsScreen} />
+      <HomeStack.Screen name="EarlyIntervention" component={EarlyInterventionScreen} />
+      <HomeStack.Screen name="ScoreBreakdown" component={ScoreBreakdownScreen} />
+      <HomeStack.Screen name="CreditProfile" component={CreditProfileScreen} />
+      <HomeStack.Screen name="GraduatedEntry" component={GraduatedEntryScreen} />
+      <HomeStack.Screen name="CrossCircleLending" component={CrossCircleLendingScreen} />
+      <HomeStack.Screen name="DefaultRecovery" component={DefaultRecoveryScreen} />
+      <HomeStack.Screen name="KYCVerification" component={KYCVerificationScreen} />
+      <HomeStack.Screen name="LegalDocuments" component={LegalDocumentsScreen} />
     </HomeStack.Navigator>
   );
 }
@@ -451,6 +500,15 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="OversightDashboard" component={OversightDashboardScreen} />
       <CirclesStack.Screen name="MediationTools" component={MediationToolsScreen} />
       <CirclesStack.Screen name="AuditTrail" component={AuditTrailScreen} />
+      {/* Circle Feature Screens */}
+      <CirclesStack.Screen name="ConflictAlert" component={ConflictAlertScreen} />
+      <CirclesStack.Screen name="InsurancePool" component={InsurancePoolScreen} />
+      <CirclesStack.Screen name="PartialContribution" component={PartialContributionScreen} />
+      <CirclesStack.Screen name="PositionSwap" component={PositionSwapScreen} />
+      <CirclesStack.Screen name="CycleTimeline" component={CycleTimelineScreen} />
+      <CirclesStack.Screen name="CircleVoting" component={CircleVotingScreen} />
+      <CirclesStack.Screen name="DynamicPayout" component={DynamicPayoutScreen} />
+      <CirclesStack.Screen name="CircleVisualizer" component={CircleVisualizerScreen} />
     </CirclesStack.Navigator>
   );
 }

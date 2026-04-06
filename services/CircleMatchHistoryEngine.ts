@@ -12,7 +12,7 @@
 // Static class pattern following AIRecommendationFeedbackEngine.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { supabase } from './supabase';
+import { supabase } from '../lib/supabase';
 
 
 // ─────────────────────────────────────────────────────────────────────────────

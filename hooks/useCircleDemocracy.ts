@@ -7,7 +7,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import {
   CircleDemocracyEngine,
   GovernanceSettings,

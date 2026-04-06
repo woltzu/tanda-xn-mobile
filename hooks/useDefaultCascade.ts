@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import { defaultCascadeHandler, DefaultRecord, CascadeResult } from '@/services/DefaultCascadeHandler';
 import { voucherCascadeService, VoucherStanding, VoucheeDefaultRecord } from '@/services/VoucherCascadeService';
 import { circleResolutionService, CircleResolution, RedistributionRequest } from '@/services/CircleResolutionService';

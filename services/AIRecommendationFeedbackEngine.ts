@@ -19,7 +19,7 @@
 //   K — Realtime Subscriptions
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { supabase } from './supabase';
+import { supabase } from '../lib/supabase';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION A — Types & Interfaces
