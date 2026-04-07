@@ -118,6 +118,7 @@ import ForgotPasswordScreen from "./screens/ForgotPasswordScreen";
 import ResetPasswordScreen from "./screens/ResetPasswordScreen";
 import { linkingConfig } from "./lib/deepLinking";
 import { PaymentProvider } from './context/PaymentContext';
+import { ToastType, registerToastHandler } from './components/Toast';
 // Marketplace Screens (Migration 057)
 import MarketplaceScreen from "./screens/MarketplaceScreen";
 import StoreDetailScreen from "./screens/StoreDetailScreen";
