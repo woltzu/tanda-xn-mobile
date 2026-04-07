@@ -139,7 +139,7 @@ const ActionScreen: React.FC = () => {
       {
         id: "start_circle",
         title: "Start a Circle",
-        subtitle: "Plant something new",
+        subtitle: "Plant something new together",
         icon: "people-circle",
         accentColor: COLORS.teal,
         route: "CreateCircleStart",
@@ -151,7 +151,7 @@ const ActionScreen: React.FC = () => {
       {
         id: "contribute",
         title: "Contribute",
-        subtitle: "Three taps to money moved",
+        subtitle: "Keep the circle moving",
         icon: "cash",
         accentColor: contributionDueSoon ? COLORS.gold : COLORS.teal,
         route: "SelectCircleContribution",
@@ -163,7 +163,7 @@ const ActionScreen: React.FC = () => {
       {
         id: "send_money",
         title: "Send to Someone",
-        subtitle: "Send to a face, not an account",
+        subtitle: "Send to a face, not a number",
         icon: "send",
         accentColor: COLORS.teal,
         route: "SendMoney",
@@ -175,7 +175,7 @@ const ActionScreen: React.FC = () => {
       {
         id: "vouch",
         title: "Vouch for Someone",
-        subtitle: "Your Honor Score is on the line",
+        subtitle: "Stake your reputation for someone",
         icon: "shield-checkmark",
         accentColor: COLORS.gold,
         route: "VouchMember",
@@ -187,7 +187,7 @@ const ActionScreen: React.FC = () => {
       {
         id: "share_moment",
         title: "Share a Moment",
-        subtitle: "Milestone, question, or welcome",
+        subtitle: "Celebrate, ask, or welcome someone",
         icon: "camera",
         accentColor: COLORS.teal,
         route: "PostToCommunity",
@@ -199,7 +199,7 @@ const ActionScreen: React.FC = () => {
       {
         id: "request_help",
         title: "Request Help",
-        subtitle: "I need a vouch, guidance, or welcome",
+        subtitle: "Ask for a vouch, guidance, or a warm welcome",
         icon: "hand-left",
         accentColor: COLORS.teal,
         route: null,
@@ -211,7 +211,7 @@ const ActionScreen: React.FC = () => {
       {
         id: "open_session",
         title: "Open a Session",
-        subtitle: "Post wisdom or announce Q&A",
+        subtitle: "Share wisdom or host a Q&A",
         icon: "school",
         accentColor: COLORS.gold,
         route: "ElderDashboard",
@@ -444,11 +444,15 @@ const ActionScreen: React.FC = () => {
         >
           {/* Header */}
           <View style={styles.header}>
-            <View style={styles.headerAccent} />
+            <View style={styles.headerAccent}>
+              <Ionicons name="flame" size={18} color={COLORS.gold} />
+            </View>
             <Text style={styles.headerTitle}>{greeting}</Text>
             {user?.name && (
               <Text style={styles.headerSubtitle}>
-                Hey {user.name.split(" ")[0]}, let's make it happen.
+                {isNewMember
+                  ? `Welcome, ${user.name.split(" ")[0]}. Your community is here for you.`
+                  : `${user.name.split(" ")[0]}, let\u2019s make it happen.`}
               </Text>
             )}
           </View>
@@ -505,11 +509,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   headerAccent: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.teal,
-    marginBottom: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(232,168,66,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
   },
   headerTitle: {
     fontSize: 26,

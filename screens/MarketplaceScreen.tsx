@@ -112,10 +112,10 @@ export default function MarketplaceScreen() {
     <View style={styles.container}>
       <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
         <View style={styles.headerRow}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Marketplace</Text>
+          <View>
+            <Text style={styles.headerTitle}>Marketplace</Text>
+            <Text style={styles.headerSubtitle}>Diaspora businesses, member prices</Text>
+          </View>
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => navigation.navigate("StoreApplication")}
@@ -198,9 +198,9 @@ export default function MarketplaceScreen() {
           {stores.length === 0 && !loading && (
             <View style={styles.emptyState}>
               <Ionicons name="storefront-outline" size={56} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>No providers yet</Text>
+              <Text style={styles.emptyTitle}>No providers here yet</Text>
               <Text style={styles.emptySubtitle}>
-                Be the first to list your business
+                Be the first to serve your community
               </Text>
               <TouchableOpacity
                 style={styles.emptyAction}
@@ -222,12 +222,12 @@ export default function MarketplaceScreen() {
           <Ionicons name="hand-right-outline" size={24} color="#00C6AE" />
           <View style={{ flex: 1 }}>
             <Text style={styles.requestTitle}>Can't find what you need?</Text>
-            <Text style={styles.requestSubtitle}>Request a provider — when 5 people ask, we recruit</Text>
+            <Text style={styles.requestSubtitle}>Request a provider \u2014 when 5 people ask, we go find them</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
         </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     </View>
   );
@@ -237,8 +237,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F7FA" },
   header: { paddingTop: 60, paddingBottom: 16, paddingHorizontal: 20 },
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
-  backButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: "#FFFFFF" },
+  headerTitle: { fontSize: 22, fontWeight: "700", color: "#FFFFFF" },
+  headerSubtitle: { fontSize: 13, color: "rgba(255,255,255,0.65)", marginTop: 3 },
   addButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#00C6AE", alignItems: "center", justifyContent: "center" },
   searchBar: { flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.1)", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, gap: 10 },
   searchInput: { flex: 1, fontSize: 15, color: "#FFFFFF" },

@@ -584,13 +584,22 @@ function getActiveRouteName(state: any): string | undefined {
 
 // Component that wraps the app content and handles inactivity lock
 function AppContent() {
-  const { isAuthenticated, isLocked, lockApp } = useAuth();
+  const { user, isAuthenticated, isLocked, lockApp } = useAuth();
 
   const { resetTimer } = useInactivityLock({
     onLock: lockApp,
     isAuthenticated,
     isLocked,
   });
+
+  // ── Event Logging: Set user ID when authenticated ─────────────────────
+  React.useEffect(() => {
+    if (user?.id) {
+      eventService.setUserId(user.id);
+    } else {
+      eventService.setUserId(null);
+    }
+  }, [user?.id]);
 
   // ── Event Logging: App lifecycle tracking ──────────────────────────────
   React.useEffect(() => {
