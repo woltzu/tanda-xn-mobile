@@ -110,6 +110,7 @@ import { CommunityProvider } from "./context/CommunityContext";
 import { ElderProvider } from "./context/ElderContext";
 import { FeatureGateProvider } from "./context/FeatureGateContext";
 import { TokenProvider } from "./context/TokenContext";
+import { FeedProvider } from "./context/FeedContext";
 import { MemberProfileProvider } from "./context/MemberProfileContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import { OnboardingProvider } from "./context/OnboardingContext";
@@ -765,6 +766,7 @@ export default function App() {
                   <AdvanceProvider>
                     <SavingsProvider>
                       <WithdrawalWizardProvider>
+                      <FeedProvider>
                       <CommunityProvider>
                         <ElderProvider>
                         <TokenProvider>
@@ -790,6 +792,7 @@ export default function App() {
                         </TokenProvider>
                         </ElderProvider>
                       </CommunityProvider>
+                      </FeedProvider>
                       </WithdrawalWizardProvider>
                     </SavingsProvider>
                   </AdvanceProvider>
