@@ -351,7 +351,7 @@ const CommunityTabScreen: React.FC = () => {
 
         {!hasArrivals && !arrivalsLoading && renderEmptyState(
           'people-outline',
-          'No arrivals yet \u2014 your community is growing'
+          'No new arrivals yet \u2014 the village is growing'
         )}
 
         {hasArrivals && (
@@ -427,7 +427,7 @@ const CommunityTabScreen: React.FC = () => {
 
         {!hasGatherings && !gatheringsLoading && renderEmptyState(
           'calendar-outline',
-          'No gatherings yet \u2014 be the first to host one'
+          'No gatherings yet \u2014 be the one who brings everyone together'
         )}
 
         <ScrollView
@@ -519,7 +519,7 @@ const CommunityTabScreen: React.FC = () => {
 
         {!hasElders && renderEmptyState(
           'shield-outline',
-          'No elders yet \u2014 leaders will emerge as your community grows'
+          'No elders yet \u2014 every village needs its wise ones'
         )}
 
         {hasElders && (
@@ -581,7 +581,7 @@ const CommunityTabScreen: React.FC = () => {
 
         {!hasProfiles && !nearYouLoading && renderEmptyState(
           'location-outline',
-          'No one nearby yet \u2014 your neighbors are on their way'
+          'No one nearby yet \u2014 your neighbors are on their way home'
         )}
 
         {hasProfiles && (
@@ -662,7 +662,7 @@ const CommunityTabScreen: React.FC = () => {
 
         {!hasMemories && !memoriesLoading && renderEmptyState(
           'time-outline',
-          'No memories yet \u2014 every milestone will live here forever'
+          'No memories yet \u2014 every milestone will be remembered here'
         )}
 
         {hasMemories && (
@@ -670,7 +670,7 @@ const CommunityTabScreen: React.FC = () => {
             {/* Memory header */}
             <View style={styles.memoryHeader}>
               <Text style={styles.memoryTitle}>
-                {selectedCommunity?.name || 'Community'} \u2014 2025/2026
+                {selectedCommunity?.name || 'Community'} \u2014 {new Date().getFullYear()}
               </Text>
               <Text style={styles.memorySub}>
                 Every milestone lives here forever
@@ -731,7 +731,10 @@ const CommunityTabScreen: React.FC = () => {
     <SafeAreaView style={styles.safeArea}>
       {/* Top Bar */}
       <View style={styles.topBar}>
-        <Text style={styles.topBarTitle}>Community</Text>
+        <View>
+          <Text style={styles.topBarTitle}>Community</Text>
+          <Text style={styles.topBarSubtitle}>Your village, your people</Text>
+        </View>
         <View style={styles.topBarRight}>
           <TouchableOpacity
             style={styles.topBarIcon}
@@ -814,6 +817,11 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: COLORS.navy,
+  },
+  topBarSubtitle: {
+    fontSize: 13,
+    color: COLORS.subtitle,
+    marginTop: 2,
   },
   topBarRight: {
     flexDirection: 'row',

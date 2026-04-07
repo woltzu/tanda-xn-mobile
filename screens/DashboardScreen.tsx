@@ -175,7 +175,7 @@ export default function DashboardScreen() {
             <Text style={styles.balanceAmount}>
               ${totalWealth.toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </Text>
-            <Text style={styles.balanceSubtext}>Here's where your money is:</Text>
+            <Text style={styles.balanceSubtext}>Your money, growing together</Text>
           </View>
         </View>
 
@@ -216,9 +216,9 @@ export default function DashboardScreen() {
                   <Ionicons name="sparkles" size={24} color={colors.accentTeal} />
                 </View>
                 <View style={styles.welcomeTextContainer}>
-                  <Text style={styles.welcomeTitle}>Welcome to TandaXn!</Text>
+                  <Text style={styles.welcomeTitle}>Welcome home</Text>
                   <Text style={styles.welcomeSubtitle}>
-                    Let's build your financial future together
+                    Your community is waiting. Let's get you started.
                   </Text>
                 </View>
               </View>
@@ -227,19 +227,19 @@ export default function DashboardScreen() {
                   <View style={[styles.welcomeStepNumber, { backgroundColor: colors.tealTintBg }]}>
                     <Text style={[styles.welcomeStepNumberText, { color: colors.accentTeal }]}>1</Text>
                   </View>
-                  <Text style={styles.welcomeStepText}>Add funds to your wallet</Text>
+                  <Text style={styles.welcomeStepText}>Fund your wallet</Text>
                 </View>
                 <View style={styles.welcomeStep}>
                   <View style={[styles.welcomeStepNumber, { backgroundColor: "#EEF2FF" }]}>
                     <Text style={[styles.welcomeStepNumberText, { color: "#6366F1" }]}>2</Text>
                   </View>
-                  <Text style={styles.welcomeStepText}>Join or start a savings circle</Text>
+                  <Text style={styles.welcomeStepText}>Join a circle or start your own</Text>
                 </View>
                 <View style={styles.welcomeStep}>
                   <View style={[styles.welcomeStepNumber, { backgroundColor: colors.successBg }]}>
                     <Text style={[styles.welcomeStepNumberText, { color: colors.successText }]}>3</Text>
                   </View>
-                  <Text style={styles.welcomeStepText}>Create goals & grow your savings</Text>
+                  <Text style={styles.welcomeStepText}>Save, grow, and prosper together</Text>
                 </View>
               </View>
             </View>
@@ -443,7 +443,7 @@ export default function DashboardScreen() {
               <View>
                 <Text style={styles.marketplaceCardTitle}>Marketplace</Text>
                 <Text style={styles.marketplaceCardDesc}>
-                  Diaspora services with member discounts
+                  Diaspora businesses, member prices
                 </Text>
               </View>
             </View>
@@ -468,7 +468,7 @@ export default function DashboardScreen() {
                     Get up to ${Math.floor((myCircles[0]?.amount * myCircles[0]?.currentMembers || 0) * 0.8).toLocaleString()} early
                   </Text>
                   <Text style={styles.advancePayoutFee}>
-                    Small fee applies • Instant to wallet
+                    Small fee \u2022 Instant to your wallet
                   </Text>
                 </View>
               </View>
@@ -602,7 +602,7 @@ export default function DashboardScreen() {
                 </View>
               </View>
               <TouchableOpacity
-                onPress={() => navigation.navigate("Circles")}
+                onPress={() => navigation.getParent()?.navigate("Circles")}
                 accessibilityLabel="See all circles"
                 accessibilityRole="button"
               >
@@ -674,7 +674,7 @@ export default function DashboardScreen() {
                 </View>
               </View>
               <TouchableOpacity
-                onPress={() => navigation.navigate("CommunityBrowser")}
+                onPress={() => navigation.getParent()?.navigate("Community")}
                 accessibilityLabel="See all communities"
                 accessibilityRole="button"
               >
@@ -1816,7 +1816,7 @@ const styles = StyleSheet.create({
   // FLOATING HELP
   floatingHelp: {
     position: "absolute",
-    bottom: 24,
+    bottom: 90,
     right: 16,
     flexDirection: "row",
     alignItems: "center",
