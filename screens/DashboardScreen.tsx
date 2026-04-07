@@ -155,10 +155,10 @@ export default function DashboardScreen() {
                 )}
               </TouchableOpacity>
 
-              {/* Avatar */}
+              {/* Avatar — Profile lives here now (not a tab) */}
               <TouchableOpacity
                 style={styles.avatarButton}
-                onPress={() => navigation.getParent()?.navigate("Profile")}
+                onPress={() => navigation.navigate("ProfileMain" as any)}
                 accessibilityLabel="Profile"
                 accessibilityRole="button"
               >
@@ -296,8 +296,8 @@ export default function DashboardScreen() {
           <View style={{ marginTop: 12 }}>
             <DreamFeedWidget
               onViewAll={() => {
-                // Switch to Dreams tab (shows DreamFeed directly)
-                (navigation as any).navigate("Dreams");
+                // Dreams moved into HomeStack (no longer a tab)
+                navigation.navigate("DreamFeed" as any);
               }}
               onPostPress={(postId) => {
                 // Open within Home stack so user stays on Dashboard tab
@@ -396,7 +396,7 @@ export default function DashboardScreen() {
           {myCircles.length > 0 && (
             <TouchableOpacity
               style={styles.payoutCountdownCard}
-              onPress={() => navigation.navigate("Marketplace" as any)}
+              onPress={() => navigation.getParent()?.navigate("Market")}
               accessibilityLabel="Payout countdown and marketplace"
               accessibilityRole="button"
             >
@@ -432,7 +432,7 @@ export default function DashboardScreen() {
           {/* SECTION 4.4 — MARKETPLACE QUICK ACCESS */}
           <TouchableOpacity
             style={styles.marketplaceCard}
-            onPress={() => navigation.navigate("Marketplace" as any)}
+            onPress={() => navigation.getParent()?.navigate("Market")}
             accessibilityLabel="Browse marketplace"
             accessibilityRole="button"
           >
@@ -484,7 +484,7 @@ export default function DashboardScreen() {
           {/* SECTION 5 — WALLET CARD (UTILITY) */}
           <TouchableOpacity
             style={styles.walletCard}
-            onPress={() => navigation.navigate("Wallet")}
+            onPress={() => navigation.navigate("WalletMain" as any)}
             accessibilityLabel="View wallet"
             accessibilityRole="button"
           >

@@ -144,6 +144,24 @@ import CrossCircleLendingScreen from "./screens/CrossCircleLendingScreen";
 import DynamicPayoutScreen from "./screens/DynamicPayoutScreen";
 import LegalDocumentsScreen from "./screens/LegalDocumentsScreen";
 import CircleVisualizerScreen from "./screens/CircleVisualizerScreen";
+// Dream Feed Screens
+import DreamFeedScreen from "./screens/DreamFeedScreen";
+import CreateDreamPostScreen from "./screens/CreateDreamPostScreen";
+import PostDetailScreen from "./screens/PostDetailScreen";
+import DreamPostCommentsScreen from "./screens/DreamPostCommentsScreen";
+import UserDreamProfileScreen from "./screens/UserDreamProfileScreen";
+import FeedSettingsScreen from "./screens/FeedSettingsScreen";
+import SupportDreamScreen from "./screens/SupportDreamScreen";
+// Community Sub-screens
+import NearYouScreen from "./screens/NearYouScreen";
+import NewArrivalsScreen from "./screens/NewArrivalsScreen";
+import GatheringsScreen from "./screens/GatheringsScreen";
+import CreateGatheringScreen from "./screens/CreateGatheringScreen";
+import CommunityMemoryScreen from "./screens/CommunityMemoryScreen";
+import PostToCommunityScreen from "./screens/PostToCommunityScreen";
+// New Tab Screens (Navigation Restructure)
+import ActionScreen from "./screens/ActionScreen";
+import CommunityTabScreen from "./screens/CommunityTabScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -346,19 +364,18 @@ export type RootStackParamList = {
 
 export type TabParamList = {
   Home: undefined;
-  Dreams: undefined;
-  Wallet: undefined;
   Circles: undefined;
-  Profile: undefined;
+  Action: undefined;
+  Market: undefined;
+  Community: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 const HomeStack = createStackNavigator();
-const DreamsStack = createStackNavigator();
-const WalletStack = createStackNavigator();
 const CirclesStack = createStackNavigator();
-const ProfileStack = createStackNavigator();
+const MarketStack = createStackNavigator();
+const CommunityStack = createStackNavigator();
 
 // Home Tab Stack - includes Dashboard and related screens
 function HomeStackScreen() {
@@ -405,6 +422,8 @@ function HomeStackScreen() {
       <HomeStack.Screen name="MediationCase" component={MediationCaseScreen} />
       <HomeStack.Screen name="ElderTrainingHub" component={ElderTrainingHubScreen} />
       <HomeStack.Screen name="AddFunds" component={AddFundsScreen} />
+      <HomeStack.Screen name="WalletMain" component={WalletScreen} />
+      <HomeStack.Screen name="Withdraw" component={WithdrawScreen} />
       <HomeStack.Screen name="CreateCircleStart" component={CreateCircleStartScreen} />
       <HomeStack.Screen name="CreateCircleDetails" component={CreateCircleDetailsScreen} />
       <HomeStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} />
@@ -429,44 +448,37 @@ function HomeStackScreen() {
       <HomeStack.Screen name="DefaultRecovery" component={DefaultRecoveryScreen} />
       <HomeStack.Screen name="KYCVerification" component={KYCVerificationScreen} />
       <HomeStack.Screen name="LegalDocuments" component={LegalDocumentsScreen} />
+      {/* Dream Feed Screens (moved from Dreams tab) */}
+      <HomeStack.Screen name="DreamFeed" component={DreamFeedScreen} />
+      <HomeStack.Screen name="CreateDreamPost" component={CreateDreamPostScreen} />
+      <HomeStack.Screen name="PostDetail" component={PostDetailScreen} />
+      <HomeStack.Screen name="PostComments" component={DreamPostCommentsScreen} />
+      <HomeStack.Screen name="UserDreamProfile" component={UserDreamProfileScreen} />
+      <HomeStack.Screen name="FeedSettings" component={FeedSettingsScreen} />
+      <HomeStack.Screen name="SupportDream" component={SupportDreamScreen} />
+      {/* Profile Screens (moved from Profile tab — profile is now avatar in top-right) */}
+      <HomeStack.Screen name="ProfileMain" component={ProfileScreen} />
+      <HomeStack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
+      <HomeStack.Screen name="LanguageRegion" component={LanguageRegionScreen} />
+      <HomeStack.Screen name="SecuritySettings" component={SecuritySettingsScreen} />
+      <HomeStack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+      <HomeStack.Screen name="TwoFactorAuth" component={TwoFactorAuthScreen} />
+      <HomeStack.Screen name="NotificationPrefs" component={NotificationPrefsScreen} />
+      <HomeStack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
+      <HomeStack.Screen name="LinkedAccounts" component={LinkedAccountsScreen} />
+      <HomeStack.Screen name="ActiveSessions" component={ActiveSessionsScreen} />
+      <HomeStack.Screen name="AboutApp" component={AboutAppScreen} />
+      <HomeStack.Screen name="XnScoreHistory" component={XnScoreHistoryScreen} />
+      <HomeStack.Screen name="VouchMember" component={VouchMemberScreen} />
+      <HomeStack.Screen name="HonorSystem" component={HonorSystemScreen} />
+      {/* Community Sub-screens (reachable from Community tab too) */}
+      <HomeStack.Screen name="NearYou" component={NearYouScreen} />
+      <HomeStack.Screen name="NewArrivals" component={NewArrivalsScreen} />
+      <HomeStack.Screen name="Gatherings" component={GatheringsScreen} />
+      <HomeStack.Screen name="CreateGathering" component={CreateGatheringScreen} />
+      <HomeStack.Screen name="CommunityMemory" component={CommunityMemoryScreen} />
+      <HomeStack.Screen name="PostToCommunity" component={PostToCommunityScreen} />
     </HomeStack.Navigator>
-  );
-}
-
-// Dreams Tab Stack
-function DreamsStackScreen() {
-  return (
-    <DreamsStack.Navigator screenOptions={{ headerShown: false }}>
-      <DreamsStack.Screen name="DreamFeed" component={DreamFeedScreen} />
-      <DreamsStack.Screen name="CreateDreamPost" component={CreateDreamPostScreen} />
-      <DreamsStack.Screen name="PostDetail" component={PostDetailScreen} />
-      <DreamsStack.Screen name="PostComments" component={DreamPostCommentsScreen} />
-      <DreamsStack.Screen name="UserDreamProfile" component={UserDreamProfileScreen} />
-      <DreamsStack.Screen name="FeedSettings" component={FeedSettingsScreen} />
-      {/* Screens reachable from feed actions */}
-      <DreamsStack.Screen name="CreateGoal" component={CreateGoalScreen} />
-      <DreamsStack.Screen name="XnScoreDashboard" component={XnScoreDashboardScreen} />
-      <DreamsStack.Screen name="JoinCircleConfirm" component={JoinCircleConfirmScreen} />
-      <DreamsStack.Screen name="SupportDream" component={SupportDreamScreen} />
-      <DreamsStack.Screen name="WalletTransactionSuccess" component={WalletTransactionSuccessScreen} />
-    </DreamsStack.Navigator>
-  );
-}
-
-// Wallet Tab Stack
-function WalletStackScreen() {
-  return (
-    <WalletStack.Navigator screenOptions={{ headerShown: false }}>
-      <WalletStack.Screen name="WalletMain" component={WalletScreen} />
-      <WalletStack.Screen name="AddFunds" component={AddFundsScreen} />
-      <WalletStack.Screen name="Withdraw" component={WithdrawScreen} />
-      <WalletStack.Screen name="SendMoney" component={SendMoneyScreen} />
-      <WalletStack.Screen name="DomesticSendMoney" component={DomesticSendMoneyScreen} />
-      <WalletStack.Screen name="Remittance" component={RemittanceScreen} />
-      <WalletStack.Screen name="WalletTransactionSuccess" component={WalletTransactionSuccessScreen} />
-      <WalletStack.Screen name="SavedRecipients" component={SavedRecipientsScreen} />
-      <WalletStack.Screen name="AddRecipient" component={AddRecipientScreen} />
-    </WalletStack.Navigator>
   );
 }
 
@@ -513,37 +525,46 @@ function CirclesStackScreen() {
   );
 }
 
-// Profile Tab Stack
-function ProfileStackScreen() {
+// Market Tab Stack — The Community Economy
+function MarketStackScreen() {
   return (
-    <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
-      <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} />
-      <ProfileStack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
-      <ProfileStack.Screen name="LanguageRegion" component={LanguageRegionScreen} />
-      <ProfileStack.Screen name="Settings" component={SettingsMainScreen} />
-      <ProfileStack.Screen name="SecuritySettings" component={SecuritySettingsScreen} />
-      <ProfileStack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-      <ProfileStack.Screen name="TwoFactorAuth" component={TwoFactorAuthScreen} />
-      <ProfileStack.Screen name="NotificationPrefs" component={NotificationPrefsScreen} />
-      <ProfileStack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
-      <ProfileStack.Screen name="LinkedAccounts" component={LinkedAccountsScreen} />
-      <ProfileStack.Screen name="ActiveSessions" component={ActiveSessionsScreen} />
-      <ProfileStack.Screen name="HelpCenter" component={HelpCenterScreen} />
-      <ProfileStack.Screen name="AboutApp" component={AboutAppScreen} />
-      <ProfileStack.Screen name="XnScoreDashboard" component={XnScoreDashboardScreen} />
-      <ProfileStack.Screen name="XnScoreHistory" component={XnScoreHistoryScreen} />
-      <ProfileStack.Screen name="VouchMember" component={VouchMemberScreen} />
-      <ProfileStack.Screen name="HonorSystem" component={HonorSystemScreen} />
-      <ProfileStack.Screen name="CommunityBrowser" component={CommunityBrowserScreen} />
-      <ProfileStack.Screen name="CommunityHub" component={CommunityHubScreen} />
-      <ProfileStack.Screen name="CreateCommunity" component={CreateCommunityScreen} />
-      <ProfileStack.Screen name="ElderDashboard" component={ElderDashboardScreen} />
-      <ProfileStack.Screen name="BecomeElder" component={BecomeElderScreen} />
-      <ProfileStack.Screen name="HonorScoreOverview" component={HonorScoreOverviewScreen} />
-      <ProfileStack.Screen name="VouchSystem" component={VouchSystemScreen} />
-      <ProfileStack.Screen name="MediationCase" component={MediationCaseScreen} />
-      <ProfileStack.Screen name="ElderTrainingHub" component={ElderTrainingHubScreen} />
-    </ProfileStack.Navigator>
+    <MarketStack.Navigator screenOptions={{ headerShown: false }}>
+      <MarketStack.Screen name="MarketMain" component={MarketplaceScreen} />
+      <MarketStack.Screen name="StoreDetail" component={StoreDetailScreen} />
+      <MarketStack.Screen name="StoreApplication" component={StoreApplicationScreen} />
+      <MarketStack.Screen name="BulkInvites" component={BulkInvitesScreen} />
+      <MarketStack.Screen name="BookService" component={BookServiceScreen} />
+      <MarketStack.Screen name="OwnerDashboard" component={OwnerDashboardScreen} />
+      <MarketStack.Screen name="MarketInsight" component={MarketInsightScreen} />
+    </MarketStack.Navigator>
+  );
+}
+
+// Community Tab Stack — The Living Village
+function CommunityStackScreen() {
+  return (
+    <CommunityStack.Navigator screenOptions={{ headerShown: false }}>
+      <CommunityStack.Screen name="CommunityMain" component={CommunityTabScreen} />
+      <CommunityStack.Screen name="CommunityBrowser" component={CommunityBrowserScreen} />
+      <CommunityStack.Screen name="CommunityHub" component={CommunityHubScreen} />
+      <CommunityStack.Screen name="CreateCommunity" component={CreateCommunityScreen} />
+      <CommunityStack.Screen name="NearYou" component={NearYouScreen} />
+      <CommunityStack.Screen name="NewArrivals" component={NewArrivalsScreen} />
+      <CommunityStack.Screen name="Gatherings" component={GatheringsScreen} />
+      <CommunityStack.Screen name="CreateGathering" component={CreateGatheringScreen} />
+      <CommunityStack.Screen name="CommunityMemory" component={CommunityMemoryScreen} />
+      <CommunityStack.Screen name="PostToCommunity" component={PostToCommunityScreen} />
+      <CommunityStack.Screen name="ElderDashboard" component={ElderDashboardScreen} />
+      <CommunityStack.Screen name="BecomeElder" component={BecomeElderScreen} />
+      <CommunityStack.Screen name="HonorScoreOverview" component={HonorScoreOverviewScreen} />
+      <CommunityStack.Screen name="VouchSystem" component={VouchSystemScreen} />
+      <CommunityStack.Screen name="MediationCase" component={MediationCaseScreen} />
+      <CommunityStack.Screen name="ElderTrainingHub" component={ElderTrainingHubScreen} />
+      {/* Profile accessible from avatar in community */}
+      <CommunityStack.Screen name="ProfileMain" component={ProfileScreen} />
+      <CommunityStack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
+      <CommunityStack.Screen name="Settings" component={SettingsMainScreen} />
+    </CommunityStack.Navigator>
   );
 }
 
@@ -635,28 +656,46 @@ function MainTabs() {
           borderTopColor: "#E5E7EB",
           paddingTop: 8,
           paddingBottom: 8,
-          height: 65,
+          height: 70,
         },
         tabBarActiveTintColor: "#00C6AE",
         tabBarInactiveTintColor: "#9CA3AF",
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: "600",
-          marginTop: 4,
+          marginTop: 2,
         },
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = "home";
 
           if (route.name === "Home") {
             iconName = focused ? "home" : "home-outline";
-          } else if (route.name === "Dreams") {
-            iconName = focused ? "sparkles" : "sparkles-outline";
-          } else if (route.name === "Wallet") {
-            iconName = focused ? "wallet" : "wallet-outline";
           } else if (route.name === "Circles") {
-            iconName = focused ? "people" : "people-outline";
-          } else if (route.name === "Profile") {
-            iconName = focused ? "person" : "person-outline";
+            iconName = focused ? "people-circle" : "people-circle-outline";
+          } else if (route.name === "Action") {
+            // Custom center button — icon handled in tabBarButton
+            return (
+              <View style={{
+                width: 56,
+                height: 56,
+                borderRadius: 16,
+                backgroundColor: "#0A2342",
+                justifyContent: "center",
+                alignItems: "center",
+                marginTop: -20,
+                shadowColor: "#0A2342",
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.35,
+                shadowRadius: 8,
+                elevation: 8,
+              }}>
+                <Ionicons name="flame" size={28} color="#E8A842" />
+              </View>
+            );
+          } else if (route.name === "Market") {
+            iconName = focused ? "storefront" : "storefront-outline";
+          } else if (route.name === "Community") {
+            iconName = focused ? "earth" : "earth-outline";
           }
 
           return <Ionicons name={iconName} size={24} color={color} />;
@@ -669,7 +708,6 @@ function MainTabs() {
           const currentRoute = state.routes.find((r: any) => r.name === route.name);
 
           if (currentRoute && currentRoute.state && currentRoute.state.index > 0) {
-            // If there are screens in the stack, pop to the first screen
             navigation.dispatch(
               CommonActions.reset({
                 index: 0,
@@ -681,10 +719,16 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Home" component={HomeStackScreen} />
-      <Tab.Screen name="Dreams" component={DreamsStackScreen} />
-      <Tab.Screen name="Wallet" component={WalletStackScreen} />
       <Tab.Screen name="Circles" component={CirclesStackScreen} />
-      <Tab.Screen name="Profile" component={ProfileStackScreen} />
+      <Tab.Screen
+        name="Action"
+        component={ActionScreen}
+        options={{
+          tabBarLabel: "",
+        }}
+      />
+      <Tab.Screen name="Market" component={MarketStackScreen} />
+      <Tab.Screen name="Community" component={CommunityStackScreen} />
     </Tab.Navigator>
   );
 }
