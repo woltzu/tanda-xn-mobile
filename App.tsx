@@ -470,7 +470,6 @@ function HomeStackScreen() {
       <HomeStack.Screen name="LinkedAccounts" component={LinkedAccountsScreen} />
       <HomeStack.Screen name="ActiveSessions" component={ActiveSessionsScreen} />
       <HomeStack.Screen name="AboutApp" component={AboutAppScreen} />
-      <HomeStack.Screen name="XnScoreHistory" component={XnScoreHistoryScreen} />
       <HomeStack.Screen name="VouchMember" component={VouchMemberScreen} />
       <HomeStack.Screen name="HonorSystem" component={HonorSystemScreen} />
       {/* Community Sub-screens (reachable from Community tab too) */}
