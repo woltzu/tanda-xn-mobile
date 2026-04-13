@@ -356,6 +356,30 @@ export default function DashboardScreen() {
           <Text style={styles.arrivalCta}>Welcome {"\u2192"}</Text>
         </TouchableOpacity>
 
+        {/* ========== 5b. TRIP ORGANIZER CTA ========== */}
+        <TouchableOpacity
+          style={styles.tripOrganizerCard}
+          onPress={() => navigation.navigate("OrganizerTripList" as any)}
+          activeOpacity={0.85}
+          accessibilityLabel="Plan a group trip"
+          accessibilityRole="button"
+        >
+          <View style={styles.tripOrganizerLeft}>
+            <View style={styles.tripOrganizerIcon}>
+              <Text style={{ fontSize: 26 }}>{"\u2708\uFE0F"}</Text>
+            </View>
+            <View style={styles.tripOrganizerText}>
+              <Text style={styles.tripOrganizerTitle}>Plan a Group Trip</Text>
+              <Text style={styles.tripOrganizerDesc}>
+                Organize itineraries, collect payments & manage participants
+              </Text>
+            </View>
+          </View>
+          <View style={styles.tripOrganizerCta}>
+            <Text style={styles.tripOrganizerCtaText}>Start {"\u2192"}</Text>
+          </View>
+        </TouchableOpacity>
+
         {/* ========== 6. COMMUNITY FEED ========== */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -726,6 +750,65 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: SUCCESS,
     marginLeft: 8,
+  },
+
+  // ===== 5b. TRIP ORGANIZER CTA =====
+  tripOrganizerCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 16,
+    marginTop: 20,
+    backgroundColor: CARD_BG,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  tripOrganizerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  tripOrganizerIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: "#FFF7ED",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 14,
+  },
+  tripOrganizerText: {
+    flex: 1,
+  },
+  tripOrganizerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: TEXT_DARK,
+    marginBottom: 3,
+  },
+  tripOrganizerDesc: {
+    fontSize: 12,
+    color: TEXT_SECONDARY,
+    lineHeight: 17,
+  },
+  tripOrganizerCta: {
+    backgroundColor: GOLD,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginLeft: 10,
+  },
+  tripOrganizerCtaText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 
   // ===== 7. NEAR YOU SERVICES =====
