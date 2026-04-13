@@ -171,3 +171,11 @@ export { ContributionMoodDetectionEngine } from './ContributionMoodDetectionEngi
 // Conflict Prediction Engine (Migration 062)
 export * from './ConflictPredictionEngine';
 export { ConflictPredictionEngine } from './ConflictPredictionEngine';
+
+// Trip Circle Engine
+export * from './TripCircleEngine';
+export { TripCircleEngine } from './TripCircleEngine';
+
+// Media Upload Service
+export * from './MediaUploadService';
+export { MediaUploadService } from './MediaUploadService';

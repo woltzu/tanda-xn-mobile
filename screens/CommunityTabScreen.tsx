@@ -773,11 +773,45 @@ const CommunityTabScreen: React.FC = () => {
         {/* 2. New Arrivals */}
         {renderNewArrivals()}
 
+        {/* Kente Divider */}
+        <View style={styles.kenteDivider}>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <View
+              key={i}
+              style={{
+                flex: i % 4 === 1 || i % 4 === 3 ? 0.4 : 1,
+                height: 4,
+                backgroundColor:
+                  i % 4 === 0 ? '#C4622D' :
+                  i % 4 === 1 ? COLORS.gold :
+                  i % 4 === 2 ? '#2A5240' : COLORS.gold,
+              }}
+            />
+          ))}
+        </View>
+
         {/* 3. Gatherings */}
         {renderGatherings()}
 
         {/* 4. Your Elders */}
         {renderYourElders()}
+
+        {/* Kente Divider */}
+        <View style={styles.kenteDivider}>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <View
+              key={i}
+              style={{
+                flex: i % 4 === 1 || i % 4 === 3 ? 0.4 : 1,
+                height: 4,
+                backgroundColor:
+                  i % 4 === 0 ? '#C4622D' :
+                  i % 4 === 1 ? COLORS.gold :
+                  i % 4 === 2 ? '#2A5240' : COLORS.gold,
+              }}
+            />
+          ))}
+        </View>
 
         {/* 5. Near You */}
         {renderNearYou()}
@@ -785,8 +819,8 @@ const CommunityTabScreen: React.FC = () => {
         {/* 6. Community Memory */}
         {renderCommunityMemory()}
 
-        {/* Bottom spacing */}
-        <View style={{ height: 32 }} />
+        {/* Bottom spacing for tab bar */}
+        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -919,6 +953,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: COLORS.teal,
+  },
+
+  // ── Kente Divider ────────────────────────────────────────────────────────
+  kenteDivider: {
+    flexDirection: 'row',
+    height: 4,
+    marginHorizontal: 20,
+    marginBottom: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    opacity: 0.35,
   },
 
   // ── Section ──────────────────────────────────────────────────────────────

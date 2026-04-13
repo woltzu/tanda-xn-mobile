@@ -984,3 +984,28 @@ export {
   type FactorBreakdown,
   type FlaggedPairSummary,
 } from './useConflictPrediction';
+
+// Trip Circle Hooks (Migration 063)
+export {
+  useProviderProfile,
+  useLiveTrips,
+  useProviderTrips,
+  useTripDetail,
+  useMemberTripDashboard,
+  useTripContributions,
+  type TripListing,
+  type TripMember,
+  type TripContribution,
+  type TripPaymentSchedule,
+  type TripSummary,
+  type ProviderProfile,
+} from './useTripCircle';
+
+// Media Upload Hooks
+export {
+  useMediaUpload,
+  useEntityMedia,
+  type UploadResult,
+  type BucketName,
+  type MediaRecord,
+} from './useMediaUpload';

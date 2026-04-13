@@ -9,6 +9,7 @@ import {
   Animated,
   Alert,
   Dimensions,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -20,22 +21,25 @@ import { useElder } from "../context/ElderContext";
 
 const COLORS = {
   navy: "#0A2342",
+  navyLight: "#0E2D54",
   teal: "#00C6AE",
+  tealLight: "rgba(0,198,174,0.12)",
   gold: "#E8A842",
+  goldLight: "rgba(232,168,66,0.12)",
   bg: "#F5F7FA",
   white: "#FFFFFF",
-  overlay: "rgba(10,35,66,0.95)",
-  cardBg: "rgba(255,255,255,0.08)",
-  cardBorder: "rgba(255,255,255,0.12)",
-  textPrimary: "#FFFFFF",
-  textSecondary: "rgba(255,255,255,0.65)",
-  urgentBg: "rgba(232,168,66,0.15)",
+  purple: "#7C5CFC",
+  purpleLight: "rgba(124,92,252,0.12)",
+  navyIconBg: "rgba(10,35,66,0.10)",
+  textDark: "#1A1A2E",
+  textSecondary: "#6B7280",
+  textMuted: "#9CA3AF",
+  cardShadow: "rgba(10,35,66,0.08)",
   urgentBorder: "#E8A842",
-  primaryBg: "rgba(0,198,174,0.15)",
   primaryBorder: "#00C6AE",
 };
 
-const { height: SCREEN_HEIGHT } = Dimensions.get("window");
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 // ============ ACTION DEFINITIONS ============
 
@@ -53,9 +57,10 @@ interface ActionItem {
   title: string;
   subtitle: string;
   icon: keyof typeof Ionicons.glyphMap;
-  accentColor: string;
-  route: string | null; // null means Alert-based action
-  priority: number; // lower = higher in list
+  iconBgColor: string;
+  iconColor: string;
+  route: string | null;
+  priority: number;
   visible: boolean;
   isUrgent: boolean;
   isPrimary: boolean;
@@ -71,7 +76,8 @@ const ActionScreen: React.FC = () => {
 
   // Animation refs
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(40)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+  const headerAnim = useRef(new Animated.Value(0)).current;
   const cardAnims = useRef<Animated.Value[]>(
     Array.from({ length: 7 }, () => new Animated.Value(0))
   ).current;
@@ -82,7 +88,9 @@ const ActionScreen: React.FC = () => {
     if (!session?.user?.created_at) return 999;
     const created = new Date(session.user.created_at);
     const now = new Date();
-    return Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+    return Math.floor(
+      (now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)
+    );
   }, [session]);
 
   const hasCircles = myCircles.length > 0;
@@ -90,18 +98,16 @@ const ActionScreen: React.FC = () => {
   const hasPendingContribution = useMemo(() => {
     return myCircles.some((circle) => {
       if (circle.status !== "active") return false;
-      return true; // Active circles imply ongoing contributions
+      return true;
     });
   }, [myCircles]);
 
   const contributionDueSoon = useMemo(() => {
-    // Check if any circle has a contribution due within 3 days
     const threeDaysFromNow = new Date();
     threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
 
     return myCircles.some((circle) => {
       if (circle.status !== "active") return false;
-      // Use frequency to estimate next due date from start
       if (!circle.startDate) return false;
       const start = new Date(circle.startDate);
       const now = new Date();
@@ -113,13 +119,14 @@ const ActionScreen: React.FC = () => {
           : circle.frequency === "biweekly"
           ? 14
           : 30;
-      // Calculate next due date
       const daysSinceStart = Math.floor(
         (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
       );
       const cyclesPassed = Math.floor(daysSinceStart / freqDays);
       const nextDueDate = new Date(start);
-      nextDueDate.setDate(nextDueDate.getDate() + (cyclesPassed + 1) * freqDays);
+      nextDueDate.setDate(
+        nextDueDate.getDate() + (cyclesPassed + 1) * freqDays
+      );
       return nextDueDate <= threeDaysFromNow;
     });
   }, [myCircles]);
@@ -128,7 +135,6 @@ const ActionScreen: React.FC = () => {
 
   const isTrustedTierPlus = useMemo(() => {
     const score = elderProfile?.honorScore ?? user?.xnScore ?? 0;
-    // Trusted tier starts at score 50+
     return score >= 50;
   }, [elderProfile, user]);
 
@@ -141,7 +147,8 @@ const ActionScreen: React.FC = () => {
         title: "Start a Circle",
         subtitle: "Plant something new together",
         icon: "people-circle",
-        accentColor: COLORS.teal,
+        iconBgColor: COLORS.tealLight,
+        iconColor: COLORS.teal,
         route: "CreateCircleStart",
         priority: hasCircles ? 40 : 10,
         visible: true,
@@ -153,7 +160,8 @@ const ActionScreen: React.FC = () => {
         title: "Contribute",
         subtitle: "Keep the circle moving",
         icon: "cash",
-        accentColor: contributionDueSoon ? COLORS.gold : COLORS.teal,
+        iconBgColor: contributionDueSoon ? COLORS.goldLight : COLORS.tealLight,
+        iconColor: contributionDueSoon ? COLORS.gold : COLORS.teal,
         route: "SelectCircleContribution",
         priority: contributionDueSoon ? 5 : 30,
         visible: hasPendingContribution,
@@ -165,7 +173,8 @@ const ActionScreen: React.FC = () => {
         title: "Send to Someone",
         subtitle: "Send to a face, not a number",
         icon: "send",
-        accentColor: COLORS.teal,
+        iconBgColor: COLORS.navyIconBg,
+        iconColor: COLORS.navy,
         route: "SendMoney",
         priority: 50,
         visible: true,
@@ -177,7 +186,8 @@ const ActionScreen: React.FC = () => {
         title: "Vouch for Someone",
         subtitle: "Stake your reputation for someone",
         icon: "shield-checkmark",
-        accentColor: COLORS.gold,
+        iconBgColor: COLORS.goldLight,
+        iconColor: COLORS.gold,
         route: "VouchMember",
         priority: 60,
         visible: isTrustedTierPlus,
@@ -189,7 +199,8 @@ const ActionScreen: React.FC = () => {
         title: "Share a Moment",
         subtitle: "Celebrate, ask, or welcome someone",
         icon: "camera",
-        accentColor: COLORS.teal,
+        iconBgColor: COLORS.tealLight,
+        iconColor: COLORS.teal,
         route: "PostToCommunity",
         priority: 70,
         visible: true,
@@ -201,7 +212,8 @@ const ActionScreen: React.FC = () => {
         title: "Request Help",
         subtitle: "Ask for a vouch, guidance, or a warm welcome",
         icon: "hand-left",
-        accentColor: COLORS.teal,
+        iconBgColor: COLORS.purpleLight,
+        iconColor: COLORS.purple,
         route: null,
         priority: isNewMember ? 8 : 80,
         visible: true,
@@ -213,9 +225,10 @@ const ActionScreen: React.FC = () => {
         title: "Open a Session",
         subtitle: "Share wisdom or host a Q&A",
         icon: "school",
-        accentColor: COLORS.gold,
+        iconBgColor: COLORS.goldLight,
+        iconColor: COLORS.gold,
         route: "ElderDashboard",
-        priority: 100, // Always at bottom
+        priority: 100,
         visible: isElder,
         isUrgent: false,
         isPrimary: false,
@@ -237,27 +250,30 @@ const ActionScreen: React.FC = () => {
   // ---- Entrance Animation ----
 
   useEffect(() => {
-    // Fade in the overlay and title
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 250,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(headerAnim, {
+        toValue: 1,
+        duration: 400,
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
         toValue: 0,
-        duration: 300,
+        duration: 350,
         useNativeDriver: true,
       }),
     ]).start();
 
-    // Stagger card animations
-    const staggerDelay = 60;
+    const staggerDelay = 70;
     actions.forEach((_, index) => {
       Animated.timing(cardAnims[index], {
         toValue: 1,
-        duration: 280,
-        delay: 150 + index * staggerDelay,
+        duration: 320,
+        delay: 200 + index * staggerDelay,
         useNativeDriver: true,
       }).start();
     });
@@ -266,7 +282,6 @@ const ActionScreen: React.FC = () => {
   // ---- Handlers ----
 
   const handleClose = () => {
-    // Animate out then navigate back
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 0,
@@ -274,7 +289,7 @@ const ActionScreen: React.FC = () => {
         useNativeDriver: true,
       }),
       Animated.timing(slideAnim, {
-        toValue: 40,
+        toValue: 30,
         duration: 200,
         useNativeDriver: true,
       }),
@@ -285,7 +300,6 @@ const ActionScreen: React.FC = () => {
 
   const handleAction = (action: ActionItem) => {
     if (action.route === null) {
-      // Request Help - Alert for now
       Alert.alert(
         "Request Help",
         "What kind of help do you need?",
@@ -294,7 +308,6 @@ const ActionScreen: React.FC = () => {
             text: "I need a vouch",
             onPress: () => {
               navigation.goBack();
-              // Navigate after goBack settles
               setTimeout(() => navigation.navigate("CommunityBrowser"), 100);
             },
           },
@@ -312,7 +325,6 @@ const ActionScreen: React.FC = () => {
       return;
     }
 
-    // Close the action sheet then navigate
     Animated.timing(fadeAnim, {
       toValue: 0,
       duration: 150,
@@ -330,22 +342,9 @@ const ActionScreen: React.FC = () => {
   const renderActionCard = (action: ActionItem, index: number) => {
     const animValue = cardAnims[index] || new Animated.Value(1);
 
-    const cardStyle = [
-      styles.actionCard,
-      action.isUrgent && styles.actionCardUrgent,
-      action.isPrimary && styles.actionCardPrimary,
-      {
-        borderLeftColor: action.isUrgent
-          ? COLORS.urgentBorder
-          : action.isPrimary
-          ? COLORS.primaryBorder
-          : action.accentColor,
-      },
-    ];
-
     const translateY = animValue.interpolate({
       inputRange: [0, 1],
-      outputRange: [24, 0],
+      outputRange: [20, 0],
     });
 
     return (
@@ -357,35 +356,25 @@ const ActionScreen: React.FC = () => {
         }}
       >
         <TouchableOpacity
-          style={cardStyle}
+          style={[
+            styles.actionCard,
+            action.isUrgent && styles.actionCardUrgent,
+            action.isPrimary && styles.actionCardPrimary,
+          ]}
           onPress={() => handleAction(action)}
           activeOpacity={0.7}
         >
+          {/* Icon Area */}
           <View
             style={[
               styles.iconContainer,
-              {
-                backgroundColor: action.isUrgent
-                  ? COLORS.urgentBg
-                  : action.isPrimary
-                  ? COLORS.primaryBg
-                  : COLORS.cardBg,
-              },
+              { backgroundColor: action.iconBgColor },
             ]}
           >
-            <Ionicons
-              name={action.icon}
-              size={26}
-              color={
-                action.isUrgent
-                  ? COLORS.gold
-                  : action.isPrimary
-                  ? COLORS.teal
-                  : COLORS.textPrimary
-              }
-            />
+            <Ionicons name={action.icon} size={26} color={action.iconColor} />
           </View>
 
+          {/* Text Area */}
           <View style={styles.actionTextContainer}>
             <View style={styles.actionTitleRow}>
               <Text
@@ -394,6 +383,7 @@ const ActionScreen: React.FC = () => {
                   action.isUrgent && styles.actionTitleUrgent,
                   action.isPrimary && styles.actionTitlePrimary,
                 ]}
+                numberOfLines={1}
               >
                 {action.title}
               </Text>
@@ -408,13 +398,16 @@ const ActionScreen: React.FC = () => {
                 </View>
               )}
             </View>
-            <Text style={styles.actionSubtitle}>{action.subtitle}</Text>
+            <Text style={styles.actionSubtitle} numberOfLines={2}>
+              {action.subtitle}
+            </Text>
           </View>
 
+          {/* Chevron */}
           <Ionicons
             name="chevron-forward"
             size={20}
-            color="rgba(255,255,255,0.3)"
+            color={COLORS.textMuted}
             style={styles.chevron}
           />
         </TouchableOpacity>
@@ -431,33 +424,52 @@ const ActionScreen: React.FC = () => {
     return "What do you want to make happen?";
   }, [isNewMember, contributionDueSoon, hasCircles]);
 
+  const firstName = user?.name ? user.name.split(" ")[0] : null;
+
   // ---- Main Render ----
 
   return (
-    <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+    <Animated.View style={[styles.screen, { opacity: fadeAnim }]}>
       <SafeAreaView style={styles.safeArea}>
+        {/* Navy Header */}
         <Animated.View
           style={[
-            styles.content,
-            { transform: [{ translateY: slideAnim }] },
+            styles.header,
+            {
+              opacity: headerAnim,
+              transform: [
+                {
+                  translateY: headerAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-10, 0],
+                  }),
+                },
+              ],
+            },
           ]}
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerAccent}>
-              <Ionicons name="flame" size={18} color={COLORS.gold} />
+          <View style={styles.headerInner}>
+            <View style={styles.flameContainer}>
+              <Ionicons name="flame" size={20} color={COLORS.gold} />
             </View>
-            <Text style={styles.headerTitle}>{greeting}</Text>
-            {user?.name && (
-              <Text style={styles.headerSubtitle}>
+            <Text style={styles.headerGreeting}>{greeting}</Text>
+            {firstName && (
+              <Text style={styles.headerName}>
                 {isNewMember
-                  ? `Welcome, ${user.name.split(" ")[0]}. Your community is here for you.`
-                  : `${user.name.split(" ")[0]}, let\u2019s make it happen.`}
+                  ? `Welcome, ${firstName}. Your community is here for you.`
+                  : `${firstName}, let\u2019s make it happen.`}
               </Text>
             )}
           </View>
+        </Animated.View>
 
-          {/* Action Cards */}
+        {/* Scrollable Action Cards */}
+        <Animated.View
+          style={[
+            styles.body,
+            { transform: [{ translateY: slideAnim }] },
+          ]}
+        >
           <ScrollView
             style={styles.scrollContainer}
             contentContainerStyle={styles.scrollContent}
@@ -466,22 +478,21 @@ const ActionScreen: React.FC = () => {
           >
             {actions.map((action, index) => renderActionCard(action, index))}
 
-            {/* Bottom spacer for close button */}
             <View style={styles.bottomSpacer} />
           </ScrollView>
-
-          {/* Close Button */}
-          <View style={styles.closeContainer}>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={handleClose}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="close" size={28} color={COLORS.textPrimary} />
-            </TouchableOpacity>
-            <Text style={styles.closeLabel}>Close</Text>
-          </View>
         </Animated.View>
+
+        {/* Close Button */}
+        <View style={styles.closeContainer}>
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={handleClose}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close" size={24} color={COLORS.navy} />
+          </TouchableOpacity>
+          <Text style={styles.closeLabel}>Close</Text>
+        </View>
       </SafeAreaView>
     </Animated.View>
   );
@@ -490,106 +501,139 @@ const ActionScreen: React.FC = () => {
 // ============ STYLES ============
 
 const styles = StyleSheet.create({
-  overlay: {
+  screen: {
     flex: 1,
-    backgroundColor: COLORS.overlay,
+    backgroundColor: COLORS.bg,
   },
   safeArea: {
     flex: 1,
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
 
-  // Header
+  // ---- Header ----
   header: {
-    paddingTop: 32,
-    paddingBottom: 24,
-    alignItems: "center",
+    backgroundColor: COLORS.navy,
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
+    paddingBottom: 28,
+    paddingTop: Platform.OS === "android" ? 44 : 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.navy,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.2,
+        shadowRadius: 16,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
-  headerAccent: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  headerInner: {
+    alignItems: "center",
+    paddingHorizontal: 32,
+  },
+  flameContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "rgba(232,168,66,0.15)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  headerTitle: {
-    fontSize: 26,
+  headerGreeting: {
+    fontSize: 24,
     fontWeight: "700",
-    color: COLORS.textPrimary,
+    color: COLORS.white,
     textAlign: "center",
-    lineHeight: 34,
+    lineHeight: 32,
     letterSpacing: -0.3,
   },
-  headerSubtitle: {
-    fontSize: 15,
-    color: COLORS.textSecondary,
+  headerName: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.6)",
     textAlign: "center",
     marginTop: 8,
     lineHeight: 20,
   },
 
-  // Scroll
+  // ---- Body ----
+  body: {
+    flex: 1,
+  },
   scrollContainer: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 4,
-    paddingBottom: 20,
+    paddingTop: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
   },
 
-  // Action Card
+  // ---- Action Card ----
   actionCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 14,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 12,
-    borderLeftWidth: 3,
-    borderLeftColor: COLORS.teal,
     borderWidth: 1,
-    borderColor: COLORS.cardBorder,
+    borderColor: "rgba(0,0,0,0.04)",
+    ...Platform.select({
+      ios: {
+        shadowColor: COLORS.cardShadow,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 1,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   actionCardUrgent: {
-    backgroundColor: COLORS.urgentBg,
-    borderColor: "rgba(232,168,66,0.3)",
+    borderColor: COLORS.urgentBorder,
+    borderWidth: 1.5,
+    backgroundColor: "#FFFDF7",
   },
   actionCardPrimary: {
-    backgroundColor: COLORS.primaryBg,
-    borderColor: "rgba(0,198,174,0.25)",
+    borderColor: COLORS.primaryBorder,
+    borderWidth: 1.5,
+    backgroundColor: "#F7FFFE",
   },
+
+  // ---- Icon ----
   iconContainer: {
     width: 48,
     height: 48,
-    borderRadius: 12,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 14,
   },
+
+  // ---- Text ----
   actionTextContainer: {
     flex: 1,
   },
   actionTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 3,
+    marginBottom: 4,
   },
   actionTitle: {
     fontSize: 16,
-    fontWeight: "600",
-    color: COLORS.textPrimary,
+    fontWeight: "700",
+    color: COLORS.textDark,
     letterSpacing: -0.1,
+    flexShrink: 1,
   },
   actionTitleUrgent: {
-    color: COLORS.gold,
+    color: "#B07818",
   },
   actionTitlePrimary: {
-    color: COLORS.teal,
+    color: "#009B89",
   },
   actionSubtitle: {
     fontSize: 13,
@@ -600,60 +644,73 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
 
-  // Badges
+  // ---- Badges ----
   urgentBadge: {
-    backgroundColor: "rgba(232,168,66,0.2)",
+    backgroundColor: COLORS.goldLight,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 10,
     marginLeft: 8,
   },
   urgentBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "800",
     color: COLORS.gold,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   primaryBadge: {
-    backgroundColor: "rgba(0,198,174,0.2)",
+    backgroundColor: COLORS.tealLight,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 10,
     marginLeft: 8,
   },
   primaryBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "800",
     color: COLORS.teal,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
 
-  // Bottom
+  // ---- Bottom ----
   bottomSpacer: {
-    height: 80,
+    height: 16,
   },
   closeContainer: {
     alignItems: "center",
-    paddingBottom: 24,
+    paddingBottom: Platform.OS === "android" ? 24 : 16,
     paddingTop: 8,
+    backgroundColor: COLORS.bg,
   },
   closeButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "rgba(255,255,255,0.1)",
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: COLORS.white,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
+    borderColor: "rgba(0,0,0,0.08)",
     alignItems: "center",
     justifyContent: "center",
+    ...Platform.select({
+      ios: {
+        shadowColor: "rgba(0,0,0,0.1)",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   closeLabel: {
     fontSize: 12,
-    color: COLORS.textSecondary,
+    color: COLORS.textMuted,
     marginTop: 6,
-    letterSpacing: 0.5,
+    fontWeight: "500",
+    letterSpacing: 0.3,
   },
 });
 

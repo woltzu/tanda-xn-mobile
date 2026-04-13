@@ -165,6 +165,14 @@ import PostToCommunityScreen from "./screens/PostToCommunityScreen";
 // New Tab Screens (Navigation Restructure)
 import ActionScreen from "./screens/ActionScreen";
 import CommunityTabScreen from "./screens/CommunityTabScreen";
+// Trip Circle Screens (8 screens across 3 flows)
+import ProviderDiscoveryScreen from "./screens/ProviderDiscoveryScreen";
+import ProviderProfileSetupScreen from "./screens/ProviderProfileSetupScreen";
+import ProviderVerificationScreen from "./screens/ProviderVerificationScreen";
+import CreateTripListingScreen from "./screens/CreateTripListingScreen";
+import ProviderTripDashboardScreen from "./screens/ProviderTripDashboardScreen";
+import TripDetailScreen from "./screens/TripDetailScreen";
+import MemberTripDashboardScreen from "./screens/MemberTripDashboardScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -344,6 +352,14 @@ export type RootStackParamList = {
   OwnerDashboard: { storeId: string };
   MarketInsight: { city?: string; category?: string };
   RequestProvider: undefined;
+  // Trip Circle Flow
+  ProviderDiscovery: undefined;
+  ProviderProfileSetup: undefined;
+  ProviderVerification: undefined;
+  CreateTripListing: undefined;
+  ProviderTripDashboard: undefined;
+  TripDetail: { tripId: string };
+  MemberTripDashboard: { tripId: string };
   // Feature Screens (AI Engines + Circle Management)
   StressScoreDashboard: undefined;
   MoodInsights: undefined;
@@ -440,6 +456,14 @@ function HomeStackScreen() {
       <HomeStack.Screen name="BookService" component={BookServiceScreen} />
       <HomeStack.Screen name="OwnerDashboard" component={OwnerDashboardScreen} />
       <HomeStack.Screen name="MarketInsight" component={MarketInsightScreen} />
+      {/* Trip Circle Screens */}
+      <HomeStack.Screen name="ProviderDiscovery" component={ProviderDiscoveryScreen} />
+      <HomeStack.Screen name="ProviderProfileSetup" component={ProviderProfileSetupScreen} />
+      <HomeStack.Screen name="ProviderVerification" component={ProviderVerificationScreen} />
+      <HomeStack.Screen name="CreateTripListing" component={CreateTripListingScreen} />
+      <HomeStack.Screen name="ProviderTripDashboard" component={ProviderTripDashboardScreen} />
+      <HomeStack.Screen name="TripDetail" component={TripDetailScreen} />
+      <HomeStack.Screen name="MemberTripDashboard" component={MemberTripDashboardScreen} />
       {/* AI / Financial Insight Screens */}
       <HomeStack.Screen name="StressScoreDashboard" component={StressScoreDashboardScreen} />
       <HomeStack.Screen name="MoodInsights" component={MoodInsightsScreen} />
@@ -538,6 +562,14 @@ function MarketStackScreen() {
       <MarketStack.Screen name="BookService" component={BookServiceScreen} />
       <MarketStack.Screen name="OwnerDashboard" component={OwnerDashboardScreen} />
       <MarketStack.Screen name="MarketInsight" component={MarketInsightScreen} />
+      {/* Trip Circle Screens */}
+      <MarketStack.Screen name="ProviderDiscovery" component={ProviderDiscoveryScreen} />
+      <MarketStack.Screen name="ProviderProfileSetup" component={ProviderProfileSetupScreen} />
+      <MarketStack.Screen name="ProviderVerification" component={ProviderVerificationScreen} />
+      <MarketStack.Screen name="CreateTripListing" component={CreateTripListingScreen} />
+      <MarketStack.Screen name="ProviderTripDashboard" component={ProviderTripDashboardScreen} />
+      <MarketStack.Screen name="TripDetail" component={TripDetailScreen} />
+      <MarketStack.Screen name="MemberTripDashboard" component={MemberTripDashboardScreen} />
     </MarketStack.Navigator>
   );
 }

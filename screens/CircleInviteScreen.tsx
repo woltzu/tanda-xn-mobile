@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   SafeAreaView,
+  ScrollView,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,10 +17,53 @@ import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
 import { useOnboarding, InviteData } from "../context/OnboardingContext";
 import { useCircles } from "../context/CirclesContext";
-import { colors, radius, typography } from "../theme/tokens";
+import { colors, radius, typography, spacing } from "../theme/tokens";
 
 type CircleInviteNavigationProp = StackNavigationProp<RootStackParamList, "CircleInvite">;
 type CircleInviteRouteProp = RouteProp<RootStackParamList, "CircleInvite">;
+
+// Helper to format a date string for display
+const formatDate = (dateStr?: string): string => {
+  if (!dateStr) return "TBD";
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch {
+    return dateStr;
+  }
+};
+
+// Helper to compute an approximate next contribution date
+const getNextContributionLabel = (frequency?: string): string => {
+  const now = new Date();
+  switch (frequency) {
+    case "daily":
+      now.setDate(now.getDate() + 1);
+      break;
+    case "weekly":
+      now.setDate(now.getDate() + 7);
+      break;
+    case "biweekly":
+      now.setDate(now.getDate() + 14);
+      break;
+    case "monthly":
+    default:
+      now.setMonth(now.getMonth() + 1);
+      break;
+  }
+  return now.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+};
+
+const frequencyLabel = (f?: string): string => {
+  switch (f) {
+    case "daily": return "day";
+    case "weekly": return "week";
+    case "biweekly": return "2 weeks";
+    case "monthly": return "month";
+    case "one-time": return "one-time";
+    default: return "month";
+  }
+};
 
 export default function CircleInviteScreen() {
   const navigation = useNavigation<CircleInviteNavigationProp>();
@@ -36,7 +81,7 @@ export default function CircleInviteScreen() {
     type: "circle",
     id: circleId,
     name: (route.params as any)?.name || "Savings Circle",
-    emoji: (route.params as any)?.emoji || "💰",
+    emoji: (route.params as any)?.emoji || "\uD83D\uDCB0",
     invitedBy: (route.params as any)?.inviter || "",
     inviterName: (route.params as any)?.inviterName || "A friend",
     contribution: (route.params as any)?.contribution,
@@ -59,7 +104,6 @@ export default function CircleInviteScreen() {
     setError(null);
 
     try {
-      // Join the circle
       await joinCircle(inviteData.id);
 
       // Mark onboarding step complete
@@ -89,6 +133,7 @@ export default function CircleInviteScreen() {
     navigation.navigate("Signup" as any);
   };
 
+  // ---- Invalid invite state ----
   if (!inviteData) {
     return (
       <SafeAreaView style={styles.container}>
@@ -99,104 +144,127 @@ export default function CircleInviteScreen() {
             This invite link is invalid or has expired.
           </Text>
           <TouchableOpacity
-            style={styles.backButton}
+            style={styles.errorBackButton}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.backButtonText}>Go Back</Text>
+            <Text style={styles.errorBackButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
+  // Derived display values
+  const memberCount = inviteData.members;
+  const contribution = inviteData.contribution;
+  const freq = inviteData.frequency || "monthly";
+  const position = memberCount ? memberCount + 1 : undefined;
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header Gradient */}
+      {/* ===== HEADER ===== */}
       <LinearGradient
         colors={[colors.primaryNavy, "#1A3A5A"]}
         style={styles.header}
       >
-        <TouchableOpacity
-          style={styles.closeButton}
-          onPress={handleDecline}
-        >
-          <Ionicons name="close" size={24} color={colors.textWhite} />
-        </TouchableOpacity>
-
-        {/* Circle Icon */}
-        <View style={styles.circleIconContainer}>
-          <LinearGradient
-            colors={[colors.accentTeal, "#00A896"]}
-            style={styles.circleIconGradient}
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity
+            style={styles.backArrow}
+            onPress={handleDecline}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Text style={styles.circleEmoji}>{inviteData.emoji}</Text>
-          </LinearGradient>
-        </View>
-
-        <Text style={styles.inviteLabel}>You've been invited to join</Text>
-        <Text style={styles.circleName}>{inviteData.name}</Text>
-
-        <View style={styles.inviterRow}>
-          <View style={styles.inviterAvatar}>
-            <Text style={styles.inviterInitial}>
-              {inviteData.inviterName.charAt(0)}
-            </Text>
-          </View>
-          <Text style={styles.inviterText}>
-            Invited by <Text style={styles.inviterName}>{inviteData.inviterName}</Text>
-          </Text>
+            <Ionicons name="arrow-back" size={22} color={colors.textWhite} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Circle Invitation</Text>
+          <View style={{ width: 40 }} />
         </View>
       </LinearGradient>
 
-      {/* Circle Details */}
-      <View style={styles.content}>
-        <View style={styles.detailsCard}>
-          <Text style={styles.detailsTitle}>Circle Details</Text>
+      <ScrollView
+        style={styles.scrollArea}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ===== INVITE CARD ===== */}
+        <View style={styles.inviteCard}>
+          {/* Circle Emoji */}
+          <View style={styles.emojiContainer}>
+            <Text style={styles.circleEmoji}>{inviteData.emoji}</Text>
+          </View>
 
-          {inviteData.contribution && (
+          {/* Circle Name */}
+          <Text style={styles.circleName}>{inviteData.name}</Text>
+
+          {/* Invited By */}
+          <View style={styles.inviterRow}>
+            <View style={styles.inviterAvatar}>
+              <Text style={styles.inviterInitial}>
+                {inviteData.inviterName.charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <Text style={styles.inviterText}>
+              Invited by{" "}
+              <Text style={styles.inviterNameText}>{inviteData.inviterName}</Text>
+            </Text>
+          </View>
+
+          {/* Divider */}
+          <View style={styles.divider} />
+
+          {/* ===== CIRCLE DETAILS ===== */}
+          {memberCount !== undefined && (
             <View style={styles.detailRow}>
-              <View style={styles.detailIcon}>
-                <Ionicons name="cash-outline" size={18} color={colors.accentTeal} />
+              <View style={styles.detailIconBox}>
+                <Ionicons name="people-outline" size={18} color={colors.accentTeal} />
               </View>
-              <View style={styles.detailInfo}>
-                <Text style={styles.detailLabel}>Contribution Amount</Text>
-                <Text style={styles.detailValue}>
-                  ${inviteData.contribution.toLocaleString()} / {inviteData.frequency}
-                </Text>
-              </View>
+              <Text style={styles.detailText}>{memberCount} members</Text>
             </View>
           )}
 
-          {inviteData.members && (
+          {contribution !== undefined && (
             <View style={styles.detailRow}>
-              <View style={styles.detailIcon}>
-                <Ionicons name="people-outline" size={18} color={colors.accentTeal} />
+              <View style={styles.detailIconBox}>
+                <Ionicons name="cash-outline" size={18} color={colors.accentTeal} />
               </View>
-              <View style={styles.detailInfo}>
-                <Text style={styles.detailLabel}>Members</Text>
-                <Text style={styles.detailValue}>
-                  {inviteData.members} members
-                </Text>
-              </View>
+              <Text style={styles.detailText}>
+                ${contribution.toLocaleString()} / {frequencyLabel(freq)}
+              </Text>
             </View>
           )}
 
           <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
-              <Ionicons name="sync-outline" size={18} color={colors.accentTeal} />
+            <View style={styles.detailIconBox}>
+              <Ionicons name="calendar-outline" size={18} color={colors.accentTeal} />
             </View>
-            <View style={styles.detailInfo}>
-              <Text style={styles.detailLabel}>How it works</Text>
-              <Text style={styles.detailValue}>
-                Members contribute {inviteData.frequency} and take turns receiving the pool
-              </Text>
-            </View>
+            <Text style={styles.detailText}>Starts soon</Text>
           </View>
+
+          {position !== undefined && (
+            <View style={styles.detailRow}>
+              <View style={styles.detailIconBox}>
+                <Ionicons name="locate-outline" size={18} color={colors.accentTeal} />
+              </View>
+              <Text style={styles.detailText}>Your position: #{position}</Text>
+            </View>
+          )}
         </View>
 
-        {/* Benefits */}
+        {/* ===== CONTRIBUTION SUMMARY ===== */}
+        {contribution !== undefined && (
+          <View style={styles.commitmentBox}>
+            <Text style={styles.commitmentTitle}>Your commitment</Text>
+            <Text style={styles.commitmentAmount}>
+              ${contribution.toLocaleString()} per {frequencyLabel(freq)}
+            </Text>
+            <Text style={styles.commitmentNext}>
+              Next contribution: {getNextContributionLabel(freq)}
+            </Text>
+          </View>
+        )}
+
+        {/* ===== WHY JOIN (Trust + Benefits) ===== */}
         <View style={styles.benefitsCard}>
-          <Text style={styles.benefitsTitle}>Why Join?</Text>
+          <Text style={styles.benefitsTitle}>Why join?</Text>
           <View style={styles.benefitRow}>
             <Ionicons name="shield-checkmark" size={16} color={colors.successText} />
             <Text style={styles.benefitText}>Save together with trusted members</Text>
@@ -211,15 +279,45 @@ export default function CircleInviteScreen() {
           </View>
         </View>
 
-        {/* Error Message */}
+        {/* ===== TRUST INDICATORS ===== */}
+        <View style={styles.trustSection}>
+          <View style={styles.trustRow}>
+            <Ionicons name="heart-outline" size={16} color={colors.accentTeal} />
+            <Text style={styles.trustText}>
+              {inviteData.inviterName} vouched for this circle
+            </Text>
+          </View>
+          {memberCount && memberCount > 1 && (
+            <View style={styles.trustRow}>
+              <View style={styles.faceStack}>
+                {Array.from({ length: Math.min(memberCount, 3) }).map((_, i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.faceCircle,
+                      { marginLeft: i > 0 ? -8 : 0, zIndex: 3 - i },
+                    ]}
+                  >
+                    <Ionicons name="person" size={12} color={colors.textWhite} />
+                  </View>
+                ))}
+              </View>
+              <Text style={styles.trustText}>
+                {memberCount} member{memberCount > 1 ? "s" : ""} already in this circle
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* ===== ERROR BANNER ===== */}
         {error && (
           <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={18} color="#DC2626" />
+            <Ionicons name="alert-circle" size={18} color={colors.errorText} />
             <Text style={styles.errorBannerText}>{error}</Text>
           </View>
         )}
 
-        {/* Action Buttons */}
+        {/* ===== ACTION BUTTONS ===== */}
         <View style={styles.actions}>
           {isAuthenticated ? (
             <>
@@ -230,7 +328,7 @@ export default function CircleInviteScreen() {
                 activeOpacity={0.8}
               >
                 {isJoining ? (
-                  <ActivityIndicator color={colors.textWhite} />
+                  <ActivityIndicator color={colors.textWhite} size="small" />
                 ) : (
                   <>
                     <Ionicons name="checkmark-circle" size={20} color={colors.textWhite} />
@@ -243,7 +341,7 @@ export default function CircleInviteScreen() {
                 style={styles.declineButton}
                 onPress={handleDecline}
               >
-                <Text style={styles.declineButtonText}>Not Now</Text>
+                <Text style={styles.declineButtonText}>Decline</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -265,34 +363,46 @@ export default function CircleInviteScreen() {
                 }}
               >
                 <Text style={styles.loginLinkText}>
-                  Already have an account? <Text style={styles.loginLinkBold}>Log In</Text>
+                  Already have an account?{" "}
+                  <Text style={styles.loginLinkBold}>Log In</Text>
                 </Text>
               </TouchableOpacity>
             </>
           )}
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  // ---- Layout ----
   container: {
     flex: 1,
     backgroundColor: colors.screenBg,
   },
-  header: {
-    paddingTop: 20,
-    paddingBottom: 40,
-    paddingHorizontal: 20,
-    alignItems: "center",
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
+  scrollArea: {
+    flex: 1,
   },
-  closeButton: {
-    position: "absolute",
-    top: 16,
-    right: 16,
+  scrollContent: {
+    padding: spacing.xl,
+    paddingBottom: 40,
+  },
+
+  // ---- Header ----
+  header: {
+    paddingTop: 16,
+    paddingBottom: 20,
+    paddingHorizontal: spacing.xl,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  backArrow: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -300,47 +410,59 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  circleIconContainer: {
-    marginTop: 20,
-    marginBottom: 16,
+  headerTitle: {
+    fontSize: typography.sectionHeader,
+    fontWeight: typography.semibold,
+    color: colors.textWhite,
   },
-  circleIconGradient: {
+
+  // ---- Invite Card ----
+  inviteCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: radius.card,
+    padding: spacing.xl,
+    alignItems: "center",
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+
+    // subtle shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  emojiContainer: {
     width: 80,
     height: 80,
     borderRadius: 20,
+    backgroundColor: colors.tealTintBg,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: colors.accentTeal,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    marginBottom: spacing.md,
   },
   circleEmoji: {
     fontSize: 40,
   },
-  inviteLabel: {
-    fontSize: typography.label,
-    color: "rgba(255,255,255,0.7)",
-    marginBottom: 8,
-  },
   circleName: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: typography.bold,
-    color: colors.textWhite,
+    color: colors.primaryNavy,
     textAlign: "center",
-    marginBottom: 16,
+    marginBottom: spacing.md,
   },
   inviterRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    marginBottom: spacing.lg,
   },
   inviterAvatar: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: colors.primaryNavy,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -351,36 +473,27 @@ const styles = StyleSheet.create({
   },
   inviterText: {
     fontSize: typography.body,
-    color: "rgba(255,255,255,0.8)",
+    color: colors.textSecondary,
   },
-  inviterName: {
-    fontWeight: typography.semibold,
-    color: colors.textWhite,
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  detailsCard: {
-    backgroundColor: colors.cardBg,
-    borderRadius: radius.card,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  detailsTitle: {
-    fontSize: typography.bodyLarge,
+  inviterNameText: {
     fontWeight: typography.semibold,
     color: colors.primaryNavy,
-    marginBottom: 16,
   },
+  divider: {
+    width: "100%",
+    height: 1,
+    backgroundColor: colors.border,
+    marginBottom: spacing.lg,
+  },
+
+  // ---- Detail rows (inside card) ----
   detailRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
+    width: "100%",
     marginBottom: 14,
   },
-  detailIcon: {
+  detailIconBox: {
     width: 36,
     height: 36,
     borderRadius: 10,
@@ -389,23 +502,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 12,
   },
-  detailInfo: {
-    flex: 1,
-  },
-  detailLabel: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-    marginBottom: 2,
-  },
-  detailValue: {
+  detailText: {
     fontSize: typography.body,
     color: colors.primaryNavy,
+    flex: 1,
   },
+
+  // ---- Contribution Summary ----
+  commitmentBox: {
+    backgroundColor: colors.tealTintBg,
+    borderRadius: radius.card,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  commitmentTitle: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
+    color: colors.textSecondary,
+    marginBottom: 4,
+  },
+  commitmentAmount: {
+    fontSize: typography.sectionHeader,
+    fontWeight: typography.bold,
+    color: colors.primaryNavy,
+    marginBottom: 4,
+  },
+  commitmentNext: {
+    fontSize: typography.bodySmall,
+    color: colors.textSecondary,
+  },
+
+  // ---- Benefits ----
   benefitsCard: {
     backgroundColor: colors.successBg,
     borderRadius: radius.card,
-    padding: 16,
-    marginBottom: 16,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
     borderWidth: 1,
     borderColor: colors.successText,
   },
@@ -424,23 +556,58 @@ const styles = StyleSheet.create({
   benefitText: {
     fontSize: typography.bodySmall,
     color: colors.successLabel,
+    flex: 1,
   },
+
+  // ---- Trust Indicators ----
+  trustSection: {
+    marginBottom: spacing.lg,
+    gap: 10,
+  },
+  trustRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  trustText: {
+    fontSize: typography.bodySmall,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  faceStack: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  faceCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.accentTeal,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.screenBg,
+  },
+
+  // ---- Error Banner ----
   errorBanner: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FEE2E2",
+    backgroundColor: colors.errorBg,
     borderRadius: radius.medium,
     padding: 12,
-    marginBottom: 16,
+    marginBottom: spacing.lg,
     gap: 8,
   },
   errorBannerText: {
     flex: 1,
     fontSize: typography.bodySmall,
-    color: "#DC2626",
+    color: colors.errorText,
   },
+
+  // ---- Action Buttons ----
   actions: {
-    marginTop: "auto",
+    marginTop: 4,
   },
   joinButton: {
     flexDirection: "row",
@@ -486,7 +653,7 @@ const styles = StyleSheet.create({
     color: colors.accentTeal,
   },
 
-  // Error state
+  // ---- Error / Invalid State ----
   errorContainer: {
     flex: 1,
     alignItems: "center",
@@ -506,13 +673,13 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 24,
   },
-  backButton: {
+  errorBackButton: {
     paddingVertical: 12,
     paddingHorizontal: 24,
     backgroundColor: colors.accentTeal,
     borderRadius: radius.button,
   },
-  backButtonText: {
+  errorBackButtonText: {
     fontSize: typography.body,
     fontWeight: typography.semibold,
     color: colors.textWhite,
