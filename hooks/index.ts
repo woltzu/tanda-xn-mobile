@@ -1009,3 +1009,19 @@ export {
   type BucketName,
   type MediaRecord,
 } from './useMediaUpload';
+
+// Trip Organizer Hooks
+export {
+  useOrganizerTrips,
+  useTripDashboard,
+  useCreateTripWizard,
+  useItineraryBuilder,
+  useParticipantManager,
+  useParticipantDetail,
+  useTripMessaging,
+  useTripVendors,
+  usePublicTrip,
+  useMyTripStatus,
+  useDocumentSubmission,
+  useTripPayment,
+} from './useTripOrganizer';

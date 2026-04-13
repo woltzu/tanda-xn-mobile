@@ -179,3 +179,7 @@ export { TripCircleEngine } from './TripCircleEngine';
 // Media Upload Service
 export * from './MediaUploadService';
 export { MediaUploadService } from './MediaUploadService';
+
+// Trip Organizer Engine
+export * from './TripOrganizerEngine';
+export { TripOrganizerEngine } from './TripOrganizerEngine';

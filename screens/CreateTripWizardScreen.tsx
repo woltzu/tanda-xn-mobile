@@ -1,0 +1,839 @@
+import React, { useState, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  SafeAreaView,
+  StatusBar,
+  KeyboardAvoidingView,
+  Platform,
+  Switch,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { colors, radius, typography, spacing } from '../theme/tokens';
+import { useCreateTripWizard } from '../hooks/useTripOrganizer';
+
+// --- Design tokens ---
+const NAVY = '#0A2342';
+const TEAL = '#00C6AE';
+const GOLD = '#E8A842';
+const BG = '#F5F7FA';
+
+const TOTAL_STEPS = 6;
+
+const STEP_NAMES = [
+  'Basics',
+  'Payment',
+  'Requirements',
+  'Itinerary',
+  'Communication',
+  'Review',
+];
+
+// --- Types ---
+interface TripFormData {
+  trip_name: string;
+  destination: string;
+  start_date: string;
+  end_date: string;
+  max_participants: string;
+  tagline: string;
+  description: string;
+  whats_included: string;
+  whats_excluded: string;
+  price_per_person: string;
+  payment_type: 'lump_sum' | 'installments';
+  deposit_required: boolean;
+  deposit_amount: string;
+  refund_policy: string;
+  requirements: RequirementItem[];
+  custom_requirements: string[];
+  messaging_mode: boolean;
+  auto_reminders: boolean;
+  notify_payment: boolean;
+  notify_docs: boolean;
+  notify_itinerary: boolean;
+}
+
+interface RequirementItem {
+  id: string;
+  label: string;
+  enabled: boolean;
+}
+
+const DEFAULT_REQUIREMENTS: RequirementItem[] = [
+  { id: 'passport', label: 'Passport', enabled: true },
+  { id: 'emergency_contact', label: 'Emergency Contact', enabled: true },
+  { id: 'waiver', label: 'Waiver', enabled: false },
+  { id: 'dietary', label: 'Dietary Preferences', enabled: false },
+  { id: 'tshirt', label: 'T-Shirt Size', enabled: false },
+];
+
+const REFUND_POLICIES = [
+  'Full refund up to 30 days before',
+  'Full refund up to 14 days before',
+  '50% refund up to 7 days before',
+  'No refunds',
+  'Custom',
+];
+
+// --- Sub-components ---
+
+const StepIndicator: React.FC<{ currentStep: number }> = ({ currentStep }) => (
+  <View style={styles.stepIndicatorRow}>
+    {Array.from({ length: TOTAL_STEPS }).map((_, i) => {
+      let bg = '#D1D5DB';
+      if (i < currentStep) bg = TEAL;
+      if (i === currentStep) bg = GOLD;
+      return (
+        <View key={i} style={[styles.stepDot, { backgroundColor: bg }]} />
+      );
+    })}
+  </View>
+);
+
+const SectionLabel: React.FC<{ label: string }> = ({ label }) => (
+  <Text style={styles.sectionLabel}>{label}</Text>
+);
+
+const FormInput: React.FC<{
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+  multiline?: boolean;
+  keyboardType?: 'default' | 'numeric';
+}> = ({ label, value, onChangeText, placeholder, multiline, keyboardType }) => (
+  <View style={styles.inputGroup}>
+    <Text style={styles.inputLabel}>{label}</Text>
+    <TextInput
+      style={[styles.textInput, multiline && styles.textInputMultiline]}
+      value={value}
+      onChangeText={onChangeText}
+      placeholder={placeholder ?? ''}
+      placeholderTextColor="#9CA3AF"
+      multiline={multiline}
+      keyboardType={keyboardType}
+    />
+  </View>
+);
+
+const ToggleRow: React.FC<{
+  label: string;
+  value: boolean;
+  onValueChange: (val: boolean) => void;
+}> = ({ label, value, onValueChange }) => (
+  <View style={styles.toggleRow}>
+    <Text style={styles.toggleLabel}>{label}</Text>
+    <Switch
+      value={value}
+      onValueChange={onValueChange}
+      trackColor={{ false: '#D1D5DB', true: TEAL }}
+      thumbColor="#FFFFFF"
+    />
+  </View>
+);
+
+// --- Steps ---
+
+const StepBasics: React.FC<{
+  data: TripFormData;
+  update: (partial: Partial<TripFormData>) => void;
+}> = ({ data, update }) => (
+  <View>
+    <SectionLabel label="Trip Details" />
+    <FormInput label="Trip Name" value={data.trip_name} onChangeText={(v) => update({ trip_name: v })} placeholder="e.g. Summer Return — Abidjan 2026" />
+    <FormInput label="Destination" value={data.destination} onChangeText={(v) => update({ destination: v })} placeholder="e.g. Abidjan, Ivory Coast" />
+    <View style={styles.row}>
+      <View style={{ flex: 1, marginRight: spacing.sm }}>
+        <FormInput label="Start Date" value={data.start_date} onChangeText={(v) => update({ start_date: v })} placeholder="YYYY-MM-DD" />
+      </View>
+      <View style={{ flex: 1, marginLeft: spacing.sm }}>
+        <FormInput label="End Date" value={data.end_date} onChangeText={(v) => update({ end_date: v })} placeholder="YYYY-MM-DD" />
+      </View>
+    </View>
+    <FormInput label="Max Participants" value={data.max_participants} onChangeText={(v) => update({ max_participants: v })} placeholder="25" keyboardType="numeric" />
+    <FormInput label="Tagline" value={data.tagline} onChangeText={(v) => update({ tagline: v })} placeholder="A short catchy tagline" />
+    <FormInput label="Description" value={data.description} onChangeText={(v) => update({ description: v })} placeholder="Tell people about this trip..." multiline />
+    <FormInput label="What's Included" value={data.whats_included} onChangeText={(v) => update({ whats_included: v })} placeholder="Flights, hotels, meals..." multiline />
+    <FormInput label="What's Excluded" value={data.whats_excluded} onChangeText={(v) => update({ whats_excluded: v })} placeholder="Visa fees, personal expenses..." multiline />
+  </View>
+);
+
+const StepPayment: React.FC<{
+  data: TripFormData;
+  update: (partial: Partial<TripFormData>) => void;
+}> = ({ data, update }) => {
+  const [showPolicyPicker, setShowPolicyPicker] = useState(false);
+
+  return (
+    <View>
+      <SectionLabel label="Pricing" />
+      <FormInput label="Price Per Person ($)" value={data.price_per_person} onChangeText={(v) => update({ price_per_person: v })} placeholder="1800" keyboardType="numeric" />
+
+      <SectionLabel label="Payment Type" />
+      <View style={styles.toggleButtonRow}>
+        <TouchableOpacity
+          style={[styles.toggleButton, data.payment_type === 'lump_sum' && styles.toggleButtonActive]}
+          onPress={() => update({ payment_type: 'lump_sum' })}
+        >
+          <Text style={[styles.toggleButtonText, data.payment_type === 'lump_sum' && styles.toggleButtonTextActive]}>Lump Sum</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.toggleButton, data.payment_type === 'installments' && styles.toggleButtonActive]}
+          onPress={() => update({ payment_type: 'installments' })}
+        >
+          <Text style={[styles.toggleButtonText, data.payment_type === 'installments' && styles.toggleButtonTextActive]}>Installments</Text>
+        </TouchableOpacity>
+      </View>
+
+      <ToggleRow label="Deposit Required" value={data.deposit_required} onValueChange={(v) => update({ deposit_required: v })} />
+      {data.deposit_required && (
+        <FormInput label="Deposit Amount ($)" value={data.deposit_amount} onChangeText={(v) => update({ deposit_amount: v })} placeholder="300" keyboardType="numeric" />
+      )}
+
+      <SectionLabel label="Refund Policy" />
+      <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowPolicyPicker(!showPolicyPicker)}>
+        <Text style={[styles.dropdownBtnText, !data.refund_policy && { color: '#9CA3AF' }]}>
+          {data.refund_policy || 'Select refund policy'}
+        </Text>
+        <Ionicons name={showPolicyPicker ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textSecondary} />
+      </TouchableOpacity>
+      {showPolicyPicker && (
+        <View style={styles.dropdownList}>
+          {REFUND_POLICIES.map((policy) => (
+            <TouchableOpacity
+              key={policy}
+              style={styles.dropdownItem}
+              onPress={() => { update({ refund_policy: policy }); setShowPolicyPicker(false); }}
+            >
+              <Text style={[styles.dropdownItemText, data.refund_policy === policy && { color: TEAL, fontWeight: typography.semibold }]}>
+                {policy}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+};
+
+const StepRequirements: React.FC<{
+  data: TripFormData;
+  update: (partial: Partial<TripFormData>) => void;
+}> = ({ data, update }) => {
+  const [newField, setNewField] = useState('');
+
+  const toggleRequirement = (id: string) => {
+    const updated = data.requirements.map((r) =>
+      r.id === id ? { ...r, enabled: !r.enabled } : r
+    );
+    update({ requirements: updated });
+  };
+
+  const addCustom = () => {
+    if (!newField.trim()) return;
+    update({
+      custom_requirements: [...data.custom_requirements, newField.trim()],
+    });
+    setNewField('');
+  };
+
+  return (
+    <View>
+      <SectionLabel label="Required Documents & Info" />
+      {data.requirements.map((req) => (
+        <TouchableOpacity key={req.id} style={styles.checkRow} onPress={() => toggleRequirement(req.id)}>
+          <Ionicons
+            name={req.enabled ? 'checkbox' : 'square-outline'}
+            size={24}
+            color={req.enabled ? TEAL : '#D1D5DB'}
+          />
+          <Text style={styles.checkLabel}>{req.label}</Text>
+        </TouchableOpacity>
+      ))}
+
+      {data.custom_requirements.length > 0 && (
+        <>
+          <SectionLabel label="Custom Fields" />
+          {data.custom_requirements.map((field, idx) => (
+            <View key={idx} style={styles.checkRow}>
+              <Ionicons name="checkbox" size={24} color={TEAL} />
+              <Text style={styles.checkLabel}>{field}</Text>
+            </View>
+          ))}
+        </>
+      )}
+
+      <View style={styles.addCustomRow}>
+        <TextInput
+          style={styles.addCustomInput}
+          value={newField}
+          onChangeText={setNewField}
+          placeholder="Add custom field..."
+          placeholderTextColor="#9CA3AF"
+        />
+        <TouchableOpacity style={styles.addCustomBtn} onPress={addCustom}>
+          <Ionicons name="add" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
+
+const StepItinerary: React.FC<{ tripId?: string }> = ({ tripId }) => {
+  const navigation = useNavigation<any>();
+
+  return (
+    <View style={styles.centeredStep}>
+      <Ionicons name="map-outline" size={64} color={TEAL} />
+      <Text style={styles.centeredTitle}>Build Your Itinerary</Text>
+      <Text style={styles.centeredSubtitle}>
+        Create a day-by-day plan with activities, locations, and times for your participants.
+      </Text>
+      <TouchableOpacity
+        style={styles.itineraryBtn}
+        activeOpacity={0.7}
+        onPress={() => navigation.navigate('ItineraryBuilder', { tripId: tripId ?? 'new' })}
+      >
+        <Ionicons name="construct-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+        <Text style={styles.itineraryBtnText}>Continue to Itinerary Builder</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+const StepCommunication: React.FC<{
+  data: TripFormData;
+  update: (partial: Partial<TripFormData>) => void;
+}> = ({ data, update }) => (
+  <View>
+    <SectionLabel label="Messaging" />
+    <ToggleRow label="Enable group messaging" value={data.messaging_mode} onValueChange={(v) => update({ messaging_mode: v })} />
+
+    <SectionLabel label="Reminders" />
+    <ToggleRow label="Auto reminders for payments & docs" value={data.auto_reminders} onValueChange={(v) => update({ auto_reminders: v })} />
+
+    <SectionLabel label="Notifications" />
+    <TouchableOpacity style={styles.checkRow} onPress={() => update({ notify_payment: !data.notify_payment })}>
+      <Ionicons name={data.notify_payment ? 'checkbox' : 'square-outline'} size={24} color={data.notify_payment ? TEAL : '#D1D5DB'} />
+      <Text style={styles.checkLabel}>Payment received</Text>
+    </TouchableOpacity>
+    <TouchableOpacity style={styles.checkRow} onPress={() => update({ notify_docs: !data.notify_docs })}>
+      <Ionicons name={data.notify_docs ? 'checkbox' : 'square-outline'} size={24} color={data.notify_docs ? TEAL : '#D1D5DB'} />
+      <Text style={styles.checkLabel}>Document uploaded</Text>
+    </TouchableOpacity>
+    <TouchableOpacity style={styles.checkRow} onPress={() => update({ notify_itinerary: !data.notify_itinerary })}>
+      <Ionicons name={data.notify_itinerary ? 'checkbox' : 'square-outline'} size={24} color={data.notify_itinerary ? TEAL : '#D1D5DB'} />
+      <Text style={styles.checkLabel}>Itinerary changes</Text>
+    </TouchableOpacity>
+  </View>
+);
+
+const StepReview: React.FC<{
+  data: TripFormData;
+  onPublish: () => void;
+}> = ({ data, onPublish }) => {
+  const ReviewRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+    <View style={styles.reviewRow}>
+      <Text style={styles.reviewLabel}>{label}</Text>
+      <Text style={styles.reviewValue}>{value || '—'}</Text>
+    </View>
+  );
+
+  return (
+    <View>
+      <SectionLabel label="Trip Summary" />
+      <View style={styles.reviewCard}>
+        <ReviewRow label="Trip Name" value={data.trip_name} />
+        <ReviewRow label="Destination" value={data.destination} />
+        <ReviewRow label="Dates" value={data.start_date && data.end_date ? `${data.start_date} to ${data.end_date}` : ''} />
+        <ReviewRow label="Max Participants" value={data.max_participants} />
+        <ReviewRow label="Tagline" value={data.tagline} />
+      </View>
+
+      <SectionLabel label="Payment" />
+      <View style={styles.reviewCard}>
+        <ReviewRow label="Price Per Person" value={data.price_per_person ? `$${data.price_per_person}` : ''} />
+        <ReviewRow label="Payment Type" value={data.payment_type === 'installments' ? 'Installments' : 'Lump Sum'} />
+        <ReviewRow label="Deposit" value={data.deposit_required ? `$${data.deposit_amount}` : 'Not required'} />
+        <ReviewRow label="Refund Policy" value={data.refund_policy} />
+      </View>
+
+      <SectionLabel label="Requirements" />
+      <View style={styles.reviewCard}>
+        {data.requirements.filter((r) => r.enabled).map((r) => (
+          <Text key={r.id} style={styles.reviewBullet}>• {r.label}</Text>
+        ))}
+        {data.custom_requirements.map((c, i) => (
+          <Text key={i} style={styles.reviewBullet}>• {c}</Text>
+        ))}
+      </View>
+
+      <TouchableOpacity style={styles.publishBtn} activeOpacity={0.7} onPress={onPublish}>
+        <Ionicons name="rocket-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+        <Text style={styles.publishBtnText}>Publish Trip</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// --- Main Screen ---
+
+const CreateTripWizardScreen: React.FC = () => {
+  const navigation = useNavigation<any>();
+  const wizard = useCreateTripWizard();
+  const scrollRef = useRef<ScrollView>(null);
+  const [currentStep, setCurrentStep] = useState(0);
+
+  const [formData, setFormData] = useState<TripFormData>({
+    trip_name: '',
+    destination: '',
+    start_date: '',
+    end_date: '',
+    max_participants: '',
+    tagline: '',
+    description: '',
+    whats_included: '',
+    whats_excluded: '',
+    price_per_person: '',
+    payment_type: 'lump_sum',
+    deposit_required: false,
+    deposit_amount: '',
+    refund_policy: '',
+    requirements: [...DEFAULT_REQUIREMENTS],
+    custom_requirements: [],
+    messaging_mode: true,
+    auto_reminders: true,
+    notify_payment: true,
+    notify_docs: true,
+    notify_itinerary: false,
+  });
+
+  const updateForm = (partial: Partial<TripFormData>) => {
+    setFormData((prev) => ({ ...prev, ...partial }));
+  };
+
+  const goNext = () => {
+    if (currentStep < TOTAL_STEPS - 1) {
+      setCurrentStep((s) => s + 1);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    }
+  };
+
+  const goBack = () => {
+    if (currentStep > 0) {
+      setCurrentStep((s) => s - 1);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    } else {
+      navigation.goBack();
+    }
+  };
+
+  const saveDraft = () => {
+    wizard?.saveDraft?.(formData);
+  };
+
+  const publish = () => {
+    wizard?.publish?.(formData);
+  };
+
+  const renderStep = () => {
+    switch (currentStep) {
+      case 0: return <StepBasics data={formData} update={updateForm} />;
+      case 1: return <StepPayment data={formData} update={updateForm} />;
+      case 2: return <StepRequirements data={formData} update={updateForm} />;
+      case 3: return <StepItinerary tripId={wizard?.tripId} />;
+      case 4: return <StepCommunication data={formData} update={updateForm} />;
+      case 5: return <StepReview data={formData} onPublish={publish} />;
+      default: return null;
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor={BG} />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={goBack} style={styles.headerBtn}>
+          <Ionicons name="arrow-back" size={24} color={NAVY} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>New Trip</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+          <Ionicons name="close" size={24} color={colors.textSecondary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Step Indicator */}
+      <View style={styles.stepSection}>
+        <StepIndicator currentStep={currentStep} />
+        <Text style={styles.stepCounter}>
+          Step {currentStep + 1} of {TOTAL_STEPS} — {STEP_NAMES[currentStep]}
+        </Text>
+      </View>
+
+      {/* Content */}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        <ScrollView
+          ref={scrollRef}
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {renderStep()}
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Footer */}
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.footerBackBtn} onPress={goBack}>
+          <Text style={styles.footerBackBtnText}>{currentStep === 0 ? 'Cancel' : 'Back'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.saveDraftBtn} onPress={saveDraft}>
+          <Text style={styles.saveDraftBtnText}>Save Draft</Text>
+        </TouchableOpacity>
+        {currentStep < TOTAL_STEPS - 1 && (
+          <TouchableOpacity style={styles.nextBtn} activeOpacity={0.7} onPress={goNext}>
+            <Text style={styles.nextBtnText}>Next</Text>
+            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+        )}
+      </View>
+    </SafeAreaView>
+  );
+};
+
+export default CreateTripWizardScreen;
+
+// --- Styles ---
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: BG,
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  headerBtn: {
+    padding: spacing.xs,
+  },
+  headerTitle: {
+    fontSize: typography.sectionHeader,
+    fontWeight: typography.bold,
+    color: NAVY,
+  },
+  stepSection: {
+    backgroundColor: '#FFFFFF',
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  stepIndicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  stepCounter: {
+    marginTop: spacing.sm,
+    fontSize: typography.bodySmall,
+    fontWeight: typography.medium,
+    color: colors.textSecondary,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: spacing.lg,
+    paddingBottom: 40,
+  },
+  sectionLabel: {
+    fontSize: typography.bodyLarge,
+    fontWeight: typography.bold,
+    color: NAVY,
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
+  },
+  inputGroup: {
+    marginBottom: spacing.lg,
+  },
+  inputLabel: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
+    color: NAVY,
+    marginBottom: spacing.xs,
+  },
+  textInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.small,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    fontSize: typography.body,
+    color: NAVY,
+  },
+  textInputMultiline: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  row: {
+    flexDirection: 'row',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.small,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  toggleLabel: {
+    fontSize: typography.body,
+    fontWeight: typography.medium,
+    color: NAVY,
+  },
+  toggleButtonRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.lg,
+  },
+  toggleButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
+  },
+  toggleButtonActive: {
+    backgroundColor: TEAL,
+    borderColor: TEAL,
+  },
+  toggleButtonText: {
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    color: colors.textSecondary,
+  },
+  toggleButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  dropdownBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.small,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 14,
+  },
+  dropdownBtnText: {
+    fontSize: typography.body,
+    color: NAVY,
+  },
+  dropdownList: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: radius.small,
+    borderBottomRightRadius: radius.small,
+  },
+  dropdownItem: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  dropdownItemText: {
+    fontSize: typography.body,
+    color: NAVY,
+  },
+  checkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  checkLabel: {
+    fontSize: typography.body,
+    color: NAVY,
+    marginLeft: spacing.md,
+  },
+  addCustomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  addCustomInput: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.small,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    fontSize: typography.body,
+    color: NAVY,
+    marginRight: spacing.sm,
+  },
+  addCustomBtn: {
+    backgroundColor: TEAL,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centeredStep: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  centeredTitle: {
+    fontSize: typography.sectionHeader,
+    fontWeight: typography.bold,
+    color: NAVY,
+    marginTop: spacing.lg,
+  },
+  centeredSubtitle: {
+    fontSize: typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    lineHeight: 22,
+  },
+  itineraryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: TEAL,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    borderRadius: radius.button,
+    marginTop: spacing.xxl,
+  },
+  itineraryBtnText: {
+    color: '#FFFFFF',
+    fontSize: typography.bodyLarge,
+    fontWeight: typography.semibold,
+  },
+  reviewCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.card,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  reviewRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  reviewLabel: {
+    fontSize: typography.bodySmall,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  reviewValue: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
+    color: NAVY,
+    flex: 1,
+    textAlign: 'right',
+  },
+  reviewBullet: {
+    fontSize: typography.body,
+    color: NAVY,
+    paddingVertical: 4,
+  },
+  publishBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: GOLD,
+    paddingVertical: 16,
+    borderRadius: radius.button,
+    marginTop: spacing.xxl,
+  },
+  publishBtnText: {
+    color: '#FFFFFF',
+    fontSize: typography.bodyLarge,
+    fontWeight: typography.bold,
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  footerBackBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: spacing.lg,
+  },
+  footerBackBtnText: {
+    fontSize: typography.body,
+    fontWeight: typography.medium,
+    color: colors.textSecondary,
+  },
+  saveDraftBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.button,
+  },
+  saveDraftBtnText: {
+    fontSize: typography.body,
+    fontWeight: typography.medium,
+    color: NAVY,
+  },
+  nextBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: TEAL,
+    paddingVertical: 10,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.button,
+  },
+  nextBtnText: {
+    color: '#FFFFFF',
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    marginRight: spacing.sm,
+  },
+});
