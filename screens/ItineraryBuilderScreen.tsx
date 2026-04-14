@@ -286,15 +286,23 @@ const ItineraryBuilderScreen: React.FC = () => {
   };
 
   const openActivityEditor = (dayId: string, activityId?: string) => {
-    setEditingDayId(dayId);
-    if (activityId) {
-      const day = days.find((d) => d.id === dayId);
-      const act = day?.activities.find((a) => a.id === activityId);
-      setEditingActivity(act ?? null);
-    } else {
-      setEditingActivity(null);
-    }
-    setModalVisible(true);
+    // Navigate to full-screen Activity Editor with maps preview
+    const day = days.find((d) => d.id === dayId);
+    const act = activityId ? day?.activities.find((a) => a.id === activityId) : undefined;
+    navigation.navigate('ActivityEditor' as any, {
+      tripId,
+      dayId,
+      activityId: activityId ?? undefined,
+      existingData: act ? {
+        name: act.name,
+        startTime: act.time,
+        endTime: '',
+        category: act.category,
+        description: act.description ?? '',
+        location: act.location ?? '',
+        organizerNote: '',
+      } : undefined,
+    });
   };
 
   const saveActivity = (form: Partial<Activity>) => {

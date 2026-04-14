@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Animated,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -26,6 +27,17 @@ const circleTypes = [
     popular: true,
   },
   {
+    id: "travel",
+    name: "Travel",
+    emoji: "✈️",
+    description:
+      "Plan a group trip with a full itinerary, collect payments, manage travelers, and share a public trip page.",
+    features: ["Trip organizer", "Payment plans", "Itinerary builder"],
+    popular: false,
+    isNew: true,
+    isTravel: true,
+  },
+  {
     id: "family-support",
     name: "Single Beneficiary",
     emoji: "👨‍👩‍👧‍👦",
@@ -33,7 +45,6 @@ const circleTypes = [
       "One person receives all contributions. Can be one-time or recurring. Perfect for trips, gifts, or family support.",
     features: ["Pick beneficiary", "Flexible duration", "One-time or recurring"],
     popular: false,
-    isNew: true,
   },
   {
     id: "beneficiary",
@@ -73,9 +84,24 @@ export default function CreateCircleStartScreen() {
   const minScoreRequired = 60;
   const canCreate = userXnScore >= minScoreRequired;
 
+  const isTravelSelected = selectedType === "travel";
+
   const handleContinue = () => {
     if (selectedType && canCreate) {
-      navigation.navigate("CreateCircleDetails", { circleType: selectedType });
+      if (isTravelSelected) {
+        // Travel type → Trip Organizer wizard (4 steps)
+        navigation.navigate("CreateTripWizard" as any, {});
+      } else {
+        // All other types → existing circle details flow
+        navigation.navigate("CreateCircleDetails", { circleType: selectedType });
+      }
+    }
+  };
+
+  const handleBasicCircleFallback = () => {
+    // Escape hatch: user picked Travel but wants a basic savings circle instead
+    if (canCreate) {
+      navigation.navigate("CreateCircleDetails", { circleType: "goal" });
     }
   };
 
@@ -131,7 +157,8 @@ export default function CreateCircleStartScreen() {
         <View style={styles.content}>
           {/* Circle Types */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Choose how money moves</Text>
+            <Text style={styles.cardTitle}>What kind of circle?</Text>
+            <Text style={styles.cardSubtitle}>Choose a purpose for your group</Text>
 
             {circleTypes.map((type) => (
               <TouchableOpacity
@@ -139,6 +166,7 @@ export default function CreateCircleStartScreen() {
                 style={[
                   styles.typeButton,
                   selectedType === type.id && styles.typeButtonSelected,
+                  selectedType === type.id && (type as any).isTravel && styles.typeButtonTravelSelected,
                   !canCreate && styles.typeButtonDisabled,
                 ]}
                 onPress={() => canCreate && setSelectedType(type.id)}
@@ -150,7 +178,7 @@ export default function CreateCircleStartScreen() {
                   </View>
                 )}
                 {(type as any).isNew && (
-                  <View style={[styles.popularBadge, { backgroundColor: "#6366F1" }]}>
+                  <View style={[styles.popularBadge, { backgroundColor: "#E8A842" }]}>
                     <Text style={styles.popularBadgeText}>NEW</Text>
                   </View>
                 )}
@@ -160,6 +188,7 @@ export default function CreateCircleStartScreen() {
                     style={[
                       styles.typeIconContainer,
                       selectedType === type.id && styles.typeIconContainerSelected,
+                      selectedType === type.id && (type as any).isTravel && styles.typeIconContainerTravel,
                     ]}
                   >
                     <Text style={styles.typeEmoji}>{type.emoji}</Text>
@@ -176,6 +205,7 @@ export default function CreateCircleStartScreen() {
                           style={[
                             styles.featureBadge,
                             selectedType === type.id && styles.featureBadgeSelected,
+                            selectedType === type.id && (type as any).isTravel && styles.featureBadgeTravel,
                           ]}
                         >
                           <Text
@@ -192,7 +222,10 @@ export default function CreateCircleStartScreen() {
                   </View>
 
                   {selectedType === type.id && (
-                    <View style={styles.checkCircle}>
+                    <View style={[
+                      styles.checkCircle,
+                      (type as any).isTravel && { backgroundColor: "#E8A842" },
+                    ]}>
                       <Ionicons name="checkmark" size={14} color="#FFFFFF" />
                     </View>
                   )}
@@ -200,6 +233,20 @@ export default function CreateCircleStartScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          {/* Trip Organizer Mode Banner — appears when Travel is selected */}
+          {isTravelSelected && (
+            <View style={styles.travelBanner}>
+              <View style={styles.travelBannerHeader}>
+                <Text style={styles.travelBannerIcon}>✈️</Text>
+                <Text style={styles.travelBannerTitle}>Trip Organizer Mode</Text>
+              </View>
+              <Text style={styles.travelBannerText}>
+                You're building a group trip. We'll help you set up the itinerary,
+                collect payments, and manage your travelers — all in one place.
+              </Text>
+            </View>
+          )}
 
           {/* How It Works */}
           <TouchableOpacity
@@ -241,25 +288,44 @@ export default function CreateCircleStartScreen() {
         </View>
       </ScrollView>
 
-      {/* Continue Button */}
+      {/* Footer — adapts for Travel vs. other types */}
       <View style={styles.footer}>
-        <TouchableOpacity
-          style={[
-            styles.continueButton,
-            (!selectedType || !canCreate) && styles.continueButtonDisabled,
-          ]}
-          onPress={handleContinue}
-          disabled={!selectedType || !canCreate}
-        >
-          <Text
+        {isTravelSelected ? (
+          <View style={styles.travelFooter}>
+            <TouchableOpacity
+              style={[styles.continueButton, styles.continueButtonTravel]}
+              onPress={handleContinue}
+              disabled={!canCreate}
+            >
+              <Text style={styles.continueButtonText}>Set Up My Trip</Text>
+              <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 6 }} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.escapeHatchButton}
+              onPress={handleBasicCircleFallback}
+            >
+              <Text style={styles.escapeHatchText}>Just create a basic savings circle</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
             style={[
-              styles.continueButtonText,
-              (!selectedType || !canCreate) && styles.continueButtonTextDisabled,
+              styles.continueButton,
+              (!selectedType || !canCreate) && styles.continueButtonDisabled,
             ]}
+            onPress={handleContinue}
+            disabled={!selectedType || !canCreate}
           >
-            Continue
-          </Text>
-        </TouchableOpacity>
+            <Text
+              style={[
+                styles.continueButtonText,
+                (!selectedType || !canCreate) && styles.continueButtonTextDisabled,
+              ]}
+            >
+              Continue
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -347,9 +413,14 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB",
   },
   cardTitle: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 18,
+    fontWeight: "700",
     color: "#0A2342",
+    marginBottom: 4,
+  },
+  cardSubtitle: {
+    fontSize: 13,
+    color: "#6B7280",
     marginBottom: 16,
   },
   typeButton: {
@@ -365,6 +436,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#F0FDFB",
     borderWidth: 2,
     borderColor: "#00C6AE",
+  },
+  typeButtonTravelSelected: {
+    backgroundColor: "#FFF7ED",
+    borderColor: "#E8A842",
   },
   typeButtonDisabled: {
     opacity: 0.6,
@@ -399,6 +474,9 @@ const styles = StyleSheet.create({
   typeIconContainerSelected: {
     backgroundColor: "#00C6AE",
   },
+  typeIconContainerTravel: {
+    backgroundColor: "#E8A842",
+  },
   typeEmoji: {
     fontSize: 26,
   },
@@ -430,6 +508,9 @@ const styles = StyleSheet.create({
   },
   featureBadgeSelected: {
     backgroundColor: "#00C6AE",
+  },
+  featureBadgeTravel: {
+    backgroundColor: "#E8A842",
   },
   featureText: {
     fontSize: 10,
@@ -518,6 +599,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+  },
+  continueButtonTravel: {
+    backgroundColor: "#E8A842",
   },
   continueButtonDisabled: {
     backgroundColor: "#E5E7EB",
@@ -529,5 +615,46 @@ const styles = StyleSheet.create({
   },
   continueButtonTextDisabled: {
     color: "#9CA3AF",
+  },
+  // --- Travel banner ---
+  travelBanner: {
+    backgroundColor: "#FFF7ED",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: "rgba(232,168,66,0.35)",
+  },
+  travelBannerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  travelBannerIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  travelBannerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#E8A842",
+  },
+  travelBannerText: {
+    fontSize: 13,
+    color: "#6B7280",
+    lineHeight: 20,
+  },
+  // --- Travel footer ---
+  travelFooter: {
+    width: "100%",
+  },
+  escapeHatchButton: {
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  escapeHatchText: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    fontWeight: "500",
   },
 });

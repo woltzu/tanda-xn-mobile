@@ -23,14 +23,12 @@ const TEAL = '#00C6AE';
 const GOLD = '#E8A842';
 const BG = '#F5F7FA';
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 4;
 
 const STEP_NAMES = [
   'Basics',
   'Payment',
   'Requirements',
-  'Itinerary',
-  'Communication',
   'Review',
 ];
 
@@ -345,38 +343,72 @@ const StepReview: React.FC<{
     </View>
   );
 
+  const enabledReqs = data.requirements.filter((r) => r.enabled);
+  const basicsComplete = !!(data.trip_name && data.destination && data.start_date && data.end_date);
+  const paymentComplete = !!(data.price_per_person);
+  const requirementsComplete = enabledReqs.length > 0 || data.custom_requirements.length > 0;
+
   return (
     <View>
-      <SectionLabel label="Trip Summary" />
+      <Text style={styles.reviewHeading}>Ready to publish?</Text>
+      <Text style={styles.reviewSubheading}>Step 4 of 4 — Review before going live</Text>
+
+      {/* Summary card */}
       <View style={styles.reviewCard}>
-        <ReviewRow label="Trip Name" value={data.trip_name} />
-        <ReviewRow label="Destination" value={data.destination} />
-        <ReviewRow label="Dates" value={data.start_date && data.end_date ? `${data.start_date} to ${data.end_date}` : ''} />
-        <ReviewRow label="Max Participants" value={data.max_participants} />
-        <ReviewRow label="Tagline" value={data.tagline} />
+        <View style={styles.reviewCardHeader}>
+          <Text style={styles.reviewTripName}>✈️ {data.trip_name || 'Untitled Trip'}</Text>
+          <View style={styles.reviewDraftPill}>
+            <Text style={styles.reviewDraftPillText}>Draft</Text>
+          </View>
+        </View>
+        <Text style={styles.reviewTripMeta}>
+          {data.destination} — {data.start_date || '?'} to {data.end_date || '?'} — {data.max_participants || '?'} spots — ${data.price_per_person || '?'}/person
+        </Text>
+        <View style={styles.reviewMetaRow}>
+          {data.deposit_required && <Text style={styles.reviewMetaItem}>Deposit: ${data.deposit_amount}</Text>}
+          {data.payment_type === 'installments' && <Text style={styles.reviewMetaItem}>Installments</Text>}
+          <Text style={styles.reviewMetaItem}>{enabledReqs.length + data.custom_requirements.length} requirements</Text>
+        </View>
       </View>
 
-      <SectionLabel label="Payment" />
-      <View style={styles.reviewCard}>
-        <ReviewRow label="Price Per Person" value={data.price_per_person ? `$${data.price_per_person}` : ''} />
-        <ReviewRow label="Payment Type" value={data.payment_type === 'installments' ? 'Installments' : 'Lump Sum'} />
-        <ReviewRow label="Deposit" value={data.deposit_required ? `$${data.deposit_amount}` : 'Not required'} />
-        <ReviewRow label="Refund Policy" value={data.refund_policy} />
+      {/* Itinerary not built alert */}
+      <View style={styles.itineraryAlert}>
+        <Ionicons name="alert-circle" size={18} color={GOLD} style={{ marginRight: 8 }} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.itineraryAlertTitle}>Itinerary not built yet</Text>
+          <Text style={styles.itineraryAlertText}>
+            You can publish now and build the itinerary after. Your trip page will show "Itinerary coming soon."
+          </Text>
+        </View>
       </View>
 
-      <SectionLabel label="Requirements" />
-      <View style={styles.reviewCard}>
-        {data.requirements.filter((r) => r.enabled).map((r) => (
-          <Text key={r.id} style={styles.reviewBullet}>• {r.label}</Text>
-        ))}
-        {data.custom_requirements.map((c, i) => (
-          <Text key={i} style={styles.reviewBullet}>• {c}</Text>
-        ))}
+      {/* Checklist */}
+      <View style={styles.reviewChecklist}>
+        <View style={styles.reviewCheckRow}>
+          <Ionicons name={basicsComplete ? 'checkbox' : 'square-outline'} size={20} color={basicsComplete ? '#10B981' : '#D1D5DB'} />
+          <Text style={[styles.reviewCheckLabel, basicsComplete && styles.reviewCheckDone]}>Trip basics complete</Text>
+        </View>
+        <View style={styles.reviewCheckRow}>
+          <Ionicons name={paymentComplete ? 'checkbox' : 'square-outline'} size={20} color={paymentComplete ? '#10B981' : '#D1D5DB'} />
+          <Text style={[styles.reviewCheckLabel, paymentComplete && styles.reviewCheckDone]}>Payment setup complete</Text>
+        </View>
+        <View style={styles.reviewCheckRow}>
+          <Ionicons name={requirementsComplete ? 'checkbox' : 'square-outline'} size={20} color={requirementsComplete ? '#10B981' : '#D1D5DB'} />
+          <Text style={[styles.reviewCheckLabel, requirementsComplete && styles.reviewCheckDone]}>Requirements selected</Text>
+        </View>
+        <View style={styles.reviewCheckRow}>
+          <Ionicons name="square-outline" size={20} color="#D1D5DB" />
+          <Text style={[styles.reviewCheckLabel, { color: '#9CA3AF' }]}>Itinerary — optional at launch</Text>
+        </View>
       </View>
 
       <TouchableOpacity style={styles.publishBtn} activeOpacity={0.7} onPress={onPublish}>
         <Ionicons name="rocket-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
         <Text style={styles.publishBtnText}>Publish Trip</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.saveDraftReviewBtn} activeOpacity={0.7}>
+        <Text style={styles.saveDraftReviewText}>Save as Draft</Text>
       </TouchableOpacity>
     </View>
   );
@@ -440,6 +472,14 @@ const CreateTripWizardScreen: React.FC = () => {
 
   const publish = () => {
     wizard?.publish?.(formData);
+    // Navigate to publish success screen
+    navigation.navigate('TripPublishSuccess' as any, {
+      tripName: formData.trip_name,
+      destination: formData.destination,
+      startDate: formData.start_date,
+      endDate: formData.end_date,
+      tripId: wizard?.tripId ?? 'new',
+    });
   };
 
   const renderStep = () => {
@@ -447,9 +487,7 @@ const CreateTripWizardScreen: React.FC = () => {
       case 0: return <StepBasics data={formData} update={updateForm} />;
       case 1: return <StepPayment data={formData} update={updateForm} />;
       case 2: return <StepRequirements data={formData} update={updateForm} />;
-      case 3: return <StepItinerary tripId={wizard?.tripId} />;
-      case 4: return <StepCommunication data={formData} update={updateForm} />;
-      case 5: return <StepReview data={formData} onPublish={publish} />;
+      case 3: return <StepReview data={formData} onPublish={publish} />;
       default: return null;
     }
   };
@@ -463,7 +501,7 @@ const CreateTripWizardScreen: React.FC = () => {
         <TouchableOpacity onPress={goBack} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New Trip</Text>
+        <Text style={styles.headerTitle}>Trip Setup</Text>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
           <Ionicons name="close" size={24} color={colors.textSecondary} />
         </TouchableOpacity>
@@ -835,5 +873,111 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontWeight: typography.semibold,
     marginRight: spacing.sm,
+  },
+  // --- Review step (4 of 4) ---
+  reviewHeading: {
+    fontSize: 20,
+    fontWeight: '800' as const,
+    color: NAVY,
+    marginBottom: 4,
+  },
+  reviewSubheading: {
+    fontSize: typography.bodySmall,
+    color: colors.textSecondary,
+    marginBottom: spacing.lg,
+  },
+  reviewCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  reviewTripName: {
+    fontSize: typography.bodyLarge,
+    fontWeight: typography.bold,
+    color: NAVY,
+    flex: 1,
+  },
+  reviewDraftPill: {
+    backgroundColor: 'rgba(232,168,66,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(232,168,66,0.3)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  reviewDraftPillText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: GOLD,
+  },
+  reviewTripMeta: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 19,
+    marginBottom: 8,
+  },
+  reviewMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  reviewMetaItem: {
+    fontSize: 12,
+    color: colors.textSecondary,
+  },
+  itineraryAlert: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(232,168,66,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(232,168,66,0.25)',
+    borderRadius: radius.small,
+    padding: 12,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+  },
+  itineraryAlertTitle: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: GOLD,
+    marginBottom: 2,
+  },
+  itineraryAlertText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  reviewChecklist: {
+    marginBottom: spacing.md,
+  },
+  reviewCheckRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    gap: 10,
+  },
+  reviewCheckLabel: {
+    fontSize: typography.body,
+    color: NAVY,
+  },
+  reviewCheckDone: {
+    textDecorationLine: 'line-through',
+    color: colors.textSecondary,
+  },
+  saveDraftReviewBtn: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.button,
+    marginTop: spacing.md,
+  },
+  saveDraftReviewText: {
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    color: NAVY,
   },
 });

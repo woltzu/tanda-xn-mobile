@@ -183,6 +183,8 @@ import TripPublicPageScreen from "./screens/TripPublicPageScreen";
 import MyTripStatusScreen from "./screens/MyTripStatusScreen";
 import DocumentSubmissionScreen from "./screens/DocumentSubmissionScreen";
 import TripPaymentScreen from "./screens/TripPaymentScreen";
+import TripPublishSuccessScreen from "./screens/TripPublishSuccessScreen";
+import ActivityEditorScreen from "./screens/ActivityEditorScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -380,6 +382,8 @@ export type RootStackParamList = {
   MyTripStatus: { tripId: string };
   DocumentSubmission: { tripId: string; participantId: string; fieldKey: string };
   TripPayment: { tripId: string; participantId: string };
+  TripPublishSuccess: { tripName?: string; destination?: string; startDate?: string; endDate?: string; tripId: string };
+  ActivityEditor: { tripId: string; dayId?: string; activityId?: string; existingData?: any };
   // Feature Screens (AI Engines + Circle Management)
   StressScoreDashboard: undefined;
   MoodInsights: undefined;
@@ -494,6 +498,8 @@ function HomeStackScreen() {
       <HomeStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
       <HomeStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />
       <HomeStack.Screen name="TripPayment" component={TripPaymentScreen} />
+      <HomeStack.Screen name="TripPublishSuccess" component={TripPublishSuccessScreen} />
+      <HomeStack.Screen name="ActivityEditor" component={ActivityEditorScreen} />
       {/* AI / Financial Insight Screens */}
       <HomeStack.Screen name="StressScoreDashboard" component={StressScoreDashboardScreen} />
       <HomeStack.Screen name="MoodInsights" component={MoodInsightsScreen} />
@@ -587,6 +593,8 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
       <CirclesStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />
       <CirclesStack.Screen name="TripPayment" component={TripPaymentScreen} />
+      <CirclesStack.Screen name="TripPublishSuccess" component={TripPublishSuccessScreen} />
+      <CirclesStack.Screen name="ActivityEditor" component={ActivityEditorScreen} />
     </CirclesStack.Navigator>
   );
 }
@@ -620,6 +628,8 @@ function MarketStackScreen() {
       <MarketStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
       <MarketStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />
       <MarketStack.Screen name="TripPayment" component={TripPaymentScreen} />
+      <MarketStack.Screen name="TripPublishSuccess" component={TripPublishSuccessScreen} />
+      <MarketStack.Screen name="ActivityEditor" component={ActivityEditorScreen} />
     </MarketStack.Navigator>
   );
 }
