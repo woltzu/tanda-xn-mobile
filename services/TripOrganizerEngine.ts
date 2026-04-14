@@ -186,8 +186,8 @@ function mapDay(row: any): TripDay {
     id: row.id,
     tripId: row.trip_id,
     dayNumber: row.day_number,
-    date: row.date,
-    title: row.title,
+    date: row.date ?? '',
+    title: row.day_title ?? row.title ?? '',
     sortOrder: row.sort_order ?? 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -517,8 +517,7 @@ export class TripOrganizerEngine {
       .insert({
         trip_id: tripId,
         day_number: data.dayNumber,
-        date: data.date,
-        title: data.title,
+        day_title: data.title || `Day ${data.dayNumber}`,
         sort_order: data.sortOrder ?? 0,
       })
       .select()
@@ -531,8 +530,7 @@ export class TripOrganizerEngine {
   static async updateDay(dayId: string, data: Partial<TripDay>): Promise<TripDay> {
     const update: any = {};
     if (data.dayNumber !== undefined) update.day_number = data.dayNumber;
-    if (data.date !== undefined) update.date = data.date;
-    if (data.title !== undefined) update.title = data.title;
+    if (data.title !== undefined) update.day_title = data.title;
     if (data.sortOrder !== undefined) update.sort_order = data.sortOrder;
     update.updated_at = new Date().toISOString();
 

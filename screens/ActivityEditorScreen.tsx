@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { colors, radius, typography, spacing } from '../theme/tokens';
+import { TripOrganizerEngine } from '../services/TripOrganizerEngine';
 
 const NAVY = '#0A2342';
 const TEAL = '#00C6AE';
@@ -22,16 +23,18 @@ const GOLD = '#E8A842';
 const BG = '#F5F7FA';
 
 const CATEGORIES = [
-  { id: 'flight', label: 'Flight', emoji: '✈️' },
-  { id: 'hotel', label: 'Hotel', emoji: '🏨' },
-  { id: 'beach', label: 'Beach', emoji: '🏖' },
-  { id: 'dining', label: 'Dining', emoji: '🍽' },
-  { id: 'activity', label: 'Activity', emoji: '🎯' },
-  { id: 'nightlife', label: 'Nightlife', emoji: '🌙' },
-  { id: 'transport', label: 'Transport', emoji: '🚐' },
-  { id: 'shopping', label: 'Shopping', emoji: '🛍' },
-  { id: 'wellness', label: 'Wellness', emoji: '💆' },
-  { id: 'other', label: 'Other', emoji: '📍' },
+  { id: 'Arrival', label: 'Arrival', emoji: '\u2708\uFE0F' },
+  { id: 'Breakfast', label: 'Breakfast', emoji: '\u2600\uFE0F' },
+  { id: 'Beach', label: 'Beach', emoji: '\uD83C\uDFD6' },
+  { id: 'Adventure', label: 'Adventure', emoji: '\uD83C\uDFCD' },
+  { id: 'Culture', label: 'Culture', emoji: '\uD83D\uDECD' },
+  { id: 'Sailing', label: 'Sailing', emoji: '\u26F5' },
+  { id: 'Dinner', label: 'Dinner', emoji: '\uD83C\uDF7D' },
+  { id: 'Nightlife', label: 'Nightlife', emoji: '\uD83C\uDF19' },
+  { id: 'Logistics', label: 'Logistics', emoji: '\uD83D\uDE97' },
+  { id: 'Departure', label: 'Departure', emoji: '\uD83D\uDEEB' },
+  { id: 'Accommodation', label: 'Stay', emoji: '\uD83C\uDFE1' },
+  { id: 'Other', label: 'Other', emoji: '\uD83D\uDCCD' },
 ];
 
 const ActivityEditorScreen: React.FC = () => {
@@ -50,7 +53,7 @@ const ActivityEditorScreen: React.FC = () => {
   const [name, setName] = useState(existingData?.name ?? '');
   const [startTime, setStartTime] = useState(existingData?.startTime ?? '');
   const [endTime, setEndTime] = useState(existingData?.endTime ?? '');
-  const [category, setCategory] = useState(existingData?.category ?? 'activity');
+  const [category, setCategory] = useState(existingData?.category ?? 'Other');
   const [description, setDescription] = useState(existingData?.description ?? '');
   const [location, setLocation] = useState(existingData?.location ?? '');
   const [organizerNote, setOrganizerNote] = useState(existingData?.organizerNote ?? '');
@@ -65,14 +68,43 @@ const ActivityEditorScreen: React.FC = () => {
     }
   };
 
-  const handleSave = () => {
-    // TODO: Wire to TripOrganizerEngine.createActivity / updateActivity
-    navigation.goBack();
+  const handleSave = async () => {
+    try {
+      if (isEditing && activityId) {
+        await TripOrganizerEngine.updateActivity(activityId, {
+          title: name,
+          startTime,
+          endTime,
+          description,
+          location,
+          categoryTag: category,
+        });
+      } else if (dayId) {
+        await TripOrganizerEngine.addActivity(dayId, {
+          title: name,
+          startTime,
+          endTime,
+          description,
+          location,
+          categoryTag: category,
+          sortOrder: 0,
+        });
+      }
+      navigation.goBack();
+    } catch (err) {
+      console.warn('[ActivityEditor] Save error:', err);
+    }
   };
 
-  const handleDelete = () => {
-    // TODO: Wire to TripOrganizerEngine.deleteActivity
-    navigation.goBack();
+  const handleDelete = async () => {
+    try {
+      if (activityId) {
+        await TripOrganizerEngine.deleteActivity(activityId);
+      }
+      navigation.goBack();
+    } catch (err) {
+      console.warn('[ActivityEditor] Delete error:', err);
+    }
   };
 
   const selectedCat = CATEGORIES.find((c) => c.id === category);
@@ -114,7 +146,7 @@ const ActivityEditorScreen: React.FC = () => {
               style={styles.textInput}
               value={name}
               onChangeText={setName}
-              placeholder="e.g. Eagle Beach — Golden Hour"
+              placeholder="e.g. Eagle Beach \u2014 Golden Hour"
               placeholderTextColor="#9CA3AF"
             />
           </View>
@@ -182,7 +214,7 @@ const ActivityEditorScreen: React.FC = () => {
             />
           </View>
 
-          {/* Location — key field that powers Maps link */}
+          {/* Location --- key field that powers Maps link */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Location (for Maps link)</Text>
             <TextInput
@@ -194,11 +226,11 @@ const ActivityEditorScreen: React.FC = () => {
             />
           </View>
 
-          {/* Maps preview — appears when location is entered */}
+          {/* Maps preview --- appears when location is entered */}
           {location.length > 2 && (
             <TouchableOpacity style={styles.mapPreview} onPress={handleOpenMaps} activeOpacity={0.8}>
               <View style={styles.mapGrid} />
-              <Text style={styles.mapPin}>📍</Text>
+              <Text style={styles.mapPin}>{'\uD83D\uDCCD'}</Text>
               <Text style={styles.mapLabel}>{location}</Text>
               <View style={styles.mapBtn}>
                 <Text style={styles.mapBtnText}>View on Maps</Text>

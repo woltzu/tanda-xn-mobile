@@ -237,7 +237,8 @@ export function useItineraryBuilder(tripId: string) {
   const reorderDays = useCallback(async (orderedDayIds: string[]) => {
     try {
       setError(null);
-      await TripOrganizerEngine.reorderDays(tripId, orderedDayIds);
+      const order = orderedDayIds.map((dayId, i) => ({ dayId, sortOrder: i }));
+      await TripOrganizerEngine.reorderDays(tripId, order);
       await fetch();
     } catch (err: any) {
       setError(err.message || 'Failed to reorder days');
