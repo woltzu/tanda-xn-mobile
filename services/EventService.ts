@@ -80,6 +80,8 @@ const BATCH_SIZE = 20;
 const FLUSH_INTERVAL_MS = 5000;    // 5 seconds
 const OFFLINE_MAX = 500;
 const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_CONSECUTIVE_FAILURES = 3;        // Stop retrying after 3 consecutive RLS failures
+const BACKOFF_BASE_MS = 10000;             // 10s base backoff after failures
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // UUID GENERATOR (lightweight, no external dep)
@@ -323,9 +325,19 @@ export class EventService {
    * Flush buffered events to Supabase.
    * Handles offline queue draining automatically.
    */
+  private _consecutiveFailures = 0;
+  private _nextRetryAt = 0;
+
   async flush(): Promise<void> {
     if (this.isFlushing) return;
     if (this.buffer.length === 0 && this.offlineQueue.length === 0) return;
+
+    // Backoff: skip flush if we've failed too many times recently
+    if (this._consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      if (Date.now() < this._nextRetryAt) return;
+      // Enough time passed — try once more
+      this._consecutiveFailures = MAX_CONSECUTIVE_FAILURES - 1;
+    }
 
     this.isFlushing = true;
 
@@ -338,14 +350,27 @@ export class EventService {
           .insert(offlineBatch);
 
         if (offlineError) {
-          // Put them back
-          this.offlineQueue.unshift(...offlineBatch);
-          console.warn('[EventService] Offline drain failed:', offlineError.message);
+          // Check if it's an RLS / permission error (won't resolve by retrying)
+          const isRlsError = offlineError.message?.includes('row-level security')
+            || offlineError.message?.includes('permission denied');
+
+          this._consecutiveFailures++;
+          if (isRlsError && this._consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            // Drop the batch — RLS won't fix itself, stop spamming logs
+            console.warn('[EventService] Offline drain RLS error — dropping batch after', this._consecutiveFailures, 'failures');
+            this._nextRetryAt = Date.now() + BACKOFF_BASE_MS * Math.pow(2, this._consecutiveFailures);
+            this.offlineQueue.length = 0; // Clear entire offline queue
+            await this.persistOfflineQueue();
+          } else {
+            // Put them back for non-RLS or first few failures
+            this.offlineQueue.unshift(...offlineBatch);
+            console.warn('[EventService] Offline drain failed:', offlineError.message);
+          }
           this.isFlushing = false;
-          return; // Don't try buffer if offline queue fails
+          return;
         }
 
-        // Persist reduced queue
+        this._consecutiveFailures = 0; // Reset on success
         await this.persistOfflineQueue();
       }
 
@@ -358,14 +383,22 @@ export class EventService {
           .insert(batch);
 
         if (error) {
-          console.warn('[EventService] Flush failed:', error.message);
-          // Move failed events to offline queue
-          this.moveToOfflineQueue(batch);
+          this._consecutiveFailures++;
+          const isRlsError = error.message?.includes('row-level security')
+            || error.message?.includes('permission denied');
+          if (isRlsError && this._consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            console.warn('[EventService] Flush RLS error — dropping events');
+            this._nextRetryAt = Date.now() + BACKOFF_BASE_MS * Math.pow(2, this._consecutiveFailures);
+          } else {
+            console.warn('[EventService] Flush failed:', error.message);
+            this.moveToOfflineQueue(batch);
+          }
+        } else {
+          this._consecutiveFailures = 0;
         }
       }
     } catch (err) {
       console.warn('[EventService] Flush error:', err);
-      // Move remaining buffer to offline queue
       if (this.buffer.length > 0) {
         const failed = this.buffer.splice(0);
         this.moveToOfflineQueue(failed);
