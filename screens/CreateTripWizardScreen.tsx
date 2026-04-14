@@ -555,31 +555,31 @@ const CreateTripWizardScreen: React.FC = () => {
 
   const publish = async () => {
     try {
-      // 1. Save draft first to get a real tripId
-      if (wizard?.updateStepData) {
-        wizard.updateStepData({
-          name: formData.trip_name,
-          destination: formData.destination,
-          startDate: formData.start_date,
-          endDate: formData.end_date,
-          maxParticipants: formData.max_participants ? parseInt(formData.max_participants) : 20,
-          description: formData.description,
-          priceCents: formData.price_per_person ? parseFloat(formData.price_per_person) : 0,
-          paymentType: formData.payment_type as any,
-          depositCents: formData.deposit_amount ? parseFloat(formData.deposit_amount) : 0,
-          refundPolicy: formData.refund_policy as any,
-        } as any);
+      // 1. Build trip data matching the Trip interface
+      const tripData = {
+        name: formData.trip_name,
+        destination: formData.destination,
+        startDate: formData.start_date,
+        endDate: formData.end_date,
+        maxParticipants: formData.max_participants ? parseInt(formData.max_participants) : 20,
+        description: formData.description,
+        priceCents: formData.price_per_person ? parseFloat(formData.price_per_person) : 0,
+        paymentType: formData.payment_type,
+        depositCents: formData.deposit_amount ? parseFloat(formData.deposit_amount) : 0,
+        refundPolicy: formData.refund_policy || 'none',
+      } as any;
+
+      // 2. Save draft — pass data directly to avoid stale state, returns the real tripId
+      const tripId = await wizard?.saveDraft?.(tripData);
+
+      // 3. Publish using the returned tripId (can't rely on state update)
+      if (tripId) {
+        await wizard?.publish?.(tripId);
       }
 
-      // Save draft (creates the trip in Supabase)
-      await wizard?.saveDraft?.();
+      const resolvedTripId = tripId ?? 'new';
 
-      // Publish the saved trip
-      await wizard?.publish?.();
-
-      const resolvedTripId = wizard?.savedTripId ?? 'new';
-
-      // Navigate to publish success screen
+      // 4. Navigate to publish success screen
       navigation.navigate('TripPublishSuccess' as any, {
         tripName: formData.trip_name,
         destination: formData.destination,

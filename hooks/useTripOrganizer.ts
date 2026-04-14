@@ -126,15 +126,18 @@ export function useCreateTripWizard() {
     setDraftData((prev) => ({ ...prev, ...data }));
   }, []);
 
-  const saveDraft = useCallback(async () => {
+  const saveDraft = useCallback(async (dataOverride?: Partial<Trip>): Promise<string> => {
+    const dataToSave = dataOverride ?? draftData;
     try {
       setLoading(true);
       setError(null);
       if (savedTripId) {
-        await TripOrganizerEngine.updateTrip(savedTripId, draftData);
+        await TripOrganizerEngine.updateTrip(savedTripId, dataToSave);
+        return savedTripId;
       } else {
-        const created = await TripOrganizerEngine.createTrip(draftData);
+        const created = await TripOrganizerEngine.createTrip(dataToSave);
         setSavedTripId(created.id);
+        return created.id;
       }
     } catch (err: any) {
       console.error('useCreateTripWizard saveDraft error:', err);
@@ -145,15 +148,16 @@ export function useCreateTripWizard() {
     }
   }, [savedTripId, draftData]);
 
-  const publish = useCallback(async () => {
-    if (!savedTripId) {
+  const publish = useCallback(async (tripIdOverride?: string) => {
+    const idToPublish = tripIdOverride || savedTripId;
+    if (!idToPublish) {
       setError('No saved trip to publish. Save a draft first.');
       return;
     }
     try {
       setLoading(true);
       setError(null);
-      await TripOrganizerEngine.publishTrip(savedTripId);
+      await TripOrganizerEngine.publishTrip(idToPublish);
     } catch (err: any) {
       console.error('useCreateTripWizard publish error:', err);
       setError(err.message || 'Failed to publish trip');

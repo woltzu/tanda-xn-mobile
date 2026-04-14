@@ -160,7 +160,7 @@ function mapTrip(row: any): Trip {
     organizerId: row.organizer_id,
     name: row.trip_name ?? row.name,
     description: row.description,
-    coverPhotoUrl: row.cover_photo_url,
+    coverPhotoUrl: row.cover_image_url ?? row.cover_photo_url,
     destination: row.destination,
     startDate: row.start_date,
     endDate: row.end_date,
@@ -168,14 +168,14 @@ function mapTrip(row: any): Trip {
     priceCents: parseFloat(row.price_per_person) || 0,
     depositCents: parseFloat(row.deposit_amount) || 0,
     paymentType: row.payment_type ?? 'lump_sum',
-    installmentCount: row.installment_count,
-    currency: row.currency ?? 'USD',
+    installmentCount: null,
+    currency: 'USD',
     status: row.status ?? 'draft',
-    slug: row.slug,
+    slug: row.slug ?? row.shareable_slug,
     messagingMode: row.messaging_mode ?? 'organizer_only',
     refundPolicy: row.refund_policy ?? 'none',
-    requiredDocuments: row.required_documents ?? [],
-    publishedAt: row.published_at,
+    requiredDocuments: row.trip_requirements ?? row.required_documents ?? [],
+    publishedAt: null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -311,26 +311,33 @@ export class TripOrganizerEngine {
 
   /** Create a new trip in draft status */
   static async createTrip(data: Partial<Trip>): Promise<Trip> {
+    // Get current user if organizerId not provided
+    let organizerId = data.organizerId;
+    if (!organizerId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      organizerId = user?.id;
+    }
+    if (!organizerId) throw new Error('No authenticated user found. Please log in.');
+
     const { data: row, error } = await supabase
       .from("trips")
       .insert({
-        organizer_id: data.organizerId,
+        organizer_id: organizerId,
         trip_name: data.name,
         description: data.description,
-        cover_photo_url: data.coverPhotoUrl,
+        cover_image_url: data.coverPhotoUrl,
         destination: data.destination,
         start_date: data.startDate,
         end_date: data.endDate,
         max_participants: data.maxParticipants ?? 20,
         price_per_person: data.priceCents ?? 0,
+        deposit_required: (data.depositCents ?? 0) > 0,
         deposit_amount: data.depositCents ?? 0,
         payment_type: data.paymentType ?? 'lump_sum',
-        installment_count: data.installmentCount,
-        currency: data.currency ?? 'USD',
         status: 'draft',
         messaging_mode: data.messagingMode ?? 'organizer_only',
         refund_policy: data.refundPolicy ?? 'none',
-        required_documents: data.requiredDocuments ?? [],
+        trip_requirements: data.requiredDocuments ?? [],
       })
       .select()
       .single();
@@ -361,19 +368,20 @@ export class TripOrganizerEngine {
     const update: any = {};
     if (data.name !== undefined) update.trip_name = data.name;
     if (data.description !== undefined) update.description = data.description;
-    if (data.coverPhotoUrl !== undefined) update.cover_photo_url = data.coverPhotoUrl;
+    if (data.coverPhotoUrl !== undefined) update.cover_image_url = data.coverPhotoUrl;
     if (data.destination !== undefined) update.destination = data.destination;
     if (data.startDate !== undefined) update.start_date = data.startDate;
     if (data.endDate !== undefined) update.end_date = data.endDate;
     if (data.maxParticipants !== undefined) update.max_participants = data.maxParticipants;
     if (data.priceCents !== undefined) update.price_per_person = data.priceCents;
-    if (data.depositCents !== undefined) update.deposit_amount = data.depositCents;
+    if (data.depositCents !== undefined) {
+      update.deposit_amount = data.depositCents;
+      update.deposit_required = data.depositCents > 0;
+    }
     if (data.paymentType !== undefined) update.payment_type = data.paymentType;
-    if (data.installmentCount !== undefined) update.installment_count = data.installmentCount;
-    if (data.currency !== undefined) update.currency = data.currency;
     if (data.messagingMode !== undefined) update.messaging_mode = data.messagingMode;
     if (data.refundPolicy !== undefined) update.refund_policy = data.refundPolicy;
-    if (data.requiredDocuments !== undefined) update.required_documents = data.requiredDocuments;
+    if (data.requiredDocuments !== undefined) update.trip_requirements = data.requiredDocuments;
     update.updated_at = new Date().toISOString();
 
     const { data: row, error } = await supabase
@@ -406,7 +414,7 @@ export class TripOrganizerEngine {
       .update({
         status: 'published',
         slug,
-        published_at: new Date().toISOString(),
+        shareable_slug: slug,
         updated_at: new Date().toISOString(),
       })
       .eq("id", tripId)
