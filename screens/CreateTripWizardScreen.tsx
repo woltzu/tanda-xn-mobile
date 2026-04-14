@@ -80,6 +80,14 @@ const REFUND_POLICIES = [
   'Custom',
 ];
 
+// Map human-readable refund policy to DB enum: 'none' | 'partial' | 'full'
+const mapRefundPolicyToDB = (policy: string): string => {
+  if (!policy || policy === 'No refunds') return 'none';
+  if (policy.startsWith('Full refund')) return 'full';
+  if (policy.startsWith('50%') || policy === 'Custom') return 'partial';
+  return 'none';
+};
+
 // --- Sub-components ---
 
 const StepIndicator: React.FC<{ currentStep: number }> = ({ currentStep }) => (
@@ -566,7 +574,7 @@ const CreateTripWizardScreen: React.FC = () => {
         priceCents: formData.price_per_person ? parseFloat(formData.price_per_person) : 0,
         paymentType: formData.payment_type,
         depositCents: formData.deposit_amount ? parseFloat(formData.deposit_amount) : 0,
-        refundPolicy: formData.refund_policy || 'none',
+        refundPolicy: mapRefundPolicyToDB(formData.refund_policy),
       } as any;
 
       // 2. Save draft — pass data directly to avoid stale state, returns the real tripId
