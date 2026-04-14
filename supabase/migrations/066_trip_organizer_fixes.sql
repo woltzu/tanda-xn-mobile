@@ -177,35 +177,46 @@ CREATE POLICY trip_vendors_organizer ON trip_vendors
 CREATE POLICY trip_vendors_participant ON trip_vendors
   FOR SELECT USING (public.is_trip_participant(trip_id, auth.uid()));
 
--- trip_payments
+-- trip_payments (joins through trip_participant_id → trip_participants)
 DROP POLICY IF EXISTS trip_payments_organizer ON trip_payments;
 DROP POLICY IF EXISTS trip_payments_self ON trip_payments;
 
 CREATE POLICY trip_payments_organizer ON trip_payments
-  FOR ALL USING (public.is_trip_organizer(trip_id, auth.uid()))
-  WITH CHECK (public.is_trip_organizer(trip_id, auth.uid()));
+  FOR ALL USING (
+    public.is_trip_organizer(
+      (SELECT tp.trip_id FROM trip_participants tp WHERE tp.id = trip_payments.trip_participant_id),
+      auth.uid()
+    )
+  ) WITH CHECK (
+    public.is_trip_organizer(
+      (SELECT tp.trip_id FROM trip_participants tp WHERE tp.id = trip_payments.trip_participant_id),
+      auth.uid()
+    )
+  );
 
 CREATE POLICY trip_payments_self ON trip_payments
-  FOR SELECT USING (auth.uid() = user_id);
+  FOR SELECT USING (
+    auth.uid() = (SELECT tp.user_id FROM trip_participants tp WHERE tp.id = trip_payments.trip_participant_id)
+  );
 
--- trip_participant_submissions
+-- trip_participant_submissions (joins through trip_participant_id → trip_participants)
 DROP POLICY IF EXISTS trip_submissions_organizer ON trip_participant_submissions;
 DROP POLICY IF EXISTS trip_submissions_self ON trip_participant_submissions;
 
 CREATE POLICY trip_submissions_organizer ON trip_participant_submissions
   FOR ALL USING (
     public.is_trip_organizer(
-      (SELECT tp.trip_id FROM trip_participants tp WHERE tp.id = trip_participant_submissions.participant_id),
+      (SELECT tp.trip_id FROM trip_participants tp WHERE tp.id = trip_participant_submissions.trip_participant_id),
       auth.uid()
     )
   ) WITH CHECK (
     public.is_trip_organizer(
-      (SELECT tp.trip_id FROM trip_participants tp WHERE tp.id = trip_participant_submissions.participant_id),
+      (SELECT tp.trip_id FROM trip_participants tp WHERE tp.id = trip_participant_submissions.trip_participant_id),
       auth.uid()
     )
   );
 
 CREATE POLICY trip_submissions_self ON trip_participant_submissions
   FOR SELECT USING (
-    auth.uid() = (SELECT tp.user_id FROM trip_participants tp WHERE tp.id = trip_participant_submissions.participant_id)
+    auth.uid() = (SELECT tp.user_id FROM trip_participants tp WHERE tp.id = trip_participant_submissions.trip_participant_id)
   );
