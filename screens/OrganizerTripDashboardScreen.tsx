@@ -103,8 +103,23 @@ const OrganizerTripDashboardScreen: React.FC = () => {
   const tripId: string = route.params?.tripId ?? '';
   const { dashboard, loading } = useTripDashboard(tripId);
 
-  // Fallback data for rendering while loading
-  const data: DashboardData = dashboard ?? {
+  // Map hook's TripDashboard (camelCase) to screen's DashboardData (snake_case)
+  const data: DashboardData = dashboard ? {
+    trip_name: dashboard.trip?.name ?? 'Untitled Trip',
+    destination: dashboard.trip?.destination ?? '',
+    cover_image_url: dashboard.trip?.coverPhotoUrl ?? undefined,
+    start_date: dashboard.trip?.startDate ?? '',
+    end_date: dashboard.trip?.endDate ?? '',
+    status: dashboard.trip?.status ?? 'draft',
+    confirmed_count: dashboard.stats?.confirmed ?? 0,
+    pending_count: dashboard.stats?.pending ?? 0,
+    waitlist_count: dashboard.stats?.waitlist ?? 0,
+    total_collected: dashboard.paymentSummary?.totalCollected ?? 0,
+    total_target: dashboard.paymentSummary?.totalExpected ?? 0,
+    docs_complete: 0,
+    docs_total: 0,
+    docs_missing_count: 0,
+  } : {
     trip_name: 'Loading...',
     destination: '',
     cover_image_url: undefined,
