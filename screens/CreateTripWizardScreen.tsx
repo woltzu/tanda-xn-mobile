@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useCreateTripWizard } from '../hooks/useTripOrganizer';
 
@@ -138,6 +139,60 @@ const ToggleRow: React.FC<{
 
 // --- Steps ---
 
+const formatDateFriendly = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const toISODate = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
+
+const DatePickerField: React.FC<{
+  label: string;
+  value: string;
+  onChange: (dateStr: string) => void;
+}> = ({ label, value, onChange }) => {
+  const [showPicker, setShowPicker] = useState(false);
+
+  const currentDate = value ? new Date(value + 'T00:00:00') : new Date();
+
+  const handleChange = (_event: any, selectedDate?: Date) => {
+    setShowPicker(Platform.OS === 'ios');
+    if (selectedDate) {
+      onChange(toISODate(selectedDate));
+    }
+  };
+
+  return (
+    <View style={styles.inputGroup}>
+      <Text style={styles.inputLabel}>{label}</Text>
+      <TouchableOpacity
+        style={styles.textInput}
+        onPress={() => setShowPicker(true)}
+        activeOpacity={0.7}
+      >
+        <Text style={{ fontSize: typography.body, color: value ? NAVY : '#9CA3AF' }}>
+          {value ? formatDateFriendly(value) : 'Select date'}
+        </Text>
+      </TouchableOpacity>
+      {showPicker && (
+        <DateTimePicker
+          value={currentDate}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={handleChange}
+        />
+      )}
+    </View>
+  );
+};
+
 const StepBasics: React.FC<{
   data: TripFormData;
   update: (partial: Partial<TripFormData>) => void;
@@ -148,10 +203,10 @@ const StepBasics: React.FC<{
     <FormInput label="Destination" value={data.destination} onChangeText={(v) => update({ destination: v })} placeholder="e.g. Abidjan, Ivory Coast" />
     <View style={styles.row}>
       <View style={{ flex: 1, marginRight: spacing.sm }}>
-        <FormInput label="Start Date" value={data.start_date} onChangeText={(v) => update({ start_date: v })} placeholder="YYYY-MM-DD" />
+        <DatePickerField label="Start Date" value={data.start_date} onChange={(v) => update({ start_date: v })} />
       </View>
       <View style={{ flex: 1, marginLeft: spacing.sm }}>
-        <FormInput label="End Date" value={data.end_date} onChangeText={(v) => update({ end_date: v })} placeholder="YYYY-MM-DD" />
+        <DatePickerField label="End Date" value={data.end_date} onChange={(v) => update({ end_date: v })} />
       </View>
     </View>
     <FormInput label="Max Participants" value={data.max_participants} onChangeText={(v) => update({ max_participants: v })} placeholder="25" keyboardType="numeric" />
@@ -527,6 +582,7 @@ const CreateTripWizardScreen: React.FC = () => {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
           {renderStep()}
         </ScrollView>

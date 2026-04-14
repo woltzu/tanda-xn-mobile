@@ -1158,14 +1158,17 @@ export class TripOrganizerEngine {
   /** Get a public trip by its slug, including itinerary days and spots remaining */
   static async getPublicTrip(
     slug: string
-  ): Promise<Trip & { days: TripDay[]; spotsRemaining: number }> {
+  ): Promise<(Trip & { days: TripDay[]; spotsRemaining: number }) | null> {
+    if (!slug || slug === 'undefined') return null;
+
     const { data: tripRow, error: tripError } = await supabase
       .from("trips")
       .select("*")
       .eq("slug", slug)
       .eq("status", "published")
-      .single();
+      .maybeSingle();
     if (tripError) throw new Error(`Trip not found: ${tripError.message}`);
+    if (!tripRow) return null;
 
     const trip = mapTrip(tripRow);
 

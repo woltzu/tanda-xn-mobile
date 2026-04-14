@@ -11,9 +11,11 @@ import {
   Modal,
   Platform,
   KeyboardAvoidingView,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useItineraryBuilder } from '../hooks/useTripOrganizer';
 
@@ -82,7 +84,9 @@ const DayCard: React.FC<{
   onEditTitle: (title: string) => void;
   onAddActivity: () => void;
   onEditActivity: (activityId: string) => void;
-}> = ({ day, onEditTitle, onAddActivity, onEditActivity }) => (
+  onAddMedia: () => void;
+  photos: string[];
+}> = ({ day, onEditTitle, onAddActivity, onEditActivity, onAddMedia, photos }) => (
   <View style={styles.dayCard}>
     <View style={styles.dayHeader}>
       <Text style={styles.dayLabel}>DAY {day.day_number}</Text>
@@ -102,6 +106,26 @@ const DayCard: React.FC<{
         onEdit={() => onEditActivity(act.id)}
       />
     ))}
+
+    {/* Photo/Video Upload Area */}
+    {photos.length > 0 && (
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.photoScrollContainer}
+        contentContainerStyle={styles.photoScrollContent}
+      >
+        {photos.map((uri, index) => (
+          <Image key={`${uri}-${index}`} source={{ uri }} style={styles.photoThumbnail} />
+        ))}
+      </ScrollView>
+    )}
+    <TouchableOpacity style={styles.mediaUploadBtn} onPress={onAddMedia} activeOpacity={0.7}>
+      <Ionicons name="camera-outline" size={28} color="#9CA3AF" />
+      <Text style={styles.mediaUploadText}>Add Photos & Videos</Text>
+      <Text style={styles.mediaUploadSubtext}>Tap to upload from camera or gallery</Text>
+    </TouchableOpacity>
+
     <TouchableOpacity style={styles.addActivityBtn} onPress={onAddActivity} activeOpacity={0.7}>
       <Ionicons name="add-circle-outline" size={20} color={TEAL} />
       <Text style={styles.addActivityText}>Add Activity</Text>
@@ -262,6 +286,7 @@ const ItineraryBuilderScreen: React.FC = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingActivity, setEditingActivity] = useState<Partial<Activity> | null>(null);
   const [editingDayId, setEditingDayId] = useState<string | null>(null);
+  const [dayPhotos, setDayPhotos] = useState<Record<string, string[]>>({});
 
   // Sync from hook when available
   React.useEffect(() => {
@@ -337,6 +362,21 @@ const ItineraryBuilderScreen: React.FC = () => {
     setEditingDayId(null);
   };
 
+  const pickDayMedia = async (dayId: string) => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      allowsMultipleSelection: true,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets) {
+      const uris = result.assets.map(a => a.uri);
+      setDayPhotos(prev => ({
+        ...prev,
+        [dayId]: [...(prev[dayId] || []), ...uris],
+      }));
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={BG} />
@@ -347,7 +387,7 @@ const ItineraryBuilderScreen: React.FC = () => {
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Itinerary Builder</Text>
-        <TouchableOpacity style={styles.previewBtn} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.previewBtn} activeOpacity={0.7} onPress={() => navigation.navigate('TripPublicPage' as any, { tripId })}>
           <Text style={styles.previewBtnText}>Preview</Text>
         </TouchableOpacity>
       </View>
@@ -372,6 +412,8 @@ const ItineraryBuilderScreen: React.FC = () => {
               onEditTitle={(title) => updateDayTitle(day.id, title)}
               onAddActivity={() => openActivityEditor(day.id)}
               onEditActivity={(actId) => openActivityEditor(day.id, actId)}
+              onAddMedia={() => pickDayMedia(day.id)}
+              photos={dayPhotos[day.id] || []}
             />
           ))
         )}
@@ -383,7 +425,7 @@ const ItineraryBuilderScreen: React.FC = () => {
         </TouchableOpacity>
 
         {/* Preview Public Page */}
-        <TouchableOpacity style={styles.previewPageBtn} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.previewPageBtn} activeOpacity={0.7} onPress={() => navigation.navigate('TripPublicPage' as any, { tripId })}>
           <Ionicons name="eye-outline" size={20} color={NAVY} style={{ marginRight: 8 }} />
           <Text style={styles.previewPageBtnText}>Preview Public Page</Text>
         </TouchableOpacity>
@@ -515,6 +557,40 @@ const styles = StyleSheet.create({
   },
   activityEditBtn: {
     padding: spacing.xs,
+  },
+  photoScrollContainer: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  photoScrollContent: {
+    gap: 8,
+  },
+  photoThumbnail: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: '#E5E7EB',
+  },
+  mediaUploadBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#D1D5DB',
+    borderStyle: 'dashed',
+    borderRadius: radius.small,
+    paddingVertical: 16,
+    marginTop: spacing.sm,
+  },
+  mediaUploadText: {
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    color: '#6B7280',
+    marginTop: 6,
+  },
+  mediaUploadSubtext: {
+    fontSize: typography.bodySmall,
+    color: '#9CA3AF',
+    marginTop: 2,
   },
   addActivityBtn: {
     flexDirection: 'row',

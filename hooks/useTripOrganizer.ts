@@ -183,7 +183,7 @@ export function useItineraryBuilder(tripId: string) {
   const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
-    if (!tripId) return;
+    if (!tripId || tripId === 'new') return;
     try {
       setLoading(true);
       setError(null);
