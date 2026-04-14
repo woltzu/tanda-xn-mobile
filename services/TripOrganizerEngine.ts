@@ -158,15 +158,15 @@ function mapTrip(row: any): Trip {
   return {
     id: row.id,
     organizerId: row.organizer_id,
-    name: row.name,
+    name: row.trip_name ?? row.name,
     description: row.description,
     coverPhotoUrl: row.cover_photo_url,
     destination: row.destination,
     startDate: row.start_date,
     endDate: row.end_date,
     maxParticipants: row.max_participants ?? 20,
-    priceCents: row.price_cents ?? 0,
-    depositCents: row.deposit_cents ?? 0,
+    priceCents: parseFloat(row.price_per_person) || 0,
+    depositCents: parseFloat(row.deposit_amount) || 0,
     paymentType: row.payment_type ?? 'lump_sum',
     installmentCount: row.installment_count,
     currency: row.currency ?? 'USD',
@@ -197,12 +197,12 @@ function mapDay(row: any): TripDay {
 function mapActivity(row: any): TripActivity {
   return {
     id: row.id,
-    dayId: row.day_id,
-    title: row.title,
+    dayId: row.trip_day_id ?? row.day_id,
+    title: row.activity_name ?? row.title,
     description: row.description,
     startTime: row.start_time,
     endTime: row.end_time,
-    location: row.location,
+    location: row.location_name ?? row.location,
     categoryTag: row.category_tag ?? 'Other',
     sortOrder: row.sort_order ?? 0,
     createdAt: row.created_at,
@@ -217,28 +217,28 @@ function mapParticipant(row: any): TripParticipant {
     userId: row.user_id,
     status: row.status ?? 'pending',
     paymentStatus: row.payment_status ?? 'unpaid',
-    totalPaidCents: row.total_paid_cents ?? 0,
+    totalPaidCents: parseFloat(row.total_paid) || 0,
     cancellationReason: row.cancellation_reason,
-    joinedAt: row.joined_at,
+    joinedAt: row.registered_at ?? row.joined_at,
     confirmedAt: row.confirmed_at,
     cancelledAt: row.cancelled_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: row.registered_at ?? row.created_at,
+    updatedAt: row.updated_at ?? row.registered_at,
   };
 }
 
 function mapSubmission(row: any): TripSubmission {
   return {
     id: row.id,
-    participantId: row.participant_id,
+    participantId: row.trip_participant_id ?? row.participant_id,
     fieldKey: row.field_key,
     fieldType: row.field_type,
     textValue: row.text_value,
     fileUrl: row.file_url,
-    verified: row.verified ?? false,
+    verified: row.verified_by_organizer ?? row.verified ?? false,
     verifiedAt: row.verified_at,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
+    createdAt: row.submitted_at ?? row.created_at,
+    updatedAt: row.updated_at ?? row.submitted_at,
   };
 }
 
@@ -261,13 +261,13 @@ function mapVendor(row: any): TripVendor {
   return {
     id: row.id,
     tripId: row.trip_id,
-    name: row.name,
+    name: row.vendor_name ?? row.name,
     vendorType: row.vendor_type ?? 'other',
     contactEmail: row.contact_email,
     contactPhone: row.contact_phone,
-    costCents: row.cost_cents ?? 0,
+    costCents: parseFloat(row.amount_paid) || 0,
     notes: row.notes,
-    isPaid: row.is_paid ?? false,
+    isPaid: (parseFloat(row.amount_paid) || 0) > 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -280,9 +280,9 @@ function mapMessage(row: any): TripMessage {
     senderId: row.sender_id,
     recipientId: row.recipient_id,
     recipientType: row.recipient_type ?? 'all',
-    body: row.body,
+    body: row.message_body ?? row.body,
     readAt: row.read_at,
-    createdAt: row.created_at,
+    createdAt: row.sent_at ?? row.created_at,
   };
 }
 
@@ -315,15 +315,15 @@ export class TripOrganizerEngine {
       .from("trips")
       .insert({
         organizer_id: data.organizerId,
-        name: data.name,
+        trip_name: data.name,
         description: data.description,
         cover_photo_url: data.coverPhotoUrl,
         destination: data.destination,
         start_date: data.startDate,
         end_date: data.endDate,
         max_participants: data.maxParticipants ?? 20,
-        price_cents: data.priceCents ?? 0,
-        deposit_cents: data.depositCents ?? 0,
+        price_per_person: data.priceCents ?? 0,
+        deposit_amount: data.depositCents ?? 0,
         payment_type: data.paymentType ?? 'lump_sum',
         installment_count: data.installmentCount,
         currency: data.currency ?? 'USD',
@@ -359,15 +359,15 @@ export class TripOrganizerEngine {
     }
 
     const update: any = {};
-    if (data.name !== undefined) update.name = data.name;
+    if (data.name !== undefined) update.trip_name = data.name;
     if (data.description !== undefined) update.description = data.description;
     if (data.coverPhotoUrl !== undefined) update.cover_photo_url = data.coverPhotoUrl;
     if (data.destination !== undefined) update.destination = data.destination;
     if (data.startDate !== undefined) update.start_date = data.startDate;
     if (data.endDate !== undefined) update.end_date = data.endDate;
     if (data.maxParticipants !== undefined) update.max_participants = data.maxParticipants;
-    if (data.priceCents !== undefined) update.price_cents = data.priceCents;
-    if (data.depositCents !== undefined) update.deposit_cents = data.depositCents;
+    if (data.priceCents !== undefined) update.price_per_person = data.priceCents;
+    if (data.depositCents !== undefined) update.deposit_amount = data.depositCents;
     if (data.paymentType !== undefined) update.payment_type = data.paymentType;
     if (data.installmentCount !== undefined) update.installment_count = data.installmentCount;
     if (data.currency !== undefined) update.currency = data.currency;
@@ -391,7 +391,7 @@ export class TripOrganizerEngine {
     // Fetch trip name to generate slug
     const { data: existing, error: fetchError } = await supabase
       .from("trips")
-      .select("name, status")
+      .select("trip_name, status")
       .eq("id", tripId)
       .single();
     if (fetchError) throw new Error(`Failed to fetch trip: ${fetchError.message}`);
@@ -399,7 +399,7 @@ export class TripOrganizerEngine {
       throw new Error(`Only draft trips can be published. Current status: ${existing.status}`);
     }
 
-    const slug = generateSlug(existing.name);
+    const slug = generateSlug(existing.trip_name);
 
     const { data: row, error } = await supabase
       .from("trips")
@@ -467,16 +467,21 @@ export class TripOrganizerEngine {
       cancelled: participants.filter(p => p.status === 'cancelled').length,
     };
 
-    // Fetch payment totals
-    const { data: paymentRows, error: payError } = await supabase
-      .from("trip_payments")
-      .select("amount_cents, status")
-      .eq("trip_id", tripId);
-    if (payError) throw new Error(`Failed to fetch payments: ${payError.message}`);
+    // Fetch payment totals (trip_payments joins through trip_participants)
+    const participantIds = participants.map(p => p.id);
+    let totalCollected = 0;
 
-    const totalCollected = (paymentRows ?? [])
-      .filter(p => p.status === 'succeeded')
-      .reduce((sum: number, p: any) => sum + (p.amount_cents ?? 0), 0);
+    if (participantIds.length > 0) {
+      const { data: paymentRows, error: payError } = await supabase
+        .from("trip_payments")
+        .select("amount, status")
+        .in("trip_participant_id", participantIds);
+      if (!payError && paymentRows) {
+        totalCollected = paymentRows
+          .filter(p => p.status === 'succeeded')
+          .reduce((sum: number, p: any) => sum + (parseFloat(p.amount) || 0), 0);
+      }
+    }
 
     const activeParticipants = participants.filter(p => p.status !== 'cancelled').length;
     const totalExpected = activeParticipants * trip.priceCents;
@@ -563,12 +568,12 @@ export class TripOrganizerEngine {
     const { data: row, error } = await supabase
       .from("trip_activities")
       .insert({
-        day_id: dayId,
-        title: data.title,
+        trip_day_id: dayId,
+        activity_name: data.title,
         description: data.description,
         start_time: data.startTime,
         end_time: data.endTime,
-        location: data.location,
+        location_name: data.location,
         category_tag: data.categoryTag ?? 'Other',
         sort_order: data.sortOrder ?? 0,
       })
@@ -581,11 +586,11 @@ export class TripOrganizerEngine {
   /** Update a trip activity */
   static async updateActivity(activityId: string, data: Partial<TripActivity>): Promise<TripActivity> {
     const update: any = {};
-    if (data.title !== undefined) update.title = data.title;
+    if (data.title !== undefined) update.activity_name = data.title;
     if (data.description !== undefined) update.description = data.description;
     if (data.startTime !== undefined) update.start_time = data.startTime;
     if (data.endTime !== undefined) update.end_time = data.endTime;
-    if (data.location !== undefined) update.location = data.location;
+    if (data.location !== undefined) update.location_name = data.location;
     if (data.categoryTag !== undefined) update.category_tag = data.categoryTag;
     if (data.sortOrder !== undefined) update.sort_order = data.sortOrder;
     update.updated_at = new Date().toISOString();
@@ -626,7 +631,7 @@ export class TripOrganizerEngine {
     const { data: activityRows, error: actError } = await supabase
       .from("trip_activities")
       .select("*")
-      .in("day_id", dayIds)
+      .in("trip_day_id", dayIds)
       .order("sort_order", { ascending: true });
     if (actError) throw new Error(`Failed to fetch itinerary activities: ${actError.message}`);
 
@@ -681,7 +686,7 @@ export class TripOrganizerEngine {
         user_id: userId,
         status: participantStatus,
         payment_status: 'unpaid',
-        total_paid_cents: 0,
+        total_paid: 0,
         joined_at: new Date().toISOString(),
       })
       .select()
@@ -886,41 +891,40 @@ export class TripOrganizerEngine {
     const { data: row, error } = await supabase
       .from("trip_payments")
       .insert({
-        participant_id: participantId,
-        trip_id: data.tripId,
-        amount_cents: data.amountCents ?? 0,
-        type: data.type ?? 'full',
+        trip_participant_id: participantId,
+        amount: data.amountCents ?? 0,
+        payment_type: data.type ?? 'full',
         status: data.status ?? 'pending',
-        reference: data.reference,
-        note: data.note,
         paid_at: data.paidAt ?? new Date().toISOString(),
       })
       .select()
       .single();
     if (error) throw new Error(`Failed to record payment: ${error.message}`);
 
-    // Update participant total_paid_cents if payment succeeded
+    // Update participant total_paid if payment succeeded
     if ((data.status ?? 'pending') === 'succeeded') {
       const { data: participant, error: partError } = await supabase
         .from("trip_participants")
-        .select("total_paid_cents, trip_id")
+        .select("total_paid, trip_id")
         .eq("id", participantId)
         .single();
       if (!partError && participant) {
-        const newTotal = (participant.total_paid_cents ?? 0) + (data.amountCents ?? 0);
+        const newTotal = (participant.total_paid ?? 0) + (data.amountCents ?? 0);
 
         // Determine new payment status
         const { data: trip } = await supabase
           .from("trips")
-          .select("price_cents, deposit_cents")
+          .select("price_per_person, deposit_amount")
           .eq("id", participant.trip_id)
           .single();
 
         let paymentStatus: PaymentStatus = 'partial';
         if (trip) {
-          if (newTotal >= trip.price_cents) {
+          const priceVal = parseFloat(trip.price_per_person) || 0;
+          const depositVal = parseFloat(trip.deposit_amount) || 0;
+          if (newTotal >= priceVal) {
             paymentStatus = 'paid_in_full';
-          } else if (newTotal >= trip.deposit_cents) {
+          } else if (newTotal >= depositVal) {
             paymentStatus = 'deposit_paid';
           }
         }
@@ -928,7 +932,7 @@ export class TripOrganizerEngine {
         await supabase
           .from("trip_participants")
           .update({
-            total_paid_cents: newTotal,
+            total_paid: newTotal,
             payment_status: paymentStatus,
             updated_at: new Date().toISOString(),
           })
@@ -957,10 +961,12 @@ export class TripOrganizerEngine {
     // Get trip price
     const { data: trip, error: tripError } = await supabase
       .from("trips")
-      .select("price_cents")
+      .select("price_per_person")
       .eq("id", tripId)
       .single();
     if (tripError) throw new Error(`Failed to fetch trip: ${tripError.message}`);
+
+    const priceVal = parseFloat(trip?.price_per_person) || 0;
 
     // Count active participants
     const { count, error: countError } = await supabase
@@ -970,17 +976,26 @@ export class TripOrganizerEngine {
       .in("status", ['pending', 'confirmed']);
     if (countError) throw new Error(`Failed to count participants: ${countError.message}`);
 
-    const totalExpected = (count ?? 0) * (trip.price_cents ?? 0);
+    const totalExpected = (count ?? 0) * priceVal;
 
-    // Sum succeeded payments
-    const { data: payments, error: payError } = await supabase
-      .from("trip_payments")
-      .select("amount_cents")
-      .eq("trip_id", tripId)
-      .eq("status", "succeeded");
-    if (payError) throw new Error(`Failed to fetch payments: ${payError.message}`);
+    // Sum succeeded payments (join through trip_participants)
+    const { data: participantIds } = await supabase
+      .from("trip_participants")
+      .select("id")
+      .eq("trip_id", tripId);
 
-    const totalCollected = (payments ?? []).reduce((sum: number, p: any) => sum + (p.amount_cents ?? 0), 0);
+    let totalCollected = 0;
+    if (participantIds && participantIds.length > 0) {
+      const pIds = participantIds.map((p: any) => p.id);
+      const { data: payments, error: payError } = await supabase
+        .from("trip_payments")
+        .select("amount")
+        .in("trip_participant_id", pIds)
+        .eq("status", "succeeded");
+      if (!payError && payments) {
+        totalCollected = payments.reduce((sum: number, p: any) => sum + (parseFloat(p.amount) || 0), 0);
+      }
+    }
 
     return {
       totalExpected,
@@ -999,13 +1014,12 @@ export class TripOrganizerEngine {
       .from("trip_vendors")
       .insert({
         trip_id: tripId,
-        name: data.name,
+        vendor_name: data.name,
         vendor_type: data.vendorType ?? 'other',
         contact_email: data.contactEmail,
         contact_phone: data.contactPhone,
-        cost_cents: data.costCents ?? 0,
+        amount_paid: data.costCents ?? 0,
         notes: data.notes,
-        is_paid: data.isPaid ?? false,
       })
       .select()
       .single();
@@ -1016,13 +1030,12 @@ export class TripOrganizerEngine {
   /** Update a vendor */
   static async updateVendor(vendorId: string, data: Partial<TripVendor>): Promise<TripVendor> {
     const update: any = {};
-    if (data.name !== undefined) update.name = data.name;
+    if (data.name !== undefined) update.vendor_name = data.name;
     if (data.vendorType !== undefined) update.vendor_type = data.vendorType;
     if (data.contactEmail !== undefined) update.contact_email = data.contactEmail;
     if (data.contactPhone !== undefined) update.contact_phone = data.contactPhone;
-    if (data.costCents !== undefined) update.cost_cents = data.costCents;
+    if (data.costCents !== undefined) update.amount_paid = data.costCents;
     if (data.notes !== undefined) update.notes = data.notes;
-    if (data.isPaid !== undefined) update.is_paid = data.isPaid;
     update.updated_at = new Date().toISOString();
 
     const { data: row, error } = await supabase
@@ -1098,7 +1111,7 @@ export class TripOrganizerEngine {
         sender_id: senderId,
         recipient_id: null,
         recipient_type: 'all',
-        body,
+        message_body: body,
       })
       .select()
       .single();
@@ -1120,7 +1133,7 @@ export class TripOrganizerEngine {
         sender_id: senderId,
         recipient_id: recipientId,
         recipient_type: 'individual',
-        body,
+        message_body: body,
       })
       .select()
       .single();
@@ -1137,7 +1150,7 @@ export class TripOrganizerEngine {
     if (type) {
       query = query.eq("recipient_type", type);
     }
-    const { data: rows, error } = await query.order("created_at", { ascending: true });
+    const { data: rows, error } = await query.order("sent_at", { ascending: true });
     if (error) throw new Error(`Failed to fetch messages: ${error.message}`);
     return (rows ?? []).map(mapMessage);
   }
@@ -1235,17 +1248,17 @@ export class TripOrganizerEngine {
       .subscribe();
   }
 
-  /** Subscribe to payment changes for a trip */
-  static subscribeToPayments(tripId: string, callback: (payload: any) => void) {
+  /** Subscribe to payment changes for a participant */
+  static subscribeToPayments(participantId: string, callback: (payload: any) => void) {
     return supabase
-      .channel(`trip-payments-${tripId}`)
+      .channel(`trip-payments-${participantId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'trip_payments',
-          filter: `trip_id=eq.${tripId}`,
+          filter: `trip_participant_id=eq.${participantId}`,
         },
         callback
       )

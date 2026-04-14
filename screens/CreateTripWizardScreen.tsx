@@ -159,14 +159,20 @@ const DatePickerField: React.FC<{
   onChange: (dateStr: string) => void;
 }> = ({ label, value, onChange }) => {
   const [showPicker, setShowPicker] = useState(false);
-
-  const currentDate = value ? new Date(value + 'T00:00:00') : new Date();
+  const [tempDate, setTempDate] = useState<Date>(value ? new Date(value + 'T00:00:00') : new Date());
 
   const handleChange = (_event: any, selectedDate?: Date) => {
-    setShowPicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      onChange(toISODate(selectedDate));
+    if (Platform.OS === 'android') {
+      setShowPicker(false);
+      if (selectedDate) onChange(toISODate(selectedDate));
+    } else if (selectedDate) {
+      setTempDate(selectedDate);
     }
+  };
+
+  const confirmIOSDate = () => {
+    onChange(toISODate(tempDate));
+    setShowPicker(false);
   };
 
   return (
@@ -174,18 +180,40 @@ const DatePickerField: React.FC<{
       <Text style={styles.inputLabel}>{label}</Text>
       <TouchableOpacity
         style={styles.textInput}
-        onPress={() => setShowPicker(true)}
+        onPress={() => {
+          if (value) setTempDate(new Date(value + 'T00:00:00'));
+          setShowPicker(true);
+        }}
         activeOpacity={0.7}
       >
         <Text style={{ fontSize: typography.body, color: value ? NAVY : '#9CA3AF' }}>
           {value ? formatDateFriendly(value) : 'Select date'}
         </Text>
       </TouchableOpacity>
-      {showPicker && (
+      {showPicker && Platform.OS === 'ios' && (
+        <View style={styles.datePickerIOS}>
+          <View style={styles.datePickerHeader}>
+            <TouchableOpacity onPress={() => setShowPicker(false)}>
+              <Text style={styles.datePickerCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={confirmIOSDate}>
+              <Text style={styles.datePickerDone}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <DateTimePicker
+            value={tempDate}
+            mode="date"
+            display="spinner"
+            onChange={handleChange}
+            style={{ height: 150 }}
+          />
+        </View>
+      )}
+      {showPicker && Platform.OS === 'android' && (
         <DateTimePicker
-          value={currentDate}
+          value={tempDate}
           mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          display="default"
           onChange={handleChange}
         />
       )}
@@ -417,7 +445,7 @@ const StepReview: React.FC<{
           </View>
         </View>
         <Text style={styles.reviewTripMeta}>
-          {data.destination} — {data.start_date || '?'} to {data.end_date || '?'} — {data.max_participants || '?'} spots — ${data.price_per_person || '?'}/person
+          {data.destination}{data.start_date ? ` · ${formatDateFriendly(data.start_date)}` : ''}{data.end_date ? ` – ${formatDateFriendly(data.end_date)}` : ''} · {data.max_participants || '?'} spots · ${data.price_per_person || '?'}/person
         </Text>
         <View style={styles.reviewMetaRow}>
           {data.deposit_required && <Text style={styles.reviewMetaItem}>Deposit: ${data.deposit_amount}</Text>}
@@ -525,16 +553,51 @@ const CreateTripWizardScreen: React.FC = () => {
     wizard?.saveDraft?.(formData);
   };
 
-  const publish = () => {
-    wizard?.publish?.(formData);
-    // Navigate to publish success screen
-    navigation.navigate('TripPublishSuccess' as any, {
-      tripName: formData.trip_name,
-      destination: formData.destination,
-      startDate: formData.start_date,
-      endDate: formData.end_date,
-      tripId: wizard?.tripId ?? 'new',
-    });
+  const publish = async () => {
+    try {
+      // 1. Save draft first to get a real tripId
+      if (wizard?.updateStepData) {
+        wizard.updateStepData({
+          name: formData.trip_name,
+          destination: formData.destination,
+          startDate: formData.start_date,
+          endDate: formData.end_date,
+          maxParticipants: formData.max_participants ? parseInt(formData.max_participants) : 20,
+          description: formData.description,
+          priceCents: formData.price_per_person ? parseFloat(formData.price_per_person) : 0,
+          paymentType: formData.payment_type as any,
+          depositCents: formData.deposit_amount ? parseFloat(formData.deposit_amount) : 0,
+          refundPolicy: formData.refund_policy as any,
+        } as any);
+      }
+
+      // Save draft (creates the trip in Supabase)
+      await wizard?.saveDraft?.();
+
+      // Publish the saved trip
+      await wizard?.publish?.();
+
+      const resolvedTripId = wizard?.savedTripId ?? 'new';
+
+      // Navigate to publish success screen
+      navigation.navigate('TripPublishSuccess' as any, {
+        tripName: formData.trip_name,
+        destination: formData.destination,
+        startDate: formData.start_date,
+        endDate: formData.end_date,
+        tripId: resolvedTripId,
+      });
+    } catch (err) {
+      console.warn('[CreateTripWizard] Publish error:', err);
+      // Still navigate but with 'new' tripId
+      navigation.navigate('TripPublishSuccess' as any, {
+        tripName: formData.trip_name,
+        destination: formData.destination,
+        startDate: formData.start_date,
+        endDate: formData.end_date,
+        tripId: 'new',
+      });
+    }
   };
 
   const renderStep = () => {
@@ -574,7 +637,7 @@ const CreateTripWizardScreen: React.FC = () => {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 120 : 0}
       >
         <ScrollView
           ref={scrollRef}
@@ -663,7 +726,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: spacing.lg,
-    paddingBottom: 40,
+    paddingBottom: 120,
   },
   sectionLabel: {
     fontSize: typography.bodyLarge,
@@ -1035,5 +1098,34 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontWeight: typography.semibold,
     color: NAVY,
+  },
+  // --- iOS Date Picker ---
+  datePickerIOS: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.small,
+    marginTop: 4,
+    overflow: 'hidden',
+  },
+  datePickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: '#F9FAFB',
+  },
+  datePickerCancel: {
+    fontSize: 15,
+    fontWeight: '500' as const,
+    color: colors.textSecondary,
+  },
+  datePickerDone: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: TEAL,
   },
 });

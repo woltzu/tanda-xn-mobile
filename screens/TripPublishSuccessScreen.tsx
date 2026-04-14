@@ -50,16 +50,31 @@ const TripPublishSuccessScreen: React.FC = () => {
     }
   };
 
+  const hasTripId = tripId && tripId !== 'new';
+
   const handlePreviewPage = () => {
-    navigation.navigate('TripPublicPage', { slug, tripId });
+    if (hasTripId) {
+      navigation.navigate('TripPublicPage', { slug, tripId });
+    } else {
+      navigation.navigate('TripPublicPage', { slug });
+    }
   };
 
   const handleBuildItinerary = () => {
-    navigation.navigate('ItineraryBuilder', { tripId });
+    if (hasTripId) {
+      navigation.navigate('ItineraryBuilder', { tripId });
+    } else {
+      // Navigate to organizer trip list so user can pick the trip
+      navigation.navigate('OrganizerTripList');
+    }
   };
 
   const handleGoToDashboard = () => {
-    navigation.navigate('OrganizerTripDashboard', { tripId });
+    if (hasTripId) {
+      navigation.navigate('OrganizerTripDashboard', { tripId });
+    } else {
+      navigation.navigate('OrganizerTripList');
+    }
   };
 
   return (

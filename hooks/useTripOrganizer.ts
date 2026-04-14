@@ -73,7 +73,7 @@ export function useTripDashboard(tripId: string) {
   const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
-    if (!tripId) return;
+    if (!tripId || tripId === 'new') return;
     try {
       setLoading(true);
       setError(null);
@@ -91,15 +91,13 @@ export function useTripDashboard(tripId: string) {
 
   // Realtime subscription for participant changes
   useEffect(() => {
-    if (!tripId) return;
+    if (!tripId || tripId === 'new') return;
 
-    const unsubscribe = TripOrganizerEngine.subscribeToParticipants(tripId, {
-      onParticipantChange: () => {
-        fetch();
-      },
+    const channel = TripOrganizerEngine.subscribeToParticipants(tripId, () => {
+      fetch();
     });
 
-    return () => { unsubscribe(); };
+    return () => { channel?.unsubscribe?.(); };
   }, [tripId, fetch]);
 
   return { dashboard, loading, error, refresh: fetch };
@@ -295,7 +293,7 @@ export function useParticipantManager(tripId: string) {
   const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
-    if (!tripId) return;
+    if (!tripId || tripId === 'new') return;
     try {
       setLoading(true);
       setError(null);
@@ -313,15 +311,13 @@ export function useParticipantManager(tripId: string) {
 
   // Realtime subscription
   useEffect(() => {
-    if (!tripId) return;
+    if (!tripId || tripId === 'new') return;
 
-    const unsubscribe = TripOrganizerEngine.subscribeToParticipants(tripId, {
-      onParticipantChange: () => {
-        fetch();
-      },
+    const channel = TripOrganizerEngine.subscribeToParticipants(tripId, () => {
+      fetch();
     });
 
-    return () => { unsubscribe(); };
+    return () => { channel?.unsubscribe?.(); };
   }, [tripId, fetch]);
 
   const setStatusFilter = useCallback((status: ParticipantStatus | null) => {
@@ -432,7 +428,7 @@ export function useTripMessaging(tripId: string) {
   const [sending, setSending] = useState(false);
 
   const fetch = useCallback(async () => {
-    if (!tripId) return;
+    if (!tripId || tripId === 'new') return;
     try {
       setLoading(true);
       setError(null);
@@ -450,15 +446,15 @@ export function useTripMessaging(tripId: string) {
 
   // Realtime subscription — append new messages
   useEffect(() => {
-    if (!tripId) return;
+    if (!tripId || tripId === 'new') return;
 
-    const unsubscribe = TripOrganizerEngine.subscribeToMessages(tripId, {
-      onNewMessage: (message: TripMessage) => {
-        setMessages((prev) => [...prev, message]);
-      },
+    const channel = TripOrganizerEngine.subscribeToMessages(tripId, (payload: any) => {
+      if (payload?.new) {
+        setMessages((prev) => [...prev, payload.new as TripMessage]);
+      }
     });
 
-    return () => { unsubscribe(); };
+    return () => { channel?.unsubscribe?.(); };
   }, [tripId]);
 
   const sendBroadcast = useCallback(async (content: string) => {
@@ -511,7 +507,7 @@ export function useTripVendors(tripId: string) {
   const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
-    if (!tripId) return;
+    if (!tripId || tripId === 'new') return;
     try {
       setLoading(true);
       setError(null);
@@ -711,13 +707,11 @@ export function useTripPayment(participantId: string) {
   useEffect(() => {
     if (!participantId) return;
 
-    const unsubscribe = TripOrganizerEngine.subscribeToPayments(participantId, {
-      onPaymentUpdate: () => {
-        fetch();
-      },
+    const channel = TripOrganizerEngine.subscribeToPayments(participantId, () => {
+      fetch();
     });
 
-    return () => { unsubscribe(); };
+    return () => { channel?.unsubscribe?.(); };
   }, [participantId, fetch]);
 
   const recordPayment = useCallback(async (paymentData: Partial<TripPayment>) => {
