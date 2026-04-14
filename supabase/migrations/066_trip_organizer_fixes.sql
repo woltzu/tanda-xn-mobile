@@ -125,12 +125,12 @@ DROP POLICY IF EXISTS trip_activities_public ON trip_activities;
 CREATE POLICY trip_activities_organizer ON trip_activities
   FOR ALL USING (
     public.is_trip_organizer(
-      (SELECT trip_id FROM trip_days WHERE id = trip_activities.day_id),
+      (SELECT trip_id FROM trip_days WHERE id = trip_activities.trip_day_id),
       auth.uid()
     )
   ) WITH CHECK (
     public.is_trip_organizer(
-      (SELECT trip_id FROM trip_days WHERE id = trip_activities.day_id),
+      (SELECT trip_id FROM trip_days WHERE id = trip_activities.trip_day_id),
       auth.uid()
     )
   );
@@ -138,7 +138,7 @@ CREATE POLICY trip_activities_organizer ON trip_activities
 CREATE POLICY trip_activities_participant ON trip_activities
   FOR SELECT USING (
     public.is_trip_participant(
-      (SELECT trip_id FROM trip_days WHERE id = trip_activities.day_id),
+      (SELECT trip_id FROM trip_days WHERE id = trip_activities.trip_day_id),
       auth.uid()
     )
   );
@@ -148,7 +148,7 @@ CREATE POLICY trip_activities_public ON trip_activities
     EXISTS (
       SELECT 1 FROM trip_days td
       JOIN trips t ON t.id = td.trip_id
-      WHERE td.id = trip_activities.day_id AND t.status = 'published'
+      WHERE td.id = trip_activities.trip_day_id AND t.status = 'published'
     )
   );
 
