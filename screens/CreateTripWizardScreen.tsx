@@ -557,25 +557,37 @@ const CreateTripWizardScreen: React.FC = () => {
     }
   };
 
-  const saveDraft = () => {
-    wizard?.saveDraft?.(formData);
+  // Convert the wizard's snake_case form state into the camelCase Trip shape
+  // that TripOrganizerEngine.createTrip / updateTrip expect.
+  const buildTripData = () => ({
+    name: formData.trip_name,
+    destination: formData.destination,
+    startDate: formData.start_date,
+    endDate: formData.end_date,
+    maxParticipants: formData.max_participants ? parseInt(formData.max_participants) : 20,
+    description: formData.description,
+    priceCents: formData.price_per_person ? parseFloat(formData.price_per_person) : 0,
+    paymentType: formData.payment_type,
+    depositCents: formData.deposit_amount ? parseFloat(formData.deposit_amount) : 0,
+    refundPolicy: mapRefundPolicyToDB(formData.refund_policy),
+  } as any);
+
+  const saveDraft = async () => {
+    try {
+      if (!formData.trip_name?.trim()) {
+        console.warn('[CreateTripWizard] Cannot save draft without a trip name');
+        return;
+      }
+      await wizard?.saveDraft?.(buildTripData());
+    } catch (err) {
+      console.warn('[CreateTripWizard] Save draft error:', err);
+    }
   };
 
   const publish = async () => {
     try {
       // 1. Build trip data matching the Trip interface
-      const tripData = {
-        name: formData.trip_name,
-        destination: formData.destination,
-        startDate: formData.start_date,
-        endDate: formData.end_date,
-        maxParticipants: formData.max_participants ? parseInt(formData.max_participants) : 20,
-        description: formData.description,
-        priceCents: formData.price_per_person ? parseFloat(formData.price_per_person) : 0,
-        paymentType: formData.payment_type,
-        depositCents: formData.deposit_amount ? parseFloat(formData.deposit_amount) : 0,
-        refundPolicy: mapRefundPolicyToDB(formData.refund_policy),
-      } as any;
+      const tripData = buildTripData();
 
       // 2. Save draft — pass data directly to avoid stale state, returns the real tripId
       const tripId = await wizard?.saveDraft?.(tripData);
