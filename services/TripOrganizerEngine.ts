@@ -23,6 +23,7 @@ export interface Trip {
   id: string;
   organizerId: string;
   name: string;
+  tagline: string | null;
   description: string | null;
   coverPhotoUrl: string | null;
   destination: string;
@@ -38,6 +39,9 @@ export interface Trip {
   slug: string | null;
   messagingMode: MessagingMode;
   refundPolicy: RefundPolicy;
+  whatsIncluded: string | null;
+  whatsExcluded: string | null;
+  registrationDeadline: string | null;
   requiredDocuments: { fieldKey: string; fieldType: string; label: string }[];
   publishedAt: string | null;
   createdAt: string;
@@ -159,6 +163,7 @@ function mapTrip(row: any): Trip {
     id: row.id,
     organizerId: row.organizer_id,
     name: row.trip_name ?? row.name,
+    tagline: row.tagline ?? null,
     description: row.description,
     coverPhotoUrl: row.cover_image_url ?? row.cover_photo_url,
     destination: row.destination,
@@ -174,6 +179,9 @@ function mapTrip(row: any): Trip {
     slug: row.slug ?? row.shareable_slug,
     messagingMode: row.messaging_mode ?? 'organizer_only',
     refundPolicy: row.refund_policy ?? 'none',
+    whatsIncluded: row.whats_included ?? null,
+    whatsExcluded: row.whats_excluded ?? null,
+    registrationDeadline: row.registration_deadline ?? null,
     requiredDocuments: row.trip_requirements ?? row.required_documents ?? [],
     publishedAt: null,
     createdAt: row.created_at,
@@ -324,6 +332,7 @@ export class TripOrganizerEngine {
       .insert({
         organizer_id: organizerId,
         trip_name: data.name,
+        tagline: data.tagline ?? null,
         description: data.description,
         cover_image_url: data.coverPhotoUrl,
         destination: data.destination,
@@ -337,6 +346,9 @@ export class TripOrganizerEngine {
         status: 'draft',
         messaging_mode: data.messagingMode ?? 'organizer_only',
         refund_policy: data.refundPolicy ?? 'none',
+        whats_included: data.whatsIncluded ?? null,
+        whats_excluded: data.whatsExcluded ?? null,
+        registration_deadline: data.registrationDeadline ?? null,
         trip_requirements: data.requiredDocuments ?? [],
       })
       .select()
@@ -367,6 +379,7 @@ export class TripOrganizerEngine {
 
     const update: any = {};
     if (data.name !== undefined) update.trip_name = data.name;
+    if (data.tagline !== undefined) update.tagline = data.tagline;
     if (data.description !== undefined) update.description = data.description;
     if (data.coverPhotoUrl !== undefined) update.cover_image_url = data.coverPhotoUrl;
     if (data.destination !== undefined) update.destination = data.destination;
@@ -381,6 +394,9 @@ export class TripOrganizerEngine {
     if (data.paymentType !== undefined) update.payment_type = data.paymentType;
     if (data.messagingMode !== undefined) update.messaging_mode = data.messagingMode;
     if (data.refundPolicy !== undefined) update.refund_policy = data.refundPolicy;
+    if (data.whatsIncluded !== undefined) update.whats_included = data.whatsIncluded;
+    if (data.whatsExcluded !== undefined) update.whats_excluded = data.whatsExcluded;
+    if (data.registrationDeadline !== undefined) update.registration_deadline = data.registrationDeadline;
     if (data.requiredDocuments !== undefined) update.trip_requirements = data.requiredDocuments;
     update.updated_at = new Date().toISOString();
 

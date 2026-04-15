@@ -128,19 +128,51 @@ const TripPublicPageScreen: React.FC = () => {
   const hookResult = usePublicTrip(slug);
   const rawTrip = hookResult?.trip;
 
+  // Calculate duration in days from start/end dates
+  const calcDurationDays = (startStr?: string | null, endStr?: string | null): number => {
+    if (!startStr || !endStr) return 0;
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    const diff = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff + 1 : 0;
+  };
+
+  // Split newline or comma-separated text into a list
+  const splitList = (text?: string | null): string[] => {
+    if (!text) return [];
+    return text
+      .split(/\r?\n|,|;|•/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  };
+
+  // Format a date as "May 15, 2026"
+  const formatDate = (dateStr?: string | null): string => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    } catch {
+      return dateStr;
+    }
+  };
+
   // Map from Trip + days to TripData format
   const trip: TripData = rawTrip ? {
     id: rawTrip.id,
     slug: rawTrip.slug ?? slug,
     name: rawTrip.name ?? 'Untitled Trip',
-    tagline: rawTrip.description ?? '',
+    tagline: (rawTrip as any).tagline ?? rawTrip.description ?? '',
     coverImage: rawTrip.coverPhotoUrl ?? undefined,
-    duration: `${rawTrip.maxParticipants ?? 0} spots`,
+    duration: (() => {
+      const days = calcDurationDays(rawTrip.startDate, rawTrip.endDate);
+      return days > 0 ? `${days} ${days === 1 ? 'Day' : 'Days'}` : '';
+    })(),
     activityCount: (rawTrip as any).days?.reduce((sum: number, d: any) => sum + (d.activities?.length ?? 0), 0) ?? 0,
     pricePerPerson: rawTrip.priceCents ?? 0,
     spotsRemaining: (rawTrip as any).spotsRemaining ?? rawTrip.maxParticipants ?? 0,
     totalSpots: rawTrip.maxParticipants ?? 0,
-    registrationDeadline: rawTrip.endDate ?? '',
+    registrationDeadline: formatDate((rawTrip as any).registrationDeadline ?? rawTrip.startDate),
     itinerary: ((rawTrip as any).days ?? []).map((d: any) => ({
       day: d.dayNumber,
       title: d.title ?? `Day ${d.dayNumber}`,
@@ -152,8 +184,8 @@ const TripPublicPageScreen: React.FC = () => {
         mapsUrl: a.location ? `https://maps.google.com/?q=${encodeURIComponent(a.location)}` : undefined,
       })),
     })),
-    included: [],
-    excluded: [],
+    included: splitList((rawTrip as any).whatsIncluded),
+    excluded: splitList((rawTrip as any).whatsExcluded),
   } : MOCK_TRIP;
   const isLoading = hookResult?.loading ?? false;
 

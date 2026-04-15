@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Switch,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -426,7 +427,8 @@ const StepCommunication: React.FC<{
 const StepReview: React.FC<{
   data: TripFormData;
   onPublish: () => void;
-}> = ({ data, onPublish }) => {
+  onSaveDraft: () => void;
+}> = ({ data, onPublish, onSaveDraft }) => {
   const ReviewRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
     <View style={styles.reviewRow}>
       <Text style={styles.reviewLabel}>{label}</Text>
@@ -498,7 +500,7 @@ const StepReview: React.FC<{
         <Text style={styles.publishBtnText}>Publish Trip</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.saveDraftReviewBtn} activeOpacity={0.7}>
+      <TouchableOpacity style={styles.saveDraftReviewBtn} activeOpacity={0.7} onPress={onSaveDraft}>
         <Text style={styles.saveDraftReviewText}>Save as Draft</Text>
       </TouchableOpacity>
     </View>
@@ -565,22 +567,28 @@ const CreateTripWizardScreen: React.FC = () => {
     startDate: formData.start_date,
     endDate: formData.end_date,
     maxParticipants: formData.max_participants ? parseInt(formData.max_participants) : 20,
-    description: formData.description,
+    tagline: formData.tagline || null,
+    description: formData.description || null,
+    whatsIncluded: formData.whats_included || null,
+    whatsExcluded: formData.whats_excluded || null,
     priceCents: formData.price_per_person ? parseFloat(formData.price_per_person) : 0,
     paymentType: formData.payment_type,
     depositCents: formData.deposit_amount ? parseFloat(formData.deposit_amount) : 0,
     refundPolicy: mapRefundPolicyToDB(formData.refund_policy),
+    messagingMode: formData.messaging_mode ? 'group' : 'organizer_only',
   } as any);
 
   const saveDraft = async () => {
     try {
       if (!formData.trip_name?.trim()) {
-        console.warn('[CreateTripWizard] Cannot save draft without a trip name');
+        Alert.alert('Trip name required', 'Please enter a trip name before saving as a draft.');
         return;
       }
       await wizard?.saveDraft?.(buildTripData());
-    } catch (err) {
+      Alert.alert('Draft saved', 'Your trip has been saved as a draft. You can come back and edit it anytime.');
+    } catch (err: any) {
       console.warn('[CreateTripWizard] Save draft error:', err);
+      Alert.alert('Could not save draft', err?.message ?? 'An unknown error occurred. Please try again.');
     }
   };
 
@@ -610,16 +618,9 @@ const CreateTripWizardScreen: React.FC = () => {
         tripId: resolvedTripId,
         slug: publishedSlug,
       });
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[CreateTripWizard] Publish error:', err);
-      // Still navigate but with 'new' tripId
-      navigation.navigate('TripPublishSuccess' as any, {
-        tripName: formData.trip_name,
-        destination: formData.destination,
-        startDate: formData.start_date,
-        endDate: formData.end_date,
-        tripId: 'new',
-      });
+      Alert.alert('Could not publish trip', err?.message ?? 'An unknown error occurred. Please try again.');
     }
   };
 
@@ -628,7 +629,7 @@ const CreateTripWizardScreen: React.FC = () => {
       case 0: return <StepBasics data={formData} update={updateForm} />;
       case 1: return <StepPayment data={formData} update={updateForm} />;
       case 2: return <StepRequirements data={formData} update={updateForm} />;
-      case 3: return <StepReview data={formData} onPublish={publish} />;
+      case 3: return <StepReview data={formData} onPublish={publish} onSaveDraft={saveDraft} />;
       default: return null;
     }
   };

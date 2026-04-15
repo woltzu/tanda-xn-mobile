@@ -48,6 +48,49 @@ const getCategoryEmoji = (tag: string | null | undefined): string => {
   return cat?.emoji ?? '\uD83D\uDCCD';
 };
 
+// Normalize "4:30 PM" / "16:30" / "4:30" / "" into a Postgres TIME literal
+// (HH:MM:SS). Returns null for empty/invalid input.
+const normalizeTime = (input: string | null | undefined): string | null => {
+  if (!input) return null;
+  const raw = input.trim();
+  if (!raw) return null;
+
+  // Match "H[:MM] [AM|PM]" or "HH:MM"
+  const match = raw.match(/^(\d{1,2})(?::(\d{1,2}))?\s*([ap]m)?$/i);
+  if (!match) return null;
+
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2] ? parseInt(match[2], 10) : 0;
+  const meridian = match[3]?.toLowerCase();
+
+  if (isNaN(hours) || isNaN(minutes)) return null;
+  if (minutes < 0 || minutes > 59) return null;
+
+  if (meridian === 'am') {
+    if (hours === 12) hours = 0;
+  } else if (meridian === 'pm') {
+    if (hours < 12) hours += 12;
+  }
+
+  if (hours < 0 || hours > 23) return null;
+
+  const hh = String(hours).padStart(2, '0');
+  const mm = String(minutes).padStart(2, '0');
+  return `${hh}:${mm}:00`;
+};
+
+// Format a Postgres TIME "HH:MM:SS" back into "H:MM AM/PM" for display
+const formatTimeDisplay = (time: string | null | undefined): string => {
+  if (!time) return '';
+  const match = time.match(/^(\d{1,2}):(\d{1,2})/);
+  if (!match) return time;
+  let hours = parseInt(match[1], 10);
+  const mins = match[2];
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12 || 12;
+  return `${hours}:${mins} ${ampm}`;
+};
+
 // --- Modal form state ---
 interface ModalForm {
   activityId: string | null;
@@ -76,7 +119,7 @@ const ActivityRow: React.FC<{
   onEdit: () => void;
 }> = ({ activity, onEdit }) => (
   <TouchableOpacity style={styles.activityRow} onPress={onEdit} activeOpacity={0.6}>
-    <Text style={styles.activityTime}>{activity.startTime ?? ''}</Text>
+    <Text style={styles.activityTime}>{formatTimeDisplay(activity.startTime)}</Text>
     <Text style={styles.activityEmoji}>{getCategoryEmoji(activity.categoryTag)}</Text>
     <View style={styles.activityInfo}>
       <Text style={styles.activityName} numberOfLines={1}>{activity.title}</Text>
@@ -357,8 +400,8 @@ const ItineraryBuilderScreen: React.FC = () => {
       activityId: activity.id,
       dayId,
       name: activity.title ?? '',
-      startTime: activity.startTime ?? '',
-      endTime: activity.endTime ?? '',
+      startTime: formatTimeDisplay(activity.startTime),
+      endTime: formatTimeDisplay(activity.endTime),
       category: (activity.categoryTag as CategoryTag) ?? 'Other',
       description: activity.description ?? '',
       location: activity.location ?? '',
@@ -376,16 +419,21 @@ const ItineraryBuilderScreen: React.FC = () => {
   };
 
   const handleSaveActivity = async () => {
-    if (!modalForm || !modalForm.name.trim()) return;
+    if (!modalForm || !modalForm.name.trim()) {
+      Alert.alert('Name required', 'Please enter an activity name.');
+      return;
+    }
     setSaving(true);
     try {
       const day = builder.days.find((d) => d.id === modalForm.dayId);
+      const startTime = normalizeTime(modalForm.startTime);
+      const endTime = normalizeTime(modalForm.endTime);
       if (modalForm.activityId) {
         // Update existing
         await TripOrganizerEngine.updateActivity(modalForm.activityId, {
           title: modalForm.name,
-          startTime: modalForm.startTime || null,
-          endTime: modalForm.endTime || null,
+          startTime,
+          endTime,
           description: modalForm.description || null,
           location: modalForm.location || null,
           categoryTag: modalForm.category,
@@ -394,8 +442,8 @@ const ItineraryBuilderScreen: React.FC = () => {
         // Add new
         await TripOrganizerEngine.addActivity(modalForm.dayId, {
           title: modalForm.name,
-          startTime: modalForm.startTime || null,
-          endTime: modalForm.endTime || null,
+          startTime,
+          endTime,
           description: modalForm.description || null,
           location: modalForm.location || null,
           categoryTag: modalForm.category,
@@ -404,8 +452,9 @@ const ItineraryBuilderScreen: React.FC = () => {
       }
       await builder.refresh();
       closeModal();
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[ItineraryBuilder] Save activity error:', err);
+      Alert.alert('Could not save activity', err?.message ?? 'An unknown error occurred.');
     } finally {
       setSaving(false);
     }
