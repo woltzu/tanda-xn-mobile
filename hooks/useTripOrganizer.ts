@@ -6,6 +6,7 @@
 // ══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../lib/supabase';
 import {
   TripOrganizerEngine,
   type Trip,
@@ -38,17 +39,28 @@ export type {
 // │  1. useOrganizerTrips — Trips managed by the organizer                  │
 // └──────────────────────────────────────────────────────────────────────────┘
 
-export function useOrganizerTrips(userId: string) {
+export function useOrganizerTrips(userId?: string) {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
-    if (!userId) return;
     try {
       setLoading(true);
       setError(null);
-      const data = await TripOrganizerEngine.getOrganizerTrips(userId);
+
+      // If no userId passed in, resolve from the current auth session
+      let resolvedId = userId;
+      if (!resolvedId) {
+        const { data: { user } } = await supabase.auth.getUser();
+        resolvedId = user?.id;
+      }
+      if (!resolvedId) {
+        setTrips([]);
+        return;
+      }
+
+      const data = await TripOrganizerEngine.getOrganizerTrips(resolvedId);
       setTrips(data);
     } catch (err: any) {
       console.error('useOrganizerTrips error:', err);
@@ -73,7 +85,10 @@ export function useTripDashboard(tripId: string) {
   const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
-    if (!tripId || tripId === 'new') return;
+    if (!tripId || tripId === 'new') {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -186,7 +201,10 @@ export function useItineraryBuilder(tripId: string) {
   const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
-    if (!tripId || tripId === 'new') return;
+    if (!tripId || tripId === 'new') {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -573,25 +591,32 @@ export function useTripVendors(tripId: string) {
 // │  9. usePublicTrip — Public trip view by slug                            │
 // └──────────────────────────────────────────────────────────────────────────┘
 
-export function usePublicTrip(slug: string) {
+export function usePublicTrip(slug: string, tripId?: string) {
   const [trip, setTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetch = useCallback(async () => {
-    if (!slug) return;
     try {
       setLoading(true);
       setError(null);
-      const data = await TripOrganizerEngine.getPublicTrip(slug);
-      setTrip(data);
+      if (slug) {
+        const data = await TripOrganizerEngine.getPublicTrip(slug);
+        setTrip(data);
+      } else if (tripId && tripId !== 'new') {
+        // Fallback: organizer preview before publish — look up by tripId
+        const data = await TripOrganizerEngine.getPublicTripById(tripId);
+        setTrip(data);
+      } else {
+        setTrip(null);
+      }
     } catch (err: any) {
       console.error('usePublicTrip error:', err);
       setError(err.message || 'Failed to load public trip');
     } finally {
       setLoading(false);
     }
-  }, [slug]);
+  }, [slug, tripId]);
 
   useEffect(() => { fetch(); }, [fetch]);
 

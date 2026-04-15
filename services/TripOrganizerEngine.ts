@@ -1190,6 +1190,78 @@ export class TripOrganizerEngine {
   // GROUP 8: PUBLIC
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /** Shared helper — fetches days + activities + spots remaining for a given trip */
+  private static async hydratePublicTrip(
+    trip: Trip
+  ): Promise<Trip & { days: (TripDay & { activities: TripActivity[] })[]; spotsRemaining: number }> {
+    // Fetch days
+    const { data: dayRows, error: dayError } = await supabase
+      .from("trip_days")
+      .select("*")
+      .eq("trip_id", trip.id)
+      .order("sort_order", { ascending: true });
+    if (dayError) throw new Error(`Failed to fetch days: ${dayError.message}`);
+
+    const days = (dayRows ?? []).map(mapDay);
+
+    // Fetch activities for all days
+    const dayIds = days.map(d => d.id);
+    const activitiesByDay: Record<string, TripActivity[]> = {};
+    if (dayIds.length > 0) {
+      const { data: actRows, error: actError } = await supabase
+        .from("trip_activities")
+        .select("*")
+        .in("trip_day_id", dayIds)
+        .order("sort_order", { ascending: true });
+      if (!actError && actRows) {
+        for (const row of actRows) {
+          const act = mapActivity(row);
+          const did = row.trip_day_id;
+          if (!activitiesByDay[did]) activitiesByDay[did] = [];
+          activitiesByDay[did].push(act);
+        }
+      }
+    }
+
+    const daysWithActivities = days.map(d => ({
+      ...d,
+      activities: activitiesByDay[d.id] ?? [],
+    }));
+
+    // Count active participants
+    const { count } = await supabase
+      .from("trip_participants")
+      .select("id", { count: 'exact', head: true })
+      .eq("trip_id", trip.id)
+      .in("status", ['pending', 'confirmed']);
+
+    const spotsRemaining = Math.max(0, trip.maxParticipants - (count ?? 0));
+
+    return {
+      ...trip,
+      days: daysWithActivities,
+      spotsRemaining,
+    };
+  }
+
+  /** Get a trip by its ID for preview (organizer-only, works for draft trips) */
+  static async getPublicTripById(
+    tripId: string
+  ): Promise<(Trip & { days: (TripDay & { activities: TripActivity[] })[]; spotsRemaining: number }) | null> {
+    if (!tripId || tripId === 'new') return null;
+
+    const { data: tripRow, error: tripError } = await supabase
+      .from("trips")
+      .select("*")
+      .eq("id", tripId)
+      .maybeSingle();
+    if (tripError) throw new Error(`Trip not found: ${tripError.message}`);
+    if (!tripRow) return null;
+
+    const trip = mapTrip(tripRow);
+    return this.hydratePublicTrip(trip);
+  }
+
   /** Get a public trip by its slug, including itinerary days and spots remaining */
   static async getPublicTrip(
     slug: string

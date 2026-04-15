@@ -361,7 +361,7 @@ export default function DashboardScreen() {
           style={styles.tripOrganizerCard}
           onPress={() => navigation.navigate("OrganizerTripList" as any)}
           activeOpacity={0.85}
-          accessibilityLabel="Plan a group trip"
+          accessibilityLabel="View my trips"
           accessibilityRole="button"
         >
           <View style={styles.tripOrganizerLeft}>
@@ -369,14 +369,14 @@ export default function DashboardScreen() {
               <Text style={{ fontSize: 26 }}>{"\u2708\uFE0F"}</Text>
             </View>
             <View style={styles.tripOrganizerText}>
-              <Text style={styles.tripOrganizerTitle}>Plan a Group Trip</Text>
+              <Text style={styles.tripOrganizerTitle}>My Trips</Text>
               <Text style={styles.tripOrganizerDesc}>
-                Organize itineraries, collect payments & manage participants
+                Organize, manage & track all your group trips
               </Text>
             </View>
           </View>
           <View style={styles.tripOrganizerCta}>
-            <Text style={styles.tripOrganizerCtaText}>Start {"\u2192"}</Text>
+            <Text style={styles.tripOrganizerCtaText}>Open {"\u2192"}</Text>
           </View>
         </TouchableOpacity>
 

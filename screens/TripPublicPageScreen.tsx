@@ -124,8 +124,8 @@ const TripPublicPageScreen: React.FC = () => {
   const slug = route.params?.slug ?? '';
   const tripId = route.params?.tripId ?? '';
 
-  // Hook fetches by slug — falls back to mock when no real data
-  const hookResult = usePublicTrip(slug);
+  // Hook fetches by slug (published) or falls back to tripId (draft preview)
+  const hookResult = usePublicTrip(slug, tripId);
   const rawTrip = hookResult?.trip;
 
   // Calculate duration in days from start/end dates

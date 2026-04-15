@@ -15,7 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { colors, radius, typography, spacing } from '../theme/tokens';
-import { useOrganizerTrips } from '../hooks/useTripOrganizer';
+import { useOrganizerTrips, type Trip } from '../hooks/useTripOrganizer';
 
 // --- Design tokens ---
 const NAVY = '#0A2342';
@@ -84,28 +84,28 @@ const GradientPlaceholder: React.FC = () => (
   </View>
 );
 
-const TripCard: React.FC<{ trip: OrganizerTrip; onPress: () => void }> = ({ trip, onPress }) => (
+const TripCard: React.FC<{ trip: Trip; onPress: () => void }> = ({ trip, onPress }) => (
   <TouchableOpacity style={styles.card} activeOpacity={0.7} onPress={onPress}>
-    {trip.cover_image_url ? (
-      <Image source={{ uri: trip.cover_image_url }} style={styles.coverImage} />
+    {trip.coverPhotoUrl ? (
+      <Image source={{ uri: trip.coverPhotoUrl }} style={styles.coverImage} />
     ) : (
       <GradientPlaceholder />
     )}
     <View style={styles.cardBody}>
       <View style={styles.cardTopRow}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.tripName} numberOfLines={1}>{trip.trip_name}</Text>
+          <Text style={styles.tripName} numberOfLines={1}>{trip.name}</Text>
           <Text style={styles.destination} numberOfLines={1}>{trip.destination}</Text>
         </View>
-        <StatusPill status={trip.status} />
+        <StatusPill status={trip.status as TripStatus} />
       </View>
-      <Text style={styles.dateRange}>{formatDateRange(trip.start_date, trip.end_date)}</Text>
+      <Text style={styles.dateRange}>{formatDateRange(trip.startDate, trip.endDate)}</Text>
       <View style={styles.cardBottomRow}>
         <Text style={styles.statText}>
-          👥 {trip.confirmed_count}/{trip.max_participants} confirmed
+          👥 {trip.maxParticipants} max
         </Text>
         <Text style={styles.statText}>
-          💰 ${trip.total_collected.toLocaleString()} collected
+          💰 ${(trip.priceCents ?? 0).toLocaleString()}/person
         </Text>
       </View>
     </View>
@@ -131,7 +131,7 @@ const OrganizerTripListScreen: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
   const [refreshing, setRefreshing] = useState(false);
 
-  const filteredTrips = (trips ?? []).filter((t: OrganizerTrip) => {
+  const filteredTrips = (trips ?? []).filter((t: Trip) => {
     if (activeFilter === 'all') return true;
     if (activeFilter === 'past') return t.status === 'closed' || t.status === 'cancelled';
     return t.status === activeFilter;
