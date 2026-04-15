@@ -581,19 +581,22 @@ const CreateTripWizardScreen: React.FC = () => {
       const tripId = await wizard?.saveDraft?.(tripData);
 
       // 3. Publish using the returned tripId (can't rely on state update)
+      let publishedSlug = '';
       if (tripId) {
-        await wizard?.publish?.(tripId);
+        const publishedTrip = await wizard?.publish?.(tripId);
+        publishedSlug = publishedTrip?.slug ?? '';
       }
 
       const resolvedTripId = tripId ?? 'new';
 
-      // 4. Navigate to publish success screen
+      // 4. Navigate to publish success screen with real slug from DB
       navigation.navigate('TripPublishSuccess' as any, {
         tripName: formData.trip_name,
         destination: formData.destination,
         startDate: formData.start_date,
         endDate: formData.end_date,
         tripId: resolvedTripId,
+        slug: publishedSlug,
       });
     } catch (err) {
       console.warn('[CreateTripWizard] Publish error:', err);

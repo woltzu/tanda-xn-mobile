@@ -148,16 +148,17 @@ export function useCreateTripWizard() {
     }
   }, [savedTripId, draftData]);
 
-  const publish = useCallback(async (tripIdOverride?: string) => {
+  const publish = useCallback(async (tripIdOverride?: string): Promise<Trip | null> => {
     const idToPublish = tripIdOverride || savedTripId;
     if (!idToPublish) {
       setError('No saved trip to publish. Save a draft first.');
-      return;
+      return null;
     }
     try {
       setLoading(true);
       setError(null);
-      await TripOrganizerEngine.publishTrip(idToPublish);
+      const publishedTrip = await TripOrganizerEngine.publishTrip(idToPublish);
+      return publishedTrip;
     } catch (err: any) {
       console.error('useCreateTripWizard publish error:', err);
       setError(err.message || 'Failed to publish trip');

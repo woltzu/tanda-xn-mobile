@@ -121,12 +121,41 @@ const MOCK_TRIP: TripData = {
 const TripPublicPageScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const slug = route.params?.slug ?? route.params?.tripId ?? MOCK_TRIP.slug;
+  const slug = route.params?.slug ?? '';
+  const tripId = route.params?.tripId ?? '';
 
-  // Hook integration — falls back to mock
+  // Hook fetches by slug — falls back to mock when no real data
   const hookResult = usePublicTrip(slug);
-  const trip: TripData = (hookResult as any)?.data ?? MOCK_TRIP;
-  const isLoading = (hookResult as any)?.isLoading ?? false;
+  const rawTrip = hookResult?.trip;
+
+  // Map from Trip + days to TripData format
+  const trip: TripData = rawTrip ? {
+    id: rawTrip.id,
+    slug: rawTrip.slug ?? slug,
+    name: rawTrip.name ?? 'Untitled Trip',
+    tagline: rawTrip.description ?? '',
+    coverImage: rawTrip.coverPhotoUrl ?? undefined,
+    duration: `${rawTrip.maxParticipants ?? 0} spots`,
+    activityCount: (rawTrip as any).days?.reduce((sum: number, d: any) => sum + (d.activities?.length ?? 0), 0) ?? 0,
+    pricePerPerson: rawTrip.priceCents ?? 0,
+    spotsRemaining: (rawTrip as any).spotsRemaining ?? rawTrip.maxParticipants ?? 0,
+    totalSpots: rawTrip.maxParticipants ?? 0,
+    registrationDeadline: rawTrip.endDate ?? '',
+    itinerary: ((rawTrip as any).days ?? []).map((d: any) => ({
+      day: d.dayNumber,
+      title: d.title ?? `Day ${d.dayNumber}`,
+      activities: (d.activities ?? []).map((a: any) => ({
+        id: a.id,
+        time: a.startTime ?? '',
+        name: a.title ?? '',
+        location: a.location ?? undefined,
+        mapsUrl: a.location ? `https://maps.google.com/?q=${encodeURIComponent(a.location)}` : undefined,
+      })),
+    })),
+    included: [],
+    excluded: [],
+  } : MOCK_TRIP;
+  const isLoading = hookResult?.loading ?? false;
 
   const [expandedDays, setExpandedDays] = useState<Record<number, boolean>>({});
 

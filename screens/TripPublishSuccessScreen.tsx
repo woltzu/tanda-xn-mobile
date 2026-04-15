@@ -28,10 +28,11 @@ const TripPublishSuccessScreen: React.FC = () => {
     startDate = '',
     endDate = '',
     tripId = 'new',
+    slug: passedSlug = '',
   } = route.params ?? {};
 
-  // Generate a slug from the trip name
-  const slug = tripName
+  // Use the real slug from DB (includes random suffix), fallback to local generation
+  const slug = passedSlug || tripName
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')

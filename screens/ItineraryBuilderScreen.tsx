@@ -88,38 +88,43 @@ const ActivityRow: React.FC<{
   </TouchableOpacity>
 );
 
-// --- Day Card ---
+// --- Day Card (uses local state for title to avoid keyboard dismiss on each keystroke) ---
 const DayCard: React.FC<{
   day: { id: string; dayNumber: number; date: string; title: string | null; activities: TripActivity[] };
-  onEditTitle: (title: string) => void;
+  onSaveTitle: (title: string) => void;
   onAddActivity: () => void;
   onEditActivity: (activity: TripActivity) => void;
   onDeleteDay: () => void;
-}> = ({ day, onEditTitle, onAddActivity, onEditActivity, onDeleteDay }) => (
-  <View style={styles.dayCard}>
-    <View style={styles.dayHeader}>
-      <Text style={styles.dayLabel}>DAY {day.dayNumber}</Text>
-      <Text style={styles.dayDate}>{day.date}</Text>
-      <TouchableOpacity onPress={onDeleteDay} style={styles.dayDeleteBtn}>
-        <Ionicons name="trash-outline" size={16} color="#EF4444" />
+}> = ({ day, onSaveTitle, onAddActivity, onEditActivity, onDeleteDay }) => {
+  const [localTitle, setLocalTitle] = useState(day.title ?? '');
+
+  return (
+    <View style={styles.dayCard}>
+      <View style={styles.dayHeader}>
+        <Text style={styles.dayLabel}>DAY {day.dayNumber}</Text>
+        <Text style={styles.dayDate}>{day.date}</Text>
+        <TouchableOpacity onPress={onDeleteDay} style={styles.dayDeleteBtn}>
+          <Ionicons name="trash-outline" size={16} color="#EF4444" />
+        </TouchableOpacity>
+      </View>
+      <TextInput
+        style={styles.dayTitleInput}
+        value={localTitle}
+        onChangeText={setLocalTitle}
+        onBlur={() => { if (localTitle !== (day.title ?? '')) onSaveTitle(localTitle); }}
+        placeholder="Day title (e.g. Arrival Day)"
+        placeholderTextColor="#9CA3AF"
+      />
+      {day.activities.map((act) => (
+        <ActivityRow key={act.id} activity={act} onEdit={() => onEditActivity(act)} />
+      ))}
+      <TouchableOpacity style={styles.addActivityBtn} onPress={onAddActivity} activeOpacity={0.7}>
+        <Ionicons name="add-circle-outline" size={20} color={TEAL} />
+        <Text style={styles.addActivityText}>Add Activity</Text>
       </TouchableOpacity>
     </View>
-    <TextInput
-      style={styles.dayTitleInput}
-      value={day.title ?? ''}
-      onChangeText={onEditTitle}
-      placeholder="Day title (e.g. Arrival Day)"
-      placeholderTextColor="#9CA3AF"
-    />
-    {day.activities.map((act) => (
-      <ActivityRow key={act.id} activity={act} onEdit={() => onEditActivity(act)} />
-    ))}
-    <TouchableOpacity style={styles.addActivityBtn} onPress={onAddActivity} activeOpacity={0.7}>
-      <Ionicons name="add-circle-outline" size={20} color={TEAL} />
-      <Text style={styles.addActivityText}>Add Activity</Text>
-    </TouchableOpacity>
-  </View>
-);
+  );
+};
 
 // --- Activity Editor Bottom Sheet Modal ---
 const ActivityModal: React.FC<{
@@ -469,7 +474,7 @@ const ItineraryBuilderScreen: React.FC = () => {
               <DayCard
                 key={day.id}
                 day={day}
-                onEditTitle={(title) => handleUpdateDayTitle(day.id, title)}
+                onSaveTitle={(title) => handleUpdateDayTitle(day.id, title)}
                 onAddActivity={() => openAddModal(day.id, day.activities)}
                 onEditActivity={(activity) => openEditModal(day.id, activity)}
                 onDeleteDay={() => handleDeleteDay(day.id)}

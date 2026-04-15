@@ -1199,6 +1199,33 @@ export class TripOrganizerEngine {
       .order("sort_order", { ascending: true });
     if (dayError) throw new Error(`Failed to fetch days: ${dayError.message}`);
 
+    const days = (dayRows ?? []).map(mapDay);
+
+    // Fetch activities for all days
+    const dayIds = days.map(d => d.id);
+    let activitiesByDay: Record<string, TripActivity[]> = {};
+    if (dayIds.length > 0) {
+      const { data: actRows, error: actError } = await supabase
+        .from("trip_activities")
+        .select("*")
+        .in("trip_day_id", dayIds)
+        .order("sort_order", { ascending: true });
+      if (!actError && actRows) {
+        for (const row of actRows) {
+          const act = mapActivity(row);
+          const did = row.trip_day_id;
+          if (!activitiesByDay[did]) activitiesByDay[did] = [];
+          activitiesByDay[did].push(act);
+        }
+      }
+    }
+
+    // Attach activities to each day
+    const daysWithActivities = days.map(d => ({
+      ...d,
+      activities: activitiesByDay[d.id] ?? [],
+    }));
+
     // Count active participants
     const { count, error: countError } = await supabase
       .from("trip_participants")
@@ -1211,7 +1238,7 @@ export class TripOrganizerEngine {
 
     return {
       ...trip,
-      days: (dayRows ?? []).map(mapDay),
+      days: daysWithActivities,
       spotsRemaining,
     };
   }
