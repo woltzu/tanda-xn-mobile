@@ -173,7 +173,7 @@ const OrganizerTripDashboardScreen: React.FC = () => {
                 <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => navigation.navigate('TripSettings', { tripId })}
+                onPress={() => navigation.navigate('CreateTripWizard', { tripId, mode: 'edit' })}
                 style={styles.heroBtn}
               >
                 <Ionicons name="settings-outline" size={24} color="#FFFFFF" />

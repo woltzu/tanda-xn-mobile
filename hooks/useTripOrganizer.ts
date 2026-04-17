@@ -183,9 +183,17 @@ export function useCreateTripWizard() {
     }
   }, [savedTripId]);
 
+  // Pre-seed the wizard with an existing tripId so saveDraft performs an
+  // update instead of a create (used for edit mode). Optionally hydrate
+  // the draft data in the same call.
+  const initEditMode = useCallback((tripId: string, data?: Partial<Trip>) => {
+    setSavedTripId(tripId);
+    if (data) setDraftData(data);
+  }, []);
+
   return {
     currentStep, draftData, savedTripId, loading, error,
-    nextStep, prevStep, updateStepData, saveDraft, publish,
+    nextStep, prevStep, updateStepData, saveDraft, publish, initEditMode,
   };
 }
 

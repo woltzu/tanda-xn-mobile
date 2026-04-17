@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,12 +12,14 @@ import {
   Platform,
   Switch,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useCreateTripWizard } from '../hooks/useTripOrganizer';
+import { TripOrganizerEngine } from '../services/TripOrganizerEngine';
 
 // --- Design tokens ---
 const NAVY = '#0A2342';
@@ -87,6 +89,15 @@ const mapRefundPolicyToDB = (policy: string): string => {
   if (policy.startsWith('Full refund')) return 'full';
   if (policy.startsWith('50%') || policy === 'Custom') return 'partial';
   return 'none';
+};
+
+// Reverse of mapRefundPolicyToDB — lossy because the DB enum is coarser than
+// the display options. Pick a reasonable default display for each enum.
+const mapRefundPolicyFromDB = (db?: string | null): string => {
+  if (db === 'full') return 'Full refund up to 30 days before';
+  if (db === 'partial') return '50% refund up to 7 days before';
+  if (db === 'none') return 'No refunds';
+  return '';
 };
 
 // --- Sub-components ---
@@ -428,7 +439,8 @@ const StepReview: React.FC<{
   data: TripFormData;
   onPublish: () => void;
   onSaveDraft: () => void;
-}> = ({ data, onPublish, onSaveDraft }) => {
+  isEditMode?: boolean;
+}> = ({ data, onPublish, onSaveDraft, isEditMode }) => {
   const ReviewRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
     <View style={styles.reviewRow}>
       <Text style={styles.reviewLabel}>{label}</Text>
@@ -496,8 +508,13 @@ const StepReview: React.FC<{
       </View>
 
       <TouchableOpacity style={styles.publishBtn} activeOpacity={0.7} onPress={onPublish}>
-        <Ionicons name="rocket-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-        <Text style={styles.publishBtnText}>Publish Trip</Text>
+        <Ionicons
+          name={isEditMode ? 'save-outline' : 'rocket-outline'}
+          size={20}
+          color="#FFFFFF"
+          style={{ marginRight: 8 }}
+        />
+        <Text style={styles.publishBtnText}>{isEditMode ? 'Save Changes' : 'Publish Trip'}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.saveDraftReviewBtn} activeOpacity={0.7} onPress={onSaveDraft}>
@@ -511,9 +528,15 @@ const StepReview: React.FC<{
 
 const CreateTripWizardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
   const wizard = useCreateTripWizard();
   const scrollRef = useRef<ScrollView>(null);
   const [currentStep, setCurrentStep] = useState(0);
+
+  // Edit mode: /CreateTripWizard?tripId=...&mode=edit
+  const editTripId: string | undefined = route.params?.tripId;
+  const isEditMode: boolean = route.params?.mode === 'edit' && !!editTripId;
+  const [hydrating, setHydrating] = useState<boolean>(isEditMode);
 
   const [formData, setFormData] = useState<TripFormData>({
     trip_name: '',
@@ -542,6 +565,48 @@ const CreateTripWizardScreen: React.FC = () => {
   const updateForm = (partial: Partial<TripFormData>) => {
     setFormData((prev) => ({ ...prev, ...partial }));
   };
+
+  // Edit mode: load the existing trip and hydrate the wizard form
+  useEffect(() => {
+    if (!isEditMode || !editTripId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const dashboard = await TripOrganizerEngine.getTripDashboard(editTripId);
+        if (cancelled) return;
+        const trip = dashboard.trip;
+        if (!trip) throw new Error('Trip not found.');
+        setFormData((prev) => ({
+          ...prev,
+          trip_name: trip.name ?? '',
+          destination: trip.destination ?? '',
+          start_date: trip.startDate ?? '',
+          end_date: trip.endDate ?? '',
+          max_participants: trip.maxParticipants ? String(trip.maxParticipants) : '',
+          tagline: (trip as any).tagline ?? '',
+          description: (trip as any).description ?? '',
+          whats_included: (trip as any).whatsIncluded ?? '',
+          whats_excluded: (trip as any).whatsExcluded ?? '',
+          price_per_person: trip.priceCents ? String(trip.priceCents) : '',
+          payment_type: ((trip as any).paymentType === 'installments' ? 'installments' : 'lump_sum'),
+          deposit_required: !!(trip as any).depositCents,
+          deposit_amount: (trip as any).depositCents ? String((trip as any).depositCents) : '',
+          refund_policy: mapRefundPolicyFromDB((trip as any).refundPolicy),
+          messaging_mode: (trip as any).messagingMode !== 'organizer_only',
+        }));
+        // Pre-seed the hook so saveDraft performs an update (not a create)
+        wizard?.initEditMode?.(editTripId, trip);
+      } catch (err: any) {
+        console.warn('[CreateTripWizard] Hydrate edit-mode error:', err);
+        Alert.alert('Could not load trip', err?.message ?? 'Please try again.');
+      } finally {
+        if (!cancelled) setHydrating(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  // We intentionally run this once per tripId; wizard identity is stable.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEditMode, editTripId]);
 
   const goNext = () => {
     if (currentStep < TOTAL_STEPS - 1) {
@@ -594,13 +659,20 @@ const CreateTripWizardScreen: React.FC = () => {
 
   const publish = async () => {
     try {
-      // 1. Build trip data matching the Trip interface
       const tripData = buildTripData();
 
-      // 2. Save draft — pass data directly to avoid stale state, returns the real tripId
+      // Edit mode: just save the changes. The trip is already published —
+      // don't call publishTrip again (it would reject a non-draft status).
+      if (isEditMode) {
+        await wizard?.saveDraft?.(tripData);
+        Alert.alert('Changes saved', 'Your trip has been updated.');
+        navigation.goBack();
+        return;
+      }
+
+      // Create mode: 1) save draft, 2) publish, 3) go to success screen
       const tripId = await wizard?.saveDraft?.(tripData);
 
-      // 3. Publish using the returned tripId (can't rely on state update)
       let publishedSlug = '';
       if (tripId) {
         const publishedTrip = await wizard?.publish?.(tripId);
@@ -609,7 +681,6 @@ const CreateTripWizardScreen: React.FC = () => {
 
       const resolvedTripId = tripId ?? 'new';
 
-      // 4. Navigate to publish success screen with real slug from DB
       navigation.navigate('TripPublishSuccess' as any, {
         tripName: formData.trip_name,
         destination: formData.destination,
@@ -620,7 +691,10 @@ const CreateTripWizardScreen: React.FC = () => {
       });
     } catch (err: any) {
       console.warn('[CreateTripWizard] Publish error:', err);
-      Alert.alert('Could not publish trip', err?.message ?? 'An unknown error occurred. Please try again.');
+      Alert.alert(
+        isEditMode ? 'Could not save changes' : 'Could not publish trip',
+        err?.message ?? 'An unknown error occurred. Please try again.'
+      );
     }
   };
 
@@ -629,7 +703,7 @@ const CreateTripWizardScreen: React.FC = () => {
       case 0: return <StepBasics data={formData} update={updateForm} />;
       case 1: return <StepPayment data={formData} update={updateForm} />;
       case 2: return <StepRequirements data={formData} update={updateForm} />;
-      case 3: return <StepReview data={formData} onPublish={publish} onSaveDraft={saveDraft} />;
+      case 3: return <StepReview data={formData} onPublish={publish} onSaveDraft={saveDraft} isEditMode={isEditMode} />;
       default: return null;
     }
   };
@@ -643,7 +717,7 @@ const CreateTripWizardScreen: React.FC = () => {
         <TouchableOpacity onPress={goBack} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Trip Setup</Text>
+        <Text style={styles.headerTitle}>{isEditMode ? 'Edit Trip' : 'Trip Setup'}</Text>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
           <Ionicons name="close" size={24} color={colors.textSecondary} />
         </TouchableOpacity>
@@ -656,6 +730,14 @@ const CreateTripWizardScreen: React.FC = () => {
           Step {currentStep + 1} of {TOTAL_STEPS} — {STEP_NAMES[currentStep]}
         </Text>
       </View>
+
+      {/* Edit-mode hydration banner */}
+      {hydrating && (
+        <View style={styles.hydratingBanner}>
+          <ActivityIndicator size="small" color={TEAL} />
+          <Text style={styles.hydratingText}>Loading trip…</Text>
+        </View>
+      )}
 
       {/* Content */}
       <KeyboardAvoidingView
@@ -1151,5 +1233,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700' as const,
     color: TEAL,
+  },
+  hydratingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    backgroundColor: 'rgba(0,198,174,0.08)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,198,174,0.2)',
+    gap: 8,
+  },
+  hydratingText: {
+    fontSize: typography.bodySmall,
+    color: TEAL,
+    fontWeight: typography.semibold,
   },
 });
