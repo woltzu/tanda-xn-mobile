@@ -538,6 +538,17 @@ const CreateTripWizardScreen: React.FC = () => {
   const isEditMode: boolean = route.params?.mode === 'edit' && !!editTripId;
   const [hydrating, setHydrating] = useState<boolean>(isEditMode);
 
+  // One-time render-side log (helps debug edit-mode issues on web).
+  // Safe: runs on every render but logs are cheap and the console stays quiet
+  // in production because this only fires when params change.
+  React.useEffect(() => {
+    console.log('[CreateTripWizard] mount params', {
+      params: route.params,
+      editTripId,
+      isEditMode,
+    });
+  }, [route.params, editTripId, isEditMode]);
+
   const [formData, setFormData] = useState<TripFormData>({
     trip_name: '',
     destination: '',
@@ -572,10 +583,12 @@ const CreateTripWizardScreen: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
+        console.log('[CreateTripWizard] hydrating start', editTripId);
         const dashboard = await TripOrganizerEngine.getTripDashboard(editTripId);
         if (cancelled) return;
         const trip = dashboard.trip;
         if (!trip) throw new Error('Trip not found.');
+        console.log('[CreateTripWizard] hydrating got trip', trip.id, trip.name);
         setFormData((prev) => ({
           ...prev,
           trip_name: trip.name ?? '',
@@ -649,10 +662,28 @@ const CreateTripWizardScreen: React.FC = () => {
         Alert.alert('Trip name required', 'Please enter a trip name before saving as a draft.');
         return;
       }
-      await wizard?.saveDraft?.(buildTripData());
+      const tripData = buildTripData();
+      console.log('[CreateTripWizard] saveDraft pressed', {
+        isEditMode,
+        editTripId,
+        hasWizard: !!wizard,
+        hasSaveDraft: !!wizard?.saveDraft,
+      });
+
+      // Edit mode: call updateTrip directly so we don't depend on the
+      // hook's internal savedTripId state (which may not have settled yet).
+      if (isEditMode && editTripId) {
+        console.log('[CreateTripWizard] edit-mode saveDraft → updateTrip start');
+        await TripOrganizerEngine.updateTrip(editTripId, tripData);
+        console.log('[CreateTripWizard] edit-mode saveDraft → updateTrip done');
+        Alert.alert('Changes saved', 'Your trip has been updated.');
+        return;
+      }
+
+      await wizard?.saveDraft?.(tripData);
       Alert.alert('Draft saved', 'Your trip has been saved as a draft. You can come back and edit it anytime.');
     } catch (err: any) {
-      console.warn('[CreateTripWizard] Save draft error:', err);
+      console.error('[CreateTripWizard] Save draft error:', err);
       Alert.alert('Could not save draft', err?.message ?? 'An unknown error occurred. Please try again.');
     }
   };
@@ -660,23 +691,36 @@ const CreateTripWizardScreen: React.FC = () => {
   const publish = async () => {
     try {
       const tripData = buildTripData();
+      console.log('[CreateTripWizard] publish pressed', {
+        isEditMode,
+        editTripId,
+        routeParams: route.params,
+        hasWizard: !!wizard,
+        hasSaveDraft: !!wizard?.saveDraft,
+      });
 
-      // Edit mode: just save the changes. The trip is already published —
-      // don't call publishTrip again (it would reject a non-draft status).
-      if (isEditMode) {
-        await wizard?.saveDraft?.(tripData);
+      // Edit mode: skip the hook (and publishTrip) entirely. Call updateTrip
+      // directly so we don't depend on the hook's savedTripId state, which
+      // may race with hydration. Then go back so the dashboard refreshes.
+      if (isEditMode && editTripId) {
+        console.log('[CreateTripWizard] edit-mode publish → updateTrip start', tripData);
+        const updated = await TripOrganizerEngine.updateTrip(editTripId, tripData);
+        console.log('[CreateTripWizard] edit-mode publish → updateTrip done', updated?.id);
         Alert.alert('Changes saved', 'Your trip has been updated.');
         navigation.goBack();
         return;
       }
 
       // Create mode: 1) save draft, 2) publish, 3) go to success screen
+      console.log('[CreateTripWizard] create-mode publish → saveDraft start');
       const tripId = await wizard?.saveDraft?.(tripData);
+      console.log('[CreateTripWizard] create-mode publish → saveDraft done', tripId);
 
       let publishedSlug = '';
       if (tripId) {
         const publishedTrip = await wizard?.publish?.(tripId);
         publishedSlug = publishedTrip?.slug ?? '';
+        console.log('[CreateTripWizard] create-mode publish → publishTrip done', publishedSlug);
       }
 
       const resolvedTripId = tripId ?? 'new';
@@ -690,7 +734,7 @@ const CreateTripWizardScreen: React.FC = () => {
         slug: publishedSlug,
       });
     } catch (err: any) {
-      console.warn('[CreateTripWizard] Publish error:', err);
+      console.error('[CreateTripWizard] Publish/save error:', err, err?.stack);
       Alert.alert(
         isEditMode ? 'Could not save changes' : 'Could not publish trip',
         err?.message ?? 'An unknown error occurred. Please try again.'
