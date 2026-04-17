@@ -589,6 +589,22 @@ const CreateTripWizardScreen: React.FC = () => {
         const trip = dashboard.trip;
         if (!trip) throw new Error('Trip not found.');
         console.log('[CreateTripWizard] hydrating got trip', trip.id, trip.name);
+        // Map the saved requiredDocuments back to the checklist state.
+        // Default keys come on/off based on whether they're present;
+        // any unknown fieldKey becomes a custom requirement.
+        const savedDocs: Array<{ fieldKey?: string; label?: string }> =
+          ((trip as any).requiredDocuments ?? []) as any[];
+        const savedKeys = new Set(savedDocs.map((d) => d?.fieldKey ?? ''));
+        const hydratedRequirements = DEFAULT_REQUIREMENTS.map((r) => ({
+          ...r,
+          enabled: savedKeys.has(r.id),
+        }));
+        const defaultKeySet = new Set(DEFAULT_REQUIREMENTS.map((r) => r.id));
+        const hydratedCustom = savedDocs
+          .filter((d) => d?.fieldKey && !defaultKeySet.has(d.fieldKey))
+          .map((d) => d.label ?? d.fieldKey ?? '')
+          .filter(Boolean);
+
         setFormData((prev) => ({
           ...prev,
           trip_name: trip.name ?? '',
@@ -606,6 +622,8 @@ const CreateTripWizardScreen: React.FC = () => {
           deposit_amount: (trip as any).depositCents ? String((trip as any).depositCents) : '',
           refund_policy: mapRefundPolicyFromDB((trip as any).refundPolicy),
           messaging_mode: (trip as any).messagingMode !== 'organizer_only',
+          requirements: hydratedRequirements,
+          custom_requirements: hydratedCustom,
         }));
         // Pre-seed the hook so saveDraft performs an update (not a create)
         wizard?.initEditMode?.(editTripId, trip);
@@ -639,22 +657,38 @@ const CreateTripWizardScreen: React.FC = () => {
 
   // Convert the wizard's snake_case form state into the camelCase Trip shape
   // that TripOrganizerEngine.createTrip / updateTrip expect.
-  const buildTripData = () => ({
-    name: formData.trip_name,
-    destination: formData.destination,
-    startDate: formData.start_date,
-    endDate: formData.end_date,
-    maxParticipants: formData.max_participants ? parseInt(formData.max_participants) : 20,
-    tagline: formData.tagline || null,
-    description: formData.description || null,
-    whatsIncluded: formData.whats_included || null,
-    whatsExcluded: formData.whats_excluded || null,
-    priceCents: formData.price_per_person ? parseFloat(formData.price_per_person) : 0,
-    paymentType: formData.payment_type,
-    depositCents: formData.deposit_amount ? parseFloat(formData.deposit_amount) : 0,
-    refundPolicy: mapRefundPolicyToDB(formData.refund_policy),
-    messagingMode: formData.messaging_mode ? 'group' : 'organizer_only',
-  } as any);
+  const buildTripData = () => {
+    // Serialize the requirements checklist + custom fields into the shape
+    // the Trip.requiredDocuments column expects: [{ fieldKey, fieldType, label }]
+    const requiredDocuments = [
+      ...formData.requirements
+        .filter((r) => r.enabled)
+        .map((r) => ({ fieldKey: r.id, fieldType: 'boolean', label: r.label })),
+      ...formData.custom_requirements.map((label, idx) => ({
+        fieldKey: `custom_${idx}`,
+        fieldType: 'text',
+        label,
+      })),
+    ];
+
+    return {
+      name: formData.trip_name,
+      destination: formData.destination,
+      startDate: formData.start_date,
+      endDate: formData.end_date,
+      maxParticipants: formData.max_participants ? parseInt(formData.max_participants) : 20,
+      tagline: formData.tagline || null,
+      description: formData.description || null,
+      whatsIncluded: formData.whats_included || null,
+      whatsExcluded: formData.whats_excluded || null,
+      priceCents: formData.price_per_person ? parseFloat(formData.price_per_person) : 0,
+      paymentType: formData.payment_type,
+      depositCents: formData.deposit_amount ? parseFloat(formData.deposit_amount) : 0,
+      refundPolicy: mapRefundPolicyToDB(formData.refund_policy),
+      messagingMode: formData.messaging_mode ? 'group' : 'organizer_only',
+      requiredDocuments,
+    } as any;
+  };
 
   const saveDraft = async () => {
     try {

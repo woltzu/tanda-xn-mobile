@@ -198,6 +198,20 @@ const OrganizerTripDashboardScreen: React.FC = () => {
           </View>
         </View>
 
+        {/* View Public Page link */}
+        <TouchableOpacity
+          style={styles.viewPublicBtn}
+          activeOpacity={0.7}
+          onPress={() => navigation.navigate('TripPublicPage', {
+            tripId,
+            slug: dashboard?.trip?.slug,
+          })}
+        >
+          <Ionicons name="eye-outline" size={18} color={TEAL} />
+          <Text style={styles.viewPublicText}>View Public Page</Text>
+          <Ionicons name="arrow-forward" size={16} color={TEAL} style={{ marginLeft: 'auto' }} />
+        </TouchableOpacity>
+
         {/* Stat Boxes */}
         <View style={styles.statRow}>
           <StatBox label="Confirmed" value={data.confirmed_count} color="#047857" bgColor={colors.successBg} />
@@ -328,6 +342,24 @@ const styles = StyleSheet.create({
   statusPillText: {
     fontSize: typography.label,
     fontWeight: typography.semibold,
+  },
+  viewPublicBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(0,198,174,0.08)',
+    borderRadius: radius.small,
+    borderWidth: 1,
+    borderColor: 'rgba(0,198,174,0.25)',
+    gap: 8,
+  },
+  viewPublicText: {
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    color: TEAL,
   },
   // Stat boxes
   statRow: {

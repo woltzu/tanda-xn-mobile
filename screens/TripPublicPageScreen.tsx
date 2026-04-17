@@ -45,6 +45,7 @@ interface TripData {
   slug: string;
   name: string;
   tagline: string;
+  destination: string;
   coverImage?: string;
   duration: string;
   activityCount: number;
@@ -63,6 +64,7 @@ const MOCK_TRIP: TripData = {
   slug: "abidjan-summer-2026",
   name: "Abidjan Summer\nExperience 2026",
   tagline: "14 days of culture, connection, and unforgettable memories",
+  destination: "Abidjan, Cote d'Ivoire",
   coverImage: undefined,
   duration: "14 Days",
   activityCount: 22,
@@ -163,6 +165,7 @@ const TripPublicPageScreen: React.FC = () => {
     slug: rawTrip.slug ?? slug,
     name: rawTrip.name ?? 'Untitled Trip',
     tagline: (rawTrip as any).tagline ?? rawTrip.description ?? '',
+    destination: rawTrip.destination ?? '',
     coverImage: rawTrip.coverPhotoUrl ?? undefined,
     duration: (() => {
       const days = calcDurationDays(rawTrip.startDate, rawTrip.endDate);
@@ -406,7 +409,7 @@ const TripPublicPageScreen: React.FC = () => {
               style={styles.mapGradient}
             >
               <Text style={styles.mapPin}>{"📍"}</Text>
-              <Text style={styles.mapLabel}>Abidjan, Cote d'Ivoire</Text>
+              <Text style={styles.mapLabel}>{trip.destination || 'Destination TBD'}</Text>
               <Text style={styles.mapSublabel}>Interactive map coming soon</Text>
             </LinearGradient>
           </View>
