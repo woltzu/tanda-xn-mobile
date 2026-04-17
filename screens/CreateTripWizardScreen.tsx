@@ -293,6 +293,16 @@ const CoverPhotoField: React.FC<{
     onPickNative();
   };
 
+  // Defensive cache-buster on the Image URI. We also cache-bust in the upload
+  // handler, so the state already carries ?t=... — but if a URL ever arrives
+  // without one (e.g. from legacy hydration), stamp it here so the browser
+  // doesn't serve a stale cached image.
+  const imageUri = React.useMemo(() => {
+    if (!url) return '';
+    if (/[?&]t=\d/.test(url)) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+  }, [url]);
+
   return (
     <View style={styles.coverFieldContainer}>
       <Text style={styles.inputLabel}>Cover Photo</Text>
@@ -300,7 +310,7 @@ const CoverPhotoField: React.FC<{
         {/* Visual content — never intercepts clicks */}
         {url ? (
           <Image
-            source={{ uri: url }}
+            source={{ uri: imageUri }}
             style={styles.coverFieldImage}
             resizeMode="cover"
             // @ts-expect-error — pointerEvents prop is web-supported on Image
@@ -706,8 +716,16 @@ const CreateTripWizardScreen: React.FC = () => {
         Alert.alert('Upload failed', res.error ?? 'Could not upload cover photo. Please try again.');
         return;
       }
-      console.log('[CreateTripWizard] cover uploaded', res.url);
-      updateForm({ cover_photo_url: res.url });
+      // The upload path is deterministic ({userId}/{tripId}-cover.jpg with
+      // upsert:true), so successive uploads return the *same* res.url. That
+      // means updateForm({cover_photo_url: res.url}) sees no state change and
+      // skips the re-render, so the preview keeps showing the old photo.
+      // Append a timestamp to (a) make the string different on each upload so
+      // React re-renders, and (b) bust the browser's HTTP cache for the
+      // stale image at that URL.
+      const cacheBustedUrl = `${res.url}${res.url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+      console.log('[CreateTripWizard] cover uploaded', cacheBustedUrl);
+      updateForm({ cover_photo_url: cacheBustedUrl });
     } catch (err: any) {
       setUploadingCover(false);
       console.error('[CreateTripWizard] upload error', err);
