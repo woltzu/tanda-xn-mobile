@@ -367,12 +367,20 @@ export class TripOrganizerEngine {
       .single();
     if (fetchError) throw new Error(`Failed to fetch trip: ${fetchError.message}`);
 
-    // If published, prevent changes to certain locked fields
-    if (existing.status === 'published') {
-      const lockedFields: (keyof Trip)[] = ['priceCents', 'depositCents', 'paymentType', 'maxParticipants'];
-      for (const field of lockedFields) {
+    // On a published trip, pricing / payment fields are locked (DB rules
+    // reject changes to them and participants already signed up on a given
+    // price shouldn't have that pulled out from under them). Silently strip
+    // those fields from the payload instead of throwing — the edit wizard
+    // sends the full hydrated form state, so we don't want every published
+    // edit to fail just because the price input wasn't cleared.
+    const isPublished = existing.status === 'published';
+    if (isPublished) {
+      const locked: (keyof Trip)[] = ['priceCents', 'depositCents', 'paymentType'];
+      for (const field of locked) {
         if (data[field] !== undefined) {
-          throw new Error(`Cannot modify ${field} on a published trip`);
+          console.warn(
+            `[TripOrganizerEngine.updateTrip] Skipping locked field '${String(field)}' on published trip ${tripId}`
+          );
         }
       }
     }
@@ -386,12 +394,17 @@ export class TripOrganizerEngine {
     if (data.startDate !== undefined) update.start_date = data.startDate;
     if (data.endDate !== undefined) update.end_date = data.endDate;
     if (data.maxParticipants !== undefined) update.max_participants = data.maxParticipants;
-    if (data.priceCents !== undefined) update.price_per_person = data.priceCents;
-    if (data.depositCents !== undefined) {
+    // Pricing fields: only included when trip is NOT published
+    if (!isPublished && data.priceCents !== undefined) {
+      update.price_per_person = data.priceCents;
+    }
+    if (!isPublished && data.depositCents !== undefined) {
       update.deposit_amount = data.depositCents;
       update.deposit_required = data.depositCents > 0;
     }
-    if (data.paymentType !== undefined) update.payment_type = data.paymentType;
+    if (!isPublished && data.paymentType !== undefined) {
+      update.payment_type = data.paymentType;
+    }
     if (data.messagingMode !== undefined) update.messaging_mode = data.messagingMode;
     if (data.refundPolicy !== undefined) update.refund_policy = data.refundPolicy;
     if (data.whatsIncluded !== undefined) update.whats_included = data.whatsIncluded;
