@@ -381,6 +381,59 @@ export class MediaUploadService {
     return data.publicUrl;
   }
 
+  /**
+   * Upload a trip cover photo to the trip-covers bucket using a deterministic
+   * path ({userId}/{tripId}-cover.jpg) so re-uploads replace the existing
+   * cover. Falls back to a timestamped path when the trip hasn't been created
+   * yet (create-flow pre-save).
+   */
+  static async uploadTripCover(
+    file: { uri: string; type: string; name: string },
+    tripId?: string,
+  ): Promise<UploadResult> {
+    try {
+      if (!IMAGE_TYPES.includes((file.type ?? '').toLowerCase())) {
+        return {
+          success: false, url: null, filePath: null,
+          error: `Invalid image type: ${file.type}. Accepted: ${IMAGE_TYPES.join(', ')}`,
+          fileSize: 0, fileType: file.type,
+        };
+      }
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+      if (!MediaUploadService._validateFileSize(blob.size, DEFAULT_IMAGE_MAX_MB)) {
+        return {
+          success: false, url: null, filePath: null,
+          error: `File too large: ${(blob.size / (1024 * 1024)).toFixed(1)}MB exceeds ${DEFAULT_IMAGE_MAX_MB}MB limit`,
+          fileSize: blob.size, fileType: file.type,
+        };
+      }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      // Stable per-trip path so new uploads replace the old cover. If the
+      // trip hasn't been saved yet we use a timestamp instead.
+      const filePath = tripId
+        ? `${user.id}/${tripId}-cover.jpg`
+        : `${user.id}/${Date.now()}.jpg`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from('trip-covers')
+        .upload(filePath, blob, { contentType: file.type, upsert: true });
+      if (uploadErr) throw uploadErr;
+
+      const url = MediaUploadService.getPublicUrl('trip-covers', filePath);
+      return { success: true, url, filePath, error: null, fileSize: blob.size, fileType: file.type };
+    } catch (err: any) {
+      console.error('[MediaUploadService.uploadTripCover] error:', err);
+      return {
+        success: false, url: null, filePath: null,
+        error: err?.message ?? 'Cover upload failed',
+        fileSize: 0, fileType: file.type,
+      };
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // PRIVATE HELPERS
   // ═══════════════════════════════════════════════════════════════════════════

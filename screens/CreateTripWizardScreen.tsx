@@ -13,13 +13,16 @@ import {
   Switch,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useCreateTripWizard } from '../hooks/useTripOrganizer';
 import { TripOrganizerEngine } from '../services/TripOrganizerEngine';
+import { MediaUploadService } from '../services/MediaUploadService';
 
 // --- Design tokens ---
 const NAVY = '#0A2342';
@@ -38,6 +41,7 @@ const STEP_NAMES = [
 
 // --- Types ---
 interface TripFormData {
+  cover_photo_url: string;
   trip_name: string;
   destination: string;
   start_date: string;
@@ -241,11 +245,52 @@ const DatePickerField: React.FC<{
   );
 };
 
+const CoverPhotoField: React.FC<{
+  url: string;
+  uploading: boolean;
+  onPick: () => void;
+}> = ({ url, uploading, onPick }) => (
+  <View style={styles.coverFieldContainer}>
+    <Text style={styles.inputLabel}>Cover Photo</Text>
+    <TouchableOpacity
+      style={styles.coverFieldButton}
+      activeOpacity={0.7}
+      onPress={onPick}
+      disabled={uploading}
+    >
+      {url ? (
+        <>
+          <Image source={{ uri: url }} style={styles.coverFieldImage} resizeMode="cover" />
+          <View style={styles.coverFieldOverlay}>
+            <Ionicons name="camera" size={18} color="#FFFFFF" />
+            <Text style={styles.coverFieldOverlayText}>Change</Text>
+          </View>
+        </>
+      ) : (
+        <View style={styles.coverFieldPlaceholder}>
+          <Ionicons name="camera-outline" size={32} color={TEAL} />
+          <Text style={styles.coverFieldPlaceholderText}>Add Cover Photo</Text>
+          <Text style={styles.coverFieldHint}>Tap to pick from your photos</Text>
+        </View>
+      )}
+      {uploading && (
+        <View style={styles.coverFieldUploading}>
+          <ActivityIndicator size="large" color="#FFFFFF" />
+          <Text style={styles.coverFieldUploadingText}>Uploading…</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  </View>
+);
+
 const StepBasics: React.FC<{
   data: TripFormData;
   update: (partial: Partial<TripFormData>) => void;
-}> = ({ data, update }) => (
+  uploadingCover: boolean;
+  onPickCover: () => void;
+}> = ({ data, update, uploadingCover, onPickCover }) => (
   <View>
+    <CoverPhotoField url={data.cover_photo_url} uploading={uploadingCover} onPick={onPickCover} />
     <SectionLabel label="Trip Details" />
     <FormInput label="Trip Name" value={data.trip_name} onChangeText={(v) => update({ trip_name: v })} placeholder="e.g. Summer Return — Abidjan 2026" />
     <FormInput label="Destination" value={data.destination} onChangeText={(v) => update({ destination: v })} placeholder="e.g. Abidjan, Ivory Coast" />
@@ -550,6 +595,7 @@ const CreateTripWizardScreen: React.FC = () => {
   }, [route.params, editTripId, isEditMode]);
 
   const [formData, setFormData] = useState<TripFormData>({
+    cover_photo_url: '',
     trip_name: '',
     destination: '',
     start_date: '',
@@ -575,6 +621,58 @@ const CreateTripWizardScreen: React.FC = () => {
 
   const updateForm = (partial: Partial<TripFormData>) => {
     setFormData((prev) => ({ ...prev, ...partial }));
+  };
+
+  // ── Cover photo picker ─────────────────────────────────────────────────
+  const [uploadingCover, setUploadingCover] = useState(false);
+
+  const pickCoverPhoto = async () => {
+    try {
+      // Request media-library permission first. On web this is a no-op
+      // (the browser picker is invoked by user gesture).
+      if (Platform.OS !== 'web') {
+        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert(
+            'Permission needed',
+            'TandaXn needs photo library access to set a trip cover. Please grant permission in your device settings.'
+          );
+          return;
+        }
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.85,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      const file = {
+        uri: asset.uri,
+        type: asset.mimeType || 'image/jpeg',
+        name: asset.fileName || 'cover.jpg',
+      };
+      console.log('[CreateTripWizard] uploading cover', { tripId: editTripId, size: asset.fileSize });
+
+      setUploadingCover(true);
+      const res = await MediaUploadService.uploadTripCover(file, editTripId);
+      setUploadingCover(false);
+
+      if (!res.success || !res.url) {
+        console.error('[CreateTripWizard] cover upload failed', res.error);
+        Alert.alert('Upload failed', res.error ?? 'Could not upload cover photo. Please try again.');
+        return;
+      }
+      console.log('[CreateTripWizard] cover uploaded', res.url);
+      updateForm({ cover_photo_url: res.url });
+    } catch (err: any) {
+      setUploadingCover(false);
+      console.error('[CreateTripWizard] pickCoverPhoto error', err);
+      Alert.alert('Could not pick photo', err?.message ?? 'An unknown error occurred.');
+    }
   };
 
   // Edit mode: load the existing trip and hydrate the wizard form
@@ -607,6 +705,7 @@ const CreateTripWizardScreen: React.FC = () => {
 
         setFormData((prev) => ({
           ...prev,
+          cover_photo_url: (trip as any).coverPhotoUrl ?? '',
           trip_name: trip.name ?? '',
           destination: trip.destination ?? '',
           start_date: trip.startDate ?? '',
@@ -674,6 +773,7 @@ const CreateTripWizardScreen: React.FC = () => {
     return {
       name: formData.trip_name,
       destination: formData.destination,
+      coverPhotoUrl: formData.cover_photo_url || null,
       startDate: formData.start_date,
       endDate: formData.end_date,
       maxParticipants: formData.max_participants ? parseInt(formData.max_participants) : 20,
@@ -778,7 +878,7 @@ const CreateTripWizardScreen: React.FC = () => {
 
   const renderStep = () => {
     switch (currentStep) {
-      case 0: return <StepBasics data={formData} update={updateForm} />;
+      case 0: return <StepBasics data={formData} update={updateForm} uploadingCover={uploadingCover} onPickCover={pickCoverPhoto} />;
       case 1: return <StepPayment data={formData} update={updateForm} />;
       case 2: return <StepRequirements data={formData} update={updateForm} />;
       case 3: return <StepReview data={formData} onPublish={publish} onSaveDraft={saveDraft} isEditMode={isEditMode} />;
@@ -1325,6 +1425,82 @@ const styles = StyleSheet.create({
   hydratingText: {
     fontSize: typography.bodySmall,
     color: TEAL,
+    fontWeight: typography.semibold,
+  },
+  // --- Cover photo picker ---
+  coverFieldContainer: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  coverFieldButton: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: 16 / 9,
+    backgroundColor: '#F1F5F9',
+    borderRadius: radius.card,
+    borderWidth: 2,
+    borderColor: 'rgba(0,198,174,0.3)',
+    borderStyle: 'dashed' as const,
+    overflow: 'hidden' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginTop: spacing.xs,
+  },
+  coverFieldImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  },
+  coverFieldOverlay: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(10,35,66,0.75)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    gap: 6,
+  },
+  coverFieldOverlayText: {
+    color: '#FFFFFF',
+    fontSize: typography.label,
+    fontWeight: typography.semibold,
+  },
+  coverFieldPlaceholder: {
+    alignItems: 'center' as const,
+    gap: 4,
+  },
+  coverFieldPlaceholderText: {
+    fontSize: typography.bodyLarge,
+    fontWeight: typography.semibold,
+    color: NAVY,
+    marginTop: spacing.xs,
+  },
+  coverFieldHint: {
+    fontSize: typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  coverFieldUploading: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(10,35,66,0.55)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 8,
+  },
+  coverFieldUploadingText: {
+    color: '#FFFFFF',
+    fontSize: typography.body,
     fontWeight: typography.semibold,
   },
 });
