@@ -249,39 +249,83 @@ const CoverPhotoField: React.FC<{
   url: string;
   uploading: boolean;
   onPick: () => void;
-}> = ({ url, uploading, onPick }) => (
-  <View style={styles.coverFieldContainer}>
-    <Text style={styles.inputLabel}>Cover Photo</Text>
-    <TouchableOpacity
-      style={styles.coverFieldButton}
-      activeOpacity={0.7}
-      onPress={onPick}
-      disabled={uploading}
-    >
-      {url ? (
-        <>
-          <Image source={{ uri: url }} style={styles.coverFieldImage} resizeMode="cover" />
-          <View style={styles.coverFieldOverlay}>
+}> = ({ url, uploading, onPick }) => {
+  // Tap handler logs so we can see in the browser console whether presses fire
+  const handlePick = () => {
+    console.log('[CoverPhotoField] tap — opening picker', { hasImage: !!url, uploading });
+    onPick();
+  };
+
+  // Selected (image shown): two separate tap targets — the image itself and
+  // a floating "Change" chip — so a press always reaches a handler even if
+  // absolutely-positioned children intercept clicks on react-native-web.
+  if (url) {
+    return (
+      <View style={styles.coverFieldContainer}>
+        <Text style={styles.inputLabel}>Cover Photo</Text>
+        <View style={styles.coverFieldButton}>
+          {/* Full-bleed image tap zone */}
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={0.85}
+            onPress={handlePick}
+            disabled={uploading}
+          >
+            <Image
+              source={{ uri: url }}
+              style={styles.coverFieldImage}
+              resizeMode="cover"
+              // @ts-expect-error — pointerEvents prop on Image is web-supported
+              pointerEvents="none"
+            />
+          </TouchableOpacity>
+          {/* Separate "Change" chip with its own onPress so it works even if
+              the absolute image above intercepts the press on some platforms */}
+          <TouchableOpacity
+            style={styles.coverFieldOverlay}
+            activeOpacity={0.7}
+            onPress={handlePick}
+            disabled={uploading}
+          >
             <Ionicons name="camera" size={18} color="#FFFFFF" />
             <Text style={styles.coverFieldOverlayText}>Change</Text>
-          </View>
-        </>
-      ) : (
-        <View style={styles.coverFieldPlaceholder}>
+          </TouchableOpacity>
+          {uploading && (
+            <View style={styles.coverFieldUploading} pointerEvents="none">
+              <ActivityIndicator size="large" color="#FFFFFF" />
+              <Text style={styles.coverFieldUploadingText}>Uploading…</Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  // Empty (no image): single large tap target for the placeholder
+  return (
+    <View style={styles.coverFieldContainer}>
+      <Text style={styles.inputLabel}>Cover Photo</Text>
+      <TouchableOpacity
+        style={styles.coverFieldButton}
+        activeOpacity={0.7}
+        onPress={handlePick}
+        disabled={uploading}
+      >
+        <View style={styles.coverFieldPlaceholder} pointerEvents="none">
           <Ionicons name="camera-outline" size={32} color={TEAL} />
           <Text style={styles.coverFieldPlaceholderText}>Add Cover Photo</Text>
           <Text style={styles.coverFieldHint}>Tap to pick from your photos</Text>
         </View>
-      )}
-      {uploading && (
-        <View style={styles.coverFieldUploading}>
-          <ActivityIndicator size="large" color="#FFFFFF" />
-          <Text style={styles.coverFieldUploadingText}>Uploading…</Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  </View>
-);
+        {uploading && (
+          <View style={styles.coverFieldUploading} pointerEvents="none">
+            <ActivityIndicator size="large" color="#FFFFFF" />
+            <Text style={styles.coverFieldUploadingText}>Uploading…</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+};
 
 const StepBasics: React.FC<{
   data: TripFormData;
