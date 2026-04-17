@@ -131,28 +131,54 @@ export class WalletService {
   // ─────────────────────────────────────────────────────────────────────────────
 
   async getOrCreateWallet(userId: string): Promise<Wallet> {
-    // Try to get existing wallet
+    // Use maybeSingle() so a missing row returns { data: null, error: null }
+    // instead of throwing a 406 "Not Acceptable" from PostgREST's .single()
+    // contract. That 406 was the error visible in the browser console.
     const { data: existing, error: fetchError } = await supabase
       .from('user_wallets')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
+
+    console.log('[WalletService.getOrCreateWallet] fetch', {
+      userId,
+      hasRow: !!existing,
+      error: fetchError
+        ? { code: fetchError.code, message: fetchError.message, details: fetchError.details, hint: fetchError.hint }
+        : null,
+      mainBalanceCents: existing?.main_balance_cents,
+    });
+
+    if (fetchError) {
+      // Fetch failed for a reason other than "no row" (maybeSingle squelches
+      // that case). Surface the error instead of silently inserting, because
+      // a blind INSERT will hit the unique user_id index and cascade into a
+      // second misleading failure.
+      throw new Error(`Failed to fetch wallet: ${fetchError.message}`);
+    }
 
     if (existing) {
       return this.mapWallet(existing);
     }
 
-    // Create new wallet
+    // No wallet row for this user yet — create one.
     const { data: newWallet, error: createError } = await supabase
       .from('user_wallets')
       .insert({ user_id: userId })
       .select()
-      .single();
+      .maybeSingle();
 
-    if (createError) {
-      throw new Error(`Failed to create wallet: ${createError.message}`);
+    console.log('[WalletService.getOrCreateWallet] insert', {
+      userId,
+      created: !!newWallet,
+      error: createError
+        ? { code: createError.code, message: createError.message, details: createError.details, hint: createError.hint }
+        : null,
+    });
+
+    if (createError || !newWallet) {
+      throw new Error(`Failed to create wallet: ${createError?.message ?? 'insert returned no row'}`);
     }
-
     return this.mapWallet(newWallet);
   }
 
@@ -161,16 +187,30 @@ export class WalletService {
       .from('user_wallets')
       .select('*')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
+
+    console.log('[WalletService.getWallet]', {
+      userId,
+      hasRow: !!data,
+      error: error ? { code: error.code, message: error.message } : null,
+      mainBalanceCents: data?.main_balance_cents,
+    });
 
     if (error || !data) return null;
     return this.mapWallet(data);
   }
 
   async getWalletSummary(userId: string): Promise<WalletSummary | null> {
+    // maybeSingle so a missing RPC row doesn't 406 the browser console.
     const { data, error } = await supabase
       .rpc('get_wallet_summary', { p_user_id: userId })
-      .single();
+      .maybeSingle();
+
+    console.log('[WalletService.getWalletSummary]', {
+      userId,
+      hasRow: !!data,
+      error: error ? { code: error.code, message: error.message } : null,
+    });
 
     if (error || !data) return null;
 
