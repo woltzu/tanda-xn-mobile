@@ -6,6 +6,7 @@ import React, {
   ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "../lib/supabase";
 
 export type Transaction = {
   id: string;
@@ -134,19 +135,58 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
     return total + (curr.usdValue || 0);
   }, 0);
 
-  // Load wallet data from storage on mount
+  // Load wallet data from storage on mount, then reconcile USD balance
+  // against the user's Supabase user_wallets row so the UI reflects
+  // authoritative server state (and not just a stale AsyncStorage snapshot).
   useEffect(() => {
     loadWalletData();
   }, []);
 
   const loadWalletData = async () => {
     try {
+      // 1. Seed from AsyncStorage for instant first render
       const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      let seedCurrencies: WalletCurrency[] | null = null;
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed.currencies) setCurrencies(parsed.currencies);
+        if (parsed.currencies) {
+          seedCurrencies = parsed.currencies;
+          setCurrencies(parsed.currencies);
+        }
         if (parsed.transactions) setTransactions(parsed.transactions);
       }
+
+      // 2. Reconcile USD balance from user_wallets in Supabase.
+      //    maybeSingle() so a missing row doesn't 406 the console.
+      const { data: authData } = await supabase.auth.getUser();
+      const uid = authData?.user?.id;
+      console.log("[WalletContext] loadWalletData", { hasSession: !!uid, userId: uid });
+      if (!uid) return;
+
+      const { data: walletRow, error: walletErr } = await supabase
+        .from("user_wallets")
+        .select("main_balance_cents, reserved_balance_cents, available_balance_cents")
+        .eq("user_id", uid)
+        .maybeSingle();
+
+      console.log("[WalletContext] user_wallets fetch", {
+        userId: uid,
+        hasRow: !!walletRow,
+        main_balance_cents: walletRow?.main_balance_cents,
+        error: walletErr
+          ? { code: walletErr.code, message: walletErr.message, details: walletErr.details, hint: walletErr.hint }
+          : null,
+      });
+
+      if (walletErr || !walletRow) return;
+
+      const mainDollars = (walletRow.main_balance_cents ?? 0) / 100;
+      const base = seedCurrencies ?? DEFAULT_CURRENCIES;
+      const hasUSD = base.some((c) => c.code === "USD");
+      const nextCurrencies: WalletCurrency[] = hasUSD
+        ? base.map((c) => (c.code === "USD" ? { ...c, balance: mainDollars } : c))
+        : [{ code: "USD", name: "US Dollar", flag: "🇺🇸", symbol: "$", balance: mainDollars, change: 0, isActive: true }, ...base];
+      setCurrencies(nextCurrencies);
     } catch (error) {
       console.error("Error loading wallet data:", error);
     } finally {

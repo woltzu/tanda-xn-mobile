@@ -423,13 +423,16 @@ export function SavingsProvider({ children }: { children: ReactNode }) {
         .order("display_order");
       if (typesData) setGoalTypes(typesData);
 
-      // Fetch user's wallet
-      const { data: walletData } = await supabase
+      // Fetch user's wallet — maybeSingle() avoids PostgREST's 406 when the
+      // row isn't present or is filtered out by RLS.
+      const { data: walletData, error: walletErr } = await supabase
         .from("user_wallets")
         .select("id")
         .eq("user_id", user.id)
-        .limit(1)
-        .single();
+        .maybeSingle();
+      if (walletErr) {
+        console.warn("[SavingsContext] wallet lookup error", walletErr);
+      }
       if (walletData) setWalletId(walletData.id);
 
       // Fetch goals with joined type info
