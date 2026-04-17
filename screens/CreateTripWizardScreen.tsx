@@ -245,84 +245,102 @@ const DatePickerField: React.FC<{
   );
 };
 
+/**
+ * Invisible HTML <input type="file"> overlay for web. Sized to fill its parent;
+ * clicks on the parent pass through and trigger the browser's native file picker.
+ * On native platforms this component renders nothing — a TouchableOpacity +
+ * ImagePicker handles the tap instead.
+ */
+const WebFileInputOverlay: React.FC<{
+  onFile: (file: File) => void;
+  disabled?: boolean;
+}> = ({ onFile, disabled }) => {
+  if (Platform.OS !== 'web') return null;
+  return React.createElement('input', {
+    type: 'file',
+    accept: 'image/*',
+    disabled: !!disabled,
+    onChange: (e: any) => {
+      const file: File | undefined = e?.target?.files?.[0];
+      if (file) {
+        console.log('[CoverPhotoField web] file picked', { name: file.name, type: file.type, size: file.size });
+        onFile(file);
+      }
+      // Reset so picking the same file again fires onChange
+      if (e?.target) e.target.value = '';
+    },
+    style: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      opacity: 0,
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      zIndex: 10,
+    },
+  });
+};
+
 const CoverPhotoField: React.FC<{
   url: string;
   uploading: boolean;
-  onPick: () => void;
-}> = ({ url, uploading, onPick }) => {
-  // Tap handler logs so we can see in the browser console whether presses fire
-  const handlePick = () => {
-    console.log('[CoverPhotoField] tap — opening picker', { hasImage: !!url, uploading });
-    onPick();
+  onPickNative: () => void;
+  onWebFile: (file: File) => void;
+}> = ({ url, uploading, onPickNative, onWebFile }) => {
+  const handleNativeTap = () => {
+    console.log('[CoverPhotoField native] tap — opening picker', { hasImage: !!url, uploading });
+    onPickNative();
   };
 
-  // Selected (image shown): two separate tap targets — the image itself and
-  // a floating "Change" chip — so a press always reaches a handler even if
-  // absolutely-positioned children intercept clicks on react-native-web.
-  if (url) {
-    return (
-      <View style={styles.coverFieldContainer}>
-        <Text style={styles.inputLabel}>Cover Photo</Text>
-        <View style={styles.coverFieldButton}>
-          {/* Full-bleed image tap zone */}
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={0.85}
-            onPress={handlePick}
-            disabled={uploading}
-          >
-            <Image
-              source={{ uri: url }}
-              style={styles.coverFieldImage}
-              resizeMode="cover"
-              // @ts-expect-error — pointerEvents prop on Image is web-supported
-              pointerEvents="none"
-            />
-          </TouchableOpacity>
-          {/* Separate "Change" chip with its own onPress so it works even if
-              the absolute image above intercepts the press on some platforms */}
-          <TouchableOpacity
-            style={styles.coverFieldOverlay}
-            activeOpacity={0.7}
-            onPress={handlePick}
-            disabled={uploading}
-          >
-            <Ionicons name="camera" size={18} color="#FFFFFF" />
-            <Text style={styles.coverFieldOverlayText}>Change</Text>
-          </TouchableOpacity>
-          {uploading && (
-            <View style={styles.coverFieldUploading} pointerEvents="none">
-              <ActivityIndicator size="large" color="#FFFFFF" />
-              <Text style={styles.coverFieldUploadingText}>Uploading…</Text>
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  }
-
-  // Empty (no image): single large tap target for the placeholder
   return (
     <View style={styles.coverFieldContainer}>
       <Text style={styles.inputLabel}>Cover Photo</Text>
-      <TouchableOpacity
-        style={styles.coverFieldButton}
-        activeOpacity={0.7}
-        onPress={handlePick}
-        disabled={uploading}
-      >
-        <View style={styles.coverFieldPlaceholder} pointerEvents="none">
-          <Ionicons name="camera-outline" size={32} color={TEAL} />
-          <Text style={styles.coverFieldPlaceholderText}>Add Cover Photo</Text>
-          <Text style={styles.coverFieldHint}>Tap to pick from your photos</Text>
-        </View>
+      <View style={styles.coverFieldButton}>
+        {/* Visual content — never intercepts clicks */}
+        {url ? (
+          <Image
+            source={{ uri: url }}
+            style={styles.coverFieldImage}
+            resizeMode="cover"
+            // @ts-expect-error — pointerEvents prop is web-supported on Image
+            pointerEvents="none"
+          />
+        ) : (
+          <View style={styles.coverFieldPlaceholder} pointerEvents="none">
+            <Ionicons name="camera-outline" size={32} color={TEAL} />
+            <Text style={styles.coverFieldPlaceholderText}>Add Cover Photo</Text>
+            <Text style={styles.coverFieldHint}>Tap to pick from your photos</Text>
+          </View>
+        )}
+        {url && (
+          <View style={styles.coverFieldOverlay} pointerEvents="none">
+            <Ionicons name="camera" size={18} color="#FFFFFF" />
+            <Text style={styles.coverFieldOverlayText}>Change</Text>
+          </View>
+        )}
         {uploading && (
           <View style={styles.coverFieldUploading} pointerEvents="none">
             <ActivityIndicator size="large" color="#FFFFFF" />
             <Text style={styles.coverFieldUploadingText}>Uploading…</Text>
           </View>
         )}
-      </TouchableOpacity>
+
+        {/* Tap layer — web uses a transparent <input type="file"> overlay so
+            the browser's native picker opens reliably without depending on
+            react-native-web's TouchableOpacity onPress translation.
+            Native uses a TouchableOpacity + expo-image-picker. */}
+        {Platform.OS === 'web' ? (
+          <WebFileInputOverlay onFile={onWebFile} disabled={uploading} />
+        ) : (
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={0.85}
+            onPress={handleNativeTap}
+            disabled={uploading}
+          />
+        )}
+      </View>
     </View>
   );
 };
@@ -331,10 +349,16 @@ const StepBasics: React.FC<{
   data: TripFormData;
   update: (partial: Partial<TripFormData>) => void;
   uploadingCover: boolean;
-  onPickCover: () => void;
-}> = ({ data, update, uploadingCover, onPickCover }) => (
+  onPickCoverNative: () => void;
+  onWebCoverFile: (file: File) => void;
+}> = ({ data, update, uploadingCover, onPickCoverNative, onWebCoverFile }) => (
   <View>
-    <CoverPhotoField url={data.cover_photo_url} uploading={uploadingCover} onPick={onPickCover} />
+    <CoverPhotoField
+      url={data.cover_photo_url}
+      uploading={uploadingCover}
+      onPickNative={onPickCoverNative}
+      onWebFile={onWebCoverFile}
+    />
     <SectionLabel label="Trip Details" />
     <FormInput label="Trip Name" value={data.trip_name} onChangeText={(v) => update({ trip_name: v })} placeholder="e.g. Summer Return — Abidjan 2026" />
     <FormInput label="Destination" value={data.destination} onChangeText={(v) => update({ destination: v })} placeholder="e.g. Abidjan, Ivory Coast" />
@@ -670,41 +694,13 @@ const CreateTripWizardScreen: React.FC = () => {
   // ── Cover photo picker ─────────────────────────────────────────────────
   const [uploadingCover, setUploadingCover] = useState(false);
 
-  const pickCoverPhoto = async () => {
+  // Shared upload step used by both web and native paths.
+  const uploadCoverAndSave = async (file: { uri: string; type: string; name: string }) => {
     try {
-      // Request media-library permission first. On web this is a no-op
-      // (the browser picker is invoked by user gesture).
-      if (Platform.OS !== 'web') {
-        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) {
-          Alert.alert(
-            'Permission needed',
-            'TandaXn needs photo library access to set a trip cover. Please grant permission in your device settings.'
-          );
-          return;
-        }
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [16, 9],
-        quality: 0.85,
-      });
-      if (result.canceled || !result.assets?.[0]) return;
-
-      const asset = result.assets[0];
-      const file = {
-        uri: asset.uri,
-        type: asset.mimeType || 'image/jpeg',
-        name: asset.fileName || 'cover.jpg',
-      };
-      console.log('[CreateTripWizard] uploading cover', { tripId: editTripId, size: asset.fileSize });
-
+      console.log('[CreateTripWizard] uploading cover', { tripId: editTripId, name: file.name, type: file.type });
       setUploadingCover(true);
       const res = await MediaUploadService.uploadTripCover(file, editTripId);
       setUploadingCover(false);
-
       if (!res.success || !res.url) {
         console.error('[CreateTripWizard] cover upload failed', res.error);
         Alert.alert('Upload failed', res.error ?? 'Could not upload cover photo. Please try again.');
@@ -714,7 +710,55 @@ const CreateTripWizardScreen: React.FC = () => {
       updateForm({ cover_photo_url: res.url });
     } catch (err: any) {
       setUploadingCover(false);
-      console.error('[CreateTripWizard] pickCoverPhoto error', err);
+      console.error('[CreateTripWizard] upload error', err);
+      Alert.alert('Could not upload photo', err?.message ?? 'An unknown error occurred.');
+    }
+  };
+
+  // Web: file arrived directly from the <input type="file"> onChange event.
+  // Wrap it in a blob: URL and hand off to the shared upload routine, which
+  // will fetch() the blob back out of the URL and push it to Supabase.
+  const handleWebCoverFile = async (file: File) => {
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      await uploadCoverAndSave({
+        uri: objectUrl,
+        type: file.type || 'image/jpeg',
+        name: file.name || 'cover.jpg',
+      });
+    } finally {
+      // Safe to revoke now — the upload already fetched the blob.
+      try { URL.revokeObjectURL(objectUrl); } catch {}
+    }
+  };
+
+  // Native: request permission, launch ImagePicker, then upload.
+  const pickCoverPhotoNative = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          'Permission needed',
+          'TandaXn needs photo library access to set a trip cover. Please grant permission in your device settings.'
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.85,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      await uploadCoverAndSave({
+        uri: asset.uri,
+        type: asset.mimeType || 'image/jpeg',
+        name: asset.fileName || 'cover.jpg',
+      });
+    } catch (err: any) {
+      setUploadingCover(false);
+      console.error('[CreateTripWizard] pickCoverPhotoNative error', err);
       Alert.alert('Could not pick photo', err?.message ?? 'An unknown error occurred.');
     }
   };
@@ -922,7 +966,7 @@ const CreateTripWizardScreen: React.FC = () => {
 
   const renderStep = () => {
     switch (currentStep) {
-      case 0: return <StepBasics data={formData} update={updateForm} uploadingCover={uploadingCover} onPickCover={pickCoverPhoto} />;
+      case 0: return <StepBasics data={formData} update={updateForm} uploadingCover={uploadingCover} onPickCoverNative={pickCoverPhotoNative} onWebCoverFile={handleWebCoverFile} />;
       case 1: return <StepPayment data={formData} update={updateForm} />;
       case 2: return <StepRequirements data={formData} update={updateForm} />;
       case 3: return <StepReview data={formData} onPublish={publish} onSaveDraft={saveDraft} isEditMode={isEditMode} />;
