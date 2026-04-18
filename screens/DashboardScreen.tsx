@@ -235,6 +235,24 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {/* ========== 1b. WALLET BALANCE CARD ========== */}
+        <TouchableOpacity
+          style={styles.walletCard}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate("WalletMain")}
+          accessibilityLabel="Open wallet"
+          accessibilityRole="button"
+        >
+          <View style={styles.walletCardIcon}>
+            <Ionicons name="wallet-outline" size={22} color={TEAL} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.walletCardLabel}>My Wallet</Text>
+            <Text style={styles.walletCardBalance}>${walletBalance.toFixed(2)}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={20} color={TEXT_SECONDARY} />
+        </TouchableOpacity>
+
         {/* ========== 2. PULSE BANNER (Teal gradient) ========== */}
         <TouchableOpacity
           style={styles.pulseBanner}
@@ -534,6 +552,48 @@ const styles = StyleSheet.create({
   },
   elderBadgeText: {
     fontSize: 14,
+  },
+
+  // ===== 1b. WALLET CARD =====
+  walletCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: CARD_BG,
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+    gap: 12,
+  },
+  walletCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,198,174,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  walletCardLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: TEXT_SECONDARY,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  walletCardBalance: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: NAVY,
+    marginTop: 2,
   },
 
   // ===== 2. PULSE BANNER =====

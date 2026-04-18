@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useXnScore } from "../context/XnScoreContext";
+import { useWallet } from "../context/WalletContext";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
@@ -21,6 +22,7 @@ export default function ProfileScreen() {
   const navigation = useNavigation<ProfileScreenNavigationProp>();
   const { user, signOut } = useAuth();
   const { score, level } = useXnScore();
+  const { balance: walletBalance } = useWallet();
 
   const handleSignOut = async () => {
     Alert.alert(
@@ -50,6 +52,7 @@ export default function ProfileScreen() {
         { icon: "person-outline", label: "Personal Information", onPress: () => navigation.navigate("PersonalInfo") },
         { icon: "shield-checkmark-outline", label: "Security", onPress: () => navigation.navigate("SecuritySettings") },
         { icon: "card-outline", label: "Payment Methods", onPress: () => navigation.navigate("LinkedAccounts") },
+        { icon: "wallet-outline", label: "Wallet & Balance", value: `$${walletBalance.toFixed(2)}`, onPress: () => navigation.navigate("WalletMain") },
         { icon: "notifications-outline", label: "Notifications", onPress: () => navigation.navigate("NotificationPrefs") },
       ],
     },
@@ -146,7 +149,12 @@ export default function ProfileScreen() {
                       </View>
                       <Text style={styles.menuItemLabel}>{item.label}</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                    <View style={styles.menuItemRight}>
+                      {(item as any).value ? (
+                        <Text style={styles.menuItemValue}>{(item as any).value}</Text>
+                      ) : null}
+                      <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                    </View>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -322,6 +330,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
     color: "#0A2342",
+  },
+  menuItemRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  menuItemValue: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#00C6AE",
   },
   signOutButton: {
     flexDirection: "row",
