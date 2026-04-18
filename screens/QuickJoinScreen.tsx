@@ -71,6 +71,30 @@ function formatMoney(amount: number, currency: string) {
   return `${amount.toFixed(2)} ${currency}`;
 }
 
+// TEMP DIAGNOSTIC — logs once per module load so we can confirm the anon key
+// is actually configured on the deployed Supabase client. Remove after
+// resolving the 401-on-anon-insert bug.
+if (typeof window !== "undefined") {
+  const anySb = supabase as any;
+  // eslint-disable-next-line no-console
+  console.log("[QuickJoin DIAG] Supabase client config", {
+    url: anySb?.supabaseUrl,
+    hasKey: !!anySb?.supabaseKey,
+    keyPrefix: typeof anySb?.supabaseKey === "string" ? anySb.supabaseKey.substring(0, 18) : null,
+    keyLength: typeof anySb?.supabaseKey === "string" ? anySb.supabaseKey.length : 0,
+    restUrl: anySb?.rest?.url,
+    restHeaders: anySb?.rest?.headers
+      ? {
+          apikey_present: !!(anySb.rest.headers as any)?.apikey,
+          apikey_prefix: typeof (anySb.rest.headers as any)?.apikey === "string"
+            ? (anySb.rest.headers as any).apikey.substring(0, 18)
+            : null,
+          authorization_present: !!(anySb.rest.headers as any)?.Authorization,
+        }
+      : null,
+  });
+}
+
 // ── Screen ─────────────────────────────────────────────────────────────────────
 export default function QuickJoinScreen() {
   const navigation = useNavigation<QuickJoinNavProp>();
