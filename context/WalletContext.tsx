@@ -435,13 +435,62 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
       } : {}),
     };
 
-    // Deduct from source currency wallet
+    // 1. Optimistic local update — keep the UI snappy and write
+    //    AsyncStorage transaction history
     const newCurrencies = currencies.map((c) =>
       c.code === currency ? { ...c, balance: c.balance - amount } : c
     );
-
     const newTransactions = [newTransaction, ...transactions];
     await saveWalletData(newCurrencies, newTransactions);
+
+    // 2. Persist the deduction to user_wallets on the server so that
+    //    loadWalletData() (which reconciles USD against the DB on mount
+    //    or refreshWallet) doesn't snap the balance back to the pre-
+    //    contribution value. USD amounts only — non-USD contributions
+    //    skip server reconciliation since the DB only tracks USD cents.
+    try {
+      if (currency === "USD") {
+        const amountCents = Math.round(amount * 100);
+        const { data: authData } = await supabase.auth.getUser();
+        const uid = authData?.user?.id;
+        console.log("[WalletContext.makeContribution] deducting", {
+          amountCents, circleId, userId: uid,
+        });
+        if (uid) {
+          const { data: walletRow, error: readErr } = await supabase
+            .from("user_wallets")
+            .select("main_balance_cents")
+            .eq("user_id", uid)
+            .maybeSingle();
+          if (readErr || !walletRow) {
+            console.warn("[WalletContext.makeContribution] wallet read failed", readErr);
+          } else {
+            const newBalanceCents = (walletRow.main_balance_cents ?? 0) - amountCents;
+            const { error: updErr } = await supabase
+              .from("user_wallets")
+              .update({ main_balance_cents: newBalanceCents })
+              .eq("user_id", uid);
+            if (updErr) {
+              console.error("[WalletContext.makeContribution] wallet update failed", updErr);
+            } else {
+              console.log("[WalletContext.makeContribution] wallet updated", {
+                before: walletRow.main_balance_cents, after: newBalanceCents,
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[WalletContext.makeContribution] server deduction error", err);
+      // Intentionally don't throw — the local state already shows the
+      // deduction and the contribution record is what the screen cares
+      // about. A follow-up refreshWallet will reconcile if needed.
+    }
+
+    // 3. Reconcile from the server so the UI shows the authoritative new
+    //    balance (protects against drift between local + server state).
+    try { await loadWalletData(); } catch {}
+
     return transactionId;
   };
 
