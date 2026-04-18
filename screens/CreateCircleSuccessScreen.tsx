@@ -145,7 +145,7 @@ export default function CreateCircleSuccessScreen() {
   const handleInviteMore = async () => {
     try {
       await Share.share({
-        message: `Join my TandaXn savings circle "${name}"! Download the app and use invite code: ${inviteCode}`,
+        message: `You've been invited to join ${name} on TandaXn! Tap to join instantly: https://v0-tanda-xn.vercel.app/join/${inviteCode}`,
       });
     } catch (error) {
       console.error("Error sharing:", error);

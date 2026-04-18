@@ -20,7 +20,7 @@ export default function InviteToCircle() {
 
   const circle = circleId ? getCircleById(circleId) : undefined
   const inviteCode = circle ? generateInviteCode(circle) : ""
-  const inviteLink = `https://tandaxn.com/join/${inviteCode}`
+  const inviteLink = `https://v0-tanda-xn.vercel.app/join/${inviteCode}`
 
   useEffect(() => {
     if (!circleId) return

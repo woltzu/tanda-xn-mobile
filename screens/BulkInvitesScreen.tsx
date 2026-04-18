@@ -258,10 +258,10 @@ export default function BulkInvitesScreen() {
               <View style={styles.smsBubble}>
                 <Text style={styles.smsBubbleText}>
                   {smsLanguage === "en"
-                    ? `Hi [Name]! ${ownerName} invites you to join TandaXn — your tontine circle is waiting. Set up in 2 min: https://tandaxn.app/join/...`
+                    ? `Hi [Name]! You've been invited to join ${storeName} on TandaXn! Tap to join instantly: https://v0-tanda-xn.vercel.app/join/[code]`
                     : smsLanguage === "both"
-                    ? `Bonjour [Nom]! ${ownerName} vous invite sur TandaXn. / Hi [Name]! Join your tontine circle: https://tandaxn.app/join/...`
-                    : `Bonjour [Nom] ! ${ownerName} vous invite à rejoindre TandaXn — votre cercle de tontine vous attend. Inscrivez-vous en 2 min : https://tandaxn.app/join/...`
+                    ? `Bonjour [Nom] ! Vous êtes invité(e) à rejoindre ${storeName} sur TandaXn ! / Hi [Name]! You've been invited to join ${storeName} on TandaXn! https://v0-tanda-xn.vercel.app/join/[code]`
+                    : `Bonjour [Nom] ! Vous êtes invité(e) à rejoindre ${storeName} sur TandaXn ! Cliquez pour rejoindre : https://v0-tanda-xn.vercel.app/join/[code]`
                   }
                 </Text>
               </View>

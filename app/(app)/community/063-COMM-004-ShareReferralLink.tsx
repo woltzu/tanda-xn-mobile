@@ -7,7 +7,7 @@ export default function ShareReferralLinkScreen() {
   const [activeTab, setActiveTab] = useState("qr")
 
   const referralCode = "FRANCK2024"
-  const referralLink = "https://tandaxn.com/join/FRANCK2024"
+  const referralLink = "https://v0-tanda-xn.vercel.app/join/FRANCK2024"
   const rewardAmount = 25
 
   const handleBack = () => {

@@ -35,7 +35,9 @@ export default function QRScannerScreen() {
     const deepLinkMatch = data.match(/tandaxn:\/\/join\/([A-Z0-9]+)/i);
     if (deepLinkMatch) return deepLinkMatch[1].toUpperCase();
 
-    // Handle web links: https://tandaxn.app/join?code=CODE
+    // Handle web links: https://v0-tanda-xn.vercel.app/join/CODE (and legacy ?code=CODE)
+    const webPathMatch = data.match(/\/join\/([A-Z0-9]+)/i);
+    if (webPathMatch) return webPathMatch[1].toUpperCase();
     const webLinkMatch = data.match(/[?&]code=([A-Z0-9]+)/i);
     if (webLinkMatch) return webLinkMatch[1].toUpperCase();
 

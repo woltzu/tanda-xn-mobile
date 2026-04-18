@@ -150,8 +150,13 @@ export default function CreateCircleInviteScreen() {
 
   const handleShareLink = async () => {
     try {
+      // Circle isn't saved yet on this pre-create wizard step, so we derive
+      // a stable invite code from the chosen name + current year using the
+      // same heuristic CircleDetailScreen applies to real circles. The real
+      // invite_code from the DB is used once the circle is created.
+      const derivedInviteCode = name.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 10) + new Date().getFullYear();
       await Share.share({
-        message: `Join my TandaXn savings circle "${name}"! Download the app and use invite code: INVITE123`,
+        message: `You've been invited to join ${name} on TandaXn! Tap to join instantly: https://v0-tanda-xn.vercel.app/join/${derivedInviteCode}`,
       });
     } catch (error) {
       console.error("Error sharing:", error);

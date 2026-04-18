@@ -175,7 +175,7 @@ export default function CircleDetailScreen() {
   const handleInviteMembers = async () => {
     try {
       await Share.share({
-        message: `Join my TandaXn savings circle "${circle.name}"!\n\nUse invite code: ${inviteCode}\n\nOr download the app: https://tandaxn.app`,
+        message: `You've been invited to join ${circle.name} on TandaXn! Tap to join instantly: https://v0-tanda-xn.vercel.app/join/${inviteCode}`,
         title: `Join ${circle.name}`,
       });
     } catch (error) {
@@ -258,7 +258,7 @@ export default function CircleDetailScreen() {
     setShowMenu(false);
     try {
       await Share.share({
-        message: `Check out "${circle.name}" on TandaXn!\n\nJoin code: ${inviteCode}\n\nContribution: $${circle.amount} ${getFrequencyLabel(circle.frequency).toLowerCase()}\nMembers: ${circle.currentMembers}/${circle.memberCount}\n\nDownload: https://tandaxn.app`,
+        message: `You've been invited to join ${circle.name} on TandaXn! Tap to join instantly: https://v0-tanda-xn.vercel.app/join/${inviteCode}`,
         title: `Share ${circle.name}`,
       });
     } catch (error) {

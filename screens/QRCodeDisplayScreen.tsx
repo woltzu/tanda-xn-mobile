@@ -136,12 +136,7 @@ export default function QRCodeDisplayScreen() {
   const handleShare = async () => {
     try {
       await Share.share({
-        message:
-          `Join my TandaXn savings circle "${circle.name}"!\n\n` +
-          `Use invite code: ${inviteCode}\n\n` +
-          `Contribution: $${circle.amount} ${circle.frequency}\n` +
-          `Members: ${circle.currentMembers}/${circle.memberCount}\n\n` +
-          `Download TandaXn: https://tandaxn.app`,
+        message: `You've been invited to join ${circle.name} on TandaXn! Tap to join instantly: https://v0-tanda-xn.vercel.app/join/${inviteCode}`,
         title: `Join ${circle.name} on TandaXn`,
       });
     } catch (error) {

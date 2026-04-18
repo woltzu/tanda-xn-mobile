@@ -13,7 +13,7 @@ export default function FamilyCircleMembersScreen() {
   }
 
   const shareInvite = () => {
-    const message = `Join our Family Circle "${circle.name}" on TandaXn to support family together! Use code: ${circle.inviteCode} or click: https://tandaxn.com/join/${circle.inviteCode}`
+    const message = `You've been invited to join ${circle.name} on TandaXn! Tap to join instantly: https://v0-tanda-xn.vercel.app/join/${circle.inviteCode}`
     if (navigator.share) {
       navigator.share({ title: "Join Family Circle", text: message })
     } else {

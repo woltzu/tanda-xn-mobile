@@ -7,7 +7,7 @@ export default function InviteFriendsScreen() {
   const [selectedContacts, setSelectedContacts] = useState<number[]>([])
 
   const referralCode = "FRANCK2024"
-  const referralLink = "https://tandaxn.com/join/FRANCK2024"
+  const referralLink = "https://v0-tanda-xn.vercel.app/join/FRANCK2024"
   const rewardAmount = 25
 
   const contacts = [
