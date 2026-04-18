@@ -6,12 +6,14 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useXnScore } from "../context/XnScoreContext";
 import { useWallet } from "../context/WalletContext";
+import { supabase } from "../lib/supabase";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
@@ -25,24 +27,52 @@ export default function ProfileScreen() {
   const { balance: walletBalance } = useWallet();
 
   const handleSignOut = async () => {
-    Alert.alert(
-      "Sign Out",
-      "Are you sure you want to sign out?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Sign Out",
-          style: "destructive",
-          onPress: async () => {
-            await signOut();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "Splash" }],
-            });
-          },
-        },
-      ]
-    );
+    console.log("[ProfileScreen] sign out tapped");
+
+    // Alert.alert button callbacks don't fire reliably on react-native-web,
+    // so use window.confirm for the web confirmation and Alert.alert on
+    // native. Each path resolves a single boolean.
+    const confirmed: boolean = Platform.OS === "web"
+      ? (typeof window !== "undefined" && typeof window.confirm === "function"
+          ? window.confirm("Are you sure you want to sign out?")
+          : true)
+      : await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            "Sign Out",
+            "Are you sure you want to sign out?",
+            [
+              { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+              { text: "Sign Out", style: "destructive", onPress: () => resolve(true) },
+            ],
+            { cancelable: true, onDismiss: () => resolve(false) },
+          );
+        });
+
+    if (!confirmed) {
+      console.log("[ProfileScreen] sign out cancelled");
+      return;
+    }
+
+    try {
+      console.log("[ProfileScreen] calling supabase.auth.signOut");
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      // Keep the in-app AuthContext in sync (clears cached user/session),
+      // but don't block on it if it's a no-op.
+      try { await signOut?.(); } catch {}
+      console.log("[ProfileScreen] signOut complete, navigating to Welcome");
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "Welcome" }],
+      });
+    } catch (err: any) {
+      console.error("[ProfileScreen] sign out error", err);
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        window.alert(`Sign out failed: ${err?.message ?? "Please try again."}`);
+      } else {
+        Alert.alert("Sign Out Failed", err?.message ?? "Please try again.");
+      }
+    }
   };
 
   const menuItems = [
