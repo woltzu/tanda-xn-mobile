@@ -71,30 +71,6 @@ function formatMoney(amount: number, currency: string) {
   return `${amount.toFixed(2)} ${currency}`;
 }
 
-// TEMP DIAGNOSTIC — logs once per module load so we can confirm the anon key
-// is actually configured on the deployed Supabase client. Remove after
-// resolving the 401-on-anon-insert bug.
-if (typeof window !== "undefined") {
-  const anySb = supabase as any;
-  // eslint-disable-next-line no-console
-  console.log("[QuickJoin DIAG] Supabase client config", {
-    url: anySb?.supabaseUrl,
-    hasKey: !!anySb?.supabaseKey,
-    keyPrefix: typeof anySb?.supabaseKey === "string" ? anySb.supabaseKey.substring(0, 18) : null,
-    keyLength: typeof anySb?.supabaseKey === "string" ? anySb.supabaseKey.length : 0,
-    restUrl: anySb?.rest?.url,
-    restHeaders: anySb?.rest?.headers
-      ? {
-          apikey_present: !!(anySb.rest.headers as any)?.apikey,
-          apikey_prefix: typeof (anySb.rest.headers as any)?.apikey === "string"
-            ? (anySb.rest.headers as any).apikey.substring(0, 18)
-            : null,
-          authorization_present: !!(anySb.rest.headers as any)?.Authorization,
-        }
-      : null,
-  });
-}
-
 // ── Screen ─────────────────────────────────────────────────────────────────────
 export default function QuickJoinScreen() {
   const navigation = useNavigation<QuickJoinNavProp>();
@@ -113,6 +89,43 @@ export default function QuickJoinScreen() {
   const [cardCvv, setCardCvv] = useState<string>("");
   const [agreed, setAgreed] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
+
+  // Clear any stale/unconfirmed Supabase session on mount. supabase-js
+  // persists sessions in localStorage with `persistSession: true`, so a
+  // leftover session from a previous signUp() test (or an unconfirmed
+  // email signup) would auto-attach as Authorization: Bearer <user-jwt>
+  // on every REST call. Supabase's PostgREST validates Authorization
+  // before apikey — if it's expired/unconfirmed, we get a 401 even with
+  // a valid anon apikey. Nuke the stale session so /join requests go
+  // through as pure anon.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session || cancelled) return;
+        const expiresAt = session.expires_at ?? 0;
+        const nowSec = Math.floor(Date.now() / 1000);
+        const userUnconfirmed = !session.user?.email_confirmed_at;
+        // Treat anything expiring within 60s as expired so we don't race
+        // the check against the request.
+        const nearExpiry = expiresAt < nowSec + 60;
+        if (nearExpiry || userUnconfirmed) {
+          console.log("[QuickJoin] Clearing stale session", {
+            expiresAt, nowSec, userUnconfirmed, nearExpiry,
+          });
+          await supabase.auth.signOut();
+        } else {
+          console.log("[QuickJoin] Existing session looks valid, keeping", {
+            expiresAt, userId: session.user?.id,
+          });
+        }
+      } catch (err) {
+        console.warn("[QuickJoin] ensureCleanAnonState error", err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Fetch circle by invite code on mount
   useEffect(() => {
@@ -217,32 +230,32 @@ export default function QuickJoinScreen() {
       }
       const email = trimmed.toLowerCase();
 
-      // 1. Record the join intent + payment stub in pending_joins. This
-      //    row survives the magic-link round trip; the magic-link landing
-      //    screen reads it back once the user is authenticated.
-      console.log("[QuickJoin] creating pending_join", { email, circleId: circle.id });
-      const { data: pendingJoin, error: pendingError } = await supabase
-        .from("pending_joins")
-        .insert({
-          email,
-          invite_code: inviteCode,
-          circle_id: circle.id,
-          payment_method: "debit_card",
-          payment_details_encrypted: `****${cardNumber.replace(/\D/g, "").slice(-4)}`,
-          consented_to_rules: true,
-        })
-        .select()
-        .single();
+      // 1. Record the join intent + payment stub by calling the
+      //    create_pending_join RPC. The function is SECURITY DEFINER so it
+      //    runs with elevated privileges and succeeds regardless of what
+      //    auth state the browser has cached — this sidesteps the 401 from
+      //    a stale Authorization header poisoning direct table INSERTs.
+      console.log("[QuickJoin] rpc create_pending_join", { email, inviteCode });
+      const { data: pendingJoinId, error: pendingError } = await supabase.rpc(
+        "create_pending_join",
+        {
+          p_email: email,
+          p_invite_code: inviteCode,
+          p_payment_method: "debit_card",
+          p_payment_details_encrypted: `****${cardNumber.replace(/\D/g, "").slice(-4)}`,
+        },
+      );
       if (pendingError) {
-        console.error("[QuickJoin] pending_joins insert failed", pendingError);
+        console.error("[QuickJoin] create_pending_join RPC failed", pendingError);
         throw pendingError;
       }
-      console.log("[QuickJoin] pending_join created", pendingJoin.id);
+      const pendingJoinUUID = pendingJoinId as string;
+      console.log("[QuickJoin] pending_join created", pendingJoinUUID);
 
       // 2. Send the magic link. shouldCreateUser:true makes this work for
       //    both new and returning users — passwordless, no rate-limit on
       //    password-based signUp attempts.
-      const redirectTo = `https://v0-tanda-xn.vercel.app/join-confirm?pending=${pendingJoin.id}`;
+      const redirectTo = `https://v0-tanda-xn.vercel.app/join-confirm?pending=${pendingJoinUUID}`;
       console.log("[QuickJoin] signInWithOtp", { email, redirectTo });
       const { error: otpError } = await supabase.auth.signInWithOtp({
         email,
@@ -250,7 +263,7 @@ export default function QuickJoinScreen() {
           shouldCreateUser: true,
           emailRedirectTo: redirectTo,
           data: {
-            pending_join_id: pendingJoin.id,
+            pending_join_id: pendingJoinUUID,
             invite_code: inviteCode,
           },
         },
