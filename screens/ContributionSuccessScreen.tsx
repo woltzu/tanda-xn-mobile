@@ -73,7 +73,7 @@ export default function ContributionSuccessScreen() {
           <Text style={styles.errorText}>Circle not found</Text>
           <TouchableOpacity
             style={styles.errorButton}
-            onPress={() => navigation.navigate("MainTabs")}
+            onPress={() => navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] })}
           >
             <Text style={styles.errorButtonText}>Go Home</Text>
           </TouchableOpacity>
@@ -136,7 +136,14 @@ export default function ContributionSuccessScreen() {
   };
 
   const handleGoHome = () => {
-    navigation.navigate("MainTabs");
+    console.log("[ContributionSuccess] Go Home tapped");
+    // Reset to MainTabs instead of navigate() — navigate() to an already-
+    // active tab/route is often a no-op on react-native-web, which is why
+    // the button appeared dead.
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "MainTabs" }],
+    });
   };
 
   const handleShareReceipt = async () => {
