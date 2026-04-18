@@ -115,6 +115,7 @@ import { MemberProfileProvider } from "./context/MemberProfileContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import { OnboardingProvider } from "./context/OnboardingContext";
 import CircleInviteScreen from "./screens/CircleInviteScreen";
+import QuickJoinScreen from "./screens/QuickJoinScreen";
 import ForgotPasswordScreen from "./screens/ForgotPasswordScreen";
 import ResetPasswordScreen from "./screens/ResetPasswordScreen";
 import { linkingConfig } from "./lib/deepLinking";
@@ -349,6 +350,7 @@ export type RootStackParamList = {
   // Invite Screens (Deep Linking)
   CircleInvite: { circleId: string; name?: string; emoji?: string; inviter?: string; inviterName?: string; contribution?: number; frequency?: string; members?: number };
   CommunityInvite: { communityId: string; name?: string; icon?: string; inviter?: string; inviterName?: string; members?: number };
+  QuickJoin: { inviteCode: string };
   // Marketplace Flow (Migration 057)
   Marketplace: undefined;
   StoreDetail: { storeId: string; nextPayoutDate?: string; payoutAmount?: number; circleId?: string; circleName?: string };
@@ -742,6 +744,8 @@ function AppContent() {
           <Stack.Screen name="AccessRestricted" component={AccessRestrictedScreen} />
           {/* Deep Link Invite Screens */}
           <Stack.Screen name="CircleInvite" component={CircleInviteScreen} />
+          {/* Public frictionless join — reachable unauthenticated at /join/:inviteCode */}
+          <Stack.Screen name="QuickJoin" component={QuickJoinScreen} />
         </Stack.Navigator>
       </View>
     </TouchableWithoutFeedback>

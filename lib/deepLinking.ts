@@ -36,6 +36,8 @@ export const linkingConfig = {
       // Invite screens
       CircleInvite: "invite/circle/:circleId",
       CommunityInvite: "invite/community/:communityId",
+      // Public frictionless join — unauthenticated, invite-code based
+      QuickJoin: "join/:inviteCode",
 
       // Main app screens
       MainTabs: {
