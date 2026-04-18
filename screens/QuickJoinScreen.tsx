@@ -173,12 +173,6 @@ export default function QuickJoinScreen() {
     return null;
   };
 
-  // Generate a random password for the auto-created account. The user can
-  // set a real password later via the password-reset flow.
-  const generatePassword = (): string => {
-    return `TX_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
-  };
-
   const handleSubmit = async () => {
     console.log("[QuickJoin] Join & Pay tapped");
     const err = validate();
@@ -193,45 +187,73 @@ export default function QuickJoinScreen() {
 
       const trimmed = emailOrPhone.trim();
       const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+      if (!isEmail) {
+        showError("Email required", "Please use an email address for passwordless sign-in. Phone login is coming soon.");
+        return;
+      }
+      const email = trimmed.toLowerCase();
 
-      // Auto-create account using the provided contact
-      if (isEmail) {
-        const password = generatePassword();
-        console.log("[QuickJoin] signUp with email", { email: trimmed });
-        const { error: signUpErr } = await supabase.auth.signUp({
-          email: trimmed,
-          password,
-          options: {
-            data: { quick_join_invite: inviteCode },
+      // 1. Record the join intent + payment stub in pending_joins. This
+      //    row survives the magic-link round trip; the magic-link landing
+      //    screen reads it back once the user is authenticated.
+      console.log("[QuickJoin] creating pending_join", { email, circleId: circle.id });
+      const { data: pendingJoin, error: pendingError } = await supabase
+        .from("pending_joins")
+        .insert({
+          email,
+          invite_code: inviteCode,
+          circle_id: circle.id,
+          payment_method: "debit_card",
+          payment_details_encrypted: `****${cardNumber.replace(/\D/g, "").slice(-4)}`,
+          consented_to_rules: true,
+        })
+        .select()
+        .single();
+      if (pendingError) {
+        console.error("[QuickJoin] pending_joins insert failed", pendingError);
+        throw pendingError;
+      }
+      console.log("[QuickJoin] pending_join created", pendingJoin.id);
+
+      // 2. Send the magic link. shouldCreateUser:true makes this work for
+      //    both new and returning users — passwordless, no rate-limit on
+      //    password-based signUp attempts.
+      const redirectTo = `https://v0-tanda-xn.vercel.app/join-confirm?pending=${pendingJoin.id}`;
+      console.log("[QuickJoin] signInWithOtp", { email, redirectTo });
+      const { error: otpError } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: redirectTo,
+          data: {
+            pending_join_id: pendingJoin.id,
+            invite_code: inviteCode,
           },
-        });
-        // Ignore "user already registered" — they can still proceed to join.
-        if (signUpErr && !/already|registered|exists/i.test(signUpErr.message)) {
-          throw signUpErr;
+        },
+      });
+
+      if (otpError) {
+        console.error("[QuickJoin] signInWithOtp failed", otpError);
+        if (/rate limit|security purposes/i.test(otpError.message)) {
+          showError(
+            "Please wait",
+            "We just sent a link. Check your email, or wait 60 seconds to request a new one."
+          );
+        } else {
+          showError("Could not send link", otpError.message);
         }
-      } else {
-        // Phone signup: use the phone number directly; Supabase will treat
-        // it as an unverified phone user. For the demo we don't OTP-verify.
-        console.log("[QuickJoin] signUp with phone", { phone: trimmed });
-        const password = generatePassword();
-        const { error: signUpErr } = await supabase.auth.signUp({
-          phone: trimmed,
-          password,
-          options: { data: { quick_join_invite: inviteCode } },
-        });
-        if (signUpErr && !/already|registered|exists/i.test(signUpErr.message)) {
-          throw signUpErr;
-        }
+        return;
       }
 
-      // In a real flow we'd charge the card via a payment processor here
-      // and create a circle_members row. For the demo we go straight to
-      // the success screen so the organizer can show the end-to-end UX.
-      console.log("[QuickJoin] navigate to JoinCircleSuccess", { circleId: circle.id });
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "JoinCircleSuccess", params: { circleId: circle.id } }],
+      // 3. Advance to the "check your email" confirmation screen.
+      console.log("[QuickJoin] magic link sent → pending confirmation screen");
+      navigation.navigate("QuickJoinPendingConfirmation", {
+        email,
+        circleName: circle.name,
+        amount: circle.amount,
+        inviteCode,
       });
+      return;
     } catch (error: any) {
       console.error("[QuickJoin] submit error", error);
       showError("Could not complete", error?.message ?? "Please try again.");
@@ -241,7 +263,10 @@ export default function QuickJoinScreen() {
   };
 
   // ── Render states ─────────────────────────────────────────────────────────────
-  if (loadingCircle) {
+  // Show ONLY the loading screen until the circle is fully loaded — no
+  // partial header renders. If lookup finished with an error or null, show
+  // the error state. Everything below this block assumes a populated circle.
+  if (loadingCircle || (!circle && !lookupError)) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="light-content" backgroundColor={NAVY} />

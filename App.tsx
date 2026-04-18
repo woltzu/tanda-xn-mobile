@@ -116,6 +116,8 @@ import { NotificationProvider } from "./context/NotificationContext";
 import { OnboardingProvider } from "./context/OnboardingContext";
 import CircleInviteScreen from "./screens/CircleInviteScreen";
 import QuickJoinScreen from "./screens/QuickJoinScreen";
+import QuickJoinPendingConfirmationScreen from "./screens/QuickJoinPendingConfirmationScreen";
+import JoinConfirmScreen from "./screens/JoinConfirmScreen";
 import ForgotPasswordScreen from "./screens/ForgotPasswordScreen";
 import ResetPasswordScreen from "./screens/ResetPasswordScreen";
 import { linkingConfig } from "./lib/deepLinking";
@@ -351,6 +353,8 @@ export type RootStackParamList = {
   CircleInvite: { circleId: string; name?: string; emoji?: string; inviter?: string; inviterName?: string; contribution?: number; frequency?: string; members?: number };
   CommunityInvite: { communityId: string; name?: string; icon?: string; inviter?: string; inviterName?: string; members?: number };
   QuickJoin: { inviteCode: string };
+  QuickJoinPendingConfirmation: { email: string; circleName: string; amount?: number; inviteCode: string };
+  JoinConfirm: undefined;
   // Marketplace Flow (Migration 057)
   Marketplace: undefined;
   StoreDetail: { storeId: string; nextPayoutDate?: string; payoutAmount?: number; circleId?: string; circleName?: string };
@@ -746,6 +750,9 @@ function AppContent() {
           <Stack.Screen name="CircleInvite" component={CircleInviteScreen} />
           {/* Public frictionless join — reachable unauthenticated at /join/:inviteCode */}
           <Stack.Screen name="QuickJoin" component={QuickJoinScreen} />
+          <Stack.Screen name="QuickJoinPendingConfirmation" component={QuickJoinPendingConfirmationScreen} />
+          {/* Magic-link landing page at /join-confirm?pending=<id> */}
+          <Stack.Screen name="JoinConfirm" component={JoinConfirmScreen} />
         </Stack.Navigator>
       </View>
     </TouchableWithoutFeedback>

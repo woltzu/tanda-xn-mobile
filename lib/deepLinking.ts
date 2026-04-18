@@ -38,6 +38,8 @@ export const linkingConfig = {
       CommunityInvite: "invite/community/:communityId",
       // Public frictionless join — unauthenticated, invite-code based
       QuickJoin: "join/:inviteCode",
+      // Magic-link landing after QuickJoin email confirmation
+      JoinConfirm: "join-confirm",
 
       // Main app screens
       MainTabs: {
