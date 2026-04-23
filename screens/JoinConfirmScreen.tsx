@@ -54,6 +54,8 @@ export default function JoinConfirmScreen() {
   const [status, setStatus] = useState<Status>("loading");
   const [message, setMessage] = useState<string>("");
   const [subMessage, setSubMessage] = useState<string>("Confirming your spot…");
+  const [circleName, setCircleName] = useState<string | null>(null);
+  const [contributionAmount, setContributionAmount] = useState<number | null>(null);
 
   useEffect(() => {
     completeJoin();
@@ -64,6 +66,63 @@ export default function JoinConfirmScreen() {
     try {
       const pendingId = readPendingId();
       console.log("[JoinConfirm] start", { pendingId });
+
+      // When Supabase rejects the magic link (already-consumed token,
+      // expired window, or the user clicked it a second time after the
+      // first click consumed it), it redirects here with auth error
+      // params in the URL *hash*. Check those FIRST — even before we
+      // try to read the session — because detectSessionInUrl won't
+      // have a valid token to parse and supabase.auth.getUser() will
+      // just return null, which used to show a generic "session
+      // expired" message. The graceful path: if the pending_join
+      // already succeeded, treat the repeat click as a success.
+      const urlHash = typeof window !== "undefined" ? (window.location.hash || "") : "";
+      const hashParams = new URLSearchParams(
+        urlHash.startsWith("#") ? urlHash.slice(1) : urlHash
+      );
+      const errorCode = hashParams.get("error_code");
+      const errorDescription = hashParams.get("error_description");
+      console.log("[JoinConfirm] hash check", { errorCode, errorDescription });
+
+      if (errorCode === "otp_expired" || errorCode === "access_denied") {
+        if (pendingId) {
+          const { data: alreadyDone, error: readErr } = await supabase
+            .from("pending_joins")
+            .select("status, circle_id, circles(name, amount)")
+            .eq("id", pendingId)
+            .maybeSingle();
+          console.log("[JoinConfirm] already-used link → status check", {
+            status: alreadyDone?.status, error: readErr,
+          });
+          if (alreadyDone?.status === "completed") {
+            const circ = (alreadyDone as any).circles;
+            setStatus("success");
+            setCircleName(circ?.name ?? null);
+            setContributionAmount(
+              typeof circ?.amount === "number" ? circ.amount : parseFloat(circ?.amount ?? "0") || null
+            );
+            setMessage(`You're already in, ${circ?.name ?? "the circle"}!`);
+            setTimeout(() => {
+              navigation.reset({
+                index: 0,
+                routes: [{
+                  name: "QuickJoinPaymentSuccess",
+                  params: {
+                    circleName: circ?.name ?? "your circle",
+                    amount: typeof circ?.amount === "number" ? circ.amount : parseFloat(circ?.amount ?? "0") || 0,
+                  },
+                }],
+              });
+            }, 1600);
+            return;
+          }
+        }
+        // Not-yet-completed but link is dead — ask for a fresh one.
+        setStatus("error");
+        setMessage("This link has already been used or expired. Please request a new one from your host.");
+        return;
+      }
+
       if (!pendingId) {
         setStatus("error");
         setMessage("Missing pending id in the URL.");
@@ -146,15 +205,44 @@ export default function JoinConfirmScreen() {
       // TODO (post-demo): trigger Stripe charge using pending.payment_method
       // and pending.payment_details_encrypted. For demo, join is complete.
 
-      console.log("[JoinConfirm] success");
-      setStatus("success");
-      setMessage(`You're in, ${pending.circles?.name ?? "the circle"}!`);
+      // Fetch fresh circle info for the success / payment screens. The
+      // joined select above sometimes returns a null nested object under
+      // PostgREST's newer foreign-key expansion; a direct select on
+      // circles is more reliable for the amount formatting.
+      const { data: circleInfo } = await supabase
+        .from("circles")
+        .select("name, amount")
+        .eq("id", pending.circle_id)
+        .maybeSingle();
 
-      // Redirect to MainTabs after a short celebration pause.
+      const resolvedName = circleInfo?.name ?? pending.circles?.name ?? "the circle";
+      const resolvedAmount = (() => {
+        const raw = circleInfo?.amount ?? (pending.circles as any)?.amount;
+        if (raw == null) return null;
+        const n = typeof raw === "number" ? raw : parseFloat(raw);
+        return Number.isFinite(n) ? n : null;
+      })();
+
+      setCircleName(resolvedName);
+      setContributionAmount(resolvedAmount);
+
+      console.log("[JoinConfirm] success", { resolvedName, resolvedAmount });
+      setStatus("success");
+      setMessage(`You're in, ${resolvedName}!`);
+
+      // Go through the QuickJoinPaymentSuccess screen so the user sees
+      // the big confirmation card with their contribution amount before
+      // landing on the dashboard.
       setTimeout(() => {
         navigation.reset({
           index: 0,
-          routes: [{ name: "MainTabs" }],
+          routes: [{
+            name: "QuickJoinPaymentSuccess",
+            params: {
+              circleName: resolvedName,
+              amount: resolvedAmount ?? 0,
+            },
+          }],
         });
       }, 1800);
     } catch (err: any) {
@@ -184,6 +272,11 @@ export default function JoinConfirmScreen() {
                 <Ionicons name="checkmark-circle" size={56} color={SUCCESS} />
               </View>
               <Text style={styles.title}>{message}</Text>
+              {contributionAmount != null ? (
+                <Text style={styles.subtitle}>
+                  Your first contribution of ${contributionAmount.toFixed(2)} has been confirmed.
+                </Text>
+              ) : null}
               <Text style={styles.subtitle}>Redirecting you to your dashboard…</Text>
             </>
           )}
