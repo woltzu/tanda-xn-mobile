@@ -154,7 +154,28 @@ export default function QuickJoinScreen() {
           setLookupError("This invite link isn't valid or has expired.");
         } else {
           const amount = Number(data.amount) || 0;
-          const memberCount = Number(data.member_count) || 1;
+          // `circles.member_count` is the TARGET/max slots the organizer
+          // configured, not how many people have actually joined. For the
+          // public-facing header we want the current headcount, so we do a
+          // live count against circle_members. Fall back to the target (or
+          // 1) if the count query fails for any reason — better a slightly
+          // optimistic number than a dashes display.
+          const targetMembers = Number(data.member_count) || 1;
+          console.log("[QuickJoin] counting active members", { circleId: data.id });
+          const { count: activeCount, error: countError } = await supabase
+            .from("circle_members")
+            .select("*", { count: "exact", head: true })
+            .eq("circle_id", data.id)
+            .eq("status", "active");
+          if (countError) {
+            console.warn("[QuickJoin] circle_members count failed", countError);
+          }
+          const memberCount = (typeof activeCount === "number" && activeCount > 0)
+            ? activeCount
+            : targetMembers;
+          console.log("[QuickJoin] member count resolved", {
+            activeCount, targetMembers, memberCount,
+          });
           setCircle({
             id: data.id,
             name: data.name ?? "A savings circle",
@@ -163,6 +184,9 @@ export default function QuickJoinScreen() {
             currency: data.currency ?? "USD",
             frequency: data.frequency ?? "monthly",
             memberCount,
+            // Payout rotates: each cycle one member receives amount * N. Use
+            // the real member count so a 3-person circle at $100 shows $300,
+            // not the target-based $500.
             potSize: amount * memberCount,
           });
         }
