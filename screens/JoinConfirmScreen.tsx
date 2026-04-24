@@ -142,93 +142,55 @@ export default function JoinConfirmScreen() {
         return;
       }
 
-      setSubMessage("Loading your circle details…");
+      setSubMessage("Completing your join…");
 
-      const { data: pending, error: fetchError } = await supabase
-        .from("pending_joins")
-        .select("*, circles(id, name, amount, currency)")
-        .eq("id", pendingId)
-        .eq("status", "awaiting_confirmation")
-        .maybeSingle();
+      // One atomic server-side step. The complete_circle_join RPC:
+      //  - verifies the pending_joins row is for the caller (email match)
+      //  - inserts the circle_members row (idempotent)
+      //  - marks the pending_joins row completed
+      //  - returns { success, already_completed, circle_name, amount, error }
+      // Running it as a SECURITY DEFINER RPC means this succeeds even if
+      // the caller's auth state is weird (just as the QuickJoin insert
+      // fix did), and it collapses three round-trips into one.
+      console.log("[JoinConfirm] calling complete_circle_join", { pendingId });
+      const { data: rpcData, error: rpcError } = await supabase.rpc(
+        "complete_circle_join",
+        { p_pending_id: pendingId },
+      );
+      console.log("[JoinConfirm] RPC response", { data: rpcData, error: rpcError });
 
-      console.log("[JoinConfirm] pending row", {
-        hasRow: !!pending,
-        error: fetchError ? { code: fetchError.code, message: fetchError.message } : null,
-      });
-
-      if (fetchError) {
+      if (rpcError || !rpcData?.success) {
         setStatus("error");
-        setMessage(fetchError.message || "Could not read pending join.");
-        return;
-      }
-      if (!pending) {
-        setStatus("error");
-        setMessage("This link has expired or already been used.");
-        return;
-      }
-
-      if ((pending.email ?? "").toLowerCase() !== (user.email ?? "").toLowerCase()) {
-        setStatus("error");
-        setMessage("Email mismatch. Please use the same email you started with.");
+        setMessage(
+          (rpcData as any)?.error
+            ?? rpcError?.message
+            ?? "Could not complete join. Please try again.",
+        );
         return;
       }
 
-      setSubMessage("Adding you to the circle…");
+      // TODO (post-demo): trigger Stripe charge here using the payment
+      // details the RPC returns alongside the circle info.
 
-      // Add user to circle_members. If they're already a member (repeat
-      // confirmation), don't treat it as an error.
-      const { error: joinError } = await supabase
-        .from("circle_members")
-        .insert({
-          circle_id: pending.circle_id,
-          user_id: user.id,
-          status: "active",
-          joined_at: new Date().toISOString(),
-        });
-
-      if (joinError && !/duplicate|unique|already/i.test(joinError.message)) {
-        console.error("[JoinConfirm] circle_members insert failed", joinError);
-        setStatus("error");
-        setMessage(joinError.message || "Could not finish join.");
-        return;
-      }
-
-      // Mark pending row completed. Ignore errors here — the join succeeded.
-      const { error: updateError } = await supabase
-        .from("pending_joins")
-        .update({ status: "completed", completed_at: new Date().toISOString() })
-        .eq("id", pendingId);
-      if (updateError) {
-        console.warn("[JoinConfirm] pending update failed (non-fatal)", updateError);
-      }
-
-      // TODO (post-demo): trigger Stripe charge using pending.payment_method
-      // and pending.payment_details_encrypted. For demo, join is complete.
-
-      // Fetch fresh circle info for the success / payment screens. The
-      // joined select above sometimes returns a null nested object under
-      // PostgREST's newer foreign-key expansion; a direct select on
-      // circles is more reliable for the amount formatting.
-      const { data: circleInfo } = await supabase
-        .from("circles")
-        .select("name, amount")
-        .eq("id", pending.circle_id)
-        .maybeSingle();
-
-      const resolvedName = circleInfo?.name ?? pending.circles?.name ?? "the circle";
+      const resolvedName = (rpcData as any).circle_name ?? "the circle";
       const resolvedAmount = (() => {
-        const raw = circleInfo?.amount ?? (pending.circles as any)?.amount;
+        const raw = (rpcData as any).amount;
         if (raw == null) return null;
         const n = typeof raw === "number" ? raw : parseFloat(raw);
         return Number.isFinite(n) ? n : null;
       })();
+      const alreadyCompleted = !!(rpcData as any).already_completed;
 
       setCircleName(resolvedName);
       setContributionAmount(resolvedAmount);
 
-      console.log("[JoinConfirm] success", { resolvedName, resolvedAmount });
+      console.log("[JoinConfirm] success", { resolvedName, resolvedAmount, alreadyCompleted });
       setStatus("success");
-      setMessage(`You're in, ${resolvedName}!`);
+      setMessage(
+        alreadyCompleted
+          ? `You're already in, ${resolvedName}!`
+          : `You're in, ${resolvedName}!`,
+      );
 
       // Go through the QuickJoinPaymentSuccess screen so the user sees
       // the big confirmation card with their contribution amount before
