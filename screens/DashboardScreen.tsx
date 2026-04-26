@@ -1,4 +1,5 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useEffect, useRef } from "react";
+import { supabase } from "../lib/supabase";
 import {
   View,
   Text,
@@ -65,6 +66,49 @@ function getGreeting(): string {
 export default function DashboardScreen() {
   const navigation = useNavigation<DashboardScreenNavigationProp>();
   const { user } = useAuth();
+
+  // Safety net: catch users who landed here without going through
+  // SetPassword (e.g. closed the tab between QuickJoin success and the
+  // password screen). Runs ONCE per mount via a ref guard, never on
+  // re-render. Only redirects when password_set is false AND
+  // password_skipped_at is null — silent no-op for everyone else.
+  const passwordCheckRan = useRef<boolean>(false);
+  useEffect(() => {
+    if (passwordCheckRan.current) return;
+    passwordCheckRan.current = true;
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("password_set, password_skipped_at")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (cancelled) return;
+        if (error) {
+          console.log("[Dashboard] password-check profile read error", { error });
+          return;
+        }
+        if (
+          profile &&
+          profile.password_set === false &&
+          profile.password_skipped_at == null
+        ) {
+          console.log("[Dashboard] redirecting to SetPassword (mid-flow recovery)", {
+            userId: user.id,
+          });
+          navigation.navigate("SetPassword" as any);
+        }
+      } catch (err) {
+        console.log("[Dashboard] password-check error", { error: err });
+      }
+    })();
+    return () => { cancelled = true; };
+    // user.id is stable per session; intentionally only checking once per mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   const { myCircles } = useCircles();
   const { score } = useXnScore();
   const { balance: walletBalance } = useWallet();

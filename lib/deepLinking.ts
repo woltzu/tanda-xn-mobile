@@ -40,6 +40,8 @@ export const linkingConfig = {
       QuickJoin: "join/:inviteCode",
       // Magic-link landing after QuickJoin email confirmation
       JoinConfirm: "join-confirm",
+      // Optional password setup screen reachable directly at /set-password
+      SetPassword: "set-password",
 
       // Main app screens
       MainTabs: {

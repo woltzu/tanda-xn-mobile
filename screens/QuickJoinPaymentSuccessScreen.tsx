@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
+import { supabase } from "../lib/supabase";
 
 type NavProp = StackNavigationProp<RootStackParamList, "QuickJoinPaymentSuccess">;
 type RouteParams = RouteProp<RootStackParamList, "QuickJoinPaymentSuccess">;
@@ -27,10 +28,46 @@ export default function QuickJoinPaymentSuccessScreen() {
   const { circleName, amount, memberCount } = route.params;
 
   useEffect(() => {
-    const t = setTimeout(() => {
-      navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] });
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      if (cancelled) return;
+      // After the celebration delay, branch on whether the user has set
+      // (or skipped) their password. New magic-link users land on
+      // SetPassword for an optional password upgrade; everyone else goes
+      // straight to MainTabs.
+      let target: "MainTabs" | "SetPassword" = "MainTabs";
+      try {
+        const { data: sessionData } = await supabase.auth.getUser();
+        const user = sessionData?.user;
+        console.log("[QuickJoinSuccess] checking password state", { userId: user?.id });
+        if (user?.id) {
+          const { data: profile, error: profErr } = await supabase
+            .from("profiles")
+            .select("password_set, password_skipped_at")
+            .eq("id", user.id)
+            .maybeSingle();
+          console.log("[QuickJoinSuccess] profile state", {
+            passwordSet: profile?.password_set,
+            skippedAt: profile?.password_skipped_at,
+            error: profErr ? { code: profErr.code, message: profErr.message } : null,
+          });
+          if (profile?.password_set === true) {
+            target = "MainTabs";
+          } else if (profile?.password_skipped_at != null) {
+            target = "MainTabs";
+          } else {
+            target = "SetPassword";
+          }
+        }
+      } catch (err) {
+        console.log("[QuickJoinSuccess] error", { error: err });
+        // Fall through to MainTabs as the safe default
+      }
+      if (cancelled) return;
+      console.log("[QuickJoinSuccess] routing to", target);
+      navigation.reset({ index: 0, routes: [{ name: target }] });
     }, 3500);
-    return () => clearTimeout(t);
+    return () => { cancelled = true; clearTimeout(t); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
