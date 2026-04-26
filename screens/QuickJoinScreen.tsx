@@ -19,6 +19,7 @@ import {
   Alert,
   Platform,
   KeyboardAvoidingView,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -71,6 +72,37 @@ function formatMoney(amount: number, currency: string) {
   return `${amount.toFixed(2)} ${currency}`;
 }
 
+// First letters of the first two words, uppercase. "Franck Agui" → "FA".
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+// Mask an email's local part for display. "kimagui@hotmail.com" → "kim***@hotmail.com".
+function maskEmail(email: string): string {
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return email;
+  if (local.length <= 3) return email;
+  return `${local.slice(0, 3)}***@${domain}`;
+}
+
+// Auth-mode state machine. 'loading' covers both initial mount and the brief
+// window between circle-load-complete and auth-detect-complete. The other
+// three modes drive distinct render branches; 'new_user' falls through to
+// the existing email + payment form.
+type QuickJoinMode = "loading" | "logged_in" | "new_user" | "already_in_circle";
+
+interface LoggedInUser {
+  id: string;
+  email: string;
+  fullName: string;
+  avatarUrl: string | null;
+}
+
 // ── Screen ─────────────────────────────────────────────────────────────────────
 export default function QuickJoinScreen() {
   const navigation = useNavigation<QuickJoinNavProp>();
@@ -90,42 +122,15 @@ export default function QuickJoinScreen() {
   const [agreed, setAgreed] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
-  // Clear any stale/unconfirmed Supabase session on mount. supabase-js
-  // persists sessions in localStorage with `persistSession: true`, so a
-  // leftover session from a previous signUp() test (or an unconfirmed
-  // email signup) would auto-attach as Authorization: Bearer <user-jwt>
-  // on every REST call. Supabase's PostgREST validates Authorization
-  // before apikey — if it's expired/unconfirmed, we get a 401 even with
-  // a valid anon apikey. Nuke the stale session so /join requests go
-  // through as pure anon.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session || cancelled) return;
-        const expiresAt = session.expires_at ?? 0;
-        const nowSec = Math.floor(Date.now() / 1000);
-        const userUnconfirmed = !session.user?.email_confirmed_at;
-        // Treat anything expiring within 60s as expired so we don't race
-        // the check against the request.
-        const nearExpiry = expiresAt < nowSec + 60;
-        if (nearExpiry || userUnconfirmed) {
-          console.log("[QuickJoin] Clearing stale session", {
-            expiresAt, nowSec, userUnconfirmed, nearExpiry,
-          });
-          await supabase.auth.signOut();
-        } else {
-          console.log("[QuickJoin] Existing session looks valid, keeping", {
-            expiresAt, userId: session.user?.id,
-          });
-        }
-      } catch (err) {
-        console.warn("[QuickJoin] ensureCleanAnonState error", err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  // Auth-detection state. We no longer force-logout existing sessions on
+  // mount (Phase B existing-member flow): we keep the session intact and
+  // branch the UI accordingly. SECURITY DEFINER RPCs on the create-pending
+  // and complete-join paths sidestep the Authorization-header issue that
+  // motivated the original force-logout.
+  const [mode, setMode] = useState<QuickJoinMode>("loading");
+  const [loggedInUser, setLoggedInUser] = useState<LoggedInUser | null>(null);
+  const [joinedAt, setJoinedAt] = useState<string | null>(null);
+  const [confirmingJoin, setConfirmingJoin] = useState<boolean>(false);
 
   // Fetch circle by invite code on mount
   useEffect(() => {
@@ -199,6 +204,76 @@ export default function QuickJoinScreen() {
     })();
     return () => { cancelled = true; };
   }, [inviteCode]);
+
+  // After the circle data lands, detect the auth state of the visitor and
+  // branch the UI: logged-in members get a one-tap "Welcome back" confirm;
+  // logged-in members already in this circle get a friendly "you're in";
+  // everyone else falls through to the existing email + payment form.
+  useEffect(() => {
+    if (!circle) return; // wait for circle data first
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (cancelled) return;
+
+        if (!user) {
+          console.log("[QuickJoin] no session, showing new-user form");
+          setMode("new_user");
+          return;
+        }
+
+        console.log("[QuickJoin] session detected", {
+          userId: user.id,
+          email: user.email,
+        });
+
+        // Already a member of THIS circle? Skip the join entirely.
+        const { data: existingMember, error: memberErr } = await supabase
+          .from("circle_members")
+          .select("joined_at")
+          .eq("circle_id", circle.id)
+          .eq("user_id", user.id)
+          .eq("status", "active")
+          .maybeSingle();
+        if (cancelled) return;
+        if (memberErr) {
+          console.log("[QuickJoin] circle_members lookup error", memberErr);
+        }
+        if (existingMember) {
+          console.log("[QuickJoin] user already in this circle");
+          setJoinedAt(existingMember.joined_at);
+          setMode("already_in_circle");
+          return;
+        }
+
+        // Pull the profile for the welcome-back card.
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("full_name, avatar_url")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (cancelled) return;
+
+        setLoggedInUser({
+          id: user.id,
+          email: user.email ?? "",
+          fullName: profile?.full_name || user.email || "Member",
+          avatarUrl: profile?.avatar_url ?? null,
+        });
+        setMode("logged_in");
+        console.log("[QuickJoin] logged-in mode activated");
+      } catch (err) {
+        console.warn("[QuickJoin] detectAuthState error", err);
+        // Defensive fallback: never trap the user — show the new-user form
+        // so they can still join the circle.
+        if (!cancelled) setMode("new_user");
+      }
+    })();
+    return () => { cancelled = true; };
+    // Re-run when the circle id changes (typically once: null → loaded)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [circle?.id]);
 
   // Format card number as "1234 5678 9012 3456"
   const onChangeCardNumber = (v: string) => {
@@ -323,11 +398,132 @@ export default function QuickJoinScreen() {
     }
   };
 
+  // ── Logged-in path: one-tap confirm join ───────────────────────────────────
+  // Two RPC calls back-to-back. create_pending_join writes the audit row
+  // (also re-uses the SECURITY DEFINER bypass), and complete_circle_join
+  // does the atomic member + wallet + contribution write. The latter
+  // verifies auth.uid() matches the pending_join email server-side, so a
+  // logged-in user trying to join with someone else's email can't.
+  const handleConfirmJoin = async () => {
+    if (!loggedInUser || !circle || confirmingJoin) return;
+
+    setConfirmingJoin(true);
+    console.log("[QuickJoin] confirming join for logged-in user", {
+      userId: loggedInUser.id,
+      email: loggedInUser.email,
+      circleId: circle.id,
+      inviteCode,
+    });
+
+    try {
+      // Step 1: create_pending_join (existing RPC; returns UUID directly)
+      const { data: pendingJoinId, error: pendingError } = await supabase.rpc(
+        "create_pending_join",
+        {
+          p_email: loggedInUser.email,
+          p_invite_code: inviteCode,
+          // Logged-in path skips the card form entirely; pass demo
+          // sentinels so the existing RPC signature is satisfied.
+          p_payment_method: "logged_in_quickjoin",
+          p_payment_details_encrypted: "****0000",
+        },
+      );
+      console.log("[QuickJoin] pending_join created", {
+        pendingId: pendingJoinId, error: pendingError,
+      });
+      if (pendingError) throw pendingError;
+      const pendingId = pendingJoinId as string | null;
+      if (!pendingId) throw new Error("No pending_id returned");
+
+      // Step 2: complete the join
+      const { data: joinResult, error: joinError } = await supabase.rpc(
+        "complete_circle_join",
+        { p_pending_id: pendingId },
+      );
+      console.log("[QuickJoin] complete_circle_join result", {
+        data: joinResult, error: joinError,
+      });
+      if (joinError) throw joinError;
+      const result = joinResult as any;
+      if (!result?.success) {
+        throw new Error(result?.error ?? result?.message ?? "Could not complete join");
+      }
+
+      // Already a member? Surface the friendly "you're already in" view
+      // instead of pretending we did anything new.
+      if (result.already_completed) {
+        console.log("[QuickJoin] user was already in circle");
+        setMode("already_in_circle");
+        return;
+      }
+
+      // Fresh join — pass a success toast payload through to the Home tab.
+      // Phase D will render this; for now it just flows along.
+      console.log("[QuickJoin] join successful, navigating to Dashboard");
+      navigation.reset({
+        index: 0,
+        routes: [{
+          name: "MainTabs",
+          // params on MainTabs aren't typed (it's `undefined` in the param
+          // list); cast away so the nested `screen` + `params` route into
+          // the Home tab's Dashboard.
+          params: {
+            screen: "Home",
+            params: {
+              joinSuccessToast: {
+                circleName: result.circle_name ?? circle.name,
+                amount: result.amount ?? circle.amount,
+              },
+            },
+          },
+        }],
+      } as any);
+    } catch (err: any) {
+      console.error("[QuickJoin] confirm join failed", err);
+      showError(
+        "Could not complete join",
+        err?.message ?? "Please try again or contact support.",
+      );
+    } finally {
+      setConfirmingJoin(false);
+    }
+  };
+
+  // Sign the user out and drop them on the new-user form so they can join
+  // with a different email. Web-safe confirm (Alert.alert button callbacks
+  // don't fire reliably on react-native-web — we hit this on the Sign Out
+  // button earlier; same pattern).
+  const handleSwitchAccount = async () => {
+    const confirmed = Platform.OS === "web"
+      ? (typeof window !== "undefined" && typeof window.confirm === "function"
+          ? window.confirm("Switch account? You'll be signed out and can join with a different email.")
+          : true)
+      : await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            "Switch account?",
+            "You will be signed out and can join with a different email.",
+            [
+              { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+              { text: "Sign out", style: "destructive", onPress: () => resolve(true) },
+            ],
+            { cancelable: true, onDismiss: () => resolve(false) },
+          );
+        });
+    if (!confirmed) return;
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn("[QuickJoin] handleSwitchAccount signOut error", err);
+    }
+    setLoggedInUser(null);
+    setMode("new_user");
+  };
+
   // ── Render states ─────────────────────────────────────────────────────────────
-  // Show ONLY the loading screen until the circle is fully loaded — no
-  // partial header renders. If lookup finished with an error or null, show
-  // the error state. Everything below this block assumes a populated circle.
-  if (loadingCircle || (!circle && !lookupError)) {
+  // Show ONLY the loading screen until the circle is fully loaded AND the
+  // auth-detect effect has resolved into a concrete mode. Everything
+  // beyond this block assumes a populated circle and a concrete mode.
+  if (loadingCircle || (!circle && !lookupError) || mode === "loading") {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="light-content" backgroundColor={NAVY} />
@@ -353,6 +549,136 @@ export default function QuickJoinScreen() {
       </SafeAreaView>
     );
   }
+
+  // ── Already a member of THIS circle (Phase B stub; Phase D will polish) ─────
+  if (mode === "already_in_circle") {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+        <View style={styles.centered}>
+          <Ionicons name="checkmark-circle" size={64} color={TEAL} />
+          <Text style={styles.errorTitle}>You're already in</Text>
+          <Text style={styles.mutedLarge}>
+            You're an active member of {circle.name}
+            {joinedAt
+              ? ` since ${new Date(joinedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+              : ""}.
+          </Text>
+          <TouchableOpacity
+            style={styles.confirmButton}
+            activeOpacity={0.85}
+            onPress={() => navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] })}
+          >
+            <Text style={styles.confirmButtonText}>Go to Dashboard</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Logged-in: Welcome Back, one-tap confirm ─────────────────────────────────
+  if (mode === "logged_in" && loggedInUser) {
+    const initials = getInitials(loggedInUser.fullName);
+    const masked = maskEmail(loggedInUser.email);
+    const potSize = circle.amount * circle.memberCount;
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Brand */}
+          <View style={styles.brandRow}>
+            <View style={styles.brandDot} />
+            <Text style={styles.brand}>TandaXn</Text>
+          </View>
+
+          {/* Welcome header */}
+          <Text style={styles.welcomeHeader}>👋 Welcome back</Text>
+
+          {/* User card */}
+          <View style={styles.userCard}>
+            {loggedInUser.avatarUrl ? (
+              <Image source={{ uri: loggedInUser.avatarUrl }} style={styles.userAvatar} />
+            ) : (
+              <View style={styles.userAvatarPlaceholder}>
+                <Text style={styles.userAvatarInitials}>{initials || "•"}</Text>
+              </View>
+            )}
+            <Text style={styles.userName}>{loggedInUser.fullName}</Text>
+            <Text style={styles.userEmail}>{masked}</Text>
+          </View>
+
+          {/* Circle preview card */}
+          <LinearGradient
+            colors={[TEAL, "#009D8B"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.circleHero}
+          >
+            <Text style={styles.circleEmoji}>{circle.emoji}</Text>
+            <Text style={styles.circleName} numberOfLines={2}>{circle.name}</Text>
+            <Text style={styles.circleAmountLine}>
+              {formatMoney(circle.amount, circle.currency)} per{" "}
+              {circle.frequency === "one-time"
+                ? "cycle"
+                : circle.frequency.replace(/ly$/, "")}
+            </Text>
+            <View style={styles.circleStatsRow}>
+              <View style={styles.circleStat}>
+                <Text style={styles.circleStatValue}>
+                  {formatMoney(circle.amount, circle.currency)}
+                </Text>
+                <Text style={styles.circleStatLabel}>Your first contribution</Text>
+              </View>
+              <View style={styles.circleDivider} />
+              <View style={styles.circleStat}>
+                <Text style={styles.circleStatValue}>
+                  {formatMoney(potSize, circle.currency)}
+                </Text>
+                <Text style={styles.circleStatLabel}>Your payout when elected</Text>
+              </View>
+            </View>
+          </LinearGradient>
+
+          {/* Confirm join button */}
+          <TouchableOpacity
+            style={[styles.confirmButton, confirmingJoin && styles.confirmButtonDisabled]}
+            activeOpacity={0.85}
+            onPress={handleConfirmJoin}
+            disabled={confirmingJoin}
+          >
+            {confirmingJoin ? (
+              <ActivityIndicator color={NAVY} />
+            ) : (
+              <>
+                <Ionicons name="shield-checkmark" size={18} color={NAVY} />
+                <Text style={styles.confirmButtonText}>
+                  Confirm Join — Pay {formatMoney(circle.amount, circle.currency)}
+                </Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Switch account */}
+          <TouchableOpacity
+            style={styles.switchAccountBtn}
+            activeOpacity={0.7}
+            onPress={handleSwitchAccount}
+            disabled={confirmingJoin}
+          >
+            <Text style={styles.switchAccountText}>Use a different account?</Text>
+          </TouchableOpacity>
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // mode === 'new_user' falls through to existing email + payment form below.
 
   const payButtonLabel = `Join & Pay ${formatMoney(circle.amount, circle.currency)}`;
 
@@ -653,4 +979,91 @@ const styles = StyleSheet.create({
 
   mutedLarge: { color: MUTED, fontSize: 15, textAlign: "center" },
   errorTitle: { color: WHITE, fontSize: 20, fontWeight: "700", marginTop: 4 },
+
+  // ── Logged-in / Welcome Back UI ──────────────────────────────────────────────
+  welcomeHeader: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: WHITE,
+    marginBottom: 16,
+    marginTop: 4,
+  },
+  userCard: {
+    alignItems: "center",
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    backgroundColor: WHITE,
+    borderRadius: 16,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  userAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginBottom: 12,
+    backgroundColor: "#E5E7EB",
+  },
+  userAvatarPlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginBottom: 12,
+    backgroundColor: TEAL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  userAvatarInitials: {
+    color: WHITE,
+    fontSize: 24,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  userName: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: NAVY,
+  },
+  userEmail: {
+    fontSize: 13,
+    color: "#64748B",
+    marginTop: 4,
+  },
+  circleAmountLine: {
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 13,
+    fontWeight: "600",
+    marginTop: 6,
+  },
+  confirmButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: TEAL,
+    paddingVertical: 18,
+    borderRadius: 14,
+    marginTop: 8,
+  },
+  confirmButtonDisabled: { opacity: 0.5 },
+  confirmButtonText: {
+    color: NAVY,
+    fontSize: 16,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  switchAccountBtn: {
+    alignItems: "center",
+    paddingVertical: 16,
+    marginTop: 6,
+  },
+  switchAccountText: {
+    color: MUTED,
+    fontSize: 13,
+    fontWeight: "600",
+  },
 });
