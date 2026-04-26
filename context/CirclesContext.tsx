@@ -847,7 +847,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
       const circleData = circles.find(c => c.id === circleId);
       const currentCycle = circleData?.currentCycle || 1;
       const { data: cycleContributions } = await supabase
-        .from("contributions")
+        .from("circle_contributions")
         .select("user_id")
         .eq("circle_id", circleId)
         .eq("cycle_number", currentCycle)
@@ -892,13 +892,13 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
 
       // Get contributions
       const { data: contributions, error: contribError } = await supabase
-        .from("contributions")
+        .from("circle_contributions")
         .select(`
           id,
           user_id,
           amount,
           created_at,
-          profiles!contributions_user_id_fkey (
+          profiles!circle_contributions_user_id_fkey (
             full_name,
             email
           )
@@ -908,7 +908,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
         .limit(50);
 
       if (contribError) {
-        console.error("Error fetching contributions:", contribError);
+        console.error("[CirclesContext] circle_contributions query failed:", contribError);
       } else if (contributions) {
         contributions.forEach((contrib: any) => {
           const isCurrentUser = contrib.user_id === user?.id;
@@ -961,14 +961,14 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
 
       // Get payouts
       const { data: payouts, error: payoutsError } = await supabase
-        .from("payouts")
+        .from("circle_payouts")
         .select(`
           id,
           recipient_id,
           amount,
           created_at,
           status,
-          profiles!payouts_recipient_id_fkey (
+          profiles!circle_payouts_recipient_id_fkey (
             full_name,
             email
           )
@@ -978,7 +978,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
         .order("created_at", { ascending: false });
 
       if (payoutsError) {
-        console.error("Error fetching payouts:", payoutsError);
+        console.error("[CirclesContext] circle_payouts query failed:", payoutsError);
       } else if (payouts) {
         payouts.forEach((payout: any) => {
           const isCurrentUser = payout.recipient_id === user?.id;
@@ -1013,7 +1013,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     const circle = circles.find(c => c.id === circleId);
     const cycleNumber = circle?.currentCycle || 1;
 
-    const { error } = await supabase.from("contributions").insert({
+    const { error } = await supabase.from("circle_contributions").insert({
       circle_id: circleId,
       user_id: user.id,
       amount,
@@ -1100,7 +1100,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
   const getContributions = async (circleId: string, cycle?: number): Promise<ContributionRecord[]> => {
     try {
       let query = supabase
-        .from("contributions")
+        .from("circle_contributions")
         .select(`
           id, user_id, amount, cycle_number, status, payment_method,
           created_at, is_late, days_late, late_fee
@@ -1185,7 +1185,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
 
       // Check if paid this cycle
       const { data: cyclePaid } = await supabase
-        .from("contributions")
+        .from("circle_contributions")
         .select("id")
         .eq("circle_id", circleId)
         .eq("user_id", user.id)
@@ -1195,7 +1195,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
 
       // Get total contributed
       const { data: totalData } = await supabase
-        .from("contributions")
+        .from("circle_contributions")
         .select("amount")
         .eq("circle_id", circleId)
         .eq("user_id", user.id)
