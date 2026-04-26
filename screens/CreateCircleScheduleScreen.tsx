@@ -308,48 +308,48 @@ export default function CreateCircleScheduleScreen() {
             </Text>
 
             {Platform.OS === "web" ? (
-              // Web: use native HTML date input (DateTimePicker doesn't work on web)
-              <View style={styles.dateButton}>
+              // Web: render a real <input type="date"> overlaid invisibly on
+              // the styled "Select a date" button. Tapping anywhere on the
+              // visual button passes the click straight through to the date
+              // input, which fires the browser's native picker reliably —
+              // including iOS Safari mobile, where the previous
+              // document.createElement / showPicker() hack had race
+              // conditions and focus-loop bugs.
+              <View style={[styles.dateButton, { position: "relative" }]}>
                 <Ionicons name="calendar-outline" size={20} color="#0A2342" />
-                <TextInput
-                  style={[styles.dateButtonText, { flex: 1, outlineStyle: "none" } as any]}
-                  value={startDate
+                <Text style={[styles.dateButtonText, { flex: 1 }]}>
+                  {startDate
                     ? startDate.toLocaleDateString("en-US", {
                         weekday: "long",
                         month: "short",
                         day: "numeric",
                         year: "numeric",
                       })
-                    : ""}
-                  placeholder="Select a date"
-                  placeholderTextColor="#9CA3AF"
-                  onFocus={(e: any) => {
-                    // Create a hidden HTML date input and trigger it
-                    const input = document.createElement("input");
-                    input.type = "date";
-                    input.min = minDate.toISOString().split("T")[0];
-                    input.style.position = "absolute";
-                    input.style.opacity = "0";
-                    input.style.pointerEvents = "none";
-                    document.body.appendChild(input);
-                    input.addEventListener("change", () => {
-                      if (input.value) {
-                        const [year, month, day] = input.value.split("-").map(Number);
-                        setStartDate(new Date(year, month - 1, day));
-                      }
-                      document.body.removeChild(input);
-                    });
-                    input.addEventListener("blur", () => {
-                      setTimeout(() => {
-                        if (document.body.contains(input)) document.body.removeChild(input);
-                      }, 200);
-                    });
-                    input.showPicker?.();
-                    input.click();
-                    e.target.blur();
+                    : "Select a date"}
+                </Text>
+                {/* Real native HTML date input overlaid invisibly */}
+                <input
+                  type="date"
+                  min={minDate.toISOString().split("T")[0]}
+                  value={startDate ? startDate.toISOString().split("T")[0] : ""}
+                  onChange={(e: any) => {
+                    if (e.target.value) {
+                      const [year, month, day] = e.target.value.split("-").map(Number);
+                      setStartDate(new Date(year, month - 1, day));
+                    }
                   }}
-                  editable={true}
-                  showSoftInputOnFocus={false}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: "100%",
+                    height: "100%",
+                    opacity: 0,
+                    cursor: "pointer",
+                    border: "none",
+                    background: "transparent",
+                    fontSize: 16,
+                  } as any}
                 />
               </View>
             ) : (
