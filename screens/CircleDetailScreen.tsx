@@ -184,11 +184,7 @@ export default function CircleDetailScreen() {
   };
 
   const handleGroupChat = () => {
-    Alert.alert(
-      "Group Chat",
-      "Group chat feature coming soon! You'll be able to message all circle members here.",
-      [{ text: "OK" }]
-    );
+    navigation.navigate("GroupChat", { circleId: circle.id, circleName: circle.name });
   };
 
   const handleEditCircle = () => {

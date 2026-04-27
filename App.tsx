@@ -120,6 +120,7 @@ import QuickJoinPendingConfirmationScreen from "./screens/QuickJoinPendingConfir
 import JoinConfirmScreen from "./screens/JoinConfirmScreen";
 import QuickJoinPaymentSuccessScreen from "./screens/QuickJoinPaymentSuccessScreen";
 import SetPasswordScreen from "./screens/SetPasswordScreen";
+import GroupChatScreen from "./screens/GroupChatScreen";
 import ForgotPasswordScreen from "./screens/ForgotPasswordScreen";
 import ResetPasswordScreen from "./screens/ResetPasswordScreen";
 import { linkingConfig } from "./lib/deepLinking";
@@ -359,6 +360,7 @@ export type RootStackParamList = {
   JoinConfirm: undefined;
   QuickJoinPaymentSuccess: { circleName: string; amount?: number; memberCount?: number };
   SetPassword: undefined;
+  GroupChat: { circleId: string; circleName: string };
   // Marketplace Flow (Migration 057)
   Marketplace: undefined;
   StoreDetail: { storeId: string; nextPayoutDate?: string; payoutAmount?: number; circleId?: string; circleName?: string };
@@ -436,6 +438,7 @@ function HomeStackScreen() {
     <HomeStack.Navigator screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="Dashboard" component={DashboardScreen} />
       <HomeStack.Screen name="CircleDetail" component={CircleDetailScreen} />
+      <HomeStack.Screen name="GroupChat" component={GroupChatScreen} options={{ headerShown: false }} />
       <HomeStack.Screen name="SendMoney" component={SendMoneyScreen} />
       <HomeStack.Screen name="DomesticSendMoney" component={DomesticSendMoneyScreen} />
       <HomeStack.Screen name="Remittance" component={RemittanceScreen} />
@@ -560,6 +563,7 @@ function CirclesStackScreen() {
     <CirclesStack.Navigator screenOptions={{ headerShown: false }}>
       <CirclesStack.Screen name="CirclesMain" component={CirclesScreen} />
       <CirclesStack.Screen name="CircleDetail" component={CircleDetailScreen} />
+      <CirclesStack.Screen name="GroupChat" component={GroupChatScreen} options={{ headerShown: false }} />
       <CirclesStack.Screen name="CreateCircleStart" component={CreateCircleStartScreen} />
       <CirclesStack.Screen name="CreateCircleDetails" component={CreateCircleDetailsScreen} />
       <CirclesStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} />
