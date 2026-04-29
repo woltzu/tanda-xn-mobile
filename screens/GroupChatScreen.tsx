@@ -223,6 +223,11 @@ export default function GroupChatScreen() {
     const isSystem = item.message_type === "system";
 
     if (isSystem) {
+      // Defensive: skip rendering if body is null/empty so a malformed
+      // system payload can't crash the row (Phase 2).
+      if (!item.body || item.body.trim() === "") {
+        return null;
+      }
       return (
         <View style={styles.systemRow}>
           <Text style={styles.systemText}>{item.body}</Text>
