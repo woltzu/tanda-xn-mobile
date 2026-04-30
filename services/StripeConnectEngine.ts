@@ -573,7 +573,7 @@ export class StripeConnectEngine {
       .from('stripe_connected_accounts')
       .select('*')
       .eq('member_id', memberId)
-      .single();
+      .maybeSingle();
 
     if (error || !data) return null;
     return mapConnectedAccount(data as any);
