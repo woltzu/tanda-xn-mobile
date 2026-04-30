@@ -10,7 +10,6 @@ import React, {
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
 import { useXnScore } from "./XnScoreContext";
-import { useTokens } from "./TokenContext";
 
 // ==================== DB ROW TYPES ====================
 
@@ -26,7 +25,6 @@ type FeatureGateRow = {
   required_role: string | null;
   requires_id_verified: boolean;
   requires_income_verified: boolean;
-  min_token_balance: number | null;
   custom_rule: Record<string, any> | null;
   reason_code: string;
   blocked_title: string;
@@ -61,7 +59,6 @@ export type ReasonCode =
   | "needs_income_verification"
   | "insufficient_role"
   | "not_elder"
-  | "insufficient_tokens"
   | "feature_disabled"
   | "account_restricted"
   | "manually_blocked"
@@ -98,7 +95,6 @@ export type FeatureGate = {
   requiredRole: string | null;
   requiresIdVerified: boolean;
   requiresIncomeVerified: boolean;
-  minTokenBalance: number | null;
   customRule: Record<string, any> | null;
   reasonCode: string;
   blockedTitle: string;
@@ -205,7 +201,6 @@ function rowToGate(row: FeatureGateRow): FeatureGate {
     requiredRole: row.required_role,
     requiresIdVerified: row.requires_id_verified,
     requiresIncomeVerified: row.requires_income_verified,
-    minTokenBalance: row.min_token_balance,
     customRule: row.custom_rule,
     reasonCode: row.reason_code,
     blockedTitle: row.blocked_title,
@@ -234,7 +229,6 @@ function evaluateGate(
   gate: FeatureGate,
   overrides: UserFeatureOverride[],
   xnScore: number,
-  tokenBalance: number,
   profile: UserGateProfile
 ): AccessResult {
   // 1. Feature disabled by admin
@@ -377,21 +371,6 @@ function evaluateGate(
     }
   }
 
-  // Token Balance
-  if (gate.minTokenBalance !== null) {
-    totalConditions++;
-    if (tokenBalance >= gate.minTokenBalance) {
-      metConditions++;
-    } else {
-      missing.push({
-        field: "tokenBalance",
-        current: tokenBalance,
-        required: gate.minTokenBalance,
-        label: "Token Balance",
-      });
-    }
-  }
-
   // Custom rules (extensible)
   if (gate.customRule) {
     if (gate.customRule.max_defaults !== undefined) {
@@ -462,8 +441,6 @@ function pickReasonCode(firstMissing: MissingRequirement, gate: FeatureGate): Re
       return "needs_verification";
     case "incomeVerified":
       return "needs_income_verification";
-    case "tokenBalance":
-      return "insufficient_tokens";
     default:
       return (gate.reasonCode as ReasonCode) || "feature_disabled";
   }
@@ -486,7 +463,6 @@ export const useFeatureGates = () => {
 export const FeatureGateProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
   const { score: xnScore } = useXnScore();
-  const { balance: tokenBalance } = useTokens();
 
   const [gates, setGates] = useState<FeatureGate[]>([]);
   const [overrides, setOverrides] = useState<UserFeatureOverride[]>([]);
@@ -691,9 +667,9 @@ export const FeatureGateProvider = ({ children }: { children: ReactNode }) => {
         // Unknown gate = allow by default (feature not gated)
         return { ...UNKNOWN_GATE };
       }
-      return evaluateGate(gate, overrides, xnScore, tokenBalance, profile);
+      return evaluateGate(gate, overrides, xnScore, profile);
     },
-    [gateMap, overrides, xnScore, tokenBalance, profile]
+    [gateMap, overrides, xnScore, profile]
   );
 
   // ---- Category filter ----

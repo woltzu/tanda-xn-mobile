@@ -109,7 +109,6 @@ import { WithdrawalWizardProvider } from "./context/WithdrawalWizardContext";
 import { CommunityProvider } from "./context/CommunityContext";
 import { ElderProvider } from "./context/ElderContext";
 import { FeatureGateProvider } from "./context/FeatureGateContext";
-import { TokenProvider } from "./context/TokenContext";
 import { FeedProvider } from "./context/FeedContext";
 import { MemberProfileProvider } from "./context/MemberProfileContext";
 import { NotificationProvider } from "./context/NotificationContext";
@@ -892,7 +891,6 @@ export default function App() {
                       <FeedProvider>
                       <CommunityProvider>
                         <ElderProvider>
-                        <TokenProvider>
                         <FeatureGateProvider>
                         <MemberProfileProvider>
                           <NotificationProvider>
@@ -912,7 +910,6 @@ export default function App() {
                           </NotificationProvider>
                         </MemberProfileProvider>
                         </FeatureGateProvider>
-                        </TokenProvider>
                         </ElderProvider>
                       </CommunityProvider>
                       </FeedProvider>

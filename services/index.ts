@@ -36,9 +36,6 @@ export * from './InterestCalculationEngine';
 // Monthly Payment System
 export * from './MonthlyPaymentEngine';
 
-// Token Incentive System
-export * from './TokenService';
-
 // Member Profile System
 export * from './MemberProfileService';
 
@@ -83,7 +80,6 @@ export { ScoreBreakdownEngine, scoreBreakdownEngine } from './ScoreBreakdownEngi
 export { CreditworthinessEngine, creditworthinessEngine } from './CreditworthinessEngine';
 export { InterestCalculationEngine, interestCalculationEngine } from './InterestCalculationEngine';
 export { MonthlyPaymentEngine, monthlyPaymentEngine } from './MonthlyPaymentEngine';
-export { TokenService, tokenService } from './TokenService';
 export { MemberProfileService, memberProfileService } from './MemberProfileService';
 export { EventService, eventService } from './EventService';
 export { HonorScoreEngine } from './HonorScoreEngine';

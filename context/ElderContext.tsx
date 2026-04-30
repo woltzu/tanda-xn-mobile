@@ -8,7 +8,6 @@ import React, {
 } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
-import { tokenService } from "@/services/TokenService";
 import { HonorScoreEngine } from "@/services/HonorScoreEngine";
 
 /**
@@ -1149,20 +1148,10 @@ export const ElderProvider = ({ children }: { children: ReactNode }) => {
           voucher_score_impact: 0,
         });
 
-        // Award tokens
-        try {
-          const request = vouchRequests.find((r) => r.id === requestId);
-          await tokenService.awardTokens(
-            user.id,
-            10,
-            "vouch_success",
-            `Vouched for ${request?.requesterName || "member"}`,
-            "member_vouches",
-            requestId
-          );
-        } catch (tokenErr) {
-          console.warn("[Elder] Token award failed (non-blocking):", tokenErr);
-        }
+        // TODO(elder-payouts): When Stripe Connect onboarding ships,
+        // wire a USD payout here for the Elder action that previously
+        // awarded tokens. See Elder Economy spec: paid expertise
+        // sessions, dispute resolution fees, per-circle oversight.
       } else {
         // Reject — revoke the vouch
         const { error } = await supabase
@@ -1266,20 +1255,11 @@ export const ElderProvider = ({ children }: { children: ReactNode }) => {
         HonorScoreEngine.computeHonorScore(user.id).catch(console.warn);
       }
 
-      // Award tokens
       if (resolvedCase) {
-        try {
-          await tokenService.awardTokens(
-            user.id,
-            20,
-            "mediation_resolved",
-            `Resolved: ${resolvedCase.title}`,
-            "disputes",
-            caseId
-          );
-        } catch (tokenErr) {
-          console.warn("[Elder] Token award failed (non-blocking):", tokenErr);
-        }
+        // TODO(elder-payouts): When Stripe Connect onboarding ships,
+        // wire a USD payout here for the Elder action that previously
+        // awarded tokens. See Elder Economy spec: paid expertise
+        // sessions, dispute resolution fees, per-circle oversight.
       }
 
       // Real-time subscription will refresh
@@ -1376,20 +1356,11 @@ export const ElderProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw new Error(error.message);
 
-      // Award tokens for course completion
       if (allCompleted && course) {
-        try {
-          await tokenService.awardTokens(
-            user.id,
-            5,
-            "training_completed",
-            `Completed: ${course.title}`,
-            "training_course",
-            courseId
-          );
-        } catch (tokenErr) {
-          console.warn("[Elder] Token award failed (non-blocking):", tokenErr);
-        }
+        // TODO(elder-payouts): When Stripe Connect onboarding ships,
+        // wire a USD payout here for the Elder action that previously
+        // awarded tokens. See Elder Economy spec: paid expertise
+        // sessions, dispute resolution fees, per-circle oversight.
 
         // Recompute honor score (training completion affects community pillar)
         HonorScoreEngine.computeHonorScore(user.id).catch((err) =>
