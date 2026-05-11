@@ -31,13 +31,6 @@ export default function AuthCallbackScreen() {
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    console.log("[AuthCallback] MOUNTED", {
-      pathname: typeof window !== "undefined" ? window.location.pathname : "n/a",
-      search: typeof window !== "undefined" ? window.location.search : "n/a",
-      hash: typeof window !== "undefined" ? window.location.hash : "n/a",
-      timestamp: Date.now(),
-    });
-
     let cancelled = false;
     let successTimeoutId: ReturnType<typeof setTimeout> | null = null;
     let errorTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -56,11 +49,6 @@ export default function AuthCallbackScreen() {
     };
 
     const navigateOnSuccess = () => {
-      console.log("[AuthCallback] navigateOnSuccess called", {
-        cancelled,
-        currentStatus: "(see below)",
-        timestamp: Date.now(),
-      });
       if (cancelled) return;
       setStatus("success");
       const type = getTypeFromUrl();
@@ -75,11 +63,6 @@ export default function AuthCallbackScreen() {
     };
 
     const navigateOnError = (message: string) => {
-      console.log("[AuthCallback] navigateOnError called", {
-        message,
-        cancelled,
-        timestamp: Date.now(),
-      });
       if (cancelled) return;
       setErrorMessage(message);
       setStatus("error");
@@ -91,12 +74,6 @@ export default function AuthCallbackScreen() {
 
     // 1. Subscribe to auth state changes — primary signal
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("[AuthCallback] auth listener event", {
-        event,
-        hasSession: !!session,
-        cancelled,
-        timestamp: Date.now(),
-      });
       if (cancelled) return;
       if (event === "SIGNED_IN" && session) {
         navigateOnSuccess();
@@ -105,14 +82,8 @@ export default function AuthCallbackScreen() {
 
     // 2. Synchronous session check (handles already-signed-in case)
     (async () => {
-      console.log("[AuthCallback] async block started", { timestamp: Date.now() });
       if (cancelled) return;
       const { data } = await supabase.auth.getSession();
-      console.log("[AuthCallback] getSession result", {
-        hasSession: !!data.session,
-        cancelled,
-        timestamp: Date.now(),
-      });
       if (cancelled) return;
       if (data.session) {
         navigateOnSuccess();
@@ -125,15 +96,9 @@ export default function AuthCallbackScreen() {
         const tokenHash = params.get("token_hash") || "";
         const type = params.get("type") || "";
         if (tokenHash && type) {
-          console.log("[AuthCallback] verifyOtp starting", { type, timestamp: Date.now() });
           const { data: verifyData, error } = await supabase.auth.verifyOtp({
             token_hash: tokenHash,
             type: type as "signup" | "email" | "recovery" | "email_change" | "invite",
-          });
-          console.log("[AuthCallback] verifyOtp result", {
-            hasSession: !!verifyData?.session,
-            error: error?.message,
-            timestamp: Date.now(),
           });
           if (cancelled) return;
           if (error || !verifyData.session) {
@@ -155,10 +120,6 @@ export default function AuthCallbackScreen() {
 
     // 5. Timeout guard — if no success signal within 8s, error out
     timeoutGuardId = setTimeout(() => {
-      console.log("[AuthCallback] 8s timeout fired", {
-        cancelled,
-        timestamp: Date.now(),
-      });
       if (cancelled) return;
       // Only fire if we're still in 'verifying' state
       setStatus((current) => {
@@ -176,7 +137,6 @@ export default function AuthCallbackScreen() {
 
     // 6. Cleanup
     return () => {
-      console.log("[AuthCallback] CLEANUP/UNMOUNT", { timestamp: Date.now() });
       cancelled = true;
       authListener?.subscription?.unsubscribe();
       if (successTimeoutId) clearTimeout(successTimeoutId);
@@ -184,8 +144,6 @@ export default function AuthCallbackScreen() {
       if (timeoutGuardId) clearTimeout(timeoutGuardId);
     };
   }, []);
-
-  console.log("[AuthCallback] RENDER", { status, timestamp: Date.now() });
 
   return (
     <View style={styles.container}>
