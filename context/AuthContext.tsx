@@ -15,7 +15,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import * as Linking from "expo-linking";
 
 // Platform-aware redirect URLs for Supabase Auth emails
-const getEmailRedirectUrl = (path: string) => {
+export const getEmailRedirectUrl = (path: string) => {
   if (Platform.OS === "web") {
     return `https://v0-tanda-xn.vercel.app/${path}`;
   }
@@ -393,8 +393,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             full_name: name,
             xn_score: 25, // Starting XnScore — grows through activity
           },
-          // Redirect to app after email verification (platform-aware)
-          emailRedirectTo: getEmailRedirectUrl("verify-email"),
+          // Redirect to /auth/confirm (AuthCallbackScreen) after email
+          // verification — that screen reads the auth tokens from the URL
+          // hash/query and navigates forward. Not /verify-email (that's the
+          // pre-click waiting room).
+          emailRedirectTo: getEmailRedirectUrl("auth/confirm"),
         },
       });
 

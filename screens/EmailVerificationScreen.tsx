@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   Linking,
   Alert,
-  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -16,6 +15,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
+import { getEmailRedirectUrl } from "../context/AuthContext";
 
 type EmailVerificationNavigationProp = StackNavigationProp<RootStackParamList, "EmailVerification">;
 type EmailVerificationRouteProp = RouteProp<RootStackParamList, "EmailVerification">;
@@ -62,14 +62,14 @@ export default function EmailVerificationScreen() {
     setResendSuccess(false);
 
     try {
-      const emailRedirectTo = Platform.OS === "web"
-        ? "https://v0-tanda-xn.vercel.app/verify-email"
-        : "tandaxn://verify-email";
+      // Redirect target must be /auth/confirm (AuthCallbackScreen), not
+      // /verify-email — same fix as in AuthContext.signUp(). See commit
+      // message for full context.
       const { error } = await supabase.auth.resend({
         type: "signup",
         email: email,
         options: {
-          emailRedirectTo,
+          emailRedirectTo: getEmailRedirectUrl("auth/confirm"),
         },
       });
 
