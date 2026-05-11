@@ -31,79 +31,118 @@ export default function AuthCallbackScreen() {
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
-    const verifyToken = async () => {
-      try {
-        // On web, read query params from window.location
-        let tokenHash = "";
-        let type = "";
+    let cancelled = false;
+    let successTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    let errorTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    let timeoutGuardId: ReturnType<typeof setTimeout> | null = null;
 
-        if (Platform.OS === "web" && typeof window !== "undefined") {
-          const params = new URLSearchParams(window.location.search);
-          tokenHash = params.get("token_hash") || "";
-          type = params.get("type") || "";
-
-          // Also check hash fragment for access_token (Supabase default flow)
-          const hash = window.location.hash;
-          if (hash && hash.includes("access_token")) {
-            // This is handled by detectSessionInUrl in supabase.ts
-            // Wait a moment for Supabase to process it
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-            const { data } = await supabase.auth.getSession();
-            if (data.session) {
-              setStatus("success");
-              setTimeout(() => {
-                navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] });
-              }, 1500);
-              return;
-            }
-          }
-        }
-
-        if (!tokenHash || !type) {
-          setErrorMessage("Invalid verification link. Please try signing up again.");
-          setStatus("error");
-          setTimeout(() => {
-            navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-          }, 3000);
-          return;
-        }
-
-        // Verify the OTP token with Supabase
-        const { data, error } = await supabase.auth.verifyOtp({
-          token_hash: tokenHash,
-          type: type as "signup" | "email" | "recovery" | "email_change" | "invite",
-        });
-
-        if (error) {
-          console.error("Verification error:", error);
-          setErrorMessage(error.message || "Verification failed. The link may have expired.");
-          setStatus("error");
-          setTimeout(() => {
-            navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-          }, 3000);
-          return;
-        }
-
-        // Success! User is now verified and logged in
-        setStatus("success");
-        setTimeout(() => {
-          if (type === "recovery") {
-            navigation.reset({ index: 0, routes: [{ name: "ResetPassword" }] });
-          } else {
-            navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] });
-          }
-        }, 1500);
-      } catch (err: any) {
-        console.error("Auth callback error:", err);
-        setErrorMessage("Something went wrong. Please try again.");
-        setStatus("error");
-        setTimeout(() => {
-          navigation.reset({ index: 0, routes: [{ name: "Login" }] });
-        }, 3000);
-      }
+    // Determine routing target based on URL params (for hash flow we
+    // can't know type without parsing, default to signup behavior)
+    const getTypeFromUrl = (): string => {
+      if (Platform.OS !== "web" || typeof window === "undefined") return "signup";
+      const qp = new URLSearchParams(window.location.search).get("type");
+      if (qp) return qp;
+      // Hash flow: type comes as &type=signup inside the hash fragment
+      const hash = window.location.hash || "";
+      const hashParams = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
+      return hashParams.get("type") || "signup";
     };
 
-    verifyToken();
+    const navigateOnSuccess = () => {
+      if (cancelled) return;
+      setStatus("success");
+      const type = getTypeFromUrl();
+      successTimeoutId = setTimeout(() => {
+        if (cancelled) return;
+        if (type === "recovery") {
+          navigation.reset({ index: 0, routes: [{ name: "ResetPassword" }] });
+        } else {
+          navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] });
+        }
+      }, 1500);
+    };
+
+    const navigateOnError = (message: string) => {
+      if (cancelled) return;
+      setErrorMessage(message);
+      setStatus("error");
+      errorTimeoutId = setTimeout(() => {
+        if (cancelled) return;
+        navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+      }, 3000);
+    };
+
+    // 1. Subscribe to auth state changes — primary signal
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (event === "SIGNED_IN" && session) {
+        navigateOnSuccess();
+      }
+    });
+
+    // 2. Synchronous session check (handles already-signed-in case)
+    (async () => {
+      if (cancelled) return;
+      const { data } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (data.session) {
+        navigateOnSuccess();
+        return;
+      }
+
+      // 3. Query-param flow: explicit verifyOtp call
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const tokenHash = params.get("token_hash") || "";
+        const type = params.get("type") || "";
+        if (tokenHash && type) {
+          const { data: verifyData, error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: type as "signup" | "email" | "recovery" | "email_change" | "invite",
+          });
+          if (cancelled) return;
+          if (error || !verifyData.session) {
+            navigateOnError(error?.message || "Verification failed. Please try signing up again.");
+            return;
+          }
+          // verifyOtp success — auth listener will fire SIGNED_IN,
+          // navigateOnSuccess via the subscription. But fall through
+          // here defensively in case the listener didn't catch it.
+          navigateOnSuccess();
+          return;
+        }
+      }
+
+      // 4. Hash flow: wait for onAuthStateChange to fire SIGNED_IN
+      // (handled by the subscription above; if it never fires within
+      // 8s, the timeoutGuard below catches it)
+    })();
+
+    // 5. Timeout guard — if no success signal within 8s, error out
+    timeoutGuardId = setTimeout(() => {
+      if (cancelled) return;
+      // Only fire if we're still in 'verifying' state
+      setStatus((current) => {
+        if (current === "verifying") {
+          setErrorMessage("Verification is taking longer than expected. Please try again.");
+          errorTimeoutId = setTimeout(() => {
+            if (cancelled) return;
+            navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+          }, 3000);
+          return "error";
+        }
+        return current;
+      });
+    }, 8000);
+
+    // 6. Cleanup
+    return () => {
+      cancelled = true;
+      authListener?.subscription?.unsubscribe();
+      if (successTimeoutId) clearTimeout(successTimeoutId);
+      if (errorTimeoutId) clearTimeout(errorTimeoutId);
+      if (timeoutGuardId) clearTimeout(timeoutGuardId);
+    };
   }, []);
 
   return (
