@@ -17,6 +17,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -46,6 +47,11 @@ export default function SetPasswordScreen() {
   // Auth state — populated on mount
   const [userId, setUserId] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
+  // Bug B1: while we check whether the user already has a password,
+  // keep the loading state visible. If they do, we auto-route away
+  // without ever showing the form.
+  const [checkingExistingPassword, setCheckingExistingPassword] =
+    useState<boolean>(true);
 
   // Form state
   const [newPassword, setNewPassword] = useState<string>("");
@@ -58,7 +64,7 @@ export default function SetPasswordScreen() {
 
   const firstInputRef = useRef<TextInput>(null);
 
-  // ── Mount: confirm session, capture user id, auto-focus first input ─────────
+  // ── Mount: confirm session, capture user id, run Bug B1 RPC check ───────────
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -69,25 +75,61 @@ export default function SetPasswordScreen() {
         if (!u) {
           console.log("[SetPassword] no session on mount");
           setUserId(null);
-        } else {
-          setUserId(u.id);
+          return;
+        }
+        setUserId(u.id);
+
+        // Bug B1: if the user already has an encrypted_password in
+        // auth.users, this screen should never have been reached. Fix
+        // the profile flag and route to MainTabs without rendering
+        // the form.
+        const { data: hasPassword, error: rpcErr } = await supabase.rpc(
+          "has_encrypted_password",
+        );
+        if (cancelled) return;
+        if (rpcErr) {
+          console.log("[SetPassword] has_encrypted_password RPC error", {
+            error: rpcErr,
+          });
+          return; // safe fallback: drop through to form
+        }
+        if (hasPassword === true) {
+          console.log(
+            "[SetPassword] user already has password, fixing profile and routing",
+            { userId: u.id },
+          );
+          await supabase
+            .from("profiles")
+            .update({ password_set: true })
+            .eq("id", u.id);
+          if (cancelled) return;
+          navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] });
+          // navigation.reset has already initiated the screen unmount;
+          // the finally below will flip the flags but the user won't
+          // see the form because the navigation transition is already
+          // in progress.
+          return;
         }
       } catch (err) {
         console.log("[SetPassword] error", { error: err });
       } finally {
-        if (!cancelled) setAuthLoading(false);
+        if (!cancelled) {
+          setAuthLoading(false);
+          setCheckingExistingPassword(false);
+        }
       }
     })();
     return () => { cancelled = true; };
   }, []);
 
-  // Auto-focus the first password field once auth resolves
+  // Auto-focus the first password field once auth resolves AND we've
+  // confirmed the user doesn't already have a password (Bug B1 RPC check).
   useEffect(() => {
-    if (!authLoading && userId) {
+    if (!authLoading && !checkingExistingPassword && userId) {
       const t = setTimeout(() => firstInputRef.current?.focus(), 120);
       return () => clearTimeout(t);
     }
-  }, [authLoading, userId]);
+  }, [authLoading, checkingExistingPassword, userId]);
 
   // ── Validation ───────────────────────────────────────────────────────────────
   const lengthOk = newPassword.length >= MIN_PASSWORD_LENGTH;
@@ -162,6 +204,21 @@ export default function SetPasswordScreen() {
     }
   };
 
+  // Bug C2: confirmation modal before Skip is final. Explains the
+  // magic-link-only lock-out risk so the user makes an informed choice.
+  const confirmSkip = () => {
+    if (saving || saved) return;
+    Alert.alert(
+      "Skip password setup?",
+      "Without a password, you can only sign in by email magic-link. If you lose access to your email or the link expires, you won't be able to log back in to your TandaXn account.\n\nAre you sure you want to skip?",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Skip anyway", style: "destructive", onPress: handleSkip },
+      ],
+      { cancelable: true },
+    );
+  };
+
   const handleSkip = async () => {
     if (saving || saved) return;
     if (!userId) {
@@ -186,8 +243,9 @@ export default function SetPasswordScreen() {
     }
   };
 
-  // ── Render: loading state while we fetch the session ────────────────────────
-  if (authLoading) {
+  // ── Render: loading state while we fetch the session AND run the Bug B1
+  //    RPC check. Spinner persists through the navigate-away transition.
+  if (authLoading || checkingExistingPassword) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="light-content" backgroundColor={NAVY} />
@@ -371,11 +429,11 @@ export default function SetPasswordScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Skip for now */}
+          {/* Skip for now — wraps handleSkip in confirmSkip (Bug C2 modal) */}
           <TouchableOpacity
             style={styles.skipBtn}
             activeOpacity={0.7}
-            onPress={handleSkip}
+            onPress={confirmSkip}
             disabled={saving}
             accessibilityRole="button"
           >

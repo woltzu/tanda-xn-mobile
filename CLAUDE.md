@@ -212,6 +212,47 @@ rewritten.
   Currently locked down to service_role only by absence of policies; either
   add explicit "deny all" comment-policy or document why empty is intentional.
 
+### Tier 4 (audit / observability) — Unknown deletion path for `auth.users`
+
+On 2026-05-11, ~7 confirmed test users (`vjekimagui+verifytest*`, `+polish*`,
+`+passwordfix*`, `+authdiag*`) disappeared from `auth.users` between the Bug
+D backfill query (15:00 UTC, 11 users present) and the Bug B/C diagnostic
+(17:00 UTC, 4 users remaining). 2-hour window with no scheduled cron run
+that could explain it.
+
+Investigation completed read-only via Management API:
+
+- **No DELETE/UPDATE triggers on `auth.users`** — only `on_auth_user_created`
+  (INSERT). Nothing automatic deletes via trigger.
+- **`cleanup_old_data()` cron** (Sat 3am) — body confirmed: cleans
+  `notifications`, `notification_queue`, trims `xn_score_history`. Does
+  NOT touch `auth.users`.
+- **`process_pending_deletions()` cron** (daily 4am) — body confirmed: loops
+  over `user_deletion_requests` WHERE `status='pending' AND retention_end_date
+  <= CURRENT_DATE`. **`user_deletion_requests` table is empty (0 rows).**
+- **No retention/TTL config** in Supabase auth config (`mailer_autoconfirm`,
+  `*_otp_exp` only).
+- **`auth.audit_log_entries` table is empty (0 rows total, ever).** Audit
+  logging into this table is disabled or never enabled for this project, so
+  there is NO DB-side audit trail of `auth.users` mutations — not even normal
+  signups.
+
+**Highest-likelihood remaining hypothesis**: manual deletion via Supabase
+Dashboard's Auth admin UI. That action calls `auth.admin.deleteUser` directly,
+bypasses `user_deletion_requests`, leaves no audit trail in `public` schema,
+and only logs in Supabase's internal observability dashboard (Logs → Auth
+logs tab — not queryable from Management API DB path).
+
+**Risk**: if cause is not manual-Dashboard (i.e., something else is silently
+deleting users), real user data is at risk in production. **Action before
+launch**: (1) confirm with project-admin humans whether deletion was manual
+on 2026-05-11; (2) if not, escalate to Supabase support to identify the
+caller via internal logs; (3) consider enabling `auth.audit_log_entries`
+logging via `GOTRUE_AUDIT_LOG_ENABLED` env or equivalent.
+
+**Action before launch**: enable Supabase audit logging (Pro tier feature).
+Required for any future incident investigation of user data anomalies.
+
 ### Smaller items (carryover from Tier 2)
 
 - Fix `services/XnScoreEngine.ts:1003` stray brace (1-char, ~5 min,
