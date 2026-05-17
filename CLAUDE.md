@@ -253,6 +253,35 @@ logging via `GOTRUE_AUDIT_LOG_ENABLED` env or equivalent.
 **Action before launch**: enable Supabase audit logging (Pro tier feature).
 Required for any future incident investigation of user data anomalies.
 
+---
+### 2026-05-17 — Bug C2 shipped but unsmoke-tested
+
+**What shipped:** SetPasswordScreen "Skip for now" button now opens an
+Alert.alert modal warning that without a password, the user will only
+be able to sign in via email magic-link. Code committed in
+`a68a46c` and present in production bundle
+`index-80cfcdddab781b9721ef0a2c867b627d.js` (verified via grep for
+"Skip password setup").
+
+**Why untested:** Reaching SetPasswordScreen as a password-less user
+requires a magic-link sign-in path. The Login screen's "Forgot
+password?" button triggers `resetPasswordForEmail()` → routes to
+`/reset-password` (ResetPasswordScreen, a different screen). There is
+no obvious UI affordance on the Login screen to trigger
+`signInWithOtp()` for an existing password-less user. Magic-link sign-in
+exists in the codebase but is not wired to the Login screen.
+
+**Risk of untested ship:** Low. Diff was 15 lines, code-reviewed
+before commit, both fix strings verified in production bundle. Fix is
+contained to a single button onPress handler — no schema, no RPC, no
+auth side effects.
+
+**Open Tier 4 follow-up:** Add a "Sign in with email link" affordance
+to the Login screen for QuickJoin / magic-link-only users. Without
+this, password-less users created via QuickJoin have no entry path
+back to the app once their initial session expires.
+---
+
 ### Smaller items (carryover from Tier 2)
 
 - Fix `services/XnScoreEngine.ts:1003` stray brace (1-char, ~5 min,
