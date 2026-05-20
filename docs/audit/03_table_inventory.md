@@ -25,7 +25,7 @@ Method: REST API probes using anon key. Status meanings:
 | `disputes` | ✅ EXISTS | 0 | 0 |
 | `wallets` | ✅ EXISTS | 0 | 0 |
 | `transactions` | ✅ EXISTS | 0 | 0 |
-| `stripe_connect_accounts` | ❌ MISSING | 0 | 0 |
+| `stripe_connected_accounts` | ✅ EXISTS | 0 | 0 |
 | `dream_feed_posts` | ❌ MISSING | 0 | 0 |
 | `marketplace_listings` | ❌ MISSING | 0 | 0 |
 | `trip_circles` | ❌ MISSING | 0 | 0 |
@@ -168,5 +168,7 @@ Method: REST API probes using anon key. Status meanings:
 
 ## Status totals
 
-- EXISTS: 135
-- MISSING: 12
+- EXISTS: 136
+- MISSING: 11
+
+> **2026-05-20 correction:** the original `stripe_connect_accounts` row was a probe-list typo. The actual table is `stripe_connected_accounts` (past participle) — exists in prod with 16 columns, 2 RLS policies, 6 indexes. Migration `054_stripe_connect_payment_system.sql` is fully applied. See `docs/audit/12_schema_reconciliation.md` for the live-schema-driven verification.
