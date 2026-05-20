@@ -1035,7 +1035,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
       amount,
       cycle_number: cycleNumber,
       due_date: dueDate,
-      status: "completed",
+      status: "paid",
       payment_method: "wallet",
     });
 
