@@ -36,6 +36,42 @@ Web prefixes (from `lib/deepLinking.ts`): `https://tandaxn.com`, `https://v0-tan
 
 ---
 
+## Audit baseline (2026-05-18)
+
+Full read-only audit in `docs/audit/*.md`. **Read these before assuming any
+feature is "done":**
+
+| File | What it answers |
+|---|---|
+| `00_SUMMARY.md` | The honest % — features WORKING vs scaffolding vs missing |
+| `01_applied_migrations.md` | Which 31 migrations actually ran in prod |
+| `02_migration_gap.md` | Which of 98 SQL files in `supabase/migrations/` are dead |
+| `03_table_inventory.md` | Which prod tables exist + row counts |
+| `04_screen_status.md` | 155 reachable screens in `screens/`; `app/` is orphan |
+| `05_critical_flows.md` | Per-flow status (savings/circles work; disputes/loans gaps) |
+| `06_migration_cleanup_plan.md` | Plan to delete 47 dead `.sql` files (NOT yet executed) |
+| `07_supabase_folder_mystery.md` | `OneDrive/Desktop/TandaXn/Supabase/` is abandoned — safe to archive |
+| `08_salvaged_from_abandoned_backend.md` | Historical context: bill-pay origin, scoring algo v1, KYC pivot |
+| `09_screen_count_verification.md` | Confirms 155 is correct; flags 18 dark-corner screens |
+
+### Open items surfaced by audit (NOT yet fixed)
+
+- `lib/deepLinking.ts` lists `Dreams`/`Wallet`/`Profile` Tab routes that don't
+  exist in the current `Tab.Navigator` (only Home/Circles/Action/Market/
+  Community). Those deep-link URLs silently fail. — small fix.
+- 47 dead migration files in `supabase/migrations/` cluttering the dir —
+  see `06_migration_cleanup_plan.md` for the safe-delete list (read-only;
+  user decision pending).
+- `OneDrive/Desktop/TandaXn/Supabase/` (capital S) entire folder is dead
+  scaffold from Jan 2026 — safe to delete except `Docs/` (3 markdown files
+  have salvageable architectural context, summarised in
+  `08_salvaged_from_abandoned_backend.md`).
+- 18 of 155 registered screens are not reached by any explicit
+  `navigation.navigate('X')` — needs runtime test to confirm reachability
+  via deep links / initial route / `reset()`.
+
+---
+
 ## Supabase
 
 - Project ref: `fjqdkyjkwqeoafwvnjgv`
