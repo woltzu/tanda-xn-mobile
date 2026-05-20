@@ -356,6 +356,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     try {
       eventService.trackAuth('logout', 'success');
+      // Flush event buffer BEFORE revoking the JWT. Otherwise the next flush
+      // hits user_events with a stale token, gets 401, and trips
+      // EventService's 5-minute self-pause (which silently drops events).
+      await eventService.flush();
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
 

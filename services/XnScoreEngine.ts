@@ -1000,7 +1000,6 @@ export class XnScoreEngine {
   // ─────────────────────────────────────────────────────────────────────────────
   // Additional types for decay/growth system
   // ─────────────────────────────────────────────────────────────────────────────
-}
 
 export type DecayReason =
   | 'inactivity_30d'

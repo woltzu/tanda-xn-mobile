@@ -1013,11 +1013,28 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     const circle = circles.find(c => c.id === circleId);
     const cycleNumber = circle?.currentCycle || 1;
 
+    // Resolve due_date — circle_contributions.due_date is NOT NULL. Prefer the
+    // circle's next upcoming/active scheduled date (contribution_schedules is
+    // per-circle, not per-member, so we use the same "earliest active" pattern
+    // as getMyContributionStatus). Falls back to today if no schedule row exists.
+    let dueDate = new Date().toISOString().split('T')[0];
+    const { data: nextSchedule } = await supabase
+      .from("contribution_schedules")
+      .select("due_date")
+      .eq("circle_id", circleId)
+      .in("status", ["upcoming", "active"])
+      .order("due_date", { ascending: true })
+      .limit(1);
+    if (nextSchedule && nextSchedule[0]?.due_date) {
+      dueDate = nextSchedule[0].due_date;
+    }
+
     const { error } = await supabase.from("circle_contributions").insert({
       circle_id: circleId,
       user_id: user.id,
       amount,
       cycle_number: cycleNumber,
+      due_date: dueDate,
       status: "completed",
       payment_method: "wallet",
     });

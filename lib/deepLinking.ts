@@ -43,29 +43,37 @@ export const linkingConfig = {
       // Optional password setup screen reachable directly at /set-password
       SetPassword: "set-password",
 
-      // Main app screens
+      // Main app tabs — must match App.tsx <Tab.Navigator>.
+      // Actual tab routes are: Home, Circles, Action, Market, Community.
+      // (Earlier versions of this config listed Dreams/Wallet/Profile as tabs;
+      // those are not tabs and the URLs silently failed — fixed 2026-05-20.)
       MainTabs: {
         screens: {
           Home: "home",
-          Dreams: {
-            screens: {
-              DreamFeed: "dreams",
-              PostDetail: "dreams/post/:postId",
-              UserDreamProfile: "dreams/user/:userId",
-            },
-          },
           Circles: "circles",
-          Wallet: "wallet",
+          Action: "action",
+          Market: "market",
           Community: "community",
-          Profile: "profile",
         },
       },
 
-      // Detail screens
+      // Detail screens (registered on the root Stack, navigable from anywhere)
       CircleDetail: "circle/:circleId",
       CommunityHub: "community/:communityId",
       GoalsHub: "goals",
       CreateGoal: "goals/create",
+
+      // Dream feed (root Stack screens — also reachable via HomeStack at runtime;
+      // putting them top-level here means /dreams URLs load without a tab bar.
+      // If you want the tab bar visible, nest these under MainTabs.Home.screens later.)
+      DreamFeed: "dreams",
+      PostDetail: "dreams/post/:postId",
+      UserDreamProfile: "dreams/user/:userId",
+
+      // Wallet / Profile / Settings (root Stack screens)
+      WalletMain: "wallet",
+      ProfileMain: "profile",
+      Settings: "settings",
     },
   },
 };
