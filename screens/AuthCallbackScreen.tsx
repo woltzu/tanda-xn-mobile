@@ -32,6 +32,11 @@ export default function AuthCallbackScreen() {
 
   useEffect(() => {
     let cancelled = false;
+    // Set to true when supabase.auth.onAuthStateChange fires PASSWORD_RECOVERY.
+    // Some recovery links (hash-fragment / deep-link) deliver the recovery
+    // signal via the auth event rather than a parseable `type=recovery` URL
+    // param, so we need both paths to converge on the same routing target.
+    let isRecoveryEvent = false;
     let successTimeoutId: ReturnType<typeof setTimeout> | null = null;
     let errorTimeoutId: ReturnType<typeof setTimeout> | null = null;
     let timeoutGuardId: ReturnType<typeof setTimeout> | null = null;
@@ -54,7 +59,7 @@ export default function AuthCallbackScreen() {
       const type = getTypeFromUrl();
       successTimeoutId = setTimeout(() => {
         if (cancelled) return;
-        if (type === "recovery") {
+        if (isRecoveryEvent || type === "recovery") {
           navigation.reset({ index: 0, routes: [{ name: "ResetPassword" }] });
         } else {
           navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] });
@@ -75,6 +80,15 @@ export default function AuthCallbackScreen() {
     // 1. Subscribe to auth state changes — primary signal
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
+      // PASSWORD_RECOVERY fires when the user lands here via a recovery
+      // link (regardless of whether the URL had `type=recovery` parseable).
+      // Latch the flag so `navigateOnSuccess` routes to ResetPassword
+      // instead of MainTabs even if SIGNED_IN arrives later.
+      if (event === "PASSWORD_RECOVERY") {
+        isRecoveryEvent = true;
+        navigateOnSuccess();
+        return;
+      }
       if (event === "SIGNED_IN" && session) {
         navigateOnSuccess();
       }
