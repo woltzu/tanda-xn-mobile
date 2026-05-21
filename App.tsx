@@ -753,6 +753,32 @@ function AppContent() {
           <Stack.Screen name="MainTabs" component={MainTabs} />
           {/* Modal screens that should appear over tabs without tab bar */}
           <Stack.Screen name="AccessRestricted" component={AccessRestrictedScreen} />
+          {/* Modal-style screen reachable from CircleDetail's Circle Options sheet.
+              The sheet renders via a portal outside CirclesStack's subtree, so
+              useNavigation() inside it returns the root Stack — hence this
+              registration in addition to the one in CirclesStack at line ~586. */}
+          <Stack.Screen name="ReportIssue" component={ReportIssueScreen} />
+          {/* Same root-Stack fallback for MediationTools — same Circle Options
+              sheet, same Portal escapes CirclesStack scope. Existing
+              CirclesStack registration at line ~589 is kept (duplicate is fine). */}
+          <Stack.Screen name="MediationTools" component={MediationToolsScreen} />
+          {/* Remaining Circle Options sheet items — same Portal pattern as
+              ReportIssue/MediationTools. Each is also registered in CirclesStack
+              (and a few elsewhere); the root-Stack duplicate ensures
+              navigate() resolves no matter which navigator's prop the modal
+              closure captures. Added 2026-05-20 alongside ReportIssue fix. */}
+          <Stack.Screen name="AdminSettings" component={AdminSettingsScreen} />
+          <Stack.Screen name="LeaveCircle" component={LeaveCircleScreen} />
+          <Stack.Screen name="HelpCenter" component={HelpCenterScreen} />
+          <Stack.Screen name="PaymentHistory" component={PaymentHistoryScreen} />
+          <Stack.Screen name="NotificationPrefs" component={NotificationPrefsScreen} />
+          <Stack.Screen name="ManageMembers" component={ManageMembersScreen} />
+          <Stack.Screen name="PauseCircle" component={PauseCircleScreen} />
+          <Stack.Screen name="CloseCircle" component={CloseCircleScreen} />
+          <Stack.Screen name="ExportData" component={ExportDataScreen} />
+          <Stack.Screen name="OversightDashboard" component={OversightDashboardScreen} />
+          <Stack.Screen name="AuditTrail" component={AuditTrailScreen} />
+          <Stack.Screen name="QRCodeDisplay" component={QRCodeDisplayScreen} />
           {/* Deep Link Invite Screens */}
           <Stack.Screen name="CircleInvite" component={CircleInviteScreen} />
           {/* Public frictionless join — reachable unauthenticated at /join/:inviteCode */}
