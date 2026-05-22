@@ -100,6 +100,25 @@ JSON response. Reads `SUPABASE_PAT` from env. `STATUS: 201` = success.
 
 ---
 
+## Stripe Integration – Status & Maintenance
+
+### Current status
+- **Test mode (sandbox) – fully functional** as of 2026-05-21.
+- Edge Functions: `create-payment-intent` (JWT‑protected) and `stripe-webhook` (no JWT).
+- Secrets stored in Supabase: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`.
+- Client‑side publishable key set in `.env.local` as `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
+
+### To keep it working
+
+- **Never change the Stripe secret keys in Supabase without redeploying the Edge Functions.**  
+  The keys are read at function boot time; a redeploy is required after any secret change:
+  ```bash
+  supabase functions deploy create-payment-intent
+  supabase functions deploy stripe-webhook --no-verify-jwt
+  ```
+
+---
+
 ## Web bundle deploy flow
 
 ```bash
