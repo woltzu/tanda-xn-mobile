@@ -82,11 +82,12 @@ const QUICK_AMOUNTS = [25, 50, 100, 250, 500];
 export default function AddFundsScreen() {
   const navigation = useNavigation<AddFundsNavigationProp>();
   const { addFunds } = useWallet();
-  const { paymentMethods, isLoadingMethods, createDeposit, presentPaymentSheet, isStripeReady } = usePayment();
+  const { paymentMethods, isLoadingMethods, createDeposit, presentPaymentSheet, isStripeReady, makeTestCharge } = usePayment();
   const [amount, setAmount] = useState("");
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [selectedSavedMethodId, setSelectedSavedMethodId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isTestCharging, setIsTestCharging] = useState(false);
 
   const numericAmount = parseFloat(amount) || 0;
   const selectedMethodData = FUNDING_METHODS.find((m) => m.id === selectedMethod);
@@ -160,6 +161,28 @@ export default function AddFundsScreen() {
       );
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  // ── DEV-only Path A smoke test ────────────────────────────────────────────
+  // Hits the create-payment-intent Edge Function with a $0.50 wallet_deposit,
+  // presents the Stripe PaymentSheet, and reports the outcome via Alert.
+  // Gated by __DEV__ in the JSX below — never rendered in production builds.
+  const handleTestCharge = async () => {
+    setIsTestCharging(true);
+    try {
+      const result = await makeTestCharge(50); // 50 cents = $0.50
+      const body = [
+        result.ok ? "Stripe accepted the $0.50 test charge." : (result.error ?? "Unknown error"),
+        result.paymentIntentId ? `PI: ${result.paymentIntentId}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+      Alert.alert(result.ok ? "Test charge OK" : "Test charge FAILED", body);
+    } catch (err: any) {
+      Alert.alert("Test charge crashed", err?.message ?? String(err));
+    } finally {
+      setIsTestCharging(false);
     }
   };
 
@@ -394,6 +417,25 @@ export default function AddFundsScreen() {
                 </View>
               </View>
             </View>
+          )}
+
+          {/* DEV-only Path A smoke test button — never rendered in prod */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.devTestChargeButton}
+              onPress={handleTestCharge}
+              disabled={isTestCharging}
+              accessibilityLabel="Run Path A test charge of fifty cents"
+            >
+              {isTestCharging ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="warning" size={18} color="#FFFFFF" />
+                  <Text style={styles.devTestChargeText}>DEV: Test charge $0.50</Text>
+                </>
+              )}
+            </TouchableOpacity>
           )}
 
           {/* Security Note */}
@@ -771,5 +813,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+  devTestChargeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FF6B6B",
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    marginBottom: 16,
+    gap: 8,
+  },
+  devTestChargeText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
   },
 });

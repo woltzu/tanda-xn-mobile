@@ -27,6 +27,7 @@ if (Platform.OS !== 'web') {
 }
 
 import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import {
   StripeConnectEngine,
   PaymentMethod as DBPaymentMethod,
@@ -104,6 +105,11 @@ export type PaymentContextType = {
 
   // Payment sheet
   presentPaymentSheet: (clientSecret: string) => Promise<{ success: boolean; error?: string }>;
+
+  // DEV-only smoke test (Path A) — bypasses StripeConnectEngine stubs
+  makeTestCharge: (
+    amountCents?: number,
+  ) => Promise<{ ok: boolean; error?: string; paymentIntentId?: string }>;
 
   // Error state
   paymentError: string | null;
@@ -457,6 +463,44 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
     }
   }, [initPaymentSheet, stripePresent]);
 
+  // ── Test charge (DEV only) — Path A smoke test ────────────────────────────
+  // Calls the create-payment-intent Edge Function directly, bypassing
+  // StripeConnectEngine's stubs, then presents the Stripe PaymentSheet via
+  // the existing presentPaymentSheetAction helper. Gated by __DEV__ in the
+  // calling screen — this method itself does no env gating so it can be
+  // exercised from anywhere during smoke testing.
+
+  const makeTestCharge = useCallback(async (
+    amountCents: number = 50,
+  ): Promise<{ ok: boolean; error?: string; paymentIntentId?: string }> => {
+    if (!user) return { ok: false, error: 'Not signed in' };
+    if (Platform.OS === 'web') {
+      return { ok: false, error: 'Test charge requires a native build (iOS or Android)' };
+    }
+
+    try {
+      // 1. Edge function creates the PI and returns the clientSecret
+      const { data, error } = await supabase.functions.invoke(
+        'create-payment-intent',
+        { body: { amount: amountCents, currency: 'usd' } },
+      );
+      if (error) return { ok: false, error: `Edge function error: ${error.message}` };
+      if (!data?.clientSecret) return { ok: false, error: 'No clientSecret returned' };
+
+      const paymentIntentId = data.paymentIntentId as string | undefined;
+
+      // 2. Present the Stripe PaymentSheet
+      const sheet = await presentPaymentSheetAction(data.clientSecret);
+      if (!sheet.success) return { ok: false, error: sheet.error, paymentIntentId };
+
+      return { ok: true, paymentIntentId };
+    } catch (err: any) {
+      const msg = err?.message ?? 'Unexpected error';
+      console.error('[PaymentContext] makeTestCharge failed:', msg);
+      return { ok: false, error: msg };
+    }
+  }, [user, presentPaymentSheetAction]);
+
   // ── Context value ─────────────────────────────────────────────────────────
 
   const value: PaymentContextType = {
@@ -477,6 +521,7 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
     createContribution,
     createWithdrawal,
     presentPaymentSheet: presentPaymentSheetAction,
+    makeTestCharge,
     paymentError,
     clearError,
   };
