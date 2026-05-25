@@ -52,10 +52,20 @@ export function useFormKeyboardOffset(): FormKeyboardOffset {
 
   const offset = useMemo(() => {
     if (Platform.OS !== 'ios') return 0;
-    let total = insets.top;
-    for (const h of Object.values(heights)) total += h;
-    return total;
-  }, [insets.top, heights]);
+    // KeyboardAvoidingView's onLayout reports frame.y in its parent's
+    // (SafeAreaView's content) coordinate system. Any chrome that's a sibling
+    // of KAV inside the same SafeAreaView is already pushed into frame.y by
+    // the flex layout — adding the chrome heights here would double-count
+    // them. The only gap KAV's frame doesn't "see" is the safe-area top
+    // inset, because SafeAreaView's content origin starts below the notch.
+    // Hence: offset bridges only that one coordinate-system mismatch.
+    //
+    // Chrome heights are still tracked by measure(key) for diagnostics and
+    // for any future caller whose chrome sits OUTSIDE the SafeAreaView
+    // (e.g. a React Navigation header above the screen view), but they
+    // don't factor into the default offset.
+    return insets.top;
+  }, [insets.top]);
 
   return { offset, measure, clear };
 }

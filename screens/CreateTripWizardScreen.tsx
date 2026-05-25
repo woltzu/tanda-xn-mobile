@@ -1154,7 +1154,11 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: spacing.lg,
-    paddingBottom: 120,
+    // Big bottom padding so the LAST FormInput (e.g. "What's Excluded" on
+    // Basics) can scroll above the keyboard. Without enough room here, max
+    // scroll position can't lift the last field past the keyboard top.
+    // Sized > iOS QWERTY+predictive bar (~336pt) with a small buffer.
+    paddingBottom: 360,
   },
   sectionLabel: {
     fontSize: typography.bodyLarge,
