@@ -777,7 +777,7 @@ export class TripOrganizerEngine {
     if (status) {
       query = query.eq("status", status);
     }
-    const { data: rows, error } = await query.order("joined_at", { ascending: true });
+    const { data: rows, error } = await query.order("registered_at", { ascending: true });
     if (error) throw new Error(`Failed to fetch participants: ${error.message}`);
     return (rows ?? []).map(mapParticipant);
   }
