@@ -21,6 +21,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useCreateTripWizard } from '../hooks/useTripOrganizer';
+import { useFormKeyboardOffset } from '../hooks/useFormKeyboardOffset';
 import { TripOrganizerEngine } from '../services/TripOrganizerEngine';
 import { MediaUploadService } from '../services/MediaUploadService';
 
@@ -182,6 +183,35 @@ const DatePickerField: React.FC<{
   value: string;
   onChange: (dateStr: string) => void;
 }> = ({ label, value, onChange }) => {
+  // Web: the native <input type="date"> emits YYYY-MM-DD verbatim, matching
+  // toISODate() on iOS/Android. @react-native-community/datetimepicker has
+  // no working web render path in this codebase, so the tap below would do
+  // nothing on web without this branch.
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.inputGroup}>
+        <Text style={styles.inputLabel}>{label}</Text>
+        {React.createElement('input', {
+          type: 'date',
+          value: value || '',
+          onChange: (e: any) => onChange(e?.target?.value ?? ''),
+          style: {
+            backgroundColor: '#FFFFFF',
+            border: `1px solid ${colors.border}`,
+            borderRadius: radius.small,
+            padding: `12px ${spacing.md}px`,
+            fontSize: typography.body,
+            color: NAVY,
+            fontFamily: 'inherit',
+            width: '100%',
+            boxSizing: 'border-box',
+            outlineColor: TEAL,
+          },
+        })}
+      </View>
+    );
+  }
+
   const [showPicker, setShowPicker] = useState(false);
   const [tempDate, setTempDate] = useState<Date>(value ? new Date(value + 'T00:00:00') : new Date());
 
@@ -656,10 +686,18 @@ const CreateTripWizardScreen: React.FC = () => {
   const scrollRef = useRef<ScrollView>(null);
   const [currentStep, setCurrentStep] = useState(0);
 
+  const { offset: keyboardOffset, measure: measureChrome, clear: clearChrome } = useFormKeyboardOffset();
+
   // Edit mode: /CreateTripWizard?tripId=...&mode=edit
   const editTripId: string | undefined = route.params?.tripId;
   const isEditMode: boolean = route.params?.mode === 'edit' && !!editTripId;
   const [hydrating, setHydrating] = useState<boolean>(isEditMode);
+
+  // Drop the banner's measured height once it unmounts; otherwise the offset
+  // stays inflated and produces an empty band above the keyboard.
+  useEffect(() => {
+    if (!hydrating) clearChrome('banner');
+  }, [hydrating, clearChrome]);
 
   // One-time render-side log (helps debug edit-mode issues on web).
   // Safe: runs on every render but logs are cheap and the console stays quiet
@@ -997,7 +1035,7 @@ const CreateTripWizardScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={styles.header} onLayout={measureChrome('header')}>
         <TouchableOpacity onPress={goBack} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
@@ -1008,7 +1046,7 @@ const CreateTripWizardScreen: React.FC = () => {
       </View>
 
       {/* Step Indicator */}
-      <View style={styles.stepSection}>
+      <View style={styles.stepSection} onLayout={measureChrome('stepSection')}>
         <StepIndicator currentStep={currentStep} />
         <Text style={styles.stepCounter}>
           Step {currentStep + 1} of {TOTAL_STEPS} — {STEP_NAMES[currentStep]}
@@ -1017,7 +1055,7 @@ const CreateTripWizardScreen: React.FC = () => {
 
       {/* Edit-mode hydration banner */}
       {hydrating && (
-        <View style={styles.hydratingBanner}>
+        <View style={styles.hydratingBanner} onLayout={measureChrome('banner')}>
           <ActivityIndicator size="small" color={TEAL} />
           <Text style={styles.hydratingText}>Loading trip…</Text>
         </View>
@@ -1027,7 +1065,7 @@ const CreateTripWizardScreen: React.FC = () => {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 120 : 0}
+        keyboardVerticalOffset={keyboardOffset}
       >
         <ScrollView
           ref={scrollRef}

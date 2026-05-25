@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { TripOrganizerEngine } from '../services/TripOrganizerEngine';
+import { useFormKeyboardOffset } from '../hooks/useFormKeyboardOffset';
 
 const NAVY = '#0A2342';
 const TEAL = '#00C6AE';
@@ -40,6 +41,7 @@ const CATEGORIES = [
 const ActivityEditorScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const { offset: keyboardOffset, measure: measureChrome } = useFormKeyboardOffset();
 
   const {
     tripId = '',
@@ -114,7 +116,7 @@ const ActivityEditorScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={styles.header} onLayout={measureChrome('header')}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
@@ -131,7 +133,7 @@ const ActivityEditorScreen: React.FC = () => {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        keyboardVerticalOffset={keyboardOffset}
       >
         <ScrollView
           style={styles.scroll}

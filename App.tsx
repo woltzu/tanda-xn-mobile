@@ -6,6 +6,7 @@ import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { View, TouchableWithoutFeedback, AppState } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { eventService } from "./services/EventService";
 import { PreferencesProvider } from "./context/PreferencesContext";
@@ -903,6 +904,7 @@ export default function App() {
   }, []);
 
   return (
+    <SafeAreaProvider>
     <PreferencesProvider>
       <AuthProvider>
         <PaymentProvider>
@@ -950,5 +952,6 @@ export default function App() {
         </PaymentProvider>
       </AuthProvider>
     </PreferencesProvider>
+    </SafeAreaProvider>
   );
 }

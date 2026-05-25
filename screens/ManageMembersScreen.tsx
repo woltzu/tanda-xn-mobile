@@ -9,9 +9,12 @@ import {
   TextInput,
   Alert,
   Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useFormKeyboardOffset } from "../hooks/useFormKeyboardOffset";
 
 interface Member {
   id: string;
@@ -103,6 +106,7 @@ export default function ManageMembersScreen() {
   const route = useRoute();
   const params = (route.params as ManageMembersParams) || {};
   const circleName = params.circleName || "Family Savings Circle";
+  const { offset: keyboardOffset, measure: measureChrome } = useFormKeyboardOffset();
 
   const [members, setMembers] = useState<Member[]>(mockMembers);
   const [searchQuery, setSearchQuery] = useState("");
@@ -368,7 +372,7 @@ export default function ManageMembersScreen() {
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={styles.header} onLayout={measureChrome('header')}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -393,6 +397,11 @@ export default function ManageMembersScreen() {
         </TouchableOpacity>
       </View>
 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={keyboardOffset}
+      >
       {/* Search and Filter */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputContainer}>
@@ -462,6 +471,7 @@ export default function ManageMembersScreen() {
         )}
         <View style={styles.bottomPadding} />
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Add Member FAB */}
       {!isReorderMode && (

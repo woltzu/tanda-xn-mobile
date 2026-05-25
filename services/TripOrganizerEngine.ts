@@ -5,6 +5,11 @@
 
 import { supabase } from "../lib/supabase";
 
+// Coerce '' / undefined to null so blank DATE inputs pass Postgres validation
+// (Postgres rejects '' for type date). `??` doesn't help here — it only catches
+// null/undefined, not the empty strings the wizard's date pickers emit.
+const nullIfBlank = <T,>(v: T) => (v === '' || v === undefined ? null : v);
+
 // ─── TYPES ──────────────────────────────────────────────────────────────────
 
 export type TripStatus = 'draft' | 'published' | 'closed' | 'cancelled';
@@ -336,8 +341,8 @@ export class TripOrganizerEngine {
         description: data.description,
         cover_image_url: data.coverPhotoUrl,
         destination: data.destination,
-        start_date: data.startDate,
-        end_date: data.endDate,
+        start_date: nullIfBlank(data.startDate),
+        end_date: nullIfBlank(data.endDate),
         max_participants: data.maxParticipants ?? 20,
         price_per_person: data.priceCents ?? 0,
         deposit_required: (data.depositCents ?? 0) > 0,
@@ -348,7 +353,7 @@ export class TripOrganizerEngine {
         refund_policy: data.refundPolicy ?? 'none',
         whats_included: data.whatsIncluded ?? null,
         whats_excluded: data.whatsExcluded ?? null,
-        registration_deadline: data.registrationDeadline ?? null,
+        registration_deadline: nullIfBlank(data.registrationDeadline),
         trip_requirements: data.requiredDocuments ?? [],
       })
       .select()
@@ -391,8 +396,8 @@ export class TripOrganizerEngine {
     if (data.description !== undefined) update.description = data.description;
     if (data.coverPhotoUrl !== undefined) update.cover_image_url = data.coverPhotoUrl;
     if (data.destination !== undefined) update.destination = data.destination;
-    if (data.startDate !== undefined) update.start_date = data.startDate;
-    if (data.endDate !== undefined) update.end_date = data.endDate;
+    if (data.startDate !== undefined) update.start_date = nullIfBlank(data.startDate);
+    if (data.endDate !== undefined) update.end_date = nullIfBlank(data.endDate);
     if (data.maxParticipants !== undefined) update.max_participants = data.maxParticipants;
     // Pricing fields: only included when trip is NOT published
     if (!isPublished && data.priceCents !== undefined) {
@@ -409,7 +414,7 @@ export class TripOrganizerEngine {
     if (data.refundPolicy !== undefined) update.refund_policy = data.refundPolicy;
     if (data.whatsIncluded !== undefined) update.whats_included = data.whatsIncluded;
     if (data.whatsExcluded !== undefined) update.whats_excluded = data.whatsExcluded;
-    if (data.registrationDeadline !== undefined) update.registration_deadline = data.registrationDeadline;
+    if (data.registrationDeadline !== undefined) update.registration_deadline = nullIfBlank(data.registrationDeadline);
     if (data.requiredDocuments !== undefined) update.trip_requirements = data.requiredDocuments;
     update.updated_at = new Date().toISOString();
 
