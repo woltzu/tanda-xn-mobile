@@ -161,8 +161,19 @@ export default function JoinConfirmScreen() {
 
       if (rpcError || !rpcData?.success) {
         setStatus("error");
+        // Prefer the human-readable `message` field over the `error` token
+        // for failure modes (email_mismatch, pending_not_found, etc.).
+        // Connect onboarding gate intentionally moved to the payout path
+        // (Stage 4), not enforced at join — just-in-time onboarding to reduce
+        // new-member friction. Note: only this RPC-based path was ever gated;
+        // the in-app joinCircle() direct-INSERT path was always ungated. JIT
+        // at payout consolidates onboarding enforcement to a single chokepoint
+        // that covers all join paths. See:
+        //   docs/audit/27_join_gate_revert_decision.md
+        //   docs/audit/28_consolidate_join_paths.md
         setMessage(
-          (rpcData as any)?.error
+          (rpcData as any)?.message
+            ?? (rpcData as any)?.error
             ?? rpcError?.message
             ?? "Could not complete join. Please try again.",
         );

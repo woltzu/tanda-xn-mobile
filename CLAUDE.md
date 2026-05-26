@@ -98,6 +98,46 @@ python /c/Users/franck/sql_run.py < query.sql
 Reads SQL from stdin, posts to `/database/query` with the curl UA, prints
 JSON response. Reads `SUPABASE_PAT` from env. `STATUS: 201` = success.
 
+### Migration conventions (REQUIRED)
+
+Every file in `supabase/migrations/` MUST end with a self-registering
+`INSERT` into `supabase_migrations.schema_migrations`. This is the entire
+deploy ritual — "run the file" must be all that's needed. Registration
+cannot be a separate manual step or it gets skipped (the 071 incident,
+2026-05-26: live function replaced via SQL Editor, registry row never
+landed, inverse drift for one full day).
+
+**Template — paste at the end of every new migration:**
+
+```sql
+-- Self-register. Idempotent via ON CONFLICT so re-runs are safe.
+INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+VALUES (
+  'NNN',
+  'short_descriptive_name',
+  ARRAY['-- NNN: short_descriptive_name']
+)
+ON CONFLICT (version) DO NOTHING;
+```
+
+Rules:
+- `version` is the three-digit prefix of the filename (e.g. `'071'`).
+- `name` matches the filename's post-prefix slug (e.g. `'revert_join_gate'`
+  for `071_revert_join_gate.sql`).
+- `statements` is `ARRAY['-- NNN: name']` minimum — the existing 067–070
+  rows have populated `statements`, so this keeps the registry shape
+  consistent for audit queries that filter on `statements IS NOT NULL`.
+- `ON CONFLICT (version) DO NOTHING` is required — without it, re-applying
+  a file (intentional or accidental) errors on the registry row.
+- DDL above the INSERT should use `CREATE OR REPLACE` / `IF NOT EXISTS`
+  / `ADD COLUMN IF NOT EXISTS` so the schema portion is also idempotent.
+
+**Drift verification template** lives in
+`docs/audit/27_migration_069_070_drift_check.sql`. Run it against the live
+DB whenever you need to confirm a migration is registered AND applied.
+Never trust `docs/audit/11_live_schema_dump.sql` as a primary source — it
+is a dated snapshot.
+
 ---
 
 ## Stripe Integration – Status & Maintenance

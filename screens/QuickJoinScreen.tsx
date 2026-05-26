@@ -446,7 +446,17 @@ export default function QuickJoinScreen() {
       if (joinError) throw joinError;
       const result = joinResult as any;
       if (!result?.success) {
-        throw new Error(result?.error ?? result?.message ?? "Could not complete join");
+        // Prefer the human-readable `message` field over the `error` token —
+        // `error` is a stable analytics code, `message` is for users.
+        // Connect onboarding gate intentionally moved to the payout path
+        // (Stage 4), not enforced at join — just-in-time onboarding to reduce
+        // new-member friction. Note: only this RPC-based path was ever gated;
+        // the in-app joinCircle() direct-INSERT path was always ungated. JIT
+        // at payout consolidates onboarding enforcement to a single chokepoint
+        // that covers all join paths. See:
+        //   docs/audit/27_join_gate_revert_decision.md
+        //   docs/audit/28_consolidate_join_paths.md
+        throw new Error(result?.message ?? result?.error ?? "Could not complete join");
       }
 
       // Already a member? Surface the friendly "you're already in" view
