@@ -56,18 +56,6 @@ export default function QRScannerScreen() {
 
   // Find circle by invite code (async for database search)
   const findCircleByCode = async (code: string): Promise<string | null> => {
-    // Check static demo codes first
-    const staticCodes: Record<string, string> = {
-      TANDA2024: "browse-1",
-      FAMILY123: "browse-2",
-      SAVE2025: "browse-3",
-      GOAL100: "browse-4",
-    };
-
-    if (staticCodes[code]) {
-      return staticCodes[code];
-    }
-
     // Use context function to find circle (async - searches database)
     const foundCircle = await findCircleByInviteCode(code);
     if (foundCircle) {

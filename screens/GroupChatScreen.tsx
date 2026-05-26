@@ -27,6 +27,13 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
 
+// UUID validity check — guards Postgres uuid columns against non-UUID strings
+// (e.g. UI placeholder IDs leaking via navigation). 22P02 errors are silenced
+// at the source instead of bubbling out of Supabase.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isValidUuid = (s: unknown): s is string =>
+  typeof s === 'string' && UUID_RE.test(s);
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 type NavProp = StackNavigationProp<RootStackParamList, "GroupChat">;
 type RouteParams = RouteProp<RootStackParamList, "GroupChat">;
@@ -72,7 +79,10 @@ export default function GroupChatScreen() {
 
   // ── Initial load: auth + last 50 messages ──────────────────────────────────
   useEffect(() => {
-    if (!circleId) return;
+    if (!isValidUuid(circleId)) {
+      if (circleId) console.warn(`[GroupChat] invalid circleId ${JSON.stringify(circleId)} — skipping load`);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -120,7 +130,7 @@ export default function GroupChatScreen() {
 
   // ── Realtime subscription ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!circleId) return;
+    if (!isValidUuid(circleId)) return;
 
     console.log("[GroupChat] subscribing to realtime channel", { circleId });
     const channel = supabase

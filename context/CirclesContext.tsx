@@ -237,119 +237,14 @@ export const useCircles = () => {
   return context;
 };
 
-// Default browse circles for discovery (shown when DB is empty or loading)
-const defaultBrowseCircles: Circle[] = [
-  {
-    id: "browse-1",
-    name: "Diaspora Family Fund",
-    type: "traditional",
-    amount: 200,
-    frequency: "monthly",
-    memberCount: 12,
-    startDate: "2025-02-01",
-    rotationMethod: "xnscore",
-    gracePeriodDays: 2,
-    invitedMembers: [],
-    createdAt: "2025-01-01",
-    createdBy: "system",
-    status: "active",
-    emoji: "👨‍👩‍👧‍👦",
-    description: "Supporting families back home together",
-    location: "USA → Kenya",
-    verified: true,
-    minScore: 50,
-    currentMembers: 8,
-    progress: 65,
-  },
-  {
-    id: "browse-2",
-    name: "Tech Workers Savings",
-    type: "traditional",
-    amount: 500,
-    frequency: "biweekly",
-    memberCount: 8,
-    startDate: "2025-01-15",
-    rotationMethod: "xnscore",
-    gracePeriodDays: 1,
-    invitedMembers: [],
-    createdAt: "2025-01-01",
-    createdBy: "system",
-    status: "active",
-    emoji: "💻",
-    description: "Bay Area tech professionals",
-    location: "San Francisco",
-    verified: true,
-    minScore: 65,
-    currentMembers: 6,
-    progress: 75,
-  },
-  {
-    id: "browse-3",
-    name: "Brooklyn Community Circle",
-    type: "traditional",
-    amount: 100,
-    frequency: "weekly",
-    memberCount: 12,
-    startDate: "2025-01-20",
-    rotationMethod: "random",
-    gracePeriodDays: 1,
-    invitedMembers: [],
-    createdAt: "2025-01-01",
-    createdBy: "system",
-    status: "active",
-    emoji: "🏙️",
-    description: "Local savings for local dreams",
-    location: "Brooklyn, NY",
-    verified: true,
-    minScore: 40,
-    currentMembers: 10,
-    progress: 80,
-  },
-  {
-    id: "browse-4",
-    name: "New Parents Support",
-    type: "goal-based",
-    amount: 150,
-    frequency: "monthly",
-    memberCount: 8,
-    startDate: "2025-02-15",
-    rotationMethod: "manual",
-    gracePeriodDays: 3,
-    invitedMembers: [],
-    createdAt: "2025-01-01",
-    createdBy: "system",
-    status: "active",
-    emoji: "👶",
-    description: "Saving for our children's future",
-    location: "Nationwide",
-    verified: false,
-    minScore: 45,
-    currentMembers: 5,
-    progress: 60,
-  },
-  {
-    id: "browse-5",
-    name: "Nurses United Fund",
-    type: "traditional",
-    amount: 250,
-    frequency: "monthly",
-    memberCount: 12,
-    startDate: "2025-01-10",
-    rotationMethod: "xnscore",
-    gracePeriodDays: 2,
-    invitedMembers: [],
-    createdAt: "2025-01-01",
-    createdBy: "system",
-    status: "active",
-    emoji: "👩‍⚕️",
-    description: "Healthcare workers saving together",
-    location: "Houston, TX",
-    verified: true,
-    minScore: 55,
-    currentMembers: 11,
-    progress: 90,
-  },
-];
+// UUID validity check. Postgres throws 22P02 ("invalid input syntax for type
+// uuid") when a non-UUID string reaches a uuid column. Guard query call sites
+// that pass a circleId from UI/navigation — if a stale placeholder / browse
+// shortcut / typo leaks in, we skip the query and warn instead of letting the
+// error surface to the user.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isValidUuid = (s: unknown): s is string =>
+  typeof s === 'string' && UUID_RE.test(s);
 
 // Helper to get emoji based on circle type
 const getCircleEmoji = (type: string): string => {
@@ -608,13 +503,10 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     (circle) => circle.createdBy === user?.id || myCircleIds.has(circle.id)
   );
 
-  // Circles available for browsing
-  const browseCircles = [
-    ...defaultBrowseCircles,
-    ...circles.filter(
-      (c) => c.createdBy !== user?.id && !myCircleIds.has(c.id) && c.status !== "completed"
-    ),
-  ];
+  // Circles available for browsing (excludes user's own + already-joined + completed)
+  const browseCircles = circles.filter(
+    (c) => c.createdBy !== user?.id && !myCircleIds.has(c.id) && c.status !== "completed"
+  );
 
   // Create a new circle
   const createCircle = async (
@@ -887,6 +779,10 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
 
   // Get circle activities (contributions, joins, payouts)
   const getCircleActivities = async (circleId: string): Promise<CircleActivity[]> => {
+    if (!isValidUuid(circleId)) {
+      console.warn(`[CirclesContext] getCircleActivities: invalid circleId ${JSON.stringify(circleId)} — skipping queries`);
+      return [];
+    }
     try {
       const activities: CircleActivity[] = [];
 
@@ -1080,14 +976,6 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
       return rowToCircle(data as CircleRow);
     }
 
-    // Fallback: search in default browse circles
-    for (const circle of defaultBrowseCircles) {
-      const circleInviteCode = generateCircleInviteCode(circle.name, circle.createdAt);
-      if (circleInviteCode === codeUpper) {
-        return circle;
-      }
-    }
-
     // Partial match in database
     const { data: partialData } = await supabase
       .from("circles")
@@ -1107,14 +995,17 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
   // NEW METHODS — Screen Integration
   // ================================================================
 
-  // Synchronous lookup from in-memory circles, fallback to browseCircles
+  // Synchronous lookup from in-memory circles
   const getCircleById = (circleId: string): Circle | undefined => {
-    return circles.find(c => c.id === circleId)
-      || defaultBrowseCircles.find(c => c.id === circleId);
+    return circles.find(c => c.id === circleId);
   };
 
   // Fetch contributions for a circle, optionally filtered by cycle
   const getContributions = async (circleId: string, cycle?: number): Promise<ContributionRecord[]> => {
+    if (!isValidUuid(circleId)) {
+      console.warn(`[CirclesContext] getContributions: invalid circleId ${JSON.stringify(circleId)} — skipping query`);
+      return [];
+    }
     try {
       let query = supabase
         .from("circle_contributions")
