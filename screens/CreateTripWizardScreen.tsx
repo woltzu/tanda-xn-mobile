@@ -14,6 +14,7 @@ import {
   Alert,
   ActivityIndicator,
   Image,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -244,25 +245,38 @@ const DatePickerField: React.FC<{
           {value ? formatDateFriendly(value) : 'Select date'}
         </Text>
       </TouchableOpacity>
-      {showPicker && Platform.OS === 'ios' && (
-        <View style={styles.datePickerIOS}>
-          <View style={styles.datePickerHeader}>
-            <TouchableOpacity onPress={() => setShowPicker(false)}>
-              <Text style={styles.datePickerCancel}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={confirmIOSDate}>
-              <Text style={styles.datePickerDone}>Done</Text>
-            </TouchableOpacity>
+      {/* iOS picker renders in a bottom-sheet Modal so the spinner escapes
+          the half-width Start/End Date column it lives in — the column was
+          clipping month/day/year columns of the spinner. Modal is a
+          top-level overlay, so its content takes the full screen width. */}
+      <Modal
+        visible={showPicker && Platform.OS === 'ios'}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPicker(false)}
+      >
+        <View style={styles.datePickerModalBackdrop}>
+          <View style={styles.datePickerModalSheet}>
+            <View style={styles.datePickerHeader}>
+              <TouchableOpacity onPress={() => setShowPicker(false)}>
+                <Text style={styles.datePickerCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={confirmIOSDate}>
+                <Text style={styles.datePickerDone}>Done</Text>
+              </TouchableOpacity>
+            </View>
+            <DateTimePicker
+              value={tempDate}
+              mode="date"
+              display="spinner"
+              onChange={handleChange}
+              style={{ height: 216 }}
+              themeVariant="light"
+              textColor={NAVY}
+            />
           </View>
-          <DateTimePicker
-            value={tempDate}
-            mode="date"
-            display="spinner"
-            onChange={handleChange}
-            style={{ height: 150 }}
-          />
         </View>
-      )}
+      </Modal>
       {showPicker && Platform.OS === 'android' && (
         <DateTimePicker
           value={tempDate}
@@ -1532,12 +1546,15 @@ const styles = StyleSheet.create({
     color: NAVY,
   },
   // --- iOS Date Picker ---
-  datePickerIOS: {
+  datePickerModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'flex-end',
+  },
+  datePickerModalSheet: {
     backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.small,
-    marginTop: 4,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     overflow: 'hidden',
   },
   datePickerHeader: {
