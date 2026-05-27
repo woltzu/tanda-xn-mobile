@@ -18,11 +18,14 @@ import { useSavings } from "../context/SavingsContext";
 import { useCommunity } from "../context/CommunityContext";
 import { useElder } from "../context/ElderContext";
 import { useNotifications } from "../context/NotificationContext";
+import { useUserDefaults } from "../hooks/useDefaultCascade";
+import { useLateContributions } from "../hooks/useLateContributions";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { RootStackParamList, TabParamList } from "../App";
+import { Routes } from "../lib/routes";
 import { colors, radius, typography } from "../theme/tokens";
 import { ProgressBar } from "../components/ui";
 import { useOnboarding } from "../context/OnboardingContext";
@@ -112,6 +115,9 @@ export default function DashboardScreen() {
   const { myCircles } = useCircles();
   const { score } = useXnScore();
   const { balance: walletBalance } = useWallet();
+  const { hasActiveDefaults } = useUserDefaults();
+  const { lateContributions } = useLateContributions();
+  const hasRecoveryItems = hasActiveDefaults || lateContributions.length > 0;
   const {
     getAdvanceTier,
     getTierInfo,
@@ -296,6 +302,31 @@ export default function DashboardScreen() {
           </View>
           <Ionicons name="chevron-forward" size={20} color={TEXT_SECONDARY} />
         </TouchableOpacity>
+
+        {/* ========== 1c. RECOVERY ALERT BANNER (red — only when active) ========== */}
+        {/* Conditional on hasActiveDefaults OR lateContributions.length > 0.
+            Placed above the Pulse banner so users see overdue items first
+            without scrolling. */}
+        {hasRecoveryItems && (
+          <TouchableOpacity
+            style={styles.recoveryBanner}
+            onPress={() => navigation.navigate(Routes.DefaultRecovery)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Open default recovery"
+          >
+            <View style={styles.recoveryBannerIcon}>
+              <Ionicons name="warning" size={22} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.recoveryBannerTitle}>Overdue contributions</Text>
+              <Text style={styles.recoveryBannerSubtitle} numberOfLines={2}>
+                You have pending defaults or late payments. Resolve now.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.85)" />
+          </TouchableOpacity>
+        )}
 
         {/* ========== 2. PULSE BANNER (Teal gradient) ========== */}
         <TouchableOpacity
@@ -637,6 +668,42 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
     color: NAVY,
+    marginTop: 2,
+  },
+
+  // ===== 1c. RECOVERY ALERT BANNER =====
+  recoveryBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#DC2626",
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    gap: 10,
+    shadowColor: "#DC2626",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  recoveryBannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recoveryBannerTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  recoveryBannerSubtitle: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.92)",
     marginTop: 2,
   },
 

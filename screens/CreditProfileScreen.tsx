@@ -18,6 +18,9 @@ import {
   useCreditScore,
   useCanApplyForLoans,
 } from "../hooks/useCreditworthiness";
+import { useUserDefaults } from "../hooks/useDefaultCascade";
+import { useLateContributions } from "../hooks/useLateContributions";
+import { Routes } from "../lib/routes";
 
 const COLORS = {
   navy: "#0A2342",
@@ -73,6 +76,9 @@ export default function CreditProfileScreen() {
   } = useEligibleLoanProducts(user?.id);
 
   const creditScore = useCreditScore(assessment?.xn_score);
+  const { hasActiveDefaults } = useUserDefaults();
+  const { lateContributions } = useLateContributions();
+  const hasRecoveryItems = hasActiveDefaults || lateContributions.length > 0;
   const { canApply, reason: applyReason, loading: applyLoading } = useCanApplyForLoans(user?.id);
 
   const loading = assessmentLoading || productsLoading;
@@ -145,6 +151,32 @@ export default function CreditProfileScreen() {
             </View>
           </View>
         </View>
+
+        {/* Default Recovery Row — only shown when the user has unresolved
+            defaults or late contributions. Visible directly under the
+            score card so it's the first thing a user with overdue items
+            sees on their credit profile. */}
+        {hasRecoveryItems && (
+          <TouchableOpacity
+            style={styles.recoveryRow}
+            onPress={() => navigation.navigate(Routes.DefaultRecovery)}
+            accessibilityRole="button"
+            accessibilityLabel="Open default recovery"
+          >
+            <View style={styles.recoveryRowIcon}>
+              <Ionicons name="warning" size={18} color={COLORS.red} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.recoveryRowTitle}>Default recovery</Text>
+              <Text style={styles.recoveryRowSubtitle}>
+                {hasActiveDefaults
+                  ? "Unresolved defaults need attention"
+                  : "Late contributions to resolve"}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={COLORS.muted} />
+          </TouchableOpacity>
+        )}
 
         {/* Assessment Breakdown */}
         {dimensions.length > 0 && (
@@ -265,6 +297,35 @@ export default function CreditProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: COLORS.bg },
+  recoveryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.red + "33",
+    gap: 12,
+    marginBottom: 12,
+  },
+  recoveryRowIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: COLORS.red + "15",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recoveryRowTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: COLORS.navy,
+  },
+  recoveryRowSubtitle: {
+    fontSize: 12,
+    color: COLORS.muted,
+    marginTop: 2,
+  },
   header: {
     backgroundColor: COLORS.navy,
     paddingTop: 50,

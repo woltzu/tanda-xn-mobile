@@ -13,6 +13,9 @@ import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useXnScore, ScoreLevel } from "../context/XnScoreContext";
+import { useUserDefaults } from "../hooks/useDefaultCascade";
+import { useLateContributions } from "../hooks/useLateContributions";
+import { Routes } from "../lib/routes";
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
 
 type XnScoreDashboardNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -32,6 +35,9 @@ export default function XnScoreDashboardScreen() {
   } = useXnScore();
 
   const scoreBreakdown = getScoreBreakdown();
+  const { hasActiveDefaults } = useUserDefaults();
+  const { lateContributions } = useLateContributions();
+  const hasRecoveryItems = hasActiveDefaults || lateContributions.length > 0;
 
   // XnScore™ V3.0 Tiers (0-100 scale)
   const getNextLevel = (): ScoreLevel | null => {
@@ -177,6 +183,24 @@ export default function XnScoreDashboardScreen() {
         </LinearGradient>
 
         <View style={styles.content}>
+          {/* Recovery alert — only shown when the user has unresolved
+              defaults or late contributions. Placed below the score
+              ring so the impact on the score is immediately visible. */}
+          {hasRecoveryItems && (
+            <TouchableOpacity
+              style={styles.recoveryLink}
+              onPress={() => navigation.navigate(Routes.DefaultRecovery)}
+              accessibilityRole="button"
+              accessibilityLabel="Open default recovery"
+            >
+              <Ionicons name="warning" size={18} color="#DC2626" />
+              <Text style={styles.recoveryLinkText}>
+                You have unresolved defaults. Tap to resolve.
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color="#DC2626" />
+            </TouchableOpacity>
+          )}
+
           {/* Streak Card */}
           {contributionStreak > 0 && (
             <View style={styles.streakCard}>
@@ -428,6 +452,24 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
+  },
+  recoveryLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  recoveryLinkText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#991B1B",
   },
   streakCard: {
     backgroundColor: "#FEF3C7",
