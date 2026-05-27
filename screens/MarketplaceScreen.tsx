@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, RefreshControl, Alert,
+  TextInput, RefreshControl,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 import { useMarketplaceStores, type StoreCategory, type MarketplaceStore } from "../hooks/useMarketplace";
 
 const CATEGORIES: { key: StoreCategory | "all"; icon: string; label: string; color: string }[] = [
@@ -27,7 +28,7 @@ const BADGE_CONFIG: Record<string, { label: string; color: string; icon: string 
 };
 
 export default function MarketplaceScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useTypedNavigation();
   const [selectedCategory, setSelectedCategory] = useState<StoreCategory | "all">("all");
   const [searchText, setSearchText] = useState("");
 
@@ -44,7 +45,7 @@ export default function MarketplaceScreen() {
       <TouchableOpacity
         key={store.id}
         style={styles.storeCard}
-        onPress={() => navigation.navigate("StoreDetail", { storeId: store.id })}
+        onPress={() => navigation.navigate(Routes.StoreDetail, { storeId: store.id })}
       >
         {store.isFeatured && (
           <View style={styles.featuredBadge}>
@@ -118,7 +119,7 @@ export default function MarketplaceScreen() {
           </View>
           <TouchableOpacity
             style={styles.addButton}
-            onPress={() => navigation.navigate("StoreApplication")}
+            onPress={() => navigation.navigate(Routes.StoreApplication)}
           >
             <Ionicons name="add" size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -204,7 +205,7 @@ export default function MarketplaceScreen() {
               </Text>
               <TouchableOpacity
                 style={styles.emptyAction}
-                onPress={() => navigation.navigate("StoreApplication")}
+                onPress={() => navigation.navigate(Routes.StoreApplication)}
               >
                 <Text style={styles.emptyActionText}>List My Business</Text>
               </TouchableOpacity>
@@ -214,15 +215,12 @@ export default function MarketplaceScreen() {
           {stores.filter(s => !s.isFeatured || selectedCategory !== "all").map(renderStoreCard)}
         </View>
 
-        {/* Request a Provider — Phase 0 nav cleanup: button held with toast
-            until RequestProvider screen is built. Was a dead-nav target per
-            docs/audit/32. */}
+        {/* Request a Provider — restored to real navigation after the
+            RequestProviderScreen landed in commit d25e290. The Phase 0
+            holding-pattern Alert is no longer needed. */}
         <TouchableOpacity
           style={styles.requestCard}
-          onPress={() => Alert.alert(
-            "Request a Provider — Coming Soon",
-            "We're building the provider-request flow. For now, share your needs with your circle organizer."
-          )}
+          onPress={() => navigation.navigate(Routes.RequestProvider)}
         >
           <Ionicons name="hand-right-outline" size={24} color="#00C6AE" />
           <View style={{ flex: 1 }}>
