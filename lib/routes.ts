@@ -178,6 +178,7 @@ export const Routes = {
   Signup: "Signup",
   Splash: "Splash",
   StoreApplication: "StoreApplication",
+  StoreBookings: "StoreBookings",
   StoreDetail: "StoreDetail",
   StressScoreDashboard: "StressScoreDashboard",
   SupportDream: "SupportDream",

@@ -196,6 +196,7 @@ import RequestProviderScreen from "./screens/RequestProviderScreen";
 import EditStoreScreen from "./screens/EditStoreScreen";
 import ManageServicesScreen from "./screens/ManageServicesScreen";
 import ServiceFormScreen from "./screens/ServiceFormScreen";
+import StoreBookingsScreen from "./screens/StoreBookingsScreen";
 import type { StoreService } from "./services/MarketplaceEngine";
 
 export type RootStackParamList = {
@@ -383,6 +384,7 @@ export type RootStackParamList = {
   OwnerDashboard: { storeId: string };
   ManageServices: { storeId: string };
   ServiceForm: { storeId: string; service?: StoreService };
+  StoreBookings: { storeId: string };
   MarketInsight: { city?: string; category?: string };
   RequestProvider: undefined;
   WebView: { url: string; title?: string; onComplete?: () => void };
@@ -670,6 +672,10 @@ function MarketStackScreen() {
         component={ServiceFormScreen}
         options={{ presentation: 'modal' }}
       />
+      {/* Store-owner booking management — closes 2 dead `StoreBookings`
+          targets from OwnerDashboardScreen's "Bookings" tile and the
+          "See All" link on the Recent Bookings section. */}
+      <MarketStack.Screen name="StoreBookings" component={StoreBookingsScreen} />
     </MarketStack.Navigator>
   );
 }

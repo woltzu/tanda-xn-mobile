@@ -155,7 +155,7 @@ export default function OwnerDashboardScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionCard}
-                onPress={() => navigation.navigate("StoreBookings", { storeId })}
+                onPress={() => navigation.navigate(Routes.StoreBookings, { storeId })}
               >
                 <View style={[styles.actionIcon, { backgroundColor: "#FCE7F3" }]}>
                   <Ionicons name="calendar-outline" size={22} color="#EC4899" />
@@ -169,7 +169,7 @@ export default function OwnerDashboardScreen() {
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
                   <Text style={styles.sectionTitle}>Recent Bookings</Text>
-                  <TouchableOpacity onPress={() => navigation.navigate("StoreBookings", { storeId })}>
+                  <TouchableOpacity onPress={() => navigation.navigate(Routes.StoreBookings, { storeId })}>
                     <Text style={styles.seeAll}>See All</Text>
                   </TouchableOpacity>
                 </View>
