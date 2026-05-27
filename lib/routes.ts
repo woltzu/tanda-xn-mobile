@@ -117,6 +117,7 @@ export const Routes = {
   LinkedAccounts: "LinkedAccounts",
   LoanApplication: "LoanApplication",
   LoanCalculator: "LoanCalculator",
+  LoanDashboard: "LoanDashboard",
   LoanDetails: "LoanDetails",
   LoanMarketplace: "LoanMarketplace",
   Login: "Login",

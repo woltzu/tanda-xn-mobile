@@ -8,13 +8,10 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import { StackNavigationProp } from "@react-navigation/stack";
-import { RootStackParamList } from "../App";
+import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 import { useLoan, LOAN_PRODUCTS, LoanProduct, LoanType, ELIGIBILITY_TIERS } from "../context/AdvanceContext";
 import { useXnScore } from "../context/XnScoreContext";
-
-type LoanMarketplaceNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const TYPE_LABELS: Record<LoanType, { label: string; color: string; icon: string }> = {
   small: { label: "Quick", color: "#10B981", icon: "flash" },
@@ -23,7 +20,7 @@ const TYPE_LABELS: Record<LoanType, { label: string; color: string; icon: string
 };
 
 export default function LoanMarketplaceScreen() {
-  const navigation = useNavigation<LoanMarketplaceNavigationProp>();
+  const navigation = useTypedNavigation();
   const { getEligibility, getAvailableProducts, activeLoans, getTotalOutstanding } = useLoan();
   const { score } = useXnScore();
 
@@ -65,10 +62,10 @@ export default function LoanMarketplaceScreen() {
 
   const handleProductPress = (product: LoanProduct) => {
     if (isProductAvailable(product)) {
-      navigation.navigate("LoanApplication", { productId: product.id });
+      navigation.navigate(Routes.LoanApplication, { productId: product.id });
     } else {
       // Show requirements
-      navigation.navigate("LoanDetails" as any, { loanId: product.id });
+      navigation.navigate(Routes.LoanDetails, { loanId: product.id });
     }
   };
 
@@ -171,7 +168,7 @@ export default function LoanMarketplaceScreen() {
             <Text style={styles.headerTitle}>Loan Marketplace</Text>
             <TouchableOpacity
               style={styles.calculatorButton}
-              onPress={() => navigation.navigate("LoanCalculator")}
+              onPress={() => navigation.navigate(Routes.LoanCalculator)}
             >
               <Ionicons name="calculator-outline" size={22} color="#FFFFFF" />
             </TouchableOpacity>
@@ -204,7 +201,7 @@ export default function LoanMarketplaceScreen() {
           {activeLoans.length > 0 && (
             <TouchableOpacity
               style={styles.activeLoansBar}
-              onPress={() => navigation.navigate("LoanDashboard")}
+              onPress={() => navigation.navigate(Routes.LoanDashboard)}
             >
               <View style={styles.activeLoansLeft}>
                 <Ionicons name="wallet" size={18} color="#F59E0B" />
@@ -268,7 +265,7 @@ export default function LoanMarketplaceScreen() {
           {/* How It Works */}
           <TouchableOpacity
             style={styles.howItWorksCard}
-            onPress={() => navigation.navigate("AdvanceExplanation")}
+            onPress={() => navigation.navigate(Routes.AdvanceExplanation)}
           >
             <View style={styles.howItWorksLeft}>
               <Ionicons name="help-circle" size={24} color="#00C6AE" />
@@ -316,7 +313,7 @@ export default function LoanMarketplaceScreen() {
                   </View>
                   <TouchableOpacity
                     style={styles.unlockButton}
-                    onPress={() => navigation.navigate("XnScoreDashboard")}
+                    onPress={() => navigation.navigate(Routes.XnScoreDashboard)}
                   >
                     <Text style={styles.unlockButtonText}>View XnScore Tips</Text>
                     <Ionicons name="arrow-forward" size={16} color="#0A2342" />

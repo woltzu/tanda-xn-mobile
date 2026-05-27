@@ -59,6 +59,7 @@ import LoanMarketplaceScreen from "./screens/LoanMarketplaceScreen";
 import LoanApplicationScreen from "./screens/LoanApplicationScreen";
 import LoanDetailsScreen from "./screens/LoanDetailsScreen";
 import LoanCalculatorScreen from "./screens/LoanCalculatorScreen";
+import LoanDashboardScreen from "./screens/LoanDashboardScreen";
 import GoalsHubScreen from "./screens/GoalsHubScreen";
 import CreateGoalScreen from "./screens/CreateGoalScreen";
 import GoalDetailsScreen from "./screens/GoalDetailsScreen";
@@ -310,6 +311,7 @@ export type RootStackParamList = {
   LoanApplication: { productId: string };
   LoanDetails: { loanId: string };
   LoanCalculator: undefined;
+  LoanDashboard: undefined;
   // Savings Goals Flow
   GoalsHub: undefined;
   CreateGoal: { goalType?: string };
@@ -469,6 +471,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="LoanApplication" component={LoanApplicationScreen} />
       <HomeStack.Screen name="LoanDetails" component={LoanDetailsScreen} />
       <HomeStack.Screen name="LoanCalculator" component={LoanCalculatorScreen} />
+      <HomeStack.Screen name="LoanDashboard" component={LoanDashboardScreen} />
       <HomeStack.Screen name="XnScoreDashboard" component={XnScoreDashboardScreen} />
       <HomeStack.Screen name="XnScoreHistory" component={XnScoreHistoryScreen} />
       <HomeStack.Screen name="SelectCircleContribution" component={SelectCircleContributionScreen} />
