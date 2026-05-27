@@ -5,7 +5,80 @@
 
 ---
 
-## Bug B — "Link a Bank" → Edge Function returns non-2xx
+## Bug B — "Link a Bank" → Edge Function returns non-2xx — RESOLVED
+
+**Status:** Resolved at diagnosis (2026-05-26). **No code change needed.** Stripe Connect was simply not enabled on the Stripe account.
+
+### Resolution (from live dashboard logs after device tap)
+
+Pulled the function's logs from the Supabase Dashboard (`Functions → create-connect-account → Logs`) while tapping "Link a Bank" on device. The function ran cleanly and Stripe rejected the `accounts.create` call with:
+
+```
+[create-connect-account] stripe.accounts.create failed: You can only create
+new accounts if you've signed up for Connect, which you can do at
+https://dashboard.stripe.com/connect
+```
+
+That maps to Hypothesis #3 in the original ranked list (Stripe-side rejection). The function boots, authenticates, looks up the existing row, resolves the country, and only then tries to create the Stripe account — at which point Stripe returns its standard "Connect not enabled on this account" error message. The function correctly surfaces this as a 502 (Stripe's failure, not the function's) per its own design.
+
+### What this confirms about the Stage 1 function itself
+
+- ✅ Deployed and reachable
+- ✅ `STRIPE_SECRET_KEY` is set (the function reaches step 6 — if the secret were missing, it would never log that tag, it'd crash on boot)
+- ✅ Auth path works (JWT validated, `getUser()` succeeded, user has email)
+- ✅ `stripe_connected_accounts` table lookup works (step 5 passed cleanly)
+- ✅ Error reporting works (the `console.error` tag came through)
+- ✅ HTTP status mapping works (returned 502 as designed for Stripe-side failures)
+
+The function is structurally healthy. The blocker was external.
+
+### The one-time fix (dashboard-only, no code)
+
+Enable Connect on the Stripe account that owns the `STRIPE_SECRET_KEY` Supabase secret:
+1. https://dashboard.stripe.com/connect (in **test mode**, since `STRIPE_SECRET_KEY` is the test key per CLAUDE.md's Stripe section)
+2. Click through Connect signup. This is a Stripe-side toggle, not a code or config change in this repo.
+3. Once enabled, retry "Link a Bank" on device. The function should now reach step 6 successfully, create the Stripe Express account, write the row, and return an `onboardingUrl` for the device to open.
+
+### Stage 1 has never actually completed end-to-end
+
+This bug means every "Link a Bank" tap since the Stage 1 function was deployed has hit the Stripe-Connect-not-enabled wall and returned 502. **No member has ever successfully created a Stripe Connect account through this app.** The DB table `stripe_connected_accounts` is presumably empty in production (confirmable with `SELECT count(*) FROM public.stripe_connected_accounts;` — expected: 0, or whatever count from manual test inserts, but no real flow-created rows).
+
+Once Connect is enabled on the dashboard, **the real Stage 1 acceptance test is now runnable for the first time**:
+
+1. Open the app as an authenticated user.
+2. Linked Accounts → "Link a Bank".
+3. Stripe-hosted onboarding page should open in the device's browser (the `onboardingUrl` returned by step 6).
+4. Complete onboarding (test-mode shortcuts apply).
+5. Stripe's webhook (`stripe-webhook` Edge Function, `account.updated` branch) should fire and update the row's `onboarding_status` / `payouts_enabled`.
+6. Re-open the app → Linked Accounts should show the linked bank account.
+7. **Verification queries:**
+   ```sql
+   SELECT id, member_id, stripe_account_id, onboarding_status,
+          payouts_enabled, charges_enabled, last_account_event_at
+   FROM public.stripe_connected_accounts
+   ORDER BY created_at DESC LIMIT 5;
+   ```
+   Expect one new row per linking attempt, with `stripe_account_id` starting `acct_...`, `onboarding_status` transitioning `pending → in_progress → complete`, and `last_account_event_at` populated once the webhook fires.
+
+This is the test that closes out Stage 1 properly. It hasn't been runnable until now because the Stripe-side prerequisite (Connect signup) was missing.
+
+### Original ranked hypotheses — what each one actually was
+
+For the record, the 5 hypotheses listed earlier in this doc map to the live log this way:
+
+| Original hypothesis | What it would have shown | Outcome |
+|---|---|---|
+| **#1** `STRIPE_SECRET_KEY` missing | No log entry, generic 500 | ❌ Not this |
+| **#2** Function not deployed | No log entry at all, 404 | ❌ Not this |
+| **#3** Stripe live/test mismatch or Stripe rejection | `[create-connect-account] stripe.accounts.create failed: <Stripe message>` | ✅ **This was it** — Stripe-side rejection, not key mismatch but Connect-not-enabled |
+| **#4** Unsupported country code | Same tag as #3 with country-related message | ❌ Not this |
+| **#5** Schema CHECK violation on INSERT | `[create-connect-account] DB insert failed for account` (function never reaches this) | ❌ Not this |
+
+So the grep cheat sheet did what it was designed to do — pointed straight at the Stripe-side cause via the specific tag, no guessing.
+
+---
+
+## Bug B — "Link a Bank" → Edge Function returns non-2xx (ORIGINAL DIAGNOSIS, kept for record)
 
 **Priority:** Highest — this tells you whether the Stage 1 Connect function is healthy.
 
@@ -111,7 +184,107 @@ If you see **none of these** but the function still 5xxs, that's hypothesis #1 (
 
 ---
 
-## Bug A — Add Currency Wallet "only offers CAD"
+## Bug A — Add Currency Wallet picker tap does nothing (RE-DIAGNOSED)
+
+**Status:** Confirmed real bug after device verification. The earlier "UX confusion" theory is **wrong** — the user tapped the CAD button and it produced **no expansion, no list, no modal**. Re-investigating reveals a different root cause: nested React Native Modal.
+
+### What the device confirmed
+
+Tap CAD button (the `<CurrencySelector>` button rendered inside the "Add Currency Wallet" outer modal) → nothing happens. No animation, no inner modal, no error. The tap registers (since `TouchableOpacity` always provides a touch-down opacity flash) but the expected inner picker modal never appears.
+
+### Root cause — nested Modal on iOS
+
+The structure is `<Modal>` inside `<Modal>`:
+
+**`WalletScreen.tsx:451-485`** renders the outer "Add Currency Wallet" modal:
+```jsx
+<Modal
+  visible={showAddCurrencyModal}
+  animationType="slide"
+  transparent={true}
+  ...
+>
+  <View style={styles.modalOverlay}>
+    <View style={styles.modalContent}>
+      ...
+      <CurrencySelector
+        selectedCurrency={selectedNewCurrency}
+        onSelect={setSelectedNewCurrency}
+        label="Currency"
+      />
+      ...
+```
+
+**`components/CurrencySelector.tsx:32-129`** renders the inner picker modal (non-compact mode):
+```jsx
+const [modalVisible, setModalVisible] = useState(false);
+...
+<TouchableOpacity
+  onPress={() => !disabled && setModalVisible(true)}  // ← THIS fires on tap
+  ...
+>
+  ...the CAD/NGN/etc. button visual...
+</TouchableOpacity>
+
+<CurrencyModal visible={modalVisible} ... />        // ← This Modal tries to open but iOS blocks it
+```
+
+When the user taps the CAD button:
+1. `onPress` correctly fires `setModalVisible(true)`. React state updates. The inner `<CurrencyModal>` component's `visible` prop changes from `false` to `true`.
+2. React Native's `<Modal>` calls into the native iOS layer to present the modal via `UIViewController.present(_:animated:)`.
+3. **iOS rejects the call silently.** Apple's `UIViewController` only allows one modal presentation at a time per view controller, and the outer `<Modal>` is already presented on the same root VC. The inner modal's `present(...)` call is dropped without an exception.
+4. The user sees nothing change. No error in the JS console, no error in the native log (unless you have verbose `UIViewController` logging enabled).
+
+This is a [known React Native limitation](https://github.com/facebook/react-native/issues/26892) — multiple Modals on the same hierarchy don't compose on iOS the way they do on Android (where Android renders modals as overlay layers, not VC presentations).
+
+### Why my earlier "UX confusion" theory was wrong
+
+I assumed tapping the CurrencySelector button would open the inner modal — which is what the code says happens *outside* of a parent modal context. I didn't account for the WalletScreen rendering it inside its own `<Modal>`. The code is correct; the integration is broken. UX confusion would have meant "user looked at button, didn't tap" — but the user did tap. Different bug class entirely.
+
+### How to verify this is the cause (read-only, optional)
+
+`CurrencySelector` is also used by `screens/MakeContributionScreen.tsx`, but there it uses a different exported component — `QuickCurrencyPicker` (line 386), which renders a horizontal scroll inline, not a modal-opening button. So MakeContributionScreen is **not** a counter-example to the nested-modal theory.
+
+A direct test would be: tap the same `<CurrencySelector>` in any context where it's NOT inside a `<Modal>`. If it works there, the nested-modal hypothesis is confirmed. Currently no such context exists in the codebase (WalletScreen is the only consumer of the full `<CurrencySelector>`), so this would require a temporary test render.
+
+### Fix options
+
+**(A) Remove the outer "Add Currency Wallet" wrapper modal.** Instead, the "+ Add Currency" tap directly opens `<CurrencySelector>`'s internal picker. The outer modal currently adds only a header ("Add Currency Wallet"), a subtitle, the selector, and an "Add NGN Wallet" CTA — most of which can be redesigned into the picker's own footer / header.
+
+- **Pros:** Eliminates the nesting entirely. Cleanest fix. Removes a redundant modal layer that the user never needed.
+- **Cons:** Requires moving the "Add Wallet" CTA into the picker, which currently lives in `WalletScreen` not `CurrencySelector`. Either pass an `onConfirm` callback to `CurrencySelector`, or call `addCurrencyWallet` directly in the picker's `onSelect`. Touches 2 files but is a clean refactor.
+
+**(B) Switch the inner Modal to inline rendering.** Make `<CurrencySelector>` render the picker list **inline** (in-place expansion) when `modalVisible` is true, instead of using a native `<Modal>`. The picker becomes a collapsible section inside the parent modal's scroll, no nested modal.
+
+- **Pros:** Minimal change to `CurrencySelector` — just replace `<Modal>` with a conditionally rendered `<View>` with absolute positioning or `flex` integration.
+- **Cons:** Changes the UX everywhere `<CurrencySelector>` is rendered, including any future non-nested contexts. If the picker is a long list, inline expansion can push surrounding UI badly.
+
+**(C) Replace `react-native`'s `<Modal>` with `react-native-modal` (community library).** This library renders modals as positioned overlays in the React tree instead of via UIKit presentation, so nesting works natively.
+
+- **Pros:** Drop-in API compatibility. Solves the general problem (any current or future nested modal will work).
+- **Cons:** Adds a dependency. Requires touching both modals (outer and inner). Bundles a fair amount of code (~50KB) for what could be solved with refactor alone.
+
+**(D) State-machine the two modals so only one is open at a time.** Tapping the CurrencySelector button closes the outer "Add Currency Wallet" modal first, then opens the picker. After picking, re-opens the outer modal with the new value selected. Convoluted UX (user sees flash, modal closes, modal opens) and easy to get wrong.
+
+- Not recommended.
+
+### Recommendation
+
+**Option A.** The outer modal is doing very little — a header, a subtitle, and an "Add Wallet" CTA. All three can move into `<CurrencySelector>`'s own modal (either by extending the component's props with `onConfirm` / `confirmLabel`, or by replacing the wrapper entirely with a direct invocation of the existing internal modal). Total touch: `WalletScreen.tsx` and `components/CurrencySelector.tsx`, ~30 lines of net change.
+
+Option B would also work and is slightly smaller in code change, but introduces an inline-expansion UX pattern that other call sites might not want.
+
+### Adjacent observation while re-reading
+
+`WalletScreen.tsx:32` sets `selectedNewCurrency` default to `"NGN"`. That's a sensible default for a Nigerian user but irrelevant for the Francophone West African beachhead. Once Bug A is fixed and the picker actually opens, consider defaulting to:
+- `preferences.language.code === 'fr' && country in ['CI','SN','ML','BF','BJ','TG','NE'] ? 'XOF' : 'NGN'` — naive but covers the Francophone diaspora case
+- Or, more robustly, source from `CurrencyContext.primaryCurrency` which can be inferred from origin country in PreferencesContext
+
+Not part of the bug fix; flagging because it's adjacent code that's about to be touched.
+
+---
+
+## Bug A — Add Currency Wallet "only offers CAD" (ORIGINAL DIAGNOSIS, kept for record)
 
 **Priority:** Medium. The data and code look correct; this may be a UX confusion rather than a data bug. Worth a screenshot before committing to a fix.
 
@@ -282,8 +455,8 @@ This is a Supabase-client-side error from `postgrest-js` — it inspects its cac
 
 | Bug | Status | Likely root cause | Action this session |
 |---|---|---|---|
-| **B** — Link a Bank non-2xx | Confirmed hitting Stage 1 `create-connect-account` EF | `STRIPE_SECRET_KEY` not propagated to the function's secrets, OR function not deployed, OR Stripe live/test-mode mismatch | Pull logs (instructions above) — that single check distinguishes between all 5 ranked hypotheses |
-| **A** — Currency picker only CAD | Picker code + data look correct | Most likely UX confusion: the selector button shows one currency; user didn't tap it to expand. Need screenshot to confirm. | Screenshot, then we decide if it's a UX fix or a hidden-second-picker hunt |
+| **B** — Link a Bank non-2xx | ✅ **RESOLVED at diagnosis** — Stripe Connect not enabled on the test-mode Stripe account | Stripe-side prerequisite, not a code bug | Enable Connect at https://dashboard.stripe.com/connect; **no code change**. Then run the Stage 1 acceptance test for the first time. |
+| **A** — Currency picker tap does nothing | ✅ Confirmed real bug — nested React Native Modal | Inner `<Modal>` inside `CurrencySelector` can't open because outer "Add Currency Wallet" `<Modal>` in `WalletScreen` already holds the iOS UIViewController. Earlier "UX confusion" theory was wrong. | Fix option A: remove outer modal wrapper, open `CurrencySelector`'s picker directly. ~30 lines across 2 files. |
 | **C** — Add Card stub | Confirmed deliberate stub | Card collection feature not built yet | Optional: hide the button or leave the alert |
 | **P2** — Add Funds: mock + schema miss | Confirmed reproducible (live Metro capture 2026-05-26) | Mock `StripeConnectEngine.createPaymentIntent` still active; writes to non-existent `client_secret` column on `stripe_payment_intents` | **None** — entangled with Stage 2; deferred to Stage 2 design |
 
