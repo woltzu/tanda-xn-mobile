@@ -5,7 +5,8 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 import { useAuth } from "../context/AuthContext";
 import { useKYCStatus, useKYCActions } from "../hooks/useKYCVerification";
 
@@ -45,7 +46,7 @@ const VERIFICATION_METHODS = [
 ];
 
 export default function KYCVerificationScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useTypedNavigation();
   const { user } = useAuth();
   const [startingMethod, setStartingMethod] = useState<string | null>(null);
 
@@ -75,18 +76,14 @@ export default function KYCVerificationScreen() {
     try {
       const result = await initializeVerification(user.id, method);
       if (result?.inquiryUrl) {
-        // KYC web-view flow is not yet wired (no WebViewScreen registered in
-        // App.tsx; was a dead-nav target per docs/audit/32). Surface the URL
-        // back to the user via a "Coming soon" alert and log the URL so we
-        // can resume the flow when the WebView screen is built. Phase 0 of
-        // navigation cleanup intentionally chose the non-destructive path —
-        // verification still kicks off server-side; only the in-app browser
-        // step is deferred.
-        console.log("[KYCVerification] inquiryUrl pending WebView screen:", result.inquiryUrl);
-        Alert.alert(
-          "KYC Verification — Coming Soon",
-          "Identity verification is being set up. Your verification has been initiated; you'll be notified when the in-app step is ready.",
-        );
+        // WebViewScreen is now wired; navigate into it with the provider's
+        // inquiry URL. Phase 0's "Coming Soon" Alert was the holding pattern
+        // before this screen existed. Title kept consistent with what KYC
+        // providers expect users to see in the header.
+        navigation.navigate(Routes.WebView, {
+          url: result.inquiryUrl,
+          title: "KYC Verification",
+        });
       } else if (result?.inquiryId) {
         Alert.alert("Verification Started", "Your verification is being processed. You will be notified when complete.");
         refresh();

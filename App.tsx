@@ -191,6 +191,8 @@ import DocumentSubmissionScreen from "./screens/DocumentSubmissionScreen";
 import TripPaymentScreen from "./screens/TripPaymentScreen";
 import TripPublishSuccessScreen from "./screens/TripPublishSuccessScreen";
 import ActivityEditorScreen from "./screens/ActivityEditorScreen";
+import WebViewScreen from "./screens/WebViewScreen";
+import RequestProviderScreen from "./screens/RequestProviderScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -376,6 +378,7 @@ export type RootStackParamList = {
   OwnerDashboard: { storeId: string };
   MarketInsight: { city?: string; category?: string };
   RequestProvider: undefined;
+  WebView: { url: string; title?: string; onComplete?: () => void };
   // Trip Circle Flow
   ProviderDiscovery: undefined;
   ProviderProfileSetup: undefined;
@@ -644,6 +647,9 @@ function MarketStackScreen() {
       <MarketStack.Screen name="TripPayment" component={TripPaymentScreen} />
       <MarketStack.Screen name="TripPublishSuccess" component={TripPublishSuccessScreen} />
       <MarketStack.Screen name="ActivityEditor" component={ActivityEditorScreen} />
+      {/* Provider-request form — closes the dead RequestProvider nav target
+          that lived in RootStackParamList without a screen attached. */}
+      <MarketStack.Screen name="RequestProvider" component={RequestProviderScreen} />
     </MarketStack.Navigator>
   );
 }
@@ -790,6 +796,14 @@ function AppContent() {
           <Stack.Screen name="QuickJoinPaymentSuccess" component={QuickJoinPaymentSuccessScreen} />
           {/* Optional password setup right after first magic-link join */}
           <Stack.Screen name="SetPassword" component={SetPasswordScreen} />
+          {/* Generic in-app web view (KYC inquiry forms, terms pages, etc.).
+              Modal presentation so it overlays the current tab without
+              disturbing the stack underneath. */}
+          <Stack.Screen
+            name="WebView"
+            component={WebViewScreen}
+            options={{ presentation: 'modal' }}
+          />
         </Stack.Navigator>
       </View>
     </TouchableWithoutFeedback>
