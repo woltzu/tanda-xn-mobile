@@ -11,7 +11,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useNavigation } from "@react-navigation/native";
+import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
 import { RootStackParamList } from "../App";
@@ -20,7 +21,7 @@ import { useAuth } from "../context/AuthContext";
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, "Login">;
 
 export default function LoginScreen() {
-  const navigation = useNavigation<LoginScreenNavigationProp>();
+  const navigation = useTypedNavigation();
   const { signIn, isLoading } = useAuth();
   const [loginMethod, setLoginMethod] = useState<"email" | "phone">("email");
   const [identifier, setIdentifier] = useState("");
@@ -203,7 +204,7 @@ export default function LoginScreen() {
               <Text style={styles.rememberText}>Remember me</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => navigation.navigate("ForgotPassword")}>
+            <TouchableOpacity onPress={() => navigation.navigate(Routes.ForgotPassword)}>
               <Text style={styles.forgotText}>Forgot password?</Text>
             </TouchableOpacity>
           </View>
@@ -247,7 +248,7 @@ export default function LoginScreen() {
               Don't have an account?{" "}
               <Text
                 style={styles.signupLink}
-                onPress={() => navigation.navigate("Signup")}
+                onPress={() => navigation.navigate(Routes.Signup)}
               >
                 Sign Up
               </Text>

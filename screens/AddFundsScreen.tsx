@@ -13,7 +13,8 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useWallet } from "../context/WalletContext";
@@ -80,7 +81,7 @@ const FUNDING_METHODS: FundingMethod[] = [
 const QUICK_AMOUNTS = [25, 50, 100, 250, 500];
 
 export default function AddFundsScreen() {
-  const navigation = useNavigation<AddFundsNavigationProp>();
+  const navigation = useTypedNavigation();
   const { addFunds } = useWallet();
   const { paymentMethods, isLoadingMethods, createDeposit, presentPaymentSheet, isStripeReady, makeTestCharge } = usePayment();
   const [amount, setAmount] = useState("");
@@ -147,7 +148,7 @@ export default function AddFundsScreen() {
       await addFunds(numericAmount, selectedMethodData?.name || "");
 
       // Navigate to success screen with real transaction info
-      navigation.navigate("WalletTransactionSuccess", {
+      navigation.navigate(Routes.WalletTransactionSuccess, {
         type: "add",
         amount: numericAmount,
         method: selectedMethodData?.name || "",
@@ -372,7 +373,7 @@ export default function AddFundsScreen() {
                   <Text style={{ fontSize: 13, color: "#6B7280", marginBottom: 8 }}>
                     No saved methods for this type
                   </Text>
-                  <TouchableOpacity onPress={() => navigation.navigate("LinkedAccounts" as any)}>
+                  <TouchableOpacity onPress={() => navigation.navigate(Routes.LinkedAccounts)}>
                     <Text style={{ fontSize: 14, fontWeight: "600", color: "#00C6AE" }}>
                       + Add a payment method
                     </Text>

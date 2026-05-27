@@ -10,7 +10,8 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
 import { RootStackParamList } from "../App";
@@ -19,7 +20,7 @@ import { useAuth } from "../context/AuthContext";
 type SignupScreenNavigationProp = StackNavigationProp<RootStackParamList, "Signup">;
 
 export default function SignupScreen() {
-  const navigation = useNavigation<SignupScreenNavigationProp>();
+  const navigation = useTypedNavigation();
   const { signUp, isLoading } = useAuth();
 
   const [formData, setFormData] = useState({
@@ -77,7 +78,7 @@ export default function SignupScreen() {
       try {
         await signUp(formData.email, formData.password, formData.fullName, formData.phone);
         // Navigate to email verification screen instead of OTP
-        navigation.navigate("EmailVerification" as any, { email: formData.email });
+        navigation.navigate(Routes.EmailVerification, { email: formData.email });
       } catch (err: any) {
         // Show specific error messages from Supabase
         let errorMessage = "Failed to create account. Please try again.";
@@ -337,7 +338,7 @@ export default function SignupScreen() {
           {/* Login Link */}
           <TouchableOpacity
             style={styles.loginLinkContainer}
-            onPress={() => navigation.navigate("Login")}
+            onPress={() => navigation.navigate(Routes.Login)}
           >
             <Text style={styles.loginText}>
               Already have an account?{" "}

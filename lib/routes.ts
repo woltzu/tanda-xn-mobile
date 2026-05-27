@@ -1,0 +1,201 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// lib/routes.ts — Typed route name registry
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// Single source of truth for every route name registered in App.tsx
+// (Stack.Screen / Tab.Screen). Two purposes:
+//
+//   1. Compile-time safety. Use Routes.Foo in place of "Foo" string literals
+//      at navigation.navigate() call sites — typos become TypeScript errors
+//      instead of runtime "no screen named X" warnings. The RootRoute type
+//      below is the union of every valid string literal.
+//
+//   2. CI verification. scripts/check-dead-routes.sh greps for
+//      navigation.navigate("X") calls anywhere in the codebase, extracts X,
+//      and fails if X is not present here. Catches typos even in code that
+//      hasn't migrated to Routes.X yet.
+//
+// To add a new route: register it in App.tsx as a <Stack.Screen> or
+// <Tab.Screen>, then add the matching entry below. Both must agree or the
+// check-dead-routes.sh script will fail CI.
+//
+// To delete a route: remove the <Stack.Screen> registration AND the entry
+// here. The check-dead-routes.sh script will then flag any remaining
+// navigate("...") call sites that still reference it — those need to be
+// fixed or removed before the registration disappears from production.
+//
+// Generated from App.tsx on 2026-05-27. Kept current by hand thereafter.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Every route name registered in the app, keyed by name. Use `Routes.X` at
+ * navigation.navigate() call sites instead of string literals.
+ */
+export const Routes = {
+  AboutApp: "AboutApp",
+  AccessRestricted: "AccessRestricted",
+  Action: "Action",
+  ActiveSessions: "ActiveSessions",
+  ActivityEditor: "ActivityEditor",
+  AddFunds: "AddFunds",
+  AddRecipient: "AddRecipient",
+  AdminSettings: "AdminSettings",
+  AdvanceDetails: "AdvanceDetails",
+  AdvanceExplanation: "AdvanceExplanation",
+  AdvanceHub: "AdvanceHub",
+  AdvanceRepayment: "AdvanceRepayment",
+  AuditTrail: "AuditTrail",
+  AuthCallback: "AuthCallback",
+  BecomeElder: "BecomeElder",
+  BookService: "BookService",
+  BulkInvites: "BulkInvites",
+  ChangePassword: "ChangePassword",
+  CircleDetail: "CircleDetail",
+  CircleInvite: "CircleInvite",
+  CircleVisualizer: "CircleVisualizer",
+  CircleVoting: "CircleVoting",
+  Circles: "Circles",
+  CirclesMain: "CirclesMain",
+  CloseCircle: "CloseCircle",
+  Community: "Community",
+  CommunityBrowser: "CommunityBrowser",
+  CommunityHub: "CommunityHub",
+  CommunityMain: "CommunityMain",
+  CommunityMemory: "CommunityMemory",
+  ConflictAlert: "ConflictAlert",
+  ContributionSuccess: "ContributionSuccess",
+  CreateCircleDetails: "CreateCircleDetails",
+  CreateCircleInvite: "CreateCircleInvite",
+  CreateCircleSchedule: "CreateCircleSchedule",
+  CreateCircleStart: "CreateCircleStart",
+  CreateCircleSuccess: "CreateCircleSuccess",
+  CreateCommunity: "CreateCommunity",
+  CreateDreamPost: "CreateDreamPost",
+  CreateGathering: "CreateGathering",
+  CreateGoal: "CreateGoal",
+  CreateTripListing: "CreateTripListing",
+  CreateTripWizard: "CreateTripWizard",
+  CreditProfile: "CreditProfile",
+  CrossCircleLending: "CrossCircleLending",
+  CycleTimeline: "CycleTimeline",
+  Dashboard: "Dashboard",
+  DefaultRecovery: "DefaultRecovery",
+  DepositToGoal: "DepositToGoal",
+  DocumentSubmission: "DocumentSubmission",
+  DomesticSendMoney: "DomesticSendMoney",
+  DreamFeed: "DreamFeed",
+  DynamicPayout: "DynamicPayout",
+  EarlyIntervention: "EarlyIntervention",
+  EditGoal: "EditGoal",
+  ElderDashboard: "ElderDashboard",
+  ElderTrainingHub: "ElderTrainingHub",
+  EmailVerification: "EmailVerification",
+  ExportData: "ExportData",
+  FeedSettings: "FeedSettings",
+  ForgotPassword: "ForgotPassword",
+  Gatherings: "Gatherings",
+  GoalDetails: "GoalDetails",
+  GoalsHub: "GoalsHub",
+  GraduatedEntry: "GraduatedEntry",
+  GroupChat: "GroupChat",
+  HelpCenter: "HelpCenter",
+  Home: "Home",
+  HonorScoreOverview: "HonorScoreOverview",
+  HonorSystem: "HonorSystem",
+  HowCirclesWork: "HowCirclesWork",
+  InsurancePool: "InsurancePool",
+  ItineraryBuilder: "ItineraryBuilder",
+  JoinCircleByCode: "JoinCircleByCode",
+  JoinCircleConfirm: "JoinCircleConfirm",
+  JoinCircleSuccess: "JoinCircleSuccess",
+  JoinConfirm: "JoinConfirm",
+  KYCVerification: "KYCVerification",
+  LanguageRegion: "LanguageRegion",
+  LeaveCircle: "LeaveCircle",
+  LegalDocuments: "LegalDocuments",
+  LinkedAccounts: "LinkedAccounts",
+  LoanApplication: "LoanApplication",
+  LoanCalculator: "LoanCalculator",
+  LoanDetails: "LoanDetails",
+  LoanMarketplace: "LoanMarketplace",
+  Login: "Login",
+  MainTabs: "MainTabs",
+  MakeContribution: "MakeContribution",
+  ManageMembers: "ManageMembers",
+  Market: "Market",
+  MarketInsight: "MarketInsight",
+  MarketMain: "MarketMain",
+  Marketplace: "Marketplace",
+  MediationCase: "MediationCase",
+  MediationTools: "MediationTools",
+  MemberTripDashboard: "MemberTripDashboard",
+  MoodInsights: "MoodInsights",
+  MyTripStatus: "MyTripStatus",
+  NearYou: "NearYou",
+  NewArrivals: "NewArrivals",
+  NotificationPrefs: "NotificationPrefs",
+  NotificationsInbox: "NotificationsInbox",
+  OTP: "OTP",
+  OrganizerTripDashboard: "OrganizerTripDashboard",
+  OrganizerTripList: "OrganizerTripList",
+  OversightDashboard: "OversightDashboard",
+  OwnerDashboard: "OwnerDashboard",
+  PartialContribution: "PartialContribution",
+  ParticipantManager: "ParticipantManager",
+  PauseCircle: "PauseCircle",
+  PaymentHistory: "PaymentHistory",
+  PersonalInfo: "PersonalInfo",
+  PositionSwap: "PositionSwap",
+  PostComments: "PostComments",
+  PostDetail: "PostDetail",
+  PostToCommunity: "PostToCommunity",
+  PrivacySettings: "PrivacySettings",
+  ProfileMain: "ProfileMain",
+  ProviderDiscovery: "ProviderDiscovery",
+  ProviderProfileSetup: "ProviderProfileSetup",
+  ProviderTripDashboard: "ProviderTripDashboard",
+  ProviderVerification: "ProviderVerification",
+  QRCodeDisplay: "QRCodeDisplay",
+  QRScanner: "QRScanner",
+  QuickJoin: "QuickJoin",
+  QuickJoinPaymentSuccess: "QuickJoinPaymentSuccess",
+  QuickJoinPendingConfirmation: "QuickJoinPendingConfirmation",
+  Remittance: "Remittance",
+  ReportIssue: "ReportIssue",
+  RequestAdvance: "RequestAdvance",
+  ResetPassword: "ResetPassword",
+  SavedRecipients: "SavedRecipients",
+  ScoreBreakdown: "ScoreBreakdown",
+  SecuritySettings: "SecuritySettings",
+  SelectCircleContribution: "SelectCircleContribution",
+  SendMoney: "SendMoney",
+  SetPassword: "SetPassword",
+  Settings: "Settings",
+  Signup: "Signup",
+  Splash: "Splash",
+  StoreApplication: "StoreApplication",
+  StoreDetail: "StoreDetail",
+  StressScoreDashboard: "StressScoreDashboard",
+  SupportDream: "SupportDream",
+  TripDetail: "TripDetail",
+  TripPayment: "TripPayment",
+  TripPublicPage: "TripPublicPage",
+  TripPublishSuccess: "TripPublishSuccess",
+  TwoFactorAuth: "TwoFactorAuth",
+  UserDreamProfile: "UserDreamProfile",
+  VouchMember: "VouchMember",
+  VouchSystem: "VouchSystem",
+  WalletMain: "WalletMain",
+  WalletTransactionSuccess: "WalletTransactionSuccess",
+  Welcome: "Welcome",
+  Withdraw: "Withdraw",
+  WithdrawFromGoal: "WithdrawFromGoal",
+  XnScoreDashboard: "XnScoreDashboard",
+  XnScoreHistory: "XnScoreHistory",
+} as const;
+
+/**
+ * Union of every valid route name. Use in function signatures that take a
+ * navigation target — e.g., useTypedNavigation's `navigate(route: RootRoute)`.
+ */
+export type RootRoute = (typeof Routes)[keyof typeof Routes];

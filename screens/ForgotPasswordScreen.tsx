@@ -12,7 +12,8 @@ import {
   Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useNavigation } from "@react-navigation/native";
+import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
 import { RootStackParamList } from "../App";
@@ -21,7 +22,7 @@ import { supabase } from "../lib/supabase";
 type ForgotPasswordScreenNavigationProp = StackNavigationProp<RootStackParamList, "ForgotPassword">;
 
 export default function ForgotPasswordScreen() {
-  const navigation = useNavigation<ForgotPasswordScreenNavigationProp>();
+  const navigation = useTypedNavigation();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
@@ -123,7 +124,7 @@ export default function ForgotPasswordScreen() {
 
               <TouchableOpacity
                 style={styles.primaryButton}
-                onPress={() => navigation.navigate("Login")}
+                onPress={() => navigation.navigate(Routes.Login)}
               >
                 <Text style={styles.primaryButtonText}>Back to Login</Text>
               </TouchableOpacity>
@@ -195,7 +196,7 @@ export default function ForgotPasswordScreen() {
               {/* Back to Login */}
               <TouchableOpacity
                 style={styles.backToLogin}
-                onPress={() => navigation.navigate("Login")}
+                onPress={() => navigation.navigate(Routes.Login)}
               >
                 <Ionicons name="arrow-back" size={16} color="#00C6AE" />
                 <Text style={styles.backToLoginText}>Back to Login</Text>

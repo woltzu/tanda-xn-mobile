@@ -13,7 +13,8 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useWallet } from "../context/WalletContext";
@@ -73,7 +74,7 @@ const WITHDRAW_METHODS: WithdrawMethod[] = [
 ];
 
 export default function WithdrawScreen() {
-  const navigation = useNavigation<WithdrawNavigationProp>();
+  const navigation = useTypedNavigation();
   const { balance, withdraw } = useWallet();
   const { paymentMethods, createWithdrawal, isOnboarded, setupConnectedAccount } = usePayment();
   const [amount, setAmount] = useState("");
@@ -132,7 +133,7 @@ export default function WithdrawScreen() {
       await withdraw(numericAmount, selectedBankAccount?.us_bank_account?.bank_name || "Bank Account");
 
       // Navigate to success screen
-      navigation.navigate("WalletTransactionSuccess", {
+      navigation.navigate(Routes.WalletTransactionSuccess, {
         type: "withdraw",
         amount: numericAmount,
         method: selectedBankAccount?.us_bank_account?.bank_name || "Bank Account",
@@ -316,7 +317,7 @@ export default function WithdrawScreen() {
             {/* Add New Method */}
             <TouchableOpacity
               style={styles.addMethodButton}
-              onPress={() => navigation.navigate("LinkedAccounts" as any)}
+              onPress={() => navigation.navigate(Routes.LinkedAccounts)}
             >
               <Ionicons name="add-circle-outline" size={22} color="#00C6AE" />
               <Text style={styles.addMethodText}>Add New Bank Account</Text>
