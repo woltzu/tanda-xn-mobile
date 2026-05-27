@@ -77,8 +77,28 @@ export default function SignupScreen() {
     if (Object.keys(newErrors).length === 0) {
       try {
         await signUp(formData.email, formData.password, formData.fullName, formData.phone);
-        // Navigate to email verification screen instead of OTP
-        navigation.navigate(Routes.EmailVerification, { email: formData.email });
+
+        // ── KYC entry-point placeholder (Phase KYC-1) ─────────────────
+        // Phase KYC-2 will replace this hardcoded mock with a real
+        // verification-status read from the user_verification table
+        // (via a KycContext). The intended logic post-KYC-2 is:
+        //   1. Email verification (existing flow) completes
+        //   2. On first login, check user_verification.tier
+        //   3. If tier === 1 (no ID yet), route to KycStack/OnboardingWelcome
+        //      rather than MainTabs
+        // For Phase KYC-1, the default below is `false` so the existing
+        // EmailVerification → AuthCallback → MainTabs flow is preserved.
+        // To manually walk through the native KYC screens end-to-end,
+        // flip the constant below to `true` and complete a fresh signup.
+        const NEEDS_KYC_AFTER_SIGNUP = false;
+        if (NEEDS_KYC_AFTER_SIGNUP) {
+          navigation.replace(Routes.KycStack, {
+            screen: Routes.OnboardingWelcome,
+          });
+        } else {
+          // Navigate to email verification screen instead of OTP
+          navigation.navigate(Routes.EmailVerification, { email: formData.email });
+        }
       } catch (err: any) {
         // Show specific error messages from Supabase
         let errorMessage = "Failed to create account. Please try again.";

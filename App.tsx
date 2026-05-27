@@ -202,6 +202,22 @@ import ManageServicesScreen from "./screens/ManageServicesScreen";
 import ServiceFormScreen from "./screens/ServiceFormScreen";
 import StoreBookingsScreen from "./screens/StoreBookingsScreen";
 import type { StoreService } from "./services/MarketplaceEngine";
+// KYC native flow (Phase KYC-1) — 13 screens that replace the legacy
+// WebView-based KYC. Registered under the nested `KycStack`
+// navigator below, reachable via navigate('KycStack', { screen: ... }).
+import OnboardingWelcomeScreen from "./screens/OnboardingWelcomeScreen";
+import VerificationOptionsScreen from "./screens/VerificationOptionsScreen";
+import ITINEducationScreen from "./screens/ITINEducationScreen";
+import ITINApplicationHelpScreen from "./screens/ITINApplicationHelpScreen";
+import InternationalVerificationScreen from "./screens/InternationalVerificationScreen";
+import TaxIDEntryScreen from "./screens/TaxIDEntryScreen";
+import AccountTiersExplainedScreen from "./screens/AccountTiersExplainedScreen";
+import IDVerificationStartScreen from "./screens/IDVerificationStartScreen";
+import DocumentUploadScreen from "./screens/DocumentUploadScreen";
+import Tier2SuccessScreen from "./screens/Tier2SuccessScreen";
+import VerificationHubScreen from "./screens/VerificationHubScreen";
+import LimitedModeScreen from "./screens/LimitedModeScreen";
+import ITINPendingScreen from "./screens/ITINPendingScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -435,6 +451,43 @@ export type RootStackParamList = {
   DynamicPayout: { circleId: string };
   LegalDocuments: undefined;
   CircleVisualizer: { circleId: string };
+  // KYC native flow (Phase KYC-1). Routes live inside a nested
+  // navigator registered as KycStack; they're listed here so
+  // cross-stack typed navigation (navigate('OnboardingWelcome', ...))
+  // resolves at compile time even though React Navigation does the
+  // hierarchical lookup at runtime.
+  KycStack: { screen?: string; params?: object } | undefined;
+  OnboardingWelcome: undefined;
+  VerificationOptions: { payout?: { amount: number; circleName: string } } | undefined;
+  ITINEducation: undefined;
+  ITINApplicationHelp: undefined;
+  InternationalVerification: undefined;
+  TaxIDEntry: undefined;
+  AccountTiersExplained: { tier?: 1 | 2 | 3 } | undefined;
+  IDVerificationStart: undefined;
+  DocumentUpload: { idType: string; side: "front" | "back" };
+  Tier2Success: undefined;
+  VerificationHub:
+    | {
+        currentTier?: 1 | 2 | 3;
+        verificationStatus?: {
+          email?: "completed" | "pending" | "in_progress" | "not_started";
+          phone?: "completed" | "pending" | "in_progress" | "not_started";
+          identity?: "completed" | "pending" | "in_progress" | "not_started";
+          taxId?: "completed" | "pending" | "in_progress" | "not_started";
+        };
+        itinStatus?: "pending" | "approved" | null;
+        pendingPayout?: { amount: number; circleName: string };
+      }
+    | undefined;
+  LimitedMode: { currentTier?: 1 | 2 | 3; reason?: "skipped" | "itin_pending" } | undefined;
+  ITINPending:
+    | {
+        applicationDate?: string;
+        estimatedCompletion?: string;
+        applicationMethod?: "caa" | "mail";
+      }
+    | undefined;
 };
 
 export type TabParamList = {
@@ -451,6 +504,7 @@ const HomeStack = createStackNavigator();
 const CirclesStack = createStackNavigator();
 const MarketStack = createStackNavigator();
 const CommunityStack = createStackNavigator();
+const KycStack = createStackNavigator();
 
 // Home Tab Stack - includes Dashboard and related screens
 function HomeStackScreen() {
@@ -722,6 +776,34 @@ function CommunityStackScreen() {
   );
 }
 
+// KYC Native Flow — 13-screen verification journey (Phase KYC-1).
+// Registered as a single root-stack screen so the entry point can
+// navigate('KycStack', { screen: 'OnboardingWelcome' }) and the
+// internal screen-to-screen navigation works via the nested stack's
+// own history. The flow exits either via navigate(Routes.Dashboard)
+// (which resolves up to the root) or, after Tier2Success, by being
+// popped via the navigator. See screens 00-12 in screens/ for the
+// individual UI.
+function KycStackScreen() {
+  return (
+    <KycStack.Navigator screenOptions={{ headerShown: false }}>
+      <KycStack.Screen name="OnboardingWelcome" component={OnboardingWelcomeScreen} />
+      <KycStack.Screen name="VerificationOptions" component={VerificationOptionsScreen} />
+      <KycStack.Screen name="ITINEducation" component={ITINEducationScreen} />
+      <KycStack.Screen name="ITINApplicationHelp" component={ITINApplicationHelpScreen} />
+      <KycStack.Screen name="InternationalVerification" component={InternationalVerificationScreen} />
+      <KycStack.Screen name="TaxIDEntry" component={TaxIDEntryScreen} />
+      <KycStack.Screen name="AccountTiersExplained" component={AccountTiersExplainedScreen} />
+      <KycStack.Screen name="IDVerificationStart" component={IDVerificationStartScreen} />
+      <KycStack.Screen name="DocumentUpload" component={DocumentUploadScreen} />
+      <KycStack.Screen name="Tier2Success" component={Tier2SuccessScreen} />
+      <KycStack.Screen name="VerificationHub" component={VerificationHubScreen} />
+      <KycStack.Screen name="LimitedMode" component={LimitedModeScreen} />
+      <KycStack.Screen name="ITINPending" component={ITINPendingScreen} />
+    </KycStack.Navigator>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // NAVIGATION HELPER - Extract active route name from nested navigators
 // ══════════════════════════════════════════════════════════════════════════════
@@ -796,6 +878,12 @@ function AppContent() {
           <Stack.Screen name="OTP" component={OTPScreen} />
           <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
           <Stack.Screen name="AuthCallback" component={AuthCallbackScreen} options={{ headerShown: false }} />
+          {/* KYC native flow (Phase KYC-1). Placed between auth and
+              MainTabs so a future "needs KYC" gate can replace MainTabs
+              with this stack. Reachable via navigation.navigate('KycStack',
+              { screen: 'OnboardingWelcome' }). The 13 child screens are
+              registered inside KycStackScreen above. */}
+          <Stack.Screen name="KycStack" component={KycStackScreen} />
           {/* Main App with Tab Bar */}
           <Stack.Screen name="MainTabs" component={MainTabs} />
           {/* Modal screens that should appear over tabs without tab bar */}

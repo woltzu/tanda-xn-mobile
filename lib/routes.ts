@@ -119,6 +119,7 @@ export const Routes = {
   JoinCircleSuccess: "JoinCircleSuccess",
   JoinConfirm: "JoinConfirm",
   KYCVerification: "KYCVerification",
+  KycStack: "KycStack",
   LanguageRegion: "LanguageRegion",
   LateContributionDetail: "LateContributionDetail",
   LeaveCircle: "LeaveCircle",
