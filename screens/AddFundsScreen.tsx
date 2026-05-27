@@ -372,7 +372,7 @@ export default function AddFundsScreen() {
                   <Text style={{ fontSize: 13, color: "#6B7280", marginBottom: 8 }}>
                     No saved methods for this type
                   </Text>
-                  <TouchableOpacity onPress={() => navigation.navigate("AddPaymentMethod" as any)}>
+                  <TouchableOpacity onPress={() => navigation.navigate("LinkedAccounts" as any)}>
                     <Text style={{ fontSize: 14, fontWeight: "600", color: "#00C6AE" }}>
                       + Add a payment method
                     </Text>

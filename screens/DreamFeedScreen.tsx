@@ -179,7 +179,7 @@ export default function DreamFeedScreen() {
           </Text>
           <TouchableOpacity
             style={styles.emptyButton}
-            onPress={() => navigation.navigate("CirclesTab" as any)}
+            onPress={() => navigation.navigate("Circles" as any)}
           >
             <Ionicons name="people" size={18} color="#FFFFFF" />
             <Text style={styles.emptyButtonText}>Browse Circles</Text>

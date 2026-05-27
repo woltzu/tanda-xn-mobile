@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, RefreshControl,
+  TextInput, RefreshControl, Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -214,10 +214,15 @@ export default function MarketplaceScreen() {
           {stores.filter(s => !s.isFeatured || selectedCategory !== "all").map(renderStoreCard)}
         </View>
 
-        {/* Request a Provider */}
+        {/* Request a Provider — Phase 0 nav cleanup: button held with toast
+            until RequestProvider screen is built. Was a dead-nav target per
+            docs/audit/32. */}
         <TouchableOpacity
           style={styles.requestCard}
-          onPress={() => navigation.navigate("RequestProvider")}
+          onPress={() => Alert.alert(
+            "Request a Provider — Coming Soon",
+            "We're building the provider-request flow. For now, share your needs with your circle organizer."
+          )}
         >
           <Ionicons name="hand-right-outline" size={24} color="#00C6AE" />
           <View style={{ flex: 1 }}>

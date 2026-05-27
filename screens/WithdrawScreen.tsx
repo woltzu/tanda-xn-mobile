@@ -316,7 +316,7 @@ export default function WithdrawScreen() {
             {/* Add New Method */}
             <TouchableOpacity
               style={styles.addMethodButton}
-              onPress={() => navigation.navigate("AddPaymentMethod" as any)}
+              onPress={() => navigation.navigate("LinkedAccounts" as any)}
             >
               <Ionicons name="add-circle-outline" size={22} color="#00C6AE" />
               <Text style={styles.addMethodText}>Add New Bank Account</Text>

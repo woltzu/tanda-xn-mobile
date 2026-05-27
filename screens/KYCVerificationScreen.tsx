@@ -75,7 +75,18 @@ export default function KYCVerificationScreen() {
     try {
       const result = await initializeVerification(user.id, method);
       if (result?.inquiryUrl) {
-        navigation.navigate("WebView", { url: result.inquiryUrl, title: "Identity Verification" });
+        // KYC web-view flow is not yet wired (no WebViewScreen registered in
+        // App.tsx; was a dead-nav target per docs/audit/32). Surface the URL
+        // back to the user via a "Coming soon" alert and log the URL so we
+        // can resume the flow when the WebView screen is built. Phase 0 of
+        // navigation cleanup intentionally chose the non-destructive path —
+        // verification still kicks off server-side; only the in-app browser
+        // step is deferred.
+        console.log("[KYCVerification] inquiryUrl pending WebView screen:", result.inquiryUrl);
+        Alert.alert(
+          "KYC Verification — Coming Soon",
+          "Identity verification is being set up. Your verification has been initiated; you'll be notified when the in-app step is ready.",
+        );
       } else if (result?.inquiryId) {
         Alert.alert("Verification Started", "Your verification is being processed. You will be notified when complete.");
         refresh();
