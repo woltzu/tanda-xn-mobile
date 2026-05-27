@@ -9,7 +9,9 @@ import {
   RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 import {
   useCurrentCycle,
   useCircleCycles,
@@ -35,7 +37,7 @@ type RouteParams = { circleId: string };
 const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
 
 export default function CycleTimelineScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useTypedNavigation();
   const route = useRoute<RouteProp<{ params: RouteParams }, "params">>();
   const { circleId } = route.params;
 
@@ -266,10 +268,7 @@ export default function CycleTimelineScreen() {
         <TouchableOpacity
           style={styles.payButton}
           onPress={() =>
-            navigation.navigate("Payment", {
-              circleId,
-              cycleId: currentCycle?.id,
-            })
+            navigation.navigate(Routes.MakeContribution, { circleId })
           }
         >
           <Ionicons name="card" size={20} color="#FFF" style={{ marginRight: 8 }} />
