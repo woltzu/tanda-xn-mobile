@@ -87,6 +87,7 @@ export const Routes = {
   DynamicPayout: "DynamicPayout",
   EarlyIntervention: "EarlyIntervention",
   EditGoal: "EditGoal",
+  EditStore: "EditStore",
   ElderDashboard: "ElderDashboard",
   ElderTrainingHub: "ElderTrainingHub",
   EmailVerification: "EmailVerification",

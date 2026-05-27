@@ -193,6 +193,7 @@ import TripPublishSuccessScreen from "./screens/TripPublishSuccessScreen";
 import ActivityEditorScreen from "./screens/ActivityEditorScreen";
 import WebViewScreen from "./screens/WebViewScreen";
 import RequestProviderScreen from "./screens/RequestProviderScreen";
+import EditStoreScreen from "./screens/EditStoreScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -312,6 +313,7 @@ export type RootStackParamList = {
   DepositToGoal: { goalId: string };
   WithdrawFromGoal: { goalId: string };
   EditGoal: { goalId: string };
+  EditStore: { storeId: string };
   // Remittance Recipients Flow
   SavedRecipients: undefined;
   AddRecipient: { returnTo?: string };
@@ -650,6 +652,9 @@ function MarketStackScreen() {
       {/* Provider-request form — closes the dead RequestProvider nav target
           that lived in RootStackParamList without a screen attached. */}
       <MarketStack.Screen name="RequestProvider" component={RequestProviderScreen} />
+      {/* Store-owner edit form — closes 2 dead nav targets from
+          OwnerDashboardScreen's header + "Edit Store" tile. */}
+      <MarketStack.Screen name="EditStore" component={EditStoreScreen} />
     </MarketStack.Navigator>
   );
 }

@@ -7,6 +7,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useOwnerDashboard } from "../hooks/useMarketplace";
+import { Routes } from "../lib/routes";
 
 export default function OwnerDashboardScreen() {
   const navigation = useNavigation<any>();
@@ -37,7 +38,7 @@ export default function OwnerDashboardScreen() {
           <Text style={styles.headerTitle}>Dashboard</Text>
           <TouchableOpacity
             style={styles.editButton}
-            onPress={() => navigation.navigate("EditStore", { storeId })}
+            onPress={() => navigation.navigate(Routes.EditStore, { storeId })}
           >
             <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
           </TouchableOpacity>
@@ -136,7 +137,7 @@ export default function OwnerDashboardScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionCard}
-                onPress={() => navigation.navigate("EditStore", { storeId })}
+                onPress={() => navigation.navigate(Routes.EditStore, { storeId })}
               >
                 <View style={[styles.actionIcon, { backgroundColor: "#F0FDFB" }]}>
                   <Ionicons name="storefront-outline" size={22} color="#00C6AE" />
