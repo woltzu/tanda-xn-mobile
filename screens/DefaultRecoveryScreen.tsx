@@ -5,7 +5,8 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 import { useAuth } from "../context/AuthContext";
 import { useUserDefaults } from "../hooks/useDefaultCascade";
 import { useLateContributions } from "../hooks/useLateContributions";
@@ -18,7 +19,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string
 };
 
 export default function DefaultRecoveryScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useTypedNavigation();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"defaults" | "late">("defaults");
 
@@ -145,7 +146,7 @@ export default function DefaultRecoveryScreen() {
                   <TouchableOpacity
                     key={d.id}
                     style={styles.card}
-                    onPress={() => navigation.navigate("DefaultDetail", { defaultId: d.id })}
+                    onPress={() => navigation.navigate(Routes.DefaultDetail, { defaultId: d.id })}
                   >
                     <View style={styles.cardHeader}>
                       <View style={[styles.statusBadge, { backgroundColor: status.color + "15" }]}>
@@ -189,7 +190,7 @@ export default function DefaultRecoveryScreen() {
                 <TouchableOpacity
                   key={lc.id}
                   style={styles.card}
-                  onPress={() => navigation.navigate("LateContributionDetail", { lateContributionId: lc.id })}
+                  onPress={() => navigation.navigate(Routes.LateContributionDetail, { lateContributionId: lc.id })}
                 >
                   <View style={styles.cardHeader}>
                     <View style={styles.lateInfo}>

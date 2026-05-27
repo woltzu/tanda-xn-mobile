@@ -146,6 +146,8 @@ import CycleTimelineScreen from "./screens/CycleTimelineScreen";
 import ScoreBreakdownScreen from "./screens/ScoreBreakdownScreen";
 import CreditProfileScreen from "./screens/CreditProfileScreen";
 import DefaultRecoveryScreen from "./screens/DefaultRecoveryScreen";
+import DefaultDetailScreen from "./screens/DefaultDetailScreen";
+import LateContributionDetailScreen from "./screens/LateContributionDetailScreen";
 import CircleVotingScreen from "./screens/CircleVotingScreen";
 import GraduatedEntryScreen from "./screens/GraduatedEntryScreen";
 import KYCVerificationScreen from "./screens/KYCVerificationScreen";
@@ -423,6 +425,8 @@ export type RootStackParamList = {
   ScoreBreakdown: undefined;
   CreditProfile: undefined;
   DefaultRecovery: undefined;
+  DefaultDetail: { defaultId: string };
+  LateContributionDetail: { lateContributionId: string };
   CircleVoting: { circleId: string };
   GraduatedEntry: undefined;
   KYCVerification: undefined;
@@ -540,6 +544,8 @@ function HomeStackScreen() {
       <HomeStack.Screen name="GraduatedEntry" component={GraduatedEntryScreen} />
       <HomeStack.Screen name="CrossCircleLending" component={CrossCircleLendingScreen} />
       <HomeStack.Screen name="DefaultRecovery" component={DefaultRecoveryScreen} />
+      <HomeStack.Screen name="DefaultDetail" component={DefaultDetailScreen} />
+      <HomeStack.Screen name="LateContributionDetail" component={LateContributionDetailScreen} />
       <HomeStack.Screen name="KYCVerification" component={KYCVerificationScreen} />
       <HomeStack.Screen name="LegalDocuments" component={LegalDocumentsScreen} />
       {/* Dream Feed Screens (moved from Dreams tab) */}
