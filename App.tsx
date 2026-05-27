@@ -186,6 +186,7 @@ import CreateTripWizardScreen from "./screens/CreateTripWizardScreen";
 import OrganizerTripDashboardScreen from "./screens/OrganizerTripDashboardScreen";
 import ItineraryBuilderScreen from "./screens/ItineraryBuilderScreen";
 import ParticipantManagerScreen from "./screens/ParticipantManagerScreen";
+import ParticipantDetailScreen from "./screens/ParticipantDetailScreen";
 import TripPublicPageScreen from "./screens/TripPublicPageScreen";
 import MyTripStatusScreen from "./screens/MyTripStatusScreen";
 import DocumentSubmissionScreen from "./screens/DocumentSubmissionScreen";
@@ -404,6 +405,7 @@ export type RootStackParamList = {
   OrganizerTripDashboard: { tripId: string };
   ItineraryBuilder: { tripId: string };
   ParticipantManager: { tripId: string };
+  ParticipantDetail: { tripId: string; participantId: string };
   TripPublicPage: { slug?: string; tripId?: string };
   MyTripStatus: { tripId: string };
   DocumentSubmission: { tripId: string; participantId: string; fieldKey: string };
@@ -522,6 +524,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="OrganizerTripDashboard" component={OrganizerTripDashboardScreen} />
       <HomeStack.Screen name="ItineraryBuilder" component={ItineraryBuilderScreen} />
       <HomeStack.Screen name="ParticipantManager" component={ParticipantManagerScreen} />
+      <HomeStack.Screen name="ParticipantDetail" component={ParticipantDetailScreen} />
       <HomeStack.Screen name="TripPublicPage" component={TripPublicPageScreen} />
       <HomeStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
       <HomeStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />
@@ -618,6 +621,7 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="OrganizerTripDashboard" component={OrganizerTripDashboardScreen} />
       <CirclesStack.Screen name="ItineraryBuilder" component={ItineraryBuilderScreen} />
       <CirclesStack.Screen name="ParticipantManager" component={ParticipantManagerScreen} />
+      <CirclesStack.Screen name="ParticipantDetail" component={ParticipantDetailScreen} />
       <CirclesStack.Screen name="TripPublicPage" component={TripPublicPageScreen} />
       <CirclesStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
       <CirclesStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />
@@ -653,6 +657,7 @@ function MarketStackScreen() {
       <MarketStack.Screen name="OrganizerTripDashboard" component={OrganizerTripDashboardScreen} />
       <MarketStack.Screen name="ItineraryBuilder" component={ItineraryBuilderScreen} />
       <MarketStack.Screen name="ParticipantManager" component={ParticipantManagerScreen} />
+      <MarketStack.Screen name="ParticipantDetail" component={ParticipantDetailScreen} />
       <MarketStack.Screen name="TripPublicPage" component={TripPublicPageScreen} />
       <MarketStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
       <MarketStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />

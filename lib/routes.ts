@@ -144,6 +144,7 @@ export const Routes = {
   OversightDashboard: "OversightDashboard",
   OwnerDashboard: "OwnerDashboard",
   PartialContribution: "PartialContribution",
+  ParticipantDetail: "ParticipantDetail",
   ParticipantManager: "ParticipantManager",
   PauseCircle: "PauseCircle",
   PaymentHistory: "PaymentHistory",

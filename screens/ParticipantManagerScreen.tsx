@@ -10,7 +10,9 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useRoute } from '@react-navigation/native';
+import { useTypedNavigation } from '../hooks/useTypedNavigation';
+import { Routes } from '../lib/routes';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useParticipantManager } from '../hooks/useTripOrganizer';
 
@@ -131,7 +133,7 @@ const EmptyFilterState: React.FC<{ filter: FilterTab }> = ({ filter }) => (
 // --- Screen ---
 
 const ParticipantManagerScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
+  const navigation = useTypedNavigation();
   const route = useRoute<any>();
   const tripId: string = route.params?.tripId ?? '';
   const { participants, loading } = useParticipantManager(tripId);
@@ -151,7 +153,7 @@ const ParticipantManagerScreen: React.FC = () => {
 
   const navigateToDetail = useCallback(
     (participantId: string) => {
-      navigation.navigate('ParticipantDetail', { tripId, participantId });
+      navigation.navigate(Routes.ParticipantDetail, { tripId, participantId });
     },
     [navigation, tripId]
   );
