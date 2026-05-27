@@ -220,6 +220,64 @@ Not broken — it's a deliberate "coming soon" stub, with a workaround pointer t
 
 ---
 
+## Bug P2 — Add Funds: mock engine + `stripe_payment_intents.client_secret` schema miss
+
+**Status:** Confirmed reproducible on device (2026-05-26, Metro terminal capture). **NOT fixed** in this investigation — entangled with Stage 2 (the real contribution flow replaces this mock path anyway).
+
+### What the tester saw
+
+Live Metro log when tapping Add Funds on device:
+
+```
+[StripeConnectEngine] Mock: Created PI pi_test_... for 10000 usd
+ERROR Error adding funds: Failed to create payment intent record:
+  Could not find the 'client_secret' column of 'stripe_payment_intents'
+  in the schema cache
+```
+
+Two stacked problems in one tap:
+
+### Problem 1 — Add Funds is still routed through the MOCK engine
+
+The `[StripeConnectEngine] Mock: Created PI ...` log line is emitted by `StripeConnectEngine` (the in-process mock), not by the `create-payment-intent` Edge Function. So even though `PaymentContext.tsx:504-507` calls the real EF for Connect's setupConnectedAccount path (Bug B above), the Add Funds path is still on the stub.
+
+This is consistent with the comment in `PaymentContext.tsx:302-305` from the Bug B trace:
+> "Stage 1: routes through the create-connect-account Edge Function (bypassing StripeConnectEngine's stubs)..."
+
+Stage 1's bypass was *only* for the connect-account path, by design. The other StripeConnectEngine mocks (PI creation, payment-method save, transfers, payouts) are still active and will be replaced by Stage 2 / Stage 3 / Stage 4 in turn.
+
+### Problem 2 — `client_secret` column missing from `stripe_payment_intents`
+
+After the mock PI is "created" in-memory, the code tries to write a row to `stripe_payment_intents` and Postgres rejects:
+
+> `Could not find the 'client_secret' column of 'stripe_payment_intents' in the schema cache`
+
+This is a Supabase-client-side error from `postgrest-js` — it inspects its cached OpenAPI schema for the target table, doesn't find a column named `client_secret`, and refuses to send the INSERT before it even hits Postgres. Two possible meanings:
+
+1. **The column genuinely doesn't exist on the live table.** Cross-check against `docs/audit/11_live_schema_dump.sql:7391-7427` for `stripe_payment_intents` to confirm. If it isn't there, the mock engine is writing to a column that's missing from the deployed schema — either the column was never added or was dropped.
+2. **The column exists but the schema cache is stale.** PostgREST refreshes on schema-change events but can fall behind. Less likely; usually self-heals within seconds.
+
+(1) is the working theory because Stage 2 work will define a real `client_secret` column anyway as part of the payment-intent persistence model.
+
+### Why we're not fixing this now
+
+- **Mock-engine elimination is Stage 2's scope.** The whole `StripeConnectEngine` is meant to be retired as the real flows are wired through Edge Functions. Adding a `client_secret` column to satisfy the mock would be throw-away work — the table is going to be reshaped by Stage 2 either way.
+- **No user-facing regression from this bug.** Add Funds via mock is a development-only path; production users will hit the real PI flow once Stage 2 lands.
+- **Fixing piecemeal risks Stage 2 drift.** If a "hotfix" adds `client_secret` outside the Stage 2 plan, the Stage 2 design has to work around it. Better to absorb it into the Stage 2 schema design from the start.
+
+### What this DOES change
+
+- This is now a **confirmed-reproducible** entry in the Stage 2 prerequisite list, not a hypothetical. Whatever doc captures Stage 2 prep (likely `docs/audit/26_stage2_blocker_fake_autocredit.md` based on the filename, which is currently untracked in your working tree) should reference this reproduction as evidence that the mock-PI path actively breaks today.
+- The 2nd surface of `StripeConnectEngine` still being mock (besides Add Funds) is the trip-payment flow (`TripPayment` screen → `StripeConnectEngine.createPaymentIntent`). Same root cause, same fix horizon — Stage 2 retires both together.
+
+### Followup, when Stage 2 starts
+
+1. Either remove the `client_secret` write from `StripeConnectEngine.createPaymentIntent` (since it's about to be replaced) **OR** add `client_secret` to `stripe_payment_intents` in the Stage 2 migration so the mock keeps working until cutover. Whichever Stage 2's design prefers.
+2. Replace `StripeConnectEngine.createPaymentIntent` callers with `supabase.functions.invoke('create-payment-intent')` (already exists per `supabase/functions/create-payment-intent/`).
+3. Confirm `stripe_payment_intents` schema matches what the real EF writes.
+
+---
+
 ## Summary
 
 | Bug | Status | Likely root cause | Action this session |
@@ -227,6 +285,7 @@ Not broken — it's a deliberate "coming soon" stub, with a workaround pointer t
 | **B** — Link a Bank non-2xx | Confirmed hitting Stage 1 `create-connect-account` EF | `STRIPE_SECRET_KEY` not propagated to the function's secrets, OR function not deployed, OR Stripe live/test-mode mismatch | Pull logs (instructions above) — that single check distinguishes between all 5 ranked hypotheses |
 | **A** — Currency picker only CAD | Picker code + data look correct | Most likely UX confusion: the selector button shows one currency; user didn't tap it to expand. Need screenshot to confirm. | Screenshot, then we decide if it's a UX fix or a hidden-second-picker hunt |
 | **C** — Add Card stub | Confirmed deliberate stub | Card collection feature not built yet | Optional: hide the button or leave the alert |
+| **P2** — Add Funds: mock + schema miss | Confirmed reproducible (live Metro capture 2026-05-26) | Mock `StripeConnectEngine.createPaymentIntent` still active; writes to non-existent `client_secret` column on `stripe_payment_intents` | **None** — entangled with Stage 2; deferred to Stage 2 design |
 
 ---
 
