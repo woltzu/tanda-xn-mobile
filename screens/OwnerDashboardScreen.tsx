@@ -146,7 +146,7 @@ export default function OwnerDashboardScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionCard}
-                onPress={() => navigation.navigate("ManageServices", { storeId })}
+                onPress={() => navigation.navigate(Routes.ManageServices, { storeId })}
               >
                 <View style={[styles.actionIcon, { backgroundColor: "#FEF3C7" }]}>
                   <Ionicons name="list-outline" size={22} color="#F59E0B" />
@@ -221,7 +221,7 @@ export default function OwnerDashboardScreen() {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Your Services ({dashboard.services.length})</Text>
-                <TouchableOpacity onPress={() => navigation.navigate("ManageServices", { storeId })}>
+                <TouchableOpacity onPress={() => navigation.navigate(Routes.ManageServices, { storeId })}>
                   <Text style={styles.seeAll}>Manage</Text>
                 </TouchableOpacity>
               </View>
@@ -235,7 +235,7 @@ export default function OwnerDashboardScreen() {
               {dashboard.services.length === 0 && (
                 <TouchableOpacity
                   style={styles.addServiceBtn}
-                  onPress={() => navigation.navigate("ManageServices", { storeId })}
+                  onPress={() => navigation.navigate(Routes.ManageServices, { storeId })}
                 >
                   <Ionicons name="add-circle-outline" size={20} color="#00C6AE" />
                   <Text style={styles.addServiceText}>Add your first service</Text>

@@ -194,6 +194,9 @@ import ActivityEditorScreen from "./screens/ActivityEditorScreen";
 import WebViewScreen from "./screens/WebViewScreen";
 import RequestProviderScreen from "./screens/RequestProviderScreen";
 import EditStoreScreen from "./screens/EditStoreScreen";
+import ManageServicesScreen from "./screens/ManageServicesScreen";
+import ServiceFormScreen from "./screens/ServiceFormScreen";
+import type { StoreService } from "./services/MarketplaceEngine";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -378,6 +381,8 @@ export type RootStackParamList = {
     circleId?: string; circleName?: string; canPayOnPayoutDay?: boolean;
   };
   OwnerDashboard: { storeId: string };
+  ManageServices: { storeId: string };
+  ServiceForm: { storeId: string; service?: StoreService };
   MarketInsight: { city?: string; category?: string };
   RequestProvider: undefined;
   WebView: { url: string; title?: string; onComplete?: () => void };
@@ -655,6 +660,16 @@ function MarketStackScreen() {
       {/* Store-owner edit form — closes 2 dead nav targets from
           OwnerDashboardScreen's header + "Edit Store" tile. */}
       <MarketStack.Screen name="EditStore" component={EditStoreScreen} />
+      {/* Store-owner service CRUD — closes 3 dead `ManageServices` targets
+          on OwnerDashboardScreen. ServiceForm presents modally so the
+          form covers the list rather than pushing a new card onto the
+          stack — matches add/edit-row UX in the rest of the app. */}
+      <MarketStack.Screen name="ManageServices" component={ManageServicesScreen} />
+      <MarketStack.Screen
+        name="ServiceForm"
+        component={ServiceFormScreen}
+        options={{ presentation: 'modal' }}
+      />
     </MarketStack.Navigator>
   );
 }
