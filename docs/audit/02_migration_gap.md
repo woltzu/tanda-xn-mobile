@@ -1,5 +1,24 @@
 # Migration Gap Analysis
 
+> ## 🔄 STALE — gap substantially closed 2026-05-27
+>
+> This doc is the **2026-05-18 snapshot** when the on-disk-vs-applied gap was 67 versions. As of 2026-05-27 the gap is **zero on-disk files** that aren't registered — every `.sql` in `supabase/migrations/` now has a registry row.
+>
+> Of the 67 "on disk but not applied" entries listed below:
+> - Most were registered via name-only backfill `INSERT`s between 2026-05-18 and 2026-05-27 (32 such backfills)
+> - 7 (`035`, `050`, `055`, `057`, `062`, `064`, `065`) were *applied-but-unregistered* (true drift) and were backfilled on 2026-05-27 by the drift audit in `docs/audit/34_migration_drift_audit_results.md`
+> - 028, 029, 030, 069 are now in the inverse state: registered but the source files were intentionally deleted (Tier 2 cleanup + the join-gate revert). Their DDL effects are confirmed absent from the live DB — registry rows are historical-only.
+>
+> Today's state: 66 files on disk, 70 registry rows (66 + 4 historical-only), zero unverified gaps.
+>
+> The convention added to CLAUDE.md ("Migration conventions — REQUIRED") prevents this drift from recurring: every new migration file must end with a self-registering `INSERT ... ON CONFLICT DO NOTHING`.
+>
+> The snapshot below is preserved as the historical baseline.
+
+---
+
+## Snapshot — 2026-05-18 (historical)
+
 Three-way cross-reference: applied (production) vs on-disk (source).
 
 ## A) Applied AND on disk (exact match) — 30

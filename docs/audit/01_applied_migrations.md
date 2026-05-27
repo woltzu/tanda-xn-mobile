@@ -1,5 +1,23 @@
 # Applied Migrations — Ground Truth
 
+> ## 🔄 STALE — superseded 2026-05-27
+>
+> This doc is the **2026-05-18 snapshot** showing 31 registered migrations at that time. The current production state is **70 registered migrations** (verified live via Management API on 2026-05-27).
+>
+> The drift audit in `docs/audit/34_migration_drift_audit_results.md` closed the gap between this snapshot and reality. Of the 39 new registrations since 2026-05-18:
+> - 32 were registered via name-only backfill `INSERT`s done over the past week (not captured here)
+> - 7 were applied-but-unregistered (drift) and were backfilled by the audit on 2026-05-27: `035`, `050`, `055`, `057`, `062`, `064`, `065`
+>
+> The snapshot below is preserved as the historical baseline. **Do not rely on the "Total applied: 31" line — it is outdated by 39.** To regenerate a fresh dump, run:
+> ```sql
+> SELECT version, name, statements IS NOT NULL AS has_statements
+> FROM supabase_migrations.schema_migrations ORDER BY version;
+> ```
+
+---
+
+## Snapshot — 2026-05-18 (historical)
+
 Source: `supabase_migrations.schema_migrations` (user-supplied paste, dated 2026-05-18)
 
 **Total applied: 31**
