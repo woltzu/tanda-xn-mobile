@@ -218,6 +218,10 @@ import Tier2SuccessScreen from "./screens/Tier2SuccessScreen";
 import VerificationHubScreen from "./screens/VerificationHubScreen";
 import LimitedModeScreen from "./screens/LimitedModeScreen";
 import ITINPendingScreen from "./screens/ITINPendingScreen";
+// Interest-First KYC entry/success screens (Phase KYC-2). Reached
+// from the Dashboard interest card, not from signup.
+import UnlockInterestPromptScreen from "./screens/UnlockInterestPromptScreen";
+import InterestUnlockedSuccessScreen from "./screens/InterestUnlockedSuccessScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -488,6 +492,15 @@ export type RootStackParamList = {
         applicationMethod?: "caa" | "mail";
       }
     | undefined;
+  // Interest-First KYC entry/success screens (Phase KYC-2).
+  UnlockInterestPrompt: {
+    totalInterest: number;
+    goalBreakdown?: Array<{ goalName: string; interest: number }>;
+  };
+  InterestUnlockedSuccess: {
+    unlockedAmount: number;
+    isFullAccess: boolean;
+  };
 };
 
 export type TabParamList = {
@@ -602,6 +615,26 @@ function HomeStackScreen() {
       <HomeStack.Screen name="LateContributionDetail" component={LateContributionDetailScreen} />
       <HomeStack.Screen name="KYCVerification" component={KYCVerificationScreen} />
       <HomeStack.Screen name="LegalDocuments" component={LegalDocumentsScreen} />
+      {/* Interest-First KYC flow (Phase KYC-2). Entered from the
+          Dashboard interest card → UnlockInterestPrompt, then
+          branches per VerificationOptions. All screens live in
+          HomeStack so the back-button trail leads cleanly back to
+          Dashboard. OnboardingWelcome, AccountTiersExplained, and
+          VerificationHub from the prior generic KYC flow are
+          intentionally NOT registered here — they're unreachable in
+          the new flow and stay as orphans until a separate cleanup
+          PR with red-emoji approval. */}
+      <HomeStack.Screen name="UnlockInterestPrompt" component={UnlockInterestPromptScreen} />
+      <HomeStack.Screen name="InterestUnlockedSuccess" component={InterestUnlockedSuccessScreen} />
+      <HomeStack.Screen name="VerificationOptions" component={VerificationOptionsScreen} />
+      <HomeStack.Screen name="TaxIDEntry" component={TaxIDEntryScreen} />
+      <HomeStack.Screen name="ITINEducation" component={ITINEducationScreen} />
+      <HomeStack.Screen name="ITINApplicationHelp" component={ITINApplicationHelpScreen} />
+      <HomeStack.Screen name="ITINPending" component={ITINPendingScreen} />
+      <HomeStack.Screen name="LimitedMode" component={LimitedModeScreen} />
+      <HomeStack.Screen name="InternationalVerification" component={InternationalVerificationScreen} />
+      <HomeStack.Screen name="IDVerificationStart" component={IDVerificationStartScreen} />
+      <HomeStack.Screen name="DocumentUpload" component={DocumentUploadScreen} />
       {/* Dream Feed Screens (moved from Dreams tab) */}
       <HomeStack.Screen name="DreamFeed" component={DreamFeedScreen} />
       <HomeStack.Screen name="CreateDreamPost" component={CreateDreamPostScreen} />
@@ -776,14 +809,17 @@ function CommunityStackScreen() {
   );
 }
 
-// KYC Native Flow — 13-screen verification journey (Phase KYC-1).
-// Registered as a single root-stack screen so the entry point can
-// navigate('KycStack', { screen: 'OnboardingWelcome' }) and the
-// internal screen-to-screen navigation works via the nested stack's
-// own history. The flow exits either via navigate(Routes.Dashboard)
-// (which resolves up to the root) or, after Tier2Success, by being
-// popped via the navigator. See screens 00-12 in screens/ for the
-// individual UI.
+// DEPRECATED — Interest-First KYC (Phase KYC-2) uses individual
+// HomeStack screens, not this nested stack. The factory is kept
+// here as dormant reference; the root <Stack.Screen name="KycStack">
+// registration further down is commented out so this code path is
+// unreachable at runtime. Future cleanup PR can delete this
+// function + the OnboardingWelcome / AccountTiersExplained /
+// VerificationHub imports that only feed it.
+//
+// Original purpose (Phase KYC-1): nested 13-screen stack mounted
+// between auth and MainTabs, entered via navigate('KycStack',
+// { screen: 'OnboardingWelcome' }).
 function KycStackScreen() {
   return (
     <KycStack.Navigator screenOptions={{ headerShown: false }}>
@@ -878,12 +914,14 @@ function AppContent() {
           <Stack.Screen name="OTP" component={OTPScreen} />
           <Stack.Screen name="EmailVerification" component={EmailVerificationScreen} />
           <Stack.Screen name="AuthCallback" component={AuthCallbackScreen} options={{ headerShown: false }} />
-          {/* KYC native flow (Phase KYC-1). Placed between auth and
-              MainTabs so a future "needs KYC" gate can replace MainTabs
-              with this stack. Reachable via navigation.navigate('KycStack',
-              { screen: 'OnboardingWelcome' }). The 13 child screens are
-              registered inside KycStackScreen above. */}
-          <Stack.Screen name="KycStack" component={KycStackScreen} />
+          {/* KycStack DEPRECATED — the Interest-First KYC flow
+              (Phase KYC-2) uses individual screens registered in
+              HomeStack instead. The KycStackScreen factory below is
+              kept dormant; the registration line is intentionally
+              commented out so the route is no longer reachable. A
+              future cleanup PR can delete the factory + 13 KYC
+              imports under red-emoji approval. */}
+          {/* <Stack.Screen name="KycStack" component={KycStackScreen} /> */}
           {/* Main App with Tab Bar */}
           <Stack.Screen name="MainTabs" component={MainTabs} />
           {/* Modal screens that should appear over tabs without tab bar */}
