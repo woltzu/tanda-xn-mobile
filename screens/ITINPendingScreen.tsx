@@ -169,6 +169,22 @@ export default function ITINPendingScreen() {
         </LinearGradient>
 
         <View style={styles.contentWrap}>
+          {/* Interest-First reassurance (KYC-2.2). Reinforces that the
+              user isn't losing money while waiting weeks for the IRS
+              to process the ITIN — interest keeps accruing in the
+              background and unlocks the moment ITIN is verified. */}
+          <View style={styles.interestGrowingCard}>
+            <Text style={styles.interestGrowingEmoji}>💰</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.interestGrowingTitle}>
+                Your interest is still growing
+              </Text>
+              <Text style={styles.interestGrowingBody}>
+                You'll unlock it as soon as your ITIN is verified.
+              </Text>
+            </View>
+          </View>
+
           {/* Timeline */}
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Application Progress</Text>
@@ -397,6 +413,33 @@ const styles = StyleSheet.create({
   },
 
   contentWrap: { padding: 20 },
+
+  // KYC-2.2 — Interest-still-growing reassurance card. Green palette
+  // mirrors the InterestUnlockedSuccess celebration to signal "this
+  // is about your money."
+  interestGrowingCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    backgroundColor: "#F0FDFB",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+  },
+  interestGrowingEmoji: { fontSize: 22 },
+  interestGrowingTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#065F46",
+  },
+  interestGrowingBody: {
+    fontSize: 12,
+    color: "#047857",
+    lineHeight: 18,
+    marginTop: 4,
+  },
 
   sectionCard: {
     backgroundColor: "#FFFFFF",
