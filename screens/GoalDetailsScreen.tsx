@@ -20,6 +20,8 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useSavings, GOAL_TYPES, GoalTransaction } from "../context/SavingsContext";
+import { useInterest } from "../hooks/useInterest";
+import { Routes } from "../lib/routes";
 
 // Menu item interface
 interface GoalMenuItem {
@@ -63,6 +65,11 @@ export default function GoalDetailsScreen() {
 
   const goal = getGoalById(goalId);
   const transactions = getGoalTransactions(goalId);
+
+  // Interest-First KYC entry surface (KYC-2.3). Interest is currently
+  // a single global mock; KYC-3 will split by goal.
+  const { totalAccruedInterest, isInterestUnlocked } = useInterest();
+  const hasInterestToShow = totalAccruedInterest > 0;
 
   // Menu and modal states
   const [showMenu, setShowMenu] = useState(false);
@@ -579,6 +586,50 @@ export default function GoalDetailsScreen() {
               </View>
             )}
           </View>
+        )}
+
+        {/* Interest card (Interest-First KYC entry) — KYC-2.3 */}
+        {hasInterestToShow && (
+          isInterestUnlocked ? (
+            <View style={styles.interestCardGreen}>
+              <View style={styles.interestCardIcon}>
+                <Text style={styles.interestCardEmoji}>✨</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.interestCardLabelGreen}>
+                  Interest earned
+                </Text>
+                <Text style={styles.interestCardAmount}>
+                  ${totalAccruedInterest.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.interestCardOrange}
+              onPress={() =>
+                navigation.navigate(Routes.UnlockInterestPrompt, {
+                  totalInterest: totalAccruedInterest,
+                })
+              }
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={`Unlock $${totalAccruedInterest.toFixed(2)} of interest`}
+            >
+              <View style={styles.interestCardIcon}>
+                <Text style={styles.interestCardEmoji}>📈</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.interestCardLabelOrange}>
+                  Interest accruing
+                </Text>
+                <Text style={styles.interestCardAmount}>
+                  ${totalAccruedInterest.toFixed(2)}
+                </Text>
+              </View>
+              <Text style={styles.interestCardCta}>Unlock now →</Text>
+            </TouchableOpacity>
+          )
         )}
 
         {/* Action Buttons */}
@@ -1680,6 +1731,61 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  // KYC-2.3 — Interest card (mirrors the Dashboard variants).
+  interestCardOrange: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 12,
+    marginBottom: 16,
+  },
+  interestCardGreen: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0FDFB",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 12,
+    marginBottom: 16,
+  },
+  interestCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  interestCardEmoji: { fontSize: 20 },
+  interestCardLabelOrange: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#92400E",
+  },
+  interestCardLabelGreen: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#065F46",
+  },
+  interestCardAmount: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#0A2342",
+    marginTop: 2,
+  },
+  interestCardCta: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#92400E",
   },
   actionButtons: {
     flexDirection: "row",
