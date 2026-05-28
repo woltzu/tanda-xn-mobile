@@ -222,6 +222,31 @@ import ITINPendingScreen from "./screens/ITINPendingScreen";
 // from the Dashboard interest card, not from signup.
 import UnlockInterestPromptScreen from "./screens/UnlockInterestPromptScreen";
 import InterestUnlockedSuccessScreen from "./screens/InterestUnlockedSuccessScreen";
+// Advance Payout V2 flow (Stage 8) — 20 screens translated from web
+// JSX. The 3 *V2 names are redesigns that coexist with the existing
+// AdvanceHub/AdvanceExplanation/AdvanceDetails screens pending a
+// future reconciliation; the rest are net-new. Reachable for testing
+// via the __DEV__ "Advance V2" button on the Dashboard.
+import AdvanceHubV2Screen from "./screens/AdvanceHubV2Screen";
+import AdvanceExplanationV2Screen from "./screens/AdvanceExplanationV2Screen";
+import SmartCalculatorScreen from "./screens/SmartCalculatorScreen";
+import ApplicationFlowScreen from "./screens/ApplicationFlowScreen";
+import AdvanceStatusDashboardScreen from "./screens/AdvanceStatusDashboardScreen";
+import AdvanceDetailsV2Screen from "./screens/AdvanceDetailsV2Screen";
+import AdvanceHistoryScreen from "./screens/AdvanceHistoryScreen";
+import AdvanceApprovalScreen from "./screens/AdvanceApprovalScreen";
+import AdvanceDisbursementScreen from "./screens/AdvanceDisbursementScreen";
+import AdvanceAgreementScreen from "./screens/AdvanceAgreementScreen";
+import EarlyRepaymentScreen from "./screens/EarlyRepaymentScreen";
+import RepaymentConfirmScreen from "./screens/RepaymentConfirmScreen";
+import PaymentFailedScreen from "./screens/PaymentFailedScreen";
+import PaymentReminderScreen from "./screens/PaymentReminderScreen";
+import HardshipRequestScreen from "./screens/HardshipRequestScreen";
+import AdvanceRejectedScreen from "./screens/AdvanceRejectedScreen";
+import AutopaySetupScreen from "./screens/AutopaySetupScreen";
+import RateBreakdownScreen from "./screens/RateBreakdownScreen";
+import AdvanceSettingsScreen from "./screens/AdvanceSettingsScreen";
+import AdminDashboardScreen from "./screens/AdminDashboardScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -501,6 +526,112 @@ export type RootStackParamList = {
     unlockedAmount: number;
     isFullAccess: boolean;
   };
+  // Advance Payout V2 flow (Stage 8). Params are intentionally loose
+  // (object/optional) — each screen reads a richer, locally-typed
+  // RouteProp internally; these entries exist so navigate() call
+  // sites and the navigator typing resolve. advanceId is the common
+  // forward-key threaded through the flow.
+  AdvanceHubV2: { user?: object } | undefined;
+  AdvanceExplanationV2: { user?: object } | undefined;
+  SmartCalculator:
+    | {
+        advanceType?: "contribution" | "quick" | "flex";
+        user?: object;
+        upcomingPayout?: object;
+      }
+    | undefined;
+  ApplicationFlow:
+    | {
+        advanceType?: string;
+        amount?: number;
+        term?: number;
+        rate?: number;
+        fee?: number;
+        total?: number;
+        upcomingPayouts?: object[];
+        advanceDetails?: object;
+      }
+    | undefined;
+  AdvanceStatusDashboard:
+    | {
+        user?: object;
+        activeAdvances?: object[];
+        totalAdvanced?: number;
+        totalDue?: number;
+      }
+    | undefined;
+  AdvanceDetailsV2: { advanceId?: string; advance?: object } | undefined;
+  AdvanceHistory:
+    | {
+        pastAdvances?: object[];
+        totalAdvanced?: number;
+        totalRepaid?: number;
+        averageRepayTime?: number;
+      }
+    | undefined;
+  AdvanceApproval:
+    | {
+        advance?: object;
+        advanceId?: string;
+        amount?: number;
+        total?: number;
+        payoutId?: string;
+      }
+    | undefined;
+  AdvanceDisbursement:
+    | {
+        advanceAmount?: number;
+        userBankAccounts?: object[];
+        walletBalance?: number;
+      }
+    | undefined;
+  AdvanceAgreement:
+    | {
+        advance?: object;
+        agreementDate?: string;
+        userName?: string;
+        advanceId?: string;
+      }
+    | undefined;
+  EarlyRepayment:
+    | {
+        advanceId?: string;
+        advance?: object;
+        walletBalance?: number;
+        paymentMethods?: object[];
+      }
+    | undefined;
+  RepaymentConfirm:
+    | {
+        repayment?: object;
+        advanceId?: string;
+        amountPaid?: number;
+        feeSaved?: number;
+        paidFrom?: string;
+      }
+    | undefined;
+  PaymentFailed: { failureDetails?: object; gracePeriod?: object } | undefined;
+  PaymentReminder: { reminder?: object; walletBalance?: number } | undefined;
+  HardshipRequest: { advanceId?: string; advance?: object } | undefined;
+  AdvanceRejected: { rejection?: object; improvements?: object[] } | undefined;
+  AutopaySetup:
+    | { activeAdvance?: object; paymentMethods?: object[] }
+    | undefined;
+  RateBreakdown:
+    | { user?: object; rateCalculation?: object; comparison?: object }
+    | undefined;
+  AdvanceSettings:
+    | { user?: object; activeAdvance?: object | null; settings?: object }
+    | undefined;
+  AdminDashboard:
+    | {
+        portfolioHealth?: object;
+        regionMetrics?: object[];
+        calibrationLogs?: object[];
+        profitability?: object;
+        alerts?: object[];
+      }
+    | undefined;
 };
 
 export type TabParamList = {
@@ -635,6 +766,32 @@ function HomeStackScreen() {
       <HomeStack.Screen name="InternationalVerification" component={InternationalVerificationScreen} />
       <HomeStack.Screen name="IDVerificationStart" component={IDVerificationStartScreen} />
       <HomeStack.Screen name="DocumentUpload" component={DocumentUploadScreen} />
+      {/* Advance Payout V2 flow (Stage 8). Entered (for now) via the
+          __DEV__ "Advance V2" button on the Dashboard → AdvanceHubV2.
+          The 3 *V2 screens coexist with the existing non-V2 Advance
+          screens registered higher up; reconciliation is a later
+          decision. AdminDashboard is staff-only and not linked from
+          any user menu. */}
+      <HomeStack.Screen name="AdvanceHubV2" component={AdvanceHubV2Screen} />
+      <HomeStack.Screen name="AdvanceExplanationV2" component={AdvanceExplanationV2Screen} />
+      <HomeStack.Screen name="SmartCalculator" component={SmartCalculatorScreen} />
+      <HomeStack.Screen name="ApplicationFlow" component={ApplicationFlowScreen} />
+      <HomeStack.Screen name="AdvanceStatusDashboard" component={AdvanceStatusDashboardScreen} />
+      <HomeStack.Screen name="AdvanceDetailsV2" component={AdvanceDetailsV2Screen} />
+      <HomeStack.Screen name="AdvanceHistory" component={AdvanceHistoryScreen} />
+      <HomeStack.Screen name="AdvanceApproval" component={AdvanceApprovalScreen} />
+      <HomeStack.Screen name="AdvanceDisbursement" component={AdvanceDisbursementScreen} />
+      <HomeStack.Screen name="AdvanceAgreement" component={AdvanceAgreementScreen} />
+      <HomeStack.Screen name="EarlyRepayment" component={EarlyRepaymentScreen} />
+      <HomeStack.Screen name="RepaymentConfirm" component={RepaymentConfirmScreen} />
+      <HomeStack.Screen name="PaymentFailed" component={PaymentFailedScreen} />
+      <HomeStack.Screen name="PaymentReminder" component={PaymentReminderScreen} />
+      <HomeStack.Screen name="HardshipRequest" component={HardshipRequestScreen} />
+      <HomeStack.Screen name="AdvanceRejected" component={AdvanceRejectedScreen} />
+      <HomeStack.Screen name="AutopaySetup" component={AutopaySetupScreen} />
+      <HomeStack.Screen name="RateBreakdown" component={RateBreakdownScreen} />
+      <HomeStack.Screen name="AdvanceSettings" component={AdvanceSettingsScreen} />
+      <HomeStack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
       {/* Dream Feed Screens (moved from Dreams tab) */}
       <HomeStack.Screen name="DreamFeed" component={DreamFeedScreen} />
       <HomeStack.Screen name="CreateDreamPost" component={CreateDreamPostScreen} />

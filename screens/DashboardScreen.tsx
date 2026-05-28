@@ -286,6 +286,22 @@ export default function DashboardScreen() {
               )}
             </View>
           </View>
+
+          {/* DEBUG ONLY — entry point to walk the translated Advance V2
+              flow during development. Gated on __DEV__ so it never
+              ships to production builds. Remove once a real entry
+              point (e.g. an Advance card) is wired. */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() => navigation.navigate(Routes.AdvanceHubV2)}
+              accessibilityLabel="Open Advance V2 flow (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="construct-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Advance V2 (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1b. WALLET BALANCE CARD ========== */}
@@ -611,6 +627,26 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 16,
     paddingHorizontal: 20,
+  },
+  // DEBUG ONLY — Advance V2 entry button (gated on __DEV__ in JSX).
+  debugButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+    borderStyle: "dashed",
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  debugButtonText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   topBar: {
     flexDirection: "row",
