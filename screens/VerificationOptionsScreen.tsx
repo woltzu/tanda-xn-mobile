@@ -1,14 +1,15 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// screens/VerificationOptionsScreen.tsx — KYC-001 inclusive ID picker
+// screens/VerificationOptionsScreen.tsx — Interest-First ID picker
 // ══════════════════════════════════════════════════════════════════════════════
 //
-// Route params (optional):
-//   { payout?: { amount: number; circleName: string } }
+// Route params: none.
 //
-// If the screen is reached from a payout-trigger flow, the caller can
-// pass a payout preview; otherwise we render a generic message-free
-// header. (Defaults to mock $1,200 / "Family Savings Circle" matching
-// the original design.)
+// Reached from UnlockInterestPromptScreen in the new Interest-First
+// flow (KYC-2.2). The header carries a single motivation line —
+// "Unlock your interest — it's easy and required by law." — rather
+// than the prior payout-preview card, since verification is now
+// positioned as "claim the interest you've earned" rather than
+// "unlock a specific circle payout."
 //
 // User picks one of four ID paths:
 //   - ssn          → TaxIDEntry
@@ -16,7 +17,8 @@
 //   - no-itin      → ITINEducation (we'll help)
 //   - international→ InternationalVerification
 //
-// Translated from KYC screens/01_VerificationOptions.jsx.
+// Originally translated from KYC screens/01_VerificationOptions.jsx;
+// adapted to the Interest-First flow per KYC_FLOW_GUIDE.md.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import React, { useState } from "react";
@@ -31,7 +33,6 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -81,22 +82,8 @@ const OPTIONS: Option[] = [
   },
 ];
 
-type VerificationOptionsParams = {
-  payout?: { amount: number; circleName: string };
-};
-type VerificationOptionsRouteProp = RouteProp<
-  { VerificationOptions: VerificationOptionsParams },
-  "VerificationOptions"
->;
-
 export default function VerificationOptionsScreen() {
   const navigation = useTypedNavigation();
-  const route = useRoute<VerificationOptionsRouteProp>();
-  const payout = route.params?.payout ?? {
-    amount: 1200,
-    circleName: "Family Savings Circle",
-  };
-
   const [selectedOption, setSelectedOption] = useState<OptionId | null>(null);
 
   const handleContinue = () => {
@@ -144,14 +131,13 @@ export default function VerificationOptionsScreen() {
             <View style={{ width: 40 }} />
           </View>
 
-          {/* Payout preview */}
-          <View style={styles.payoutCard}>
-            <Text style={styles.payoutLabel}>To receive your payout</Text>
-            <Text style={styles.payoutAmount}>
-              ${payout.amount.toLocaleString()}
-            </Text>
-            <Text style={styles.payoutCircle}>{payout.circleName}</Text>
-          </View>
+          {/* Interest-First motivation line (KYC-2.2). Replaces the
+              prior payout-preview card since the new flow positions
+              verification as "claim the interest you already earned"
+              rather than "unlock a circle payout." */}
+          <Text style={styles.headerMotivation}>
+            Unlock your interest — it's easy and required by law.
+          </Text>
         </LinearGradient>
 
         {/* Content */}
@@ -265,7 +251,7 @@ const styles = StyleSheet.create({
 
   header: {
     paddingTop: 20,
-    paddingBottom: 80,
+    paddingBottom: 60,
     paddingHorizontal: 20,
   },
   headerTopRow: {
@@ -288,26 +274,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
   },
-  payoutCard: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 16,
-    padding: 16,
-    alignItems: "center",
-  },
-  payoutLabel: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.8)",
-    marginBottom: 4,
-  },
-  payoutAmount: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: TEAL,
-  },
-  payoutCircle: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.7)",
+  headerMotivation: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.85)",
     marginTop: 4,
+    lineHeight: 20,
   },
 
   contentWrap: { marginTop: -40, paddingHorizontal: 20 },
