@@ -19,7 +19,7 @@
 // Buttons:
 //   - "Start Using TandaXn" / "Continue to TandaXn" → Dashboard
 //   - "Actually, I'll verify now" (only when reason !== 'itin_pending')
-//     → IDVerificationStart
+//     → VerificationOptions (Interest-First flow re-entry — KYC-2.2)
 //
 // Translated from KYC screens/11_LimitedMode.jsx.
 // ══════════════════════════════════════════════════════════════════════════════
@@ -56,24 +56,27 @@ type LimitedModeRouteProp = RouteProp<
   "LimitedMode"
 >;
 
+// Six things the user CAN still do without verifying. The last item
+// ("Interest keeps growing") is the bridge that motivates them to
+// come back and verify — it's there whether they verify or not.
 const AVAILABLE_FEATURES = [
   "Join savings circles",
   "Contribute monthly payments",
   "Track your savings progress",
   "Chat with circle members",
   "View your dashboard",
+  "Interest keeps growing",
 ];
 
 type LimitedFeature = { text: string; tier: 2 | 3 };
 
-const LIMITED_TIER1: LimitedFeature[] = [
-  { text: "Receive payouts (requires ID)", tier: 2 },
-  { text: "Create your own circles (requires ID)", tier: 2 },
-  { text: "Earn interest on savings (requires Tax ID)", tier: 3 },
-  { text: "Send money internationally (requires Tax ID)", tier: 3 },
-];
-
-const LIMITED_TIER2: LimitedFeature[] = [
+// Three rewards behind verification. All gated at Tier 3 because the
+// new Interest-First flow's headline reward (claiming earned
+// interest, unlimited payouts, international transfers) requires
+// tax-ID submission. The earlier per-currentTier split is gone —
+// every limited-mode user, regardless of partial progress, sees the
+// same unlock-targets list.
+const LIMITED_FEATURES: LimitedFeature[] = [
   { text: "Receive payouts over $600/year", tier: 3 },
   { text: "Earn interest on savings", tier: 3 },
   { text: "Send money internationally", tier: 3 },
@@ -82,11 +85,13 @@ const LIMITED_TIER2: LimitedFeature[] = [
 export default function LimitedModeScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<LimitedModeRouteProp>();
-  const currentTier = route.params?.currentTier ?? 1;
+  // currentTier param is still accepted for future use (badge swap,
+  // analytics tagging) but no longer branches the feature lists —
+  // the Interest-First flow shows the same single list to all
+  // limited-mode users.
   const reason: Reason = route.params?.reason ?? "skipped";
 
-  const limitedFeatures =
-    currentTier === 1 ? LIMITED_TIER1 : LIMITED_TIER2;
+  const limitedFeatures = LIMITED_FEATURES;
 
   const isPending = reason === "itin_pending";
 
@@ -199,7 +204,7 @@ export default function LimitedModeScreen() {
         {!isPending && (
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={() => navigation.navigate(Routes.IDVerificationStart)}
+            onPress={() => navigation.navigate(Routes.VerificationOptions)}
             accessibilityRole="button"
             accessibilityLabel="Actually, I'll verify now"
           >
