@@ -20,6 +20,7 @@ import { useElder } from "../context/ElderContext";
 import { useNotifications } from "../context/NotificationContext";
 import { useUserDefaults } from "../hooks/useDefaultCascade";
 import { useLateContributions } from "../hooks/useLateContributions";
+import { useInterest } from "../hooks/useInterest";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
@@ -118,6 +119,8 @@ export default function DashboardScreen() {
   const { hasActiveDefaults } = useUserDefaults();
   const { lateContributions } = useLateContributions();
   const hasRecoveryItems = hasActiveDefaults || lateContributions.length > 0;
+  const { totalAccruedInterest, isInterestUnlocked } = useInterest();
+  const hasInterestToShow = totalAccruedInterest > 0;
   const {
     getAdvanceTier,
     getTierInfo,
@@ -326,6 +329,53 @@ export default function DashboardScreen() {
             </View>
             <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.85)" />
           </TouchableOpacity>
+        )}
+
+        {/* ========== 1d. INTEREST CARD (Interest-First KYC entry) ========== */}
+        {/* Orange "accruing" variant nudges the user into the KYC flow;
+            green "earned" variant celebrates an unlocked balance.
+            Hidden when the user has no accrued interest at all. */}
+        {hasInterestToShow && (
+          isInterestUnlocked ? (
+            <View style={styles.interestCardGreen}>
+              <View style={styles.interestCardIcon}>
+                <Text style={styles.interestCardEmoji}>✨</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.interestCardLabelGreen}>
+                  Interest earned
+                </Text>
+                <Text style={styles.interestCardAmount}>
+                  ${totalAccruedInterest.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.interestCardOrange}
+              onPress={() =>
+                navigation.navigate(Routes.UnlockInterestPrompt, {
+                  totalInterest: totalAccruedInterest,
+                })
+              }
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel={`Unlock $${totalAccruedInterest.toFixed(2)} of interest`}
+            >
+              <View style={styles.interestCardIcon}>
+                <Text style={styles.interestCardEmoji}>📈</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.interestCardLabelOrange}>
+                  Interest accruing
+                </Text>
+                <Text style={styles.interestCardAmount}>
+                  ${totalAccruedInterest.toFixed(2)}
+                </Text>
+              </View>
+              <Text style={styles.interestCardCta}>Unlock now →</Text>
+            </TouchableOpacity>
+          )
         )}
 
         {/* ========== 2. PULSE BANNER (Teal gradient) ========== */}
@@ -705,6 +755,67 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "rgba(255,255,255,0.92)",
     marginTop: 2,
+  },
+
+  // ===== 1d. INTEREST CARD (KYC-2.3) =====
+  // Two visual variants share the same base shape:
+  //   - Orange (accruing): nudge into UnlockInterestPrompt
+  //   - Green (unlocked): celebratory, no tap action
+  interestCardOrange: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF7ED",
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 12,
+  },
+  interestCardGreen: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0FDFB",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderRadius: 14,
+    gap: 12,
+  },
+  interestCardIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  interestCardEmoji: { fontSize: 20 },
+  interestCardLabelOrange: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#92400E",
+  },
+  interestCardLabelGreen: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#065F46",
+  },
+  interestCardAmount: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: NAVY,
+    marginTop: 2,
+  },
+  interestCardCta: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#92400E",
   },
 
   // ===== 2. PULSE BANNER =====
