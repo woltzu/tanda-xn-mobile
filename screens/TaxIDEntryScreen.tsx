@@ -14,12 +14,18 @@
 //     back to default on Android. letterSpacing maps 1:1.
 //   - The 3-segment progress bar in the header is rendered as flex Views.
 //
-// On Continue → AccountTiersExplained. "Don't have SSN or ITIN?" help
-// link → ITINEducation (which is the explainer for users without a
-// tax ID).
+// On "Verify & Unlock Interest" → InterestUnlockedSuccess (the
+// Interest-First flow's celebration terminus) with params
+// { unlockedAmount, isFullAccess: true }. The unlockedAmount is
+// forwarded from the UnlockInterestPrompt route param chain; the
+// `isFullAccess: true` reflects that completing tax-ID verification
+// grants Tier 3.
 //
-// All four form values stay in local state for now; Phase KYC-2 will
-// route them through a KYC context's `submitTaxId(...)`.
+// "Don't have SSN or ITIN?" help link → ITINEducation.
+//
+// All four form values stay in local state for now; Phase KYC-3 will
+// route them through a KYC context's `submitTaxId(...)` that talks
+// to the verification edge function.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import React, { useState } from "react";
@@ -37,6 +43,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -62,8 +69,23 @@ function formatDate(value: string): string {
   return v;
 }
 
+// Optional `totalInterest` is forwarded from UnlockInterestPromptScreen
+// when the user enters the verification flow from the Dashboard
+// interest card. It's later passed straight through to
+// InterestUnlockedSuccess so the celebration screen shows the same
+// amount the user was promised. Falls back to a mock $47.83 (the
+// canonical guide value) for direct/test entry.
+type TaxIDEntryParams = { totalInterest?: number };
+type TaxIDEntryRouteProp = RouteProp<
+  { TaxIDEntry: TaxIDEntryParams },
+  "TaxIDEntry"
+>;
+const MOCK_TOTAL_INTEREST = 47.83;
+
 export default function TaxIDEntryScreen() {
   const navigation = useTypedNavigation();
+  const route = useRoute<TaxIDEntryRouteProp>();
+  const totalInterest = route.params?.totalInterest ?? MOCK_TOTAL_INTEREST;
 
   const [idType, setIdType] = useState<IdType | null>(null);
   const [legalName, setLegalName] = useState("");
@@ -83,9 +105,19 @@ export default function TaxIDEntryScreen() {
 
   const handleContinue = () => {
     if (!canContinue) return;
-    // Phase KYC-2 will submit via a KYC context; for now,
-    // just navigate forward.
-    navigation.navigate(Routes.AccountTiersExplained);
+    // Interest-First flow (KYC-2.2): a successful tax-ID submission
+    // is the final step in the SSN/ITIN paths. Land the user on
+    // InterestUnlockedSuccess with the same amount they saw on
+    // UnlockInterestPrompt. isFullAccess: true because tax-ID
+    // verification grants Tier 3.
+    //
+    // Phase KYC-2 / KYC-3 will replace the synchronous navigate with
+    // an actual submitTaxId() context call → backend verification →
+    // success navigation on response.
+    navigation.navigate(Routes.InterestUnlockedSuccess, {
+      unlockedAmount: totalInterest,
+      isFullAccess: true,
+    });
   };
 
   const taxIdLabel =
@@ -325,7 +357,7 @@ export default function TaxIDEntryScreen() {
             disabled={!canContinue}
             accessibilityRole="button"
             accessibilityState={{ disabled: !canContinue }}
-            accessibilityLabel="Continue"
+            accessibilityLabel="Verify and unlock interest"
           >
             <Text
               style={[
@@ -333,7 +365,7 @@ export default function TaxIDEntryScreen() {
                 !canContinue && styles.continueButtonTextDisabled,
               ]}
             >
-              Continue
+              Verify & Unlock Interest
             </Text>
           </TouchableOpacity>
         </View>
