@@ -14,6 +14,8 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
+import { useFormDraft } from "../hooks/useFormDraft";
+import { CircleDraft, CIRCLE_DRAFT_KEY } from "../lib/circleDraft";
 
 type CreateCircleSuccessNavigationProp = StackNavigationProp<RootStackParamList>;
 type CreateCircleSuccessRouteProp = RouteProp<RootStackParamList, "CreateCircleSuccess">;
@@ -61,6 +63,9 @@ export default function CreateCircleSuccessScreen() {
     isRecurring,
     totalCycles,
   } = route.params;
+
+  // Cross-step draft: cleared below once the circle is created successfully.
+  const { clearDraft } = useFormDraft<CircleDraft>(CIRCLE_DRAFT_KEY, { circleType });
 
   // Check if this is a family support or disaster relief circle
   const isFamilySupport = circleType === "family-support";
@@ -110,6 +115,10 @@ export default function CreateCircleSuccessScreen() {
       });
       // Store the created circle ID for navigation
       setCreatedCircleId(newCircle.id);
+      // Created successfully — clear the saved wizard draft so it won't
+      // reappear next time. Inside the try, after success only: a failed
+      // createCircle (catch below) leaves the draft intact for retry.
+      clearDraft();
     } catch (error) {
       console.error("Error saving circle:", error);
     }
