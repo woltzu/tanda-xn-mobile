@@ -18,6 +18,8 @@ import { RootStackParamList } from "../App";
 import * as Contacts from "expo-contacts";
 import { useElder } from "../context/ElderContext";
 import { useCommunity, Community } from "../context/CommunityContext";
+import { useFormDraft } from "../hooks/useFormDraft";
+import { CircleDraft, CIRCLE_DRAFT_KEY } from "../lib/circleDraft";
 
 type CreateCircleDetailsNavigationProp = StackNavigationProp<RootStackParamList>;
 type CreateCircleDetailsRouteProp = RouteProp<RootStackParamList, "CreateCircleDetails">;
@@ -86,20 +88,30 @@ export default function CreateCircleDetailsScreen() {
   const { isElder, elderProfile } = useElder();
   const { myCommunities } = useCommunity();
 
-  const [name, setName] = useState("");
-  const [amount, setAmount] = useState("");
-  const [frequency, setFrequency] = useState("monthly");
-  const [memberCount, setMemberCount] = useState("");
-  const [beneficiaryName, setBeneficiaryName] = useState("");
-  const [beneficiaryReason, setBeneficiaryReason] = useState("");
-  const [beneficiaryPhone, setBeneficiaryPhone] = useState("");
-  const [beneficiaryCountry, setBeneficiaryCountry] = useState("");
+  // Cross-step draft: pre-fill from restored params (present only when the
+  // user chose "Restore" on the Start screen) and save the merged wizard
+  // state on continue. Fresh flows arrive with just { circleType }.
+  const draftParams = route.params as Partial<CircleDraft>;
+  const { saveDraft } = useFormDraft<CircleDraft>(CIRCLE_DRAFT_KEY, { circleType });
+
+  const [name, setName] = useState(draftParams.name ?? "");
+  const [amount, setAmount] = useState(
+    draftParams.amount != null ? String(draftParams.amount) : ""
+  );
+  const [frequency, setFrequency] = useState(draftParams.frequency ?? "monthly");
+  const [memberCount, setMemberCount] = useState(
+    draftParams.memberCount != null ? String(draftParams.memberCount) : ""
+  );
+  const [beneficiaryName, setBeneficiaryName] = useState(draftParams.beneficiaryName ?? "");
+  const [beneficiaryReason, setBeneficiaryReason] = useState(draftParams.beneficiaryReason ?? "");
+  const [beneficiaryPhone, setBeneficiaryPhone] = useState(draftParams.beneficiaryPhone ?? "");
+  const [beneficiaryCountry, setBeneficiaryCountry] = useState(draftParams.beneficiaryCountry ?? "");
   const [showContactPicker, setShowContactPicker] = useState(false);
   const [contacts, setContacts] = useState<ContactItem[]>([]);
   const [contactSearch, setContactSearch] = useState("");
   const [selectedBeneficiaryContact, setSelectedBeneficiaryContact] = useState<ContactItem | null>(null);
   // For recurring beneficiary circles
-  const [totalCycles, setTotalCycles] = useState(1);
+  const [totalCycles, setTotalCycles] = useState(draftParams.totalCycles ?? 1);
   const [showDurationPicker, setShowDurationPicker] = useState(false);
   // For Elder disaster relief - community selection
   const [selectedCommunity, setSelectedCommunity] = useState<Community | null>(null);
@@ -208,26 +220,31 @@ export default function CreateCircleDetailsScreen() {
   const totalContributionPerMember = parsedAmount * totalCycles;
 
   const handleContinue = () => {
-    if (canContinue) {
-      navigation.navigate("CreateCircleSchedule", {
-        circleType,
-        name: name.trim(),
-        amount: parsedAmount,
-        frequency, // Respect the user's chosen frequency (biweekly, weekly, etc.)
-        memberCount: parsedMemberCount,
-        beneficiaryName: showBeneficiary && beneficiaryName.trim() ? beneficiaryName.trim() : undefined,
-        beneficiaryReason: showBeneficiary && beneficiaryReason.trim() ? beneficiaryReason.trim() : undefined,
-        // New fields for family support circles
-        beneficiaryPhone: isFamilySupport && beneficiaryPhone ? beneficiaryPhone : undefined,
-        beneficiaryCountry: isFamilySupport && beneficiaryCountry ? beneficiaryCountry : undefined,
-        isRecurring: isRecurring || undefined,
-        totalCycles: isFamilySupport ? totalCycles : undefined,
-        // Elder disaster relief fields
-        targetCommunityId: isDisasterRelief && selectedCommunity ? selectedCommunity.id : undefined,
-        targetCommunityName: isDisasterRelief && selectedCommunity ? selectedCommunity.name : undefined,
-        isElderCreated: isDisasterRelief && isElder && elderProfile?.status === "approved",
-      } as any); // Type assertion for additional params
-    }
+    if (!canContinue) return;
+    // Merge carried-forward params (incl. any restored Schedule/Invite fields)
+    // with this step's values. The same object is both saved as the draft and
+    // passed forward, keeping the accumulated wizard state consistent.
+    const nextParams = {
+      ...route.params,
+      circleType,
+      name: name.trim(),
+      amount: parsedAmount,
+      frequency, // Respect the user's chosen frequency (biweekly, weekly, etc.)
+      memberCount: parsedMemberCount,
+      beneficiaryName: showBeneficiary && beneficiaryName.trim() ? beneficiaryName.trim() : undefined,
+      beneficiaryReason: showBeneficiary && beneficiaryReason.trim() ? beneficiaryReason.trim() : undefined,
+      // New fields for family support circles
+      beneficiaryPhone: isFamilySupport && beneficiaryPhone ? beneficiaryPhone : undefined,
+      beneficiaryCountry: isFamilySupport && beneficiaryCountry ? beneficiaryCountry : undefined,
+      isRecurring: isRecurring || undefined,
+      totalCycles: isFamilySupport ? totalCycles : undefined,
+      // Elder disaster relief fields
+      targetCommunityId: isDisasterRelief && selectedCommunity ? selectedCommunity.id : undefined,
+      targetCommunityName: isDisasterRelief && selectedCommunity ? selectedCommunity.name : undefined,
+      isElderCreated: isDisasterRelief && isElder && elderProfile?.status === "approved",
+    };
+    saveDraft(nextParams as CircleDraft);
+    navigation.navigate("CreateCircleSchedule", nextParams as any); // extra params
   };
 
   return (

@@ -14,16 +14,9 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
 import { useFormDraft } from "../hooks/useFormDraft";
+import { CircleDraft, CIRCLE_DRAFT_KEY } from "../lib/circleDraft";
 
 type CreateCircleStartNavigationProp = StackNavigationProp<RootStackParamList>;
-
-// Shape of the cross-step circle-creation draft. circleType is always set
-// (chosen on this screen, persisted from the Details step onward); the rest
-// of the wizard fields are filled in across later steps, so they stay loose.
-type CircleDraft = {
-  circleType: string;
-  [key: string]: unknown;
-};
 
 const circleTypes = [
   {
@@ -99,7 +92,7 @@ export default function CreateCircleStartScreen() {
   // a restore; it does not save (Continue starts a fresh wizard). The later
   // step screens save/clear it.
   const { hasDraft, restoreDraft, clearDraft } = useFormDraft<CircleDraft>(
-    "circle-create",
+    CIRCLE_DRAFT_KEY,
     { circleType: "" }
   );
   const [bannerDismissed, setBannerDismissed] = useState(false);
