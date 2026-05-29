@@ -15,10 +15,10 @@
 // `GoalDetailV2` (added during the registration phase, mirroring the
 // Advance Option B precedent). The existing GoalDetails screen is untouched.
 //
-// NAVIGATION — translation-only batch. `onBack` → goBack(); every forward
-// action (Add Money, Withdraw, Link Circle, Edit, Milestones, See All)
-// resolves to a "coming soon" Alert placeholder. Real navigation is wired
-// in the registration phase once the sibling goal screens are registered.
+// NAVIGATION — `onBack` → goBack(). Every action is wired: Add Money →
+// GoalAddMoney, Withdraw → GoalWithdraw, Link Circle → GoalLinkCircle,
+// Edit → GoalEdit, Milestones → GoalMilestones, See All → GoalActivity
+// (each forwards { goalId, goal }; See All also forwards recentActivity).
 //
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
@@ -32,7 +32,6 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -224,10 +223,8 @@ export default function GoalDetailV2Screen() {
   };
   const lockStatus = getLockStatus();
 
-  // Edit Goal (three-dot menu) stays a placeholder — no GoalEdit screen yet.
-  const comingSoon = (label: string) =>
-    Alert.alert(label, "This will be available soon.");
-
+  const handleEditGoal = () =>
+    navigation.navigate(Routes.GoalEdit, { goalId: goal.id, goal });
   const handleAddMoney = () =>
     navigation.navigate(Routes.GoalAddMoney, { goalId: goal.id, goal });
   const handleWithdraw = () =>
@@ -278,7 +275,7 @@ export default function GoalDetailV2Screen() {
 
             <TouchableOpacity
               style={styles.iconButton}
-              onPress={() => comingSoon("Edit Goal")}
+              onPress={handleEditGoal}
               accessibilityRole="button"
               accessibilityLabel="Goal options"
             >

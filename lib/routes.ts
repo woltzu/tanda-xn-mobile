@@ -120,6 +120,7 @@ export const Routes = {
   GoalCreate: "GoalCreate",
   GoalDetails: "GoalDetails",
   GoalDetailV2: "GoalDetailV2",
+  GoalEdit: "GoalEdit",
   GoalLinkCircle: "GoalLinkCircle",
   GoalMilestones: "GoalMilestones",
   GoalSetupSuccess: "GoalSetupSuccess",
