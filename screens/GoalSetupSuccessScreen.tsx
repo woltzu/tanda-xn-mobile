@@ -12,9 +12,9 @@
 // matching the no-Animated convention used across the translated screens.
 //
 // NAVIGATION — onDone ("I'll do this later") → goBack(); "Go to My Goal" →
-// GoalDetailV2 { goal } (forwards the received goal). The remaining actions
-// (deposit, link circle, set up auto-deposit) are still "coming soon" Alert
-// placeholders tagged TODO(goals-wiring).
+// GoalDetailV2, "Make First Deposit" → GoalAddMoney, "Link a Circle" →
+// GoalLinkCircle (all forward the received goal). "Set Up Auto-Deposit"
+// stays a "coming soon" Alert placeholder (no autopay/edit screen yet).
 //
 // Route params (optional):
 //   goal?: { name; emoji; target; monthlyContribution; autoDepositEnabled;
@@ -82,11 +82,9 @@ export default function GoalSetupSuccessScreen() {
   const estimatedInterest =
     (goal.target / 2) * (goal.interestRate / 100) * (monthsToGoal / 12);
 
-  // "Go to My Goal" is wired to GoalDetailV2 below. These forward targets
-  // are not wired yet:
-  //   onAddMoney       → Routes.GoalAddMoney
-  //   onLinkCircle     → Routes.GoalLinkCircle
-  //   onSetupAutoDeposit → Routes.AutopaySetup (or goal settings)
+  // "Go to My Goal" → GoalDetailV2, "Make First Deposit" → GoalAddMoney,
+  // and "Link a Circle" → GoalLinkCircle are wired below. Only "Set Up
+  // Auto-Deposit" stays a placeholder (no autopay/edit screen yet).
   const comingSoon = (label: string) =>
     Alert.alert(label, "This will be available soon.");
 
@@ -177,7 +175,11 @@ export default function GoalSetupSuccessScreen() {
 
             {/* Make first deposit */}
             <TouchableOpacity
-              onPress={() => comingSoon("Make First Deposit")}
+              onPress={() =>
+                navigation.navigate(Routes.GoalAddMoney, {
+                  goal: route.params?.goal,
+                })
+              }
               accessibilityRole="button"
               style={styles.stepButton}
             >
@@ -197,7 +199,11 @@ export default function GoalSetupSuccessScreen() {
 
             {/* Link circle */}
             <TouchableOpacity
-              onPress={() => comingSoon("Link a Circle")}
+              onPress={() =>
+                navigation.navigate(Routes.GoalLinkCircle, {
+                  goal: route.params?.goal,
+                })
+              }
               accessibilityRole="button"
               style={styles.stepButton}
             >

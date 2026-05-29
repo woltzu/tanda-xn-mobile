@@ -9,8 +9,8 @@
 // custom goal.
 //
 // NAVIGATION — onBack → goBack(); category selection (incl. the custom
-// option) navigates to GoalTypeSelect { category }. "Skip for now" stays a
-// "coming soon" Alert placeholder until its forward target is decided.
+// option) navigates to GoalTypeSelect { category }. "Skip for now" →
+// Dashboard.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import React from "react";
@@ -22,7 +22,6 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -85,12 +84,6 @@ const CATEGORIES: Category[] = [
 export default function GoalCategorySelectScreen() {
   const navigation = useTypedNavigation();
 
-  // "Skip for now" stays a placeholder — no clear forward target until the
-  // post-onboarding destination is decided. Category selection (incl. the
-  // custom option) navigates into GoalTypeSelect.
-  const comingSoon = (label: string) =>
-    Alert.alert(label, "This will be available soon.");
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={NAVY} />
@@ -117,7 +110,7 @@ export default function GoalCategorySelectScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <TouchableOpacity
-              onPress={() => comingSoon("Skip for now")}
+              onPress={() => navigation.navigate(Routes.Dashboard)}
               accessibilityRole="button"
             >
               <Text style={styles.skipText}>Skip for now</Text>
