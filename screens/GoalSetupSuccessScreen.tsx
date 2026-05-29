@@ -11,10 +11,10 @@
 // The web success-icon "scaleIn" CSS animation is dropped (static icon),
 // matching the no-Animated convention used across the translated screens.
 //
-// NAVIGATION — translation-only batch. onDone ("I'll do this later") →
-// goBack(); every other action (go to goal, deposit, link circle, set up
-// auto-deposit) is a "coming soon" Alert placeholder tagged
-// TODO(goals-wiring).
+// NAVIGATION — onDone ("I'll do this later") → goBack(); "Go to My Goal" →
+// GoalDetailV2 { goal } (forwards the received goal). The remaining actions
+// (deposit, link circle, set up auto-deposit) are still "coming soon" Alert
+// placeholders tagged TODO(goals-wiring).
 //
 // Route params (optional):
 //   goal?: { name; emoji; target; monthlyContribution; autoDepositEnabled;
@@ -36,6 +36,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -81,8 +82,8 @@ export default function GoalSetupSuccessScreen() {
   const estimatedInterest =
     (goal.target / 2) * (goal.interestRate / 100) * (monthsToGoal / 12);
 
-  // TODO(goals-wiring):
-  //   onGoToGoal       → Routes.GoalDetailV2 { goal }
+  // "Go to My Goal" is wired to GoalDetailV2 below. These forward targets
+  // are not wired yet:
   //   onAddMoney       → Routes.GoalAddMoney
   //   onLinkCircle     → Routes.GoalLinkCircle
   //   onSetupAutoDeposit → Routes.AutopaySetup (or goal settings)
@@ -290,7 +291,11 @@ export default function GoalSetupSuccessScreen() {
         {/* ===== BOTTOM CTA ===== */}
         <View style={styles.bottomBar}>
           <TouchableOpacity
-            onPress={() => comingSoon("Go to My Goal")}
+            onPress={() =>
+              navigation.navigate(Routes.GoalDetailV2, {
+                goal: route.params?.goal,
+              })
+            }
             accessibilityRole="button"
             style={styles.primaryButton}
           >

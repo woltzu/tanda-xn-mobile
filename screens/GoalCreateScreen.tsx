@@ -16,11 +16,9 @@
 // NAMING — this is a *new* v2 screen. It does NOT overwrite the existing
 // CreateGoal route/screen; route name (added later) will be `GoalCreate`.
 //
-// NAVIGATION — translation-only batch. `onBack` → goBack(); goal creation
-// currently resolves to an Alert + goBack() placeholder. Real wiring
-// (success screen, circle linking) lands in the registration phase.
-// The "Link a Circle" picker is fully in-screen (no navigation), faithful
-// to the web design.
+// NAVIGATION — `onBack` → goBack(); "Create Goal" builds a mock goal
+// object and navigates to GoalSetupSuccess { goal }. The "Link a Circle"
+// picker is fully in-screen (no navigation), faithful to the web design.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import React, { useState } from "react";
@@ -33,12 +31,12 @@ import {
   SafeAreaView,
   StatusBar,
   TextInput,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -220,13 +218,42 @@ export default function GoalCreateScreen() {
 
   const handleCreate = () => {
     if (!canCreate) return;
-    // TODO(goals-wiring): persist via SavingsContext, then
-    // navigation.navigate(Routes.GoalSetupSuccess, { ...goalData }).
-    Alert.alert(
-      "Goal created",
-      `${goalName} • ${selectedType.name} • ${getEffectiveApy()}% APY\nTarget $${targetAmount.toLocaleString()} · $${monthlyContribution}/mo`,
-      [{ text: "Done", onPress: () => navigation.goBack() }]
-    );
+    const apy = getEffectiveApy();
+    // Mock goal object. Kept comprehensive on purpose: GoalSetupSuccess
+    // reads name/target/monthly/autoDeposit/estimatedAchieveDate/interestRate,
+    // and it later forwards this same object to GoalDetailV2 — which reads
+    // balance/interestEarned/dailyInterest/progressPercent/daysActive etc.
+    // Including zeroed defaults here avoids missing-field crashes downstream.
+    // Real persistence via SavingsContext lands later.
+    const newGoal = {
+      id: "new-" + Date.now(),
+      name: goalName,
+      emoji: goalType.emoji,
+      category: goalType.name,
+      balance: 0,
+      target: targetAmount,
+      interestEarned: 0,
+      dailyInterest: 0,
+      progressPercent: 0,
+      daysActive: 0,
+      isOnTrack: true,
+      monthlyContribution,
+      autoDepositEnabled: autoDeposit,
+      linkedCircle: null,
+      startDate: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      targetDate: estimatedDateStr,
+      estimatedAchieveDate: estimatedDateStr,
+      savingsType,
+      apy,
+      interestRate: apy,
+      lockPeriodMonths: savingsType === "locked" ? lockPeriodMonths : null,
+      lockEndDate: savingsType === "locked" ? lockEndDate.toISOString() : null,
+    };
+    navigation.navigate(Routes.GoalSetupSuccess, { goal: newGoal });
   };
 
   return (

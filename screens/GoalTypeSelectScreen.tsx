@@ -10,9 +10,8 @@
 // Route params (optional):
 //   category?: { id; name; emoji; color; bgColor }  (defaults to Financial Freedom)
 //
-// NAVIGATION — translation-only batch. onBack → goBack(); goal-type /
-// custom selection resolve to "coming soon" Alert placeholders tagged
-// TODO(goals-wiring) (forward target: GoalCreate with { goalType, category }).
+// NAVIGATION — onBack → goBack(); selecting a goal type (or the custom
+// option) navigates to GoalCreate with { goalType }.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import React from "react";
@@ -24,12 +23,12 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -268,10 +267,22 @@ export default function GoalTypeSelectScreen() {
     GOAL_TYPES_BY_CATEGORY[category.id] ||
     GOAL_TYPES_BY_CATEGORY.financial_freedom;
 
-  // TODO(goals-wiring): selecting a type should
-  // navigation.navigate(Routes.GoalCreate, { goalType, category }).
-  const comingSoon = (label: string) =>
-    Alert.alert(label, "This will be available soon.");
+  const handleSelectGoalType = (goalType: GoalTypeOption) => {
+    navigation.navigate(Routes.GoalCreate, { goalType });
+  };
+
+  const handleCustomGoal = () => {
+    navigation.navigate(Routes.GoalCreate, {
+      goalType: {
+        id: "custom",
+        emoji: "⭐",
+        name: "Custom Goal",
+        description: "Your personal goal",
+        suggestedTarget: 10000,
+        suggestedMonthly: 500,
+      },
+    });
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -318,7 +329,7 @@ export default function GoalTypeSelectScreen() {
             {goalTypes.map((goalType) => (
               <TouchableOpacity
                 key={goalType.id}
-                onPress={() => comingSoon(goalType.name)}
+                onPress={() => handleSelectGoalType(goalType)}
                 activeOpacity={0.85}
                 accessibilityRole="button"
                 style={styles.typeCard}
@@ -378,7 +389,7 @@ export default function GoalTypeSelectScreen() {
 
           {/* Custom goal */}
           <TouchableOpacity
-            onPress={() => comingSoon("Custom Goal")}
+            onPress={handleCustomGoal}
             activeOpacity={0.85}
             accessibilityRole="button"
             style={styles.customButton}

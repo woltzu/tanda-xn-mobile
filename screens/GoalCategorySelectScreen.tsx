@@ -8,9 +8,9 @@
 // (Family / Financial Freedom / Personal Transformation / Legacy) or a
 // custom goal.
 //
-// NAVIGATION — translation-only batch. onBack → goBack(); category
-// selection / skip / custom resolve to "coming soon" Alert placeholders
-// tagged TODO(goals-wiring) (forward target: GoalTypeSelect).
+// NAVIGATION — onBack → goBack(); category selection (incl. the custom
+// option) navigates to GoalTypeSelect { category }. "Skip for now" stays a
+// "coming soon" Alert placeholder until its forward target is decided.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import React from "react";
@@ -27,6 +27,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -84,9 +85,9 @@ const CATEGORIES: Category[] = [
 export default function GoalCategorySelectScreen() {
   const navigation = useTypedNavigation();
 
-  // TODO(goals-wiring): selecting a category should
-  // navigation.navigate(Routes.GoalTypeSelect, { category }); skip should
-  // jump past the guided flow.
+  // "Skip for now" stays a placeholder — no clear forward target until the
+  // post-onboarding destination is decided. Category selection (incl. the
+  // custom option) navigates into GoalTypeSelect.
   const comingSoon = (label: string) =>
     Alert.alert(label, "This will be available soon.");
 
@@ -138,7 +139,9 @@ export default function GoalCategorySelectScreen() {
             {CATEGORIES.map((category) => (
               <TouchableOpacity
                 key={category.id}
-                onPress={() => comingSoon(category.name)}
+                onPress={() =>
+                  navigation.navigate(Routes.GoalTypeSelect, { category })
+                }
                 activeOpacity={0.85}
                 accessibilityRole="button"
                 style={styles.categoryCard}
@@ -194,7 +197,17 @@ export default function GoalCategorySelectScreen() {
 
           {/* Custom goal */}
           <TouchableOpacity
-            onPress={() => comingSoon("Custom Goal")}
+            onPress={() =>
+              navigation.navigate(Routes.GoalTypeSelect, {
+                category: {
+                  id: "custom",
+                  name: "Custom Goal",
+                  emoji: "✨",
+                  color: "#00C6AE",
+                  bgColor: "#F0FDFB",
+                },
+              })
+            }
             activeOpacity={0.85}
             accessibilityRole="button"
             style={styles.customButton}
