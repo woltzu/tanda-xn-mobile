@@ -13,8 +13,17 @@ import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
+import { useFormDraft } from "../hooks/useFormDraft";
 
 type CreateCircleStartNavigationProp = StackNavigationProp<RootStackParamList>;
+
+// Shape of the cross-step circle-creation draft. circleType is always set
+// (chosen on this screen, persisted from the Details step onward); the rest
+// of the wizard fields are filled in across later steps, so they stay loose.
+type CircleDraft = {
+  circleType: string;
+  [key: string]: unknown;
+};
 
 const circleTypes = [
   {
@@ -86,6 +95,30 @@ export default function CreateCircleStartScreen() {
 
   const isTravelSelected = selectedType === "travel";
 
+  // Cross-step draft (shared key). This screen only READS the draft to offer
+  // a restore; it does not save (Continue starts a fresh wizard). The later
+  // step screens save/clear it.
+  const { hasDraft, restoreDraft, clearDraft } = useFormDraft<CircleDraft>(
+    "circle-create",
+    { circleType: "" }
+  );
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  const handleRestoreDraft = () => {
+    const d = restoreDraft();
+    if (d) {
+      // Restore always re-enters at the first data-entry step; the saved
+      // fields ride along as params so each downstream step can pre-fill.
+      navigation.navigate("CreateCircleDetails", { ...d });
+    }
+    setBannerDismissed(true);
+  };
+
+  const handleDiscardDraft = () => {
+    clearDraft();
+    setBannerDismissed(true);
+  };
+
   const handleContinue = () => {
     if (selectedType && canCreate) {
       if (isTravelSelected) {
@@ -155,6 +188,31 @@ export default function CreateCircleStartScreen() {
 
         {/* Content */}
         <View style={styles.content}>
+          {/* Unfinished-circle draft banner */}
+          {hasDraft && !bannerDismissed && (
+            <View style={styles.draftBanner}>
+              <Text style={styles.draftBannerText}>
+                You have an unfinished circle. Restore it?
+              </Text>
+              <View style={styles.draftBannerActions}>
+                <TouchableOpacity
+                  style={styles.draftBannerButton}
+                  onPress={handleRestoreDraft}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.draftBannerButtonText}>Restore</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.draftBannerButton}
+                  onPress={handleDiscardDraft}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.draftBannerButtonText}>Discard</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {/* Circle Types */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>What kind of circle?</Text>
@@ -404,6 +462,30 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 120,
   },
+  draftBanner: {
+    backgroundColor: "#FEF3C7",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  draftBannerText: {
+    flex: 1,
+    color: "#92400E",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  draftBannerActions: { flexDirection: "row", alignItems: "center" },
+  draftBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
+    marginLeft: 8,
+  },
+  draftBannerButtonText: { color: "#D97706", fontWeight: "600", fontSize: 13 },
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
