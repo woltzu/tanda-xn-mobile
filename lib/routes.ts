@@ -113,6 +113,7 @@ export const Routes = {
   ForgotPassword: "ForgotPassword",
   Gatherings: "Gatherings",
   GoalAchieved: "GoalAchieved",
+  GoalActivity: "GoalActivity",
   GoalAddMoney: "GoalAddMoney",
   GoalBItems: "GoalBItems",
   GoalCategorySelect: "GoalCategorySelect",

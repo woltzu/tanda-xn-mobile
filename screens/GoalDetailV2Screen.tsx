@@ -38,6 +38,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -579,7 +580,12 @@ export default function GoalDetailV2Screen() {
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardHeading}>Recent Activity</Text>
               <TouchableOpacity
-                onPress={() => comingSoon("All Activity")}
+                onPress={() =>
+                  navigation.navigate(Routes.GoalActivity, {
+                    goal,
+                    recentActivity,
+                  })
+                }
                 accessibilityRole="button"
               >
                 <Text style={styles.linkAction}>See All</Text>

@@ -265,6 +265,7 @@ import GoalMilestonesScreen from "./screens/GoalMilestonesScreen";
 import GoalAchievedScreen from "./screens/GoalAchievedScreen";
 import GoalBItemsScreen from "./screens/GoalBItemsScreen";
 import GoalStoriesScreen from "./screens/GoalStoriesScreen";
+import GoalActivityScreen from "./screens/GoalActivityScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -667,6 +668,7 @@ export type RootStackParamList = {
   GoalAchieved: { goalId?: string; goal?: object } | undefined;
   GoalBItems: { goalId?: string; goal?: object } | undefined;
   GoalStories: undefined;
+  GoalActivity: { goal?: object; recentActivity?: object[] } | undefined;
 };
 
 export type TabParamList = {
@@ -844,6 +846,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="GoalAchieved" component={GoalAchievedScreen} />
       <HomeStack.Screen name="GoalBItems" component={GoalBItemsScreen} />
       <HomeStack.Screen name="GoalStories" component={GoalStoriesScreen} />
+      <HomeStack.Screen name="GoalActivity" component={GoalActivityScreen} />
       {/* Dream Feed Screens (moved from Dreams tab) */}
       <HomeStack.Screen name="DreamFeed" component={DreamFeedScreen} />
       <HomeStack.Screen name="CreateDreamPost" component={CreateDreamPostScreen} />
