@@ -12,10 +12,10 @@
 // redesign takes the V2 suffix → future route `GoalsHubV2` (per the
 // established conflict rule). The existing hub is untouched.
 //
-// NAVIGATION — translation-only batch. There is no back button (hub
-// screen). Forward actions (open goal, create goal, view stories) resolve
-// to "coming soon" Alert placeholders tagged TODO(goals-wiring); real
-// navigation is wired during the registration phase.
+// NAVIGATION — there is no back button (hub screen). Tapping a goal →
+// GoalDetailV2 (forwarding the full goal object so the V2 detail screen
+// has data until fetch-by-id lands), "+ New Goal" / empty-state →
+// GoalCategorySelect, and stories "See All" / a story row → GoalStories.
 //
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
@@ -29,12 +29,12 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
-  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -170,13 +170,6 @@ export default function GoalsHubV2Screen() {
     return true;
   });
 
-  // TODO(goals-wiring): wire to typed navigation once registered:
-  //   onGoalPress  → Routes.GoalDetailV2 { goal }
-  //   onCreateGoal → Routes.GoalCategorySelect
-  //   onViewStories / onViewStory → Routes.GoalStories
-  const comingSoon = (label: string) =>
-    Alert.alert(label, "This will be available soon.");
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={NAVY} />
@@ -199,7 +192,7 @@ export default function GoalsHubV2Screen() {
               <Text style={styles.headerTitle}>Achieve Your Dreams</Text>
             </View>
             <TouchableOpacity
-              onPress={() => comingSoon("Create Goal")}
+              onPress={() => navigation.navigate(Routes.GoalCategorySelect)}
               accessibilityRole="button"
               accessibilityLabel="New goal"
               style={styles.newGoalButton}
@@ -262,7 +255,12 @@ export default function GoalsHubV2Screen() {
             {filteredGoals.map((goal) => (
               <TouchableOpacity
                 key={goal.id}
-                onPress={() => comingSoon(goal.name)}
+                onPress={() =>
+                  navigation.navigate(Routes.GoalDetailV2, {
+                    goalId: goal.id,
+                    goal,
+                  })
+                }
                 activeOpacity={0.85}
                 accessibilityRole="button"
                 style={styles.goalCard}
@@ -353,7 +351,7 @@ export default function GoalsHubV2Screen() {
                 Start your journey to achieving the life you came here to build.
               </Text>
               <TouchableOpacity
-                onPress={() => comingSoon("Create Goal")}
+                onPress={() => navigation.navigate(Routes.GoalCategorySelect)}
                 accessibilityRole="button"
                 style={styles.emptyButton}
               >
@@ -369,7 +367,7 @@ export default function GoalsHubV2Screen() {
             <View style={styles.cardHeaderRow}>
               <Text style={styles.cardHeading}>🏆 Achievement Stories</Text>
               <TouchableOpacity
-                onPress={() => comingSoon("Achievement Stories")}
+                onPress={() => navigation.navigate(Routes.GoalStories)}
                 accessibilityRole="button"
               >
                 <Text style={styles.linkAction}>See All</Text>
@@ -380,7 +378,7 @@ export default function GoalsHubV2Screen() {
               {achievementStories.map((story) => (
                 <TouchableOpacity
                   key={story.id}
-                  onPress={() => comingSoon(story.userName)}
+                  onPress={() => navigation.navigate(Routes.GoalStories)}
                   activeOpacity={0.85}
                   accessibilityRole="button"
                   style={styles.storyRow}
