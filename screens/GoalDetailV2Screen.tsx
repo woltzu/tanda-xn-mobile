@@ -224,14 +224,18 @@ export default function GoalDetailV2Screen() {
   };
   const lockStatus = getLockStatus();
 
-  // TODO(goals-wiring): replace each placeholder with typed navigation:
-  //   onAddMoney      → Routes.GoalAddMoney
-  //   onWithdraw      → Routes.GoalWithdraw
-  //   onLinkCircle    → Routes.GoalLinkCircle
-  //   onEditGoal      → Routes.EditGoal
-  //   onViewMilestones→ Routes.GoalMilestones
+  // Edit Goal (three-dot menu) stays a placeholder — no GoalEdit screen yet.
   const comingSoon = (label: string) =>
     Alert.alert(label, "This will be available soon.");
+
+  const handleAddMoney = () =>
+    navigation.navigate(Routes.GoalAddMoney, { goalId: goal.id, goal });
+  const handleWithdraw = () =>
+    navigation.navigate(Routes.GoalWithdraw, { goalId: goal.id, goal });
+  const handleLinkCircle = () =>
+    navigation.navigate(Routes.GoalLinkCircle, { goalId: goal.id, goal });
+  const handleViewMilestones = () =>
+    navigation.navigate(Routes.GoalMilestones, { goalId: goal.id, goal });
 
   const activityIcon = (type: Activity["type"]) =>
     type === "interest" ? "📈" : type === "circle_payout" ? "🔄" : "💰";
@@ -473,7 +477,7 @@ export default function GoalDetailV2Screen() {
 
           {/* Milestones */}
           <TouchableOpacity
-            onPress={() => comingSoon("Milestones")}
+            onPress={handleViewMilestones}
             activeOpacity={0.8}
             accessibilityRole="button"
             style={styles.card}
@@ -538,7 +542,7 @@ export default function GoalDetailV2Screen() {
                   </View>
                 </View>
                 <TouchableOpacity
-                  onPress={() => comingSoon("Link a Circle")}
+                  onPress={handleLinkCircle}
                   accessibilityRole="button"
                 >
                   <Text style={styles.linkAction}>Edit</Text>
@@ -560,7 +564,7 @@ export default function GoalDetailV2Screen() {
             </View>
           ) : (
             <TouchableOpacity
-              onPress={() => comingSoon("Link a Circle")}
+              onPress={handleLinkCircle}
               activeOpacity={0.8}
               accessibilityRole="button"
               style={styles.linkCircleButton}
@@ -633,7 +637,7 @@ export default function GoalDetailV2Screen() {
       {/* ===== BOTTOM ACTIONS ===== */}
       <View style={styles.bottomBar}>
         <TouchableOpacity
-          onPress={() => comingSoon("Add Money")}
+          onPress={handleAddMoney}
           accessibilityRole="button"
           style={styles.addMoneyButton}
         >
@@ -641,7 +645,7 @@ export default function GoalDetailV2Screen() {
           <Text style={styles.addMoneyText}>Add Money</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={() => comingSoon("Withdraw")}
+          onPress={handleWithdraw}
           accessibilityRole="button"
           style={styles.withdrawButton}
         >
