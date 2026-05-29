@@ -302,6 +302,21 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Advance V2 (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point to walk the translated Goals V2
+              flow during development. Gated on __DEV__ so it never ships.
+              Remove once a real entry point (e.g. a Goals card) is wired. */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() => navigation.navigate(Routes.GoalsHubV2)}
+              accessibilityLabel="Open Goals V2 flow (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="trophy-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Goals V2 (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1b. WALLET BALANCE CARD ========== */}

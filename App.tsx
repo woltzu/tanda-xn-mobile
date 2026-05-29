@@ -247,6 +247,24 @@ import AutopaySetupScreen from "./screens/AutopaySetupScreen";
 import RateBreakdownScreen from "./screens/RateBreakdownScreen";
 import AdvanceSettingsScreen from "./screens/AdvanceSettingsScreen";
 import AdminDashboardScreen from "./screens/AdminDashboardScreen";
+// Goals flow (GOALS-001..015) — 13 screens translated from web JSX.
+// GoalDetailV2 / GoalsHubV2 are redesigns that coexist with the existing
+// GoalDetails / GoalsHub production screens (registered above); the rest are
+// net-new. Reachable for testing via the __DEV__ "Goals V2" button on the
+// Dashboard. Forward navigation between them is still TODO(goals-wiring).
+import GoalsHubV2Screen from "./screens/GoalsHubV2Screen";
+import GoalCategorySelectScreen from "./screens/GoalCategorySelectScreen";
+import GoalTypeSelectScreen from "./screens/GoalTypeSelectScreen";
+import GoalCreateScreen from "./screens/GoalCreateScreen";
+import GoalSetupSuccessScreen from "./screens/GoalSetupSuccessScreen";
+import GoalDetailV2Screen from "./screens/GoalDetailV2Screen";
+import GoalAddMoneyScreen from "./screens/GoalAddMoneyScreen";
+import GoalWithdrawScreen from "./screens/GoalWithdrawScreen";
+import GoalLinkCircleScreen from "./screens/GoalLinkCircleScreen";
+import GoalMilestonesScreen from "./screens/GoalMilestonesScreen";
+import GoalAchievedScreen from "./screens/GoalAchievedScreen";
+import GoalBItemsScreen from "./screens/GoalBItemsScreen";
+import GoalStoriesScreen from "./screens/GoalStoriesScreen";
 
 export type RootStackParamList = {
   Splash: undefined;
@@ -632,6 +650,23 @@ export type RootStackParamList = {
         alerts?: object[];
       }
     | undefined;
+  // Goals flow (GOALS-001..015). Params are intentionally loose — each
+  // screen reads a richer locally-typed RouteProp internally with sensible
+  // defaults, so these entries exist only so navigate() call sites and the
+  // navigator typing resolve. goalId is the common forward-key for wiring.
+  GoalsHubV2: undefined;
+  GoalCategorySelect: undefined;
+  GoalTypeSelect: { category?: object } | undefined;
+  GoalCreate: { goalType?: object; availableCircles?: object[] } | undefined;
+  GoalSetupSuccess: { goal?: object } | undefined;
+  GoalDetailV2: { goalId?: string; goal?: object } | undefined;
+  GoalAddMoney: { goalId?: string; goal?: object } | undefined;
+  GoalWithdraw: { goalId?: string; goal?: object } | undefined;
+  GoalLinkCircle: { goalId?: string; goal?: object } | undefined;
+  GoalMilestones: { goalId?: string; goal?: object } | undefined;
+  GoalAchieved: { goalId?: string; goal?: object } | undefined;
+  GoalBItems: { goalId?: string; goal?: object } | undefined;
+  GoalStories: undefined;
 };
 
 export type TabParamList = {
@@ -792,6 +827,23 @@ function HomeStackScreen() {
       <HomeStack.Screen name="RateBreakdown" component={RateBreakdownScreen} />
       <HomeStack.Screen name="AdvanceSettings" component={AdvanceSettingsScreen} />
       <HomeStack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+      {/* Goals flow (GOALS-001..015). Entered (for now) via the __DEV__
+          "Goals V2" button on the Dashboard → GoalsHubV2. GoalDetailV2 /
+          GoalsHubV2 coexist with the existing GoalDetails / GoalsHub screens
+          registered above; reconciliation is a later decision. */}
+      <HomeStack.Screen name="GoalsHubV2" component={GoalsHubV2Screen} />
+      <HomeStack.Screen name="GoalCategorySelect" component={GoalCategorySelectScreen} />
+      <HomeStack.Screen name="GoalTypeSelect" component={GoalTypeSelectScreen} />
+      <HomeStack.Screen name="GoalCreate" component={GoalCreateScreen} />
+      <HomeStack.Screen name="GoalSetupSuccess" component={GoalSetupSuccessScreen} />
+      <HomeStack.Screen name="GoalDetailV2" component={GoalDetailV2Screen} />
+      <HomeStack.Screen name="GoalAddMoney" component={GoalAddMoneyScreen} />
+      <HomeStack.Screen name="GoalWithdraw" component={GoalWithdrawScreen} />
+      <HomeStack.Screen name="GoalLinkCircle" component={GoalLinkCircleScreen} />
+      <HomeStack.Screen name="GoalMilestones" component={GoalMilestonesScreen} />
+      <HomeStack.Screen name="GoalAchieved" component={GoalAchievedScreen} />
+      <HomeStack.Screen name="GoalBItems" component={GoalBItemsScreen} />
+      <HomeStack.Screen name="GoalStories" component={GoalStoriesScreen} />
       {/* Dream Feed Screens (moved from Dreams tab) */}
       <HomeStack.Screen name="DreamFeed" component={DreamFeedScreen} />
       <HomeStack.Screen name="CreateDreamPost" component={CreateDreamPostScreen} />
