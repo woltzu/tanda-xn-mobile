@@ -33,9 +33,9 @@ export type CircleDraft = {
   targetCommunityName?: string;
   isElderCreated?: boolean;
   // Schedule step
-  startDate?: string | null;
+  startDate?: string | null; // ISO string (serialized from the Date picker)
   rotationMethod?: string;
-  gracePeriodDays?: string;
+  gracePeriodDays?: number; // parsed to a number when forwarded
   // Invite step
   invitedMembers?: string[];
   // Any other accumulated params pass through untyped.

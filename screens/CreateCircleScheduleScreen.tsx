@@ -14,6 +14,8 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useFormDraft } from "../hooks/useFormDraft";
+import { CircleDraft, CIRCLE_DRAFT_KEY } from "../lib/circleDraft";
 
 type CreateCircleScheduleNavigationProp = StackNavigationProp<RootStackParamList>;
 type CreateCircleScheduleRouteProp = RouteProp<RootStackParamList, "CreateCircleSchedule">;
@@ -66,6 +68,10 @@ export default function CreateCircleScheduleScreen() {
     totalCycles,
   } = route.params;
 
+  // Cross-step draft: pre-fill from restored params, save on continue.
+  const draftParams = route.params as Partial<CircleDraft>;
+  const { saveDraft } = useFormDraft<CircleDraft>(CIRCLE_DRAFT_KEY, { circleType });
+
   // Check if this is a one-time collection (based on frequency selection, not circle type)
   const isOneTime = frequency === "one-time";
   // Check if this is a single beneficiary circle (supports recurring payouts)
@@ -79,10 +85,20 @@ export default function CreateCircleScheduleScreen() {
   const monthlyPayout = amount * memberCount;
   const totalPayoutAllCycles = monthlyPayout * (totalCycles || 1);
 
-  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [startDate, setStartDate] = useState<Date | null>(
+    draftParams.startDate ? new Date(draftParams.startDate) : null
+  );
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [rotationMethod, setRotationMethod] = useState("xnscore");
-  const [gracePeriodDays, setGracePeriodDays] = useState("2");
+  const [rotationMethod, setRotationMethod] = useState(
+    // Guard: the forwarded value may be the computed "beneficiary" override,
+    // which isn't a selectable option — fall back to the default.
+    rotationMethods.some((r) => r.id === draftParams.rotationMethod)
+      ? (draftParams.rotationMethod as string)
+      : "xnscore"
+  );
+  const [gracePeriodDays, setGracePeriodDays] = useState(
+    draftParams.gracePeriodDays != null ? String(draftParams.gracePeriodDays) : "2"
+  );
   const [showAllCycles, setShowAllCycles] = useState(false);
   const [contributionDeadlines, setContributionDeadlines] = useState<
     Array<{ cycle: number; date: string; fullDate: Date }>
@@ -161,23 +177,20 @@ export default function CreateCircleScheduleScreen() {
 
   const handleContinue = () => {
     if (canContinue && startDate) {
-      navigation.navigate("CreateCircleInvite", {
-        circleType,
-        name,
-        amount,
-        frequency,
-        memberCount,
+      // Merge carried-forward params (incl. any restored Invite fields) with
+      // this step's values. route.params already holds all the Details-step
+      // fields, so the same object is saved as the draft and forwarded.
+      const merged = {
+        ...route.params,
         startDate: startDate.toISOString(),
-        rotationMethod: isOneTime || isFamilySupport || isDisasterRelief ? "beneficiary" : rotationMethod,
+        rotationMethod:
+          isOneTime || isFamilySupport || isDisasterRelief
+            ? "beneficiary"
+            : rotationMethod,
         gracePeriodDays: parseInt(gracePeriodDays),
-        beneficiaryName,
-        beneficiaryReason,
-        // Pass through beneficiary circle fields
-        beneficiaryPhone,
-        beneficiaryCountry,
-        isRecurring,
-        totalCycles,
-      });
+      };
+      saveDraft(merged as CircleDraft);
+      navigation.navigate("CreateCircleInvite", merged as any);
     }
   };
 
