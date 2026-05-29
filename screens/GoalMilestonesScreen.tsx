@@ -1,0 +1,508 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// screens/GoalMilestonesScreen.tsx — GOALS-011
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// Translated from web JSX: 162-GOALS-011-GoalMilestones.jsx.
+//
+// Milestone timeline (First Deposit → 10% → 25% → 50% → 75% → 90% → 100%)
+// with a top progress summary, an orange "next milestone" card (with a
+// mini progress bar + Add Money), the timeline itself (vertical connector
+// line + achieved/locked dots), and a motivation card.
+//
+// NAVIGATION — translation-only batch. onBack → goBack(); Add Money (next
+// card + bottom CTA) resolves to a "coming soon" Alert placeholder tagged
+// TODO(goals-wiring) (forward target: GoalAddMoney).
+//
+// Route params (all optional — defaults applied for standalone preview).
+// ══════════════════════════════════════════════════════════════════════════════
+
+import React from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  SafeAreaView,
+  StatusBar,
+  Alert,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTypedNavigation } from "../hooks/useTypedNavigation";
+
+const NAVY = "#0A2342";
+const TEAL = "#00C6AE";
+const GREEN = "#059669";
+const BORDER = "#E5E7EB";
+const MUTED = "#6B7280";
+
+type MilestonesGoal = {
+  id: string;
+  name: string;
+  emoji: string;
+  balance: number;
+  target: number;
+  progressPercent: number;
+  startDate: string;
+};
+
+type Milestone = {
+  id: string;
+  type: string;
+  label: string;
+  emoji: string;
+  percent: number;
+  achieved: boolean;
+  achievedDate: string | null;
+  amount: number;
+  message: string;
+};
+
+type GoalMilestonesParams = {
+  goal?: MilestonesGoal;
+  milestones?: Milestone[];
+};
+type GoalMilestonesRouteProp = RouteProp<
+  { GoalMilestones: GoalMilestonesParams },
+  "GoalMilestones"
+>;
+
+const DEFAULT_GOAL: MilestonesGoal = {
+  id: "g1",
+  name: "First Home in Atlanta",
+  emoji: "🏠",
+  balance: 8500.0,
+  target: 25000.0,
+  progressPercent: 34,
+  startDate: "Jan 15, 2025",
+};
+
+const DEFAULT_MILESTONES: Milestone[] = [
+  { id: "m1", type: "first_deposit", label: "First Deposit", emoji: "🚀", percent: 0, achieved: true, achievedDate: "Jan 15, 2025", amount: 500, message: "Your journey begins!" },
+  { id: "m2", type: "percent_10", label: "10% Milestone", emoji: "🌱", percent: 10, achieved: true, achievedDate: "Feb 1, 2025", amount: 2500, message: "1 in 10 steps taken!" },
+  { id: "m3", type: "percent_25", label: "25% Milestone", emoji: "💪", percent: 25, achieved: true, achievedDate: "Mar 10, 2025", amount: 6250, message: "Quarter of the way there!" },
+  { id: "m4", type: "percent_50", label: "Halfway!", emoji: "🏔️", percent: 50, achieved: false, achievedDate: null, amount: 12500, message: "The summit is in sight!" },
+  { id: "m5", type: "percent_75", label: "75% Milestone", emoji: "🏃", percent: 75, achieved: false, achievedDate: null, amount: 18750, message: "Sprint to the finish!" },
+  { id: "m6", type: "percent_90", label: "Almost There!", emoji: "🔥", percent: 90, achieved: false, achievedDate: null, amount: 22500, message: "One final push!" },
+  { id: "m7", type: "goal_achieved", label: "Goal Achieved!", emoji: "🏆", percent: 100, achieved: false, achievedDate: null, amount: 25000, message: "YOU DID IT!" },
+];
+
+export default function GoalMilestonesScreen() {
+  const navigation = useTypedNavigation();
+  const route = useRoute<GoalMilestonesRouteProp>();
+
+  const goal = route.params?.goal ?? DEFAULT_GOAL;
+  const milestones = route.params?.milestones ?? DEFAULT_MILESTONES;
+
+  const achievedCount = milestones.filter((m) => m.achieved).length;
+  const nextIndex = milestones.findIndex((m) => !m.achieved);
+  const nextMilestone = nextIndex >= 0 ? milestones[nextIndex] : undefined;
+  const amountToNext = nextMilestone ? nextMilestone.amount - goal.balance : 0;
+
+  // Progress within the band between the previous milestone and the next one.
+  const prevAmount = nextIndex > 0 ? milestones[nextIndex - 1].amount : 0;
+  const nextProgressPct = nextMilestone
+    ? Math.max(
+        0,
+        Math.min(
+          100,
+          ((goal.balance - prevAmount) / (nextMilestone.amount - prevAmount)) * 100
+        )
+      )
+    : 0;
+
+  // Motivation line uses the first two words of the goal name (web parity).
+  const nameWords = goal.name.split(" ");
+  const shortName = [nameWords[0], nameWords[1]].filter(Boolean).join(" ");
+
+  // TODO(goals-wiring): Add Money → navigation.navigate(Routes.GoalAddMoney, { goal }).
+  const comingSoon = (label: string) =>
+    Alert.alert(label, "This will be available soon.");
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ===== HEADER ===== */}
+        <LinearGradient
+          colors={[NAVY, "#143654"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >
+          <View style={styles.headerTopRow}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+            >
+              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerKicker} numberOfLines={1}>
+                {goal.emoji} {goal.name}
+              </Text>
+              <Text style={styles.headerTitle}>Milestones</Text>
+            </View>
+          </View>
+
+          {/* Progress summary */}
+          <View style={styles.summaryRow}>
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{achievedCount}</Text>
+              <Text style={styles.summaryLabel}>Milestones Hit</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{goal.progressPercent}%</Text>
+              <Text style={styles.summaryLabel}>Progress</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryItem}>
+              <Text style={[styles.summaryValue, { color: TEAL }]}>
+                {milestones.length - achievedCount}
+              </Text>
+              <Text style={styles.summaryLabel}>To Go</Text>
+            </View>
+          </View>
+        </LinearGradient>
+
+        {/* ===== CONTENT ===== */}
+        <View style={styles.contentWrap}>
+          {/* Next milestone card */}
+          {nextMilestone && (
+            <LinearGradient
+              colors={["#F59E0B", "#D97706"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.nextCard}
+            >
+              <View style={styles.nextTopRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.nextKicker}>NEXT MILESTONE</Text>
+                  <View style={styles.nextTitleRow}>
+                    <Text style={styles.nextEmoji}>{nextMilestone.emoji}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.nextLabel}>{nextMilestone.label}</Text>
+                      <Text style={styles.nextAmount}>
+                        ${amountToNext.toLocaleString()} to unlock
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={() => comingSoon("Add Money")}
+                  accessibilityRole="button"
+                  style={styles.nextAddButton}
+                >
+                  <Text style={styles.nextAddText}>Add Money</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Mini progress to next */}
+              <View style={styles.nextProgressTrack}>
+                <View
+                  style={[styles.nextProgressFill, { width: `${nextProgressPct}%` }]}
+                />
+              </View>
+            </LinearGradient>
+          )}
+
+          {/* Timeline */}
+          <View style={styles.card}>
+            <Text style={styles.cardHeading}>Your Journey</Text>
+
+            <View style={styles.timeline}>
+              {/* Connector line behind the dots */}
+              <View style={styles.timelineLine} />
+
+              {milestones.map((milestone, idx) => {
+                const isNext = idx === nextIndex;
+                return (
+                  <View key={milestone.id} style={styles.timelineItem}>
+                    {/* Dot / icon */}
+                    {milestone.achieved ? (
+                      <LinearGradient
+                        colors={[TEAL, GREEN]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.dot}
+                      >
+                        <Text style={styles.dotEmoji}>{milestone.emoji}</Text>
+                      </LinearGradient>
+                    ) : (
+                      <View style={[styles.dot, styles.dotLocked]}>
+                        <Text style={styles.dotLockedEmoji}>🔒</Text>
+                      </View>
+                    )}
+
+                    {/* Content */}
+                    <View style={styles.timelineContent}>
+                      <View style={styles.timelineLabelRow}>
+                        <Text
+                          style={[
+                            styles.timelineLabel,
+                            { color: milestone.achieved ? NAVY : "#9CA3AF" },
+                          ]}
+                        >
+                          {milestone.label}
+                        </Text>
+                        {milestone.achieved && (
+                          <View style={styles.achievedBadge}>
+                            <Text style={styles.achievedBadgeText}>✓ Achieved</Text>
+                          </View>
+                        )}
+                      </View>
+
+                      <Text
+                        style={[
+                          styles.timelineMeta,
+                          { color: milestone.achieved ? MUTED : "#9CA3AF" },
+                        ]}
+                      >
+                        {milestone.percent > 0
+                          ? `${milestone.percent}% of target`
+                          : "Start saving"}{" "}
+                        • ${milestone.amount.toLocaleString()}
+                      </Text>
+
+                      {milestone.achieved && milestone.achievedDate && (
+                        <Text style={styles.timelineMessage}>
+                          🎉 {milestone.message} — {milestone.achievedDate}
+                        </Text>
+                      )}
+
+                      {!milestone.achieved && isNext && (
+                        <View style={styles.unlockBox}>
+                          <Text style={styles.unlockText}>
+                            ⭐ $
+                            {Math.max(
+                              0,
+                              milestone.amount - goal.balance
+                            ).toLocaleString()}{" "}
+                            more to unlock this milestone
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Motivation card */}
+          <View style={styles.motivationCard}>
+            <Text style={styles.motivationText}>
+              "Every milestone is proof that discipline works. Keep going —{" "}
+              {shortName} is within reach."
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* ===== BOTTOM CTA ===== */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          onPress={() => comingSoon("Add Money")}
+          accessibilityRole="button"
+          style={styles.primaryButton}
+        >
+          <Text style={styles.primaryButtonText}>
+            Add Money to Reach Next Milestone
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#F5F7FA" },
+  scroll: { flex: 1 },
+  scrollContent: { paddingBottom: 24 },
+
+  header: { paddingTop: 20, paddingBottom: 60, paddingHorizontal: 20 },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 20,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerKicker: { fontSize: 12, color: "rgba(255,255,255,0.7)" },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginTop: 4,
+  },
+
+  summaryRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    padding: 16,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 14,
+  },
+  summaryItem: { alignItems: "center" },
+  summaryValue: { fontSize: 28, fontWeight: "700", color: "#FFFFFF" },
+  summaryLabel: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 2,
+  },
+  summaryDivider: { width: 1, backgroundColor: "rgba(255,255,255,0.2)" },
+
+  contentWrap: { marginTop: -30, paddingHorizontal: 16 },
+
+  // Next milestone card
+  nextCard: { borderRadius: 16, padding: 18, marginBottom: 16 },
+  nextTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  nextKicker: { fontSize: 11, color: "rgba(255,255,255,0.8)" },
+  nextTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 4,
+  },
+  nextEmoji: { fontSize: 28 },
+  nextLabel: { fontSize: 18, fontWeight: "700", color: "#FFFFFF" },
+  nextAmount: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.9)",
+    marginTop: 2,
+  },
+  nextAddButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+  },
+  nextAddText: { fontSize: 13, fontWeight: "700", color: "#D97706" },
+  nextProgressTrack: {
+    height: 6,
+    backgroundColor: "rgba(255,255,255,0.3)",
+    borderRadius: 3,
+    overflow: "hidden",
+    marginTop: 14,
+  },
+  nextProgressFill: { height: 6, backgroundColor: "#FFFFFF", borderRadius: 3 },
+
+  // Timeline
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  cardHeading: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: NAVY,
+    marginBottom: 16,
+  },
+  timeline: { position: "relative" },
+  timelineLine: {
+    position: "absolute",
+    left: 22.5,
+    top: 24,
+    bottom: 24,
+    width: 3,
+    backgroundColor: BORDER,
+    borderRadius: 2,
+  },
+  timelineItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 16,
+    paddingVertical: 12,
+  },
+  dot: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1,
+  },
+  dotEmoji: { fontSize: 22 },
+  dotLocked: { backgroundColor: BORDER },
+  dotLockedEmoji: { fontSize: 18 },
+  timelineContent: { flex: 1, paddingTop: 4 },
+  timelineLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  timelineLabel: { fontSize: 15, fontWeight: "600" },
+  achievedBadge: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: "#F0FDFB",
+  },
+  achievedBadgeText: { fontSize: 10, fontWeight: "600", color: GREEN },
+  timelineMeta: { fontSize: 13, marginTop: 4 },
+  timelineMessage: { fontSize: 11, color: GREEN, marginTop: 4 },
+  unlockBox: {
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 8,
+  },
+  unlockText: { fontSize: 11, color: "#92400E" },
+
+  // Motivation
+  motivationCard: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: NAVY,
+    borderRadius: 14,
+  },
+  motivationText: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    lineHeight: 22,
+    textAlign: "center",
+  },
+
+  // Bottom CTA
+  bottomBar: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 32,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  primaryButton: {
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: TEAL,
+    alignItems: "center",
+  },
+  primaryButtonText: { fontSize: 16, fontWeight: "700", color: "#FFFFFF" },
+});
