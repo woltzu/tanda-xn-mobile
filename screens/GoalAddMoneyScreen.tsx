@@ -1,0 +1,607 @@
+// ══════════════════════════════════════════════════════════════════════════════
+// screens/GoalAddMoneyScreen.tsx — GOALS-007
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// Translated from web JSX: 158-GOALS-007-GoalAddMoney.jsx.
+//
+// Fund a goal from one of four sources: TandaXn Wallet, a linked bank
+// account, a saved debit card (1.5% fee), or set up auto-deposit. Amount
+// input with quick-select chips ($100/$250/$500/$1000) + "Fill to Target".
+//
+// NAVIGATION — translation-only batch. onBack → goBack(); the deposit CTA
+// and add-source / auto-deposit actions resolve to "coming soon" Alert
+// placeholders tagged TODO(goals-wiring).
+//
+// Route params (all optional — defaults applied for standalone preview).
+// ══════════════════════════════════════════════════════════════════════════════
+
+import React, { useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  SafeAreaView,
+  StatusBar,
+  TextInput,
+  Alert,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTypedNavigation } from "../hooks/useTypedNavigation";
+
+const NAVY = "#0A2342";
+const TEAL = "#00C6AE";
+const GREEN = "#059669";
+const BORDER = "#E5E7EB";
+const MUTED = "#6B7280";
+
+type SourceKind = "wallet" | "bank" | "card";
+
+type AddMoneyGoal = {
+  id: string;
+  name: string;
+  emoji: string;
+  balance: number;
+  target: number;
+};
+
+type BankAccount = {
+  id: string;
+  name: string;
+  last4: string;
+  type: string;
+};
+
+type SavedCard = {
+  id: string;
+  name: string;
+  last4: string;
+  type: string;
+};
+
+type GoalAddMoneyParams = {
+  goal?: AddMoneyGoal;
+  walletBalance?: number;
+  linkedBankAccounts?: BankAccount[];
+  savedCards?: SavedCard[];
+};
+type GoalAddMoneyRouteProp = RouteProp<
+  { GoalAddMoney: GoalAddMoneyParams },
+  "GoalAddMoney"
+>;
+
+const DEFAULT_GOAL: AddMoneyGoal = {
+  id: "g1",
+  name: "First Home in Atlanta",
+  emoji: "🏠",
+  balance: 8500.0,
+  target: 25000.0,
+};
+
+const DEFAULT_BANKS: BankAccount[] = [
+  { id: "b1", name: "Chase Checking", last4: "4532", type: "checking" },
+  { id: "b2", name: "Wells Fargo Savings", last4: "7891", type: "savings" },
+];
+
+const DEFAULT_CARDS: SavedCard[] = [
+  { id: "c1", name: "Visa", last4: "1234", type: "debit" },
+];
+
+const SUGGESTED_AMOUNTS = [100, 250, 500, 1000];
+
+/** Radio indicator: filled teal + check when selected, hollow ring otherwise. */
+function Radio({ selected, size = 22 }: { selected: boolean; size?: number }) {
+  return (
+    <View
+      style={[
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          alignItems: "center",
+          justifyContent: "center",
+        },
+        selected
+          ? { backgroundColor: TEAL }
+          : { borderWidth: 2, borderColor: "#D1D5DB" },
+      ]}
+    >
+      {selected && (
+        <Ionicons name="checkmark" size={Math.round(size * 0.55)} color="#FFFFFF" />
+      )}
+    </View>
+  );
+}
+
+export default function GoalAddMoneyScreen() {
+  const navigation = useTypedNavigation();
+  const route = useRoute<GoalAddMoneyRouteProp>();
+
+  const goal = route.params?.goal ?? DEFAULT_GOAL;
+  const walletBalance = route.params?.walletBalance ?? 1250.0;
+  const linkedBankAccounts = route.params?.linkedBankAccounts ?? DEFAULT_BANKS;
+  const savedCards = route.params?.savedCards ?? DEFAULT_CARDS;
+
+  const [selectedSource, setSelectedSource] = useState<SourceKind | null>(null);
+  const [amount, setAmount] = useState("");
+  const [selectedBankId, setSelectedBankId] = useState<string | null>(
+    linkedBankAccounts[0]?.id || null
+  );
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(
+    savedCards[0]?.id || null
+  );
+
+  const remainingToTarget = goal.target - goal.balance;
+  const numAmount = Number(amount) || 0;
+  const canSubmit = amount.length > 0 && numAmount > 0 && !!selectedSource;
+
+  // TODO(goals-wiring): route the deposit to the chosen source:
+  //   wallet → wallet debit; bank → ACH; card → card charge (1.5% fee).
+  const comingSoon = (label: string) =>
+    Alert.alert(label, "This will be available soon.");
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    comingSoon(`Add $${numAmount.toLocaleString()} to Goal`);
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* ===== HEADER ===== */}
+        <LinearGradient
+          colors={[NAVY, "#143654"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >
+          <View style={styles.headerTopRow}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+            >
+              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Add Money</Text>
+          </View>
+
+          {/* Goal summary */}
+          <View style={styles.goalSummary}>
+            <View style={styles.goalEmojiBox}>
+              <Text style={styles.goalEmoji}>{goal.emoji}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.goalName}>{goal.name}</Text>
+              <Text style={styles.goalMeta}>
+                ${goal.balance.toLocaleString()} saved • $
+                {remainingToTarget.toLocaleString()} to go
+              </Text>
+            </View>
+          </View>
+        </LinearGradient>
+
+        {/* ===== CONTENT ===== */}
+        <View style={styles.contentWrap}>
+          {/* Amount input */}
+          <View style={styles.card}>
+            <Text style={styles.fieldLabel}>AMOUNT TO ADD</Text>
+            <View style={styles.amountInputWrap}>
+              <Text style={styles.amountCurrency}>$</Text>
+              <TextInput
+                value={amount}
+                onChangeText={(t) => setAmount(t.replace(/[^0-9.]/g, ""))}
+                placeholder="0.00"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="numeric"
+                style={styles.amountInput}
+              />
+            </View>
+
+            {/* Quick select */}
+            <View style={styles.quickRow}>
+              {SUGGESTED_AMOUNTS.map((amt) => {
+                const isActive = amount === String(amt);
+                return (
+                  <TouchableOpacity
+                    key={amt}
+                    onPress={() => setAmount(String(amt))}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
+                    style={[styles.quickPill, isActive && styles.quickPillActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.quickPillText,
+                        isActive && styles.quickPillTextActive,
+                      ]}
+                    >
+                      ${amt}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity
+                onPress={() => setAmount(String(remainingToTarget))}
+                accessibilityRole="button"
+                style={styles.fillPill}
+              >
+                <Text style={styles.fillPillText}>Fill to Target</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Funding source */}
+          <View style={styles.card}>
+            <Text style={[styles.fieldLabel, { marginBottom: 12 }]}>FUND FROM</Text>
+
+            {/* Wallet */}
+            <TouchableOpacity
+              onPress={() => setSelectedSource("wallet")}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityState={{ selected: selectedSource === "wallet" }}
+              style={[
+                styles.sourceRow,
+                selectedSource === "wallet" && styles.sourceRowSelected,
+              ]}
+            >
+              <View style={styles.sourceLeft}>
+                <View style={[styles.sourceIconBox, { backgroundColor: TEAL }]}>
+                  <Text style={styles.sourceIconEmoji}>💵</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.sourceName}>TandaXn Wallet</Text>
+                  <Text style={styles.sourceMeta}>
+                    Balance: ${walletBalance.toLocaleString()}
+                  </Text>
+                </View>
+              </View>
+              <Radio selected={selectedSource === "wallet"} />
+            </TouchableOpacity>
+
+            {/* Bank accounts */}
+            {linkedBankAccounts.map((bank) => {
+              const isSel = selectedSource === "bank" && selectedBankId === bank.id;
+              return (
+                <TouchableOpacity
+                  key={bank.id}
+                  onPress={() => {
+                    setSelectedSource("bank");
+                    setSelectedBankId(bank.id);
+                  }}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSel }}
+                  style={[styles.sourceRow, isSel && styles.sourceRowSelected]}
+                >
+                  <View style={styles.sourceLeft}>
+                    <View
+                      style={[styles.sourceIconBox, { backgroundColor: "#1D4ED8" }]}
+                    >
+                      <Text style={styles.sourceIconEmoji}>🏦</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.sourceName}>{bank.name}</Text>
+                      <Text style={styles.sourceMeta}>
+                        ••••{bank.last4} • {bank.type}
+                      </Text>
+                    </View>
+                  </View>
+                  <Radio selected={isSel} />
+                </TouchableOpacity>
+              );
+            })}
+
+            {/* Debit cards */}
+            {savedCards.map((card) => {
+              const isSel = selectedSource === "card" && selectedCardId === card.id;
+              return (
+                <TouchableOpacity
+                  key={card.id}
+                  onPress={() => {
+                    setSelectedSource("card");
+                    setSelectedCardId(card.id);
+                  }}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSel }}
+                  style={[styles.sourceRow, isSel && styles.sourceRowSelected]}
+                >
+                  <View style={styles.sourceLeft}>
+                    <View
+                      style={[styles.sourceIconBox, { backgroundColor: "#7C3AED" }]}
+                    >
+                      <Text style={styles.sourceIconEmoji}>💳</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.sourceName}>
+                        {card.name} ••••{card.last4}
+                      </Text>
+                      <Text style={styles.sourceMeta}>Debit card • 1.5% fee</Text>
+                    </View>
+                  </View>
+                  <Radio selected={isSel} />
+                </TouchableOpacity>
+              );
+            })}
+
+            {/* Add new */}
+            <View style={styles.addNewRow}>
+              <TouchableOpacity
+                onPress={() => comingSoon("Link Bank")}
+                accessibilityRole="button"
+                style={styles.addNewButton}
+              >
+                <Text style={styles.addNewText}>+ Link Bank</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => comingSoon("Add Card")}
+                accessibilityRole="button"
+                style={styles.addNewButton}
+              >
+                <Text style={styles.addNewText}>+ Add Card</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Auto-deposit upsell */}
+          <TouchableOpacity
+            onPress={() => comingSoon("Set Up Auto-Deposit")}
+            activeOpacity={0.9}
+            accessibilityRole="button"
+          >
+            <LinearGradient
+              colors={[NAVY, "#143654"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.upsellCard}
+            >
+              <Text style={styles.upsellEmoji}>⚡</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.upsellTitle}>Set Up Auto-Deposit</Text>
+                <Text style={styles.upsellBody}>
+                  Never miss a contribution. Save automatically.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+            </LinearGradient>
+          </TouchableOpacity>
+
+          {/* Fee notice (card + amount) */}
+          {selectedSource === "card" && amount.length > 0 && (
+            <View style={styles.feeNotice}>
+              <Text style={styles.feeEmoji}>💡</Text>
+              <Text style={styles.feeText}>
+                Card deposits have a 1.5% fee (${(numAmount * 0.015).toFixed(2)}).
+                Bank transfers are free.
+              </Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* ===== BOTTOM CTA ===== */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          onPress={handleSubmit}
+          disabled={!canSubmit}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !canSubmit }}
+          style={[styles.primaryButton, !canSubmit && styles.primaryButtonDisabled]}
+        >
+          <Text
+            style={[
+              styles.primaryButtonText,
+              !canSubmit && styles.primaryButtonTextDisabled,
+            ]}
+          >
+            {amount.length > 0
+              ? `Add $${numAmount.toLocaleString()} to Goal`
+              : "Enter Amount"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: "#F5F7FA" },
+  scroll: { flex: 1 },
+  scrollContent: { paddingBottom: 24 },
+
+  header: { paddingTop: 20, paddingBottom: 50, paddingHorizontal: 20 },
+  headerTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 20,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerTitle: { fontSize: 20, fontWeight: "700", color: "#FFFFFF" },
+
+  goalSummary: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    padding: 14,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 14,
+  },
+  goalEmojiBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: "#F0FDFB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  goalEmoji: { fontSize: 26 },
+  goalName: { fontSize: 14, fontWeight: "600", color: "#FFFFFF" },
+  goalMeta: { fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 4 },
+
+  contentWrap: { marginTop: -25, paddingHorizontal: 16 },
+
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  fieldLabel: { fontSize: 12, fontWeight: "600", color: MUTED },
+
+  amountInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: TEAL,
+    backgroundColor: "#F0FDFB",
+  },
+  amountCurrency: { fontSize: 32, fontWeight: "700", color: NAVY },
+  amountInput: {
+    flex: 1,
+    fontSize: 36,
+    fontWeight: "700",
+    color: NAVY,
+    marginLeft: 4,
+    padding: 0,
+  },
+
+  quickRow: { flexDirection: "row", gap: 8, marginTop: 14, flexWrap: "wrap" },
+  quickPill: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#FFFFFF",
+  },
+  quickPillActive: { borderWidth: 2, borderColor: TEAL, backgroundColor: "#F0FDFB" },
+  quickPillText: { fontSize: 14, fontWeight: "600", color: MUTED },
+  quickPillTextActive: { color: GREEN },
+  fillPill: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: TEAL,
+    backgroundColor: "#FFFFFF",
+  },
+  fillPillText: { fontSize: 12, fontWeight: "600", color: TEAL },
+
+  // Funding source rows
+  sourceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#F5F7FA",
+    marginBottom: 10,
+  },
+  sourceRowSelected: {
+    borderWidth: 2,
+    borderColor: TEAL,
+    backgroundColor: "#F0FDFB",
+    margin: -1,
+    marginBottom: 9,
+  },
+  sourceLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  sourceIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sourceIconEmoji: { fontSize: 20 },
+  sourceName: { fontSize: 14, fontWeight: "600", color: NAVY },
+  sourceMeta: { fontSize: 12, color: MUTED, marginTop: 2 },
+
+  addNewRow: { flexDirection: "row", gap: 10, marginTop: 4 },
+  addNewButton: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "#D1D5DB",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+  },
+  addNewText: { fontSize: 12, fontWeight: "500", color: MUTED },
+
+  // Auto-deposit upsell
+  upsellCard: {
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  upsellEmoji: { fontSize: 28 },
+  upsellTitle: { fontSize: 14, fontWeight: "600", color: "#FFFFFF" },
+  upsellBody: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 4,
+  },
+
+  // Fee notice
+  feeNotice: {
+    padding: 12,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  feeEmoji: { fontSize: 16 },
+  feeText: { fontSize: 12, color: "#92400E", flex: 1 },
+
+  // Bottom CTA
+  bottomBar: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 32,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  primaryButton: {
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: TEAL,
+    alignItems: "center",
+  },
+  primaryButtonDisabled: { backgroundColor: BORDER },
+  primaryButtonText: { fontSize: 16, fontWeight: "700", color: "#FFFFFF" },
+  primaryButtonTextDisabled: { color: "#9CA3AF" },
+});
