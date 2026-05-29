@@ -21,7 +21,7 @@
 // picker is fully in-screen (no navigation), faithful to the web design.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -36,6 +36,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { useFormDraft } from "../hooks/useFormDraft";
 import { Routes } from "../lib/routes";
 
 const NAVY = "#0A2342";
@@ -156,6 +157,16 @@ const DEFAULT_CIRCLES: Circle[] = [
 
 const SUGGESTED_AMOUNTS = [5000, 10000, 25000, 50000];
 
+type GoalDraft = {
+  goalName: string;
+  targetAmount: number;
+  monthlyContribution: number;
+  autoDeposit: boolean;
+  linkedCircleId: string | null;
+  savingsType: SavingsTypeId;
+  lockPeriodMonths: number;
+};
+
 export default function GoalCreateScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalCreateRouteProp>();
@@ -178,6 +189,67 @@ export default function GoalCreateScreen() {
   const [autoDeposit, setAutoDeposit] = useState(true);
   const [linkedCircleId, setLinkedCircleId] = useState<string | null>(null);
   const [showCircleSelect, setShowCircleSelect] = useState(false);
+
+  // ── Auto-save draft (Phase C) ────────────────────────────────────────────
+  const { hasDraft, saveDraft, restoreDraft, clearDraft } =
+    useFormDraft<GoalDraft>("goal_create", {
+      goalName: goalType.name,
+      targetAmount: goalType.suggestedTarget || 25000,
+      monthlyContribution: goalType.suggestedMonthly || 500,
+      autoDeposit: true,
+      linkedCircleId: null,
+      savingsType: "emergency",
+      lockPeriodMonths: 12,
+    });
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const isFirstDraftRender = useRef(true);
+
+  // Persist edits (debounced). Skip the very first run so the initial/default
+  // values don't clobber a freshly loaded draft before the user can restore.
+  useEffect(() => {
+    if (isFirstDraftRender.current) {
+      isFirstDraftRender.current = false;
+      return;
+    }
+    saveDraft({
+      goalName,
+      targetAmount,
+      monthlyContribution,
+      autoDeposit,
+      linkedCircleId,
+      savingsType,
+      lockPeriodMonths,
+    });
+  }, [
+    goalName,
+    targetAmount,
+    monthlyContribution,
+    autoDeposit,
+    linkedCircleId,
+    savingsType,
+    lockPeriodMonths,
+    saveDraft,
+  ]);
+
+  const handleRestoreDraft = () => {
+    const d = restoreDraft();
+    if (d) {
+      setGoalName(d.goalName);
+      setTargetAmount(d.targetAmount);
+      setMonthlyContribution(d.monthlyContribution);
+      setAutoDeposit(d.autoDeposit);
+      setLinkedCircleId(d.linkedCircleId);
+      setSavingsType(d.savingsType);
+      setLockPeriodMonths(d.lockPeriodMonths);
+    }
+    setBannerDismissed(true);
+  };
+
+  const handleDiscardDraft = () => {
+    clearDraft();
+    setBannerDismissed(true);
+  };
+  // ──────────────────────────────────────────────────────────────────────────
 
   const selectedType = SAVINGS_TYPES[savingsType];
 
@@ -253,6 +325,7 @@ export default function GoalCreateScreen() {
       lockPeriodMonths: savingsType === "locked" ? lockPeriodMonths : null,
       lockEndDate: savingsType === "locked" ? lockEndDate.toISOString() : null,
     };
+    clearDraft();
     navigation.navigate(Routes.GoalSetupSuccess, { goal: newGoal });
   };
 
@@ -299,6 +372,31 @@ export default function GoalCreateScreen() {
 
         {/* ===== CONTENT ===== */}
         <View style={styles.contentWrap}>
+          {/* Unfinished-goal draft banner (Phase C) */}
+          {hasDraft && !bannerDismissed && (
+            <View style={styles.draftBanner}>
+              <Text style={styles.draftBannerText}>
+                You have an unfinished goal. Restore it?
+              </Text>
+              <View style={styles.draftBannerActions}>
+                <TouchableOpacity
+                  style={styles.draftBannerButton}
+                  onPress={handleRestoreDraft}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.draftBannerButtonText}>Restore</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.draftBannerButton}
+                  onPress={handleDiscardDraft}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.draftBannerButtonText}>Discard</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {/* Savings type selection */}
           <View style={styles.card}>
             <View style={styles.cardTitleRow}>
@@ -760,6 +858,33 @@ const styles = StyleSheet.create({
   },
 
   contentWrap: { marginTop: -25, paddingHorizontal: 16 },
+
+  // Draft restore banner (Phase C). Placed inside contentWrap, so it omits
+  // the horizontal margin the spec used (contentWrap already pads to 16).
+  draftBanner: {
+    backgroundColor: "#FEF3C7",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  draftBannerText: {
+    flex: 1,
+    color: "#92400E",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  draftBannerActions: { flexDirection: "row", alignItems: "center" },
+  draftBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
+    marginLeft: 8,
+  },
+  draftBannerButtonText: { color: "#D97706", fontWeight: "600", fontSize: 13 },
 
   card: {
     backgroundColor: "#FFFFFF",
