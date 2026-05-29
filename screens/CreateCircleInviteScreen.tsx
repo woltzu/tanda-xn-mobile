@@ -16,6 +16,8 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import * as Contacts from "expo-contacts";
+import { useFormDraft } from "../hooks/useFormDraft";
+import { CircleDraft, CIRCLE_DRAFT_KEY } from "../lib/circleDraft";
 
 type CreateCircleInviteNavigationProp = StackNavigationProp<RootStackParamList>;
 type CreateCircleInviteRouteProp = RouteProp<RootStackParamList, "CreateCircleInvite">;
@@ -64,8 +66,17 @@ export default function CreateCircleInviteScreen() {
     totalCycles,
   } = route.params;
 
+  // Cross-step draft: pre-fill the member selection from a restored draft and
+  // keep the draft current. The draft is CLEARED on the Success screen after
+  // the circle is actually created (creation happens there, not here), so a
+  // failed creation leaves the draft intact for retry.
+  const draftParams = route.params as Partial<CircleDraft>;
+  const { saveDraft } = useFormDraft<CircleDraft>(CIRCLE_DRAFT_KEY, { circleType });
+
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [selectedMembers, setSelectedMembers] = useState<string[]>(
+    draftParams.invitedMembers ?? []
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -175,6 +186,11 @@ export default function CreateCircleInviteScreen() {
     const selectedContactsList = contacts.filter((c) =>
       selectedMembers.includes(c.id)
     );
+
+    // Keep the draft current with the final member selection (stored as the
+    // id list, matching selectedMembers, for a clean restore). Not cleared
+    // here — the Success screen clears it once creation succeeds.
+    saveDraft({ ...route.params, invitedMembers: selectedMembers } as CircleDraft);
 
     navigation.navigate("CreateCircleSuccess", {
       circleType,
