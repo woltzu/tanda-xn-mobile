@@ -8,11 +8,21 @@
 // Supported purposes (caller picks via `purpose` field in body):
 //   - 'wallet_deposit' (default — original Path A smoke test)
 //   - 'goal_deposit'   (extension, migration 074):
-//        Caller passes { purpose: 'goal_deposit', goalId, applyCardFee }.
+//        Caller passes { purpose: 'goal_deposit', goalId, applyCardFee,
+//                       paymentMethodType?, paymentMethodId? }.
 //        We verify the caller owns goalId, optionally add a 1.5% card fee on
-//        top of the deposit amount, and stamp metadata.type='goal_deposit'
-//        + metadata.goal_id + metadata.deposit_amount_cents + metadata.fee_cents
+//        top of the deposit amount (card path only), and stamp
+//        metadata.type='goal_deposit' + metadata.goal_id +
+//        metadata.deposit_amount_cents + metadata.fee_cents + metadata.source
 //        so the webhook can call credit_goal_external on success.
+//
+//        paymentMethodType (default 'card'):
+//          - 'card': automatic_payment_methods, applyCardFee respected,
+//            metadata.source='card'.
+//          - 'us_bank_account': payment_method=paymentMethodId (required,
+//            must be a Stripe PM owned by the caller via stripe_bank_accounts),
+//            confirm=true with mandate_data filled from req headers for ACH
+//            authorization. No card fee. metadata.source='bank'.
 //
 // Auth model:
 //   - JWT-scoped client (from caller's Authorization header) → used ONLY to
@@ -89,6 +99,8 @@ Deno.serve(async (req) => {
     purpose?: unknown;
     goalId?: unknown;
     applyCardFee?: unknown;
+    paymentMethodType?: unknown;
+    paymentMethodId?: unknown;
   };
   try {
     body = await req.json();
@@ -101,10 +113,24 @@ Deno.serve(async (req) => {
     typeof body.currency === "string" ? body.currency.toLowerCase() : "usd";
   const purpose =
     typeof body.purpose === "string" ? body.purpose : "wallet_deposit";
+  // Default to 'card' so existing callers (Path A smoke test, the goal
+  // card-deposit screen pre-bank) keep their existing behaviour.
+  const paymentMethodType =
+    typeof body.paymentMethodType === "string" ? body.paymentMethodType : "card";
+  const paymentMethodId =
+    typeof body.paymentMethodId === "string" ? body.paymentMethodId : null;
 
   if (!Number.isInteger(amount) || (amount as number) < 50) {
     return jsonResponse(
       { error: "amount must be an integer number of cents ≥ 50" },
+      400
+    );
+  }
+
+  const ALLOWED_PAYMENT_METHODS = new Set(["card", "us_bank_account"]);
+  if (!ALLOWED_PAYMENT_METHODS.has(paymentMethodType)) {
+    return jsonResponse(
+      { error: `paymentMethodType '${paymentMethodType}' is not supported` },
       400
     );
   }
@@ -169,20 +195,61 @@ Deno.serve(async (req) => {
       );
     }
 
-    description = `Goal deposit ${goalId}`;
-
-    // applyCardFee=true means the user opted into the card path; charge
-    // amount + 1.5% on TOP. The deposit credited to the goal is still
-    // `amount`; the fee is platform margin.
-    if (body.applyCardFee === true) {
-      feeCents = Math.round((amount as number) * 0.015);
-      chargeAmountCents = (amount as number) + feeCents;
+    if (paymentMethodType === "us_bank_account") {
+      // Bank path — paymentMethodId must be present and owned by the user
+      // via stripe_bank_accounts (the Financial Connections linked-banks
+      // table, migration 075). No card fee on bank deposits — the screen
+      // advertises "Bank transfers are free".
+      if (!paymentMethodId) {
+        return jsonResponse(
+          { error: "paymentMethodId is required when paymentMethodType='us_bank_account'" },
+          400
+        );
+      }
+      const serviceClientForCheck = createClient(supabaseUrl, serviceRoleKey);
+      const { data: bankRow, error: bankErr } = await serviceClientForCheck
+        .from("stripe_bank_accounts")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("stripe_payment_method_id", paymentMethodId)
+        .maybeSingle();
+      if (bankErr) {
+        console.error(
+          "[create-payment-intent] bank ownership check failed:",
+          bankErr.message
+        );
+        return jsonResponse(
+          { error: "Failed to verify bank payment method", detail: bankErr.message },
+          500
+        );
+      }
+      if (!bankRow) {
+        return jsonResponse(
+          { error: "Bank payment method not found or not owned by caller" },
+          403
+        );
+      }
+      description = `Goal deposit ${goalId} (bank)`;
+      // chargeAmountCents stays = amount (no fee).
+    } else {
+      description = `Goal deposit ${goalId}`;
+      // applyCardFee=true means the user opted into the card path; charge
+      // amount + 1.5% on TOP. The deposit credited to the goal is still
+      // `amount`; the fee is platform margin.
+      if (body.applyCardFee === true) {
+        feeCents = Math.round((amount as number) * 0.015);
+        chargeAmountCents = (amount as number) + feeCents;
+      }
     }
   }
 
   // ─── 3. Create PaymentIntent on Stripe ───
   // Fresh UUID for idempotency so accidental double-clicks don't double-charge.
   const idempotencyKey = crypto.randomUUID();
+
+  // source is the value that lands in savings_transactions.source after the
+  // webhook calls credit_goal_external. Clean values: 'card' or 'bank'.
+  const goalSource = paymentMethodType === "us_bank_account" ? "bank" : "card";
 
   const metadata: Record<string, string> =
     purpose === "goal_deposit"
@@ -192,7 +259,7 @@ Deno.serve(async (req) => {
           goal_id: goalId as string,
           deposit_amount_cents: String(depositAmountCents),
           fee_cents: String(feeCents),
-          source: "goals_addmoney_card",
+          source: goalSource,
         }
       : {
           user_id: user.id,
@@ -200,18 +267,58 @@ Deno.serve(async (req) => {
           source: "path_a_smoke_test",
         };
 
+  // Build PI create params. Card path uses automatic_payment_methods so
+  // Stripe picks the best wallet at checkout; bank path is explicit because
+  // the payment_method is pre-selected and ACH requires a mandate.
+  const piCreateParams: Stripe.PaymentIntentCreateParams = {
+    amount: chargeAmountCents,
+    currency,
+    metadata,
+    description,
+  };
+
+  if (purpose === "goal_deposit" && paymentMethodType === "us_bank_account") {
+    // Resolve the user's Stripe customer — PaymentIntents with an attached
+    // bank PaymentMethod require a customer on the PI.
+    const serviceClientForCust = createClient(supabaseUrl, serviceRoleKey);
+    const { data: custRow } = await serviceClientForCust
+      .from("stripe_customers")
+      .select("stripe_customer_id")
+      .eq("member_id", user.id)
+      .maybeSingle();
+    if (!custRow?.stripe_customer_id) {
+      return jsonResponse(
+        { error: "No Stripe customer for user — link a bank first to create one" },
+        400
+      );
+    }
+
+    piCreateParams.payment_method_types = ["us_bank_account"];
+    piCreateParams.payment_method = paymentMethodId as string;
+    piCreateParams.customer = custRow.stripe_customer_id;
+    piCreateParams.confirm = true;
+    // ACH mandate. Stripe requires explicit customer acceptance for ACH
+    // debits — we use 'online' acceptance with the caller's IP + UA from
+    // the request headers so the consent record is tied to the user's
+    // actual session. x-forwarded-for can be a comma-separated chain;
+    // the first entry is the original client IP per the standard.
+    piCreateParams.mandate_data = {
+      customer_acceptance: {
+        type: "online",
+        online: {
+          ip_address:
+            req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "0.0.0.0",
+          user_agent: req.headers.get("user-agent") ?? "unknown",
+        },
+      },
+    };
+  } else {
+    piCreateParams.automatic_payment_methods = { enabled: true };
+  }
+
   let intent: Stripe.PaymentIntent;
   try {
-    intent = await stripe.paymentIntents.create(
-      {
-        amount: chargeAmountCents,
-        currency,
-        metadata,
-        automatic_payment_methods: { enabled: true },
-        description,
-      },
-      { idempotencyKey }
-    );
+    intent = await stripe.paymentIntents.create(piCreateParams, { idempotencyKey });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[create-payment-intent] stripe.create failed:", msg);

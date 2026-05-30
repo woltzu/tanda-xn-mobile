@@ -147,13 +147,23 @@ Deno.serve(async (req) => {
         console.error("[stripe-webhook]", msg);
         processingError = msg;
       } else {
+        // Source is set in PI metadata at create time by
+        // create-payment-intent: 'card' for card / 'bank' for ACH via
+        // Stripe Financial Connections. Default to 'card' for backward
+        // compatibility with any PI created before the source field was
+        // added (the only such PIs in flight are pre-migration-075 cards).
+        const source =
+          typeof pi.metadata.source === "string" && pi.metadata.source.length > 0
+            ? pi.metadata.source
+            : "card";
+
         const { data: rpcResult, error: rpcErr } = await supabase.rpc(
           "credit_goal_external",
           {
             p_goal_id: goalId,
             p_amount_cents: depositCents,
             p_fee_cents: Number.isFinite(feeCents) && feeCents > 0 ? feeCents : 0,
-            p_source: "card",
+            p_source: source,
             p_stripe_pi_id: pi.id,
           }
         );
