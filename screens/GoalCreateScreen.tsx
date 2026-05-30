@@ -306,6 +306,18 @@ export default function GoalCreateScreen() {
     // category isn't tracked on the goalType yet (it lives on the prior
     // GoalCategorySelect step and isn't threaded through); fall back to the
     // goalType's display name so the goal isn't empty-categoried in the DB.
+    // Guard non-UUID inputs before they hit Postgres:
+    // - Mock circle ids from the in-screen picker (e.g. "c1", "c2") aren't
+    //   valid UUIDs — drop them. linked_circle_id stays NULL until real
+    //   circle wiring is in place.
+    const UUID_RE =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const linkedCircleIdSafe =
+      linkedCircleId && UUID_RE.test(linkedCircleId) ? linkedCircleId : undefined;
+    // target_date is a Postgres DATE column; the human "Jul 2030" string
+    // from toLocaleDateString isn't parseable. Send YYYY-MM-DD instead.
+    const targetDateISO = estimatedDate.toISOString().split("T")[0];
+
     const result = await createGoal({
       name: goalName,
       emoji: goalType.emoji,
@@ -315,11 +327,11 @@ export default function GoalCreateScreen() {
       targetAmount,
       monthlyContribution,
       autoDepositEnabled: autoDeposit,
-      linkedCircleId: linkedCircleId ?? undefined,
+      linkedCircleId: linkedCircleIdSafe,
       lockPeriodMonths: savingsType === "locked" ? lockPeriodMonths : undefined,
       lockEndDate:
         savingsType === "locked" ? lockEndDate.toISOString() : undefined,
-      targetDate: estimatedDateStr,
+      targetDate: targetDateISO,
     });
     setIsCreating(false);
 
