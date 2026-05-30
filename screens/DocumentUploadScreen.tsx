@@ -8,16 +8,17 @@
 // pushed again for the back. After the back is captured, the user lands
 // on Tier2Success.
 //
-// ───── Phase KYC-1 placeholder note ─────
-// Real camera (expo-camera) and file-picker (expo-image-picker)
-// integration lands in Phase KYC-2. For this commit the dark camera
-// pane is rendered with the original document-frame overlay, corner
-// markers, tips, and mode toggle — but tapping the bottom "Capture"
-// or "Choose File" button shows an Alert acknowledging the placeholder
-// and, on OK, navigates forward as if capture succeeded. This lets
-// the full nav flow be tested end-to-end without taking the camera
-// dependency.
-// ────────────────────────────────────────
+// ───── Capture & upload (KYC-2, shipped) ─────
+// Real camera + photo-library pick via expo-image-picker. Selected asset
+// is uploaded to the `verification-docs` Supabase Storage bucket through
+// MediaUploadService.uploadDocument (validates type, size, writes a row
+// in media_uploads), then the resulting URL is upserted into
+// user_kyc.id_document_{front,back}_url and verification_status moves
+// to 'pending'. The pane shows a live preview, a spinner during upload,
+// and a success badge; the bottom button morphs from
+// "Capture / Choose File" → "Continue" after a successful upload, and
+// a "Re-capture" affordance lets the user pick again.
+// ─────────────────────────────────────────────
 //
 // Translated from KYC screens/08_DocumentUpload.jsx.
 // ══════════════════════════════════════════════════════════════════════════════
@@ -32,12 +33,17 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
+  Image,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import * as ImagePicker from "expo-image-picker";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import { supabase } from "../lib/supabase";
+import { MediaUploadService } from "../services/MediaUploadService";
 import type { IDDocType } from "./IDVerificationStartScreen";
 
 const NAVY = "#0A2342";
@@ -84,37 +90,165 @@ export default function DocumentUploadScreen() {
   const side = route.params?.side ?? "front";
 
   const [captureMode, setCaptureMode] = useState<CaptureMode>("camera");
+  // Local preview URI (asset picked but maybe not yet uploaded).
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  // Set after MediaUploadService.uploadDocument returns success. Drives the
+  // bottom-bar button transition from "Capture / Choose" → "Continue".
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const idTypeLabel = ID_TYPE_LABELS[idType] ?? "Document";
   const tipsForSide = TIPS[side];
 
-  // ── Placeholder action ──────────────────────────────────────────────────
-  // KYC-2 will replace this with actual camera/image-picker integration.
-  // For now we acknowledge the placeholder, then navigate forward.
-  const handleAction = () => {
-    const actionVerb = captureMode === "camera" ? "Camera" : "File upload";
-    Alert.alert(
-      `${actionVerb} not yet wired`,
-      "Camera and file-upload will be implemented in Phase KYC-2. For now we'll simulate a successful capture and move on.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Continue",
-          onPress: () => {
-            if (side === "front") {
-              // Push a new instance so back-button takes the user back to
-              // the front capture (rather than reusing the same instance).
-              navigation.push(Routes.DocumentUpload, {
-                idType,
-                side: "back",
-              });
-            } else {
-              navigation.navigate(Routes.Tier2Success);
-            }
+  // ── Aspect ratio used both for the on-screen pane and the cropper ───────
+  // Passport (booklet open) reads as 4:3; ID cards / licences / permits as 3:2.
+  const cropAspect: [number, number] = idType === "passport" ? [4, 3] : [3, 2];
+
+  // ── Upload + DB write ───────────────────────────────────────────────────
+  // Called after the user picks an asset from camera or library. Uploads to
+  // the verification-docs bucket via MediaUploadService, then upserts the
+  // resulting URL into user_kyc.id_document_{front,back}_url. Status moves
+  // to 'pending' (the user has submitted but hasn't been verified yet).
+  const uploadAsset = async (asset: ImagePicker.ImagePickerAsset) => {
+    setPreviewUri(asset.uri);
+    setUploading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        Alert.alert("Sign-in required", "Please sign in again before uploading.");
+        return;
+      }
+
+      const filename =
+        asset.fileName ?? `${idType}-${side}-${Date.now()}.jpg`;
+      const mimeType = asset.mimeType ?? "image/jpeg";
+
+      const res = await MediaUploadService.uploadDocument(
+        { uri: asset.uri, type: mimeType, name: filename },
+        { entityType: "kyc_id_document", entityId: user.id }
+      );
+
+      if (!res.success || !res.url) {
+        setPreviewUri(null);
+        Alert.alert("Upload failed", res.error ?? "Could not upload the document.");
+        return;
+      }
+
+      // Persist the URL on the user's kyc row. Upsert on user_id so this
+      // works whether or not a kyc row already exists. We also stamp
+      // id_type (idempotent) and move verification_status to 'pending'.
+      const sideColumn =
+        side === "front" ? "id_document_front_url" : "id_document_back_url";
+
+      const { error: dbErr } = await supabase
+        .from("user_kyc")
+        .upsert(
+          {
+            user_id: user.id,
+            id_type: idType,
+            [sideColumn]: res.url,
+            verification_status: "pending",
+            updated_at: new Date().toISOString(),
           },
-        },
-      ],
-    );
+          { onConflict: "user_id" }
+        );
+
+      if (dbErr) {
+        // File is already in storage, so don't roll back the preview —
+        // the user can re-tap Continue (which will re-attempt). Surface
+        // the underlying error so we know what went wrong.
+        console.warn("[DocumentUpload] user_kyc upsert failed", dbErr);
+        Alert.alert(
+          "Saved file, but record failed",
+          `The image uploaded but we couldn't update your verification record. ${dbErr.message}`
+        );
+        return;
+      }
+
+      setUploadedUrl(res.url);
+    } catch (err: any) {
+      setPreviewUri(null);
+      console.error("[DocumentUpload] uploadAsset error", err);
+      Alert.alert("Upload error", err?.message ?? "An unknown error occurred.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ── Camera capture ──────────────────────────────────────────────────────
+  const pickFromCamera = async () => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          "Camera access needed",
+          "TandaXn needs camera access to capture your ID. Please grant permission in your device settings."
+        );
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: cropAspect,
+        quality: 0.85,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      await uploadAsset(result.assets[0]);
+    } catch (err: any) {
+      console.error("[DocumentUpload] pickFromCamera error", err);
+      Alert.alert("Camera error", err?.message ?? "Could not open the camera.");
+    }
+  };
+
+  // ── Gallery pick ────────────────────────────────────────────────────────
+  const pickFromLibrary = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          "Photo library access needed",
+          "TandaXn needs photo library access to upload your ID. Please grant permission in your device settings."
+        );
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: cropAspect,
+        quality: 0.85,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      await uploadAsset(result.assets[0]);
+    } catch (err: any) {
+      console.error("[DocumentUpload] pickFromLibrary error", err);
+      Alert.alert("Picker error", err?.message ?? "Could not open the photo library.");
+    }
+  };
+
+  // ── Bottom-bar button: picks based on captureMode, OR proceeds if uploaded ──
+  const handlePrimary = () => {
+    if (uploading) return;
+    if (uploadedUrl) {
+      if (side === "front") {
+        // Push a new instance so back-button takes the user back to
+        // the front capture (rather than reusing the same instance).
+        navigation.push(Routes.DocumentUpload, { idType, side: "back" });
+      } else {
+        navigation.navigate(Routes.Tier2Success);
+      }
+      return;
+    }
+    if (captureMode === "camera") {
+      pickFromCamera();
+    } else {
+      pickFromLibrary();
+    }
+  };
+
+  // ── Reset to allow a new pick ───────────────────────────────────────────
+  const handleRecapture = () => {
+    setPreviewUri(null);
+    setUploadedUrl(null);
   };
 
   return (
@@ -155,34 +289,73 @@ export default function DocumentUploadScreen() {
               },
             ]}
           >
-            {/* Document frame overlay */}
-            <View
-              style={[
-                styles.documentFrame,
-                {
-                  borderRadius: idType === "passport" ? 12 : 8,
-                },
-              ]}
-            >
-              {/* Document icon */}
-              <View style={styles.documentIconBox}>
-                <Ionicons
-                  name="document-text-outline"
-                  size={32}
-                  color="rgba(255,255,255,0.5)"
-                />
+            {previewUri ? (
+              /* Picked-asset preview — fills the pane */
+              <Image
+                source={{ uri: previewUri }}
+                style={styles.previewImage}
+                resizeMode="cover"
+                accessibilityLabel={`Preview of captured ${side} side`}
+              />
+            ) : (
+              /* Empty-pane placeholder (the document frame + position text) */
+              <View
+                style={[
+                  styles.documentFrame,
+                  {
+                    borderRadius: idType === "passport" ? 12 : 8,
+                  },
+                ]}
+              >
+                <View style={styles.documentIconBox}>
+                  <Ionicons
+                    name="document-text-outline"
+                    size={32}
+                    color="rgba(255,255,255,0.5)"
+                  />
+                </View>
+                <Text style={styles.positionText}>
+                  Position {idTypeLabel.toLowerCase()} here
+                </Text>
               </View>
-              <Text style={styles.positionText}>
-                Position {idTypeLabel.toLowerCase()} here
-              </Text>
-            </View>
+            )}
 
-            {/* Corner markers */}
+            {/* Corner markers stay overlaid in both states so the pane still
+                reads as a camera frame. */}
             <View style={[styles.corner, styles.cornerTL]} />
             <View style={[styles.corner, styles.cornerTR]} />
             <View style={[styles.corner, styles.cornerBL]} />
             <View style={[styles.corner, styles.cornerBR]} />
+
+            {/* Upload-in-flight overlay */}
+            {uploading && (
+              <View style={styles.uploadOverlay} pointerEvents="none">
+                <ActivityIndicator size="large" color="#FFFFFF" />
+                <Text style={styles.uploadOverlayText}>Uploading…</Text>
+              </View>
+            )}
+
+            {/* Success badge when upload finished */}
+            {!uploading && uploadedUrl && (
+              <View style={styles.successBadge} pointerEvents="none">
+                <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                <Text style={styles.successBadgeText}>Uploaded</Text>
+              </View>
+            )}
           </View>
+
+          {/* Re-capture link — only shown when a preview exists */}
+          {previewUri && !uploading && (
+            <TouchableOpacity
+              style={styles.recaptureRow}
+              onPress={handleRecapture}
+              accessibilityRole="button"
+              accessibilityLabel="Take or pick a different photo"
+            >
+              <Ionicons name="refresh" size={16} color={TEAL} />
+              <Text style={styles.recaptureText}>Re-capture</Text>
+            </TouchableOpacity>
+          )}
 
           {/* Tips */}
           <View style={styles.tipsCard}>
@@ -234,27 +407,55 @@ export default function DocumentUploadScreen() {
         style={styles.bottomBar}
         pointerEvents="box-none"
       >
-        {captureMode === "camera" ? (
+        {uploadedUrl ? (
+          /* After successful upload — Continue advances the flow */
           <TouchableOpacity
             style={styles.captureButton}
-            onPress={handleAction}
+            onPress={handlePrimary}
+            disabled={uploading}
+            accessibilityRole="button"
+            accessibilityLabel={side === "front" ? "Continue to back side" : "Continue to success"}
+          >
+            <Ionicons name="arrow-forward" size={22} color="#FFFFFF" />
+            <Text style={styles.captureButtonText}>
+              {side === "front" ? "Continue to Back" : "Continue"}
+            </Text>
+          </TouchableOpacity>
+        ) : captureMode === "camera" ? (
+          <TouchableOpacity
+            style={[styles.captureButton, uploading && styles.buttonDisabled]}
+            onPress={handlePrimary}
+            disabled={uploading}
             accessibilityRole="button"
             accessibilityLabel={`Capture ${side}`}
           >
-            <Ionicons name="ellipse-outline" size={22} color="#FFFFFF" />
-            <Text style={styles.captureButtonText}>
-              Capture {side === "front" ? "Front" : "Back"}
-            </Text>
+            {uploading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons name="ellipse-outline" size={22} color="#FFFFFF" />
+                <Text style={styles.captureButtonText}>
+                  Capture {side === "front" ? "Front" : "Back"}
+                </Text>
+              </>
+            )}
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            style={styles.uploadButton}
-            onPress={handleAction}
+            style={[styles.uploadButton, uploading && styles.buttonDisabled]}
+            onPress={handlePrimary}
+            disabled={uploading}
             accessibilityRole="button"
             accessibilityLabel="Choose file"
           >
-            <Ionicons name="cloud-upload-outline" size={22} color="#FFFFFF" />
-            <Text style={styles.uploadButtonText}>Choose File</Text>
+            {uploading ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                <Ionicons name="cloud-upload-outline" size={22} color="#FFFFFF" />
+                <Text style={styles.uploadButtonText}>Choose File</Text>
+              </>
+            )}
           </TouchableOpacity>
         )}
       </LinearGradient>
@@ -440,5 +641,56 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+
+  // ── Preview & upload-state styles ─────────────────────────────────────
+  previewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  uploadOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  uploadOverlayText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  successBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,198,174,0.95)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  successBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  recaptureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    marginBottom: 8,
+  },
+  recaptureText: {
+    color: TEAL,
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
