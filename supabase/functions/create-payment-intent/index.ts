@@ -1,9 +1,18 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // create-payment-intent — Edge Function (Deno runtime)
 //
-// Path A smoke test: creates a Stripe PaymentIntent for the authenticated
-// user, records it in stripe_payment_intents, and returns the client_secret
-// so the mobile client can present a PaymentSheet.
+// Creates a Stripe PaymentIntent for the authenticated user, records it in
+// stripe_payment_intents, and returns the client_secret so the mobile client
+// can present a PaymentSheet.
+//
+// Supported purposes (caller picks via `purpose` field in body):
+//   - 'wallet_deposit' (default — original Path A smoke test)
+//   - 'goal_deposit'   (extension, migration 074):
+//        Caller passes { purpose: 'goal_deposit', goalId, applyCardFee }.
+//        We verify the caller owns goalId, optionally add a 1.5% card fee on
+//        top of the deposit amount, and stamp metadata.type='goal_deposit'
+//        + metadata.goal_id + metadata.deposit_amount_cents + metadata.fee_cents
+//        so the webhook can call credit_goal_external on success.
 //
 // Auth model:
 //   - JWT-scoped client (from caller's Authorization header) → used ONLY to
@@ -11,13 +20,22 @@
 //   - Service-role client → used to INSERT into stripe_payment_intents
 //     (RLS-bypass; the table has a service_role ALL policy).
 //
-// Schema notes (verified against live DB 2026-05-21):
+// Schema notes (verified against live DB 2026-05-30):
 //   - amount_cents (NOT amount), integer, CHECK (> 0)
 //   - purpose NOT NULL, CHECK ∈ ('contribution', 'insurance_premium',
-//     'late_fee', 'loan_repayment', 'wallet_deposit', 'membership_fee')
-//     → using 'wallet_deposit' for the smoke test
+//     'late_fee', 'loan_repayment', 'wallet_deposit', 'membership_fee',
+//     'goal_deposit')  ← 'goal_deposit' added by migration 074
+//   - goal_id UUID nullable, FK -> user_savings_goals(id)  ← added by 074
 //   - client_secret is NOT stored in DB (returned to client only)
 //   - idempotency_key UNIQUE — we send a fresh UUID per request
+//
+// Card-fee model (goal_deposit only, applyCardFee=true):
+//   The user-facing fee is added on TOP of the deposit. For a $100 deposit
+//   the Stripe charge is $101.50; $100 is credited to the goal; $1.50 is
+//   the platform's gross margin (Stripe's own card fee comes out of that —
+//   the 1.5% is presented to the user as a "card processing fee"). We do
+//   NOT use Stripe Connect's application_fee_amount because this is a
+//   direct platform charge, not a transfer to a connected account.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import Stripe from "npm:stripe@^17";
@@ -65,7 +83,13 @@ Deno.serve(async (req) => {
   }
 
   // ─── 2. Parse + validate body ───
-  let body: { amount?: unknown; currency?: unknown };
+  let body: {
+    amount?: unknown;
+    currency?: unknown;
+    purpose?: unknown;
+    goalId?: unknown;
+    applyCardFee?: unknown;
+  };
   try {
     body = await req.json();
   } catch {
@@ -75,6 +99,8 @@ Deno.serve(async (req) => {
   const amount = body.amount;
   const currency =
     typeof body.currency === "string" ? body.currency.toLowerCase() : "usd";
+  const purpose =
+    typeof body.purpose === "string" ? body.purpose : "wallet_deposit";
 
   if (!Number.isInteger(amount) || (amount as number) < 50) {
     return jsonResponse(
@@ -83,23 +109,106 @@ Deno.serve(async (req) => {
     );
   }
 
+  const ALLOWED_PURPOSES = new Set([
+    "wallet_deposit",
+    "goal_deposit",
+    // Other live purposes (contribution / late_fee / loan_repayment / etc.)
+    // are reachable through other code paths; accepting here would let any
+    // authenticated caller stuff an arbitrary purpose into the table.
+  ]);
+  if (!ALLOWED_PURPOSES.has(purpose)) {
+    return jsonResponse(
+      { error: `purpose '${purpose}' is not supported by this endpoint` },
+      400
+    );
+  }
+
+  // ─── 2b. Goal-deposit specific validation + fee computation ──────────────
+  // For non-goal purposes the deposit equals the charge; goal_id + fee
+  // metadata stay null.
+  let goalId: string | null = null;
+  let chargeAmountCents = amount as number;          // what we charge Stripe
+  let depositAmountCents = amount as number;          // what goes to the goal
+  let feeCents = 0;                                   // platform card-fee
+  let description = "Path A smoke test — wallet deposit";
+
+  if (purpose === "goal_deposit") {
+    const goalIdRaw = typeof body.goalId === "string" ? body.goalId : "";
+    const UUID_RE =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_RE.test(goalIdRaw)) {
+      return jsonResponse(
+        { error: "goalId must be a valid UUID when purpose='goal_deposit'" },
+        400
+      );
+    }
+    goalId = goalIdRaw;
+
+    // Verify the caller owns the goal — defends the FK at the application
+    // layer rather than waiting for the DB-level insert to fail. We use the
+    // auth-scoped client so the lookup is gated by user_savings_goals RLS.
+    const { data: ownedGoal, error: goalErr } = await authClient
+      .from("user_savings_goals")
+      .select("id")
+      .eq("id", goalId)
+      .maybeSingle();
+    if (goalErr) {
+      console.error(
+        "[create-payment-intent] goal ownership check failed:",
+        goalErr.message
+      );
+      return jsonResponse(
+        { error: "Failed to verify goal ownership", detail: goalErr.message },
+        500
+      );
+    }
+    if (!ownedGoal) {
+      return jsonResponse(
+        { error: "Goal not found or not owned by caller" },
+        403
+      );
+    }
+
+    description = `Goal deposit ${goalId}`;
+
+    // applyCardFee=true means the user opted into the card path; charge
+    // amount + 1.5% on TOP. The deposit credited to the goal is still
+    // `amount`; the fee is platform margin.
+    if (body.applyCardFee === true) {
+      feeCents = Math.round((amount as number) * 0.015);
+      chargeAmountCents = (amount as number) + feeCents;
+    }
+  }
+
   // ─── 3. Create PaymentIntent on Stripe ───
-  // Use a fresh UUID for idempotency so accidental double-clicks don't double-charge.
+  // Fresh UUID for idempotency so accidental double-clicks don't double-charge.
   const idempotencyKey = crypto.randomUUID();
+
+  const metadata: Record<string, string> =
+    purpose === "goal_deposit"
+      ? {
+          user_id: user.id,
+          type: "goal_deposit",
+          goal_id: goalId as string,
+          deposit_amount_cents: String(depositAmountCents),
+          fee_cents: String(feeCents),
+          source: "goals_addmoney_card",
+        }
+      : {
+          user_id: user.id,
+          test_charge: "true",
+          source: "path_a_smoke_test",
+        };
 
   let intent: Stripe.PaymentIntent;
   try {
     intent = await stripe.paymentIntents.create(
       {
-        amount: amount as number,
+        amount: chargeAmountCents,
         currency,
-        metadata: {
-          user_id: user.id,
-          test_charge: "true",
-          source: "path_a_smoke_test",
-        },
+        metadata,
         automatic_payment_methods: { enabled: true },
-        description: "Path A smoke test — wallet deposit",
+        description,
       },
       { idempotencyKey }
     );
@@ -116,12 +225,13 @@ Deno.serve(async (req) => {
     .insert({
       stripe_payment_intent_id: intent.id,
       member_id: user.id,
-      amount_cents: amount,
+      amount_cents: chargeAmountCents, // what Stripe will actually charge
       currency,
       status: intent.status,
-      purpose: "wallet_deposit",
+      purpose,
+      goal_id: goalId,
       idempotency_key: idempotencyKey,
-      description: "Path A smoke test — wallet deposit",
+      description,
       metadata: intent.metadata,
     });
 
@@ -148,7 +258,10 @@ Deno.serve(async (req) => {
   return jsonResponse({
     clientSecret: intent.client_secret,
     paymentIntentId: intent.id,
-    amount: amount,
+    amount: chargeAmountCents,
+    depositAmount: depositAmountCents,
+    feeCents,
     currency,
+    purpose,
   });
 });

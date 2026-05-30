@@ -120,6 +120,75 @@ Deno.serve(async (req) => {
         "— event recorded but not applied"
       );
     }
+
+    // ── Goal-deposit side-effect on payment_intent.succeeded ──────────────
+    // Migration 074: when a PaymentIntent created with purpose='goal_deposit'
+    // succeeds, credit the goal via the credit_goal_external RPC. The RPC is
+    // idempotent on stripe_payment_intent_id so Stripe's automatic retries
+    // (up to ~3 days) cannot double-credit. We only act on .succeeded so
+    // .processing / .requires_action / .failed don't trigger a credit.
+    //
+    // Source of truth for the credit amount and the fee is the PI metadata
+    // we stamped at create time, NOT pi.amount: when applyCardFee=true the
+    // user was charged amount+fee, but only `amount` should land in the
+    // goal.
+    if (
+      event.type === "payment_intent.succeeded" &&
+      pi.metadata?.type === "goal_deposit"
+    ) {
+      const goalId = pi.metadata.goal_id ?? null;
+      const depositCentsRaw = pi.metadata.deposit_amount_cents ?? "";
+      const feeCentsRaw = pi.metadata.fee_cents ?? "0";
+      const depositCents = Number(depositCentsRaw);
+      const feeCents = Number(feeCentsRaw);
+
+      if (!goalId || !Number.isFinite(depositCents) || depositCents <= 0) {
+        const msg = `Malformed goal_deposit metadata on PI ${pi.id}: goal_id=${goalId}, deposit_amount_cents=${depositCentsRaw}`;
+        console.error("[stripe-webhook]", msg);
+        processingError = msg;
+      } else {
+        const { data: rpcResult, error: rpcErr } = await supabase.rpc(
+          "credit_goal_external",
+          {
+            p_goal_id: goalId,
+            p_amount_cents: depositCents,
+            p_fee_cents: Number.isFinite(feeCents) && feeCents > 0 ? feeCents : 0,
+            p_source: "card",
+            p_stripe_pi_id: pi.id,
+          }
+        );
+
+        if (rpcErr) {
+          processingError = `credit_goal_external RPC error: ${rpcErr.message}`;
+          console.error("[stripe-webhook]", processingError);
+        } else if (rpcResult && rpcResult.success === false) {
+          // Function-level failure (e.g. "Goal not found"). We set
+          // processingError so the webhook row records the failure for
+          // forensics. The existing tail of this handler will then
+          // return 500 → Stripe retries. The retry will hit the
+          // event-row UNIQUE check (Layer 1 in the docblock) and ack
+          // with duplicate=true without re-invoking the RPC, so a
+          // permanent error doesn't actually loop forever — it logs
+          // once, stripe_webhook_events records the failure, and the
+          // retry-train terminates at the duplicate-event ack.
+          const msg = `credit_goal_external returned failure: ${rpcResult.error}`;
+          console.error("[stripe-webhook]", msg);
+          processingError = msg;
+        } else if (rpcResult?.idempotent_replay) {
+          console.log(
+            "[stripe-webhook] credit_goal_external idempotent replay for PI",
+            pi.id
+          );
+        } else {
+          console.log(
+            "[stripe-webhook] credit_goal_external succeeded for PI",
+            pi.id,
+            "→ goal_balance_cents =",
+            rpcResult?.goal_balance_cents
+          );
+        }
+      }
+    }
   } else {
     console.log("[stripe-webhook] ignoring non-PI event", event.type);
   }
