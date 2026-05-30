@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useRef } from "react";
+import React, { useMemo, useEffect, useRef, useCallback } from "react";
 import { supabase } from "../lib/supabase";
 import {
   View,
@@ -7,10 +7,12 @@ import {
   TouchableOpacity,
   ScrollView,
   SafeAreaView,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useCircles } from "../context/CirclesContext";
+import { useOrganizerTrips } from "../hooks/useTripOrganizer";
 import { useXnScore } from "../context/XnScoreContext";
 import { useWallet } from "../context/WalletContext";
 import { useAdvance, LOAN_PRODUCTS, ELIGIBILITY_TIERS } from "../context/AdvanceContext";
@@ -21,7 +23,7 @@ import { useNotifications } from "../context/NotificationContext";
 import { useUserDefaults } from "../hooks/useDefaultCascade";
 import { useLateContributions } from "../hooks/useLateContributions";
 import { useInterest } from "../hooks/useInterest";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -51,6 +53,29 @@ const WARNING = "#F59E0B";
 
 // Circle accent color rotation
 const CIRCLE_ACCENTS = [TEAL, GOLD, NAVY, TEAL, GOLD];
+
+// Trip status pill colors — mirrors OrganizerTripListScreen for visual consistency
+const TRIP_STATUS_COLORS: Record<
+  "draft" | "published" | "closed" | "cancelled",
+  { bg: string; text: string }
+> = {
+  draft: { bg: "#E5E7EB", text: "#6B7280" },
+  published: { bg: "rgba(0,198,174,0.15)", text: TEAL },
+  closed: { bg: "rgba(10,35,66,0.12)", text: NAVY },
+  cancelled: { bg: "#FEE2E2", text: "#DC2626" },
+};
+
+// Trip card date formatter — matches OrganizerTripListScreen output
+const formatTripDates = (start: string, end: string): string => {
+  try {
+    const s = new Date(start);
+    const e = new Date(end);
+    const opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+    return `${s.toLocaleDateString("en-US", opts)} — ${e.toLocaleDateString("en-US", { ...opts, year: "numeric" })}`;
+  } catch {
+    return `${start} — ${end}`;
+  }
+};
 
 // Static near-you services data
 const NEAR_YOU_SERVICES = [
@@ -114,6 +139,15 @@ export default function DashboardScreen() {
   }, [user?.id]);
 
   const { myCircles } = useCircles();
+  const { trips: organizerTrips, refresh: refreshOrganizerTrips } = useOrganizerTrips();
+
+  // Re-fetch trips when the Dashboard regains focus (e.g. after creating a
+  // trip in the wizard) so newly-created trips appear without a hard reload.
+  useFocusEffect(
+    useCallback(() => {
+      refreshOrganizerTrips();
+    }, [refreshOrganizerTrips])
+  );
   const { score } = useXnScore();
   const { balance: walletBalance } = useWallet();
   const { hasActiveDefaults } = useUserDefaults();
@@ -530,29 +564,100 @@ export default function DashboardScreen() {
           <Text style={styles.arrivalCta}>Welcome {"\u2192"}</Text>
         </TouchableOpacity>
 
-        {/* ========== 5b. TRIP ORGANIZER CTA ========== */}
-        <TouchableOpacity
-          style={styles.tripOrganizerCard}
-          onPress={() => navigation.navigate("OrganizerTripList" as any)}
-          activeOpacity={0.85}
-          accessibilityLabel="View my trips"
-          accessibilityRole="button"
-        >
-          <View style={styles.tripOrganizerLeft}>
-            <View style={styles.tripOrganizerIcon}>
-              <Text style={{ fontSize: 26 }}>{"\u2708\uFE0F"}</Text>
+        {/* ========== 5b. MY TRIPS \u2014 real preview when trips exist, static tile as empty state ========== */}
+        {organizerTrips.length > 0 ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>My Trips</Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate("OrganizerTripList" as any)}
+                accessibilityLabel="See all my trips"
+                accessibilityRole="button"
+              >
+                <Text style={styles.sectionLink}>See all</Text>
+              </TouchableOpacity>
             </View>
-            <View style={styles.tripOrganizerText}>
-              <Text style={styles.tripOrganizerTitle}>My Trips</Text>
-              <Text style={styles.tripOrganizerDesc}>
-                Organize, manage & track all your group trips
-              </Text>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.tripsScroll}
+            >
+              {organizerTrips.slice(0, 6).map((trip) => {
+                const statusKey = (trip.status as "draft" | "published" | "closed" | "cancelled");
+                const statusColor = TRIP_STATUS_COLORS[statusKey] ?? TRIP_STATUS_COLORS.draft;
+                return (
+                  <TouchableOpacity
+                    key={trip.id}
+                    style={styles.tripCard}
+                    onPress={() =>
+                      navigation.navigate("OrganizerTripDashboard" as any, { tripId: trip.id })
+                    }
+                    accessibilityLabel={`Trip: ${trip.name}`}
+                    accessibilityRole="button"
+                  >
+                    {trip.coverPhotoUrl ? (
+                      <Image source={{ uri: trip.coverPhotoUrl }} style={styles.tripCover} />
+                    ) : (
+                      <View style={[styles.tripCover, styles.tripCoverPlaceholder]}>
+                        <Text style={{ fontSize: 28 }}>{"\u2708\uFE0F"}</Text>
+                      </View>
+                    )}
+                    <View style={styles.tripCardBody}>
+                      <Text style={styles.tripName} numberOfLines={1}>
+                        {trip.name}
+                      </Text>
+                      <Text style={styles.tripDates} numberOfLines={1}>
+                        {formatTripDates(trip.startDate, trip.endDate)}
+                      </Text>
+                      <View
+                        style={[styles.tripStatusPill, { backgroundColor: statusColor.bg }]}
+                      >
+                        <Text style={[styles.tripStatusPillText, { color: statusColor.text }]}>
+                          {statusKey.charAt(0).toUpperCase() + statusKey.slice(1)}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+
+              {/* See-all card mirrors the "Start a new circle" pattern */}
+              <TouchableOpacity
+                style={styles.tripSeeMoreCard}
+                onPress={() => navigation.navigate("OrganizerTripList" as any)}
+                accessibilityLabel="See all my trips"
+                accessibilityRole="button"
+              >
+                <Ionicons name="arrow-forward" size={24} color={TEAL} />
+                <Text style={styles.tripSeeMoreText}>See all{"\n"}trips</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.tripOrganizerCard}
+            onPress={() => navigation.navigate("OrganizerTripList" as any)}
+            activeOpacity={0.85}
+            accessibilityLabel="View my trips"
+            accessibilityRole="button"
+          >
+            <View style={styles.tripOrganizerLeft}>
+              <View style={styles.tripOrganizerIcon}>
+                <Text style={{ fontSize: 26 }}>{"\u2708\uFE0F"}</Text>
+              </View>
+              <View style={styles.tripOrganizerText}>
+                <Text style={styles.tripOrganizerTitle}>My Trips</Text>
+                <Text style={styles.tripOrganizerDesc}>
+                  Organize, manage & track all your group trips
+                </Text>
+              </View>
             </View>
-          </View>
-          <View style={styles.tripOrganizerCta}>
-            <Text style={styles.tripOrganizerCtaText}>Open {"\u2192"}</Text>
-          </View>
-        </TouchableOpacity>
+            <View style={styles.tripOrganizerCta}>
+              <Text style={styles.tripOrganizerCtaText}>Open {"\u2192"}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
 
         {/* ========== 6. COMMUNITY FEED ========== */}
         <View style={styles.section}>
@@ -1142,6 +1247,72 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+
+  // ===== 5c. MY TRIPS PREVIEW (horizontal scroll, mirrors Your Circles idiom) =====
+  tripsScroll: {
+    paddingRight: 16,
+    gap: 12,
+  },
+  tripCard: {
+    width: 220,
+    backgroundColor: CARD_BG,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+    overflow: "hidden",
+  },
+  tripCover: {
+    width: "100%",
+    height: 100,
+  },
+  tripCoverPlaceholder: {
+    backgroundColor: "#FFF7ED",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tripCardBody: {
+    padding: 12,
+  },
+  tripName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: TEXT_DARK,
+  },
+  tripDates: {
+    fontSize: 12,
+    color: TEXT_SECONDARY,
+    marginTop: 3,
+  },
+  tripStatusPill: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  tripStatusPillText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  tripSeeMoreCard: {
+    width: 110,
+    backgroundColor: CARD_BG,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    borderStyle: "dashed",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  tripSeeMoreText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: TEAL,
+    textAlign: "center",
+    lineHeight: 18,
   },
 
   // ===== 7. NEAR YOU SERVICES =====
