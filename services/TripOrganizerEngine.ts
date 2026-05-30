@@ -14,6 +14,23 @@ const nullIfBlank = <T,>(v: T) => (v === '' || v === undefined ? null : v);
 
 export type TripStatus = 'draft' | 'published' | 'closed' | 'cancelled';
 export type PaymentType = 'lump_sum' | 'installments';
+export type PaymentFrequency = 'weekly' | 'biweekly' | 'monthly';
+
+export interface InstallmentScheduleItem {
+  due_date: string;     // YYYY-MM-DD
+  amount_cents: number;
+}
+
+/**
+ * Envelope stored in `trips.installment_schedule` (JSONB). cadence/count are
+ * denormalised at the top so consumers (and Postgres queries via `->>`) can
+ * read them without walking the array. installments[] is the generated plan.
+ */
+export interface InstallmentSchedule {
+  cadence: PaymentFrequency | null;
+  count: number;
+  installments: InstallmentScheduleItem[];
+}
 export type ParticipantStatus = 'pending' | 'confirmed' | 'waitlist' | 'cancelled';
 export type PaymentStatus = 'unpaid' | 'deposit_paid' | 'partial' | 'paid_in_full';
 export type TripPaymentType = 'deposit' | 'installment' | 'full' | 'refund';
@@ -38,7 +55,12 @@ export interface Trip {
   priceCents: number;
   depositCents: number;
   paymentType: PaymentType;
+  // Cross-step installment plan stored as a JSONB envelope in
+  // trips.installment_schedule. installmentCount / paymentFrequency are
+  // derived from it in mapTrip for convenience.
+  installmentSchedule: InstallmentSchedule | null;
   installmentCount: number | null;
+  paymentFrequency: PaymentFrequency | null;
   currency: string;
   status: TripStatus;
   slug: string | null;
@@ -163,7 +185,30 @@ export interface TripDashboard {
 
 // ─── MAPPERS ────────────────────────────────────────────────────────────────
 
+/** Parse the JSONB installment_schedule envelope from a trips row. */
+function extractInstallmentSchedule(value: any): InstallmentSchedule | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  if (typeof value.count !== "number" || !Array.isArray(value.installments)) {
+    return null;
+  }
+  const cadence: PaymentFrequency | null =
+    value.cadence === "weekly" ||
+    value.cadence === "biweekly" ||
+    value.cadence === "monthly"
+      ? value.cadence
+      : null;
+  return {
+    cadence,
+    count: value.count,
+    installments: value.installments.filter(
+      (it: any) =>
+        it && typeof it.due_date === "string" && typeof it.amount_cents === "number"
+    ),
+  };
+}
+
 function mapTrip(row: any): Trip {
+  const installmentSchedule = extractInstallmentSchedule(row.installment_schedule);
   return {
     id: row.id,
     organizerId: row.organizer_id,
@@ -178,7 +223,9 @@ function mapTrip(row: any): Trip {
     priceCents: parseFloat(row.price_per_person) || 0,
     depositCents: parseFloat(row.deposit_amount) || 0,
     paymentType: row.payment_type ?? 'lump_sum',
-    installmentCount: null,
+    installmentSchedule,
+    installmentCount: installmentSchedule?.count ?? null,
+    paymentFrequency: installmentSchedule?.cadence ?? null,
     currency: 'USD',
     status: row.status ?? 'draft',
     slug: row.slug ?? row.shareable_slug,
@@ -348,6 +395,7 @@ export class TripOrganizerEngine {
         deposit_required: (data.depositCents ?? 0) > 0,
         deposit_amount: data.depositCents ?? 0,
         payment_type: data.paymentType ?? 'lump_sum',
+        installment_schedule: data.installmentSchedule ?? [],
         status: 'draft',
         messaging_mode: data.messagingMode ?? 'organizer_only',
         refund_policy: data.refundPolicy ?? 'none',
@@ -380,7 +428,7 @@ export class TripOrganizerEngine {
     // edit to fail just because the price input wasn't cleared.
     const isPublished = existing.status === 'published';
     if (isPublished) {
-      const locked: (keyof Trip)[] = ['priceCents', 'depositCents', 'paymentType'];
+      const locked: (keyof Trip)[] = ['priceCents', 'depositCents', 'paymentType', 'installmentSchedule'];
       for (const field of locked) {
         if (data[field] !== undefined) {
           console.warn(
@@ -409,6 +457,9 @@ export class TripOrganizerEngine {
     }
     if (!isPublished && data.paymentType !== undefined) {
       update.payment_type = data.paymentType;
+    }
+    if (!isPublished && data.installmentSchedule !== undefined) {
+      update.installment_schedule = data.installmentSchedule ?? [];
     }
     if (data.messagingMode !== undefined) update.messaging_mode = data.messagingMode;
     if (data.refundPolicy !== undefined) update.refund_policy = data.refundPolicy;

@@ -23,7 +23,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useCreateTripWizard } from '../hooks/useTripOrganizer';
 import { useFormKeyboardOffset } from '../hooks/useFormKeyboardOffset';
-import { TripOrganizerEngine } from '../services/TripOrganizerEngine';
+import {
+  TripOrganizerEngine,
+  type PaymentFrequency,
+  type InstallmentSchedule,
+} from '../services/TripOrganizerEngine';
 import { MediaUploadService } from '../services/MediaUploadService';
 
 // --- Design tokens ---
@@ -55,6 +59,8 @@ interface TripFormData {
   whats_excluded: string;
   price_per_person: string;
   payment_type: 'lump_sum' | 'installments';
+  payment_frequency: PaymentFrequency;   // only used when payment_type === 'installments'
+  installment_count: number;             // ditto
   deposit_required: boolean;
   deposit_amount: string;
   refund_policy: string;
@@ -432,11 +438,93 @@ const StepBasics: React.FC<{
   </View>
 );
 
+/**
+ * Generate the JSONB installment_schedule envelope from cadence + count +
+ * total (price - deposit, in cents). Anchor (b): the LAST installment falls
+ * one day before start_date, and earlier installments step BACKWARDS by the
+ * cadence — so payment is always complete before the trip starts. Any date
+ * that would land in the past is clamped to today (preserves the count + the
+ * last-before-trip anchor; just compresses the early payments). With no
+ * start_date set, falls back to forward stepping from today.
+ */
+function generateInstallmentSchedule(opts: {
+  cadence: PaymentFrequency;
+  count: number;
+  totalCents: number;
+  startDate?: string | null;
+}): InstallmentSchedule {
+  const { cadence, count, totalCents, startDate } = opts;
+  if (count <= 0 || totalCents <= 0) {
+    return { cadence, count: 0, installments: [] };
+  }
+  const baseCents = Math.floor(totalCents / count);
+  const remainder = totalCents - baseCents * count;
+  const amounts = Array.from({ length: count }, (_, i) =>
+    i === count - 1 ? baseCents + remainder : baseCents
+  );
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const stepDate = (d: Date, dir: -1 | 1) => {
+    if (cadence === 'monthly') d.setMonth(d.getMonth() + dir);
+    else d.setDate(d.getDate() + dir * (cadence === 'biweekly' ? 14 : 7));
+  };
+
+  const dueDates: Date[] = new Array(count);
+  if (startDate) {
+    const last = new Date(startDate + 'T00:00:00');
+    last.setDate(last.getDate() - 1);
+    dueDates[count - 1] = last;
+    for (let i = count - 2; i >= 0; i--) {
+      const prev = new Date(dueDates[i + 1]);
+      stepDate(prev, -1);
+      dueDates[i] = prev;
+    }
+    for (let i = 0; i < count; i++) {
+      if (dueDates[i].getTime() < today.getTime()) dueDates[i] = new Date(today);
+    }
+  } else {
+    for (let i = 0; i < count; i++) {
+      const due = new Date(today);
+      if (cadence === 'monthly') due.setMonth(due.getMonth() + i);
+      else due.setDate(due.getDate() + i * (cadence === 'biweekly' ? 14 : 7));
+      dueDates[i] = due;
+    }
+  }
+
+  return {
+    cadence,
+    count,
+    installments: dueDates.map((d, i) => ({
+      due_date: d.toISOString().split('T')[0],
+      amount_cents: amounts[i],
+    })),
+  };
+}
+
+const INSTALLMENT_COUNT_OPTIONS = [3, 4, 6, 12] as const;
+const FREQUENCY_OPTIONS: { value: PaymentFrequency; label: string }[] = [
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Bi-weekly' },
+  { value: 'monthly', label: 'Monthly' },
+];
+
 const StepPayment: React.FC<{
   data: TripFormData;
   update: (partial: Partial<TripFormData>) => void;
 }> = ({ data, update }) => {
   const [showPolicyPicker, setShowPolicyPicker] = useState(false);
+
+  // Live preview values for the installment plan (when applicable).
+  const previewPrice = parseFloat(data.price_per_person) || 0;
+  const previewDeposit = data.deposit_required
+    ? parseFloat(data.deposit_amount) || 0
+    : 0;
+  const previewTotal = Math.max(0, previewPrice - previewDeposit);
+  const previewPer =
+    data.installment_count > 0 ? previewTotal / data.installment_count : 0;
+  const previewFreqLabel =
+    data.payment_frequency === 'biweekly' ? 'bi-weekly' : data.payment_frequency;
 
   return (
     <View>
@@ -458,6 +546,66 @@ const StepPayment: React.FC<{
           <Text style={[styles.toggleButtonText, data.payment_type === 'installments' && styles.toggleButtonTextActive]}>Installments</Text>
         </TouchableOpacity>
       </View>
+
+      {data.payment_type === 'installments' && (
+        <>
+          <SectionLabel label="Payment Frequency" />
+          <View style={styles.toggleButtonRow}>
+            {FREQUENCY_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.value}
+                style={[
+                  styles.toggleButton,
+                  data.payment_frequency === opt.value && styles.toggleButtonActive,
+                ]}
+                onPress={() => update({ payment_frequency: opt.value })}
+              >
+                <Text
+                  style={[
+                    styles.toggleButtonText,
+                    data.payment_frequency === opt.value && styles.toggleButtonTextActive,
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <SectionLabel label="Number of Installments" />
+          <View style={styles.toggleButtonRow}>
+            {INSTALLMENT_COUNT_OPTIONS.map((n) => (
+              <TouchableOpacity
+                key={n}
+                style={[
+                  styles.toggleButton,
+                  data.installment_count === n && styles.toggleButtonActive,
+                ]}
+                onPress={() => update({ installment_count: n })}
+              >
+                <Text
+                  style={[
+                    styles.toggleButtonText,
+                    data.installment_count === n && styles.toggleButtonTextActive,
+                  ]}
+                >
+                  {n}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {previewTotal > 0 && data.installment_count > 0 && (
+            <View style={styles.installmentPreview}>
+              <Text style={styles.installmentPreviewText}>
+                {data.installment_count} {previewFreqLabel} payments of $
+                {previewPer.toFixed(2)}
+                {data.start_date ? ' — last due before trip starts' : ''}
+              </Text>
+            </View>
+          )}
+        </>
+      )}
 
       <ToggleRow label="Deposit Required" value={data.deposit_required} onValueChange={(v) => update({ deposit_required: v })} />
       {data.deposit_required && (
@@ -737,6 +885,8 @@ const CreateTripWizardScreen: React.FC = () => {
     whats_excluded: '',
     price_per_person: '',
     payment_type: 'lump_sum',
+    payment_frequency: 'monthly',
+    installment_count: 4,
     deposit_required: false,
     deposit_amount: '',
     refund_policy: '',
@@ -875,6 +1025,8 @@ const CreateTripWizardScreen: React.FC = () => {
           whats_excluded: (trip as any).whatsExcluded ?? '',
           price_per_person: trip.priceCents ? String(trip.priceCents) : '',
           payment_type: ((trip as any).paymentType === 'installments' ? 'installments' : 'lump_sum'),
+          payment_frequency: ((trip as any).paymentFrequency as PaymentFrequency) ?? 'monthly',
+          installment_count: (trip as any).installmentCount ?? 4,
           deposit_required: !!(trip as any).depositCents,
           deposit_amount: (trip as any).depositCents ? String((trip as any).depositCents) : '',
           refund_policy: mapRefundPolicyFromDB((trip as any).refundPolicy),
@@ -941,6 +1093,26 @@ const CreateTripWizardScreen: React.FC = () => {
       whatsExcluded: formData.whats_excluded || null,
       priceCents: formData.price_per_person ? parseFloat(formData.price_per_person) : 0,
       paymentType: formData.payment_type,
+      // Lump sum → null (engine writes [] to clear). Installments → generated
+      // envelope based on cadence + count + (price - deposit), anchored so the
+      // last installment is due 1 day before start_date when start_date is set.
+      installmentSchedule:
+        formData.payment_type === 'installments'
+          ? generateInstallmentSchedule({
+              cadence: formData.payment_frequency,
+              count: formData.installment_count,
+              totalCents: Math.round(
+                Math.max(
+                  0,
+                  (parseFloat(formData.price_per_person) || 0) -
+                    (formData.deposit_required
+                      ? parseFloat(formData.deposit_amount) || 0
+                      : 0)
+                ) * 100
+              ),
+              startDate: formData.start_date || null,
+            })
+          : null,
       depositCents: formData.deposit_amount ? parseFloat(formData.deposit_amount) : 0,
       refundPolicy: mapRefundPolicyToDB(formData.refund_policy),
       messagingMode: formData.messaging_mode ? 'group' : 'organizer_only',
@@ -1247,6 +1419,18 @@ const styles = StyleSheet.create({
   },
   toggleButtonTextActive: {
     color: '#FFFFFF',
+  },
+  // Installment plan preview shown under the cadence + count pickers.
+  installmentPreview: {
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#F5F7FA',
+    borderRadius: 8,
+  },
+  installmentPreviewText: {
+    fontSize: 13,
+    color: '#6B7280',
   },
   dropdownBtn: {
     flexDirection: 'row',
