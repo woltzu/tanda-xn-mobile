@@ -10,14 +10,18 @@
 //
 // NAVIGATION — onBack → goBack(). Source-aware submit:
 //   wallet → useGoalActions.addMoney (atomic via transfer_to_goal RPC).
-//   card   → create-payment-intent edge function (purpose='goal_deposit',
-//            applyCardFee=true) + Stripe PaymentSheet via PaymentContext.
-//            The credit_goal_external RPC (migration 074) fires
-//            asynchronously from the stripe-webhook on
-//            payment_intent.succeeded — the user sees the updated
-//            balance when GoalDetailV2 refetches on focus.
-//   bank   → comingSoon Alert. Bank ACH needs Stripe Financial
-//            Connections / Plaid bank-link first; out of scope here.
+//   card   → create-payment-intent (goal_deposit, applyCardFee=true) +
+//            Stripe PaymentSheet via PaymentContext. Goal balance is
+//            credited asynchronously by the credit_goal_external RPC
+//            (migration 074) when the payment_intent.succeeded webhook
+//            arrives; GoalDetailV2's useFocusEffect refetches on return.
+//   bank   → stripe-create-bank-session → collectFinancialConnectionsAccounts
+//            (Stripe FC sheet) → stripe-attach-bank-payment-method →
+//            create-payment-intent (goal_deposit, us_bank_account,
+//            paymentMethodId). The backend creates the PaymentIntent with
+//            confirm: true + mandate_data so ACH is initiated immediately;
+//            the goal is credited 3-5 business days later when the
+//            payment_intent.succeeded webhook fires.
 //
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
@@ -34,6 +38,7 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -42,6 +47,43 @@ import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useGoalActions } from "../hooks/useGoalActions";
 import { usePayment } from "../context/PaymentContext";
 import { supabase } from "../lib/supabase";
+
+// ─── Stripe Financial Connections — lazy-require web-safe wrapper ────────────
+// PaymentContext already does this dance for initPaymentSheet/presentPaymentSheet
+// but does not expose collectFinancialConnectionsAccounts. Rather than touch
+// PaymentContext (which carries an unrelated work-in-progress diff), mirror
+// the same pattern locally for just the FC method we need.
+//
+// On native, we destructure useStripe from the real package and call
+// collectFinancialConnectionsAccounts(clientSecret) — the SDK method that
+// opens the FC sheet and returns the linked-accounts session.
+//
+// On web (and any environment where the package fails to load), we fall
+// back to a mock that returns a friendly error so the bank flow surfaces
+// "not available on web" instead of a crash.
+type CollectFCAccounts = (
+  clientSecret: string
+) => Promise<{
+  session?: { id: string };
+  error?: { message?: string; code?: string };
+}>;
+let useStripeFC: () => { collectFinancialConnectionsAccounts: CollectFCAccounts } =
+  () => ({
+    collectFinancialConnectionsAccounts: async () => ({
+      error: { message: "Bank linking is not available on this platform" },
+    }),
+  });
+if (Platform.OS !== "web") {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const stripeMod = require("@stripe/stripe-react-native");
+    if (stripeMod?.useStripe) {
+      useStripeFC = stripeMod.useStripe;
+    }
+  } catch {
+    // Module not available — keep the mock so the screen still loads.
+  }
+}
 
 // UUID guard — sub-screens can be reached with mock defaults that use ids
 // like "g1"; the hook will reject those with a 22P02 from Postgres.
@@ -140,6 +182,9 @@ export default function GoalAddMoneyScreen() {
   const route = useRoute<GoalAddMoneyRouteProp>();
   const { addMoney } = useGoalActions();
   const { presentPaymentSheet } = usePayment();
+  // Hoist the FC method to component-top per React Hook rules; we'll call
+  // the returned function from inside the async bank handler below.
+  const { collectFinancialConnectionsAccounts } = useStripeFC();
 
   const goal = route.params?.goal ?? DEFAULT_GOAL;
   const goalId = route.params?.goalId ?? goal.id;
@@ -156,11 +201,19 @@ export default function GoalAddMoneyScreen() {
     savedCards[0]?.id || null
   );
   const [submitting, setSubmitting] = useState(false);
+  // Separate state for the bank flow because its lifecycle is much
+  // longer (multi-step FC sheet + 3 edge function calls) and the UI
+  // needs to disable interactions throughout.
+  const [linkingBank, setLinkingBank] = useState(false);
 
   const remainingToTarget = goal.target - goal.balance;
   const numAmount = Number(amount) || 0;
   const canSubmit =
-    !submitting && amount.length > 0 && numAmount > 0 && !!selectedSource;
+    !submitting &&
+    !linkingBank &&
+    amount.length > 0 &&
+    numAmount > 0 &&
+    !!selectedSource;
 
   const comingSoon = (label: string) =>
     Alert.alert(label, "This will be available soon.");
@@ -246,6 +299,134 @@ export default function GoalAddMoneyScreen() {
     }
   };
 
+  // ── Bank (ACH) deposit path — Stripe Financial Connections + ACH ──────────
+  // Four-step flow keyed on the backend shipped in commit 7701feb / migration
+  // 075:
+  //   1. stripe-create-bank-session       → FC session client_secret + sessionId.
+  //   2. collectFinancialConnectionsAccounts(clientSecret)  → open FC sheet.
+  //   3. stripe-attach-bank-payment-method → convert linked FC accounts to
+  //      Stripe PaymentMethods, attach to customer, persist in
+  //      stripe_bank_accounts. Returns accounts[0].paymentMethodId.
+  //   4. create-payment-intent             → PI is created server-side with
+  //      payment_method=pmId, confirm:true, mandate_data (from request
+  //      headers on the server). For ACH the PI moves directly to
+  //      'processing' on Stripe's side; the credit_goal_external RPC fires
+  //      from the payment_intent.succeeded webhook 3-5 business days later
+  //      when ACH settles.
+  //
+  // Why NOT call confirmPayment client-side here: the backend already
+  // confirmed the PaymentIntent with the attached PM. A second confirm
+  // would error out ("PaymentIntent already in processing").
+  const handleBankDeposit = async () => {
+    if (!UUID_RE.test(goalId)) {
+      Alert.alert(
+        "Goal not loaded",
+        "Open this screen from your goal's detail page so the deposit can be saved."
+      );
+      return;
+    }
+    const amountCents = Math.round(numAmount * 100);
+    if (amountCents < 50) {
+      Alert.alert("Amount too small", "Minimum bank deposit is $0.50.");
+      return;
+    }
+    if (Platform.OS === "web") {
+      Alert.alert(
+        "Not available on web",
+        "Bank linking via Financial Connections is only available in the mobile app."
+      );
+      return;
+    }
+
+    setLinkingBank(true);
+    try {
+      // 1. Create the Financial Connections session (creates-or-gets the
+      //    Stripe customer behind the scenes; we don't need the customerId
+      //    on the client).
+      const { data: sessionData, error: sessionErr } =
+        await supabase.functions.invoke("stripe-create-bank-session", {
+          body: {},
+        });
+      if (sessionErr) {
+        throw new Error(sessionErr.message ?? "Failed to start bank linking");
+      }
+      const fcClientSecret = (sessionData as { clientSecret?: string })?.clientSecret;
+      const sessionId = (sessionData as { sessionId?: string })?.sessionId;
+      if (!fcClientSecret || !sessionId) {
+        throw new Error("Bank session response missing clientSecret/sessionId");
+      }
+
+      // 2. Open the FC sheet. User picks a bank, authenticates, picks
+      //    accounts. Cancellation surfaces as { error: { code: 'Canceled' } }
+      //    — treat quietly (no scary alert).
+      const fcResult = await collectFinancialConnectionsAccounts(fcClientSecret);
+      if (fcResult.error) {
+        if (fcResult.error.code === "Canceled") return; // user backed out
+        throw new Error(fcResult.error.message ?? "Bank linking failed");
+      }
+      if (!fcResult.session) {
+        throw new Error("No bank account was linked");
+      }
+
+      // 3. Convert linked FC accounts → Stripe PaymentMethods on the server.
+      //    The function upserts into stripe_bank_accounts and returns the
+      //    PM id (first account if multiple were linked).
+      const { data: attachData, error: attachErr } =
+        await supabase.functions.invoke("stripe-attach-bank-payment-method", {
+          body: { sessionId },
+        });
+      if (attachErr) {
+        throw new Error(attachErr.message ?? "Failed to attach bank account");
+      }
+      const accounts =
+        (attachData as { accounts?: Array<{ paymentMethodId: string }> })?.accounts;
+      const paymentMethodId = accounts?.[0]?.paymentMethodId;
+      if (!paymentMethodId) {
+        throw new Error("No bank payment method returned by server");
+      }
+
+      // 4. Create + confirm the PaymentIntent on the server. No fee for
+      //    ACH (the screen advertises "Bank transfers are free"); the
+      //    backend computes everything from amountCents and stamps
+      //    metadata.source='bank' for the webhook.
+      const { data: piData, error: piErr } = await supabase.functions.invoke(
+        "create-payment-intent",
+        {
+          body: {
+            amount: amountCents,
+            purpose: "goal_deposit",
+            goalId,
+            paymentMethodType: "us_bank_account",
+            paymentMethodId,
+            // applyCardFee intentionally omitted/false
+          },
+        }
+      );
+      if (piErr) {
+        throw new Error(piErr.message ?? "Failed to create bank payment intent");
+      }
+      if (!(piData as { paymentIntentId?: string })?.paymentIntentId) {
+        throw new Error("Payment intent creation returned no id");
+      }
+
+      // ACH takes days to settle; webhook is what credits the goal. Set
+      // expectations clearly so the user doesn't refresh hoping for an
+      // instant balance change.
+      Alert.alert(
+        "Bank transfer initiated",
+        "Your deposit will appear in this goal in 3-5 business days once your bank confirms the transfer.",
+        [{ text: "OK", onPress: () => navigation.goBack() }]
+      );
+    } catch (err: any) {
+      Alert.alert(
+        "Bank deposit failed",
+        err?.message ?? "Please try again or pick a different payment method."
+      );
+    } finally {
+      setLinkingBank(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!canSubmit) return;
 
@@ -254,10 +435,8 @@ export default function GoalAddMoneyScreen() {
       return;
     }
 
-    // Bank source still pending ACH wiring (Stripe Financial Connections
-    // or Plaid bank-link). Out of scope for this commit.
-    if (selectedSource !== "wallet") {
-      comingSoon(`Add $${numAmount.toLocaleString()} to Goal`);
+    if (selectedSource === "bank") {
+      await handleBankDeposit();
       return;
     }
 
@@ -526,6 +705,17 @@ export default function GoalAddMoneyScreen() {
               </Text>
             </View>
           )}
+
+          {/* Timing notice (bank) — ACH settles in 3-5 business days */}
+          {selectedSource === "bank" && amount.length > 0 && (
+            <View style={styles.feeNotice}>
+              <Text style={styles.feeEmoji}>🕒</Text>
+              <Text style={styles.feeText}>
+                Bank transfers are free but take 3-5 business days to
+                appear in your goal.
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -535,10 +725,13 @@ export default function GoalAddMoneyScreen() {
           onPress={handleSubmit}
           disabled={!canSubmit}
           accessibilityRole="button"
-          accessibilityState={{ disabled: !canSubmit, busy: submitting }}
+          accessibilityState={{
+            disabled: !canSubmit,
+            busy: submitting || linkingBank,
+          }}
           style={[styles.primaryButton, !canSubmit && styles.primaryButtonDisabled]}
         >
-          {submitting ? (
+          {submitting || linkingBank ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text
@@ -548,7 +741,9 @@ export default function GoalAddMoneyScreen() {
               ]}
             >
               {amount.length > 0
-                ? `Add $${numAmount.toLocaleString()} to Goal`
+                ? selectedSource === "bank"
+                  ? `Link Bank & Send $${numAmount.toLocaleString()}`
+                  : `Add $${numAmount.toLocaleString()} to Goal`
                 : "Enter Amount"}
             </Text>
           )}
