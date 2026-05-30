@@ -14,12 +14,20 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as Linking from "expo-linking";
 
-// Platform-aware redirect URLs for Supabase Auth emails
+// Platform-aware redirect URLs for Supabase Auth emails.
+// Use Linking.createURL() on native so the scheme matches the runtime:
+//   - Expo Go (dev):                    exp://192.168.x.x:8081/--/<path>
+//   - Dev client / production build:    tandaxn://<path>
+// The previous hardcoded `tandaxn://${path}` URL did NOT work in Expo Go
+// (Expo Go doesn't claim the custom scheme), so confirmation links never
+// opened the app there and users got stuck on "waiting verification".
+// All three prefixes (exp://, tandaxn://, https://v0-tanda-xn.vercel.app/)
+// must be in the Supabase Auth dashboard's allowed redirect URLs.
 export const getEmailRedirectUrl = (path: string) => {
   if (Platform.OS === "web") {
     return `https://v0-tanda-xn.vercel.app/${path}`;
   }
-  return `tandaxn://${path}`;
+  return Linking.createURL(path);
 };
 
 type User = {
@@ -121,25 +129,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   // Handle deep link auth callbacks (email verification, password reset)
   useEffect(() => {
     const handleDeepLink = async (url: string) => {
-      // Check if this is an auth callback URL with tokens
-      if (url.includes("access_token") || url.includes("refresh_token") || url.includes("type=")) {
-        try {
-          // Extract tokens from URL fragment or query params
-          const parsedUrl = Linking.parse(url);
-          const fragment = url.split("#")[1];
+      try {
+        const parsedUrl = Linking.parse(url);
 
+        // PKCE flow: Supabase appends ?code=... to the redirect URL.
+        // (The current client uses implicit flow by default, but accept both
+        // shapes so a future switch to flowType:'pkce' doesn't require
+        // touching this handler.)
+        const code = parsedUrl.queryParams?.code as string | undefined;
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            console.error("Error exchanging code for session:", error);
+          } else if (data.session) {
+            setSession(data.session);
+            setUser(formatUser(data.user));
+            setIsLocked(false);
+          }
+          return;
+        }
+
+        // Implicit flow (current default): tokens come back in the URL hash.
+        if (
+          url.includes("access_token") ||
+          url.includes("refresh_token") ||
+          url.includes("type=")
+        ) {
+          const fragment = url.split("#")[1];
           if (fragment) {
             const params = new URLSearchParams(fragment);
             const accessToken = params.get("access_token");
             const refreshToken = params.get("refresh_token");
-
             if (accessToken && refreshToken) {
-              // Set the session from the tokens
               const { data, error } = await supabase.auth.setSession({
                 access_token: accessToken,
                 refresh_token: refreshToken,
               });
-
               if (error) {
                 console.error("Error setting session from deep link:", error);
               } else if (data.session) {
@@ -149,9 +174,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               }
             }
           }
-        } catch (error) {
-          console.error("Error handling auth deep link:", error);
         }
+      } catch (error) {
+        console.error("Error handling auth deep link:", error);
       }
     };
 

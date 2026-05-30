@@ -18,6 +18,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
+import { getEmailRedirectUrl } from "../context/AuthContext";
 
 type ForgotPasswordScreenNavigationProp = StackNavigationProp<RootStackParamList, "ForgotPassword">;
 
@@ -48,11 +49,11 @@ export default function ForgotPasswordScreen() {
     setIsLoading(true);
 
     try {
-      const redirectTo = Platform.OS === "web"
-        ? "https://v0-tanda-xn.vercel.app/reset-password"
-        : "tandaxn://reset-password";
+      // Uses the same platform-aware helper as signUp/email confirmation, so
+      // on Expo Go we get an exp:// URL (which Expo Go actually handles), and
+      // on dev-client / production builds we get tandaxn://.
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo,
+        redirectTo: getEmailRedirectUrl("reset-password"),
       });
 
       if (resetError) throw resetError;
