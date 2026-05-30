@@ -23,6 +23,14 @@
 //   - back chevron: step > 1 ? setStep(step - 1) : goBack
 //   - bottom "Continue" advances step 1→2 / 2→3
 //   - bottom "Confirm & Get $X Now" (step 3) → AdvanceApproval
+//
+// Auto-save drafts:
+//   The cross-step state (selected payout, advance details snapshot, agreed
+//   checkboxes) is persisted to AsyncStorage under the 'advance-application'
+//   key via useFormDraft. On re-mount, a yellow banner offers Restore /
+//   Discard; Restore jumps directly to the saved step with all state
+//   re-hydrated. The draft is cleared on Discard and on the final
+//   step 3 → AdvanceApproval handoff. Back navigation does NOT clear.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import React, { useState } from "react";
@@ -39,7 +47,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { useFormDraft } from "../hooks/useFormDraft";
 import { Routes } from "../lib/routes";
+import type { AdvanceDraft } from "../types/advance";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -88,15 +98,20 @@ export default function ApplicationFlowScreen() {
   const route = useRoute<ApplicationFlowRouteProp>();
 
   const upcomingPayouts = route.params?.upcomingPayouts ?? DEFAULT_PAYOUTS;
-  // Build advanceDetails from forwarded SmartCalculator params if the
-  // route was reached via the calculator; otherwise fall back to mock.
-  const advanceDetails: AdvanceDetails =
-    route.params?.advanceDetails ?? {
-      amount: route.params?.amount ?? 300,
-      fee: route.params?.fee ?? 15,
-      total: route.params?.total ?? 315,
-      rate: route.params?.rate ?? 9.5,
-    };
+
+  // Build advanceDetails from forwarded SmartCalculator params on first
+  // render. Stored as state (rather than const) so a restored draft can
+  // replay the snapshot — useful if the user returns without the original
+  // route params.
+  const [advanceDetails, setAdvanceDetails] = useState<AdvanceDetails>(
+    () =>
+      route.params?.advanceDetails ?? {
+        amount: route.params?.amount ?? 300,
+        fee: route.params?.fee ?? 15,
+        total: route.params?.total ?? 315,
+        rate: route.params?.rate ?? 9.5,
+      }
+  );
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedPayout, setSelectedPayout] = useState<PayoutOption | null>(null);
@@ -104,11 +119,111 @@ export default function ApplicationFlowScreen() {
   const [agreedToWithholding, setAgreedToWithholding] = useState(false);
   const [agreedToDefault, setAgreedToDefault] = useState(false);
 
+  // ── Draft auto-save (mirrors GoalCreate / CreateCircle pattern) ─────────
+  // Key 'advance-application'. Draft persists across app launches and
+  // surfaces via a yellow restore banner. Saved on every step transition
+  // and on every step-3 checkbox toggle. Cleared on final confirmation
+  // (the step 3 → AdvanceApproval handoff) or explicit Discard.
+  const { hasDraft, saveDraft, restoreDraft, clearDraft } =
+    useFormDraft<AdvanceDraft>("advance-application", { step: 1 });
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // ── Helper: snapshot current state into draft shape ─────────────────────
+  const buildDraft = (overrides: Partial<AdvanceDraft> = {}): AdvanceDraft => ({
+    step,
+    selectedPayout: selectedPayout ?? undefined,
+    advanceDetails,
+    termsAgreed: {
+      agreedToWithholding,
+      agreedToDefault,
+      agreedToTerms,
+    },
+    ...overrides,
+  });
+
+  const handleRestoreDraft = () => {
+    const d = restoreDraft();
+    if (!d) {
+      setBannerDismissed(true);
+      return;
+    }
+    if (d.selectedPayout) {
+      setSelectedPayout(d.selectedPayout);
+    }
+    if (d.advanceDetails) {
+      setAdvanceDetails({
+        amount: d.advanceDetails.amount,
+        fee: d.advanceDetails.fee,
+        total: d.advanceDetails.total,
+        rate: d.advanceDetails.rate,
+      });
+    }
+    if (d.termsAgreed) {
+      setAgreedToWithholding(!!d.termsAgreed.agreedToWithholding);
+      setAgreedToDefault(!!d.termsAgreed.agreedToDefault);
+      setAgreedToTerms(!!d.termsAgreed.agreedToTerms);
+    }
+    setStep(d.step);
+    setBannerDismissed(true);
+  };
+
+  const handleDiscardDraft = () => {
+    clearDraft();
+    setBannerDismissed(true);
+  };
+
+  // ── Checkbox setters that also persist termsAgreed ──────────────────────
+  // We wrap rather than use a setter-watching useEffect so the saved value
+  // reflects the toggled state immediately (no stale-closure window).
+  const toggleWithholding = () => {
+    const next = !agreedToWithholding;
+    setAgreedToWithholding(next);
+    saveDraft(
+      buildDraft({
+        termsAgreed: {
+          agreedToWithholding: next,
+          agreedToDefault,
+          agreedToTerms,
+        },
+      })
+    );
+  };
+
+  const toggleDefault = () => {
+    const next = !agreedToDefault;
+    setAgreedToDefault(next);
+    saveDraft(
+      buildDraft({
+        termsAgreed: {
+          agreedToWithholding,
+          agreedToDefault: next,
+          agreedToTerms,
+        },
+      })
+    );
+  };
+
+  const toggleTerms = () => {
+    const next = !agreedToTerms;
+    setAgreedToTerms(next);
+    saveDraft(
+      buildDraft({
+        termsAgreed: {
+          agreedToWithholding,
+          agreedToDefault,
+          agreedToTerms: next,
+        },
+      })
+    );
+  };
+
   const allAgreed = agreedToTerms && agreedToWithholding && agreedToDefault;
   const canAdvance =
     step === 1 ? !!selectedPayout : step === 2 ? true : allAgreed;
 
   const handleBack = () => {
+    // Going back keeps the draft intact — only Discard or final
+    // confirmation should clear it.
     if (step > 1) {
       setStep((step - 1) as 1 | 2 | 3);
     } else {
@@ -119,8 +234,19 @@ export default function ApplicationFlowScreen() {
   const handleContinue = () => {
     if (!canAdvance) return;
     if (step < 3) {
-      setStep((step + 1) as 1 | 2 | 3);
+      const nextStep = (step + 1) as 1 | 2 | 3;
+      // Persist the snapshot for the *next* step so a fresh launch can
+      // resume directly there. Step 2 has no editable fields so the
+      // snapshot here is identical to the route-supplied values.
+      saveDraft(buildDraft({ step: nextStep }));
+      setStep(nextStep);
     } else {
+      // Final confirmation. The advance is created downstream on
+      // AdvanceApproval; we clear the draft here because "Confirm & Get $X"
+      // is the user-facing point of no return. If a deferred clear is
+      // preferred (only on AdvanceApproval success), that would require a
+      // second-screen change.
+      clearDraft();
       navigation.navigate(Routes.AdvanceApproval, {
         payoutId: selectedPayout?.id,
         amount: advanceDetails.amount,
@@ -176,6 +302,33 @@ export default function ApplicationFlowScreen() {
         </LinearGradient>
 
         <View style={styles.contentWrap}>
+          {/* Unfinished-application draft banner — mirrors GoalCreate / CreateCircle */}
+          {hasDraft && !bannerDismissed && (
+            <View style={styles.draftBanner}>
+              <Text style={styles.draftBannerText}>
+                You have an unfinished advance application. Restore it?
+              </Text>
+              <View style={styles.draftBannerActions}>
+                <TouchableOpacity
+                  style={styles.draftBannerButton}
+                  onPress={handleRestoreDraft}
+                  accessibilityRole="button"
+                  accessibilityLabel="Restore draft application"
+                >
+                  <Text style={styles.draftBannerButtonText}>Restore</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.draftBannerButton}
+                  onPress={handleDiscardDraft}
+                  accessibilityRole="button"
+                  accessibilityLabel="Discard draft application"
+                >
+                  <Text style={styles.draftBannerButtonText}>Discard</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {/* STEP 1 — Select payout */}
           {step === 1 && (
             <View>
@@ -359,7 +512,7 @@ export default function ApplicationFlowScreen() {
 
                 <CheckboxRow
                   checked={agreedToWithholding}
-                  onToggle={() => setAgreedToWithholding(!agreedToWithholding)}
+                  onToggle={toggleWithholding}
                   accent={TEAL}
                   bgChecked="#F0FDFB"
                 >
@@ -373,7 +526,7 @@ export default function ApplicationFlowScreen() {
 
                 <CheckboxRow
                   checked={agreedToDefault}
-                  onToggle={() => setAgreedToDefault(!agreedToDefault)}
+                  onToggle={toggleDefault}
                   accent={AMBER}
                   bgChecked="#FEF3C7"
                 >
@@ -384,7 +537,7 @@ export default function ApplicationFlowScreen() {
 
                 <CheckboxRow
                   checked={agreedToTerms}
-                  onToggle={() => setAgreedToTerms(!agreedToTerms)}
+                  onToggle={toggleTerms}
                   accent={TEAL}
                   bgChecked="#F0FDFB"
                 >
@@ -723,4 +876,30 @@ const styles = StyleSheet.create({
   primaryButtonDisabled: { backgroundColor: BORDER },
   primaryButtonText: { fontSize: 16, fontWeight: "600", color: "#FFFFFF" },
   primaryButtonTextDisabled: { color: "#9CA3AF" },
+
+  // Draft restore banner — same shape as GoalCreate / CreateCircle.
+  draftBanner: {
+    backgroundColor: "#FEF3C7",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  draftBannerText: {
+    flex: 1,
+    color: "#92400E",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  draftBannerActions: { flexDirection: "row", alignItems: "center" },
+  draftBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
+    marginLeft: 8,
+  },
+  draftBannerButtonText: { color: "#D97706", fontWeight: "600", fontSize: 13 },
 });
