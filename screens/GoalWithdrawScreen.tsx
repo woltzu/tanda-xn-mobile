@@ -16,8 +16,9 @@
 // NAMING — *new* v2 screen; route name (added later) `GoalWithdraw`. Does
 // NOT overwrite the existing WithdrawFromGoal route/screen.
 //
-// NAVIGATION — translation-only batch. `onBack`/`onCancel` → goBack();
-// confirming the withdrawal resolves to an Alert + goBack() placeholder.
+// NAVIGATION — `onBack`/`onCancel` → goBack(); wallet-destination withdrawals
+// are wired to useGoalActions.withdraw. Bank destination still resolves to a
+// "coming soon" Alert pending ACH integration.
 //
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
@@ -33,11 +34,16 @@ import {
   StatusBar,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { useGoalActions } from "../hooks/useGoalActions";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -90,6 +96,9 @@ type Destination = {
 };
 
 type GoalWithdrawParams = {
+  // goalId is forwarded from GoalDetailV2 alongside goal. Prefer goalId when
+  // present so a malformed goal object can't poison the FK.
+  goalId?: string;
   goal?: Goal;
   withdrawDestinations?: Destination[];
 };
@@ -129,8 +138,10 @@ type PenaltyInfo = {
 export default function GoalWithdrawScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalWithdrawRouteProp>();
+  const { withdraw } = useGoalActions();
 
   const goal = route.params?.goal ?? DEFAULT_GOAL;
+  const goalId = route.params?.goalId ?? goal.id;
   const withdrawDestinations =
     route.params?.withdrawDestinations ?? DEFAULT_DESTINATIONS;
 
@@ -140,8 +151,14 @@ export default function GoalWithdrawScreen() {
   const [otherReasonText, setOtherReasonText] = useState("");
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [acknowledgedPenalty, setAcknowledgedPenalty] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const availableBalance = goal.balance + goal.interestEarned;
+  // Withdrawable = current_balance only. accrued_interest_cents is tracked
+  // on the goal but isn't rolled into the spendable balance until an
+  // accrual process credits it (out of scope here). Validating against
+  // balance + interestEarned would let the user attempt to withdraw more
+  // than useGoalActions.withdraw will accept (it checks balance only).
+  const availableBalance = goal.balance;
   const numAmount = Number(amount) || 0;
   const isValidAmount = numAmount > 0 && numAmount <= availableBalance;
 
@@ -217,19 +234,53 @@ export default function GoalWithdrawScreen() {
     if (canProceed()) setShowConfirmation(true);
   };
 
-  const handleConfirm = () => {
-    // TODO(goals-wiring): persist via SavingsContext then
-    // navigation.navigate(Routes.WalletTransactionSuccess, {...}).
-    Alert.alert(
-      "Withdrawal requested",
-      `You'll receive $${finalAmount.toLocaleString("en-US", {
-        minimumFractionDigits: 2,
-      })}` +
-        (penaltyInfo.hasPenalty
-          ? ` after a $${penaltyInfo.penaltyAmount.toFixed(2)} penalty.`
-          : "."),
-      [{ text: "Done", onPress: () => navigation.goBack() }]
+  const handleConfirm = async () => {
+    // Bank destination still pending ACH wiring.
+    if (destination !== "wallet") {
+      Alert.alert("Bank withdrawal", "This will be available soon.");
+      return;
+    }
+
+    if (!UUID_RE.test(goalId)) {
+      Alert.alert(
+        "Goal not loaded",
+        "Open this screen from your goal's detail page so the withdrawal can be saved."
+      );
+      return;
+    }
+
+    // Resolve a human-readable reason where one was selected. Free-form
+    // text from the "Other" path takes precedence over the option id.
+    const resolvedReason =
+      selectedReason === "other" && otherReasonText.trim().length > 0
+        ? otherReasonText.trim()
+        : selectedReason
+        ? VALID_EMERGENCY_REASONS.find((r) => r.id === selectedReason)?.label ??
+          selectedReason
+        : undefined;
+
+    // TODO(wallet-sync): credit user_wallets.main_balance_cents by
+    // (numAmount - penaltyAmount) in the same transaction as the goal debit.
+    // Today the goal balance drops but the wallet does not — recommended
+    // fix is an RPC `transfer_from_goal(goal_id, amount_cents, penalty_pct)`
+    // that updates both rows atomically.
+    setSubmitting(true);
+    const { error } = await withdraw(
+      goalId,
+      numAmount,
+      resolvedReason,
+      penaltyInfo.hasPenalty ? penaltyInfo.penaltyPercent : 0
     );
+    setSubmitting(false);
+
+    if (error) {
+      Alert.alert("Withdrawal failed", error.message ?? "Please try again.");
+      return;
+    }
+
+    // GoalDetailV2 refetches on focus — no Alert needed; the user sees
+    // the lower balance the moment they're back on the detail screen.
+    navigation.goBack();
   };
 
   // Savings type display info
@@ -332,20 +383,28 @@ export default function GoalWithdrawScreen() {
           <View style={styles.confirmActions}>
             <TouchableOpacity
               onPress={() => setShowConfirmation(false)}
+              disabled={submitting}
               accessibilityRole="button"
-              style={styles.confirmGoBack}
+              style={[styles.confirmGoBack, submitting && { opacity: 0.5 }]}
             >
               <Text style={styles.confirmGoBackText}>Go Back</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={handleConfirm}
+              disabled={submitting}
               accessibilityRole="button"
+              accessibilityState={{ busy: submitting }}
               style={[
                 styles.confirmWithdraw,
                 { backgroundColor: penaltyInfo.hasPenalty ? RED : TEAL },
+                submitting && { opacity: 0.85 },
               ]}
             >
-              <Text style={styles.confirmWithdrawText}>Withdraw</Text>
+              {submitting ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.confirmWithdrawText}>Withdraw</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>

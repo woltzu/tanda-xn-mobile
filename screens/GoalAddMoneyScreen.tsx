@@ -8,9 +8,9 @@
 // account, a saved debit card (1.5% fee), or set up auto-deposit. Amount
 // input with quick-select chips ($100/$250/$500/$1000) + "Fill to Target".
 //
-// NAVIGATION — translation-only batch. onBack → goBack(); the deposit CTA
-// and add-source / auto-deposit actions resolve to "coming soon" Alert
-// placeholders tagged TODO(goals-wiring).
+// NAVIGATION — onBack → goBack(); wallet-source deposits are wired to
+// useGoalActions.addMoney. Bank/Card/Auto-deposit still resolve to
+// "coming soon" Alert placeholders pending Stripe / ACH integration.
 //
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
@@ -26,11 +26,18 @@ import {
   StatusBar,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { useGoalActions } from "../hooks/useGoalActions";
+
+// UUID guard — sub-screens can be reached with mock defaults that use ids
+// like "g1"; the hook will reject those with a 22P02 from Postgres.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -63,6 +70,9 @@ type SavedCard = {
 };
 
 type GoalAddMoneyParams = {
+  // goalId is forwarded from GoalDetailV2 alongside goal. Prefer goalId when
+  // present so a malformed goal object can't poison the FK.
+  goalId?: string;
   goal?: AddMoneyGoal;
   walletBalance?: number;
   linkedBankAccounts?: BankAccount[];
@@ -119,8 +129,10 @@ function Radio({ selected, size = 22 }: { selected: boolean; size?: number }) {
 export default function GoalAddMoneyScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalAddMoneyRouteProp>();
+  const { addMoney } = useGoalActions();
 
   const goal = route.params?.goal ?? DEFAULT_GOAL;
+  const goalId = route.params?.goalId ?? goal.id;
   const walletBalance = route.params?.walletBalance ?? 1250.0;
   const linkedBankAccounts = route.params?.linkedBankAccounts ?? DEFAULT_BANKS;
   const savedCards = route.params?.savedCards ?? DEFAULT_CARDS;
@@ -133,19 +145,50 @@ export default function GoalAddMoneyScreen() {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(
     savedCards[0]?.id || null
   );
+  const [submitting, setSubmitting] = useState(false);
 
   const remainingToTarget = goal.target - goal.balance;
   const numAmount = Number(amount) || 0;
-  const canSubmit = amount.length > 0 && numAmount > 0 && !!selectedSource;
+  const canSubmit =
+    !submitting && amount.length > 0 && numAmount > 0 && !!selectedSource;
 
-  // TODO(goals-wiring): route the deposit to the chosen source:
-  //   wallet → wallet debit; bank → ACH; card → card charge (1.5% fee).
   const comingSoon = (label: string) =>
     Alert.alert(label, "This will be available soon.");
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!canSubmit) return;
-    comingSoon(`Add $${numAmount.toLocaleString()} to Goal`);
+
+    // Bank / Card source still pending Stripe + ACH wiring.
+    if (selectedSource !== "wallet") {
+      comingSoon(`Add $${numAmount.toLocaleString()} to Goal`);
+      return;
+    }
+
+    if (!UUID_RE.test(goalId)) {
+      Alert.alert(
+        "Goal not loaded",
+        "Open this screen from your goal's detail page so the deposit can be saved."
+      );
+      return;
+    }
+
+    // TODO(wallet-sync): debit user_wallets.main_balance_cents by the same
+    // amount atomically. Today the goal balance moves but the wallet does
+    // not — see scope note in the diagnostic. Recommended approach: a
+    // dedicated SQL/RPC `transfer_to_goal(goal_id, amount_cents)` that
+    // updates both rows in a single transaction.
+    setSubmitting(true);
+    const { error } = await addMoney(goalId, numAmount, "wallet");
+    setSubmitting(false);
+
+    if (error) {
+      Alert.alert("Deposit failed", error.message ?? "Please try again.");
+      return;
+    }
+
+    // GoalDetailV2 refetches on focus, so a bare goBack() is enough —
+    // the new balance will appear when the user lands back on detail.
+    navigation.goBack();
   };
 
   return (
@@ -398,19 +441,23 @@ export default function GoalAddMoneyScreen() {
           onPress={handleSubmit}
           disabled={!canSubmit}
           accessibilityRole="button"
-          accessibilityState={{ disabled: !canSubmit }}
+          accessibilityState={{ disabled: !canSubmit, busy: submitting }}
           style={[styles.primaryButton, !canSubmit && styles.primaryButtonDisabled]}
         >
-          <Text
-            style={[
-              styles.primaryButtonText,
-              !canSubmit && styles.primaryButtonTextDisabled,
-            ]}
-          >
-            {amount.length > 0
-              ? `Add $${numAmount.toLocaleString()} to Goal`
-              : "Enter Amount"}
-          </Text>
+          {submitting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text
+              style={[
+                styles.primaryButtonText,
+                !canSubmit && styles.primaryButtonTextDisabled,
+              ]}
+            >
+              {amount.length > 0
+                ? `Add $${numAmount.toLocaleString()} to Goal`
+                : "Enter Amount"}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
