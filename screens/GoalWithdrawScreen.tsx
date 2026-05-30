@@ -259,11 +259,10 @@ export default function GoalWithdrawScreen() {
           selectedReason
         : undefined;
 
-    // TODO(wallet-sync): credit user_wallets.main_balance_cents by
-    // (numAmount - penaltyAmount) in the same transaction as the goal debit.
-    // Today the goal balance drops but the wallet does not — recommended
-    // fix is an RPC `transfer_from_goal(goal_id, amount_cents, penalty_pct)`
-    // that updates both rows atomically.
+    // Atomic via the transfer_from_goal RPC (migration 073) — goal debit
+    // and wallet credit (gross − penalty) happen in one transaction
+    // inside useGoalActions. The platform retains the penalty in the
+    // savings_transactions audit row (no fees ledger yet).
     setSubmitting(true);
     const { error } = await withdraw(
       goalId,

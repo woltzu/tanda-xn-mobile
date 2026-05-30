@@ -172,11 +172,8 @@ export default function GoalAddMoneyScreen() {
       return;
     }
 
-    // TODO(wallet-sync): debit user_wallets.main_balance_cents by the same
-    // amount atomically. Today the goal balance moves but the wallet does
-    // not — see scope note in the diagnostic. Recommended approach: a
-    // dedicated SQL/RPC `transfer_to_goal(goal_id, amount_cents)` that
-    // updates both rows in a single transaction.
+    // Atomic via the transfer_to_goal RPC (migration 073) — wallet debit
+    // and goal credit happen in one transaction inside useGoalActions.
     setSubmitting(true);
     const { error } = await addMoney(goalId, numAmount, "wallet");
     setSubmitting(false);

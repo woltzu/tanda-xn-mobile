@@ -14,9 +14,12 @@
 //     user_wallets) and savings_goal_type_id (resolved from savings_type via a
 //     type code).
 //   - No DELETE RLS policy exists → deleteGoal is a soft delete (goal_status).
-//   - addMoney / withdraw run as two steps (insert transaction, then update the
-//     goal balance) per the MVP plan; a later pass can move this into a secure
-//     RPC/Edge Function for atomicity.
+//   - addMoney / withdraw call the atomic RPCs `transfer_to_goal` /
+//     `transfer_from_goal` (migration 073). Wallet ↔ goal can never drift —
+//     a wallet debit never appears without the matching goal credit, and
+//     a withdraw never leaves the goal without the wallet credit. The RPC
+//     also enforces the `current_balance_cents >= amount` check that the
+//     DB itself doesn't (no CHECK constraint on user_savings_goals).
 //
 // Every action returns { data, error } (Supabase-style). NOT yet wired into any
 // screen — that's a later phase.
@@ -211,7 +214,38 @@ export function useGoalActions() {
     return { data: (data ?? []).map(mapGoalRow), error: null };
   };
 
-  // ── Money movement (two-step: insert transaction, then update balance) ──────
+  // ── Money movement (atomic via RPC — see migration 073) ────────────────────
+  //
+  // Both deposit and withdraw are single supabase.rpc() calls into a
+  // plpgsql function that mutates user_wallets + user_savings_goals +
+  // savings_transactions inside one transaction. Wallet ↔ goal can never
+  // drift; concurrent transfers are serialised by row locks inside the
+  // function (SELECT … FOR UPDATE). The RPC returns a JSONB envelope:
+  //   { success: true,  goal_balance_cents, wallet_balance_cents, … }
+  //   { success: false, error: "human-readable message" }
+  // We re-fetch the goal row after a successful RPC so the caller still
+  // receives a typed Goal (mapGoalRow output) consistent with the rest of
+  // the hook's contract.
+  //
+  // `source` on addMoney is currently always 'wallet' end-to-end — bank/card
+  // sources are stubbed in the screen and never reach the hook. The
+  // parameter is retained for future-compatibility but unused; if a non-
+  // wallet source is ever passed, the deposit is rejected before hitting
+  // the RPC so the failure mode is obvious.
+
+  const refetchGoalForResult = async (
+    goalId: string
+  ): Promise<ActionResult<Goal>> => {
+    const { data: row, error } = await supabase
+      .from(GOALS_TABLE)
+      .select("*")
+      .eq("id", goalId)
+      .maybeSingle();
+    if (error) return { data: null, error };
+    if (!row) return { data: null, error: new Error("Goal not found after transfer") };
+    return { data: mapGoalRow(row), error: null };
+  };
+
   const addMoney = async (
     goalId: string,
     amount: number,
@@ -222,42 +256,29 @@ export function useGoalActions() {
     if (amountCents <= 0)
       return { data: null, error: new Error("Amount must be greater than zero") };
 
-    const { data: goalRow, error: gErr } = await supabase
-      .from(GOALS_TABLE)
-      .select("current_balance_cents, total_deposits_cents")
-      .eq("id", goalId)
-      .maybeSingle();
-    if (gErr) return { data: null, error: gErr };
-    if (!goalRow) return { data: null, error: new Error("Goal not found") };
+    // Wallet is the only source backed by an atomic RPC today. Bank / card
+    // require Stripe + ACH wiring (Phase 2+) — guard so they don't silently
+    // pretend to succeed if a future screen accidentally calls through.
+    if (source !== "wallet") {
+      return {
+        data: null,
+        error: new Error(`Source '${source}' is not yet supported for direct transfer`),
+      };
+    }
 
-    const balanceBefore = goalRow.current_balance_cents ?? 0;
-    const balanceAfter = balanceBefore + amountCents;
-
-    const { error: txnErr } = await supabase.from(TXNS_TABLE).insert({
-      savings_goal_id: goalId,
-      user_id: user.id,
-      transaction_type: "deposit",
-      source,
-      amount_cents: amountCents,
-      balance_before_cents: balanceBefore,
-      balance_after_cents: balanceAfter,
-      transaction_status: "completed",
+    const { data, error } = await supabase.rpc("transfer_to_goal", {
+      p_goal_id: goalId,
+      p_amount_cents: amountCents,
     });
-    if (txnErr) return { data: null, error: txnErr };
+    if (error) return { data: null, error };
+    if (!data?.success) {
+      return {
+        data: null,
+        error: new Error(data?.error ?? "Transfer failed"),
+      };
+    }
 
-    const { data: updated, error: uErr } = await supabase
-      .from(GOALS_TABLE)
-      .update({
-        current_balance_cents: balanceAfter,
-        total_deposits_cents: (goalRow.total_deposits_cents ?? 0) + amountCents,
-        last_deposit_at: nowIso(),
-        updated_at: nowIso(),
-      })
-      .eq("id", goalId)
-      .select()
-      .single();
-    if (uErr) return { data: null, error: uErr };
-    return { data: mapGoalRow(updated), error: null };
+    return refetchGoalForResult(goalId);
   };
 
   const withdraw = async (
@@ -271,56 +292,29 @@ export function useGoalActions() {
     if (amountCents <= 0)
       return { data: null, error: new Error("Amount must be greater than zero") };
 
-    const { data: goalRow, error: gErr } = await supabase
-      .from(GOALS_TABLE)
-      .select("current_balance_cents, total_withdrawals_cents")
-      .eq("id", goalId)
-      .maybeSingle();
-    if (gErr) return { data: null, error: gErr };
-    if (!goalRow) return { data: null, error: new Error("Goal not found") };
-
-    const balanceBefore = goalRow.current_balance_cents ?? 0;
-    if (amountCents > balanceBefore)
-      return { data: null, error: new Error("Amount exceeds available balance") };
-
-    // The full withdrawal leaves the goal; the penalty is retained, so the user
-    // nets (amount − penalty). balance decreases by the gross amount.
+    // Client computes penalty in cents from the percent so the RPC can stay
+    // ignorant of pricing rules (flexible / emergency / locked logic lives
+    // in the screen). The RPC then debits goal by gross and credits wallet
+    // by net = gross − penalty.
     const penaltyCents = penaltyPercent
       ? Math.round(amountCents * (penaltyPercent / 100))
       : 0;
-    const balanceAfter = balanceBefore - amountCents;
 
-    const { error: txnErr } = await supabase.from(TXNS_TABLE).insert({
-      savings_goal_id: goalId,
-      user_id: user.id,
-      transaction_type: "withdrawal",
-      source: "wallet",
-      amount_cents: amountCents,
-      penalty_amount_cents: penaltyCents,
-      fee_cents: 0,
-      balance_before_cents: balanceBefore,
-      balance_after_cents: balanceAfter,
-      transaction_status: "completed",
-      metadata: {
-        reason: reason ?? null,
-        net_received_cents: amountCents - penaltyCents,
-      },
+    const { data, error } = await supabase.rpc("transfer_from_goal", {
+      p_goal_id: goalId,
+      p_amount_cents: amountCents,
+      p_penalty_amount_cents: penaltyCents,
+      p_reason: reason ?? null,
     });
-    if (txnErr) return { data: null, error: txnErr };
+    if (error) return { data: null, error };
+    if (!data?.success) {
+      return {
+        data: null,
+        error: new Error(data?.error ?? "Withdrawal failed"),
+      };
+    }
 
-    const { data: updated, error: uErr } = await supabase
-      .from(GOALS_TABLE)
-      .update({
-        current_balance_cents: balanceAfter,
-        total_withdrawals_cents:
-          (goalRow.total_withdrawals_cents ?? 0) + amountCents,
-        updated_at: nowIso(),
-      })
-      .eq("id", goalId)
-      .select()
-      .single();
-    if (uErr) return { data: null, error: uErr };
-    return { data: mapGoalRow(updated), error: null };
+    return refetchGoalForResult(goalId);
   };
 
   // ── Mutations ───────────────────────────────────────────────────────────────
