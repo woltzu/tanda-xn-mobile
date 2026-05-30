@@ -121,17 +121,26 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── Goal-deposit side-effect on payment_intent.succeeded ──────────────
-    // Migration 074: when a PaymentIntent created with purpose='goal_deposit'
-    // succeeds, credit the goal via the credit_goal_external RPC. The RPC is
-    // idempotent on stripe_payment_intent_id so Stripe's automatic retries
-    // (up to ~3 days) cannot double-credit. We only act on .succeeded so
-    // .processing / .requires_action / .failed don't trigger a credit.
+    // ── Goal-deposit side-effects: .processing (pending) + .succeeded ─────
+    // Migration 074 introduced the .succeeded → credit_goal_external path.
+    // Migration 076 adds the .processing → record_pending_goal_deposit
+    // path for ACH: Stripe fires .processing immediately when an ACH PI
+    // is confirmed (typically within seconds of the user linking their
+    // bank) and then .succeeded 3-5 business days later when ACH clears.
+    // Recording a pending row on .processing means the user sees the
+    // deposit in their activity feed immediately rather than waiting
+    // days; credit_goal_external upgrades the pending row to completed
+    // and credits the goal balance atomically when .succeeded arrives.
     //
-    // Source of truth for the credit amount and the fee is the PI metadata
-    // we stamped at create time, NOT pi.amount: when applyCardFee=true the
-    // user was charged amount+fee, but only `amount` should land in the
-    // goal.
+    // Both branches read the credit amount + fee from PI metadata we
+    // stamped at create time (NOT pi.amount): when applyCardFee=true
+    // the user was charged amount+fee on the card path, but only
+    // `amount` should land in the goal.
+    //
+    // Source of truth for the source field is also metadata.source —
+    // 'card' for card, 'bank' for ACH via Stripe Financial Connections.
+    // Defaults to 'card' for backward compatibility with any PI created
+    // before the source field was added.
     if (
       event.type === "payment_intent.succeeded" &&
       pi.metadata?.type === "goal_deposit"
@@ -195,6 +204,60 @@ Deno.serve(async (req) => {
             pi.id,
             "→ goal_balance_cents =",
             rpcResult?.goal_balance_cents
+          );
+        }
+      }
+    }
+
+    // ── .processing → record a pending savings_transactions row ───────────
+    // Mirrors the .succeeded block's metadata-extraction shape so the two
+    // branches are easy to read side by side. record_pending_goal_deposit
+    // is idempotent via ON CONFLICT (stripe_payment_intent_id) DO NOTHING,
+    // so a Stripe retry of .processing OR a race where .succeeded fires
+    // first both leave the existing row untouched. Goal balance is NOT
+    // credited here — that happens later on .succeeded via the
+    // credit_goal_external upgrade path.
+    if (
+      event.type === "payment_intent.processing" &&
+      pi.metadata?.type === "goal_deposit"
+    ) {
+      const goalId = pi.metadata.goal_id ?? null;
+      const depositCentsRaw = pi.metadata.deposit_amount_cents ?? "";
+      const feeCentsRaw = pi.metadata.fee_cents ?? "0";
+      const depositCents = Number(depositCentsRaw);
+      const feeCents = Number(feeCentsRaw);
+      const source =
+        typeof pi.metadata.source === "string" && pi.metadata.source.length > 0
+          ? pi.metadata.source
+          : "bank";
+
+      if (!goalId || !Number.isFinite(depositCents) || depositCents <= 0) {
+        const msg = `Malformed goal_deposit metadata on PI ${pi.id} (.processing): goal_id=${goalId}, deposit_amount_cents=${depositCentsRaw}`;
+        console.error("[stripe-webhook]", msg);
+        processingError = msg;
+      } else {
+        const { data: rpcResult, error: rpcErr } = await supabase.rpc(
+          "record_pending_goal_deposit",
+          {
+            p_goal_id: goalId,
+            p_amount_cents: depositCents,
+            p_fee_cents: Number.isFinite(feeCents) && feeCents > 0 ? feeCents : 0,
+            p_source: source,
+            p_stripe_pi_id: pi.id,
+          }
+        );
+
+        if (rpcErr) {
+          processingError = `record_pending_goal_deposit RPC error: ${rpcErr.message}`;
+          console.error("[stripe-webhook]", processingError);
+        } else if (rpcResult && rpcResult.success === false) {
+          const msg = `record_pending_goal_deposit returned failure: ${rpcResult.error}`;
+          console.error("[stripe-webhook]", msg);
+          processingError = msg;
+        } else {
+          console.log(
+            "[stripe-webhook] record_pending_goal_deposit succeeded for PI",
+            pi.id
           );
         }
       }
