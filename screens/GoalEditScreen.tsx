@@ -7,9 +7,10 @@
 // (Savings type / lock period are NOT editable here — they're set at
 // creation.)
 //
-// PERSISTENCE — none yet (Phase C). "Save" validates, confirms with an
-// Alert summarizing the new values, then goBack()s. "Cancel" goBack()s
-// without saving. Fields populate from route.params.goal (or a default).
+// PERSISTENCE — Save calls useGoalActions.updateGoal with the four
+// editable fields (name, target, monthly contribution, auto-deposit
+// toggle). On success → goBack() and GoalDetailV2's useFocusEffect
+// refetches; on error → Alert. Cancel still goBack()s without saving.
 //
 // Route params (all optional):
 //   goalId?: string
@@ -29,11 +30,16 @@ import {
   StatusBar,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { useGoalActions } from "../hooks/useGoalActions";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -70,8 +76,10 @@ const SUGGESTED_AMOUNTS = [5000, 10000, 25000, 50000];
 export default function GoalEditScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalEditRouteProp>();
+  const { updateGoal } = useGoalActions();
 
   const goal = route.params?.goal ?? DEFAULT_GOAL;
+  const goalId = route.params?.goalId ?? goal.id ?? "";
 
   const [goalName, setGoalName] = useState(goal.name ?? "");
   const [targetAmount, setTargetAmount] = useState(goal.target ?? 25000);
@@ -79,19 +87,47 @@ export default function GoalEditScreen() {
     goal.monthlyContribution ?? 500
   );
   const [autoDeposit, setAutoDeposit] = useState(goal.autoDepositEnabled ?? true);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const canSave = goalName.trim().length > 0 && targetAmount > 0;
+  // Validation: name non-empty, target > 0, monthly >= 0. Monthly = 0 is
+  // allowed even though the stepper UI keeps it >= $50 — defensive against
+  // any future input that bypasses the stepper.
+  const canSave =
+    !isSaving &&
+    goalName.trim().length > 0 &&
+    targetAmount > 0 &&
+    monthlyContribution >= 0;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!canSave) return;
-    // No persistence yet (Phase C). Confirm the edit and return.
-    Alert.alert(
-      "Goal updated",
-      `${goalName}\nTarget $${targetAmount.toLocaleString()} · $${monthlyContribution}/mo · Auto-deposit ${
-        autoDeposit ? "ON" : "OFF"
-      }`,
-      [{ text: "OK", onPress: () => navigation.goBack() }]
-    );
+
+    if (!UUID_RE.test(goalId)) {
+      Alert.alert(
+        "Goal not loaded",
+        "Open this screen from your goal's detail page so the edit can be saved."
+      );
+      return;
+    }
+
+    // The hook accepts camelCase keys (UpdateGoalInput) and converts
+    // dollar amounts to cents on its side.
+    setIsSaving(true);
+    const { error } = await updateGoal(goalId, {
+      name: goalName.trim(),
+      targetAmount,
+      monthlyContribution,
+      autoDepositEnabled: autoDeposit,
+    });
+    setIsSaving(false);
+
+    if (error) {
+      Alert.alert("Couldn't save", error.message ?? "Please try again.");
+      return;
+    }
+
+    // GoalDetailV2's useFocusEffect refetches the goal on return,
+    // so a bare goBack() is enough — no confirmation Alert.
+    navigation.goBack();
   };
 
   return (
@@ -259,22 +295,27 @@ export default function GoalEditScreen() {
           onPress={handleSave}
           disabled={!canSave}
           accessibilityRole="button"
-          accessibilityState={{ disabled: !canSave }}
+          accessibilityState={{ disabled: !canSave, busy: isSaving }}
           style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
         >
-          <Text
-            style={[
-              styles.saveButtonText,
-              !canSave && styles.saveButtonTextDisabled,
-            ]}
-          >
-            Save Changes
-          </Text>
+          {isSaving ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text
+              style={[
+                styles.saveButtonText,
+                !canSave && styles.saveButtonTextDisabled,
+              ]}
+            >
+              Save Changes
+            </Text>
+          )}
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
+          disabled={isSaving}
           accessibilityRole="button"
-          style={styles.cancelButton}
+          style={[styles.cancelButton, isSaving && { opacity: 0.5 }]}
         >
           <Text style={styles.cancelText}>Cancel</Text>
         </TouchableOpacity>
