@@ -13,13 +13,15 @@
 // (10/25/50/75/100) — no new slider dependency, mirroring the quick-button
 // approach in SmartCalculatorScreen.
 //
-// NAVIGATION — translation-only batch. onBack → goBack(); link / unlink
-// resolve to "coming soon" Alert placeholders tagged TODO(goals-wiring).
+// NAVIGATION — onBack → goBack(); link / unlink are wired to
+// useGoalActions.linkCircle / unlinkCircle. Available circles come from
+// useCircles().myCircles so the screen always reflects the user's real
+// memberships rather than mock data.
 //
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -29,11 +31,27 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { useGoalActions } from "../hooks/useGoalActions";
+import { useCircles } from "../context/CirclesContext";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// circle_payout_action vocabulary — text column, no DB enum. Values match
+// the screen's three transfer options. Keep these strings stable; downstream
+// payout automation (Phase 2) will branch on them.
+type CirclePayoutAction = "deposit_all" | "deposit_percent" | "ask";
+const TRANSFER_TO_ACTION: Record<TransferOption, CirclePayoutAction> = {
+  all: "deposit_all",
+  percent: "deposit_percent",
+  ask: "ask",
+};
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -65,7 +83,12 @@ type Circle = {
 };
 
 type GoalLinkCircleParams = {
+  // goalId is forwarded from GoalDetailV2 alongside goal. Prefer goalId
+  // when present so a malformed goal object can't poison the FK.
+  goalId?: string;
   goal?: LinkGoal;
+  // Optional override; when omitted we fetch the user's real circles from
+  // useCircles() and map them to this screen's local Circle shape.
   availableCircles?: Circle[];
 };
 type GoalLinkCircleRouteProp = RouteProp<
@@ -82,38 +105,9 @@ const DEFAULT_GOAL: LinkGoal = {
   linkedCircleId: null,
 };
 
-const DEFAULT_CIRCLES: Circle[] = [
-  {
-    id: "c1",
-    name: "Home Buyers Circle",
-    emoji: "🏠",
-    monthlyPayout: 2000,
-    nextPayoutDate: "Feb 15, 2026",
-    members: 10,
-    yourPosition: 4,
-    isActive: true,
-  },
-  {
-    id: "c2",
-    name: "Abidjan Savers",
-    emoji: "🌍",
-    monthlyPayout: 500,
-    nextPayoutDate: "Feb 20, 2026",
-    members: 8,
-    yourPosition: 2,
-    isActive: true,
-  },
-  {
-    id: "c3",
-    name: "Atlanta Diaspora Circle",
-    emoji: "🇺🇸",
-    monthlyPayout: 1000,
-    nextPayoutDate: "Mar 1, 2026",
-    members: 12,
-    yourPosition: 7,
-    isActive: true,
-  },
-];
+// DEFAULT_CIRCLES removed — the screen now sources circles from
+// useCircles().myCircles. The optional route.params.availableCircles
+// override is still accepted for testing / standalone preview.
 
 const PERCENT_OPTIONS = [10, 25, 50, 75, 100];
 
@@ -144,24 +138,95 @@ function Radio({ selected, size = 22 }: { selected: boolean; size?: number }) {
 export default function GoalLinkCircleScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalLinkCircleRouteProp>();
+  const { linkCircle, unlinkCircle } = useGoalActions();
+  const { myCircles } = useCircles();
 
   const goal = route.params?.goal ?? DEFAULT_GOAL;
-  const availableCircles = route.params?.availableCircles ?? DEFAULT_CIRCLES;
+  const goalId = route.params?.goalId ?? goal.id ?? "";
+
+  // Map the user's real circles to this screen's local Circle shape.
+  // nextPayoutDate is best-effort: the Circle context doesn't track per-user
+  // payout-date projections, so we surface startDate as a stand-in (better
+  // than a hardcoded mock date). monthlyPayout uses amount * memberCount as
+  // the full per-cycle pot — the cycle isn't necessarily monthly, but the
+  // share-split math (toGoal / toWallet) is per-circle accurate either way.
+  const mappedCircles: Circle[] = useMemo(
+    () =>
+      myCircles.map((c) => ({
+        id: c.id,
+        name: c.name,
+        emoji: c.emoji,
+        monthlyPayout: c.amount * (c.memberCount || c.currentMembers || 1),
+        nextPayoutDate: c.startDate ?? "TBD",
+        members: c.currentMembers,
+        yourPosition: c.myPosition ?? 1,
+        isActive: c.status === "active",
+      })),
+    [myCircles]
+  );
+
+  const availableCircles = route.params?.availableCircles ?? mappedCircles;
 
   const [selectedCircleId, setSelectedCircleId] = useState<string | null>(
     goal.linkedCircleId
   );
   const [transferOption, setTransferOption] = useState<TransferOption>("all");
   const [transferPercent, setTransferPercent] = useState(100);
+  const [isSaving, setIsSaving] = useState(false);
 
   const selectedCircle = availableCircles.find((c) => c.id === selectedCircleId);
   const payout = selectedCircle?.monthlyPayout ?? 0;
   const toGoal = (payout * transferPercent) / 100;
   const toWallet = (payout * (100 - transferPercent)) / 100;
 
-  // TODO(goals-wiring): persist via SavingsContext then goBack / success.
-  const comingSoon = (label: string) =>
-    Alert.alert(label, "This will be available soon.");
+  const guardGoalId = (): boolean => {
+    if (UUID_RE.test(goalId)) return true;
+    Alert.alert(
+      "Goal not loaded",
+      "Open this screen from your goal's detail page so the link can be saved."
+    );
+    return false;
+  };
+
+  const handleLink = async () => {
+    if (!selectedCircleId || isSaving) return;
+    if (!guardGoalId()) return;
+    if (!UUID_RE.test(selectedCircleId)) {
+      Alert.alert(
+        "Pick a real circle",
+        "The circles list is showing preview data. Make sure you're signed in and have at least one circle."
+      );
+      return;
+    }
+    const action = TRANSFER_TO_ACTION[transferOption];
+    // Only send a percent value when the user picked the percentage split.
+    const percent = transferOption === "percent" ? transferPercent : undefined;
+
+    setIsSaving(true);
+    const { error } = await linkCircle(goalId, selectedCircleId, action, percent);
+    setIsSaving(false);
+
+    if (error) {
+      Alert.alert("Couldn't link circle", error.message ?? "Please try again.");
+      return;
+    }
+    navigation.goBack();
+  };
+
+  const handleRemoveLink = async () => {
+    if (isSaving) return;
+    if (!guardGoalId()) return;
+
+    setIsSaving(true);
+    const { error } = await unlinkCircle(goalId);
+    setIsSaving(false);
+
+    if (error) {
+      Alert.alert("Couldn't remove link", error.message ?? "Please try again.");
+      return;
+    }
+    navigation.goBack();
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -448,30 +513,35 @@ export default function GoalLinkCircleScreen() {
       {/* ===== BOTTOM CTA ===== */}
       <View style={styles.bottomBar}>
         <TouchableOpacity
-          onPress={() => comingSoon("Link Circle to Goal")}
-          disabled={!selectedCircleId}
+          onPress={handleLink}
+          disabled={!selectedCircleId || isSaving}
           accessibilityRole="button"
-          accessibilityState={{ disabled: !selectedCircleId }}
+          accessibilityState={{ disabled: !selectedCircleId || isSaving, busy: isSaving }}
           style={[
             styles.primaryButton,
-            !selectedCircleId && styles.primaryButtonDisabled,
+            (!selectedCircleId || isSaving) && styles.primaryButtonDisabled,
           ]}
         >
-          <Text
-            style={[
-              styles.primaryButtonText,
-              !selectedCircleId && styles.primaryButtonTextDisabled,
-            ]}
-          >
-            {selectedCircleId ? "Link Circle to Goal" : "Select a Circle"}
-          </Text>
+          {isSaving ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text
+              style={[
+                styles.primaryButtonText,
+                !selectedCircleId && styles.primaryButtonTextDisabled,
+              ]}
+            >
+              {selectedCircleId ? "Link Circle to Goal" : "Select a Circle"}
+            </Text>
+          )}
         </TouchableOpacity>
 
         {goal.linkedCircleId && (
           <TouchableOpacity
-            onPress={() => comingSoon("Remove Current Link")}
+            onPress={handleRemoveLink}
+            disabled={isSaving}
             accessibilityRole="button"
-            style={styles.removeButton}
+            style={[styles.removeButton, isSaving && { opacity: 0.5 }]}
           >
             <Text style={styles.removeText}>Remove Current Link</Text>
           </TouchableOpacity>

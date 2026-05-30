@@ -346,6 +346,29 @@ export function useGoalActions() {
     return { data: mapGoalRow(data), error: null };
   };
 
+  // Direct update (mirroring linkCircle) so the call site doesn't have to
+  // remember three keys at once. updateGoal does not currently expose the
+  // linked_circle_* fields in its UpdateGoalInput shape, so this is the
+  // cleanest path until/unless that input grows.
+  const unlinkCircle = async (
+    goalId: string
+  ): Promise<ActionResult<Goal>> => {
+    if (!user) return authError();
+    const { data, error } = await supabase
+      .from(GOALS_TABLE)
+      .update({
+        linked_circle_id: null,
+        circle_payout_action: null,
+        circle_payout_percent: null,
+        updated_at: nowIso(),
+      })
+      .eq("id", goalId)
+      .select()
+      .single();
+    if (error) return { data: null, error };
+    return { data: mapGoalRow(data), error: null };
+  };
+
   const updateGoal = async (
     goalId: string,
     updates: UpdateGoalInput
@@ -402,6 +425,7 @@ export function useGoalActions() {
     addMoney,
     withdraw,
     linkCircle,
+    unlinkCircle,
     updateGoal,
     deleteGoal,
   };
