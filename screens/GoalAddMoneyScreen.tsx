@@ -8,9 +8,16 @@
 // account, a saved debit card (1.5% fee), or set up auto-deposit. Amount
 // input with quick-select chips ($100/$250/$500/$1000) + "Fill to Target".
 //
-// NAVIGATION — onBack → goBack(); wallet-source deposits are wired to
-// useGoalActions.addMoney. Bank/Card/Auto-deposit still resolve to
-// "coming soon" Alert placeholders pending Stripe / ACH integration.
+// NAVIGATION — onBack → goBack(). Source-aware submit:
+//   wallet → useGoalActions.addMoney (atomic via transfer_to_goal RPC).
+//   card   → create-payment-intent edge function (purpose='goal_deposit',
+//            applyCardFee=true) + Stripe PaymentSheet via PaymentContext.
+//            The credit_goal_external RPC (migration 074) fires
+//            asynchronously from the stripe-webhook on
+//            payment_intent.succeeded — the user sees the updated
+//            balance when GoalDetailV2 refetches on focus.
+//   bank   → comingSoon Alert. Bank ACH needs Stripe Financial
+//            Connections / Plaid bank-link first; out of scope here.
 //
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
@@ -33,6 +40,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useGoalActions } from "../hooks/useGoalActions";
+import { usePayment } from "../context/PaymentContext";
+import { supabase } from "../lib/supabase";
 
 // UUID guard — sub-screens can be reached with mock defaults that use ids
 // like "g1"; the hook will reject those with a 22P02 from Postgres.
@@ -130,6 +139,7 @@ export default function GoalAddMoneyScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalAddMoneyRouteProp>();
   const { addMoney } = useGoalActions();
+  const { presentPaymentSheet } = usePayment();
 
   const goal = route.params?.goal ?? DEFAULT_GOAL;
   const goalId = route.params?.goalId ?? goal.id;
@@ -155,10 +165,97 @@ export default function GoalAddMoneyScreen() {
   const comingSoon = (label: string) =>
     Alert.alert(label, "This will be available soon.");
 
+  // ── Card deposit path (migration 074 + extended create-payment-intent) ─────
+  // 1. Convert dollars → cents and call our edge function with
+  //    purpose='goal_deposit'. The function charges amount + 1.5% on the card,
+  //    stamps the PI metadata with goal_id + deposit_amount_cents + fee_cents,
+  //    and persists a row in stripe_payment_intents.
+  // 2. Open the Stripe PaymentSheet via PaymentContext (which already wraps
+  //    StripeProvider in App.tsx, so this works on native; web returns a mock
+  //    error which we surface as a friendly Alert).
+  // 3. When the user confirms, Stripe charges the card and fires the
+  //    payment_intent.succeeded webhook → our handler calls the
+  //    credit_goal_external RPC → goal balance is credited.
+  // 4. The credit is ASYNC vs the PaymentSheet dismissal. We Alert
+  //    ("will be added shortly") so the user knows the balance update is in
+  //    flight, then goBack(). GoalDetailV2's useFocusEffect refetches on
+  //    return — by the time the user lands there the webhook has typically
+  //    fired (~1-2s on test mode) and the new balance is visible.
+  const handleCardDeposit = async () => {
+    if (!UUID_RE.test(goalId)) {
+      Alert.alert(
+        "Goal not loaded",
+        "Open this screen from your goal's detail page so the deposit can be saved."
+      );
+      return;
+    }
+
+    // Edge function takes amount in CENTS (≥ 50). Convert dollars → cents
+    // with Math.round to avoid float precision issues.
+    const amountCents = Math.round(numAmount * 100);
+    if (amountCents < 50) {
+      Alert.alert("Amount too small", "Minimum card deposit is $0.50.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      // 1. Create the PaymentIntent via our extended edge function.
+      const { data, error: invokeErr } = await supabase.functions.invoke(
+        "create-payment-intent",
+        {
+          body: {
+            amount: amountCents,
+            purpose: "goal_deposit",
+            goalId,
+            applyCardFee: true,
+          },
+        }
+      );
+      if (invokeErr) {
+        throw new Error(invokeErr.message ?? "Failed to create payment intent");
+      }
+      const clientSecret = (data as { clientSecret?: string })?.clientSecret;
+      if (!clientSecret) {
+        throw new Error("No client secret returned by server");
+      }
+
+      // 2. Open the Stripe PaymentSheet (wrapped by PaymentContext).
+      const sheet = await presentPaymentSheet(clientSecret);
+      if (!sheet.success) {
+        // User cancellation surfaces as an error message too; treat both
+        // the same — bail without crediting and without surfacing as a
+        // failure scarier than it is. The Stripe SDK distinguishes
+        // "Canceled" vs other errors in the error.message — surface as-is.
+        if (sheet.error) {
+          Alert.alert("Payment not completed", sheet.error);
+        }
+        return;
+      }
+
+      // 3. Charge succeeded. Webhook is in flight; credit lands async.
+      Alert.alert(
+        "Deposit on its way",
+        "Your card was charged. The goal balance will update in a moment.",
+        [{ text: "OK", onPress: () => navigation.goBack() }]
+      );
+    } catch (err: any) {
+      Alert.alert("Payment failed", err?.message ?? "Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!canSubmit) return;
 
-    // Bank / Card source still pending Stripe + ACH wiring.
+    if (selectedSource === "card") {
+      await handleCardDeposit();
+      return;
+    }
+
+    // Bank source still pending ACH wiring (Stripe Financial Connections
+    // or Plaid bank-link). Out of scope for this commit.
     if (selectedSource !== "wallet") {
       comingSoon(`Add $${numAmount.toLocaleString()} to Goal`);
       return;
