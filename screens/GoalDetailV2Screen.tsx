@@ -20,10 +20,18 @@
 // Edit → GoalEdit, Milestones → GoalMilestones, See All → GoalActivity
 // (each forwards { goalId, goal }; See All also forwards recentActivity).
 //
+// DATA — when route.params.goalId is set, the goal + transactions are
+// fetched via useGoalActions.fetchGoal() and refetched on useFocusEffect
+// (so returning from add-money / withdraw / edit / link-circle picks up the
+// new state). If only a `goal` object is passed (legacy debug nav from
+// GoalsHubV2's mock cards), it's used as-is. While loading we show a
+// spinner; on fetch failure or with neither input we show a "Goal not
+// found" empty state with a Back action.
+//
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -32,12 +40,16 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRoute, RouteProp } from "@react-navigation/native";
+import { useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import { useGoalActions } from "../hooks/useGoalActions";
+import type { Goal as RealGoal, GoalTransaction as RealTxn } from "../types/goals";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -192,13 +204,214 @@ const DEFAULT_ACTIVITY: Activity[] = [
   { type: "deposit", desc: "Manual deposit", amount: 1000, date: "Jan 10", isCredit: true },
 ];
 
+// ── viewModel mappers ─────────────────────────────────────────────────────
+// The DB-backed Goal (from useGoalActions.fetchGoal) is leaner than what
+// this screen's render expects (mock-derived shape). These mappers compute
+// the missing fields client-side (progressPercent, daysActive, apy from the
+// savings tier) and fill the rest with safe defaults, so the render below
+// stays unchanged for both real and legacy passed-goal data.
+// linkedCircle: the DB only stores the FK id; the rich payout details
+// (name / nextPayout / payoutAmount) need a separate circle fetch we haven't
+// wired yet, so we render a minimal placeholder card when a goal is linked.
+
+function defaultDescForType(t: RealTxn["type"]): string {
+  switch (t) {
+    case "deposit":
+      return "Deposit";
+    case "withdrawal":
+      return "Withdrawal";
+    case "interest_credit":
+      return "Interest";
+    case "circle_payout":
+      return "Circle payout";
+    case "penalty":
+      return "Penalty";
+    case "transfer_in":
+      return "Transfer in";
+    case "transfer_out":
+      return "Transfer out";
+    default:
+      return "Activity";
+  }
+}
+
+function mapRealGoalToRender(real: RealGoal): Goal {
+  const target = real.targetAmount || 0;
+  const balance = real.currentBalance || 0;
+  const progressPercent =
+    target > 0 ? Math.min(100, Math.round((balance / target) * 1000) / 10) : 0;
+  const apy =
+    real.savingsType === "locked"
+      ? 4
+      : real.savingsType === "emergency"
+      ? 2
+      : 0;
+  const daysActive = real.createdAt
+    ? Math.max(
+        0,
+        Math.floor(
+          (Date.now() - new Date(real.createdAt).getTime()) / 86_400_000
+        )
+      )
+    : 0;
+  return {
+    id: real.id,
+    name: real.name,
+    emoji: real.emoji ?? "🎯",
+    category: real.category ?? "",
+    balance,
+    target,
+    interestEarned: real.interestEarned ?? 0,
+    dailyInterest: 0, // not tracked on the row yet
+    progressPercent,
+    isOnTrack: real.status === "active",
+    startDate: real.createdAt,
+    targetDate: real.targetDate ?? "",
+    monthlyContribution: real.monthlyContribution ?? 0,
+    autoDepositEnabled: real.autoDepositEnabled,
+    autoDepositDay: real.autoDepositDay ?? 1,
+    savingsType: (real.savingsType ?? "flexible") as SavingsTypeId,
+    apy,
+    lockEndDate: real.lockEndDate ?? null,
+    lockPeriodMonths: real.lockPeriodMonths ?? null,
+    linkedCircle: real.linkedCircleId
+      ? {
+          id: real.linkedCircleId,
+          name: "Linked Circle",
+          nextPayout: "—",
+          payoutAmount: 0,
+          payoutAction: real.circlePayoutAction ?? "deposit_all",
+        }
+      : null,
+    daysActive,
+  };
+}
+
+function mapRealTxnsToActivities(txns: RealTxn[]): Activity[] {
+  return txns.map((t) => {
+    const isCredit =
+      t.type === "deposit" ||
+      t.type === "interest_credit" ||
+      t.type === "circle_payout" ||
+      t.type === "transfer_in";
+    const renderType: Activity["type"] =
+      t.type === "interest_credit"
+        ? "interest"
+        : t.type === "circle_payout"
+        ? "circle_payout"
+        : "deposit";
+    const date = t.createdAt
+      ? new Date(t.createdAt).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        })
+      : "";
+    return {
+      type: renderType,
+      desc: t.description ?? defaultDescForType(t.type),
+      amount: t.amount,
+      date,
+      isCredit,
+    };
+  });
+}
+
 export default function GoalDetailV2Screen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalDetailV2RouteProp>();
 
-  const goal = route.params?.goal ?? DEFAULT_GOAL;
-  const milestones = route.params?.milestones ?? DEFAULT_MILESTONES;
-  const recentActivity = route.params?.recentActivity ?? DEFAULT_ACTIVITY;
+  const goalId = (route.params as { goalId?: string } | undefined)?.goalId;
+  const passedGoal = (route.params?.goal as Goal | undefined) ?? null;
+
+  // Real backend: fetch the goal + its transactions when a goalId is given.
+  // If a fully-formed render-shaped goal was passed instead (legacy debug
+  // nav from GoalsHubV2's mock cards), use it as-is.
+  const { fetchGoal } = useGoalActions();
+  const [goal, setGoal] = useState<Goal | null>(passedGoal);
+  const [transactions, setTransactions] = useState<RealTxn[] | null>(null);
+  const [loading, setLoading] = useState<boolean>(!!goalId);
+
+  const loadGoal = useCallback(async () => {
+    if (!goalId) return;
+    setLoading(true);
+    const { data, error } = await fetchGoal(goalId);
+    if (error || !data) {
+      Alert.alert(
+        "Couldn't load goal",
+        (error as { message?: string } | null)?.message ??
+          "This goal couldn't be loaded."
+      );
+      setLoading(false);
+      return;
+    }
+    setGoal(mapRealGoalToRender(data.goal));
+    setTransactions(data.transactions);
+    setLoading(false);
+  }, [goalId, fetchGoal]);
+
+  // Refetch whenever the screen comes back into focus — covers returning
+  // from add-money / withdraw / edit / link-circle.
+  useFocusEffect(
+    useCallback(() => {
+      if (goalId) loadGoal();
+    }, [goalId, loadGoal])
+  );
+
+  // Milestones aren't tracked in the DB; derive `achieved` from current
+  // progress. Falls back to passed/mocks for the legacy debug path.
+  const milestones = useMemo<Milestone[]>(() => {
+    if (!goal) {
+      return (
+        (route.params?.milestones as Milestone[] | undefined) ?? DEFAULT_MILESTONES
+      );
+    }
+    return DEFAULT_MILESTONES.map((m) => ({
+      ...m,
+      achieved: goal.progressPercent >= m.percent,
+    }));
+  }, [goal, route.params?.milestones]);
+
+  // Recent activity: prefer fetched transactions; fall back to passed params
+  // / mock for the legacy debug path.
+  const recentActivity = useMemo<Activity[]>(() => {
+    if (transactions) return mapRealTxnsToActivities(transactions);
+    return (
+      (route.params?.recentActivity as Activity[] | undefined) ?? DEFAULT_ACTIVITY
+    );
+  }, [transactions, route.params?.recentActivity]);
+
+  if (loading && !goal) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+        <View style={styles.centerFill}>
+          <ActivityIndicator size="large" color={TEAL} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!goal) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+        <View style={styles.centerFill}>
+          <Text style={styles.emptyEmoji}>🔎</Text>
+          <Text style={styles.emptyTitle}>Goal not found</Text>
+          <Text style={styles.emptyBody}>
+            We couldn't load this goal. Try again from the goals list.
+          </Text>
+          <TouchableOpacity
+            style={styles.emptyButton}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+          >
+            <Text style={styles.emptyButtonText}>Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const typeInfo = SAVINGS_TYPE_INFO[goal.savingsType] || SAVINGS_TYPE_INFO.flexible;
   const remainingAmount = goal.target - goal.balance;
@@ -655,6 +868,37 @@ export default function GoalDetailV2Screen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#F5F7FA" },
+
+  // Loading / empty states (shown before the real goal renders below)
+  centerFill: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  emptyEmoji: { fontSize: 48, marginBottom: 12 },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: NAVY,
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptyBody: {
+    fontSize: 14,
+    color: MUTED,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  emptyButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+    backgroundColor: TEAL,
+  },
+  emptyButtonText: { fontSize: 14, fontWeight: "700", color: "#FFFFFF" },
+
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 24 },
 

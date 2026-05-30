@@ -16,8 +16,10 @@
 // NAMING — this is a *new* v2 screen. It does NOT overwrite the existing
 // CreateGoal route/screen; route name (added later) will be `GoalCreate`.
 //
-// NAVIGATION — `onBack` → goBack(); "Create Goal" builds a mock goal
-// object and navigates to GoalSetupSuccess { goal }. The "Link a Circle"
+// NAVIGATION — `onBack` → goBack(); "Create Goal" calls useGoalActions
+// .createGoal() (real Supabase insert), clears any unfinished-goal draft,
+// then navigation.replaces to GoalDetailV2 { goalId } on success. Errors
+// surface as an Alert; the form stays open for retry. The "Link a Circle"
 // picker is fully in-screen (no navigation), faithful to the web design.
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -31,12 +33,15 @@ import {
   SafeAreaView,
   StatusBar,
   TextInput,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useFormDraft } from "../hooks/useFormDraft";
+import { useGoalActions } from "../hooks/useGoalActions";
 import { Routes } from "../lib/routes";
 
 const NAVY = "#0A2342";
@@ -288,45 +293,47 @@ export default function GoalCreateScreen() {
 
   const linkedCircle = availableCircles.find((c) => c.id === linkedCircleId);
 
-  const handleCreate = () => {
-    if (!canCreate) return;
-    const apy = getEffectiveApy();
-    // Mock goal object. Kept comprehensive on purpose: GoalSetupSuccess
-    // reads name/target/monthly/autoDeposit/estimatedAchieveDate/interestRate,
-    // and it later forwards this same object to GoalDetailV2 — which reads
-    // balance/interestEarned/dailyInterest/progressPercent/daysActive etc.
-    // Including zeroed defaults here avoids missing-field crashes downstream.
-    // Real persistence via SavingsContext lands later.
-    const newGoal = {
-      id: "new-" + Date.now(),
+  // Real backend: createGoal() inserts into user_savings_goals + resolves the
+  // NOT NULL savings_goal_type_id and wallet_id internally (see useGoalActions).
+  const { createGoal } = useGoalActions();
+  const [isCreating, setIsCreating] = useState(false);
+
+  const handleCreate = async () => {
+    if (!canCreate || isCreating) return;
+    setIsCreating(true);
+    // The hook's CreateGoalInput is camelCase (types/goals.ts). Amounts are
+    // dollars here — the hook converts to cents at the DB boundary.
+    // category isn't tracked on the goalType yet (it lives on the prior
+    // GoalCategorySelect step and isn't threaded through); fall back to the
+    // goalType's display name so the goal isn't empty-categoried in the DB.
+    const result = await createGoal({
       name: goalName,
       emoji: goalType.emoji,
+      goalType: goalType.id,
       category: goalType.name,
-      balance: 0,
-      target: targetAmount,
-      interestEarned: 0,
-      dailyInterest: 0,
-      progressPercent: 0,
-      daysActive: 0,
-      isOnTrack: true,
+      savingsType,
+      targetAmount,
       monthlyContribution,
       autoDepositEnabled: autoDeposit,
-      linkedCircle: null,
-      startDate: new Date().toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
+      linkedCircleId: linkedCircleId ?? undefined,
+      lockPeriodMonths: savingsType === "locked" ? lockPeriodMonths : undefined,
+      lockEndDate:
+        savingsType === "locked" ? lockEndDate.toISOString() : undefined,
       targetDate: estimatedDateStr,
-      estimatedAchieveDate: estimatedDateStr,
-      savingsType,
-      apy,
-      interestRate: apy,
-      lockPeriodMonths: savingsType === "locked" ? lockPeriodMonths : null,
-      lockEndDate: savingsType === "locked" ? lockEndDate.toISOString() : null,
-    };
+    });
+    setIsCreating(false);
+
+    if (result.error || !result.data) {
+      const msg =
+        (result.error as { message?: string } | null)?.message ??
+        "Could not create goal. Please try again.";
+      Alert.alert("Couldn't create goal", msg);
+      return;
+    }
+
     clearDraft();
-    navigation.navigate(Routes.GoalSetupSuccess, { goal: newGoal });
+    // navigation.replace so back doesn't return to the (now-empty) create form.
+    navigation.replace(Routes.GoalDetailV2, { goalId: result.data.id });
   };
 
   return (
@@ -792,19 +799,26 @@ export default function GoalCreateScreen() {
       <View style={styles.bottomBar}>
         <TouchableOpacity
           onPress={handleCreate}
-          disabled={!canCreate}
+          disabled={!canCreate || isCreating}
           accessibilityRole="button"
-          accessibilityState={{ disabled: !canCreate }}
-          style={[styles.primaryButton, !canCreate && styles.primaryButtonDisabled]}
+          accessibilityState={{ disabled: !canCreate || isCreating, busy: isCreating }}
+          style={[
+            styles.primaryButton,
+            (!canCreate || isCreating) && styles.primaryButtonDisabled,
+          ]}
         >
-          <Text
-            style={[
-              styles.primaryButtonText,
-              !canCreate && styles.primaryButtonTextDisabled,
-            ]}
-          >
-            Create Goal
-          </Text>
+          {isCreating ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text
+              style={[
+                styles.primaryButtonText,
+                !canCreate && styles.primaryButtonTextDisabled,
+              ]}
+            >
+              Create Goal
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
