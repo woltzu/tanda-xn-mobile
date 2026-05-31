@@ -262,8 +262,89 @@ Deno.serve(async (req) => {
         }
       }
     }
+  } else if (event.type === "account.updated") {
+    // ── Stage 1: Connect onboarding status updates ──
+    // Connect Express accounts fire account.updated whenever their state
+    // changes (during onboarding, KYC verification, requirements changes).
+    // This is the ONLY source of truth for onboarding_status — the gate in
+    // complete_circle_join reads onboarding_status='complete' + payouts_enabled.
+    //
+    // Idempotency layers:
+    //   Layer 1 (existing): UNIQUE on stripe_event_id catches duplicate
+    //     deliveries of the same event (Stripe retries).
+    //   Layer 2 (new): the UPDATE is conditional on last_account_event_at
+    //     being NULL OR <= the incoming event.created — this catches
+    //     out-of-order delivery of DIFFERENT events. .lte. (not .lt.) so
+    //     two events with the same second-precision timestamp both apply
+    //     (the later-arriving one wins, which mirrors Stripe's behavior).
+    const acct = event.data.object as Stripe.Account;
+    const eventCreatedAt = new Date(event.created * 1000).toISOString();
+
+    // Canonical "complete" — payout readiness only. charges_enabled is
+    // observed but NOT a gate condition (separate charges & transfers
+    // architecture means the connected account never needs to charge).
+    let onboardingStatus: "pending" | "in_progress" | "complete" | "restricted" | "disabled";
+    if (acct.requirements?.disabled_reason) {
+      onboardingStatus = "disabled";
+    } else if ((acct.requirements?.past_due?.length ?? 0) > 0) {
+      onboardingStatus = "restricted";
+    } else if (
+      acct.payouts_enabled === true &&
+      acct.details_submitted === true &&
+      (acct.requirements?.currently_due?.length ?? 0) === 0
+    ) {
+      onboardingStatus = "complete";
+    } else {
+      onboardingStatus = "in_progress";
+    }
+
+    const { error: updErr, count } = await supabase
+      .from("stripe_connected_accounts")
+      .update(
+        {
+          onboarding_status: onboardingStatus,
+          payouts_enabled: acct.payouts_enabled ?? false,
+          charges_enabled: acct.charges_enabled ?? false, // observed for diagnostics, not gate-relevant
+          details_submitted: acct.details_submitted ?? false,
+          capabilities: acct.capabilities ?? {},
+          requirements: acct.requirements ?? {},
+          tos_accepted_at: acct.tos_acceptance?.date
+            ? new Date(acct.tos_acceptance.date * 1000).toISOString()
+            : null,
+          last_account_event_at: eventCreatedAt,
+          updated_at: new Date().toISOString(),
+        },
+        { count: "exact" }
+      )
+      .eq("stripe_account_id", acct.id)
+      .or(`last_account_event_at.is.null,last_account_event_at.lte.${eventCreatedAt}`);
+
+    if (updErr) {
+      processingError = `account.updated apply failed: ${updErr.message}`;
+      console.error("[stripe-webhook]", processingError);
+    } else if (count === 0) {
+      // Either no matching row OR the incoming event is older than the
+      // last applied one. Not an error — Layer 2 correctly ignored a
+      // stale delivery, OR the account was created in the dashboard
+      // (not via our API) and we have no record of it.
+      console.warn(
+        "[stripe-webhook] account.updated skipped for",
+        acct.id,
+        "(no matching row OR stale event; event.created =",
+        eventCreatedAt + ")"
+      );
+    } else {
+      console.log(
+        "[stripe-webhook] account.updated applied for",
+        acct.id,
+        "→ status =",
+        onboardingStatus,
+        ", payouts_enabled =",
+        acct.payouts_enabled
+      );
+    }
   } else {
-    console.log("[stripe-webhook] ignoring non-PI event", event.type);
+    console.log("[stripe-webhook] ignoring non-PI/non-account event", event.type);
   }
 
   // ─── 3. Record the event in stripe_webhook_events ───
