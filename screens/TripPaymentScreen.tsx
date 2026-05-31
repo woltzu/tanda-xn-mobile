@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -13,7 +13,17 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { colors, radius, typography, spacing } from "../theme/tokens";
-import { useTripPayment } from "../hooks/useTripOrganizer";
+import { useTripDashboard, useTripPayment } from "../hooks/useTripOrganizer";
+import InstallmentScheduleView from "../components/InstallmentScheduleView";
+import { supabase } from "../lib/supabase";
+import {
+  computeInstallmentTotals,
+  formatMoneyCents,
+  type TripPaymentRecord,
+} from "../lib/tripHelpers";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const GOLD = "#E8A842";
 const GOLD_BG = "rgba(232,168,66,0.1)";
@@ -88,6 +98,52 @@ const TripPaymentScreen: React.FC = () => {
   const data: PaymentData = (hookResult as any)?.data ?? MOCK_PAYMENT;
   const processPayment = (hookResult as any)?.pay ?? (async () => {});
   const isLoading = (hookResult as any)?.isLoading ?? false;
+
+  // ── Real schedule + participant payments (added on top of the existing
+  //    mock-driven UI so the existing pay-now flow keeps working until the
+  //    rest of the screen is wired to real data). When tripId/participantId
+  //    aren't UUIDs (the screen ships with "trip-001" / "me" defaults for
+  //    standalone preview), the hooks no-op and we render the empty state. ──
+  const { dashboard: tripDashboard } = useTripDashboard(
+    UUID_RE.test(tripId) ? tripId : ""
+  );
+  const installmentSchedule = tripDashboard?.trip?.installmentSchedule ?? null;
+
+  const [participantPayments, setParticipantPayments] = useState<
+    TripPaymentRecord[]
+  >([]);
+  useEffect(() => {
+    if (!UUID_RE.test(participantId)) {
+      setParticipantPayments([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data: rows, error } = await supabase
+        .from("trip_payments")
+        .select(
+          "installment_number, amount, paid_at, due_date, status"
+        )
+        .eq("trip_participant_id", participantId);
+      if (cancelled) return;
+      if (error) {
+        // Non-fatal — the schedule still renders, just without paid badges.
+        // eslint-disable-next-line no-console
+        console.warn("[TripPaymentScreen] payments fetch failed:", error.message);
+        setParticipantPayments([]);
+        return;
+      }
+      setParticipantPayments((rows ?? []) as TripPaymentRecord[]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [participantId]);
+
+  const totals = computeInstallmentTotals(
+    installmentSchedule ?? undefined,
+    participantPayments
+  );
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPaid, setIsPaid] = useState(false);
@@ -287,6 +343,44 @@ const TripPaymentScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* ── Full installment schedule (real data when available) ────
+                Shows the entire schedule with per-row paid/upcoming/overdue
+                badges derived from the participant's trip_payments. When
+                the screen is opened with mock route params (no real trip,
+                no real participant), the InstallmentScheduleView renders
+                its own "No installment plan set" empty state and the
+                totals headline shows zeros. ──────────────────────────── */}
+            {installmentSchedule && (
+              <View style={styles.scheduleWrap}>
+                <Text style={styles.scheduleTitle}>Full Payment Schedule</Text>
+                <View style={styles.totalsRow}>
+                  <View style={styles.totalsCol}>
+                    <Text style={styles.totalsLabel}>Paid</Text>
+                    <Text style={styles.totalsValuePaid}>
+                      {formatMoneyCents(totals.totalPaidCents)}
+                    </Text>
+                  </View>
+                  <View style={styles.totalsCol}>
+                    <Text style={styles.totalsLabel}>Remaining</Text>
+                    <Text style={styles.totalsValueRemaining}>
+                      {formatMoneyCents(totals.totalRemainingCents)}
+                    </Text>
+                  </View>
+                  <View style={styles.totalsCol}>
+                    <Text style={styles.totalsLabel}>Total</Text>
+                    <Text style={styles.totalsValueTotal}>
+                      {formatMoneyCents(totals.totalScheduledCents)}
+                    </Text>
+                  </View>
+                </View>
+                <InstallmentScheduleView
+                  schedule={installmentSchedule}
+                  payments={participantPayments}
+                  showStatus={true}
+                />
+              </View>
+            )}
           </>
         )}
       </ScrollView>
@@ -574,6 +668,52 @@ const styles = StyleSheet.create({
   changeBtnText: {
     fontSize: typography.label,
     fontWeight: typography.semibold,
+    color: NAVY,
+  },
+
+  // ── Full Schedule (real installment data via InstallmentScheduleView) ──
+  scheduleWrap: {
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  scheduleTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: NAVY,
+    marginBottom: 10,
+  },
+  totalsRow: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  totalsCol: {
+    flex: 1,
+    alignItems: "center",
+  },
+  totalsLabel: {
+    fontSize: 11,
+    color: "#6B7280",
+    marginBottom: 4,
+    fontWeight: "600",
+  },
+  totalsValuePaid: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#059669",
+  },
+  totalsValueRemaining: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#D97706",
+  },
+  totalsValueTotal: {
+    fontSize: 15,
+    fontWeight: "700",
     color: NAVY,
   },
 

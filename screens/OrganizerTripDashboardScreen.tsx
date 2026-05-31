@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useTripDashboard } from '../hooks/useTripOrganizer';
+import InstallmentScheduleView from '../components/InstallmentScheduleView';
 
 // --- Design tokens ---
 const NAVY = '#0A2342';
@@ -227,6 +228,15 @@ const OrganizerTripDashboardScreen: React.FC = () => {
             total={data.total_target}
             color={TEAL}
             prefix="$"
+          />
+        </View>
+
+        {/* Payment Schedule (organizer view: no per-row status badges) */}
+        <View style={styles.scheduleWrap}>
+          <Text style={styles.sectionTitle}>Payment Schedule</Text>
+          <InstallmentScheduleView
+            schedule={dashboard?.trip?.installmentSchedule}
+            showStatus={false}
           />
         </View>
 
@@ -453,6 +463,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.md,
     marginTop: spacing.sm,
+  },
+  // Payment Schedule section wrapper — uses the same horizontal padding as
+  // other cards so the InstallmentScheduleView block lines up with them.
+  scheduleWrap: {
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
   quickActionsGrid: {
     flexDirection: 'row',
