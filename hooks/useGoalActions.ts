@@ -31,6 +31,7 @@ import {
   ActionResult,
   CreateGoalInput,
   Goal,
+  GoalMilestone,
   GoalTransaction,
   GoalWithTransactions,
   SavingsTypeV2,
@@ -39,6 +40,7 @@ import {
 
 const GOALS_TABLE = "user_savings_goals";
 const TXNS_TABLE = "savings_transactions";
+const MILESTONES_TABLE = "goal_milestones";
 
 // V2 savings_type → existing savings_goal_types.code (live codes don't include
 // 'flexible'; 'general' is the no/low-lock tier).
@@ -80,6 +82,16 @@ function mapGoalRow(row: any): Goal {
     achievedAt: row.completed_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function mapMilestoneRow(row: any): GoalMilestone {
+  return {
+    id: row.id,
+    goalId: row.goal_id,
+    milestonePercent: row.milestone_percent,
+    reachedAt: row.reached_at,
+    celebrated: !!row.celebrated,
   };
 }
 
@@ -194,10 +206,21 @@ export function useGoalActions() {
       .order("created_at", { ascending: false });
     if (txnErr) return { data: null, error: txnErr };
 
+    // Milestones list — empty until the goal's balance crosses a threshold
+    // for the first time (handled atomically by _record_goal_milestones in
+    // migration 078). Order ascending so the screen renders First → 100%.
+    const { data: milestones, error: msErr } = await supabase
+      .from(MILESTONES_TABLE)
+      .select("id, goal_id, milestone_percent, reached_at, celebrated")
+      .eq("goal_id", goalId)
+      .order("milestone_percent", { ascending: true });
+    if (msErr) return { data: null, error: msErr };
+
     return {
       data: {
         goal: mapGoalRow(goalRow),
         transactions: (txns ?? []).map(mapTxnRow),
+        milestones: (milestones ?? []).map(mapMilestoneRow),
       },
       error: null,
     };

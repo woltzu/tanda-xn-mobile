@@ -115,10 +115,29 @@ export interface UpdateGoalInput {
   targetDate?: string;
 }
 
-/** A single goal with its transaction history (returned by `fetchGoal`). */
+/**
+ * Achievement record from `goal_milestones`. Inserted automatically by the
+ * _record_goal_milestones RPC (migration 078) whenever the goal's balance
+ * crosses 10/25/50/75/90/100% for the first time. The screen-side
+ * GoalMilestonesScreen renders this list with achieved / locked badges.
+ */
+export interface GoalMilestone {
+  id: string;
+  goalId: string;          // goal_id
+  milestonePercent: number; // milestone_percent (one of 10/25/50/75/90/100)
+  reachedAt: string;        // reached_at (timestamptz)
+  celebrated: boolean;
+}
+
+/**
+ * A single goal with its transaction + milestone history (returned by
+ * `fetchGoal`). `milestones` is empty until the goal's balance crosses a
+ * threshold for the first time.
+ */
 export interface GoalWithTransactions {
   goal: Goal;
   transactions: GoalTransaction[];
+  milestones: GoalMilestone[];
 }
 
 /** Supabase-style result shape returned by every hook action. */

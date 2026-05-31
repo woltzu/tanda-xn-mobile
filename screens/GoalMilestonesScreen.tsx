@@ -16,7 +16,7 @@
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -31,6 +31,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { useGoalActions } from "../hooks/useGoalActions";
+import type { GoalMilestone as RealMilestone } from "../types/goals";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -61,8 +63,13 @@ type Milestone = {
 };
 
 type GoalMilestonesParams = {
+  goalId?: string;
   goal?: MilestonesGoal;
-  milestones?: Milestone[];
+  // Raw rows from goal_milestones (forwarded by GoalDetailV2's
+  // handleViewMilestones after migration 078). When present, we skip the
+  // fetch; otherwise we pull them via useGoalActions.fetchGoal. Legacy
+  // callers that pass nothing fall back to DEFAULT_MILESTONES (mock).
+  milestones?: RealMilestone[];
 };
 type GoalMilestonesRouteProp = RouteProp<
   { GoalMilestones: GoalMilestonesParams },
@@ -89,12 +96,122 @@ const DEFAULT_MILESTONES: Milestone[] = [
   { id: "m7", type: "goal_achieved", label: "Goal Achieved!", emoji: "🏆", percent: 100, achieved: false, achievedDate: null, amount: 25000, message: "YOU DID IT!" },
 ];
 
+// Canonical milestone definitions used when we have real DB rows. Mirrors
+// the percentage thresholds that _record_goal_milestones (migration 078)
+// inserts. First Deposit isn't tracked in goal_milestones (skipped per the
+// approved scope) — we synthesize it from goal.balance > 0 with the
+// earliest real-milestone reachedAt as a date proxy.
+type MilestoneTemplate = Omit<Milestone, "achieved" | "achievedDate" | "amount">;
+const PERCENT_TEMPLATES: MilestoneTemplate[] = [
+  { id: "m10", type: "percent_10", label: "10% Milestone", emoji: "🌱", percent: 10, message: "1 in 10 steps taken!" },
+  { id: "m25", type: "percent_25", label: "25% Milestone", emoji: "💪", percent: 25, message: "Quarter of the way there!" },
+  { id: "m50", type: "percent_50", label: "Halfway!", emoji: "🏔️", percent: 50, message: "The summit is in sight!" },
+  { id: "m75", type: "percent_75", label: "75% Milestone", emoji: "🏃", percent: 75, message: "Sprint to the finish!" },
+  { id: "m90", type: "percent_90", label: "Almost There!", emoji: "🔥", percent: 90, message: "One final push!" },
+  { id: "m100", type: "goal_achieved", label: "Goal Achieved!", emoji: "🏆", percent: 100, message: "YOU DID IT!" },
+];
+
+function formatMilestoneDate(iso: string | null): string | null {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+/**
+ * Build the screen's 7-row milestone list from real DB rows + the goal.
+ * First Deposit row: synthesized (achieved iff goal.balance > 0). Percent
+ * rows: amount = goal.target * pct/100; achieved iff a matching DB row
+ * exists; achievedDate from that row's reachedAt.
+ */
+function buildMilestonesFromReal(
+  real: RealMilestone[],
+  goal: MilestonesGoal
+): Milestone[] {
+  const byPct = new Map<number, RealMilestone>(
+    real.map((r) => [r.milestonePercent, r])
+  );
+
+  // First-deposit synthesis. Date proxy: earliest real-milestone date —
+  // not exactly right (the user may have made many small deposits before
+  // crossing 10%) but the best approximation without querying
+  // savings_transactions for the oldest row. Flagged as a follow-up.
+  const firstDepositAchieved = goal.balance > 0;
+  const firstDepositDate = real
+    .map((r) => r.reachedAt)
+    .sort()[0]
+    ? formatMilestoneDate(real.map((r) => r.reachedAt).sort()[0])
+    : null;
+  const firstDeposit: Milestone = {
+    id: "m0_first_deposit",
+    type: "first_deposit",
+    label: "First Deposit",
+    emoji: "🚀",
+    percent: 0,
+    amount: 0,
+    achieved: firstDepositAchieved,
+    achievedDate: firstDepositAchieved ? firstDepositDate : null,
+    message: "Your journey begins!",
+  };
+
+  const percentRows: Milestone[] = PERCENT_TEMPLATES.map((tpl) => {
+    const row = byPct.get(tpl.percent);
+    return {
+      ...tpl,
+      amount: Math.round((goal.target * tpl.percent) / 100),
+      achieved: !!row,
+      achievedDate: row ? formatMilestoneDate(row.reachedAt) : null,
+    };
+  });
+
+  return [firstDeposit, ...percentRows];
+}
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default function GoalMilestonesScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalMilestonesRouteProp>();
+  const { fetchGoal } = useGoalActions();
 
   const goal = route.params?.goal ?? DEFAULT_GOAL;
-  const milestones = route.params?.milestones ?? DEFAULT_MILESTONES;
+  const goalId = route.params?.goalId ?? goal.id;
+
+  // Real DB rows: prefer the inline route-param payload (GoalDetailV2
+  // forwards them on navigate so we paint immediately), otherwise fetch
+  // fresh on mount when goalId is a UUID. Empty array stays empty until
+  // the first percentage threshold is crossed (handled by
+  // _record_goal_milestones in migration 078).
+  const [realMilestones, setRealMilestones] = useState<RealMilestone[]>(
+    route.params?.milestones ?? []
+  );
+  useEffect(() => {
+    if (route.params?.milestones) return; // already supplied inline
+    if (!UUID_RE.test(goalId)) return; // mock / preview mode
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await fetchGoal(goalId);
+      if (cancelled || error || !data) return;
+      setRealMilestones(data.milestones);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [goalId, fetchGoal, route.params?.milestones]);
+
+  // Decide whether to render the mock-driven canonical 7 rows (legacy
+  // preview / debug nav) or the real-data-driven set. We treat the
+  // presence of a UUID goalId as the marker for "real mode".
+  const milestones: Milestone[] = UUID_RE.test(goalId)
+    ? buildMilestonesFromReal(realMilestones, goal)
+    : DEFAULT_MILESTONES;
 
   const achievedCount = milestones.filter((m) => m.achieved).length;
   const nextIndex = milestones.findIndex((m) => !m.achieved);

@@ -49,7 +49,17 @@ import { useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useGoalActions } from "../hooks/useGoalActions";
-import type { Goal as RealGoal, GoalTransaction as RealTxn } from "../types/goals";
+import type {
+  Goal as RealGoal,
+  GoalMilestone as RealMilestone,
+  GoalTransaction as RealTxn,
+} from "../types/goals";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+// AsyncStorage key for "user has seen the GoalAchieved celebration for this
+// goal once". When set, the celebration banner stops auto-rendering on
+// every focus. The user can still navigate to GoalMilestones manually.
+const ACHIEVED_SEEN_KEY = (goalId: string) => `goal_achieved_seen_${goalId}`;
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -329,6 +339,17 @@ export default function GoalDetailV2Screen() {
   const { fetchGoal } = useGoalActions();
   const [goal, setGoal] = useState<Goal | null>(passedGoal);
   const [transactions, setTransactions] = useState<RealTxn[] | null>(null);
+  const [milestones, setMilestones] = useState<RealMilestone[]>([]);
+  // Raw status from the DB row — kept separate from the viewModel `goal`
+  // because the viewModel mapping drops the status field. Used to gate
+  // the celebration banner below.
+  const [realStatus, setRealStatus] = useState<string | null>(null);
+  const [hasSeenCelebration, setHasSeenCelebration] = useState<boolean>(false);
+  // Per-session dismissal — separate from the persisted "seen" flag so
+  // tapping Dismiss hides the banner for THIS session only. After a fresh
+  // launch, if the user still hasn't seen the celebration, the banner
+  // returns (and Dismiss isn't a permanent silence).
+  const [bannerDismissed, setBannerDismissed] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(!!goalId);
 
   const loadGoal = useCallback(async () => {
@@ -346,6 +367,17 @@ export default function GoalDetailV2Screen() {
     }
     setGoal(mapRealGoalToRender(data.goal));
     setTransactions(data.transactions);
+    setMilestones(data.milestones);
+    setRealStatus(data.goal.status);
+
+    // Look up persisted "seen" flag. Errors are non-fatal (treated as
+    // not-seen) — worst case the user sees the banner an extra time.
+    try {
+      const seen = await AsyncStorage.getItem(ACHIEVED_SEEN_KEY(goalId));
+      setHasSeenCelebration(seen === "true");
+    } catch {
+      setHasSeenCelebration(false);
+    }
     setLoading(false);
   }, [goalId, fetchGoal]);
 
@@ -444,8 +476,36 @@ export default function GoalDetailV2Screen() {
     navigation.navigate(Routes.GoalWithdraw, { goalId: goal.id, goal });
   const handleLinkCircle = () =>
     navigation.navigate(Routes.GoalLinkCircle, { goalId: goal.id, goal });
+  // Forward real milestones via route params so GoalMilestonesScreen can
+  // skip its own DB round-trip on first paint. Empty array is fine — the
+  // milestones screen treats it as "nothing achieved yet".
   const handleViewMilestones = () =>
-    navigation.navigate(Routes.GoalMilestones, { goalId: goal.id, goal });
+    navigation.navigate(Routes.GoalMilestones, {
+      goalId: goal.id,
+      goal,
+      milestones,
+    });
+
+  // Celebration banner gates and handler. Visible when the goal is
+  // completed AND the user hasn't permanently dismissed via "View
+  // celebration" AND hasn't tapped Dismiss this session.
+  const showCelebrationBanner =
+    realStatus === "completed" && !hasSeenCelebration && !bannerDismissed;
+
+  const handleViewCelebration = async () => {
+    try {
+      await AsyncStorage.setItem(ACHIEVED_SEEN_KEY(goal.id), "true");
+    } catch {
+      // Storage failure is non-fatal — worst case the banner returns on
+      // next mount. Still navigate so the user sees the celebration.
+    }
+    setHasSeenCelebration(true);
+    navigation.navigate(Routes.GoalAchieved as any, {
+      goalId: goal.id,
+      goal,
+    });
+  };
+  const handleDismissCelebrationBanner = () => setBannerDismissed(true);
 
   const activityIcon = (type: Activity["type"]) =>
     type === "interest" ? "📈" : type === "circle_payout" ? "🔄" : "💰";
@@ -579,6 +639,33 @@ export default function GoalDetailV2Screen() {
 
         {/* ===== CONTENT ===== */}
         <View style={styles.contentWrap}>
+          {/* Celebration banner — visible only when the goal is completed
+              and the user hasn't permanently dismissed via View Celebration
+              (AsyncStorage flag) or temporarily via Dismiss (per-session). */}
+          {showCelebrationBanner && (
+            <View style={styles.celebrationBanner}>
+              <TouchableOpacity
+                style={styles.celebrationBannerLeft}
+                onPress={handleViewCelebration}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="View goal achievement celebration"
+              >
+                <Text style={styles.celebrationBannerText}>
+                  🎉 Goal achieved! View celebration {"→"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.celebrationBannerDismiss}
+                onPress={handleDismissCelebrationBanner}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss celebration banner"
+              >
+                <Text style={styles.celebrationBannerDismissText}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Savings type card */}
           <View
             style={[
@@ -981,6 +1068,41 @@ const styles = StyleSheet.create({
   progressLabel: { fontSize: 12, color: "rgba(255,255,255,0.8)" },
 
   contentWrap: { marginTop: -50, paddingHorizontal: 16 },
+
+  // Celebration banner — yellow-tinted with a teal CTA. Sits at the top of
+  // contentWrap so it visually overlaps the hero gradient's bottom edge,
+  // making it the first thing the user sees on a completed goal.
+  celebrationBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FEF3C7",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  celebrationBannerLeft: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  celebrationBannerText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#92400E",
+  },
+  celebrationBannerDismiss: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
+  },
+  celebrationBannerDismissText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#92400E",
+  },
 
   card: {
     backgroundColor: "#FFFFFF",
