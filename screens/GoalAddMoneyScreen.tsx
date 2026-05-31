@@ -26,7 +26,7 @@
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -46,6 +46,7 @@ import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useGoalActions } from "../hooks/useGoalActions";
 import { usePayment } from "../context/PaymentContext";
+import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 
 // ─── Stripe Financial Connections — lazy-require web-safe wrapper ────────────
@@ -113,6 +114,17 @@ type BankAccount = {
   type: string;
 };
 
+// Row shape we read from stripe_bank_accounts. stripe_payment_method_id is
+// the key we need to charge an ACH PI directly without re-running the FC
+// sheet.
+type SavedBank = {
+  id: string;
+  stripe_payment_method_id: string;
+  bank_name: string | null;
+  last4: string | null;
+  account_holder_name: string | null;
+};
+
 type SavedCard = {
   id: string;
   name: string;
@@ -142,10 +154,9 @@ const DEFAULT_GOAL: AddMoneyGoal = {
   target: 25000.0,
 };
 
-const DEFAULT_BANKS: BankAccount[] = [
-  { id: "b1", name: "Chase Checking", last4: "4532", type: "checking" },
-  { id: "b2", name: "Wells Fargo Savings", last4: "7891", type: "savings" },
-];
+// DEFAULT_BANKS removed — bank list now comes from stripe_bank_accounts.
+// The route.params.linkedBankAccounts override is still honored for
+// preview / snapshot testing (see bankRowsForRender below).
 
 const DEFAULT_CARDS: SavedCard[] = [
   { id: "c1", name: "Visa", last4: "1234", type: "debit" },
@@ -182,6 +193,7 @@ export default function GoalAddMoneyScreen() {
   const route = useRoute<GoalAddMoneyRouteProp>();
   const { addMoney } = useGoalActions();
   const { presentPaymentSheet } = usePayment();
+  const { user } = useAuth();
   // Hoist the FC method to component-top per React Hook rules; we'll call
   // the returned function from inside the async bank handler below.
   const { collectFinancialConnectionsAccounts } = useStripeFC();
@@ -189,14 +201,54 @@ export default function GoalAddMoneyScreen() {
   const goal = route.params?.goal ?? DEFAULT_GOAL;
   const goalId = route.params?.goalId ?? goal.id;
   const walletBalance = route.params?.walletBalance ?? 1250.0;
-  const linkedBankAccounts = route.params?.linkedBankAccounts ?? DEFAULT_BANKS;
   const savedCards = route.params?.savedCards ?? DEFAULT_CARDS;
+
+  // ── Real saved banks (replaces DEFAULT_BANKS) ────────────────────────────
+  // Fetched from stripe_bank_accounts (populated by the FC attach flow in
+  // migration 075). When the user picks one of these rows, the bank deposit
+  // handler skips the FC sheet entirely and uses the stored
+  // stripe_payment_method_id directly. route.params.linkedBankAccounts is
+  // still honored as an override so the screen stays previewable in
+  // isolation with a synthetic bank list.
+  const [savedBanks, setSavedBanks] = useState<SavedBank[]>([]);
+  const fetchSavedBanks = useCallback(async () => {
+    if (!user?.id) return;
+    const { data, error } = await supabase
+      .from("stripe_bank_accounts")
+      .select(
+        "id, stripe_payment_method_id, bank_name, last4, account_holder_name"
+      )
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.warn("[GoalAddMoneyScreen] saved banks fetch failed:", error.message);
+      setSavedBanks([]);
+      return;
+    }
+    setSavedBanks((data ?? []) as SavedBank[]);
+  }, [user?.id]);
+  useEffect(() => {
+    fetchSavedBanks();
+  }, [fetchSavedBanks]);
+
+  // Optional preview-mode override (e.g. snapshot test fixtures). Maps the
+  // legacy BankAccount shape onto our render shape so existing test data
+  // keeps working.
+  const previewBanks = route.params?.linkedBankAccounts ?? null;
+  const bankRowsForRender: SavedBank[] = previewBanks
+    ? previewBanks.map((b) => ({
+        id: b.id,
+        stripe_payment_method_id: "", // preview-only; can't actually charge
+        bank_name: b.name,
+        last4: b.last4 ?? null,
+        account_holder_name: null,
+      }))
+    : savedBanks;
 
   const [selectedSource, setSelectedSource] = useState<SourceKind | null>(null);
   const [amount, setAmount] = useState("");
-  const [selectedBankId, setSelectedBankId] = useState<string | null>(
-    linkedBankAccounts[0]?.id || null
-  );
+  const [selectedBankId, setSelectedBankId] = useState<string | null>(null);
   const [selectedCardId, setSelectedCardId] = useState<string | null>(
     savedCards[0]?.id || null
   );
@@ -340,49 +392,67 @@ export default function GoalAddMoneyScreen() {
 
     setLinkingBank(true);
     try {
-      // 1. Create the Financial Connections session (creates-or-gets the
-      //    Stripe customer behind the scenes; we don't need the customerId
-      //    on the client).
-      const { data: sessionData, error: sessionErr } =
-        await supabase.functions.invoke("stripe-create-bank-session", {
-          body: {},
-        });
-      if (sessionErr) {
-        throw new Error(sessionErr.message ?? "Failed to start bank linking");
-      }
-      const fcClientSecret = (sessionData as { clientSecret?: string })?.clientSecret;
-      const sessionId = (sessionData as { sessionId?: string })?.sessionId;
-      if (!fcClientSecret || !sessionId) {
-        throw new Error("Bank session response missing clientSecret/sessionId");
-      }
+      // ── Resolve a paymentMethodId for the ACH charge ─────────────────
+      // If the user picked one of their saved banks, use that PM directly
+      // and skip the FC sheet entirely — they've already linked this bank.
+      // Otherwise (no saved bank selected, or the user has zero saved
+      // banks) run the full FC link+attach flow inline.
+      const selectedSavedBank = bankRowsForRender.find(
+        (b) => b.id === selectedBankId && b.stripe_payment_method_id
+      );
 
-      // 2. Open the FC sheet. User picks a bank, authenticates, picks
-      //    accounts. Cancellation surfaces as { error: { code: 'Canceled' } }
-      //    — treat quietly (no scary alert).
-      const fcResult = await collectFinancialConnectionsAccounts(fcClientSecret);
-      if (fcResult.error) {
-        if (fcResult.error.code === "Canceled") return; // user backed out
-        throw new Error(fcResult.error.message ?? "Bank linking failed");
-      }
-      if (!fcResult.session) {
-        throw new Error("No bank account was linked");
-      }
+      let paymentMethodId: string | null =
+        selectedSavedBank?.stripe_payment_method_id ?? null;
 
-      // 3. Convert linked FC accounts → Stripe PaymentMethods on the server.
-      //    The function upserts into stripe_bank_accounts and returns the
-      //    PM id (first account if multiple were linked).
-      const { data: attachData, error: attachErr } =
-        await supabase.functions.invoke("stripe-attach-bank-payment-method", {
-          body: { sessionId },
-        });
-      if (attachErr) {
-        throw new Error(attachErr.message ?? "Failed to attach bank account");
-      }
-      const accounts =
-        (attachData as { accounts?: Array<{ paymentMethodId: string }> })?.accounts;
-      const paymentMethodId = accounts?.[0]?.paymentMethodId;
       if (!paymentMethodId) {
-        throw new Error("No bank payment method returned by server");
+        // 1. Create the Financial Connections session (creates-or-gets the
+        //    Stripe customer behind the scenes; we don't need the customerId
+        //    on the client).
+        const { data: sessionData, error: sessionErr } =
+          await supabase.functions.invoke("stripe-create-bank-session", {
+            body: {},
+          });
+        if (sessionErr) {
+          throw new Error(sessionErr.message ?? "Failed to start bank linking");
+        }
+        const fcClientSecret = (sessionData as { clientSecret?: string })?.clientSecret;
+        const sessionId = (sessionData as { sessionId?: string })?.sessionId;
+        if (!fcClientSecret || !sessionId) {
+          throw new Error("Bank session response missing clientSecret/sessionId");
+        }
+
+        // 2. Open the FC sheet. User picks a bank, authenticates, picks
+        //    accounts. Cancellation surfaces as { error: { code: 'Canceled' } }
+        //    — treat quietly (no scary alert).
+        const fcResult = await collectFinancialConnectionsAccounts(fcClientSecret);
+        if (fcResult.error) {
+          if (fcResult.error.code === "Canceled") return; // user backed out
+          throw new Error(fcResult.error.message ?? "Bank linking failed");
+        }
+        if (!fcResult.session) {
+          throw new Error("No bank account was linked");
+        }
+
+        // 3. Convert linked FC accounts → Stripe PaymentMethods on the server.
+        //    The function upserts into stripe_bank_accounts and returns the
+        //    PM id (first account if multiple were linked).
+        const { data: attachData, error: attachErr } =
+          await supabase.functions.invoke("stripe-attach-bank-payment-method", {
+            body: { sessionId },
+          });
+        if (attachErr) {
+          throw new Error(attachErr.message ?? "Failed to attach bank account");
+        }
+        const accounts =
+          (attachData as { accounts?: Array<{ paymentMethodId: string }> })?.accounts;
+        paymentMethodId = accounts?.[0]?.paymentMethodId ?? null;
+        if (!paymentMethodId) {
+          throw new Error("No bank payment method returned by server");
+        }
+
+        // Refresh the saved-banks list in the background so the next
+        // deposit can reuse this bank without re-running the FC sheet.
+        fetchSavedBanks();
       }
 
       // 4. Create + confirm the PaymentIntent on the server. No fee for
@@ -421,6 +491,71 @@ export default function GoalAddMoneyScreen() {
       Alert.alert(
         "Bank deposit failed",
         err?.message ?? "Please try again or pick a different payment method."
+      );
+    } finally {
+      setLinkingBank(false);
+    }
+  };
+
+  // ── Link a new bank for FUTURE use (no immediate charge) ─────────────────
+  // Powers the "+ Link a bank account" affordance. Runs the same FC link
+  // flow as handleBankDeposit's path-when-no-saved-bank, but stops before
+  // create-payment-intent so the user can link ahead of time and pick the
+  // bank later when they have an amount entered.
+  const linkBankOnly = async () => {
+    if (Platform.OS === "web") {
+      Alert.alert(
+        "Not available on web",
+        "Bank linking via Financial Connections is only available in the mobile app."
+      );
+      return;
+    }
+    setLinkingBank(true);
+    try {
+      const { data: sessionData, error: sessionErr } =
+        await supabase.functions.invoke("stripe-create-bank-session", {
+          body: {},
+        });
+      if (sessionErr) {
+        throw new Error(sessionErr.message ?? "Failed to start bank linking");
+      }
+      const fcClientSecret = (sessionData as { clientSecret?: string })?.clientSecret;
+      const sessionId = (sessionData as { sessionId?: string })?.sessionId;
+      if (!fcClientSecret || !sessionId) {
+        throw new Error("Bank session response missing clientSecret/sessionId");
+      }
+
+      const fcResult = await collectFinancialConnectionsAccounts(fcClientSecret);
+      if (fcResult.error) {
+        if (fcResult.error.code === "Canceled") return;
+        throw new Error(fcResult.error.message ?? "Bank linking failed");
+      }
+      if (!fcResult.session) {
+        throw new Error("No bank account was linked");
+      }
+
+      const { data: attachData, error: attachErr } =
+        await supabase.functions.invoke("stripe-attach-bank-payment-method", {
+          body: { sessionId },
+        });
+      if (attachErr) {
+        throw new Error(attachErr.message ?? "Failed to attach bank account");
+      }
+      const accounts =
+        (attachData as { accounts?: Array<{ paymentMethodId: string; bankName?: string | null; last4?: string | null }> })?.accounts;
+      if (!accounts || accounts.length === 0) {
+        throw new Error("Server returned no linked accounts");
+      }
+
+      await fetchSavedBanks();
+      Alert.alert(
+        "Bank linked",
+        `${accounts[0].bankName ?? "Your bank"} (••••${accounts[0].last4 ?? "????"}) is now available. Pick it as the funding source to deposit.`
+      );
+    } catch (err: any) {
+      Alert.alert(
+        "Bank linking failed",
+        err?.message ?? "Please try again."
       );
     } finally {
       setLinkingBank(false);
@@ -587,38 +722,52 @@ export default function GoalAddMoneyScreen() {
               <Radio selected={selectedSource === "wallet"} />
             </TouchableOpacity>
 
-            {/* Bank accounts */}
-            {linkedBankAccounts.map((bank) => {
-              const isSel = selectedSource === "bank" && selectedBankId === bank.id;
-              return (
-                <TouchableOpacity
-                  key={bank.id}
-                  onPress={() => {
-                    setSelectedSource("bank");
-                    setSelectedBankId(bank.id);
-                  }}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isSel }}
-                  style={[styles.sourceRow, isSel && styles.sourceRowSelected]}
-                >
-                  <View style={styles.sourceLeft}>
-                    <View
-                      style={[styles.sourceIconBox, { backgroundColor: "#1D4ED8" }]}
-                    >
-                      <Text style={styles.sourceIconEmoji}>🏦</Text>
+            {/* Saved bank accounts (real rows from stripe_bank_accounts;
+                preview-mode override still honored). Picking one here makes
+                handleBankDeposit skip the FC sheet on submit. When the list
+                is empty we render a friendly placeholder pointing at the
+                "+ Link a bank account" affordance below. */}
+            {bankRowsForRender.length === 0 ? (
+              <View style={[styles.sourceRow, { justifyContent: "center" }]}>
+                <Text style={styles.sourceMeta}>
+                  No banks linked yet — tap "+ Link a bank account" below.
+                </Text>
+              </View>
+            ) : (
+              bankRowsForRender.map((bank) => {
+                const isSel = selectedSource === "bank" && selectedBankId === bank.id;
+                const displayName = bank.bank_name ?? "Bank account";
+                const last4 = bank.last4 ?? "????";
+                return (
+                  <TouchableOpacity
+                    key={bank.id}
+                    onPress={() => {
+                      setSelectedSource("bank");
+                      setSelectedBankId(bank.id);
+                    }}
+                    activeOpacity={0.85}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSel }}
+                    style={[styles.sourceRow, isSel && styles.sourceRowSelected]}
+                  >
+                    <View style={styles.sourceLeft}>
+                      <View
+                        style={[styles.sourceIconBox, { backgroundColor: "#1D4ED8" }]}
+                      >
+                        <Text style={styles.sourceIconEmoji}>🏦</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.sourceName}>{displayName}</Text>
+                        <Text style={styles.sourceMeta}>
+                          ••••{last4} • bank account
+                        </Text>
+                      </View>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.sourceName}>{bank.name}</Text>
-                      <Text style={styles.sourceMeta}>
-                        ••••{bank.last4} • {bank.type}
-                      </Text>
-                    </View>
-                  </View>
-                  <Radio selected={isSel} />
-                </TouchableOpacity>
-              );
-            })}
+                    <Radio selected={isSel} />
+                  </TouchableOpacity>
+                );
+              })
+            )}
 
             {/* Debit cards */}
             {savedCards.map((card) => {
@@ -656,11 +805,15 @@ export default function GoalAddMoneyScreen() {
             {/* Add new */}
             <View style={styles.addNewRow}>
               <TouchableOpacity
-                onPress={() => comingSoon("Link Bank")}
+                onPress={linkBankOnly}
+                disabled={linkingBank}
                 accessibilityRole="button"
-                style={styles.addNewButton}
+                accessibilityState={{ disabled: linkingBank }}
+                style={[styles.addNewButton, linkingBank && { opacity: 0.5 }]}
               >
-                <Text style={styles.addNewText}>+ Link Bank</Text>
+                <Text style={styles.addNewText}>
+                  {linkingBank ? "Linking…" : "+ Link a bank account"}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => comingSoon("Add Card")}
