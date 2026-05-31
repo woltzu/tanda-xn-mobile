@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, radius, typography, spacing } from "../theme/tokens";
+import InstallmentScheduleView from "../components/InstallmentScheduleView";
 
 // Mock data
 const TRIP = {
@@ -188,6 +189,25 @@ const TripDetailScreen = () => {
             </View>
           ))}
         </View>
+
+        {/* Payment Schedule (renders nothing today because the mock TRIP has
+            no installmentSchedule field; future-proofs the screen so that
+            once it's wired to a real Trip via TripOrganizerEngine.getTrip,
+            the schedule appears automatically — see OrganizerTripDashboard
+            for the live pattern this matches). */}
+        {(TRIP as any).installmentSchedule && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Payment Schedule</Text>
+            </View>
+            <View style={styles.scheduleWrap}>
+              <InstallmentScheduleView
+                schedule={(TRIP as any).installmentSchedule}
+                showStatus={false}
+              />
+            </View>
+          </>
+        )}
 
         {/* Refund / Cancellation Policy Card */}
         <View style={styles.policyCard}>
@@ -442,6 +462,13 @@ const styles = StyleSheet.create({
     fontSize: typography.bodySmall,
     fontWeight: typography.semibold,
     color: colors.accentTeal,
+  },
+
+  // Payment Schedule (future-proof; renders only when TRIP gains an
+  // installmentSchedule field via real data wiring).
+  scheduleWrap: {
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
   },
 
   // Travelers
