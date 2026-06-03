@@ -23,6 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useCreateTripWizard } from '../hooks/useTripOrganizer';
 import { useFormKeyboardOffset } from '../hooks/useFormKeyboardOffset';
+import { useFormDraft } from '../hooks/useFormDraft';
 import {
   TripOrganizerEngine,
   type PaymentFrequency,
@@ -78,6 +79,26 @@ interface RequirementItem {
   label: string;
   enabled: boolean;
 }
+
+// ── Local draft persistence ──────────────────────────────────────────────────
+// Shadow copy of the wizard form state, kept in AsyncStorage so a user who
+// quits mid-flow without tapping "Save Draft" (which writes a Trip row with
+// status='draft' to the DB) can resume their entered values on a later
+// visit. The two concepts coexist:
+//   - Server-side "Save Draft" (existing): the wizard's saveDraft() function
+//     calls TripOrganizerEngine.updateTrip / wizard.saveDraft. This is what
+//     ships when the user explicitly taps the Save Draft button.
+//   - Client-side "form draft" (this addition): debounced AsyncStorage write
+//     on every field change. Restored opt-in via banner on Step 0.
+//
+// The draft shape mirrors TripFormData 1:1 + the active step. We persist
+// currentStep too so Restore returns the user to where they were, rather
+// than inferring (the spec asked for inference; saving currentStep is
+// simpler and just as correct since the screen owns the step counter).
+interface TripDraft extends TripFormData {
+  currentStep: number;
+}
+const TRIP_DRAFT_KEY = 'trip-wizard';
 
 const DEFAULT_REQUIREMENTS: RequirementItem[] = [
   { id: 'passport', label: 'Passport', enabled: true },
@@ -903,6 +924,60 @@ const CreateTripWizardScreen: React.FC = () => {
     setFormData((prev) => ({ ...prev, ...partial }));
   };
 
+  // ── Local form draft persistence ────────────────────────────────────────
+  // Per-trip key (edit mode → `trip-wizard-${editTripId}`; create mode →
+  // `trip-wizard-new`). Aliased destructure to avoid colliding with the
+  // existing local `saveDraft` function below (which writes to the DB).
+  const draftKey = `${TRIP_DRAFT_KEY}-${editTripId ?? 'new'}`;
+  const {
+    saveDraft: persistFormState,
+    restoreDraft: getStoredFormState,
+    clearDraft: clearStoredFormState,
+    hasDraft: hasStoredFormState,
+  } = useFormDraft<TripDraft>(draftKey, {
+    ...formData,
+    currentStep: 0,
+  });
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  // CRITICAL: gate autosave to prevent the edit-mode fetch hydration from
+  // clobbering a pre-existing draft. Without this, the sequence
+  //   (1) mount with prior draft in AsyncStorage,
+  //   (2) fetch completes → setFormData(fetched),
+  //   (3) autosave effect fires with fetched values,
+  // overwrites the user's unsaved draft with the freshly fetched DB row
+  // BEFORE they can click Restore. The gate flips on after the user has
+  // dismissed the banner (Restore or Discard) OR after we've confirmed no
+  // draft exists.
+  const canAutoSave = !hydrating && (bannerDismissed || !hasStoredFormState);
+
+  // Debounced save on every change, once the gate is open.
+  useEffect(() => {
+    if (!canAutoSave) return;
+    persistFormState({ ...formData, currentStep });
+  }, [formData, currentStep, canAutoSave, persistFormState]);
+
+  const handleRestoreDraft = () => {
+    const d = getStoredFormState();
+    if (d) {
+      // Drop currentStep from the form spread so we don't accidentally
+      // set it as a form field; it's restored via setCurrentStep below.
+      const { currentStep: savedStep, ...formFields } = d;
+      setFormData(formFields as TripFormData);
+      // Clamp restored step to a valid range in case the wizard layout
+      // ever shrinks. Min 0, max TOTAL_STEPS - 1.
+      const clampedStep = Math.max(0, Math.min(TOTAL_STEPS - 1, savedStep ?? 0));
+      setCurrentStep(clampedStep);
+    }
+    setBannerDismissed(true);
+  };
+
+  const handleDiscardDraft = () => {
+    clearStoredFormState();
+    setBannerDismissed(true);
+  };
+  // ────────────────────────────────────────────────────────────────────────
+
   // ── Cover photo picker ─────────────────────────────────────────────────
   const [uploadingCover, setUploadingCover] = useState(false);
 
@@ -1140,11 +1215,16 @@ const CreateTripWizardScreen: React.FC = () => {
         console.log('[CreateTripWizard] edit-mode saveDraft → updateTrip start');
         await TripOrganizerEngine.updateTrip(editTripId, tripData);
         console.log('[CreateTripWizard] edit-mode saveDraft → updateTrip done');
+        // Edits are now persisted server-side — wipe the AsyncStorage shadow.
+        clearStoredFormState();
         Alert.alert('Changes saved', 'Your trip has been updated.');
         return;
       }
 
       await wizard?.saveDraft?.(tripData);
+      // Trip now exists server-side as a draft — the user can resume from
+      // the dashboard via the real DB row, no need to keep the local shadow.
+      clearStoredFormState();
       Alert.alert('Draft saved', 'Your trip has been saved as a draft. You can come back and edit it anytime.');
     } catch (err: any) {
       console.error('[CreateTripWizard] Save draft error:', err);
@@ -1170,6 +1250,8 @@ const CreateTripWizardScreen: React.FC = () => {
         console.log('[CreateTripWizard] edit-mode publish → updateTrip start', tripData);
         const updated = await TripOrganizerEngine.updateTrip(editTripId, tripData);
         console.log('[CreateTripWizard] edit-mode publish → updateTrip done', updated?.id);
+        // Trip is published — wipe the AsyncStorage shadow.
+        clearStoredFormState();
         Alert.alert('Changes saved', 'Your trip has been updated.');
         navigation.goBack();
         return;
@@ -1188,6 +1270,9 @@ const CreateTripWizardScreen: React.FC = () => {
       }
 
       const resolvedTripId = tripId ?? 'new';
+
+      // Trip is published — wipe the AsyncStorage shadow.
+      clearStoredFormState();
 
       navigation.navigate('TripPublishSuccess' as any, {
         tripName: formData.trip_name,
@@ -1261,6 +1346,35 @@ const CreateTripWizardScreen: React.FC = () => {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
         >
+          {/* Local-draft restore banner. Shown only on Step 0 when a
+              persisted form-state shadow exists and the user hasn't
+              dismissed it via Restore/Discard. Distinct from the existing
+              "Loading trip…" banner above (which is edit-mode fetch
+              hydration). */}
+          {currentStep === 0 && hasStoredFormState && !bannerDismissed && (
+            <View style={styles.draftBanner}>
+              <Text style={styles.draftBannerText}>
+                You have an unfinished trip. Pick up where you left off?
+              </Text>
+              <View style={styles.draftBannerActions}>
+                <TouchableOpacity
+                  style={styles.draftBannerButton}
+                  onPress={handleRestoreDraft}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.draftBannerButtonText}>Restore</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.draftBannerButton}
+                  onPress={handleDiscardDraft}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.draftBannerButtonText}>Discard</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           {renderStep()}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -1776,6 +1890,31 @@ const styles = StyleSheet.create({
     color: TEAL,
     fontWeight: typography.semibold,
   },
+  // --- Local-draft restore banner (mirrors GoalCreateScreen) ---
+  draftBanner: {
+    backgroundColor: '#FEF3C7',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  draftBannerText: {
+    flex: 1,
+    color: '#92400E',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  draftBannerActions: { flexDirection: 'row', alignItems: 'center' },
+  draftBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#FFFFFF',
+    marginLeft: 8,
+  },
+  draftBannerButtonText: { color: '#D97706', fontWeight: '600', fontSize: 13 },
   // --- Cover photo picker ---
   coverFieldContainer: {
     marginTop: spacing.lg,
