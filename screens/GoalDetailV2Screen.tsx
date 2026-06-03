@@ -389,20 +389,6 @@ export default function GoalDetailV2Screen() {
     }, [goalId, loadGoal])
   );
 
-  // Milestones aren't tracked in the DB; derive `achieved` from current
-  // progress. Falls back to passed/mocks for the legacy debug path.
-  const milestones = useMemo<Milestone[]>(() => {
-    if (!goal) {
-      return (
-        (route.params?.milestones as Milestone[] | undefined) ?? DEFAULT_MILESTONES
-      );
-    }
-    return DEFAULT_MILESTONES.map((m) => ({
-      ...m,
-      achieved: goal.progressPercent >= m.percent,
-    }));
-  }, [goal, route.params?.milestones]);
-
   // Recent activity: prefer fetched transactions; fall back to passed params
   // / mock for the legacy debug path.
   const recentActivity = useMemo<Activity[]>(() => {
