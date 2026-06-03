@@ -31,7 +31,7 @@
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -49,6 +49,7 @@ import { useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useGoalActions } from "../hooks/useGoalActions";
+import { supabase } from "../lib/supabase";
 import type {
   Goal as RealGoal,
   GoalMilestone as RealMilestone,
@@ -383,9 +384,45 @@ export default function GoalDetailV2Screen() {
 
   // Refetch whenever the screen comes back into focus — covers returning
   // from add-money / withdraw / edit / link-circle.
+  //
+  // Compound interest is invoked BEFORE loadGoal so the fetched balance
+  // reflects today's accrual. The RPC short-circuits cheaply with
+  // reason='no_days_elapsed' when called twice in the same calendar day,
+  // so wiring it to every focus event is safe — one extra round-trip
+  // when nothing's changed. The compoundingThisFocus ref guards against
+  // React StrictMode's intentional double-invocation of effects in dev
+  // (without it we'd issue two compound RPCs per focus in development).
+  const compoundingThisFocus = useRef(false);
   useFocusEffect(
     useCallback(() => {
-      if (goalId) loadGoal();
+      if (!goalId) return;
+      let cancelled = false;
+      const compoundThenLoad = async () => {
+        if (compoundingThisFocus.current) {
+          // Second StrictMode invocation in dev — skip compound, still
+          // refresh the goal in case state changed elsewhere.
+          if (!cancelled) loadGoal();
+          return;
+        }
+        compoundingThisFocus.current = true;
+        try {
+          await supabase.rpc("compound_interest_for_goal", {
+            p_goal_id: goalId,
+          });
+        } catch (e) {
+          // Non-fatal — the screen still shows the (pre-compound) balance.
+          // Most likely cause for a real error: migration 081 hasn't been
+          // applied yet on this environment.
+          console.warn("[GoalDetailV2] compound_interest_for_goal failed", e);
+        }
+        if (!cancelled) loadGoal();
+      };
+      compoundThenLoad();
+      return () => {
+        cancelled = true;
+        // Reset on blur so the next focus compounds again.
+        compoundingThisFocus.current = false;
+      };
     }, [goalId, loadGoal])
   );
 
