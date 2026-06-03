@@ -17,7 +17,7 @@
 //   - "Add Tax ID Later"    → TaxIDEntry
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React from "react";
+import React, { useEffect } from "react";
 import {
   View,
   Text,
@@ -32,6 +32,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useAuth } from "../context/AuthContext";
+import { kycDraft } from "../lib/kycDraft";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -56,6 +57,14 @@ export default function Tier2SuccessScreen() {
   const navigation = useTypedNavigation();
   const { user } = useAuth();
   const userName = user?.name ?? "there";
+
+  // Terminal screen for the international + ID-document KYC path. Wipe
+  // the resume draft so a future re-entry to the KYC flow starts clean.
+  // (The SSN/ITIN path's terminal — InterestUnlockedSuccessScreen —
+  // performs the same wipe for its branch.)
+  useEffect(() => {
+    kycDraft.clear();
+  }, []);
 
   const goToDashboard = () => navigation.navigate(Routes.Dashboard);
   const goToTaxIdEntry = () => navigation.navigate(Routes.TaxIDEntry);

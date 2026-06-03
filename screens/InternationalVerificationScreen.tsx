@@ -15,7 +15,7 @@
 // downstream knows what was submitted.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -34,6 +34,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import { kycDraft } from "../lib/kycDraft";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -81,10 +82,40 @@ export default function InternationalVerificationScreen() {
   const [taxId, setTaxId] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  // ── KYC draft hydrate ────────────────────────────────────────────────────
+  // Restore country / idType / hasTaxId from the persisted draft on mount.
+  // The international tax-ID digits are NEVER persisted (see lib/kycDraft.ts
+  // header) so the user always re-keys those — even on Restore from the
+  // welcome banner.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const d = await kycDraft.get();
+      if (cancelled || !d) return;
+      if (d.country) setCountry(d.country as Country);
+      if (d.internationalIdType) setIdType(d.internationalIdType as IdType);
+      if (typeof d.hasTaxId === "boolean") setHasTaxId(d.hasTaxId);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  // ──────────────────────────────────────────────────────────────────────────
+
   const canContinue = !!country && !!idType && hasTaxId !== null;
 
   const handleContinue = () => {
     if (!canContinue) return;
+    // Persist non-sensitive fields to the KYC draft so a user who quits
+    // mid-flow (between this screen and Tier2Success) can resume with
+    // country / ID type / hasTaxId pre-filled. We intentionally do NOT
+    // persist taxId — see lib/kycDraft.ts header. clear() on
+    // Tier2SuccessScreen wipes this on a real terminal success.
+    kycDraft.merge({
+      country,
+      internationalIdType: idType,
+      hasTaxId,
+    });
     // Phase KYC-2 will read the form state from a KYC context;
     // for now we just navigate forward.
     navigation.navigate(Routes.IDVerificationStart);

@@ -18,7 +18,7 @@
 //
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -31,6 +31,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import { kycDraft, type KycDraft } from "../lib/kycDraft";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -53,6 +54,63 @@ const TRUST_BADGES = [
 
 export default function OnboardingWelcomeScreen() {
   const navigation = useTypedNavigation();
+
+  // ── KYC draft restore banner ─────────────────────────────────────────────
+  // Read once on mount. If a draft exists, surface the yellow banner. The
+  // banner is dismissed (locally) on Restore or Discard; data side-effects
+  // live in the handlers below. The draft itself is the single source of
+  // truth — each input screen also hydrates its fields from kycDraft.get()
+  // on mount, so Restore here just navigates to the right screen and lets
+  // it pull its slice of the draft.
+  const [draft, setDraft] = useState<KycDraft | null>(null);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const hasIt = await kycDraft.has();
+      if (cancelled) return;
+      if (hasIt) {
+        const d = await kycDraft.get();
+        if (cancelled) return;
+        setDraft(d);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Resume target inferred from which fields are populated. We do NOT
+  // store a step counter — that would break silently if screen order
+  // ever changes. The presence of `country` (international path) or
+  // `taxIdType` (SSN/ITIN path) tells us which path the user was on.
+  const handleRestoreDraft = () => {
+    setBannerDismissed(true);
+    if (!draft) return;
+    if (draft.country != null) {
+      navigation.navigate(Routes.InternationalVerification);
+    } else if (
+      draft.taxIdType ||
+      draft.legalName ||
+      draft.dateOfBirth
+    ) {
+      navigation.navigate(Routes.TaxIDEntry);
+    } else {
+      // Defensive: kycDraft.has() returned true but no recognized fields
+      // are populated. Send the user through the normal entry point.
+      navigation.navigate(Routes.VerificationOptions);
+    }
+  };
+
+  const handleDiscardDraft = () => {
+    kycDraft.clear();
+    setBannerDismissed(true);
+    setDraft(null);
+  };
+
+  const showBanner = draft != null && !bannerDismissed;
+  // ──────────────────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -96,6 +154,31 @@ export default function OnboardingWelcomeScreen() {
 
         {/* Highlights card */}
         <View style={styles.contentWrap}>
+          {/* KYC draft restore banner — shown only when a draft exists. */}
+          {showBanner && (
+            <View style={styles.draftBanner}>
+              <Text style={styles.draftBannerText}>
+                You have an unfinished verification. Pick up where you left off?
+              </Text>
+              <View style={styles.draftBannerActions}>
+                <TouchableOpacity
+                  style={styles.draftBannerButton}
+                  onPress={handleRestoreDraft}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.draftBannerButtonText}>Restore</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.draftBannerButton}
+                  onPress={handleDiscardDraft}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.draftBannerButtonText}>Discard</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
           <View style={styles.highlightsCard}>
             {HIGHLIGHTS.map((item, idx) => (
               <View
@@ -216,6 +299,32 @@ const styles = StyleSheet.create({
   flag: { fontSize: 24, opacity: 0.9 },
 
   contentWrap: { paddingHorizontal: 20, marginTop: -40 },
+
+  // Draft restore banner — mirrors GoalCreateScreen for visual consistency.
+  draftBanner: {
+    backgroundColor: "#FEF3C7",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  draftBannerText: {
+    flex: 1,
+    color: "#92400E",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  draftBannerActions: { flexDirection: "row", alignItems: "center" },
+  draftBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
+    marginLeft: 8,
+  },
+  draftBannerButtonText: { color: "#D97706", fontWeight: "600", fontSize: 13 },
 
   highlightsCard: {
     backgroundColor: "#FFFFFF",

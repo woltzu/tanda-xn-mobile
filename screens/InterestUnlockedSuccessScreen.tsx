@@ -30,7 +30,7 @@
 // sees concretely what changed.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React from "react";
+import React, { useEffect } from "react";
 import {
   View,
   Text,
@@ -45,6 +45,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import { kycDraft } from "../lib/kycDraft";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -114,6 +115,14 @@ export default function InterestUnlockedSuccessScreen() {
   const isFullAccess = route.params?.isFullAccess ?? false;
   const amountLabel = formatMoney(unlockedAmount);
   const changes = buildChanges(isFullAccess);
+
+  // Terminal screen for the SSN/ITIN KYC path. Wipe the resume draft so a
+  // future re-entry to the KYC flow (e.g. a second account, or a returning
+  // user testing) starts clean. (The international path's terminal —
+  // Tier2SuccessScreen — performs the same wipe for its branch.)
+  useEffect(() => {
+    kycDraft.clear();
+  }, []);
 
   const goToDashboard = () => navigation.navigate(Routes.Dashboard);
   const goToTransfer = () => navigation.navigate(Routes.Withdraw);

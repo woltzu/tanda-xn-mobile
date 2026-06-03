@@ -28,7 +28,7 @@
 // to the verification edge function.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -44,6 +44,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { kycDraft } from "../lib/kycDraft";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -93,6 +94,25 @@ export default function TaxIDEntryScreen() {
   const [taxId, setTaxId] = useState("");
   const [confirmTaxId, setConfirmTaxId] = useState("");
 
+  // ── KYC draft hydrate ────────────────────────────────────────────────────
+  // Restore non-sensitive fields from the persisted draft on mount. The
+  // tax ID digits are NEVER persisted (see lib/kycDraft.ts header) so the
+  // user always re-keys those — even on Restore from the welcome banner.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const d = await kycDraft.get();
+      if (cancelled || !d) return;
+      if (d.taxIdType) setIdType(d.taxIdType as IdType);
+      if (d.legalName) setLegalName(d.legalName);
+      if (d.dateOfBirth) setDateOfBirth(d.dateOfBirth);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  // ──────────────────────────────────────────────────────────────────────────
+
   const rawTaxId = taxId.replace(/\D/g, "");
   const rawConfirm = confirmTaxId.replace(/\D/g, "");
   const idsMatch = rawTaxId === rawConfirm;
@@ -105,6 +125,17 @@ export default function TaxIDEntryScreen() {
 
   const handleContinue = () => {
     if (!canContinue) return;
+    // Persist non-sensitive fields to the KYC draft so a user who quits
+    // the InterestUnlockedSuccess screen and comes back later can resume
+    // with their name/DOB pre-filled. We intentionally do NOT persist
+    // taxId / confirmTaxId — see lib/kycDraft.ts header for the privacy
+    // posture. clear() on InterestUnlockedSuccess wipes this on a real
+    // terminal success.
+    kycDraft.merge({
+      taxIdType: idType as "ssn" | "itin",
+      legalName,
+      dateOfBirth,
+    });
     // Interest-First flow (KYC-2.2): a successful tax-ID submission
     // is the final step in the SSN/ITIN paths. Land the user on
     // InterestUnlockedSuccess with the same amount they saw on
