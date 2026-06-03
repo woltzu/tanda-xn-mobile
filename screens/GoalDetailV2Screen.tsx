@@ -389,6 +389,24 @@ export default function GoalDetailV2Screen() {
     }, [goalId, loadGoal])
   );
 
+  // Adapter from DB-shape RealMilestone[] (id, goalId, milestonePercent,
+  // reachedAt, celebrated) to the chip-row's display shape (percent,
+  // achieved, achievedDate). The DB only writes a row when a threshold
+  // has been crossed, so any threshold present in `milestones` is
+  // achieved; the rest are still locked. The full GoalMilestones screen
+  // does its own mapping via buildMilestonesFromReal — we pass `milestones`
+  // unchanged via route params on navigation (see handleViewMilestones).
+  const displayMilestones = useMemo(() => {
+    const thresholds = [10, 25, 50, 75, 90, 100];
+    const achievedSet = new Set(milestones.map((m) => m.milestonePercent));
+    return thresholds.map((percent) => ({
+      percent,
+      achieved: achievedSet.has(percent),
+      achievedDate: milestones.find((m) => m.milestonePercent === percent)
+        ?.reachedAt,
+    }));
+  }, [milestones]);
+
   // Recent activity: prefer fetched transactions; fall back to passed params
   // / mock for the legacy debug path.
   const recentActivity = useMemo<Activity[]>(() => {
@@ -771,7 +789,7 @@ export default function GoalDetailV2Screen() {
             </View>
 
             <View style={styles.milestoneRow}>
-              {milestones.map((m, idx) => (
+              {displayMilestones.map((m, idx) => (
                 <View key={idx} style={styles.milestoneItem}>
                   <View
                     style={[
@@ -788,13 +806,13 @@ export default function GoalDetailV2Screen() {
                       {m.achieved ? "✓" : `${m.percent}%`}
                     </Text>
                   </View>
-                  {idx < milestones.length - 1 && (
+                  {idx < displayMilestones.length - 1 && (
                     <View
                       style={[
                         styles.milestoneConnector,
                         {
                           backgroundColor:
-                            m.achieved && milestones[idx + 1]?.achieved
+                            m.achieved && displayMilestones[idx + 1]?.achieved
                               ? TEAL
                               : BORDER,
                         },
@@ -806,8 +824,8 @@ export default function GoalDetailV2Screen() {
             </View>
 
             <Text style={styles.milestoneSummary}>
-              {milestones.filter((m) => m.achieved).length} of {milestones.length}{" "}
-              milestones reached
+              {displayMilestones.filter((m) => m.achieved).length} of{" "}
+              {displayMilestones.length} milestones reached
             </Text>
           </TouchableOpacity>
 
