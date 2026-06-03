@@ -25,7 +25,7 @@
 //
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -43,6 +43,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { useFormDraft } from "../hooks/useFormDraft";
 import { Routes } from "../lib/routes";
 import { useOwnerDashboard, useMarketplaceActions } from "../hooks/useMarketplace";
 import type { StoreCategory } from "../services/MarketplaceEngine";
@@ -85,9 +86,47 @@ export default function EditStoreScreen() {
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
+  // ── Auto-save draft ──────────────────────────────────────────────────────
+  // Per-store key so two stores edited from the same device don't share a
+  // draft. coverPhotoUri intentionally omitted — the screen has no image-
+  // picker state today, so there's nothing to persist.
+  type EditStoreDraft = {
+    businessName: string;
+    description: string;
+    category: StoreCategory;
+  };
+  const { saveDraft, restoreDraft, clearDraft } = useFormDraft<EditStoreDraft>(
+    `edit-store-${storeId}`,
+    {
+      businessName: "",
+      description: "",
+      category: "other",
+    }
+  );
+  const isFirstDraftRender = useRef(true);
+  // One-shot restore. WITHOUT this guard, the restore effect would re-fire
+  // every time saveDraft updates the hook's internal draft state (since
+  // restoreDraft's callback identity depends on the loaded draft). That
+  // would clobber live keystrokes mid-typing.
+  const hasRestoredDraft = useRef(false);
+  useEffect(() => {
+    if (hasRestoredDraft.current) return;
+    const d = restoreDraft();
+    if (d) {
+      setBusinessName(d.businessName);
+      setDescription(d.description);
+      setCategory(d.category);
+      // Mark hydrated so the existing store-fetch hydration below skips
+      // — draft (user's most recent edits) wins over fetched DB values.
+      setHydrated(true);
+      hasRestoredDraft.current = true;
+    }
+  }, [restoreDraft]);
+
   // Hydrate form state once the store data lands. The hook re-renders when
   // dashboard changes; we only seed on first arrival so user edits aren't
-  // clobbered by a stale background re-fetch.
+  // clobbered by a stale background re-fetch. If a draft was restored
+  // above, this is already a no-op (hydrated is already true).
   useEffect(() => {
     if (store && !hydrated) {
       setBusinessName(store.businessName ?? "");
@@ -96,6 +135,21 @@ export default function EditStoreScreen() {
       setHydrated(true);
     }
   }, [store, hydrated]);
+
+  // Debounced save on every change. Skip first render so default values
+  // don't clobber a freshly loaded draft before restore fires.
+  useEffect(() => {
+    if (isFirstDraftRender.current) {
+      isFirstDraftRender.current = false;
+      return;
+    }
+    saveDraft({
+      businessName,
+      description,
+      category,
+    });
+  }, [businessName, description, category, saveDraft]);
+  // ──────────────────────────────────────────────────────────────────────────
 
   // Computed: has the form been dirtied vs the loaded store?
   const isDirty = useMemo(() => {
@@ -124,6 +178,10 @@ export default function EditStoreScreen() {
         description: description.trim() || undefined,
         category,
       });
+      // Clear draft now that the update is persisted server-side.
+      // Cancel intentionally does NOT clear — the user may want to
+      // resume editing later from the same partial state.
+      clearDraft();
       Alert.alert("Store updated", "Your changes are live.", [
         { text: "OK", onPress: () => navigation.goBack() },
       ]);
