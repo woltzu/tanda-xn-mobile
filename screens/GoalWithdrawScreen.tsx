@@ -125,6 +125,10 @@ const DEFAULT_GOAL: Goal = {
 
 const DEFAULT_DESTINATIONS: Destination[] = [
   { id: "wallet", name: "TandaXn Wallet", type: "wallet", icon: "💵" },
+  // Placeholder generic-bank tile. Until the Stripe payout flow ships
+  // (migrations 079/080 + a future create-payout Edge Function), tapping
+  // this surfaces a "coming soon" Alert from handleConfirm.
+  { id: "bank-generic", name: "Bank Account", type: "bank", icon: "🏦" },
   { id: "b1", name: "Chase Checking", last4: "4532", type: "bank", icon: "🏦" },
 ];
 
@@ -235,9 +239,15 @@ export default function GoalWithdrawScreen() {
   };
 
   const handleConfirm = async () => {
-    // Bank destination still pending ACH wiring.
+    // Bank destination still pending Stripe payout wiring. Migrations 079
+    // (stripe_payout_id column) and 080 (debit_goal_external RPC) have
+    // opened the schema slot and the service-role-only primitive; the
+    // payout Edge Function + Stripe Connect wiring lands in a later stage.
     if (destination !== "wallet") {
-      Alert.alert("Bank withdrawal", "This will be available soon.");
+      Alert.alert(
+        "Bank withdrawal",
+        "Bank withdrawals are coming soon. You will need to link a Stripe account to withdraw to a bank."
+      );
       return;
     }
 
