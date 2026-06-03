@@ -23,7 +23,7 @@
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -41,6 +41,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useGoalActions } from "../hooks/useGoalActions";
+import { useFormDraft } from "../hooks/useFormDraft";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -156,6 +157,73 @@ export default function GoalWithdrawScreen() {
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [acknowledgedPenalty, setAcknowledgedPenalty] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // ── Auto-save draft ──────────────────────────────────────────────────────
+  // Per-goal key so two different goals don't share a draft. Confirmation
+  // and submitting states are deliberately NOT persisted — they're
+  // transient UI state, not form input.
+  type GoalWithdrawDraft = {
+    amount: string;
+    destination: string;
+    selectedReason: string | null;
+    otherReasonText: string;
+    acknowledgedPenalty: boolean;
+  };
+  const { saveDraft, restoreDraft, clearDraft } = useFormDraft<GoalWithdrawDraft>(
+    `goal-withdraw-${goalId}`,
+    {
+      amount: "",
+      destination: "wallet",
+      selectedReason: null,
+      otherReasonText: "",
+      acknowledgedPenalty: false,
+    }
+  );
+  const isFirstDraftRender = useRef(true);
+  // One-shot restore. WITHOUT this guard, the restore effect would re-fire
+  // every time saveDraft updates the hook's internal draft state (since
+  // restoreDraft's callback identity depends on the loaded draft). That
+  // would clobber live keystrokes mid-typing — every save would echo
+  // back the just-saved snapshot over the user's input. With the ref, we
+  // pull from AsyncStorage exactly once and then let React state own the
+  // form for the rest of the session.
+  const hasRestoredDraft = useRef(false);
+  useEffect(() => {
+    if (hasRestoredDraft.current) return;
+    const d = restoreDraft();
+    if (d) {
+      setAmount(d.amount);
+      setDestination(d.destination);
+      setSelectedReason(d.selectedReason);
+      setOtherReasonText(d.otherReasonText);
+      setAcknowledgedPenalty(d.acknowledgedPenalty);
+      hasRestoredDraft.current = true;
+    }
+  }, [restoreDraft]);
+
+  // Debounced save on every change. Skip first render so default values
+  // don't clobber a freshly loaded draft before restore fires.
+  useEffect(() => {
+    if (isFirstDraftRender.current) {
+      isFirstDraftRender.current = false;
+      return;
+    }
+    saveDraft({
+      amount,
+      destination,
+      selectedReason,
+      otherReasonText,
+      acknowledgedPenalty,
+    });
+  }, [
+    amount,
+    destination,
+    selectedReason,
+    otherReasonText,
+    acknowledgedPenalty,
+    saveDraft,
+  ]);
+  // ──────────────────────────────────────────────────────────────────────────
 
   // Withdrawable = current_balance only. accrued_interest_cents is tracked
   // on the goal but isn't rolled into the spendable balance until an
@@ -289,6 +357,8 @@ export default function GoalWithdrawScreen() {
 
     // GoalDetailV2 refetches on focus — no Alert needed; the user sees
     // the lower balance the moment they're back on the detail screen.
+    // Wipe the draft now so a fresh entry starts clean next time.
+    clearDraft();
     navigation.goBack();
   };
 

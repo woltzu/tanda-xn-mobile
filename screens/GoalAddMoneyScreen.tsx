@@ -26,7 +26,7 @@
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -44,6 +44,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { useFormDraft } from "../hooks/useFormDraft";
 import { useGoalActions } from "../hooks/useGoalActions";
 import { usePayment } from "../context/PaymentContext";
 import { useAuth } from "../context/AuthContext";
@@ -258,6 +259,62 @@ export default function GoalAddMoneyScreen() {
   // needs to disable interactions throughout.
   const [linkingBank, setLinkingBank] = useState(false);
 
+  // ── Auto-save draft ──────────────────────────────────────────────────────
+  // Per-goal key so two different goals don't share a draft. With the
+  // legacy mock fallback goalId='g1' the key becomes "goal-add-money-g1"
+  // — harmless, just sits unused in storage if no real edits are made.
+  type GoalAddMoneyDraft = {
+    amount: string;
+    selectedSource: SourceKind | null;
+    selectedBankId: string | null;
+    selectedCardId: string | null;
+  };
+  const { saveDraft, restoreDraft, clearDraft } = useFormDraft<GoalAddMoneyDraft>(
+    `goal-add-money-${goalId}`,
+    {
+      amount: "",
+      selectedSource: null,
+      selectedBankId: null,
+      selectedCardId: savedCards[0]?.id || null,
+    }
+  );
+  const isFirstDraftRender = useRef(true);
+  // One-shot restore. WITHOUT this guard, the restore effect would re-fire
+  // every time saveDraft updates the hook's internal draft state (since
+  // restoreDraft's callback identity depends on the loaded draft). That
+  // would clobber live keystrokes mid-typing — every save would echo
+  // back the just-saved snapshot over the user's input. With the ref, we
+  // pull from AsyncStorage exactly once and then let React state own the
+  // form for the rest of the session.
+  const hasRestoredDraft = useRef(false);
+  useEffect(() => {
+    if (hasRestoredDraft.current) return;
+    const d = restoreDraft();
+    if (d) {
+      setAmount(d.amount);
+      if (d.selectedSource) setSelectedSource(d.selectedSource);
+      if (d.selectedBankId) setSelectedBankId(d.selectedBankId);
+      if (d.selectedCardId) setSelectedCardId(d.selectedCardId);
+      hasRestoredDraft.current = true;
+    }
+  }, [restoreDraft]);
+
+  // Debounced save on every change. Skip first render so default values
+  // don't clobber a freshly loaded draft before restore fires.
+  useEffect(() => {
+    if (isFirstDraftRender.current) {
+      isFirstDraftRender.current = false;
+      return;
+    }
+    saveDraft({
+      amount,
+      selectedSource,
+      selectedBankId,
+      selectedCardId,
+    });
+  }, [amount, selectedSource, selectedBankId, selectedCardId, saveDraft]);
+  // ──────────────────────────────────────────────────────────────────────────
+
   const remainingToTarget = goal.target - goal.balance;
   const numAmount = Number(amount) || 0;
   const canSubmit =
@@ -339,6 +396,8 @@ export default function GoalAddMoneyScreen() {
       }
 
       // 3. Charge succeeded. Webhook is in flight; credit lands async.
+      // Wipe the draft now so a fresh entry starts clean next time.
+      clearDraft();
       Alert.alert(
         "Deposit on its way",
         "Your card was charged. The goal balance will update in a moment.",
@@ -482,6 +541,8 @@ export default function GoalAddMoneyScreen() {
       // ACH takes days to settle; webhook is what credits the goal. Set
       // expectations clearly so the user doesn't refresh hoping for an
       // instant balance change.
+      // Wipe the draft now so a fresh entry starts clean next time.
+      clearDraft();
       Alert.alert(
         "Bank transfer initiated",
         "Your deposit will appear in this goal in 3-5 business days once your bank confirms the transfer.",
@@ -596,6 +657,7 @@ export default function GoalAddMoneyScreen() {
 
     // GoalDetailV2 refetches on focus, so a bare goBack() is enough —
     // the new balance will appear when the user lands back on detail.
+    clearDraft();
     navigation.goBack();
   };
 
