@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, Alert, KeyboardAvoidingView, Platform, Switch,
@@ -7,6 +7,23 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useMarketplaceActions, type StoreCategory } from "../hooks/useMarketplace";
+import { useFormDraft } from "../hooks/useFormDraft";
+
+// Shape persisted by useFormDraft. `step` is included so a user returning
+// to a half-finished application resumes on the wizard step they left.
+type StoreApplicationDraft = {
+  step: number;
+  category: StoreCategory | null;
+  businessName: string;
+  ownerName: string;
+  phone: string;
+  city: string;
+  state: string;
+  description: string;
+  memberDiscount: boolean;
+  discountPct: string;
+  exclusiveOffer: string;
+};
 
 const CATEGORIES: { key: StoreCategory; icon: string; color: string; label: string }[] = [
   { key: "food", icon: "restaurant", color: "#F59E0B", label: "Food & Catering" },
@@ -42,6 +59,83 @@ export default function StoreApplicationScreen() {
   const [discountPct, setDiscountPct] = useState("10");
   const [exclusiveOffer, setExclusiveOffer] = useState("");
 
+  // ── Auto-save draft ──────────────────────────────────────────────────────
+  const { hasDraft, saveDraft, restoreDraft, clearDraft } =
+    useFormDraft<StoreApplicationDraft>("store_application", {
+      step: 0,
+      category: null,
+      businessName: "",
+      ownerName: "",
+      phone: "",
+      city: "",
+      state: "",
+      description: "",
+      memberDiscount: true,
+      discountPct: "10",
+      exclusiveOffer: "",
+    });
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const isFirstDraftRender = useRef(true);
+
+  // Persist edits (debounced). Skip the very first run so the initial/default
+  // values don't clobber a freshly loaded draft before the user can restore.
+  useEffect(() => {
+    if (isFirstDraftRender.current) {
+      isFirstDraftRender.current = false;
+      return;
+    }
+    saveDraft({
+      step,
+      category,
+      businessName,
+      ownerName,
+      phone,
+      city,
+      state,
+      description,
+      memberDiscount,
+      discountPct,
+      exclusiveOffer,
+    });
+  }, [
+    step,
+    category,
+    businessName,
+    ownerName,
+    phone,
+    city,
+    state,
+    description,
+    memberDiscount,
+    discountPct,
+    exclusiveOffer,
+    saveDraft,
+  ]);
+
+  const handleRestoreDraft = () => {
+    const d = restoreDraft();
+    if (d) {
+      setStep(d.step);
+      setCategory(d.category);
+      setBusinessName(d.businessName);
+      setOwnerName(d.ownerName);
+      setPhone(d.phone);
+      setCity(d.city);
+      setState(d.state);
+      setDescription(d.description);
+      setMemberDiscount(d.memberDiscount);
+      setDiscountPct(d.discountPct);
+      setExclusiveOffer(d.exclusiveOffer);
+    }
+    setBannerDismissed(true);
+  };
+
+  const handleDiscardDraft = () => {
+    clearDraft();
+    setBannerDismissed(true);
+  };
+  // ──────────────────────────────────────────────────────────────────────────
+
   const handleNext = () => {
     if (step === 0 && !category) {
       Alert.alert("Required", "Please select a category");
@@ -69,6 +163,8 @@ export default function StoreApplicationScreen() {
         memberDiscountPct: memberDiscount ? parseInt(discountPct) || 10 : 0,
         exclusiveOffer: exclusiveOffer.trim() || undefined,
       });
+      // Clear the persisted draft now that the application is filed.
+      await clearDraft();
       Alert.alert(
         "Welcome to the Marketplace! 🎉",
         "Your store is live. Add your services next to start receiving bookings.",
@@ -105,6 +201,31 @@ export default function StoreApplicationScreen() {
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+
+          {/* Draft restore banner */}
+          {hasDraft && !bannerDismissed && (
+            <View style={styles.draftBanner}>
+              <Text style={styles.draftBannerText}>
+                You have an unfinished store application. Restore it?
+              </Text>
+              <View style={styles.draftBannerActions}>
+                <TouchableOpacity
+                  style={styles.draftBannerButton}
+                  onPress={handleRestoreDraft}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.draftBannerButtonText}>Restore</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.draftBannerButton}
+                  onPress={handleDiscardDraft}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.draftBannerButtonText}>Discard</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* Step 0: Category Selection */}
           {step === 0 && (
@@ -309,6 +430,32 @@ const styles = StyleSheet.create({
   progressDotActive: { backgroundColor: "#00C6AE" },
   stepLabel: { fontSize: 14, color: "rgba(255,255,255,0.7)", textAlign: "center" },
   content: { flex: 1, padding: 20 },
+
+  // Draft restore banner — mirrors GoalCreateScreen for visual consistency.
+  draftBanner: {
+    backgroundColor: "#FEF3C7",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  draftBannerText: {
+    flex: 1,
+    color: "#92400E",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  draftBannerActions: { flexDirection: "row", alignItems: "center" },
+  draftBannerButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#FFFFFF",
+    marginLeft: 8,
+  },
+  draftBannerButtonText: { color: "#D97706", fontWeight: "600", fontSize: 13 },
 
   sectionLabel: { fontSize: 17, fontWeight: "600", color: "#0A2342", marginBottom: 16, marginTop: 4 },
 
