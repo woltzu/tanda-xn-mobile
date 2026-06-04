@@ -1,4 +1,21 @@
-import React, { useState } from "react";
+// ═══════════════════════════════════════════════════════════════════════════════
+// LeaveCircleScreen — Phase D3.1 of feat(substitute)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Full rewrite. The previous version was theatrical UI: setTimeout(1500)
+// simulation, fake LV-{timestamp}-{rand} IDs, no DB writes, mismatched
+// reason enums. This version uses the migration-101 RPCs end to end:
+//   * evaluate_exit_for_member(circle_id)  — impact preview on mount
+//   * submit_exit_request(circle_id, reason, acknowledged_impact=true)
+//     — server-side computes evaluation + inserts circle_exit_requests,
+//       the auto-match trigger from migration 099 fires immediately.
+//
+// Single-step UX (was 2-step wizard). The impact card is shown up front
+// so the user can see exactly what happens before they commit. Reason
+// picker maps UI labels → engine enum.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -6,15 +23,24 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
-  TextInput,
+  ActivityIndicator,
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
+
+type EngineReason =
+  | "financial_hardship"
+  | "relocation"
+  | "life_change"
+  | "other";
 
 interface LeaveCircleParams {
-  circleName?: string;
   circleId?: string;
+  circleName?: string;
+  // Older callers may pass these but we always re-evaluate server-side
   memberPosition?: number;
   totalMembers?: number;
   currentCycle?: number;
@@ -22,491 +48,430 @@ interface LeaveCircleParams {
   hasReceivedPayout?: boolean;
 }
 
-type LeaveReason =
-  | "financial"
-  | "personal"
-  | "relocation"
-  | "dissatisfied"
-  | "other";
+interface ExitEvaluation {
+  success: boolean;
+  notice_days?: number;
+  cycles_completed?: number;
+  total_cycles?: number;
+  completion_percentage?: number;
+  payout_already_received?: boolean;
+  payout_entitlement_status?: string;
+  original_payout_amount_cents?: number;
+  substitute_share_cents?: number;
+  insurance_pool_share_cents?: number;
+  original_member_settlement_cents?: number;
+  xnscore_impact?: "none" | "partial" | "full_default";
+  xnscore_adjustment?: number;
+  position?: number;
+  error?: string;
+}
+
+const REASON_OPTIONS: Array<{
+  key: EngineReason;
+  uiLabel: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  description: string;
+}> = [
+  {
+    key: "financial_hardship",
+    uiLabel: "Financial Difficulties",
+    icon: "wallet-outline",
+    description: "Cannot continue with contributions",
+  },
+  {
+    key: "life_change",
+    uiLabel: "Personal Reasons",
+    icon: "person-outline",
+    description: "Family or health-related matters",
+  },
+  {
+    key: "relocation",
+    uiLabel: "Relocating",
+    icon: "airplane-outline",
+    description: "Moving to a different area",
+  },
+  {
+    key: "other",
+    uiLabel: "Other Reason",
+    icon: "ellipsis-horizontal",
+    description: "Something else",
+  },
+];
+
+function fmtCents(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
 
 export default function LeaveCircleScreen() {
   const navigation = useNavigation();
   const route = useRoute();
   const params = (route.params as LeaveCircleParams) || {};
+  const { user } = useAuth();
+  const circleId = params.circleId ?? "";
+  const fallbackCircleName = params.circleName ?? "this circle";
 
-  const circleName = params.circleName || "Family Savings Circle";
-  const currentCycle = params.currentCycle || 3;
-  const totalCycles = params.totalCycles || 12;
-  const hasReceivedPayout = params.hasReceivedPayout ?? true;
-  const memberPosition = params.memberPosition || 5;
+  const [evaluation, setEvaluation] = useState<ExitEvaluation | null>(null);
+  const [evalLoading, setEvalLoading] = useState(true);
+  const [evalError, setEvalError] = useState<string | null>(null);
+  const [circleName, setCircleName] = useState<string>(fallbackCircleName);
 
-  const [step, setStep] = useState(1);
-  const [selectedReason, setSelectedReason] = useState<LeaveReason | null>(null);
-  const [otherReason, setOtherReason] = useState("");
-  const [acknowledged, setAcknowledged] = useState({
-    noticePeriod: false,
-    outstandingPayments: false,
-    noRefund: false,
-    finalDecision: false,
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [requestSubmitted, setRequestSubmitted] = useState(false);
-  const [requestId, setRequestId] = useState("");
+  const [selectedReason, setSelectedReason] = useState<EngineReason | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
 
-  const reasons = [
-    {
-      key: "financial" as LeaveReason,
-      label: "Financial Difficulties",
-      icon: "wallet-outline",
-      description: "Cannot continue with contributions",
-    },
-    {
-      key: "personal" as LeaveReason,
-      label: "Personal Reasons",
-      icon: "person-outline",
-      description: "Family or health-related matters",
-    },
-    {
-      key: "relocation" as LeaveReason,
-      label: "Relocating",
-      icon: "airplane-outline",
-      description: "Moving to a different area",
-    },
-    {
-      key: "dissatisfied" as LeaveReason,
-      label: "Dissatisfied with Circle",
-      icon: "thumbs-down-outline",
-      description: "Issues with management or members",
-    },
-    {
-      key: "other" as LeaveReason,
-      label: "Other Reason",
-      icon: "ellipsis-horizontal",
-      description: "Please specify below",
-    },
-  ];
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState<{
+    requestId: string;
+    evaluation: ExitEvaluation;
+  } | null>(null);
 
-  const noticePeriodDays = hasReceivedPayout ? 30 : 14;
-  const outstandingCycles = hasReceivedPayout
-    ? totalCycles - currentCycle
-    : 0;
-  const outstandingAmount = outstandingCycles * 100; // $100 per cycle
+  // ── Load evaluation + circle name ────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!circleId || !user?.id) {
+        setEvalError("Missing circle or user context");
+        setEvalLoading(false);
+        return;
+      }
+      setEvalLoading(true);
+      setEvalError(null);
+      try {
+        const [{ data: evalData, error: evalErr }, circleResp] = await Promise.all([
+          supabase.rpc("evaluate_exit_for_member", { p_circle_id: circleId }),
+          supabase.from("circles").select("name").eq("id", circleId).maybeSingle(),
+        ]);
 
-  const generateRequestId = () => {
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 6).toUpperCase();
-    return `LV-${timestamp}-${random}`;
+        if (cancelled) return;
+
+        if (evalErr) {
+          setEvalError(evalErr.message);
+          setEvalLoading(false);
+          return;
+        }
+
+        const ev = evalData as ExitEvaluation;
+        if (!ev?.success) {
+          setEvalError(ev?.error ?? "Could not evaluate exit");
+        } else {
+          setEvaluation(ev);
+        }
+        if (circleResp.data?.name) setCircleName(circleResp.data.name);
+      } catch (err: any) {
+        if (!cancelled) setEvalError(err?.message ?? "Unknown error");
+      } finally {
+        if (!cancelled) setEvalLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [circleId, user?.id]);
+
+  const hasPayoutPending = useMemo(
+    () => evaluation?.payout_entitlement_status === "pending_transfer",
+    [evaluation],
+  );
+
+  const xnscoreCopy = useMemo(() => {
+    if (!evaluation) return null;
+    const delta = evaluation.xnscore_adjustment ?? 0;
+    if (evaluation.xnscore_impact === "none") {
+      return { tone: "good" as const, text: "No XnScore impact (clean exit)." };
+    }
+    return {
+      tone: delta <= -10 ? ("bad" as const) : ("warn" as const),
+      text: `Your XnScore will change by ${delta > 0 ? "+" : ""}${delta}.`,
+    };
+  }, [evaluation]);
+
+  // ── Submit ────────────────────────────────────────────────────────────────
+  const handleSubmit = async () => {
+    if (!selectedReason || !acknowledged) return;
+    setSubmitting(true);
+    try {
+      const { data, error } = await supabase.rpc("submit_exit_request", {
+        p_circle_id: circleId,
+        p_reason: selectedReason,
+        p_acknowledged_impact: true,
+      });
+      if (error) {
+        Alert.alert("Could not submit", error.message);
+        return;
+      }
+      const result = data as {
+        success: boolean;
+        request_id?: string;
+        evaluation?: ExitEvaluation;
+        error?: string;
+        existing_request_id?: string;
+      };
+      if (!result.success) {
+        const detail = result.existing_request_id
+          ? `${result.error}\n\nExisting request: ${result.existing_request_id}`
+          : result.error ?? "Unknown error";
+        Alert.alert("Could not submit", detail);
+        return;
+      }
+      setSubmitted({
+        requestId: result.request_id ?? "",
+        evaluation: result.evaluation ?? (evaluation as ExitEvaluation),
+      });
+    } catch (err: any) {
+      Alert.alert("Could not submit", err?.message ?? "Unknown error");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleSubmitRequest = () => {
-    setIsSubmitting(true);
+  // ── Renderers ─────────────────────────────────────────────────────────────
+  const renderImpact = () => {
+    if (!evaluation) return null;
+    return (
+      <View style={styles.impactCard}>
+        <Text style={styles.cardTitle}>What happens if you leave</Text>
 
-    // Simulate API call
-    setTimeout(() => {
-      setRequestId(generateRequestId());
-      setIsSubmitting(false);
-      setRequestSubmitted(true);
-    }, 1500);
+        <View style={styles.impactRow}>
+          <Ionicons name="layers-outline" size={18} color="#2563EB" />
+          <Text style={styles.impactLabel}>Cycles completed</Text>
+          <Text style={styles.impactValue}>
+            {evaluation.cycles_completed} of {evaluation.total_cycles}
+            {evaluation.total_cycles && evaluation.total_cycles > 0
+              ? ` (${evaluation.completion_percentage}%)`
+              : ""}
+          </Text>
+        </View>
+
+        <View style={styles.impactRow}>
+          <Ionicons
+            name={evaluation.payout_already_received ? "checkmark-circle-outline" : "time-outline"}
+            size={18}
+            color={evaluation.payout_already_received ? "#10B981" : "#6B7280"}
+          />
+          <Text style={styles.impactLabel}>Payout received</Text>
+          <Text style={styles.impactValue}>
+            {evaluation.payout_already_received ? "Yes" : "Not yet"}
+          </Text>
+        </View>
+
+        <View style={styles.impactRow}>
+          <Ionicons name="calendar-outline" size={18} color="#2563EB" />
+          <Text style={styles.impactLabel}>Notice period</Text>
+          <Text style={styles.impactValue}>{evaluation.notice_days} days</Text>
+        </View>
+
+        {xnscoreCopy && (
+          <View style={styles.impactRow}>
+            <Ionicons
+              name="trending-down-outline"
+              size={18}
+              color={
+                xnscoreCopy.tone === "good"
+                  ? "#10B981"
+                  : xnscoreCopy.tone === "warn"
+                    ? "#F59E0B"
+                    : "#DC2626"
+              }
+            />
+            <Text style={styles.impactLabel}>XnScore</Text>
+            <Text
+              style={[
+                styles.impactValue,
+                xnscoreCopy.tone === "good" && { color: "#10B981" },
+                xnscoreCopy.tone === "warn" && { color: "#92400E" },
+                xnscoreCopy.tone === "bad" && { color: "#DC2626" },
+              ]}
+            >
+              {xnscoreCopy.text}
+            </Text>
+          </View>
+        )}
+
+        {hasPayoutPending && (
+          <View style={styles.splitBlock}>
+            <Text style={styles.splitTitle}>80/10/10 payout split</Text>
+            <Text style={styles.splitHint}>
+              Since your payout hasn't been delivered yet, it transfers when a substitute fills your seat:
+            </Text>
+            <View style={styles.splitRow}>
+              <Text style={styles.splitLabel}>Substitute receives</Text>
+              <Text style={styles.splitValue}>
+                {fmtCents(evaluation.substitute_share_cents ?? 0)}
+              </Text>
+            </View>
+            <View style={styles.splitRow}>
+              <Text style={styles.splitLabel}>Insurance pool</Text>
+              <Text style={styles.splitValue}>
+                {fmtCents(evaluation.insurance_pool_share_cents ?? 0)}
+              </Text>
+            </View>
+            <View style={styles.splitRow}>
+              <Text style={styles.splitLabel}>You settle for</Text>
+              <Text style={[styles.splitValue, { color: "#10B981" }]}>
+                {fmtCents(evaluation.original_member_settlement_cents ?? 0)}
+              </Text>
+            </View>
+            <View style={[styles.splitRow, styles.splitTotalRow]}>
+              <Text style={styles.splitLabelTotal}>Original payout</Text>
+              <Text style={styles.splitValueTotal}>
+                {fmtCents(evaluation.original_payout_amount_cents ?? 0)}
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+    );
   };
 
-  const allAcknowledged = Object.values(acknowledged).every(Boolean);
-
-  const renderStep1 = () => (
-    <View style={styles.stepContainer}>
+  const renderForm = () => (
+    <>
       <View style={styles.warningBanner}>
-        <Ionicons name="warning" size={24} color="#F59E0B" />
+        <Ionicons name="warning" size={22} color="#F59E0B" />
         <View style={styles.warningContent}>
-          <Text style={styles.warningTitle}>Important Notice</Text>
+          <Text style={styles.warningTitle}>Leaving {circleName}</Text>
           <Text style={styles.warningText}>
-            Leaving a circle is a significant decision. Please review all terms
-            carefully before proceeding.
+            Once submitted, the system will immediately search for a qualified substitute. You'll be
+            notified when the match is confirmed.
           </Text>
         </View>
       </View>
 
-      <View style={styles.infoCard}>
-        <Text style={styles.infoCardTitle}>Your Current Status</Text>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Circle</Text>
-          <Text style={styles.infoValue}>{circleName}</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Current Cycle</Text>
-          <Text style={styles.infoValue}>
-            {currentCycle} of {totalCycles}
-          </Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Your Position</Text>
-          <Text style={styles.infoValue}>#{memberPosition}</Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Payout Received</Text>
-          <Text
-            style={[
-              styles.infoValue,
-              { color: hasReceivedPayout ? "#10B981" : "#6B7280" },
-            ]}
-          >
-            {hasReceivedPayout ? "Yes" : "Not Yet"}
-          </Text>
-        </View>
-      </View>
+      {renderImpact()}
 
       <Text style={styles.sectionTitle}>Why are you leaving?</Text>
-      <Text style={styles.sectionSubtitle}>
-        Help us understand your reason for leaving
-      </Text>
-
-      {reasons.map((reason) => (
+      {REASON_OPTIONS.map((opt) => (
         <TouchableOpacity
-          key={reason.key}
+          key={opt.key}
           style={[
             styles.reasonCard,
-            selectedReason === reason.key && styles.reasonCardSelected,
+            selectedReason === opt.key && styles.reasonCardSelected,
           ]}
-          onPress={() => setSelectedReason(reason.key)}
+          onPress={() => setSelectedReason(opt.key)}
         >
           <View
             style={[
               styles.reasonIcon,
-              selectedReason === reason.key && styles.reasonIconSelected,
+              selectedReason === opt.key && styles.reasonIconSelected,
             ]}
           >
             <Ionicons
-              name={reason.icon as any}
-              size={24}
-              color={selectedReason === reason.key ? "#FFFFFF" : "#6B7280"}
+              name={opt.icon}
+              size={22}
+              color={selectedReason === opt.key ? "#FFFFFF" : "#6B7280"}
             />
           </View>
           <View style={styles.reasonContent}>
             <Text
               style={[
                 styles.reasonLabel,
-                selectedReason === reason.key && styles.reasonLabelSelected,
+                selectedReason === opt.key && styles.reasonLabelSelected,
               ]}
             >
-              {reason.label}
+              {opt.uiLabel}
             </Text>
-            <Text style={styles.reasonDescription}>{reason.description}</Text>
+            <Text style={styles.reasonDescription}>{opt.description}</Text>
           </View>
           <View
             style={[
               styles.radioOuter,
-              selectedReason === reason.key && styles.radioOuterSelected,
+              selectedReason === opt.key && styles.radioOuterSelected,
             ]}
           >
-            {selectedReason === reason.key && (
-              <View style={styles.radioInner} />
-            )}
+            {selectedReason === opt.key && <View style={styles.radioInner} />}
           </View>
         </TouchableOpacity>
       ))}
 
-      {selectedReason === "other" && (
-        <TextInput
-          style={styles.otherInput}
-          placeholder="Please specify your reason..."
-          placeholderTextColor="#9CA3AF"
-          value={otherReason}
-          onChangeText={setOtherReason}
-          multiline
-          numberOfLines={3}
-        />
-      )}
+      <TouchableOpacity
+        style={styles.ackRow}
+        onPress={() => setAcknowledged((v) => !v)}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: acknowledged }}
+      >
+        <View style={[styles.checkbox, acknowledged && styles.checkboxChecked]}>
+          {acknowledged && <Ionicons name="checkmark" size={16} color="#FFFFFF" />}
+        </View>
+        <Text style={styles.ackLabel}>
+          I understand the impact above and want to proceed.
+        </Text>
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={[
-          styles.continueButton,
-          !selectedReason && styles.continueButtonDisabled,
+          styles.submitButton,
+          (!selectedReason || !acknowledged || submitting) &&
+            styles.submitButtonDisabled,
         ]}
-        onPress={() => setStep(2)}
-        disabled={!selectedReason}
+        onPress={handleSubmit}
+        disabled={!selectedReason || !acknowledged || submitting}
       >
-        <Text style={styles.continueButtonText}>Continue</Text>
-        <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
-      </TouchableOpacity>
-    </View>
-  );
-
-  const renderStep2 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.sectionTitle}>Terms & Conditions</Text>
-      <Text style={styles.sectionSubtitle}>
-        Please acknowledge the following terms
-      </Text>
-
-      <View style={styles.termCard}>
-        <View style={styles.termHeader}>
-          <Ionicons name="time-outline" size={24} color="#2563EB" />
-          <Text style={styles.termTitle}>Notice Period</Text>
-        </View>
-        <Text style={styles.termDescription}>
-          You must provide <Text style={styles.termHighlight}>{noticePeriodDays} days</Text> notice
-          before leaving the circle.
-          {hasReceivedPayout
-            ? " Since you have already received your payout, a longer notice period applies."
-            : ""}
-        </Text>
-        <TouchableOpacity
-          style={styles.checkboxRow}
-          onPress={() =>
-            setAcknowledged({ ...acknowledged, noticePeriod: !acknowledged.noticePeriod })
-          }
-        >
-          <View
-            style={[
-              styles.checkbox,
-              acknowledged.noticePeriod && styles.checkboxChecked,
-            ]}
-          >
-            {acknowledged.noticePeriod && (
-              <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-            )}
-          </View>
-          <Text style={styles.checkboxLabel}>
-            I understand the {noticePeriodDays}-day notice period requirement
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {hasReceivedPayout && outstandingCycles > 0 && (
-        <View style={styles.termCard}>
-          <View style={styles.termHeader}>
-            <Ionicons name="cash-outline" size={24} color="#EF4444" />
-            <Text style={styles.termTitle}>Outstanding Payments</Text>
-          </View>
-          <Text style={styles.termDescription}>
-            Since you have received your payout, you are obligated to continue
-            contributing for the remaining{" "}
-            <Text style={styles.termHighlight}>{outstandingCycles} cycles</Text>{" "}
-            (${outstandingAmount} total) before leaving.
-          </Text>
-          <TouchableOpacity
-            style={styles.checkboxRow}
-            onPress={() =>
-              setAcknowledged({
-                ...acknowledged,
-                outstandingPayments: !acknowledged.outstandingPayments,
-              })
-            }
-          >
-            <View
-              style={[
-                styles.checkbox,
-                acknowledged.outstandingPayments && styles.checkboxChecked,
-              ]}
-            >
-              {acknowledged.outstandingPayments && (
-                <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-              )}
-            </View>
-            <Text style={styles.checkboxLabel}>
-              I will fulfill my remaining payment obligations
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      <View style={styles.termCard}>
-        <View style={styles.termHeader}>
-          <Ionicons name="ban-outline" size={24} color="#F59E0B" />
-          <Text style={styles.termTitle}>No Refunds</Text>
-        </View>
-        <Text style={styles.termDescription}>
-          Contributions already made to the circle cannot be refunded upon
-          leaving. All past payments remain with the circle pool.
-        </Text>
-        <TouchableOpacity
-          style={styles.checkboxRow}
-          onPress={() =>
-            setAcknowledged({ ...acknowledged, noRefund: !acknowledged.noRefund })
-          }
-        >
-          <View
-            style={[
-              styles.checkbox,
-              acknowledged.noRefund && styles.checkboxChecked,
-            ]}
-          >
-            {acknowledged.noRefund && (
-              <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-            )}
-          </View>
-          <Text style={styles.checkboxLabel}>
-            I understand there are no refunds for past contributions
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.termCard}>
-        <View style={styles.termHeader}>
-          <Ionicons name="alert-circle-outline" size={24} color="#DC2626" />
-          <Text style={styles.termTitle}>Final Decision</Text>
-        </View>
-        <Text style={styles.termDescription}>
-          Once your leave request is approved, this action cannot be undone. You
-          will need to request to rejoin and may be placed at the end of the
-          queue.
-        </Text>
-        <TouchableOpacity
-          style={styles.checkboxRow}
-          onPress={() =>
-            setAcknowledged({
-              ...acknowledged,
-              finalDecision: !acknowledged.finalDecision,
-            })
-          }
-        >
-          <View
-            style={[
-              styles.checkbox,
-              acknowledged.finalDecision && styles.checkboxChecked,
-            ]}
-          >
-            {acknowledged.finalDecision && (
-              <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-            )}
-          </View>
-          <Text style={styles.checkboxLabel}>
-            I understand this is a final decision
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.buttonRow}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => setStep(1)}
-        >
-          <Ionicons name="arrow-back" size={20} color="#6B7280" />
-          <Text style={styles.backButtonText}>Back</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.submitButton,
-            (!allAcknowledged || !hasReceivedPayout && !acknowledged.noRefund && !acknowledged.noticePeriod && !acknowledged.finalDecision) && styles.submitButtonDisabled,
-          ]}
-          onPress={handleSubmitRequest}
-          disabled={!allAcknowledged || isSubmitting}
-        >
-          {isSubmitting ? (
-            <Text style={styles.submitButtonText}>Submitting...</Text>
-          ) : (
-            <>
-              <Text style={styles.submitButtonText}>Submit Request</Text>
-              <Ionicons name="exit-outline" size={20} color="#FFFFFF" />
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const renderConfirmation = () => (
-    <View style={styles.confirmationContainer}>
-      <View style={styles.confirmationIcon}>
-        <Ionicons name="checkmark-circle" size={80} color="#10B981" />
-      </View>
-
-      <Text style={styles.confirmationTitle}>Request Submitted</Text>
-      <Text style={styles.confirmationSubtitle}>
-        Your leave request has been submitted to the Circle Admin and Elders for
-        review.
-      </Text>
-
-      <View style={styles.requestCard}>
-        <Text style={styles.requestLabel}>Request ID</Text>
-        <Text style={styles.requestId}>{requestId}</Text>
-        <Text style={styles.requestTimestamp}>
-          Submitted on {new Date().toLocaleDateString("en-US", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </Text>
-      </View>
-
-      <View style={styles.nextStepsCard}>
-        <Text style={styles.nextStepsTitle}>What Happens Next</Text>
-        <View style={styles.nextStep}>
-          <View style={styles.stepNumber}>
-            <Text style={styles.stepNumberText}>1</Text>
-          </View>
-          <Text style={styles.stepText}>
-            Circle Admin will review your request within 48 hours
-          </Text>
-        </View>
-        <View style={styles.nextStep}>
-          <View style={styles.stepNumber}>
-            <Text style={styles.stepNumberText}>2</Text>
-          </View>
-          <Text style={styles.stepText}>
-            Your {noticePeriodDays}-day notice period begins upon approval
-          </Text>
-        </View>
-        <View style={styles.nextStep}>
-          <View style={styles.stepNumber}>
-            <Text style={styles.stepNumberText}>3</Text>
-          </View>
-          <Text style={styles.stepText}>
-            You'll receive email confirmation at each step
-          </Text>
-        </View>
-        {hasReceivedPayout && (
-          <View style={styles.nextStep}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>4</Text>
-            </View>
-            <Text style={styles.stepText}>
-              Complete remaining payments during notice period
-            </Text>
-          </View>
+        {submitting ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <>
+            <Text style={styles.submitButtonText}>Submit Request</Text>
+            <Ionicons name="exit-outline" size={18} color="#FFFFFF" />
+          </>
         )}
-      </View>
-
-      <View style={styles.emailNotice}>
-        <Ionicons name="mail-outline" size={20} color="#2563EB" />
-        <Text style={styles.emailNoticeText}>
-          A confirmation email has been sent to your registered email address
-        </Text>
-      </View>
-
-      <TouchableOpacity
-        style={styles.doneButton}
-        onPress={() => navigation.goBack()}
-      >
-        <Text style={styles.doneButtonText}>Return to Circle</Text>
       </TouchableOpacity>
-    </View>
+    </>
   );
 
+  const renderConfirmation = () => {
+    if (!submitted) return null;
+    const ev = submitted.evaluation;
+    return (
+      <View style={styles.confirmContainer}>
+        <Ionicons name="checkmark-circle" size={72} color="#10B981" />
+        <Text style={styles.confirmTitle}>Request submitted</Text>
+        <Text style={styles.confirmSubtitle}>
+          The system is now searching for a qualified substitute. You'll be
+          notified as soon as a match is found.
+        </Text>
+
+        <View style={styles.requestCard}>
+          <Text style={styles.requestLabel}>Request ID</Text>
+          <Text style={styles.requestId} numberOfLines={1}>
+            {submitted.requestId.slice(0, 8)}…{submitted.requestId.slice(-4)}
+          </Text>
+        </View>
+
+        <View style={styles.stepsCard}>
+          <Text style={styles.stepsTitle}>What happens next</Text>
+          {[
+            "The system automatically offered your seat to a top-ranked substitute.",
+            "They have 48 hours to confirm. If they decline or time out, the system tries the next candidate.",
+            `Your circle admin will be asked to approve within 24 hours of confirmation — silence auto-approves.`,
+            ev.payout_entitlement_status === "pending_transfer"
+              ? `Your payout splits 80/10/10 — you settle for ${fmtCents(ev.original_member_settlement_cents ?? 0)}.`
+              : "Your XnScore impact will be applied when the substitution completes.",
+          ].map((step, i) => (
+            <View key={i} style={styles.step}>
+              <View style={styles.stepNum}>
+                <Text style={styles.stepNumText}>{i + 1}</Text>
+              </View>
+              <Text style={styles.stepText}>{step}</Text>
+            </View>
+          ))}
+        </View>
+
+        <TouchableOpacity
+          style={styles.doneButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.doneButtonText}>Return to Circle</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // ── Top-level layout ──────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.headerBackButton}
-          onPress={() => {
-            if (requestSubmitted) {
-              navigation.goBack();
-            } else if (step > 1) {
-              setStep(step - 1);
-            } else {
-              Alert.alert(
-                "Cancel Request",
-                "Are you sure you want to cancel your leave request?",
-                [
-                  { text: "Stay", style: "cancel" },
-                  { text: "Cancel", onPress: () => navigation.goBack() },
-                ]
-              );
-            }
-          }}
+          onPress={() => navigation.goBack()}
         >
           <Ionicons name="close" size={24} color="#1F2937" />
         </TouchableOpacity>
@@ -514,33 +479,33 @@ export default function LeaveCircleScreen() {
         <View style={styles.headerPlaceholder} />
       </View>
 
-      {!requestSubmitted && (
-        <View style={styles.progressContainer}>
-          <View style={styles.progressBar}>
-            <View
-              style={[styles.progressFill, { width: step === 1 ? "50%" : "100%" }]}
-            />
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {evalLoading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator color="#2563EB" />
+            <Text style={styles.loadingText}>Evaluating your exit…</Text>
           </View>
-          <Text style={styles.progressText}>Step {step} of 2</Text>
-        </View>
-      )}
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {requestSubmitted
-          ? renderConfirmation()
-          : step === 1
-          ? renderStep1()
-          : renderStep2()}
+        ) : evalError ? (
+          <View style={styles.errorBox}>
+            <Ionicons name="alert-circle" size={22} color="#DC2626" />
+            <Text style={styles.errorText}>{evalError}</Text>
+          </View>
+        ) : submitted ? (
+          renderConfirmation()
+        ) : (
+          renderForm()
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F3F4F6",
-  },
+  container: { flex: 1, backgroundColor: "#F3F4F6" },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -551,240 +516,118 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5E7EB",
   },
-  headerBackButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1F2937",
-  },
-  headerPlaceholder: {
-    width: 40,
-  },
-  progressContainer: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
-  },
-  progressBar: {
-    height: 4,
-    backgroundColor: "#E5E7EB",
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#2563EB",
-    borderRadius: 2,
-  },
-  progressText: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginTop: 8,
-    textAlign: "center",
-  },
-  content: {
-    flex: 1,
-  },
-  stepContainer: {
+  headerBackButton: { padding: 8 },
+  headerTitle: { fontSize: 18, fontWeight: "700", color: "#1F2937" },
+  headerPlaceholder: { width: 40 },
+  content: { flex: 1 },
+  loadingBox: { alignItems: "center", padding: 32, gap: 12 },
+  loadingText: { color: "#6B7280", fontSize: 14 },
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FCA5A5",
+    borderWidth: 1,
+    borderRadius: 12,
     padding: 16,
+    gap: 8,
   },
+  errorText: { color: "#991B1B", fontSize: 14, flex: 1, lineHeight: 20 },
   warningBanner: {
     flexDirection: "row",
     backgroundColor: "#FFFBEB",
     borderRadius: 12,
-    padding: 16,
+    padding: 14,
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#FCD34D",
   },
-  warningContent: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  warningTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#92400E",
-    marginBottom: 4,
-  },
-  warningText: {
-    fontSize: 14,
-    color: "#92400E",
-    lineHeight: 20,
-  },
-  infoCard: {
+  warningContent: { marginLeft: 10, flex: 1 },
+  warningTitle: { fontSize: 15, fontWeight: "700", color: "#92400E", marginBottom: 4 },
+  warningText: { fontSize: 13, color: "#92400E", lineHeight: 18 },
+  impactCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
     padding: 16,
-    marginBottom: 24,
+    marginBottom: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
   },
-  infoCardTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1F2937",
-    marginBottom: 12,
-  },
-  infoRow: {
+  cardTitle: { fontSize: 15, fontWeight: "700", color: "#1F2937", marginBottom: 12 },
+  impactRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "center",
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
+    gap: 10,
   },
-  infoLabel: {
-    fontSize: 14,
-    color: "#6B7280",
+  impactLabel: { flex: 1, fontSize: 13, color: "#6B7280" },
+  impactValue: { fontSize: 13, fontWeight: "600", color: "#1F2937" },
+  splitBlock: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
   },
-  infoValue: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1F2937",
+  splitTitle: { fontSize: 14, fontWeight: "700", color: "#1F2937", marginBottom: 4 },
+  splitHint: { fontSize: 12, color: "#6B7280", lineHeight: 17, marginBottom: 10 },
+  splitRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 6,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1F2937",
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: "#6B7280",
-    marginBottom: 16,
-  },
+  splitLabel: { fontSize: 13, color: "#4B5563" },
+  splitValue: { fontSize: 13, fontWeight: "600", color: "#1F2937" },
+  splitTotalRow: { borderTopWidth: 1, borderTopColor: "#E5E7EB", marginTop: 4, paddingTop: 8 },
+  splitLabelTotal: { fontSize: 13, fontWeight: "700", color: "#1F2937" },
+  splitValueTotal: { fontSize: 14, fontWeight: "800", color: "#1F2937" },
+  sectionTitle: { fontSize: 16, fontWeight: "700", color: "#1F2937", marginBottom: 10 },
   reasonCard: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
-  reasonCardSelected: {
-    borderColor: "#2563EB",
-    backgroundColor: "#EFF6FF",
-  },
+  reasonCardSelected: { borderColor: "#2563EB", backgroundColor: "#EFF6FF" },
   reasonIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: "#F3F4F6",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
-  reasonIconSelected: {
-    backgroundColor: "#2563EB",
-  },
-  reasonContent: {
-    flex: 1,
-  },
-  reasonLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1F2937",
-  },
-  reasonLabelSelected: {
-    color: "#2563EB",
-  },
-  reasonDescription: {
-    fontSize: 13,
-    color: "#6B7280",
-    marginTop: 2,
-  },
+  reasonIconSelected: { backgroundColor: "#2563EB" },
+  reasonContent: { flex: 1 },
+  reasonLabel: { fontSize: 15, fontWeight: "600", color: "#1F2937" },
+  reasonLabelSelected: { color: "#2563EB" },
+  reasonDescription: { fontSize: 12, color: "#6B7280", marginTop: 2 },
   radioOuter: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     borderWidth: 2,
     borderColor: "#D1D5DB",
     justifyContent: "center",
     alignItems: "center",
   },
-  radioOuterSelected: {
-    borderColor: "#2563EB",
-  },
-  radioInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#2563EB",
-  },
-  otherInput: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 14,
-    color: "#1F2937",
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    minHeight: 100,
-    textAlignVertical: "top",
-    marginBottom: 16,
-  },
-  continueButton: {
+  radioOuterSelected: { borderColor: "#2563EB" },
+  radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#2563EB" },
+  ackRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#2563EB",
-    paddingVertical: 16,
-    borderRadius: 12,
-    gap: 8,
-    marginTop: 8,
-  },
-  continueButtonDisabled: {
-    backgroundColor: "#9CA3AF",
-  },
-  continueButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-  termCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  termHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  termTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1F2937",
-    marginLeft: 12,
-  },
-  termDescription: {
-    fontSize: 14,
-    color: "#6B7280",
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  termHighlight: {
-    fontWeight: "600",
-    color: "#1F2937",
-  },
-  checkboxRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+    gap: 10,
   },
   checkbox: {
     width: 22,
@@ -794,42 +637,10 @@ const styles = StyleSheet.create({
     borderColor: "#D1D5DB",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
-    marginTop: 2,
   },
-  checkboxChecked: {
-    backgroundColor: "#2563EB",
-    borderColor: "#2563EB",
-  },
-  checkboxLabel: {
-    flex: 1,
-    fontSize: 14,
-    color: "#4B5563",
-    lineHeight: 20,
-  },
-  buttonRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 8,
-  },
-  backButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    gap: 8,
-  },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#6B7280",
-  },
+  checkboxChecked: { backgroundColor: "#2563EB", borderColor: "#2563EB" },
+  ackLabel: { flex: 1, fontSize: 14, color: "#374151", lineHeight: 19 },
   submitButton: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -837,128 +648,72 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     gap: 8,
+    marginTop: 8,
   },
-  submitButtonDisabled: {
-    backgroundColor: "#9CA3AF",
-  },
-  submitButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-  confirmationContainer: {
-    padding: 16,
-    alignItems: "center",
-  },
-  confirmationIcon: {
-    marginVertical: 24,
-  },
-  confirmationTitle: {
-    fontSize: 24,
-    fontWeight: "700",
+  submitButtonDisabled: { backgroundColor: "#9CA3AF" },
+  submitButtonText: { fontSize: 16, fontWeight: "700", color: "#FFFFFF" },
+  confirmContainer: { alignItems: "center", paddingTop: 20 },
+  confirmTitle: {
+    fontSize: 22,
+    fontWeight: "800",
     color: "#1F2937",
-    marginBottom: 8,
+    marginTop: 12,
+    marginBottom: 6,
   },
-  confirmationSubtitle: {
+  confirmSubtitle: {
     fontSize: 14,
     color: "#6B7280",
     textAlign: "center",
     lineHeight: 20,
-    marginBottom: 24,
-    paddingHorizontal: 16,
+    marginBottom: 22,
+    paddingHorizontal: 12,
   },
   requestCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    padding: 20,
+    padding: 18,
     width: "100%",
     alignItems: "center",
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
-  requestLabel: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginBottom: 4,
-  },
+  requestLabel: { fontSize: 12, color: "#6B7280", marginBottom: 4 },
   requestId: {
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 18,
+    fontWeight: "800",
     color: "#2563EB",
     fontFamily: "monospace",
-    marginBottom: 8,
   },
-  requestTimestamp: {
-    fontSize: 12,
-    color: "#9CA3AF",
-  },
-  nextStepsCard: {
+  stepsCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    padding: 20,
+    padding: 18,
     width: "100%",
-    marginBottom: 20,
+    marginBottom: 18,
   },
-  nextStepsTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1F2937",
-    marginBottom: 16,
-  },
-  nextStep: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 12,
-  },
-  stepNumber: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+  stepsTitle: { fontSize: 15, fontWeight: "700", color: "#1F2937", marginBottom: 14 },
+  step: { flexDirection: "row", alignItems: "flex-start", marginBottom: 12, gap: 12 },
+  stepNum: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: "#2563EB",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
   },
-  stepNumberText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-  stepText: {
-    flex: 1,
-    fontSize: 14,
-    color: "#4B5563",
-    lineHeight: 20,
-  },
-  emailNotice: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#EFF6FF",
-    padding: 12,
-    borderRadius: 8,
-    width: "100%",
-    marginBottom: 24,
-    gap: 8,
-  },
-  emailNoticeText: {
-    flex: 1,
-    fontSize: 13,
-    color: "#1E40AF",
-  },
+  stepNumText: { fontSize: 11, fontWeight: "700", color: "#FFFFFF" },
+  stepText: { flex: 1, fontSize: 13, color: "#4B5563", lineHeight: 19 },
   doneButton: {
     backgroundColor: "#2563EB",
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 32,
     borderRadius: 12,
     width: "100%",
   },
   doneButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 15,
+    fontWeight: "700",
     color: "#FFFFFF",
     textAlign: "center",
   },

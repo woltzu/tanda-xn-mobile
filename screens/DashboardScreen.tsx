@@ -591,6 +591,33 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Cross Circle Lending (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point for SubstitutePoolScreen
+              (Phase D3 of feat(substitute)). Member section: eligibility
+              check, opt-in form, current pool stats, pending offers inbox
+              (accept/decline). Admin section (visible only if user is
+              creator/admin in any circle): pending admin_pending records
+              with approve/decline and live 24h auto-approval countdown.
+              The engine is now wired:
+                - check_substitute_pool_eligibility for opt-in gate (101)
+                - submit_exit_request + auto-match trigger (099 + 101)
+                - respond_to_substitution accept/decline (101)
+                - admin_approve/decline_substitution (101)
+                - Lifecycle cron auto-approves at 24h, expires at 48h,
+                  resets decline counters at 90d (100 + EF)
+              Shown unconditionally under __DEV__ — eligibility is enforced
+              inside the screen. Remove once a real entry point exists. */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() => navigation.navigate(Routes.SubstitutePool)}
+              accessibilityLabel="Open Substitute Pool (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="people-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Substitute Pool (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1a-prime. MEMBER TIER CARD ========== */}

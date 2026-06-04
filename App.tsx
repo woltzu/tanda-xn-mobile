@@ -141,6 +141,7 @@ import MoodInsightsScreen from "./screens/MoodInsightsScreen";
 import ConflictAlertScreen from "./screens/ConflictAlertScreen";
 import DiscoverCirclesScreen from "./screens/DiscoverCirclesScreen";
 import InsurancePoolScreen from "./screens/InsurancePoolScreen";
+import SubstitutePoolScreen from "./screens/SubstitutePoolScreen";
 import PartialContributionScreen from "./screens/PartialContributionScreen";
 import PositionSwapScreen from "./screens/PositionSwapScreen";
 import CycleTimelineScreen from "./screens/CycleTimelineScreen";
@@ -486,6 +487,7 @@ export type RootStackParamList = {
   DiscoverCircles: undefined;
   ConflictAlert: { circleId: string };
   InsurancePool: { circleId: string };
+  SubstitutePool: undefined;
   PartialContribution: { circleId: string; cycleId?: string };
   PositionSwap: { circleId: string };
   CycleTimeline: { circleId: string };
@@ -789,6 +791,7 @@ function HomeStackScreen() {
       {/* InsurancePoolScreen also registered in CirclesStack — duplicated
           here for the Dashboard debug chip (Phase D3 of feat(insurance)). */}
       <HomeStack.Screen name="InsurancePool" component={InsurancePoolScreen} />
+      <HomeStack.Screen name="SubstitutePool" component={SubstitutePoolScreen} />
       <HomeStack.Screen name="EarlyIntervention" component={EarlyInterventionScreen} />
       <HomeStack.Screen name="ScoreBreakdown" component={ScoreBreakdownScreen} />
       <HomeStack.Screen name="CreditProfile" component={CreditProfileScreen} />
