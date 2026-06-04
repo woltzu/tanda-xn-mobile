@@ -245,8 +245,18 @@ export default function MakeContributionScreen() {
       if (!hasEnoughBalance) {
         Alert.alert(
           "Insufficient Balance",
-          `Your ${paymentCurrency} wallet balance is not enough for this contribution. Please add funds or choose a different payment method.`,
-          [{ text: "OK" }]
+          `Your ${paymentCurrency} wallet balance is not enough for this contribution. Add funds, pick a different payment method, or use Flexible Payment to pay 50% now and split the rest over the next two cycles.`,
+          [
+            { text: "OK", style: "cancel" },
+            {
+              // Phase D2 of feat(partial). The Partial route's cycleId is
+              // optional — the screen resolves the active cycle from
+              // circle_cycles on mount, so we only need to pass circleId.
+              text: "Use Flexible Payment",
+              onPress: () =>
+                navigation.navigate("PartialContribution", { circleId }),
+            },
+          ],
         );
         return;
       }
@@ -602,34 +612,53 @@ export default function MakeContributionScreen() {
 
       {/* Bottom Action */}
       <View style={styles.bottomBar}>
-        <View style={styles.bottomSummary}>
-          <Text style={styles.bottomLabel}>Total Amount</Text>
-          <Text style={styles.bottomAmount}>
-            {currencyInfo?.symbol}{formatCurrency(paymentAmount, paymentCurrency)}
-          </Text>
-          {isCrossBorder && (
-            <Text style={styles.bottomConversion}>
-              = {circleCurrencyInfo?.symbol}{formatCurrency(amount, circleCurrency)} {circleCurrency}
+        <View style={styles.bottomBarRow}>
+          <View style={styles.bottomSummary}>
+            <Text style={styles.bottomLabel}>Total Amount</Text>
+            <Text style={styles.bottomAmount}>
+              {currencyInfo?.symbol}{formatCurrency(paymentAmount, paymentCurrency)}
             </Text>
-          )}
+            {isCrossBorder && (
+              <Text style={styles.bottomConversion}>
+                = {circleCurrencyInfo?.symbol}{formatCurrency(amount, circleCurrency)} {circleCurrency}
+              </Text>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.confirmButton,
+              isProcessing && styles.confirmButtonDisabled,
+            ]}
+            onPress={handleConfirmPayment}
+            disabled={isProcessing}
+          >
+            {isProcessing ? (
+              <Text style={styles.confirmButtonText}>Processing...</Text>
+            ) : (
+              <>
+                <Ionicons name="lock-closed" size={18} color="#FFFFFF" />
+                <Text style={styles.confirmButtonText}>Confirm Payment</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
 
+        {/* Tertiary Flexible Payment entry. Phase D2 of feat(partial).
+            Discreet link so members can opt for 50/25/25 proactively,
+            not only when they hit the insufficient-balance wall. */}
         <TouchableOpacity
-          style={[
-            styles.confirmButton,
-            isProcessing && styles.confirmButtonDisabled,
-          ]}
-          onPress={handleConfirmPayment}
+          style={styles.flexiblePaymentLink}
+          onPress={() =>
+            navigation.navigate("PartialContribution", { circleId })
+          }
           disabled={isProcessing}
+          accessibilityRole="button"
+          accessibilityLabel="Use Flexible Payment instead"
         >
-          {isProcessing ? (
-            <Text style={styles.confirmButtonText}>Processing...</Text>
-          ) : (
-            <>
-              <Ionicons name="lock-closed" size={18} color="#FFFFFF" />
-              <Text style={styles.confirmButtonText}>Confirm Payment</Text>
-            </>
-          )}
+          <Text style={styles.flexiblePaymentLinkText}>
+            Need more time? Use Flexible Payment →
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -1025,6 +1054,8 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",
+  },
+  bottomBarRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 16,
@@ -1064,6 +1095,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+  flexiblePaymentLink: {
+    width: "100%",
+    paddingTop: 10,
+    paddingBottom: 4,
+    alignItems: "center",
+  },
+  flexiblePaymentLinkText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#0A2342",
+    letterSpacing: 0.2,
   },
   errorBanner: {
     flexDirection: "row",
