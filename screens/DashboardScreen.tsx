@@ -22,6 +22,7 @@ import { useElder } from "../context/ElderContext";
 import { useNotifications } from "../context/NotificationContext";
 import { useActiveIntervention } from "../hooks/useEarlyIntervention";
 import { useStressIntervention } from "../hooks/useFinancialStressPrediction";
+import { useMoodIntervention } from "../hooks/useContributionMoodDetection";
 import { useUserDefaults } from "../hooks/useDefaultCascade";
 import { useLateContributions } from "../hooks/useLateContributions";
 import { useInterest } from "../hooks/useInterest";
@@ -119,6 +120,19 @@ export default function DashboardScreen() {
     activeIntervention: stressIntervention,
     hasActiveIntervention: hasStressIntervention,
   } = useStressIntervention();
+
+  // Active mood-intervention card (Phase D3 of feat(mood)). Pulls the
+  // pending mood_interventions row from process_member_mood (migration
+  // 091) and subscribes to realtime. Hidden until a snapshot crosses
+  // score=30 (drifting → warm_checkin), 55 (disengaging → contribution_
+  // pause), or 75 (at_risk → human_outreach, requires_review). Whole
+  // card is tappable → MoodInsightsScreen.
+  // Note: hook returns `hasActive` (not hasActiveIntervention as the
+  // spec naming would suggest); aliased for clarity.
+  const {
+    activeIntervention: moodIntervention,
+    hasActive: hasMoodIntervention,
+  } = useMoodIntervention();
 
   // Safety net: catch users who landed here without going through
   // SetPassword (e.g. closed the tab between QuickJoin success and the
@@ -414,6 +428,24 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Stress Score (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point for the Mood Insights screen
+              (Phase D3 of feat(mood)). The screen already shows the
+              member's mood drift score + 5-signal breakdown + history
+              + active intervention + opt-out toggle. This chip makes
+              it reachable without waiting for the weekly scoring cron
+              to land an intervention. */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() => navigation.navigate(Routes.MoodInsights)}
+              accessibilityLabel="Open Mood Insights (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="happy-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Mood Insights (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1a-bis. EARLY INTERVENTION CARD ========== */}
@@ -519,6 +551,86 @@ export default function DashboardScreen() {
                   color={stressIntervention.interventionType === "counselor_referral"
                     ? "#991B1B"
                     : "#9A3412"}
+                />
+              </View>
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* ========== 1a-quater. MOOD INTERVENTION CARD ========== */}
+        {/* Phase D3 of feat(mood). Renders when a pending mood_intervention
+            exists for this member (hook filters on outcome IN
+            ('pending','pending_review','sent','viewed')). Color adapts to
+            tier_at_trigger from the snapshot that triggered the offer:
+              - 'drifting'    → yellow (warm_checkin, soft nudge)
+              - 'disengaging' → orange (contribution_pause, moderate)
+              - 'at_risk'     → red    (human_outreach, requires_review)
+            Whole card opens MoodInsightsScreen where the member sees the
+            full 5-signal breakdown, accept/decline buttons, and the
+            opt-out toggle. Engine title/body localized EN/FR by the RPC. */}
+        {hasMoodIntervention && moodIntervention && (
+          <TouchableOpacity
+            style={[
+              styles.moodCard,
+              moodIntervention.tierAtTrigger === "at_risk" ? styles.moodCardRed :
+              moodIntervention.tierAtTrigger === "disengaging" ? styles.moodCardOrange :
+              styles.moodCardYellow,
+            ]}
+            onPress={() => navigation.navigate(Routes.MoodInsights)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Open mood insights"
+          >
+            <View style={[
+              styles.moodIcon,
+              moodIntervention.tierAtTrigger === "at_risk" ? styles.moodIconRed :
+              moodIntervention.tierAtTrigger === "disengaging" ? styles.moodIconOrange :
+              styles.moodIconYellow,
+            ]}>
+              <Ionicons
+                name={moodIntervention.tierAtTrigger === "at_risk" ? "heart" : "chatbubble-ellipses-outline"}
+                size={22}
+                color={
+                  moodIntervention.tierAtTrigger === "at_risk" ? "#991B1B" :
+                  moodIntervention.tierAtTrigger === "disengaging" ? "#9A3412" :
+                  "#92400E"
+                }
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[
+                styles.moodTitle,
+                moodIntervention.tierAtTrigger === "at_risk" ? { color: "#991B1B" } :
+                moodIntervention.tierAtTrigger === "disengaging" ? { color: "#9A3412" } :
+                { color: "#92400E" },
+              ]}>
+                {moodIntervention.messageTitle}
+              </Text>
+              <Text style={[
+                styles.moodBody,
+                moodIntervention.tierAtTrigger === "at_risk" ? { color: "#7F1D1D" } :
+                moodIntervention.tierAtTrigger === "disengaging" ? { color: "#7C2D12" } :
+                { color: "#78350F" },
+              ]} numberOfLines={3}>
+                {moodIntervention.messageBody}
+              </Text>
+              <View style={styles.moodCtaRow}>
+                <Text style={[
+                  styles.moodCtaText,
+                  moodIntervention.tierAtTrigger === "at_risk" ? { color: "#991B1B" } :
+                  moodIntervention.tierAtTrigger === "disengaging" ? { color: "#9A3412" } :
+                  { color: "#92400E" },
+                ]}>
+                  View details
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={14}
+                  color={
+                    moodIntervention.tierAtTrigger === "at_risk" ? "#991B1B" :
+                    moodIntervention.tierAtTrigger === "disengaging" ? "#9A3412" :
+                    "#92400E"
+                  }
                 />
               </View>
             </View>
@@ -1112,6 +1224,72 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   stressCtaText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  // ── Mood intervention card (Phase D3 of feat(mood)) ──────────────────
+  // Three color variants share layout; tone shifts with tier_at_trigger.
+  // Engine bands: drifting=warm_checkin (yellow), disengaging=
+  // contribution_pause (orange), at_risk=human_outreach (red).
+  moodCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
+  },
+  moodCardYellow: {
+    backgroundColor: "#FEF3C7",   // amber-100
+    borderColor: "#FCD34D",       // amber-300
+  },
+  moodCardOrange: {
+    backgroundColor: "#FFEDD5",   // orange-100
+    borderColor: "#FDBA74",       // orange-300
+  },
+  moodCardRed: {
+    backgroundColor: "#FEE2E2",   // red-100
+    borderColor: "#FCA5A5",       // red-300
+  },
+  moodIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  moodIconYellow: {
+    backgroundColor: "#FDE68A",   // amber-200
+  },
+  moodIconOrange: {
+    backgroundColor: "#FED7AA",   // orange-200
+  },
+  moodIconRed: {
+    backgroundColor: "#FECACA",   // red-200
+  },
+  moodTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  moodBody: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "500",
+  },
+  moodCtaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 8,
+  },
+  moodCtaText: {
     fontSize: 12,
     fontWeight: "700",
   },

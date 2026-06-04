@@ -105,10 +105,13 @@ export default function MoodInsightsScreen() {
   const config = STATUS_CONFIG[tier];
   const score = currentSnapshot?.compositeMoodScore ?? 0;
   const signals = currentSnapshot?.signalBreakdown;
+  // Precedence fix: `a ?? 0 + b ?? 0` parses as `a ?? (0 + b) ?? 0`,
+  // so when baselinePolarity is non-null the lexical term is silently
+  // dropped from the average. Parenthesize each `?? 0` independently.
+  // Also removed the `as any` cast — these fields exist on MoodBaseline.
   const baselineScore = baseline?.isEstablished
     ? Math.round(
-        ((baseline as any).baselinePolarity ?? 0 +
-          (baseline as any).baselineLexical ?? 0) / 2
+        ((baseline.baselinePolarity ?? 0) + (baseline.baselineLexical ?? 0)) / 2
       )
     : null;
 
