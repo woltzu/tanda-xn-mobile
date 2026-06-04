@@ -94,6 +94,7 @@ export const Routes = {
   CrossCircleLending: "CrossCircleLending",
   CycleTimeline: "CycleTimeline",
   Dashboard: "Dashboard",
+  DecisionHistory: "DecisionHistory",
   DefaultDetail: "DefaultDetail",
   DefaultRecovery: "DefaultRecovery",
   DepositToGoal: "DepositToGoal",

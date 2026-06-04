@@ -143,6 +143,7 @@ import DiscoverCirclesScreen from "./screens/DiscoverCirclesScreen";
 import InsurancePoolScreen from "./screens/InsurancePoolScreen";
 import SubstitutePoolScreen from "./screens/SubstitutePoolScreen";
 import CreditReportScreen from "./screens/CreditReportScreen";
+import DecisionHistoryScreen from "./screens/DecisionHistoryScreen";
 import PartialContributionScreen from "./screens/PartialContributionScreen";
 import PositionSwapScreen from "./screens/PositionSwapScreen";
 import CycleTimelineScreen from "./screens/CycleTimelineScreen";
@@ -490,6 +491,7 @@ export type RootStackParamList = {
   InsurancePool: { circleId: string };
   SubstitutePool: undefined;
   CreditReport: undefined;
+  DecisionHistory: undefined;
   PartialContribution: { circleId: string; cycleId?: string };
   PositionSwap: { circleId: string };
   CycleTimeline: { circleId: string };
@@ -639,7 +641,7 @@ export type RootStackParamList = {
   PaymentFailed: { failureDetails?: object; gracePeriod?: object } | undefined;
   PaymentReminder: { reminder?: object; walletBalance?: number } | undefined;
   HardshipRequest: { advanceId?: string; advance?: object } | undefined;
-  AdvanceRejected: { rejection?: object; improvements?: object[] } | undefined;
+  AdvanceRejected: { rejection?: object; improvements?: object[]; advanceId?: string } | undefined;
   AutopaySetup:
     | { activeAdvance?: object; paymentMethods?: object[] }
     | undefined;
@@ -795,6 +797,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="InsurancePool" component={InsurancePoolScreen} />
       <HomeStack.Screen name="SubstitutePool" component={SubstitutePoolScreen} />
       <HomeStack.Screen name="CreditReport" component={CreditReportScreen} />
+      <HomeStack.Screen name="DecisionHistory" component={DecisionHistoryScreen} />
       <HomeStack.Screen name="EarlyIntervention" component={EarlyInterventionScreen} />
       <HomeStack.Screen name="ScoreBreakdown" component={ScoreBreakdownScreen} />
       <HomeStack.Screen name="CreditProfile" component={CreditProfileScreen} />

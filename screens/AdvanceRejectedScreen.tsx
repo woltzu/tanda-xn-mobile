@@ -19,6 +19,11 @@
 // Route params (all optional, defaults match canonical mock):
 //   rejection?: Rejection
 //   improvements?: Improvement[]
+//   advanceId?: string  // when present, fetch the linked
+//                       // liquidity_denial decision via useExplanation
+//                       // and surface its localized explanation above the
+//                       // static reason copy. Falls through silently if
+//                       // no decision row exists (e.g. legacy advances).
 //
 // Navigation:
 //   - back → goBack
@@ -45,6 +50,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import { useExplanation } from "../hooks/useExplainableAI";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -82,6 +88,7 @@ type Improvement = {
 type AdvanceRejectedParams = {
   rejection?: Rejection;
   improvements?: Improvement[];
+  advanceId?: string;
 };
 type AdvanceRejectedRouteProp = RouteProp<
   { AdvanceRejected: AdvanceRejectedParams },
@@ -145,7 +152,17 @@ export default function AdvanceRejectedScreen() {
 
   const rejection = route.params?.rejection ?? DEFAULT_REJECTION;
   const improvements = route.params?.improvements ?? DEFAULT_IMPROVEMENTS;
+  const advanceId = route.params?.advanceId;
   const message = rejectionMessage(rejection);
+
+  // When the screen is opened from a real liquidity-advance request,
+  // surface the localized AI explanation that the SQL-side gate
+  // recorded via record_ai_decision. Falls back silently if no row
+  // exists (legacy advances or pre-migration-111 requests).
+  const { explanationText } = useExplanation({
+    sourceEventId: advanceId,
+    sourceEventType: advanceId ? "liquidity_advance_request" : undefined,
+  });
 
   const progressPct = Math.min(
     100,
@@ -201,6 +218,21 @@ export default function AdvanceRejectedScreen() {
         </LinearGradient>
 
         <View style={styles.contentWrap}>
+          {/* AI explanation card (localized via record_ai_decision).
+              Only renders when a linked decision row exists for this
+              advance — keeps legacy/mock flows unchanged. */}
+          {explanationText ? (
+            <View style={styles.explanationCard}>
+              <View style={styles.explanationHeader}>
+                <View style={styles.explanationIconBox}>
+                  <Ionicons name="information-circle" size={18} color="#FFFFFF" />
+                </View>
+                <Text style={styles.explanationTitle}>Why this decision</Text>
+              </View>
+              <Text style={styles.explanationBody}>{explanationText}</Text>
+            </View>
+          ) : null}
+
           {/* XnScore progress card (only for xnscore_low) */}
           {isScoreLow && (
             <View style={styles.scoreCard}>
@@ -393,6 +425,33 @@ const styles = StyleSheet.create({
   },
 
   contentWrap: { marginTop: -40, paddingHorizontal: 20 },
+
+  explanationCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderLeftWidth: 4,
+    borderLeftColor: NAVY,
+  },
+  explanationHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+  },
+  explanationIconBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: NAVY,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  explanationTitle: { fontSize: 14, fontWeight: "700", color: NAVY },
+  explanationBody: { fontSize: 14, color: NAVY, lineHeight: 20 },
 
   scoreCard: {
     backgroundColor: "#FFFFFF",

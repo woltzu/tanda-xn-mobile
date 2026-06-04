@@ -709,6 +709,28 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Credit Report (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point to DecisionHistoryScreen.
+              Phase D3 of feat(explainable-ai) #83. 16th debug chip.
+              Shows the running log of AI decisions made about the
+              member (liquidity_denial, tier_advancement, etc.) with
+              the localized rendered_explanation from
+              record_ai_decision. */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() =>
+                navigation.navigate(Routes.DecisionHistory as never)
+              }
+              accessibilityLabel="Open Explainable AI decision history (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="bulb-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>
+                Explainable AI (debug)
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1a-prime. MEMBER TIER CARD ========== */}
