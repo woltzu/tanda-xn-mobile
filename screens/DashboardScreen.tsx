@@ -20,6 +20,7 @@ import { useSavings } from "../context/SavingsContext";
 import { useCommunity } from "../context/CommunityContext";
 import { useElder } from "../context/ElderContext";
 import { useNotifications } from "../context/NotificationContext";
+import { useActiveIntervention } from "../hooks/useEarlyIntervention";
 import { useUserDefaults } from "../hooks/useDefaultCascade";
 import { useLateContributions } from "../hooks/useLateContributions";
 import { useInterest } from "../hooks/useInterest";
@@ -95,6 +96,15 @@ function getGreeting(): string {
 export default function DashboardScreen() {
   const navigation = useNavigation<DashboardScreenNavigationProp>();
   const { user } = useAuth();
+
+  // Active early-intervention banner. The hook handles its own auth
+  // (via useAuth internally) and subscribes to member_interventions
+  // realtime so dismissals + new arrivals reflect without a refresh.
+  const {
+    intervention,
+    hasIntervention,
+    markEngaged,
+  } = useActiveIntervention();
 
   // Safety net: catch users who landed here without going through
   // SetPassword (e.g. closed the tab between QuickJoin success and the
@@ -352,6 +362,36 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* ========== 1a-bis. EARLY INTERVENTION CARD ========== */}
+        {/* Only renders when an unresolved intervention exists for this
+            member (hook filters to status IN 'sent'|'viewed'|'engaged').
+            Tap "Got it" → markEngaged() flips status to 'engaged' and the
+            realtime subscription clears the banner. Amber color matches
+            the engine's WARNING tone, distinct from the red recovery
+            banner below (which is a stronger signal). */}
+        {hasIntervention && intervention && (
+          <View style={styles.interventionCard}>
+            <View style={styles.interventionIcon}>
+              <Ionicons name="hand-left-outline" size={22} color="#92400E" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.interventionTitle} numberOfLines={4}>
+                {intervention.messageText}
+              </Text>
+              <View style={styles.interventionActions}>
+                <TouchableOpacity
+                  style={styles.interventionPrimaryBtn}
+                  onPress={() => { markEngaged(); }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Acknowledge intervention"
+                >
+                  <Text style={styles.interventionPrimaryBtnText}>Got it</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* ========== 1b. WALLET BALANCE CARD ========== */}
         <TouchableOpacity
@@ -836,6 +876,55 @@ const styles = StyleSheet.create({
   },
 
   // ===== 1b. WALLET CARD =====
+  // Early-intervention banner — sits between the header and the wallet card.
+  // Amber/warm palette (mirrors the engine's WARNING tone token), distinct
+  // from the harder-red recoveryBanner below which fires for actual overdue
+  // payments. Soft-dismiss via the "Got it" → markEngaged() handler.
+  interventionCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#FEF3C7",
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    gap: 12,
+  },
+  interventionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#FDE68A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  interventionTitle: {
+    fontSize: 13,
+    color: "#92400E",
+    lineHeight: 18,
+    fontWeight: "500",
+  },
+  interventionActions: {
+    flexDirection: "row",
+    marginTop: 10,
+    gap: 8,
+  },
+  interventionPrimaryBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+  },
+  interventionPrimaryBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#92400E",
+  },
+
   walletCard: {
     flexDirection: "row",
     alignItems: "center",
