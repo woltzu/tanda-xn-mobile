@@ -23,6 +23,7 @@ import { useNotifications } from "../context/NotificationContext";
 import { useActiveIntervention } from "../hooks/useEarlyIntervention";
 import { useStressIntervention } from "../hooks/useFinancialStressPrediction";
 import { useMoodIntervention } from "../hooks/useContributionMoodDetection";
+import { useMemberTier } from "../hooks/useGraduatedEntry";
 import { useUserDefaults } from "../hooks/useDefaultCascade";
 import { useLateContributions } from "../hooks/useLateContributions";
 import { useInterest } from "../hooks/useInterest";
@@ -95,6 +96,43 @@ function getGreeting(): string {
   return "Good evening";
 }
 
+// ─── Tier helpers (Phase D3 of feat(tier)) ────────────────────────────────
+// Map graduated_entry_tiers.tier_key → color/bg/emoji. Values mirror the
+// engine's seeded definitions in migration 040.
+function getTierColor(tierKey: string): string {
+  switch (tierKey) {
+    case "critical": return "#991B1B";
+    case "newcomer": return "#EF4444";
+    case "established": return "#F59E0B";
+    case "trusted": return "#10B981";
+    case "elder": return "#8B5CF6";
+    case "elite": return "#FFD700";
+    default: return "#6B7280";
+  }
+}
+function getTierBg(tierKey: string): string {
+  switch (tierKey) {
+    case "critical": return "#FEE2E2";
+    case "newcomer": return "#FEF2F2";
+    case "established": return "#FEF3C7";
+    case "trusted": return "#D1FAE5";
+    case "elder": return "#EDE9FE";
+    case "elite": return "#FEF9C3";
+    default: return "#F3F4F6";
+  }
+}
+function getTierEmoji(tierKey: string): string {
+  switch (tierKey) {
+    case "critical": return "\u{1F6AB}";       // 🚫
+    case "newcomer": return "\u{1F331}";       // 🌱
+    case "established": return "\u{26A1}";     // ⚡
+    case "trusted": return "\u{2713}";         // ✓
+    case "elder": return "\u{1F3C6}";          // 🏆
+    case "elite": return "\u{2B50}";           // ⭐
+    default: return "\u{1F535}";               // 🔵
+  }
+}
+
 export default function DashboardScreen() {
   const navigation = useNavigation<DashboardScreenNavigationProp>();
   const { user } = useAuth();
@@ -133,6 +171,12 @@ export default function DashboardScreen() {
     activeIntervention: moodIntervention,
     hasActive: hasMoodIntervention,
   } = useMoodIntervention();
+
+  // Member tier (Phase D3 of feat(tier)). Reads from member_tier_status
+  // which is now populated daily by graduated-entry-cron (Phase D2). The
+  // hook auto-subscribes to realtime so tier advancement is reflected
+  // without a refresh.
+  const { status: tierStatus } = useMemberTier();
 
   // Safety net: catch users who landed here without going through
   // SetPassword (e.g. closed the tab between QuickJoin success and the
@@ -464,7 +508,88 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Discover Circles (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point for the Graduated Entry screen
+              (Phase D3 of feat(tier)). The screen (341 LOC) shows the
+              member's current tier, action items for next tier,
+              fast-track form, and tier history. The tier card below
+              already exposes the headline data; this chip is the path
+              to the deeper detail screen until a real menu entry exists. */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() => navigation.navigate(Routes.GraduatedEntry)}
+              accessibilityLabel="Open Tier Status (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="ribbon-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Tier Status (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
+
+        {/* ========== 1a-prime. MEMBER TIER CARD ========== */}
+        {/* Phase D3 of feat(tier). Shows current tier + progress to next.
+            Renders for every member with a member_tier_status row (now
+            populated by graduated-entry-cron via the profiles.xn_score
+            fallback in migration 094). Card color and icon come from the
+            engine's seeded tier definitions in graduated_entry_tiers.
+            Whole card is tappable → GraduatedEntryScreen for the deep view. */}
+        {tierStatus && (
+          <TouchableOpacity
+            style={[
+              styles.tierCard,
+              { backgroundColor: getTierBg(tierStatus.currentTier),
+                borderColor: getTierColor(tierStatus.currentTier) },
+            ]}
+            onPress={() => navigation.navigate(Routes.GraduatedEntry)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${tierStatus.currentTier} tier details`}
+          >
+            <View style={[
+              styles.tierIcon,
+              { backgroundColor: getTierColor(tierStatus.currentTier) + "22" },
+            ]}>
+              <Text style={styles.tierEmoji}>{getTierEmoji(tierStatus.currentTier)}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={styles.tierLabelRow}>
+                <Text style={[styles.tierLabel, { color: getTierColor(tierStatus.currentTier) }]}>
+                  {tierStatus.currentTier.charAt(0).toUpperCase() + tierStatus.currentTier.slice(1)}
+                </Text>
+                {tierStatus.nextTier ? (
+                  <Text style={styles.tierProgress}>
+                    {tierStatus.progressPct}% to {tierStatus.nextTier.charAt(0).toUpperCase() + tierStatus.nextTier.slice(1)}
+                  </Text>
+                ) : (
+                  <Text style={styles.tierProgress}>Maxed out</Text>
+                )}
+              </View>
+              <View style={styles.tierProgressTrack}>
+                <View
+                  style={[
+                    styles.tierProgressFill,
+                    {
+                      width: `${Math.min(100, tierStatus.progressPct)}%`,
+                      backgroundColor: getTierColor(tierStatus.currentTier),
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.tierFooter} numberOfLines={1}>
+                {tierStatus.maxCircleSize === null || tierStatus.maxCircleSize === 0
+                  ? (tierStatus.maxCircleSize === 0 ? "Cannot join circles yet" : "Unlimited access")
+                  : `Up to ${tierStatus.maxCircleSize}-member circles · $${Math.round((tierStatus.maxContributionCents ?? 0) / 100)}/mo cap`}
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={getTierColor(tierStatus.currentTier)}
+            />
+          </TouchableOpacity>
+        )}
 
         {/* ========== 1a-bis. EARLY INTERVENTION CARD ========== */}
         {/* Only renders when an unresolved intervention exists for this
@@ -1310,6 +1435,64 @@ const styles = StyleSheet.create({
   moodCtaText: {
     fontSize: 12,
     fontWeight: "700",
+  },
+
+  // ── Tier card (Phase D3 of feat(tier)) ───────────────────────────────
+  // Single horizontal card showing tier emoji + label + progress to next
+  // tier + access summary. Background and border tone follow the tier's
+  // color from graduated_entry_tiers seed data.
+  tierCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
+  },
+  tierIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tierEmoji: {
+    fontSize: 18,
+  },
+  tierLabelRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  tierLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  tierProgress: {
+    fontSize: 11,
+    color: "#6B7280",
+    fontWeight: "500",
+  },
+  tierProgressTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(0,0,0,0.06)",
+    overflow: "hidden",
+    marginBottom: 6,
+  },
+  tierProgressFill: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  tierFooter: {
+    fontSize: 11,
+    color: "#6B7280",
+    fontWeight: "500",
   },
 
   walletCard: {
