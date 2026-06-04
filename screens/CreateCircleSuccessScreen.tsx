@@ -66,6 +66,33 @@ export default function CreateCircleSuccessScreen() {
   const [preflightStatus, setPreflightStatus] = useState<PreflightStatus>("evaluating");
   const { evaluation, evaluateFormation } = useCircleFormationCheck();
 
+  // ── Composition evaluator (Phase B of feat(circle), migration 092) ──
+  // Group-level metrics that pairwise Conflict scoring can't see: XnScore
+  // homogeneity, tenure diversity, vouching density, affordability across
+  // the proposed set. Returns 0-100 score + 4-factor breakdown + warnings.
+  // Triggers the same review modal as Conflict when score < 50 (acceptable
+  // threshold).
+  type CompositionFactor = {
+    score: number;
+    weight: number;
+    detail: Record<string, any>;
+  };
+  type CompositionResult = {
+    success: boolean;
+    composition_score?: number;
+    tier?: "strong" | "acceptable" | "weak" | "poor";
+    can_proceed?: boolean;
+    breakdown?: {
+      xn_homogeneity: CompositionFactor;
+      tenure_diversity: CompositionFactor;
+      vouch_density: CompositionFactor;
+      affordability: CompositionFactor;
+    };
+    warnings?: Array<{ type: string; severity: string; message: string }>;
+    member_count?: number;
+  };
+  const [composition, setComposition] = useState<CompositionResult | null>(null);
+
   const {
     circleType,
     name,
@@ -144,23 +171,53 @@ export default function CreateCircleSuccessScreen() {
 
   const runPreflight = async () => {
     const ids = await resolveProposedMemberIds();
-    // < 2 members → 0 pairs → no-op. Skip the engine entirely.
-    if (ids.length < 2) {
-      setPreflightStatus("approved");
-      return;
+    // < 2 members → 0 pairs → no-op for the Conflict engine. Still call
+    // the composition evaluator since it has useful single-member output
+    // (affordability + tenure are well-defined for N=1).
+    let conflictRequiresReview = false;
+    let compositionRequiresReview = false;
+    let compositionResult: CompositionResult | null = null;
+
+    // 1) Conflict Prediction (pairwise) — needs ≥ 2 members
+    if (ids.length >= 2) {
+      try {
+        const result = await evaluateFormation(ids);
+        conflictRequiresReview = result?.requiresReview ?? false;
+      } catch (err: any) {
+        console.warn("[preflight] formation check failed:", err?.message);
+      }
     }
+
+    // 2) Group composition — runs even for N=1 (single-member circles).
+    // Amount in dollars × 100 = cents. Frequency passed through.
     try {
-      const result = await evaluateFormation(ids);
-      if (result?.requiresReview) {
-        setPreflightStatus("review-required");
-      } else {
-        setPreflightStatus("approved");
+      const { data, error } = await supabase.rpc("evaluate_circle_composition", {
+        p_member_ids: ids,
+        p_target_amount_cents: Math.round(amount * 100),
+        p_frequency: frequency,
+      });
+      if (error) {
+        console.warn("[preflight] composition RPC error:", error.message);
+      } else if (data) {
+        compositionResult = data as CompositionResult;
+        setComposition(compositionResult);
+        if (
+          compositionResult.success &&
+          typeof compositionResult.composition_score === "number" &&
+          compositionResult.composition_score < 50
+        ) {
+          compositionRequiresReview = true;
+        }
       }
     } catch (err: any) {
-      // Engine failure should NOT block circle creation — surfacing a
-      // backend hiccup at "Create Circle" time would punish the user for
-      // an internal monitoring system going down.
-      console.warn("[preflight] formation check failed:", err?.message);
+      console.warn("[preflight] composition check threw:", err?.message);
+    }
+
+    // Trigger review if EITHER engine flagged. Either way, engine errors
+    // never block circle creation — same contract as before.
+    if (conflictRequiresReview || compositionRequiresReview) {
+      setPreflightStatus("review-required");
+    } else {
       setPreflightStatus("approved");
     }
   };
@@ -263,14 +320,28 @@ export default function CreateCircleSuccessScreen() {
     });
   };
 
-  // ── Conflict review modal ────────────────────────────────────────────
-  // Renders when preflightStatus === "review-required". Lists flagged pairs
-  // with friction tier + top contributing factor so the admin can make an
-  // informed call. Two outcomes: proceed anyway or go back and edit members.
+  // ── Review modal — Conflict + Composition combined ──────────────────
+  // Renders when preflightStatus === "review-required". Shows pair-level
+  // friction (from Conflict Prediction) AND group-level composition
+  // score (from migration 092's evaluate_circle_composition). Either or
+  // both may have triggered the modal — heading + content adapt.
   const renderReviewModal = () => {
     const flagged = evaluation?.flag?.flaggedPairIds ?? [];
     const tier = evaluation?.circleTier ?? "clear";
     const highest = evaluation?.highestScore ?? 0;
+    const hasConflict = flagged.length > 0;
+    const hasCompositionIssue =
+      composition?.success === true &&
+      typeof composition?.composition_score === "number" &&
+      composition.composition_score < 50;
+
+    // Adapt title/subtitle based on which engine(s) flagged.
+    const modalTitle =
+      hasConflict && hasCompositionIssue ? "Friction & Composition Concerns" :
+      hasConflict ? "Potential Friction Detected" :
+      hasCompositionIssue ? "Group Composition Below Threshold" :
+      "Review Required";
+
     return (
       <Modal
         visible={preflightStatus === "review-required"}
@@ -282,38 +353,117 @@ export default function CreateCircleSuccessScreen() {
             <View style={styles.modalIcon}>
               <Ionicons name="warning" size={28} color="#D97706" />
             </View>
-            <Text style={styles.modalTitle}>Potential Friction Detected</Text>
-            <Text style={styles.modalSubtitle}>
-              Our compatibility check found {flagged.length} pair
-              {flagged.length === 1 ? "" : "s"} that may have higher conflict
-              risk. Circle tier: <Text style={styles.modalTierBold}>{tier.toUpperCase()}</Text>{" "}
-              (highest pair score {Math.round(highest)}/100).
-            </Text>
+            <Text style={styles.modalTitle}>{modalTitle}</Text>
 
             <ScrollView style={styles.modalPairsList}>
-              {flagged.slice(0, 5).map((p: any, idx: number) => (
-                <View key={idx} style={styles.modalPairRow}>
-                  <View style={[styles.modalTierDot, {
-                    backgroundColor:
-                      p.tier === "separate" ? "#DC2626" :
-                      p.tier === "flag" ? "#EF4444" :
-                      p.tier === "watch" ? "#F59E0B" : "#10B981",
-                  }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.modalPairScore}>
-                      {Math.round(p.friction_score)}/100 — {p.tier}
+              {/* Conflict section */}
+              {hasConflict && (
+                <>
+                  <Text style={styles.modalSubtitle}>
+                    Our compatibility check found {flagged.length} pair
+                    {flagged.length === 1 ? "" : "s"} that may have higher conflict
+                    risk. Circle tier: <Text style={styles.modalTierBold}>{tier.toUpperCase()}</Text>{" "}
+                    (highest pair score {Math.round(highest)}/100).
+                  </Text>
+                  {flagged.slice(0, 5).map((p: any, idx: number) => (
+                    <View key={idx} style={styles.modalPairRow}>
+                      <View style={[styles.modalTierDot, {
+                        backgroundColor:
+                          p.tier === "separate" ? "#DC2626" :
+                          p.tier === "flag" ? "#EF4444" :
+                          p.tier === "watch" ? "#F59E0B" : "#10B981",
+                      }]} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.modalPairScore}>
+                          {Math.round(p.friction_score)}/100 — {p.tier}
+                        </Text>
+                        <Text style={styles.modalPairFactor}>
+                          Top factor: {String(p.top_factor).replace(/_/g, " ")}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                  {flagged.length > 5 && (
+                    <Text style={styles.modalMoreText}>
+                      +{flagged.length - 5} more flagged pair
+                      {flagged.length - 5 === 1 ? "" : "s"}
                     </Text>
-                    <Text style={styles.modalPairFactor}>
-                      Top factor: {String(p.top_factor).replace(/_/g, " ")}
+                  )}
+                </>
+              )}
+
+              {/* Composition section — shows whenever modal is open AND
+                  composition produced data, regardless of which engine
+                  triggered the modal. Helps admin see the full picture. */}
+              {composition?.success && composition.breakdown && (
+                <View style={styles.compositionBox}>
+                  <View style={styles.compositionHeader}>
+                    <Text style={styles.compositionTitle}>
+                      Group Composition: {Math.round(composition.composition_score ?? 0)}/100
                     </Text>
+                    <View style={[styles.compositionTierPill, {
+                      backgroundColor:
+                        composition.tier === "strong" ? "#D1FAE5" :
+                        composition.tier === "acceptable" ? "#DBEAFE" :
+                        composition.tier === "weak" ? "#FED7AA" :
+                        "#FEE2E2",
+                    }]}>
+                      <Text style={[styles.compositionTierText, {
+                        color:
+                          composition.tier === "strong" ? "#065F46" :
+                          composition.tier === "acceptable" ? "#1E40AF" :
+                          composition.tier === "weak" ? "#9A3412" :
+                          "#991B1B",
+                      }]}>{(composition.tier ?? "?").toUpperCase()}</Text>
+                    </View>
                   </View>
+
+                  {/* 4 factor bars */}
+                  {[
+                    { key: "xn_homogeneity",   label: "XnScore homogeneity" },
+                    { key: "tenure_diversity", label: "Tenure diversity" },
+                    { key: "vouch_density",    label: "Vouching density" },
+                    { key: "affordability",    label: "Affordability" },
+                  ].map(({ key, label }) => {
+                    const factor: any = (composition.breakdown as any)?.[key];
+                    if (!factor) return null;
+                    const pct = Math.min(100, Math.max(0, Math.round(factor.score)));
+                    return (
+                      <View key={key} style={styles.compositionFactor}>
+                        <View style={styles.compositionFactorLabelRow}>
+                          <Text style={styles.compositionFactorLabel}>{label}</Text>
+                          <Text style={styles.compositionFactorScore}>
+                            {pct} <Text style={styles.compositionFactorWeight}>
+                              ({Math.round(factor.weight * 100)}%)
+                            </Text>
+                          </Text>
+                        </View>
+                        <View style={styles.compositionBarTrack}>
+                          <View style={[styles.compositionBarFill, {
+                            width: `${pct}%`,
+                            backgroundColor:
+                              pct >= 75 ? "#10B981" :
+                              pct >= 50 ? "#3B82F6" :
+                              pct >= 25 ? "#F59E0B" :
+                              "#EF4444",
+                          }]} />
+                        </View>
+                      </View>
+                    );
+                  })}
+
+                  {/* Warnings */}
+                  {(composition.warnings ?? []).map((w, idx) => (
+                    <View key={idx} style={styles.compositionWarningRow}>
+                      <Ionicons
+                        name={w.severity === "high" ? "alert-circle" : "warning-outline"}
+                        size={14}
+                        color={w.severity === "high" ? "#991B1B" : "#9A3412"}
+                      />
+                      <Text style={styles.compositionWarningText}>{w.message}</Text>
+                    </View>
+                  ))}
                 </View>
-              ))}
-              {flagged.length > 5 && (
-                <Text style={styles.modalMoreText}>
-                  +{flagged.length - 5} more flagged pair
-                  {flagged.length - 5 === 1 ? "" : "s"}
-                </Text>
               )}
             </ScrollView>
 
@@ -928,5 +1078,85 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+
+  // ── Composition section (Phase B of feat(circle)) ────────────────────
+  compositionBox: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  compositionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  compositionTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0A2342",
+  },
+  compositionTierPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  compositionTierText: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+  },
+  compositionFactor: {
+    marginTop: 8,
+  },
+  compositionFactorLabelRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  compositionFactorLabel: {
+    fontSize: 11,
+    color: "#374151",
+    fontWeight: "500",
+  },
+  compositionFactorScore: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0A2342",
+  },
+  compositionFactorWeight: {
+    fontSize: 10,
+    fontWeight: "400",
+    color: "#9CA3AF",
+  },
+  compositionBarTrack: {
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#E5E7EB",
+    overflow: "hidden",
+  },
+  compositionBarFill: {
+    height: "100%",
+    borderRadius: 3,
+  },
+  compositionWarningRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    marginTop: 8,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+  },
+  compositionWarningText: {
+    flex: 1,
+    fontSize: 11,
+    color: "#374151",
+    lineHeight: 15,
   },
 });
