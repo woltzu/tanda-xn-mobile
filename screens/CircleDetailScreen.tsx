@@ -18,6 +18,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { Circle, CircleMember, CircleActivity, useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
+import { useActivePlan } from "../hooks/usePartialContribution";
 
 type CircleDetailNavigationProp = StackNavigationProp<RootStackParamList>;
 type CircleDetailRouteProp = RouteProp<RootStackParamList, "CircleDetail">;
@@ -99,6 +100,18 @@ export default function CircleDetailScreen() {
   const [activities, setActivities] = useState<CircleActivity[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
   const [isLoadingActivities, setIsLoadingActivities] = useState(true);
+
+  // Phase D4 of feat(partial). Active partial-contribution plan for this
+  // member + this circle (driven by the migration 102 RPCs, surfaced via
+  // the existing useActivePlan hook which queries partial_contribution_plans
+  // directly — that read is clean against prod schema).
+  const {
+    plan: partialPlan,
+    hasPlan: hasPartialPlan,
+    catchUpProgress: partialProgress,
+    nextCatchUpDate: partialNextDue,
+    remainingAmount: partialRemaining,
+  } = useActivePlan(user?.id, circleId);
 
   // Find the circle in all available sources: user circles, my circles, or browse circles
   const circle = [...circles, ...myCircles, ...browseCircles].find((c) => c.id === circleId);
@@ -400,6 +413,69 @@ export default function CircleDetailScreen() {
           <Text style={styles.statSubtext}>{circle.memberCount} members</Text>
         </View>
       </View>
+
+      {/* Active Partial Plan Card — Phase D4 of feat(partial).
+          Renders only when the current user has an active partial-
+          contribution plan for this circle. Real entry point for plan
+          management — no debug-only guard. Tapping "View plan details"
+          navigates to PartialContributionScreen, which resolves the
+          active cycle from circle_cycles when cycleId is omitted. */}
+      {isMember && hasPartialPlan && partialPlan && (
+        <View style={styles.partialPlanCard}>
+          <View style={styles.partialPlanHeader}>
+            <View style={styles.partialPlanIcon}>
+              <Ionicons name="calendar-outline" size={20} color="#00C6AE" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.partialPlanBadge}>FLEXIBLE PAYMENT ACTIVE</Text>
+              <Text style={styles.partialPlanTitle}>
+                ${partialRemaining.toFixed(2)} remaining
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.progressBarBg}>
+            <View
+              style={[
+                styles.progressBarFill,
+                { width: `${partialProgress.percentage}%`, backgroundColor: "#00C6AE" },
+              ]}
+            />
+          </View>
+          <View style={styles.partialPlanProgressRow}>
+            <Text style={styles.partialPlanProgressLabel}>
+              {partialProgress.paid} of {partialProgress.total} catch-ups paid
+            </Text>
+            <Text style={styles.partialPlanProgressPct}>
+              {partialProgress.percentage}%
+            </Text>
+          </View>
+
+          {partialNextDue && (
+            <View style={styles.partialPlanNextRow}>
+              <Ionicons name="time-outline" size={14} color="#6B7280" />
+              <Text style={styles.partialPlanNextText}>
+                Next catch-up due {partialNextDue}
+              </Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.partialPlanButton}
+            onPress={() =>
+              navigation.navigate("PartialContribution", {
+                circleId,
+                cycleId: partialPlan.cycleId,
+              })
+            }
+            accessibilityRole="button"
+            accessibilityLabel="View Flexible Payment plan details"
+          >
+            <Text style={styles.partialPlanButtonText}>View plan details</Text>
+            <Ionicons name="arrow-forward" size={14} color="#00C6AE" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Payment Progress */}
       <View style={styles.card}>
@@ -1260,6 +1336,85 @@ const styles = StyleSheet.create({
     height: "100%",
     backgroundColor: "#00C6AE",
     borderRadius: 4,
+  },
+  partialPlanCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#00C6AE",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  partialPlanHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 12,
+  },
+  partialPlanIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#00C6AE15",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  partialPlanBadge: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#00C6AE",
+    letterSpacing: 0.6,
+  },
+  partialPlanTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginTop: 2,
+  },
+  partialPlanProgressRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  partialPlanProgressLabel: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  partialPlanProgressPct: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#00C6AE",
+  },
+  partialPlanNextRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
+  },
+  partialPlanNextText: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  partialPlanButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#00C6AE15",
+  },
+  partialPlanButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#00C6AE",
   },
   progressText: {
     fontSize: 12,

@@ -618,6 +618,32 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Substitute Pool (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point for PartialContributionScreen.
+              Phase D4 of feat(partial). Hidden if the user has no circles
+              (the screen needs a circleId). The screen resolves the active
+              cycle from circle_cycles on mount when cycleId is omitted, so
+              we only need to pass circleId.
+              The real user-facing entry points are:
+                - MakeContributionScreen "Insufficient Balance" alert
+                - MakeContributionScreen tertiary CTA
+                - CircleDetail active-plan card (when a plan exists)
+              This chip exists for fast QA without going through those flows. */}
+          {__DEV__ && myCircles.length > 0 && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() =>
+                navigation.navigate(Routes.PartialContribution, {
+                  circleId: myCircles[0]?.id ?? "",
+                })
+              }
+              accessibilityLabel="Open Partial Contribution (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="pie-chart-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Partial Contribution (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1a-prime. MEMBER TIER CARD ========== */}
