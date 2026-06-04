@@ -14,9 +14,18 @@
 // are still covered by scoring-pipeline-daily, which writes its own
 // cron_job_logs rows so the same dashboard reflects them anyway.
 //
-// Dependencies: hooks/useCronAIJobs (already exists). No new RPCs.
-// Gating: __DEV__ entry chip on Dashboard; no role gate on the screen
-// itself yet -- add an `is_admin` check before shipping to TestFlight.
+// Dependencies: hooks/useCronAIJobs (existing), hooks/useIsAdmin (added
+// in migration 114 commit). The screen is gated TWO ways:
+//   1. Frontend: useIsAdmin -> if false, render an "Access denied" view
+//      and skip every data hook so they never run for non-admins.
+//   2. Backend: RLS on cron_job_logs / model_performance_logs /
+//      cohort_analytics (migration 114) restricts SELECT to admin_users
+//      rows + service_role. If somebody bypasses the frontend guard,
+//      they still get empty arrays from PostgREST instead of real data.
+//
+// The Dashboard chip is __DEV__-only, so the visible entry point is dev
+// builds only; the guards above also protect prod once the chip is moved
+// to a role-gated admin menu.
 // =============================================================================
 
 import React, { useMemo, useState } from "react";
@@ -40,6 +49,7 @@ import {
   type JobHealthSummary,
   type CronJobLog,
 } from "../hooks/useCronAIJobs";
+import { useIsAdmin } from "../hooks/useIsAdmin";
 
 const COLORS = {
   navy: "#0A2342",
@@ -97,6 +107,83 @@ function fmtPct(n: number | null | undefined, digits = 1): string {
 }
 
 export default function AIJobsHealthScreen() {
+  const navigation = useNavigation();
+  const { isAdmin, loading: adminLoading, error: adminError } = useIsAdmin();
+
+  // Early-return BEFORE wiring the data hooks. This isn't just cosmetic:
+  // useAIJobHealth/useAIJobLogs/etc. each issue supabase queries on mount,
+  // so calling them for a non-admin would (a) spam the network with
+  // requests that RLS will reject anyway, and (b) leak job-name metadata
+  // via the cron_job_logs.job_name column even when rows return empty.
+  // We fail-closed on loading too -- the access-denied frame shows
+  // "Checking permissions" until isAdmin resolves.
+  if (adminLoading || !isAdmin) {
+    return (
+      <AccessGate
+        loading={adminLoading}
+        error={adminError}
+        onBack={() => navigation.goBack()}
+      />
+    );
+  }
+
+  return <AIJobsHealthScreenInner />;
+}
+
+function AccessGate({
+  loading,
+  error,
+  onBack,
+}: {
+  loading: boolean;
+  error: string | null;
+  onBack: () => void;
+}) {
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.headerBtn} onPress={onBack}>
+          <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>AI Job Fleet</Text>
+        <View style={styles.headerBtn} />
+      </View>
+
+      <View style={styles.deniedBox}>
+        {loading ? (
+          <>
+            <ActivityIndicator color={COLORS.teal} />
+            <Text style={styles.deniedTitle}>Checking permissions</Text>
+            <Text style={styles.deniedBody}>
+              Confirming your admin role with the server.
+            </Text>
+          </>
+        ) : (
+          <>
+            <Ionicons
+              name="lock-closed-outline"
+              size={36}
+              color={COLORS.red}
+            />
+            <Text style={styles.deniedTitle}>Access denied</Text>
+            <Text style={styles.deniedBody}>
+              This screen surfaces operational metrics restricted to active
+              admins. Ask an admin to add you to the team if you need access.
+            </Text>
+            {error ? (
+              <Text style={styles.deniedError}>Reason: {error}</Text>
+            ) : null}
+            <TouchableOpacity style={styles.deniedBtn} onPress={onBack}>
+              <Text style={styles.deniedBtnText}>Go back</Text>
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function AIJobsHealthScreenInner() {
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
 
@@ -555,6 +642,42 @@ const styles = StyleSheet.create({
     minWidth: 50,
     textAlign: "right",
   },
+
+  deniedBox: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  deniedTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: COLORS.navy,
+    marginTop: 8,
+  },
+  deniedBody: {
+    fontSize: 13,
+    color: COLORS.muted,
+    textAlign: "center",
+    lineHeight: 19,
+    maxWidth: 320,
+  },
+  deniedError: {
+    fontSize: 11,
+    color: COLORS.red,
+    fontFamily: "monospace",
+    textAlign: "center",
+    marginTop: 4,
+  },
+  deniedBtn: {
+    marginTop: 16,
+    backgroundColor: COLORS.navy,
+    paddingHorizontal: 22,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  deniedBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
 
   loadingBox: { paddingVertical: 32, alignItems: "center" },
   emptyBox: {
