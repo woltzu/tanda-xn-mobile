@@ -148,11 +148,11 @@ export default function PositionSwapScreen() {
             <Text style={styles.mutedText}>Your Position</Text>
             <Text style={styles.positionNumber}>#{currentPosition ?? "?"}</Text>
             <Text style={styles.positionSubtext}>of {totalPositions}</Text>
-            {myMember?.payout_date && (
-              <Text style={styles.payoutDate}>
-                Payout: {myMember.payout_date}
-              </Text>
-            )}
+            {/* Payout-date block removed in PositionSwap D2 — the
+                CircleMemberForSwap type from PositionSwapEngine doesn't
+                model a per-member payout_date. If we add it later
+                (e.g., from circle_cycles.expected_payout_date filtered by
+                recipient_user_id) it can be restored here. */}
           </View>
         </View>
 

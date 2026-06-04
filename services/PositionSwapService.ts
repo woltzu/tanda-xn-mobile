@@ -199,20 +199,25 @@ export class PositionSwapService {
       .eq("circle_id", circleId)
       .single();
 
+    // D2 fix: SwapEligibility models constraints in camelCase, the DB
+    // query returns snake_case — coerce at the assignment site.
+    const toCamel = (c?: { min_position: number; max_position: number }) =>
+      c ? { minPosition: c.min_position, maxPosition: c.max_position } : undefined;
+
     // Check if target can take requester's position
     if (targetConstraint) {
       if (requesterPosition < targetConstraint.min_position) {
         return {
           canSwap: false,
           reason: `Target user cannot take Position ${requesterPosition} (minimum: ${targetConstraint.min_position})`,
-          targetConstraints: targetConstraint,
+          targetConstraints: toCamel(targetConstraint),
         };
       }
       if (requesterPosition > targetConstraint.max_position) {
         return {
           canSwap: false,
           reason: `Target user cannot take Position ${requesterPosition} (maximum: ${targetConstraint.max_position})`,
-          targetConstraints: targetConstraint,
+          targetConstraints: toCamel(targetConstraint),
         };
       }
     }
@@ -223,14 +228,14 @@ export class PositionSwapService {
         return {
           canSwap: false,
           reason: `You cannot take Position ${targetPosition} (your minimum: ${requesterConstraint.min_position})`,
-          requesterConstraints: requesterConstraint,
+          requesterConstraints: toCamel(requesterConstraint),
         };
       }
       if (targetPosition > requesterConstraint.max_position) {
         return {
           canSwap: false,
           reason: `You cannot take Position ${targetPosition} (your maximum: ${requesterConstraint.max_position})`,
-          requesterConstraints: requesterConstraint,
+          requesterConstraints: toCamel(requesterConstraint),
         };
       }
     }
@@ -260,8 +265,8 @@ export class PositionSwapService {
 
     return {
       canSwap: true,
-      requesterConstraints: requesterConstraint || undefined,
-      targetConstraints: targetConstraint || undefined,
+      requesterConstraints: toCamel(requesterConstraint ?? undefined),
+      targetConstraints: toCamel(targetConstraint ?? undefined),
     };
   }
 

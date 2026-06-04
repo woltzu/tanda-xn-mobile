@@ -668,6 +668,29 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           )}
 
+          {/* DEBUG ONLY — entry point to PositionSwapScreen.
+              Phase D2 of feat(position-swap) #18. The whole engine
+              (14 RPCs + hourly cron + EF + 906-LOC service + screen)
+              has been deployed since migration 018 with no navigation
+              entry from anywhere in the app. The chip + the kebab
+              menu item on CircleDetail fix that. Real entry: the
+              "Swap Position" item in CircleDetail's 3-dot menu. */}
+          {__DEV__ && myCircles.length > 0 && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() =>
+                navigation.navigate("PositionSwap" as any, {
+                  circleId: myCircles[0]?.id ?? "",
+                })
+              }
+              accessibilityLabel="Open Position Swap (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="swap-horizontal" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Position Swap (debug)</Text>
+            </TouchableOpacity>
+          )}
+
           {/* DEBUG ONLY — entry point to CreditReportScreen.
               Feature #13. Always available under __DEV__ since the
               report works even with no circles (it just shows empty

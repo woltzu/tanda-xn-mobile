@@ -244,6 +244,15 @@ export default function CircleDetailScreen() {
     });
   };
 
+  // Phase D2 of feat(position-swap) #18. PositionSwapScreen was registered
+  // in CirclesStack but had no navigation entry point — entirely orphan
+  // despite the entire backend (14 RPCs + cron + EF) being deployed and
+  // ready. This menu item makes the lifecycle reachable.
+  const handleSwapPosition = () => {
+    setShowMenu(false);
+    navigation.navigate("PositionSwap" as any, { circleId });
+  };
+
   // Determine user's role in this circle
   const getUserRole = (): UserRole => {
     // Check if user is the creator (admin)
@@ -1265,6 +1274,22 @@ export default function CircleDetailScreen() {
                   <View style={styles.menuItemContent}>
                     <Text style={styles.menuItemText}>Payment Reminders</Text>
                     <Text style={styles.menuItemDesc}>Set up alerts for due dates</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                </TouchableOpacity>
+
+                {/* Swap Position — Phase D2 of feat(position-swap) #18.
+                    Was missing for the entire engine's lifetime
+                    despite full backend (14 RPCs + hourly cron + EF). */}
+                <TouchableOpacity style={styles.menuItem} onPress={handleSwapPosition}>
+                  <View style={[styles.menuItemIcon, { backgroundColor: "#DBEAFE" }]}>
+                    <Ionicons name="swap-horizontal" size={20} color="#1D4ED8" />
+                  </View>
+                  <View style={styles.menuItemContent}>
+                    <Text style={styles.menuItemText}>Swap Position</Text>
+                    <Text style={styles.menuItemDesc}>
+                      Trade your payout position with another member
+                    </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                 </TouchableOpacity>
