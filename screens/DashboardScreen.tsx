@@ -568,6 +568,29 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Insurance Pool (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point for CrossCircleLendingScreen
+              (Phase D4 of feat(liquidity)). Platform-level pool that
+              advances members against their future payout (3-5% flat
+              fee, hardcoded in CrossCircleLiquidityEngine.ts). The pool
+              is now wired:
+                - Server-side eligibility + auto-approval (migration 097)
+                - Weekly safety-knob auto-tune cron (migration 098 + EF
+                  liquidity-pool-health-cron from D3)
+              Shown unconditionally under __DEV__ — the pool is
+              platform-wide, not per-circle. Remove once a real entry
+              point exists in the standard navigation. */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() => navigation.navigate(Routes.CrossCircleLending)}
+              accessibilityLabel="Open Cross Circle Lending (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="swap-horizontal-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Cross Circle Lending (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1a-prime. MEMBER TIER CARD ========== */}
