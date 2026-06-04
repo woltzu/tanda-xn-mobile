@@ -6,6 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Share,
+  Modal,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,6 +18,8 @@ import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
 import { useFormDraft } from "../hooks/useFormDraft";
 import { CircleDraft, CIRCLE_DRAFT_KEY } from "../lib/circleDraft";
+import { supabase } from "../lib/supabase";
+import { useCircleFormationCheck } from "../hooks/useConflictPrediction";
 
 type CreateCircleSuccessNavigationProp = StackNavigationProp<RootStackParamList>;
 type CreateCircleSuccessRouteProp = RouteProp<RootStackParamList, "CreateCircleSuccess">;
@@ -44,7 +48,23 @@ export default function CreateCircleSuccessScreen() {
   const { createCircle } = useCircles();
   const { user } = useAuth();
   const circleSavedRef = useRef(false);
+  const preflightStartedRef = useRef(false);
   const [createdCircleId, setCreatedCircleId] = useState<string | null>(null);
+
+  // ── Conflict Prediction Engine: formation-time pairwise friction check ──
+  // Phase D1 of feat(conflict): before we actually write the circle, run the
+  // engine over (creator + resolvable invitee UUIDs) so member_pair_scores
+  // and circle_formation_flags get rows. If any pair lands in Flag/Separate
+  // tier, the admin sees a modal asking "Create anyway?" before save.
+  //
+  // Preflight states:
+  //   'evaluating'      — resolving invitee UUIDs + running formation check
+  //   'review-required' — flagged pairs exist; modal is showing
+  //   'approved'        — admin chose to proceed (or check produced no flags)
+  //   'saved'           — circle insert finished; show the success card
+  type PreflightStatus = "evaluating" | "review-required" | "approved" | "saved";
+  const [preflightStatus, setPreflightStatus] = useState<PreflightStatus>("evaluating");
+  const { evaluation, evaluateFormation } = useCircleFormationCheck();
 
   const {
     circleType,
@@ -73,13 +93,88 @@ export default function CreateCircleSuccessScreen() {
   const monthlyPayout = amount * memberCount;
   const totalPayoutAllCycles = monthlyPayout * (totalCycles || 1);
 
-  // Save the circle when the screen mounts
+  // Preflight runs once on mount: resolve invitee UUIDs → run formation
+  // check. If review is required, the modal handles transition to save.
+  // Otherwise we auto-advance to saving.
   useEffect(() => {
-    if (!circleSavedRef.current) {
-      circleSavedRef.current = true;
-      saveCircle();
-    }
+    if (preflightStartedRef.current) return;
+    preflightStartedRef.current = true;
+    runPreflight();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Once the admin approves (or the check produced no flags), save the
+  // circle exactly once. Mirrors the original one-shot guard.
+  useEffect(() => {
+    if (preflightStatus === "approved" && !circleSavedRef.current) {
+      circleSavedRef.current = true;
+      saveCircle().finally(() => setPreflightStatus("saved"));
+    }
+  }, [preflightStatus]);
+
+  // Resolve as many invitee phone numbers as possible to TandaXn profile UUIDs.
+  // Most device contacts won't match (they aren't TandaXn users yet); the
+  // check still runs on the matching subset + the creator. If no one resolves
+  // we end up with just [creator], which produces 0 pairs and the engine
+  // no-ops cleanly — which is the correct behavior, not a bug.
+  const resolveProposedMemberIds = async (): Promise<string[]> => {
+    const creatorId = user?.id;
+    if (!creatorId) return [];
+    const phones = invitedMembers
+      .map((m) => m.phone?.replace(/[^\d+]/g, ""))
+      .filter((p): p is string => !!p && p.length >= 8);
+    if (phones.length === 0) return [creatorId];
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, phone")
+        .in("phone", phones);
+      if (error) {
+        console.warn("[preflight] phone→UUID lookup failed:", error.message);
+        return [creatorId];
+      }
+      const matchedIds = (data ?? []).map((r: any) => r.id as string);
+      // De-dupe with the creator's UUID (in case they invited themselves)
+      return Array.from(new Set([creatorId, ...matchedIds]));
+    } catch (err: any) {
+      console.warn("[preflight] phone→UUID lookup threw:", err?.message);
+      return [creatorId];
+    }
+  };
+
+  const runPreflight = async () => {
+    const ids = await resolveProposedMemberIds();
+    // < 2 members → 0 pairs → no-op. Skip the engine entirely.
+    if (ids.length < 2) {
+      setPreflightStatus("approved");
+      return;
+    }
+    try {
+      const result = await evaluateFormation(ids);
+      if (result?.requiresReview) {
+        setPreflightStatus("review-required");
+      } else {
+        setPreflightStatus("approved");
+      }
+    } catch (err: any) {
+      // Engine failure should NOT block circle creation — surfacing a
+      // backend hiccup at "Create Circle" time would punish the user for
+      // an internal monitoring system going down.
+      console.warn("[preflight] formation check failed:", err?.message);
+      setPreflightStatus("approved");
+    }
+  };
+
+  // Admin chose to proceed despite flagged pairs
+  const handleProceedDespiteFlags = () => {
+    setPreflightStatus("approved");
+  };
+
+  // Admin chose to cancel — go back to the Invite step so they can adjust
+  // the proposed member list. The wizard draft is intact so nothing is lost.
+  const handleCancelFlags = () => {
+    navigation.goBack();
+  };
 
   const saveCircle = async () => {
     try {
@@ -168,8 +263,101 @@ export default function CreateCircleSuccessScreen() {
     });
   };
 
+  // ── Conflict review modal ────────────────────────────────────────────
+  // Renders when preflightStatus === "review-required". Lists flagged pairs
+  // with friction tier + top contributing factor so the admin can make an
+  // informed call. Two outcomes: proceed anyway or go back and edit members.
+  const renderReviewModal = () => {
+    const flagged = evaluation?.flag?.flaggedPairIds ?? [];
+    const tier = evaluation?.circleTier ?? "clear";
+    const highest = evaluation?.highestScore ?? 0;
+    return (
+      <Modal
+        visible={preflightStatus === "review-required"}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIcon}>
+              <Ionicons name="warning" size={28} color="#D97706" />
+            </View>
+            <Text style={styles.modalTitle}>Potential Friction Detected</Text>
+            <Text style={styles.modalSubtitle}>
+              Our compatibility check found {flagged.length} pair
+              {flagged.length === 1 ? "" : "s"} that may have higher conflict
+              risk. Circle tier: <Text style={styles.modalTierBold}>{tier.toUpperCase()}</Text>{" "}
+              (highest pair score {Math.round(highest)}/100).
+            </Text>
+
+            <ScrollView style={styles.modalPairsList}>
+              {flagged.slice(0, 5).map((p: any, idx: number) => (
+                <View key={idx} style={styles.modalPairRow}>
+                  <View style={[styles.modalTierDot, {
+                    backgroundColor:
+                      p.tier === "separate" ? "#DC2626" :
+                      p.tier === "flag" ? "#EF4444" :
+                      p.tier === "watch" ? "#F59E0B" : "#10B981",
+                  }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalPairScore}>
+                      {Math.round(p.friction_score)}/100 — {p.tier}
+                    </Text>
+                    <Text style={styles.modalPairFactor}>
+                      Top factor: {String(p.top_factor).replace(/_/g, " ")}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+              {flagged.length > 5 && (
+                <Text style={styles.modalMoreText}>
+                  +{flagged.length - 5} more flagged pair
+                  {flagged.length - 5 === 1 ? "" : "s"}
+                </Text>
+              )}
+            </ScrollView>
+
+            <Text style={styles.modalNote}>
+              You can still create the circle. Flagged pairs will be monitored
+              after formation; if scores escalate, you'll get an alert.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={handleCancelFlags}
+              >
+                <Text style={styles.modalCancelText}>Edit members</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalProceedBtn}
+                onPress={handleProceedDespiteFlags}
+              >
+                <Text style={styles.modalProceedText}>Create anyway</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  // Loading overlay covers the success card while preflight + save run.
+  const isPreflighting = preflightStatus !== "saved";
+
   return (
     <View style={styles.container}>
+      {renderReviewModal()}
+      {isPreflighting && preflightStatus !== "review-required" && (
+        <View style={styles.preflightOverlay}>
+          <ActivityIndicator size="large" color="#00C6AE" />
+          <Text style={styles.preflightText}>
+            {preflightStatus === "evaluating"
+              ? "Checking circle compatibility…"
+              : "Creating your circle…"}
+          </Text>
+        </View>
+      )}
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Success Header */}
         <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
@@ -610,5 +798,135 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#00C6AE",
+  },
+  // ── Conflict Prediction preflight overlay + review modal ─────────────
+  preflightOverlay: {
+    position: "absolute",
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(245,247,250,0.96)",
+    zIndex: 100,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 16,
+  },
+  preflightText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#0A2342",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(10,35,66,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  modalCard: {
+    width: "100%",
+    maxWidth: 420,
+    maxHeight: "85%",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 24,
+  },
+  modalIcon: {
+    alignSelf: "center",
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#FEF3C7",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#0A2342",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  modalTierBold: {
+    fontWeight: "700",
+    color: "#D97706",
+  },
+  modalPairsList: {
+    maxHeight: 220,
+    marginBottom: 12,
+  },
+  modalPairRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  modalTierDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  modalPairScore: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0A2342",
+  },
+  modalPairFactor: {
+    fontSize: 11,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  modalMoreText: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    textAlign: "center",
+    paddingVertical: 6,
+  },
+  modalNote: {
+    fontSize: 12,
+    color: "#6B7280",
+    fontStyle: "italic",
+    textAlign: "center",
+    lineHeight: 17,
+    marginBottom: 16,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+  },
+  modalCancelText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+  modalProceedBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#00C6AE",
+    alignItems: "center",
+  },
+  modalProceedText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });
