@@ -1,13 +1,26 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // EDGE FUNCTION: scoring-pipeline-daily
 // ══════════════════════════════════════════════════════════════════════════════
-// Schedule: Daily at 03:00 UTC (via pg_cron)
-// Purpose: Orchestrate the full scoring pipeline:
-//   1. Recompute member behavioral profiles
-//   2. Compute default probabilities
-//   3. Compute circle health scores
-//   4. Recalculate XnScores
-//   5. Evaluate score-based alerts
+// Schedule: Daily at 03:00 UTC (via pg_cron — already scheduled, just needed
+//   this EF to actually be deployed at the URL the cron POSTs to).
+//
+// Purpose: Orchestrate the full scoring pipeline. Wraps run_scoring_pipeline()
+// which executes 7 steps (each in its own BEGIN..EXCEPTION block so one bad
+// step doesn't kill the run):
+//   1. compute_all_member_profiles            → member_behavioral_profiles
+//   2. compute_all_default_probabilities       → default_probability_scores
+//   3. compute_all_circle_health_scores        → circle_health_scores
+//   4. recalculate_all_xn_scores               → xn_scores
+//   5. evaluate_score_alerts                   → score_alerts
+//   6. compute_all_honor_scores                → honor_scores       [migration 037]
+//   7. evaluate_all_member_tiers               → member_tier_status  [migration 040]
+//
+// Returns JSONB: { run_id, profiles, default_probs, circles, xnscores,
+//                  alerts, honor_scores, tiers, duration_ms, errors }
+//
+// Caveat: xn_scores / circle_health / alerts stay at 0 until
+// cycle_contributions populates with real user activity. The pipeline is
+// being honest about empty upstream data, not broken.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
@@ -48,11 +61,22 @@ serve(async (req: Request) => {
     }
 
     const processingTimeMs = Date.now() - startTime
-    const totalRecords = (data.profiles || 0) + (data.default_probs || 0) +
-                         (data.circles || 0) + (data.xnscores || 0)
+    // Include ALL 7 step outputs. Previous version only summed 4 (profiles,
+    // default_probs, circles, xnscores), undercounting by alerts + honor_scores
+    // + tiers — the two new steps added by migrations 037 and 040.
+    const totalRecords =
+      (data.profiles || 0) +
+      (data.default_probs || 0) +
+      (data.circles || 0) +
+      (data.xnscores || 0) +
+      (data.alerts || 0) +
+      (data.honor_scores || 0) +
+      (data.tiers || 0)
     const hasErrors = data.errors && data.errors.length > 0
 
-    // Log to cron_job_logs
+    // Log to cron_job_logs. Use .then().catch() chain (not .catch() directly
+    // on the builder) — the builder is thenable but doesn't expose .catch
+    // on itself; on the Promise returned by .then() it works.
     await supabase
       .from('cron_job_logs')
       .insert({
@@ -64,13 +88,18 @@ serve(async (req: Request) => {
         execution_time_ms: processingTimeMs,
         details: {
           run_id: data.run_id,
-          profiles: data.profiles,
-          default_probs: data.default_probs,
-          circles: data.circles,
-          xnscores: data.xnscores,
-          alerts: data.alerts,
+          step_counts: {
+            profiles: data.profiles,
+            default_probs: data.default_probs,
+            circle_health: data.circles,
+            xnscores: data.xnscores,
+            alerts: data.alerts,
+            honor_scores: data.honor_scores,   // step 6 (mig 037)
+            tiers: data.tiers,                  // step 7 (mig 040)
+          },
           pipeline_duration_ms: data.duration_ms,
-          date: new Date().toISOString().split('T')[0]
+          date: new Date().toISOString().split('T')[0],
+          note: 'xn_scores / circle_health / alerts stay at 0 until cycle_contributions populates with real user activity. Pipeline is honest, not broken.',
         },
         error_message: hasErrors ? JSON.stringify(data.errors) : null
       })
@@ -83,6 +112,8 @@ serve(async (req: Request) => {
     console.log(`   ⭕ Circle health scores: ${data.circles}`)
     console.log(`   ⭐ XnScores recalculated: ${data.xnscores}`)
     console.log(`   🔔 Alerts generated: ${data.alerts}`)
+    console.log(`   🎖️ Honor scores: ${data.honor_scores}`)
+    console.log(`   🥇 Tiers evaluated: ${data.tiers}`)
     console.log(`   ⏱️ Time: ${processingTimeMs}ms`)
     if (hasErrors) {
       console.log(`   ⚠️ Errors: ${JSON.stringify(data.errors)}`)
