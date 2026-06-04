@@ -526,6 +526,26 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Tier Status (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point for the DynamicPayoutScreen
+              (Option A of feat(payout)). The screen (467 LOC) shows the
+              computed payout order + per-member explanations. Hidden if
+              the user has no circles (the screen needs a circleId
+              param). Tap from CreateCircleSuccess after computing AI
+              order is the real entry; this chip is for direct preview. */}
+          {__DEV__ && myCircles.length > 0 && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() => navigation.navigate(Routes.DynamicPayout, {
+                circleId: myCircles[0]?.id ?? "",
+              })}
+              accessibilityLabel="Open Payout Ordering (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="sparkles-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Payout Ordering (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1a-prime. MEMBER TIER CARD ========== */}

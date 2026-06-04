@@ -20,6 +20,7 @@ import { useFormDraft } from "../hooks/useFormDraft";
 import { CircleDraft, CIRCLE_DRAFT_KEY } from "../lib/circleDraft";
 import { supabase } from "../lib/supabase";
 import { useCircleFormationCheck } from "../hooks/useConflictPrediction";
+import { DynamicPayoutOrderingEngine } from "../services/DynamicPayoutOrderingEngine";
 
 type CreateCircleSuccessNavigationProp = StackNavigationProp<RootStackParamList>;
 type CreateCircleSuccessRouteProp = RouteProp<RootStackParamList, "CreateCircleSuccess">;
@@ -92,6 +93,25 @@ export default function CreateCircleSuccessScreen() {
     member_count?: number;
   };
   const [composition, setComposition] = useState<CompositionResult | null>(null);
+
+  // ── DynamicPayoutOrderingEngine invocation (Option A) ──────────────
+  // Engine is event-driven by design — runs once at circle formation,
+  // not on a cron (payout_algorithm_config.midcycle_reorder_enabled is
+  // FALSE by default per migration 042 seed). The admin triggers it
+  // explicitly via the button below after the circle is saved.
+  //
+  // Engine writes to: payout_orders (the order itself), payout_position_
+  // explanations (per-member rationale), stability_optimization_runs
+  // (Monte Carlo metadata). All 3 tables already exist (migration 042).
+  //
+  // Note re N+1: the engine generates `candidate_count=500` candidate
+  // orderings via Monte Carlo, scores each. For a 5-10 member circle this
+  // takes ~1-3s in the RN client. Larger circles get slower; a future
+  // server-side port may be warranted.
+  type PayoutOrderStatus = "idle" | "computing" | "completed" | "failed";
+  const [payoutOrderStatus, setPayoutOrderStatus] =
+    useState<PayoutOrderStatus>("idle");
+  const [payoutOrderError, setPayoutOrderError] = useState<string | null>(null);
 
   const {
     circleType,
@@ -318,6 +338,36 @@ export default function CreateCircleSuccessScreen() {
       index: 0,
       routes: [{ name: "MainTabs" }],
     });
+  };
+
+  // ── Compute AI-optimized payout order ──────────────────────────────
+  // Fires DynamicPayoutOrderingEngine.determineOptimizedOrder. The engine
+  // (1264 LOC) generates 500 Monte Carlo candidates, scores each on
+  // collapseProb/engagementRetention/riskDistribution/contributionContinuity,
+  // selects the best, writes to payout_orders + payout_position_explanations.
+  // Failure is non-fatal — the circle's wizard-set rotation_method is
+  // still the live order until a successful AI order overrides it.
+  const handleComputeOptimalOrder = async () => {
+    if (!createdCircleId) {
+      setPayoutOrderError("Circle ID not available yet — try again in a moment");
+      setPayoutOrderStatus("failed");
+      return;
+    }
+    setPayoutOrderError(null);
+    setPayoutOrderStatus("computing");
+    try {
+      await DynamicPayoutOrderingEngine.determineOptimizedOrder(createdCircleId);
+      setPayoutOrderStatus("completed");
+    } catch (err: any) {
+      console.warn("[payout-order] engine failed:", err?.message);
+      setPayoutOrderError(err?.message ?? "Engine error");
+      setPayoutOrderStatus("failed");
+    }
+  };
+
+  const handleViewPayoutOrder = () => {
+    if (!createdCircleId) return;
+    navigation.navigate("DynamicPayout", { circleId: createdCircleId });
   };
 
   // ── Review modal — Conflict + Composition combined ──────────────────
@@ -643,6 +693,90 @@ export default function CreateCircleSuccessScreen() {
               </View>
             </View>
           </View>
+
+          {/* ── AI payout-order optimization card (Option A of feat(payout)) ──
+              Only renders once the circle has been saved (createdCircleId
+              is set). Triggers DynamicPayoutOrderingEngine in the mobile
+              client. Engine writes payout_orders + per-member explanations
+              + Monte Carlo run metadata. Failure is non-fatal — circle's
+              wizard-assigned rotation_method stays live until override. */}
+          {createdCircleId && (
+            <View style={styles.payoutOrderCard}>
+              <View style={styles.payoutOrderHeader}>
+                <View style={styles.payoutOrderIcon}>
+                  <Ionicons name="sparkles" size={20} color="#7C3AED" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.payoutOrderTitle}>Optimize payout order</Text>
+                  <Text style={styles.payoutOrderSubtitle}>
+                    Let our AI suggest a stability-optimized sequence based on
+                    member XnScore, need, risk, and preferences.
+                  </Text>
+                </View>
+              </View>
+
+              {payoutOrderStatus === "idle" && (
+                <TouchableOpacity
+                  style={styles.payoutOrderButton}
+                  onPress={handleComputeOptimalOrder}
+                  accessibilityRole="button"
+                  accessibilityLabel="Compute AI-optimized payout order"
+                >
+                  <Ionicons name="play" size={14} color="#FFFFFF" />
+                  <Text style={styles.payoutOrderButtonText}>Compute AI order</Text>
+                </TouchableOpacity>
+              )}
+
+              {payoutOrderStatus === "computing" && (
+                <View style={styles.payoutOrderStatusRow}>
+                  <ActivityIndicator size="small" color="#7C3AED" />
+                  <Text style={styles.payoutOrderStatusText}>
+                    Running Monte Carlo over 500 candidate orderings…
+                  </Text>
+                </View>
+              )}
+
+              {payoutOrderStatus === "completed" && (
+                <>
+                  <View style={styles.payoutOrderStatusRow}>
+                    <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                    <Text style={[styles.payoutOrderStatusText, { color: "#065F46" }]}>
+                      Optimal order computed. Explanations saved per member.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.payoutOrderButton, { backgroundColor: "#10B981" }]}
+                    onPress={handleViewPayoutOrder}
+                    accessibilityRole="button"
+                    accessibilityLabel="View computed payout order"
+                  >
+                    <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+                    <Text style={styles.payoutOrderButtonText}>View payout order</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {payoutOrderStatus === "failed" && (
+                <>
+                  <View style={styles.payoutOrderStatusRow}>
+                    <Ionicons name="alert-circle" size={16} color="#DC2626" />
+                    <Text style={[styles.payoutOrderStatusText, { color: "#991B1B" }]}>
+                      {payoutOrderError ?? "Engine error"}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.payoutOrderButton}
+                    onPress={handleComputeOptimalOrder}
+                    accessibilityRole="button"
+                    accessibilityLabel="Retry compute AI payout order"
+                  >
+                    <Ionicons name="refresh" size={14} color="#FFFFFF" />
+                    <Text style={styles.payoutOrderButtonText}>Retry</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -1158,5 +1292,72 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#374151",
     lineHeight: 15,
+  },
+
+  // ── AI payout-order card (Option A of feat(payout)) ───────────────
+  // Violet/purple tone to distinguish from the existing teal-themed
+  // cards on this screen — signals that this is an optional advanced
+  // action (not part of the basic creation flow).
+  payoutOrderCard: {
+    backgroundColor: "#F5F3FF",        // violet-50
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",            // violet-200
+  },
+  payoutOrderHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 14,
+  },
+  payoutOrderIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#EDE9FE",        // violet-100
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  payoutOrderTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#4C1D95",                  // violet-900
+    marginBottom: 4,
+  },
+  payoutOrderSubtitle: {
+    fontSize: 12,
+    color: "#5B21B6",                  // violet-800
+    lineHeight: 17,
+  },
+  payoutOrderButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#7C3AED",        // violet-600
+  },
+  payoutOrderButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#FFFFFF",
+  },
+  payoutOrderStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginBottom: 4,
+  },
+  payoutOrderStatusText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#4C1D95",
+    fontWeight: "500",
+    lineHeight: 16,
   },
 });

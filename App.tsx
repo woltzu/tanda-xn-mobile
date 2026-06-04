@@ -782,6 +782,10 @@ function HomeStackScreen() {
       <HomeStack.Screen name="StressScoreDashboard" component={StressScoreDashboardScreen} />
       <HomeStack.Screen name="MoodInsights" component={MoodInsightsScreen} />
       <HomeStack.Screen name="DiscoverCircles" component={DiscoverCirclesScreen} />
+      {/* DynamicPayoutScreen also registered in CirclesStack at line 931;
+          duplicated here so the Dashboard debug chip + CreateCircleSuccess
+          screen (both in HomeStack) can navigate without a tab switch. */}
+      <HomeStack.Screen name="DynamicPayout" component={DynamicPayoutScreen} />
       <HomeStack.Screen name="EarlyIntervention" component={EarlyInterventionScreen} />
       <HomeStack.Screen name="ScoreBreakdown" component={ScoreBreakdownScreen} />
       <HomeStack.Screen name="CreditProfile" component={CreditProfileScreen} />
