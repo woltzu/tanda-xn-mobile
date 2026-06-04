@@ -295,7 +295,15 @@ export class CircleMatchingService {
           community:communities(name)
         `)
         .in("status", ["pending", "forming", "active"])
-        .gt("member_count", supabase.rpc("get_current_members_count")) // Has open spots
+        // NB: "has open spots" was previously filtered server-side via
+        //   .gt("member_count", supabase.rpc("get_current_members_count"))
+        // but `get_current_members_count` is not a real RPC, so the
+        // filter was throwing on every call and the recommender returned
+        // nothing in prod. The CLIENT-side filter below
+        //   .filter((c) => (c.current_members || 0) < (c.member_count || 10))
+        // already enforces open spots correctly. Keep the server query
+        // narrow to status + (optional) community, and rely on the
+        // already-correct client filter for capacity.
         .order("created_at", { ascending: false });
 
       // Filter by communities if specified
