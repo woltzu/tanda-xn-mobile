@@ -5,6 +5,7 @@ import React, {
   useEffect,
   ReactNode,
   useCallback,
+  useRef,
 } from "react";
 import { Platform } from "react-native";
 import { supabase } from "../lib/supabase";
@@ -214,9 +215,57 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (session) {
         setIsLocked(false);
       }
+
+      // Record a row in login_events for SIGNED_IN or INITIAL_SESSION so
+      // the stress engine's Signal C (login_drop) has data to compute
+      // rolling 7d-vs-23d frequency from. Fire-and-forget — we never
+      // block the auth flow on this.
+      //
+      // De-dup is per (user_id, app instance): once we've recorded a
+      // particular user this app run, we don't record again on
+      // TOKEN_REFRESHED, biometric unlock re-mount, etc. SIGNED_OUT
+      // clears the ref so a fresh sign-in records again.
+      if (
+        (event === "SIGNED_IN" || event === "INITIAL_SESSION") &&
+        session?.user?.id
+      ) {
+        if (lastRecordedUserIdRef.current !== session.user.id) {
+          lastRecordedUserIdRef.current = session.user.id;
+          recordLoginEvent(session.user.id);
+        }
+      } else if (event === "SIGNED_OUT") {
+        lastRecordedUserIdRef.current = null;
+      }
     });
 
     return () => subscription.unsubscribe();
+  }, []);
+
+  // Refs for login-event recording dedup (Stress Signal C).
+  // lastRecordedUserIdRef tracks the most recently logged-event user_id
+  // for THIS app instance — survives across React strict-mode double-mounts
+  // and TOKEN_REFRESHED events. Cleared on SIGNED_OUT.
+  const lastRecordedUserIdRef = useRef<string | null>(null);
+
+  const recordLoginEvent = useCallback(async (userId: string) => {
+    try {
+      const sessionId =
+        `${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      const { error } = await supabase.from("login_events").insert({
+        user_id: userId,
+        session_id: sessionId,
+        source: "auth_state_change",
+        platform: Platform.OS,
+      });
+      if (error) {
+        // Swallow — login event recording must never break sign-in. The
+        // unique partial index on (user_id, session_id) would reject a
+        // true dup but our generated session_id avoids that.
+        console.log("[login_events] insert failed:", error.message);
+      }
+    } catch (err: any) {
+      console.log("[login_events] insert threw:", err?.message);
+    }
   }, []);
 
   // Lock the app (without signing out)
