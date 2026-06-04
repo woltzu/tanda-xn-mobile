@@ -49,6 +49,11 @@ export type Circle = {
   payoutPerCycle?: number;
   cyclesCompleted?: number;
   totalPayoutToDate?: number;
+  // Trust premium score, 0–100. Either inherited from members' past
+  // completed circles at creation time, or computed from this circle's
+  // own contribution history when it completes (Step 2 of
+  // feat(circle-reputation) #14).
+  reputationScore?: number;
 };
 
 export type CircleMember = {
@@ -153,6 +158,7 @@ type CircleRow = {
   payout_per_cycle: number | null;
   cycles_completed: number;
   total_payout_to_date: number;
+  reputation_score?: number;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -306,6 +312,10 @@ const rowToCircle = (row: CircleRow): Circle => ({
   payoutPerCycle: row.payout_per_cycle || undefined,
   cyclesCompleted: row.cycles_completed,
   totalPayoutToDate: row.total_payout_to_date,
+  // Supabase returns NUMERIC as string; coerce. Falls back to 0 for
+  // older rows that haven't been migrated through Step 1 yet.
+  reputationScore:
+    row.reputation_score == null ? 0 : Number(row.reputation_score),
 });
 
 // Convert Circle object to database row (camelCase to snake_case)

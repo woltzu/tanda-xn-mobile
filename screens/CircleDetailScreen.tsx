@@ -427,6 +427,117 @@ export default function CircleDetailScreen() {
         </View>
       </View>
 
+      {/* Reputation Card — Step 4 of feat(circle-reputation) #14.
+          Always renders. Shows the score (0–100) with tiered color, a
+          short interpretation, and the premium benefits unlocked when
+          score >= 80. For a brand-new circle with score=0 (no
+          inheritance, no completion), shows a "building trust"
+          placeholder so the user knows the slot exists. */}
+      {(() => {
+        const score = circle.reputationScore ?? 0;
+        let tier: {
+          label: string;
+          color: string;
+          bg: string;
+          summary: string;
+        };
+        if (score >= 90) {
+          tier = {
+            label: "ELITE",
+            color: "#B45309",
+            bg: "#FEF3C7",
+            summary: "Elite reputation — premium benefits unlocked.",
+          };
+        } else if (score >= 70) {
+          tier = {
+            label: "EXCELLENT",
+            color: "#065F46",
+            bg: "#D1FAE5",
+            summary:
+              score >= 80
+                ? "Excellent reputation — qualifies for premium benefits."
+                : "Excellent reputation — almost qualifying for premium benefits.",
+          };
+        } else if (score >= 40) {
+          tier = {
+            label: "BUILDING",
+            color: "#92400E",
+            bg: "#FEF3C7",
+            summary: "Building trust — keep contributing on time.",
+          };
+        } else if (score > 0) {
+          tier = {
+            label: "AT RISK",
+            color: "#991B1B",
+            bg: "#FEE2E2",
+            summary: "Reputation at risk — defaults are eroding trust.",
+          };
+        } else {
+          tier = {
+            label: "NEW",
+            color: "#374151",
+            bg: "#F3F4F6",
+            summary:
+              "Building trust — complete this circle to earn a reputation score.",
+          };
+        }
+        return (
+          <View
+            style={[styles.repCard, { borderLeftColor: tier.color }]}
+          >
+            <View style={styles.repHeader}>
+              <View>
+                <View
+                  style={[styles.repBadge, { backgroundColor: tier.bg }]}
+                >
+                  <Text style={[styles.repBadgeLabel, { color: tier.color }]}>
+                    REPUTATION · {tier.label}
+                  </Text>
+                </View>
+                <Text style={styles.repCardTitle}>Circle Reputation</Text>
+              </View>
+              <View style={styles.repScoreBox}>
+                <Text style={[styles.repScore, { color: tier.color }]}>
+                  {Math.round(score)}
+                </Text>
+                <Text style={styles.repScoreOver}>/100</Text>
+              </View>
+            </View>
+
+            <View style={styles.repScoreBar}>
+              <View
+                style={[
+                  styles.repScoreBarFill,
+                  {
+                    width: `${Math.max(0, Math.min(100, score))}%`,
+                    backgroundColor: tier.color,
+                  },
+                ]}
+              />
+            </View>
+
+            <Text style={styles.repSummary}>{tier.summary}</Text>
+
+            {score >= 80 && (
+              <View style={styles.repBenefitsBlock}>
+                <View style={styles.repBenefitRow}>
+                  <Ionicons name="trending-down" size={14} color="#065F46" />
+                  <Text style={styles.repBenefitText}>
+                    0.5% lower insurance fee
+                  </Text>
+                </View>
+                <View style={styles.repBenefitRow}>
+                  <Ionicons name="trending-up" size={14} color="#065F46" />
+                  <Text style={styles.repBenefitText}>
+                    90% advance limit (instead of 80%)
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+        );
+      })()}
+
       {/* Circle Health Card — Phase D3 of feat(circle-health).
           Renders once the scoring pipeline has populated a score for
           this circle (one row in circle_health_scores per circle, kept
@@ -1637,6 +1748,54 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   healthRefreshText: { fontSize: 12, fontWeight: "700", color: "#2563EB" },
+  repCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  repHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  repBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginBottom: 6,
+  },
+  repBadgeLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 0.6 },
+  repCardTitle: { fontSize: 15, fontWeight: "700", color: "#0A2342" },
+  repScoreBox: { flexDirection: "row", alignItems: "baseline", gap: 2 },
+  repScore: { fontSize: 32, fontWeight: "800" },
+  repScoreOver: { fontSize: 13, color: "#9CA3AF", fontWeight: "600" },
+  repScoreBar: {
+    height: 6,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 3,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  repScoreBarFill: { height: 6, borderRadius: 3 },
+  repSummary: { fontSize: 13, color: "#374151", lineHeight: 18 },
+  repBenefitsBlock: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+    gap: 6,
+  },
+  repBenefitRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  repBenefitText: { fontSize: 12, color: "#065F46", fontWeight: "600" },
   progressText: {
     fontSize: 12,
     color: "#6B7280",

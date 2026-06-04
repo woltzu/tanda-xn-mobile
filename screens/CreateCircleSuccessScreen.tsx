@@ -94,6 +94,20 @@ export default function CreateCircleSuccessScreen() {
   };
   const [composition, setComposition] = useState<CompositionResult | null>(null);
 
+  // ── Inherited reputation preview (Step 4 of feat(circle-reputation) #14) ──
+  // Computed during preflight from the resolved member IDs. Surfaces the
+  // average reputation score the new circle starts with + whether the group
+  // qualifies for premium benefits (insurance discount + higher advance cap).
+  type InheritanceResult = {
+    success: boolean;
+    average_reputation: number;
+    reputation_count: number;
+    members_with_history: number;
+    members_total: number;
+    qualifies_for_premium: boolean;
+  };
+  const [inheritance, setInheritance] = useState<InheritanceResult | null>(null);
+
   // ── DynamicPayoutOrderingEngine invocation (Option A) ──────────────
   // Engine is event-driven by design — runs once at circle formation,
   // not on a cron (payout_algorithm_config.midcycle_reorder_enabled is
@@ -231,6 +245,23 @@ export default function CreateCircleSuccessScreen() {
       }
     } catch (err: any) {
       console.warn("[preflight] composition check threw:", err?.message);
+    }
+
+    // 3) Inherited reputation — read-only preview of the group's average
+    // reputation from past completed circles. Does not gate creation.
+    try {
+      const { data, error } = await supabase.rpc(
+        "get_inherited_reputation_for_members",
+        { p_member_ids: ids },
+      );
+      if (error) {
+        console.warn("[preflight] inheritance RPC error:", error.message);
+      } else if (data) {
+        const inh = data as InheritanceResult;
+        if (inh.success) setInheritance(inh);
+      }
+    } catch (err: any) {
+      console.warn("[preflight] inheritance lookup threw:", err?.message);
     }
 
     // Trigger review if EITHER engine flagged. Either way, engine errors
@@ -657,6 +688,100 @@ export default function CreateCircleSuccessScreen() {
             </View>
           )}
 
+          {/* Reputation inheritance preview — Step 4 of feat(circle-reputation).
+              Renders once the preflight RPC has resolved. Shows the
+              starting reputation_score the new circle inherits from its
+              members' past completed circles + lists premium benefits
+              when the group qualifies (avg >= 80). */}
+          {inheritance && (
+            <View
+              style={[
+                styles.repInheritCard,
+                {
+                  borderLeftColor: inheritance.qualifies_for_premium
+                    ? "#065F46"
+                    : "#92400E",
+                },
+              ]}
+            >
+              <View style={styles.repInheritHeader}>
+                <View
+                  style={[
+                    styles.repInheritBadge,
+                    {
+                      backgroundColor: inheritance.qualifies_for_premium
+                        ? "#D1FAE5"
+                        : "#FEF3C7",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.repInheritBadgeLabel,
+                      {
+                        color: inheritance.qualifies_for_premium
+                          ? "#065F46"
+                          : "#92400E",
+                      },
+                    ]}
+                  >
+                    {inheritance.qualifies_for_premium
+                      ? "PREMIUM TRUST"
+                      : "BUILDING TRUST"}
+                  </Text>
+                </View>
+                <View style={styles.repInheritScoreBox}>
+                  <Text
+                    style={[
+                      styles.repInheritScore,
+                      {
+                        color: inheritance.qualifies_for_premium
+                          ? "#065F46"
+                          : "#92400E",
+                      },
+                    ]}
+                  >
+                    {Math.round(inheritance.average_reputation)}
+                  </Text>
+                  <Text style={styles.repInheritScoreOver}>/100</Text>
+                </View>
+              </View>
+              <Text style={styles.repInheritTitle}>
+                Your group's starting reputation
+              </Text>
+              <Text style={styles.repInheritSubtitle}>
+                Averaged across {inheritance.reputation_count} past completed
+                circle{inheritance.reputation_count === 1 ? "" : "s"} from{" "}
+                {inheritance.members_with_history} of {inheritance.members_total}{" "}
+                member{inheritance.members_total === 1 ? "" : "s"}.
+              </Text>
+              {inheritance.qualifies_for_premium ? (
+                <View style={styles.repInheritBenefits}>
+                  <View style={styles.repInheritBenefitRow}>
+                    <Ionicons name="trending-down" size={14} color="#065F46" />
+                    <Text style={styles.repInheritBenefitText}>
+                      0.5% lower insurance pool fee
+                    </Text>
+                  </View>
+                  <View style={styles.repInheritBenefitRow}>
+                    <Ionicons name="trending-up" size={14} color="#065F46" />
+                    <Text style={styles.repInheritBenefitText}>
+                      90% advance limit (instead of 80%)
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.repInheritEncourage}>
+                  <Text style={styles.repInheritEncourageText}>
+                    {inheritance.reputation_count === 0
+                      ? "Complete this circle successfully to start building a reputation."
+                      : "Complete this circle to push your score above 80 and unlock premium benefits."}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Next Steps */}
           <View style={styles.nextStepsCard}>
             <Text style={styles.nextStepsTitle}>What's Next?</Text>
@@ -959,6 +1084,84 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: "#E5E7EB",
+  },
+  repInheritCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  repInheritHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  repInheritBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  repInheritBadgeLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.6,
+  },
+  repInheritScoreBox: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 2,
+  },
+  repInheritScore: {
+    fontSize: 30,
+    fontWeight: "800",
+  },
+  repInheritScoreOver: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    fontWeight: "600",
+  },
+  repInheritTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 4,
+  },
+  repInheritSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    lineHeight: 17,
+  },
+  repInheritBenefits: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+    gap: 6,
+  },
+  repInheritBenefitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  repInheritBenefitText: {
+    fontSize: 13,
+    color: "#065F46",
+    fontWeight: "600",
+  },
+  repInheritEncourage: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  repInheritEncourageText: {
+    fontSize: 12,
+    color: "#92400E",
+    lineHeight: 17,
   },
   nextStepsTitle: {
     fontSize: 14,
