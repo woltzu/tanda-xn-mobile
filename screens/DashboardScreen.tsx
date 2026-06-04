@@ -21,6 +21,7 @@ import { useCommunity } from "../context/CommunityContext";
 import { useElder } from "../context/ElderContext";
 import { useNotifications } from "../context/NotificationContext";
 import { useActiveIntervention } from "../hooks/useEarlyIntervention";
+import { useStressIntervention } from "../hooks/useFinancialStressPrediction";
 import { useUserDefaults } from "../hooks/useDefaultCascade";
 import { useLateContributions } from "../hooks/useLateContributions";
 import { useInterest } from "../hooks/useInterest";
@@ -105,6 +106,19 @@ export default function DashboardScreen() {
     hasIntervention,
     markEngaged,
   } = useActiveIntervention();
+
+  // Active stress-intervention card (Phase D3 of feat(stress)). Pulls the
+  // member's pending stress_interventions row (if any) and subscribes
+  // to realtime updates so accept/decline taps on StressScoreDashboard
+  // also clear the card here. hasActiveIntervention is false (and the
+  // card hidden) until the scoring cron lands a member into orange/red
+  // and creates an offer — which currently won't happen because only
+  // Signal A is producing data. Wiring is correct end-to-end; it's
+  // gated on signal data we don't have yet.
+  const {
+    activeIntervention: stressIntervention,
+    hasActiveIntervention: hasStressIntervention,
+  } = useStressIntervention();
 
   // Safety net: catch users who landed here without going through
   // SetPassword (e.g. closed the tab between QuickJoin success and the
@@ -381,6 +395,25 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Conflict Alerts (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point for the Financial Wellness screen
+              (Phase D3 of feat(stress)). The screen already shows the
+              member's full stress breakdown + history + active
+              intervention; this chip just makes it reachable without
+              waiting for an intervention to land. Remove once a real
+              entry point (e.g. a Wellness card on the Dashboard) is
+              wired. */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() => navigation.navigate(Routes.StressScoreDashboard)}
+              accessibilityLabel="Open Stress Score (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="pulse-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Stress Score (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1a-bis. EARLY INTERVENTION CARD ========== */}
@@ -411,6 +444,85 @@ export default function DashboardScreen() {
               </View>
             </View>
           </View>
+        )}
+
+        {/* ========== 1a-ter. STRESS INTERVENTION CARD ========== */}
+        {/* Phase D3 of feat(stress). Renders when a pending
+            stress_interventions row exists for this member (hook filters
+            on outcome='pending'). Color and CTA copy adapt to the
+            intervention_type:
+              - 'payment_restructure' → orange tone (less severe)
+              - 'counselor_referral'  → red tone (more severe)
+            Whole card is tappable — opens StressScoreDashboard where the
+            member can review the breakdown and accept/decline. Distinct
+            from the amber Early Intervention card above (which is a
+            soft nudge from the score-pipeline engine); this is a
+            concrete restructure/referral offer from the stress engine. */}
+        {hasStressIntervention && stressIntervention && (
+          <TouchableOpacity
+            style={[
+              styles.stressCard,
+              stressIntervention.interventionType === "counselor_referral"
+                ? styles.stressCardRed
+                : styles.stressCardOrange,
+            ]}
+            onPress={() => navigation.navigate(Routes.StressScoreDashboard)}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Open stress wellness details"
+          >
+            <View style={[
+              styles.stressIcon,
+              stressIntervention.interventionType === "counselor_referral"
+                ? styles.stressIconRed
+                : styles.stressIconOrange,
+            ]}>
+              <Ionicons
+                name={stressIntervention.interventionType === "counselor_referral"
+                  ? "heart-circle"
+                  : "wallet-outline"}
+                size={22}
+                color={stressIntervention.interventionType === "counselor_referral"
+                  ? "#991B1B"
+                  : "#9A3412"}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[
+                styles.stressTitle,
+                stressIntervention.interventionType === "counselor_referral"
+                  ? { color: "#991B1B" }
+                  : { color: "#9A3412" },
+              ]}>
+                {stressIntervention.messageTitle}
+              </Text>
+              <Text style={[
+                styles.stressBody,
+                stressIntervention.interventionType === "counselor_referral"
+                  ? { color: "#7F1D1D" }
+                  : { color: "#7C2D12" },
+              ]} numberOfLines={3}>
+                {stressIntervention.messageBody}
+              </Text>
+              <View style={styles.stressCtaRow}>
+                <Text style={[
+                  styles.stressCtaText,
+                  stressIntervention.interventionType === "counselor_referral"
+                    ? { color: "#991B1B" }
+                    : { color: "#9A3412" },
+                ]}>
+                  View details
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={14}
+                  color={stressIntervention.interventionType === "counselor_referral"
+                    ? "#991B1B"
+                    : "#9A3412"}
+                />
+              </View>
+            </View>
+          </TouchableOpacity>
         )}
 
         {/* ========== 1b. WALLET BALANCE CARD ========== */}
@@ -943,6 +1055,65 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: "#92400E",
+  },
+
+  // ── Stress intervention card (Phase D3 of feat(stress)) ──────────────
+  // Two color variants share dimensions / layout; only background +
+  // border tone change with intervention_type. Whole card is touchable
+  // and navigates to StressScoreDashboard.
+  stressCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 12,
+  },
+  stressCardOrange: {
+    backgroundColor: "#FFEDD5",   // orange-100
+    borderColor: "#FDBA74",       // orange-300
+  },
+  stressCardRed: {
+    backgroundColor: "#FEE2E2",   // red-100
+    borderColor: "#FCA5A5",       // red-300
+  },
+  stressIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  stressIconOrange: {
+    backgroundColor: "#FED7AA",   // orange-200
+  },
+  stressIconRed: {
+    backgroundColor: "#FECACA",   // red-200
+  },
+  stressTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  stressBody: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "500",
+  },
+  stressCtaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 8,
+  },
+  stressCtaText: {
+    fontSize: 12,
+    fontWeight: "700",
   },
 
   walletCard: {
