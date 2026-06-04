@@ -52,16 +52,22 @@ serve(async (req: Request) => {
     if (error) {
       console.error("[early-intervention-cron] RPC error:", error);
       // Log failure to cron_job_logs so the daily metrics still capture it.
-      await supabase.from("cron_job_logs").insert({
-        job_name: "early-intervention-cron",
-        status: "failed",
-        records_processed: 0,
-        records_succeeded: 0,
-        records_failed: 1,
-        execution_time_ms: Date.now() - startTime,
-        details: { error_code: error.code },
-        error_message: error.message,
-      }).catch((e: any) => console.log("⚠️ Could not log job:", e.message));
+      // Wrapped in try/catch because Supabase-js v2 .insert() returns a
+      // PostgrestFilterBuilder (thenable) that does NOT expose .catch().
+      try {
+        await supabase.from("cron_job_logs").insert({
+          job_name: "early-intervention-cron",
+          status: "failed",
+          records_processed: 0,
+          records_succeeded: 0,
+          records_failed: 1,
+          execution_time_ms: Date.now() - startTime,
+          details: { error_code: error.code },
+          error_message: error.message,
+        });
+      } catch (logErr: any) {
+        console.log("⚠️ Could not log job:", logErr?.message);
+      }
 
       return new Response(
         JSON.stringify({ success: false, error: error.message }),
@@ -87,16 +93,21 @@ serve(async (req: Request) => {
       created: result.interventions_created,
     });
 
-    // Log success to cron_job_logs.
-    await supabase.from("cron_job_logs").insert({
-      job_name: "early-intervention-cron",
-      status: "success",
-      records_processed: result.candidates_evaluated,
-      records_succeeded: result.interventions_created,
-      records_failed: 0,
-      execution_time_ms: Date.now() - startTime,
-      details: result,
-    }).catch((e: any) => console.log("⚠️ Could not log job:", e.message));
+    // Log success to cron_job_logs. Wrapped in try/catch (see note above
+    // re Supabase-js v2 PostgrestFilterBuilder not exposing .catch()).
+    try {
+      await supabase.from("cron_job_logs").insert({
+        job_name: "early-intervention-cron",
+        status: "success",
+        records_processed: result.candidates_evaluated,
+        records_succeeded: result.interventions_created,
+        records_failed: 0,
+        execution_time_ms: Date.now() - startTime,
+        details: result,
+      });
+    } catch (logErr: any) {
+      console.log("⚠️ Could not log job:", logErr?.message);
+    }
 
     return new Response(
       JSON.stringify({
