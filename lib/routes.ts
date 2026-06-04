@@ -90,6 +90,7 @@ export const Routes = {
   CreateTripListing: "CreateTripListing",
   CreateTripWizard: "CreateTripWizard",
   CreditProfile: "CreditProfile",
+  CreditReport: "CreditReport",
   CrossCircleLending: "CrossCircleLending",
   CycleTimeline: "CycleTimeline",
   Dashboard: "Dashboard",

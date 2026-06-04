@@ -667,6 +667,25 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Circle Health (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point to CreditReportScreen.
+              Feature #13. Always available under __DEV__ since the
+              report works even with no circles (it just shows empty
+              transaction history + falls back to profiles.xn_score).
+              The real user-facing entry is meant to be a Settings or
+              Profile menu item — added here as the 14th debug chip
+              for fast QA. */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() => navigation.navigate(Routes.CreditReport)}
+              accessibilityLabel="Open Credit Report (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="document-text-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Credit Report (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1a-prime. MEMBER TIER CARD ========== */}
