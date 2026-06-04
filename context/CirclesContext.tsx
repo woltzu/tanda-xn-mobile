@@ -530,7 +530,35 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
       inviteCode,
     };
 
-    const rowData = circleToRow(newCircleData);
+    // Phase Step 2 of feat(circle-reputation) #14. Pre-compute the
+    // creator's inherited reputation so the new circle starts with a
+    // realistic baseline score. As more members accept their invites and
+    // get added to circle_members, the score would ideally refresh — for
+    // now we set the floor here and rely on the completion trigger
+    // (migration 106) to land the final score when the circle completes.
+    // Failure is non-fatal: we'd rather create the circle with a 0 score
+    // than block creation on a transient RPC error.
+    let inheritedReputationScore = 0;
+    try {
+      const { data: inheritData } = await supabase.rpc(
+        "get_inherited_reputation_for_members",
+        { p_member_ids: [user.id] },
+      );
+      const result = inheritData as { average_reputation?: number } | null;
+      if (result?.average_reputation != null) {
+        inheritedReputationScore = Number(result.average_reputation) || 0;
+      }
+    } catch (repErr: any) {
+      console.warn(
+        "[CirclesContext] inherited reputation lookup failed (non-fatal):",
+        repErr?.message,
+      );
+    }
+
+    const rowData = {
+      ...circleToRow(newCircleData),
+      reputation_score: inheritedReputationScore,
+    };
 
     // Insert into Supabase
     const { data, error: insertError } = await supabase
