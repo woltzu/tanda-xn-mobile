@@ -36,12 +36,18 @@
 
 
 -- ─── PART A: RLS loosening ────────────────────────────────────────────────
+-- Each policy is preceded by DROP POLICY IF EXISTS so this migration is
+-- safely re-runnable (the SQL editor's "Run" button is a common second
+-- application path that would otherwise hit error 42710 "policy already
+-- exists"). The CREATE POLICY statements themselves are not natively
+-- idempotent in PostgreSQL.
 
 -- Allow authenticated users to insert their own pair scores. The TS engine
 -- calls this from the Create Circle wizard via the mobile supabase client.
 -- WITH CHECK is intentionally permissive because the engine generates
 -- derived data (no user-supplied content) and a forged row only adds noise
 -- to the monitoring queue. Anonymous role remains blocked.
+DROP POLICY IF EXISTS pair_scores_auth_insert ON member_pair_scores;
 CREATE POLICY pair_scores_auth_insert ON member_pair_scores
   FOR INSERT TO authenticated
   WITH CHECK (true);
@@ -50,16 +56,19 @@ CREATE POLICY pair_scores_auth_insert ON member_pair_scores
 -- inserted row, the SELECT policy must also allow the row to be visible.
 -- Limit reads to pairs the user is part of (so the dashboard can show their
 -- own monitored pairs but can't see others').
+DROP POLICY IF EXISTS pair_scores_auth_select_own ON member_pair_scores;
 CREATE POLICY pair_scores_auth_select_own ON member_pair_scores
   FOR SELECT TO authenticated
   USING (auth.uid() = member_a_id OR auth.uid() = member_b_id);
 
 -- Same dual policy for circle_formation_flags. Read is restricted to flags
 -- where the user is in proposed_members (a JSONB array of UUIDs).
+DROP POLICY IF EXISTS formation_flags_auth_insert ON circle_formation_flags;
 CREATE POLICY formation_flags_auth_insert ON circle_formation_flags
   FOR INSERT TO authenticated
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS formation_flags_auth_select_own ON circle_formation_flags;
 CREATE POLICY formation_flags_auth_select_own ON circle_formation_flags
   FOR SELECT TO authenticated
   USING (
@@ -69,10 +78,12 @@ CREATE POLICY formation_flags_auth_select_own ON circle_formation_flags
 
 -- post_formation_monitor: same shape. User can see monitors where they're
 -- one of the watched pair.
+DROP POLICY IF EXISTS post_monitor_auth_insert ON post_formation_monitor;
 CREATE POLICY post_monitor_auth_insert ON post_formation_monitor
   FOR INSERT TO authenticated
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS post_monitor_auth_select_own ON post_formation_monitor;
 CREATE POLICY post_monitor_auth_select_own ON post_formation_monitor
   FOR SELECT TO authenticated
   USING (auth.uid() = member_a_id OR auth.uid() = member_b_id);
