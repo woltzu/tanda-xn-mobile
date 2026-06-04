@@ -182,10 +182,15 @@ export class PartialContributionEngine {
       };
     }
 
-    // Check contribution deadline
+    // Check contribution deadline.
+    // NOTE: SELECT used to include `status` (engine pre-migration-102 bug).
+    // Column on circle_cycles is `cycle_status`, not `status`, and the
+    // value was never read here — `cycle.status` is referenced nowhere.
+    // We just need the deadline. (Server-side preview_partial_contribution
+    // from migration 102 uses the correct columns.)
     const { data: cycle, error: cycleErr } = await supabase
       .from('circle_cycles')
-      .select('contribution_deadline, status')
+      .select('contribution_deadline')
       .eq('id', cycleId)
       .single();
 
