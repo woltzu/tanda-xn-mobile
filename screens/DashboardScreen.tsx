@@ -644,6 +644,29 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Partial Contribution (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point to the Circle Health card on
+              CircleDetail. Phase D3 of feat(circle-health). Navigates to
+              the first circle's detail screen, where the health card
+              renders if the scoring-pipeline cron has populated a score.
+              Hidden when myCircles.length === 0. The real user-facing
+              entry is the health card itself on CircleDetail — this chip
+              just makes it one tap from the Dashboard during QA. */}
+          {__DEV__ && myCircles.length > 0 && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() =>
+                navigation.navigate(Routes.CircleDetail, {
+                  circleId: myCircles[0]?.id ?? "",
+                })
+              }
+              accessibilityLabel="Open Circle Health (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="pulse-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Circle Health (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1a-prime. MEMBER TIER CARD ========== */}

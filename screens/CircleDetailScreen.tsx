@@ -19,6 +19,7 @@ import { RootStackParamList } from "../App";
 import { Circle, CircleMember, CircleActivity, useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
 import { useActivePlan } from "../hooks/usePartialContribution";
+import { useCircleHealth } from "../hooks/useCircleHealth";
 
 type CircleDetailNavigationProp = StackNavigationProp<RootStackParamList>;
 type CircleDetailRouteProp = RouteProp<RootStackParamList, "CircleDetail">;
@@ -112,6 +113,18 @@ export default function CircleDetailScreen() {
     nextCatchUpDate: partialNextDue,
     remainingAmount: partialRemaining,
   } = useActivePlan(user?.id, circleId);
+
+  // Phase D3 of feat(circle-health). Circle health score driven by the
+  // (now-fixed) compute_circle_health_score function in migration 104.
+  // Initial load + realtime updates from the nightly scoring-pipeline cron.
+  const {
+    health: circleHealth,
+    recomputing: healthRecomputing,
+    recompute: recomputeHealth,
+    statusVisual: healthStatusVisual,
+    trendVisual: healthTrendVisual,
+    scoreDelta: healthDelta,
+  } = useCircleHealth(circleId);
 
   // Find the circle in all available sources: user circles, my circles, or browse circles
   const circle = [...circles, ...myCircles, ...browseCircles].find((c) => c.id === circleId);
@@ -413,6 +426,131 @@ export default function CircleDetailScreen() {
           <Text style={styles.statSubtext}>{circle.memberCount} members</Text>
         </View>
       </View>
+
+      {/* Circle Health Card — Phase D3 of feat(circle-health).
+          Renders once the scoring pipeline has populated a score for
+          this circle (one row in circle_health_scores per circle, kept
+          fresh nightly by scoring-pipeline-daily cron). Shows status
+          badge, score, trend, 4 component bars, and a Refresh button
+          calling the recompute_circle_health RPC. */}
+      {circleHealth && healthStatusVisual && (
+        <View
+          style={[
+            styles.healthCard,
+            { borderLeftColor: healthStatusVisual.color },
+          ]}
+        >
+          <View style={styles.healthHeader}>
+            <View
+              style={[
+                styles.healthBadge,
+                { backgroundColor: healthStatusVisual.bg },
+              ]}
+            >
+              <Text style={styles.healthBadgeEmoji}>{healthStatusVisual.emoji}</Text>
+              <Text
+                style={[styles.healthBadgeLabel, { color: healthStatusVisual.color }]}
+              >
+                {healthStatusVisual.label}
+              </Text>
+            </View>
+            <View style={styles.healthScoreBox}>
+              <Text
+                style={[styles.healthScore, { color: healthStatusVisual.color }]}
+              >
+                {Math.round(circleHealth.health_score)}
+              </Text>
+              <Text style={styles.healthScoreOver}>/100</Text>
+            </View>
+          </View>
+
+          <View style={styles.healthScoreBar}>
+            <View
+              style={[
+                styles.healthScoreBarFill,
+                {
+                  width: `${Math.max(0, Math.min(100, circleHealth.health_score))}%`,
+                  backgroundColor: healthStatusVisual.color,
+                },
+              ]}
+            />
+          </View>
+
+          {healthTrendVisual && (
+            <View style={styles.healthTrendRow}>
+              <Text style={styles.healthTrendEmoji}>{healthTrendVisual.emoji}</Text>
+              <Text style={[styles.healthTrendLabel, { color: healthTrendVisual.color }]}>
+                {healthTrendVisual.label}
+              </Text>
+              {healthDelta !== null && healthDelta !== 0 && (
+                <Text style={styles.healthDelta}>
+                  {healthDelta > 0 ? "+" : ""}
+                  {healthDelta.toFixed(1)} from last run
+                </Text>
+              )}
+            </View>
+          )}
+
+          <View style={styles.healthGrid}>
+            {[
+              {
+                label: "Contribution",
+                value: circleHealth.contribution_reliability_score,
+              },
+              {
+                label: "Member Quality",
+                value: circleHealth.member_quality_score,
+              },
+              {
+                label: "Financial Stability",
+                value: circleHealth.financial_stability_score,
+              },
+              {
+                label: "Social Cohesion",
+                value: circleHealth.social_cohesion_score,
+              },
+            ].map((c) => (
+              <View key={c.label} style={styles.healthGridItem}>
+                <Text style={styles.healthGridLabel}>{c.label}</Text>
+                <View style={styles.healthGridBarBg}>
+                  <View
+                    style={[
+                      styles.healthGridBarFill,
+                      {
+                        width: `${Math.max(0, Math.min(100, c.value))}%`,
+                        backgroundColor: healthStatusVisual.color,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.healthGridValue}>{Math.round(c.value)}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.healthFooter}>
+            <Text style={styles.healthFooterText}>
+              Updated {formatDate(circleHealth.last_computed_at)}
+            </Text>
+            <TouchableOpacity
+              style={styles.healthRefresh}
+              onPress={recomputeHealth}
+              disabled={healthRecomputing}
+              accessibilityRole="button"
+              accessibilityLabel="Refresh circle health score"
+            >
+              {healthRecomputing ? (
+                <Ionicons name="refresh" size={14} color="#6B7280" />
+              ) : (
+                <>
+                  <Ionicons name="refresh-outline" size={14} color="#2563EB" />
+                  <Text style={styles.healthRefreshText}>Refresh score</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* Active Partial Plan Card — Phase D4 of feat(partial).
           Renders only when the current user has an active partial-
@@ -1416,6 +1554,89 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#00C6AE",
   },
+  healthCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  healthHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  healthBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  healthBadgeEmoji: { fontSize: 14 },
+  healthBadgeLabel: { fontSize: 12, fontWeight: "800", letterSpacing: 0.4 },
+  healthScoreBox: { flexDirection: "row", alignItems: "baseline", gap: 2 },
+  healthScore: { fontSize: 28, fontWeight: "800" },
+  healthScoreOver: { fontSize: 13, color: "#9CA3AF", fontWeight: "600" },
+  healthScoreBar: {
+    height: 6,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 3,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  healthScoreBarFill: { height: 6, borderRadius: 3 },
+  healthTrendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 14,
+  },
+  healthTrendEmoji: { fontSize: 14 },
+  healthTrendLabel: { fontSize: 13, fontWeight: "700" },
+  healthDelta: { fontSize: 12, color: "#6B7280", marginLeft: 4 },
+  healthGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginBottom: 12,
+  },
+  healthGridItem: { flex: 1, minWidth: "44%" },
+  healthGridLabel: { fontSize: 11, color: "#6B7280", marginBottom: 4 },
+  healthGridBarBg: {
+    height: 4,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 2,
+    overflow: "hidden",
+    marginBottom: 3,
+  },
+  healthGridBarFill: { height: 4, borderRadius: 2 },
+  healthGridValue: { fontSize: 12, fontWeight: "700", color: "#1F2937" },
+  healthFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 6,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  healthFooterText: { fontSize: 11, color: "#9CA3AF" },
+  healthRefresh: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  healthRefreshText: { fontSize: 12, fontWeight: "700", color: "#2563EB" },
   progressText: {
     fontSize: 12,
     color: "#6B7280",
