@@ -743,6 +743,10 @@ function HomeStackScreen() {
       <HomeStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} />
       <HomeStack.Screen name="CreateCircleInvite" component={CreateCircleInviteScreen} />
       <HomeStack.Screen name="CreateCircleSuccess" component={CreateCircleSuccessScreen} />
+      {/* Conflict Prediction admin/Elder dashboard. Also registered in
+          CirclesStack; duplicated here so the __DEV__ debug button on the
+          Dashboard (Home tab) can navigate without a tab switch. */}
+      <HomeStack.Screen name="ConflictAlert" component={ConflictAlertScreen} />
       {/* Marketplace (Migration 057) */}
       <HomeStack.Screen name="Marketplace" component={MarketplaceScreen} />
       <HomeStack.Screen name="StoreDetail" component={StoreDetailScreen} />

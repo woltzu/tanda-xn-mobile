@@ -14,7 +14,27 @@ import {
   type FormationFlag,
   type PostFormationMonitor as MonitorType,
   type ConflictRecord,
+  type ReviewOutcome,
 } from "../hooks/useConflictPrediction";
+import { useAuth } from "../context/AuthContext";
+
+// Engine return types use snake_case; the FlaggedPairSummary interface from
+// the engine matches what's actually inside circle_formation_flags.flagged_pair_ids.
+type FlaggedPair = {
+  member_a_id: string;
+  member_b_id: string;
+  friction_score: number;
+  tier: string;
+  top_factor: string;
+};
+
+// Short-form ID for display until we wire a profiles lookup hook here.
+// Shows "abcd1234…" so admins can at least correlate with a member ID.
+const shortId = (id: string | undefined): string =>
+  id ? `${id.slice(0, 8)}…` : "—";
+
+const formatFactor = (factor: string): string =>
+  String(factor).replace(/_/g, " ");
 
 type TabKey = "formation" | "monitoring" | "history";
 
@@ -31,17 +51,21 @@ const SEVERITY_CONFIG: Record<string, { color: string; bg: string; icon: string 
   critical: { color: "#991B1B", bg: "#FEE2E2", icon: "skull-outline" },
 };
 
+// Engine tier vocabulary (clear | watch | flag | separate) — drives the
+// circle-level circleTier and the pair-level tier on FlaggedPairSummary.
 const TIER_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  clear:   { label: "Clear", color: "#10B981", bg: "#ECFDF5" },
-  caution: { label: "Caution", color: "#F59E0B", bg: "#FFFBEB" },
-  warning: { label: "Warning", color: "#EF4444", bg: "#FEF2F2" },
-  block:   { label: "Blocked", color: "#991B1B", bg: "#FEE2E2" },
+  clear:      { label: "Clear",      color: "#10B981", bg: "#ECFDF5" },
+  compatible: { label: "Compatible", color: "#10B981", bg: "#ECFDF5" },
+  watch:      { label: "Watch",      color: "#F59E0B", bg: "#FFFBEB" },
+  flag:       { label: "Flag",       color: "#EF4444", bg: "#FEF2F2" },
+  separate:   { label: "Separate",   color: "#991B1B", bg: "#FEE2E2" },
 };
 
 export default function ConflictAlertScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute();
   const circleId = (route.params as any)?.circleId as string;
+  const { user } = useAuth();
 
   const [activeTab, setActiveTab] = useState<TabKey>("formation");
 
@@ -63,27 +87,50 @@ export default function ConflictAlertScreen() {
   }, [activeTab, formation, monitor, history]);
 
   // ── Formation review handlers ──────────────────────────────────────────────
-  const handleReview = useCallback((flag: FormationFlag, outcome: "approved" | "rejected" | "override") => {
+  // Map UI verbs ("approved" / "rejected" / "override") to the engine's
+  // ReviewOutcome enum. The original code mistakenly called
+  // actions.resolveConflict() (which targets conflict_history) with a
+  // FormationFlag id — that would have either errored or silently mutated
+  // the wrong row. Correct call is formation.reviewFormation() which routes
+  // to ConflictPredictionEngine.reviewFormationFlag().
+  const mapToReviewOutcome = (
+    uiOutcome: "approved" | "rejected" | "override"
+  ): ReviewOutcome => {
+    if (uiOutcome === "approved") return "approved";
+    if (uiOutcome === "rejected") return "formation_blocked";
+    return "overridden";
+  };
+
+  const handleReview = useCallback((flag: FormationFlag, uiOutcome: "approved" | "rejected" | "override") => {
+    if (!user?.id) {
+      Alert.alert("Sign-in required", "Reviewers must be authenticated.");
+      return;
+    }
     Alert.alert(
-      `${outcome.charAt(0).toUpperCase() + outcome.slice(1)} Formation`,
-      `Are you sure you want to ${outcome} this formation?`,
+      `${uiOutcome.charAt(0).toUpperCase() + uiOutcome.slice(1)} Formation`,
+      `Are you sure you want to ${uiOutcome} this formation?`,
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Confirm",
-          style: outcome === "rejected" ? "destructive" : "default",
+          style: uiOutcome === "rejected" ? "destructive" : "default",
           onPress: async () => {
             try {
-              await actions.resolveConflict(flag.id, outcome);
+              await formation.reviewFormation(
+                flag.id,
+                user.id,
+                mapToReviewOutcome(uiOutcome),
+                `Reviewed via mobile dashboard`
+              );
               formation.refresh();
-            } catch {
-              Alert.alert("Error", "Failed to process review.");
+            } catch (err: any) {
+              Alert.alert("Error", err?.message ?? "Failed to process review.");
             }
           },
         },
       ]
     );
-  }, [actions, formation]);
+  }, [formation, user?.id]);
 
   // ── Resolve conflict handler ───────────────────────────────────────────────
   const handleResolve = useCallback((conflict: ConflictRecord) => {
@@ -124,7 +171,11 @@ export default function ConflictAlertScreen() {
     }
 
     return formation.pendingReviews.map((flag) => {
-      const tier = TIER_CONFIG[flag.frictionTier] ?? TIER_CONFIG.clear;
+      // Engine: circleTier (not frictionTier), flaggedPairIds (snake-cased
+      // payload, not flaggedPairs), flaggedAt (not createdAt), reviewNotes
+      // (not notes). friction_score is already 0-100, no *100 needed.
+      const tier = TIER_CONFIG[flag.circleTier] ?? TIER_CONFIG.clear;
+      const pairs = flag.flaggedPairIds as unknown as FlaggedPair[];
       return (
         <View key={flag.id} style={styles.card}>
           <View style={styles.cardHeader}>
@@ -133,30 +184,39 @@ export default function ConflictAlertScreen() {
               <Text style={[styles.tierLabel, { color: tier.color }]}>{tier.label}</Text>
             </View>
             <Text style={styles.cardTimestamp}>
-              {new Date(flag.createdAt).toLocaleDateString()}
+              {new Date(flag.flaggedAt).toLocaleDateString()}
             </Text>
           </View>
 
           <Text style={styles.cardTitle}>Formation Review Required</Text>
+          <Text style={styles.cardNotes}>
+            {flag.totalPairs} pair{flag.totalPairs === 1 ? "" : "s"} scored,{" "}
+            {flag.flaggedPairs} flagged. Highest pair {Math.round(flag.highestScore)}/100.
+          </Text>
 
-          {flag.flaggedPairs && flag.flaggedPairs.length > 0 && (
+          {pairs && pairs.length > 0 && (
             <View style={styles.pairsList}>
-              {flag.flaggedPairs.map((pair: any, idx: number) => (
+              {pairs.map((pair: FlaggedPair, idx: number) => (
                 <View key={idx} style={styles.pairRow}>
                   <Ionicons name="people-outline" size={16} color="#6B7280" />
-                  <Text style={styles.pairText}>
-                    {pair.memberAName ?? pair.memberAId} - {pair.memberBName ?? pair.memberBId}
-                  </Text>
-                  <Text style={[styles.pairScore, { color: (pair.score ?? 0) >= 0.7 ? "#EF4444" : "#F59E0B" }]}>
-                    {((pair.score ?? 0) * 100).toFixed(0)}%
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pairText}>
+                      {shortId(pair.member_a_id)} ↔ {shortId(pair.member_b_id)}
+                    </Text>
+                    <Text style={[styles.pairText, { fontSize: 11, color: "#9CA3AF" }]}>
+                      Top factor: {formatFactor(pair.top_factor)}
+                    </Text>
+                  </View>
+                  <Text style={[styles.pairScore, { color: pair.friction_score >= 55 ? "#EF4444" : "#F59E0B" }]}>
+                    {Math.round(pair.friction_score)}/100
                   </Text>
                 </View>
               ))}
             </View>
           )}
 
-          {flag.notes && (
-            <Text style={styles.cardNotes}>{flag.notes}</Text>
+          {flag.reviewNotes && (
+            <Text style={styles.cardNotes}>{flag.reviewNotes}</Text>
           )}
 
           <View style={styles.actionRow}>
@@ -229,55 +289,61 @@ export default function ConflictAlertScreen() {
           </View>
         </View>
 
-        {monitor.monitors.map((m) => (
-          <View key={m.id} style={[styles.card, m.escalated && styles.escalatedCard]}>
-            <View style={styles.cardHeader}>
-              <View style={styles.monitorMeta}>
-                <Ionicons
-                  name={m.escalated ? "alert-circle" : "eye-outline"}
-                  size={18}
-                  color={m.escalated ? "#EF4444" : "#00C6AE"}
-                />
-                <Text style={[styles.monitorStatus, { color: m.escalated ? "#EF4444" : "#00C6AE" }]}>
-                  {m.escalated ? "Escalated" : "Watching"}
+        {monitor.monitors.map((m) => {
+          // Engine: currentScore (not frictionScore) — already 0-100;
+          // memberAId/memberBId only (no Name fields); escalationReason
+          // (not reason); monitoringStart (not createdAt).
+          // Previous code multiplied a 0-100 score by 100, making the bar
+          // always fill (`width: 7000%`) — fixed here.
+          const score = m.currentScore ?? m.initialScore;
+          return (
+            <View key={m.id} style={[styles.card, m.escalated && styles.escalatedCard]}>
+              <View style={styles.cardHeader}>
+                <View style={styles.monitorMeta}>
+                  <Ionicons
+                    name={m.escalated ? "alert-circle" : "eye-outline"}
+                    size={18}
+                    color={m.escalated ? "#EF4444" : "#00C6AE"}
+                  />
+                  <Text style={[styles.monitorStatus, { color: m.escalated ? "#EF4444" : "#00C6AE" }]}>
+                    {m.escalated ? "Escalated" : "Watching"}
+                  </Text>
+                </View>
+                <Text style={styles.cardTimestamp}>
+                  {new Date(m.monitoringStart).toLocaleDateString()}
                 </Text>
               </View>
-              <Text style={styles.cardTimestamp}>
-                {new Date(m.createdAt).toLocaleDateString()}
-              </Text>
-            </View>
 
-            <View style={styles.pairRow}>
-              <Ionicons name="people" size={16} color="#0A2342" />
-              <Text style={styles.pairTextBold}>
-                {(m as any).memberAName ?? "Member A"} - {(m as any).memberBName ?? "Member B"}
-              </Text>
-            </View>
+              <View style={styles.pairRow}>
+                <Ionicons name="people" size={16} color="#0A2342" />
+                <Text style={styles.pairTextBold}>
+                  {shortId(m.memberAId)} ↔ {shortId(m.memberBId)}
+                </Text>
+              </View>
 
-            {(m as any).frictionScore != null && (
               <View style={styles.scoreBar}>
                 <View style={styles.scoreTrack}>
                   <View
                     style={[
                       styles.scoreFill,
                       {
-                        width: `${Math.min(((m as any).frictionScore ?? 0) * 100, 100)}%`,
-                        backgroundColor: (m as any).frictionScore >= 0.7 ? "#EF4444" : (m as any).frictionScore >= 0.4 ? "#F59E0B" : "#10B981",
+                        width: `${Math.min(score, 100)}%`,
+                        backgroundColor: score >= 70 ? "#EF4444" : score >= 40 ? "#F59E0B" : "#10B981",
                       },
                     ]}
                   />
                 </View>
                 <Text style={styles.scoreText}>
-                  {(((m as any).frictionScore ?? 0) * 100).toFixed(0)}%
+                  {Math.round(score)}/100
                 </Text>
               </View>
-            )}
 
-            {(m as any).reason && (
-              <Text style={styles.cardNotes}>{(m as any).reason}</Text>
-            )}
-          </View>
-        ))}
+              {m.escalationReason && (
+                <Text style={styles.cardNotes}>{m.escalationReason}</Text>
+              )}
+            </View>
+          );
+        })}
       </>
     );
   };
@@ -336,9 +402,11 @@ export default function ConflictAlertScreen() {
                 </View>
               </View>
 
-              <Text style={styles.cardTitle}>{conflict.conflictType ?? "Conflict"}</Text>
+              <Text style={styles.cardTitle}>
+                {(conflict.conflictType ?? "Conflict").replace(/_/g, " ")}
+              </Text>
               <Text style={styles.cardTimestamp}>
-                {new Date(conflict.createdAt).toLocaleDateString()}
+                {new Date(conflict.reportedAt).toLocaleDateString()}
               </Text>
 
               {conflict.description && (

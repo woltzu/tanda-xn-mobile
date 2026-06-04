@@ -361,6 +361,26 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Goals V2 (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point for the Conflict Prediction admin
+              dashboard (Phase D3 of feat(conflict)). Passes the first
+              circle's id so the Monitoring + History tabs have data scope;
+              the Formation tab is circle-agnostic and shows all pending
+              reviews. Replace with a real admin/Elder entry point once an
+              Elder UI exists. */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() => navigation.navigate(Routes.ConflictAlert, {
+                circleId: myCircles[0]?.id ?? "",
+              })}
+              accessibilityLabel="Open Conflict Alerts (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="shield-half-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Conflict Alerts (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1a-bis. EARLY INTERVENTION CARD ========== */}
