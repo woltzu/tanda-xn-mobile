@@ -546,6 +546,28 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Payout Ordering (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point for the InsurancePoolScreen
+              (Phase D3 of feat(insurance)). The screen (794 LOC) shows
+              the per-circle pool: current rate, balance, withholding
+              transactions, claims, rate history. Hidden if user has no
+              circles. The pool itself is now wired:
+                - Contributions auto-withhold via the trigger from D1
+                - Weekly rate cron from D2 recalculates per AI algorithm
+              Remove once a real admin-area entry to the pool exists. */}
+          {__DEV__ && myCircles.length > 0 && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() => navigation.navigate(Routes.InsurancePool, {
+                circleId: myCircles[0]?.id ?? "",
+              })}
+              accessibilityLabel="Open Insurance Pool (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="shield-checkmark-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Insurance Pool (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1a-prime. MEMBER TIER CARD ========== */}
