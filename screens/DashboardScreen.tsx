@@ -731,6 +731,29 @@ export default function DashboardScreen() {
               </Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY -- entry point to AIJobsHealthScreen.
+              CronAIJobEngine #191. 17th debug chip. Read-only admin
+              dashboard showing fleet status across all AI cron jobs
+              (cron_job_logs), default-probability model accuracy +
+              drift (model_performance_logs), and cohort retention
+              metrics (cohort_analytics). The new weekly + monthly
+              EFs scheduled via migration 113 surface here too. */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() =>
+                navigation.navigate(Routes.AIJobsHealth as never)
+              }
+              accessibilityLabel="Open AI Job Fleet (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="pulse-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>
+                AI Job Fleet (debug)
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1a-prime. MEMBER TIER CARD ========== */}

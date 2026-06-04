@@ -144,6 +144,7 @@ import InsurancePoolScreen from "./screens/InsurancePoolScreen";
 import SubstitutePoolScreen from "./screens/SubstitutePoolScreen";
 import CreditReportScreen from "./screens/CreditReportScreen";
 import DecisionHistoryScreen from "./screens/DecisionHistoryScreen";
+import AIJobsHealthScreen from "./screens/AIJobsHealthScreen";
 import PartialContributionScreen from "./screens/PartialContributionScreen";
 import PositionSwapScreen from "./screens/PositionSwapScreen";
 import CycleTimelineScreen from "./screens/CycleTimelineScreen";
@@ -492,6 +493,7 @@ export type RootStackParamList = {
   SubstitutePool: undefined;
   CreditReport: undefined;
   DecisionHistory: undefined;
+  AIJobsHealth: undefined;
   PartialContribution: { circleId: string; cycleId?: string };
   PositionSwap: { circleId: string };
   CycleTimeline: { circleId: string };
@@ -798,6 +800,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="SubstitutePool" component={SubstitutePoolScreen} />
       <HomeStack.Screen name="CreditReport" component={CreditReportScreen} />
       <HomeStack.Screen name="DecisionHistory" component={DecisionHistoryScreen} />
+      <HomeStack.Screen name="AIJobsHealth" component={AIJobsHealthScreen} />
       <HomeStack.Screen name="EarlyIntervention" component={EarlyInterventionScreen} />
       <HomeStack.Screen name="ScoreBreakdown" component={ScoreBreakdownScreen} />
       <HomeStack.Screen name="CreditProfile" component={CreditProfileScreen} />

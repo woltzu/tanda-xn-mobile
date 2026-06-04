@@ -33,6 +33,7 @@
  */
 export const Routes = {
   AboutApp: "AboutApp",
+  AIJobsHealth: "AIJobsHealth",
   AccessRestricted: "AccessRestricted",
   AccountTiersExplained: "AccountTiersExplained",
   Action: "Action",
