@@ -172,6 +172,7 @@ export const Routes = {
   MarketMain: "MarketMain",
   Marketplace: "Marketplace",
   MediationCase: "MediationCase",
+  DiscoverCircles: "DiscoverCircles",
   MediationTools: "MediationTools",
   MemberTripDashboard: "MemberTripDashboard",
   MoodInsights: "MoodInsights",

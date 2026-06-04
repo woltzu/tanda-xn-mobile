@@ -446,6 +446,24 @@ export default function DashboardScreen() {
               <Text style={styles.debugButtonText}>Mood Insights (debug)</Text>
             </TouchableOpacity>
           )}
+
+          {/* DEBUG ONLY — entry point for the Discover Circles screen
+              (Phase C of feat(circle)). The screen surfaces the existing
+              CircleMatchingService recommendations (826 LOC, totally
+              dormant before this commit) and logs interactions to
+              circle_match_history for ML training data. Remove once a
+              real entry (e.g. "Discover" tab) is added. */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.debugButton}
+              onPress={() => navigation.navigate(Routes.DiscoverCircles)}
+              accessibilityLabel="Open Discover Circles (debug)"
+              accessibilityRole="button"
+            >
+              <Ionicons name="compass-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.debugButtonText}>Discover Circles (debug)</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ========== 1a-bis. EARLY INTERVENTION CARD ========== */}

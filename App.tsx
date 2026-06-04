@@ -139,6 +139,7 @@ import MarketInsightScreen from "./screens/MarketInsightScreen";
 import StressScoreDashboardScreen from "./screens/StressScoreDashboardScreen";
 import MoodInsightsScreen from "./screens/MoodInsightsScreen";
 import ConflictAlertScreen from "./screens/ConflictAlertScreen";
+import DiscoverCirclesScreen from "./screens/DiscoverCirclesScreen";
 import InsurancePoolScreen from "./screens/InsurancePoolScreen";
 import PartialContributionScreen from "./screens/PartialContributionScreen";
 import PositionSwapScreen from "./screens/PositionSwapScreen";
@@ -482,6 +483,7 @@ export type RootStackParamList = {
   // Feature Screens (AI Engines + Circle Management)
   StressScoreDashboard: undefined;
   MoodInsights: undefined;
+  DiscoverCircles: undefined;
   ConflictAlert: { circleId: string };
   InsurancePool: { circleId: string };
   PartialContribution: { circleId: string; cycleId?: string };
@@ -779,6 +781,7 @@ function HomeStackScreen() {
       {/* AI / Financial Insight Screens */}
       <HomeStack.Screen name="StressScoreDashboard" component={StressScoreDashboardScreen} />
       <HomeStack.Screen name="MoodInsights" component={MoodInsightsScreen} />
+      <HomeStack.Screen name="DiscoverCircles" component={DiscoverCirclesScreen} />
       <HomeStack.Screen name="EarlyIntervention" component={EarlyInterventionScreen} />
       <HomeStack.Screen name="ScoreBreakdown" component={ScoreBreakdownScreen} />
       <HomeStack.Screen name="CreditProfile" component={CreditProfileScreen} />
