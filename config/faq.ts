@@ -186,6 +186,32 @@ export const FAQ_ITEMS: FAQItem[] = [
     related: ["what_is_xnscore"],
   },
 
+  // ----- Goals (additional) -------------------------------------------------
+  {
+    id: "how_to_set_a_goal",
+    category: "goals",
+    question: "How do I set a goal?",
+    answer:
+      "Open the Goals tab and tap +. Pick a category (Emergency, Education, Travel, Home, Vehicle, or Custom), choose a target amount and timeline, and pick a savings type. You can optionally link a circle so payouts auto-deposit into the goal.",
+    related: ["what_are_goals", "flexible_vs_emergency_vs_locked", "how_does_auto_deposit_work"],
+  },
+  {
+    id: "how_do_i_earn_interest",
+    category: "goals",
+    question: "How do I earn interest on my savings?",
+    answer:
+      "Funds you put into a goal sit in a yield-bearing wallet and accrue interest daily. The rate depends on the savings type you picked when you created the goal -- Flexible is lowest, Locked is highest. Interest is calculated daily and credited monthly.",
+    related: ["flexible_vs_emergency_vs_locked", "what_are_goals"],
+  },
+  {
+    id: "how_does_auto_deposit_work",
+    category: "goals",
+    question: "How does auto-deposit work?",
+    answer:
+      "When you link a circle to a goal, every payout you receive from that circle gets routed straight into the goal's balance instead of your wallet. You can unlink at any time from the goal's detail screen, and you can link multiple circles to the same goal.",
+    related: ["how_to_set_a_goal", "what_are_goals"],
+  },
+
   // ----- Verification -------------------------------------------------------
   {
     id: "what_is_kyc",
@@ -202,6 +228,59 @@ export const FAQ_ITEMS: FAQItem[] = [
     answer:
       "Open Profile -> Payment Methods and pick Add Bank or Add Card. Bank links go through Stripe Financial Connections (instant for most US banks). Cards are tokenized -- we never store the raw number. You can add multiple methods and pick a default.",
     related: ["how_do_i_withdraw"],
+  },
+  {
+    id: "what_documents_for_kyc",
+    category: "verification",
+    question: "What documents are accepted for KYC?",
+    answer:
+      "A government-issued photo ID (passport, driver's license, or national ID card), proof of address (a utility bill or bank statement issued in the last 90 days), and a live selfie that matches the ID photo. Make sure every corner of the document is in frame and the text is readable.",
+    related: ["what_is_kyc", "how_long_does_kyc_take"],
+  },
+  {
+    id: "how_long_does_kyc_take",
+    category: "verification",
+    question: "How long does KYC verification take?",
+    answer:
+      "Most submissions are approved automatically within a few minutes. If anything triggers a manual review -- low-quality photo, name mismatch, restricted country -- a human checks it within one business day. You'll get a push notification either way.",
+    related: ["what_is_kyc", "what_documents_for_kyc"],
+  },
+
+  // ----- Wallet / Funds (lives under technical to stay within the
+  //       existing FAQCategory union; if we ever split out a dedicated
+  //       Wallet category, these rows are the natural seed.) ----------
+  {
+    id: "how_do_i_add_funds",
+    category: "technical",
+    question: "How do I add funds to my wallet?",
+    answer:
+      "Open Wallet -> Add Funds and pick a linked bank or card. Bank transfers settle in 1-3 business days; debit-card top-ups are typically instant. You can also set a recurring auto-top-up from Wallet -> Settings if you want a hands-off approach.",
+    related: ["how_do_i_link_a_bank", "what_are_wallet_fees"],
+  },
+  {
+    id: "what_are_wallet_fees",
+    category: "technical",
+    question: "What are the wallet and withdrawal fees?",
+    answer:
+      "Bank deposits and standard withdrawals are free. Debit-card top-ups carry a small processing fee (currently 1.5%) that the screen always shows before you confirm. Instant withdrawals to a card add a separate expedite fee; same-day to a bank is free.",
+    related: ["how_do_i_add_funds", "how_do_i_withdraw"],
+  },
+
+  // ----- Account & Privacy (also under technical for now) -----------
+  {
+    id: "how_is_my_data_protected",
+    category: "technical",
+    question: "How is my data protected?",
+    answer:
+      "Personal data is encrypted at rest with AES-256 and in transit with TLS 1.3. Payment credentials are tokenized by our payment partners -- we never store raw card or bank numbers. You can review the data we hold, export it, or request deletion from Profile -> Privacy.",
+    related: ["delete_account", "is_my_money_safe"],
+  },
+  {
+    id: "change_language",
+    category: "technical",
+    question: "Can I change the app language?",
+    answer:
+      "Yes. Open Profile -> Language & Region and pick from the supported languages. Decisions and notifications are localized too -- the AI explanations you see in your Decision History switch language the moment you change the setting.",
   },
 
   // ----- Technical / Support -----------------------------------------------
