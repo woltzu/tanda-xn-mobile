@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,8 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
+import { useWalkthrough } from "../hooks/useWalkthrough";
+import WalkthroughOverlay from "../components/WalkthroughOverlay";
 
 type CirclesScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -24,6 +26,36 @@ export default function CirclesScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeTab, setActiveTab] = useState<"browse" | "my">("browse");
+
+  // Walkthrough: first-time visitors get the circles_intro tour. We pick
+  // the tour based on the current tab -- "My" defaults to the create-flow
+  // tour, "Browse" defaults to the join-flow tour. The hook handles the
+  // version-bump reset, so changing copy in config/walkthroughs.ts and
+  // bumping WALKTHROUGH_VERSION will re-show the tour to existing users.
+  const { isWalkthroughCompleted, markWalkthroughCompleted } = useWalkthrough();
+  const [walkthroughActive, setWalkthroughActive] = useState(false);
+  const [walkthroughStep, setWalkthroughStep] = useState(0);
+  const walkthroughId =
+    activeTab === "browse" ? "join_circle_intro" : "circles_intro";
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const done = await isWalkthroughCompleted(walkthroughId);
+      if (!cancelled && !done) {
+        setWalkthroughStep(0);
+        setWalkthroughActive(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [walkthroughId, isWalkthroughCompleted]);
+
+  const finishWalkthrough = async () => {
+    setWalkthroughActive(false);
+    await markWalkthroughCompleted(walkthroughId);
+  };
 
   // Convert browse circles to the format expected by CircleCard
   const circles = browseCircles.map((circle) => ({
@@ -386,11 +418,22 @@ export default function CirclesScreen() {
         style={styles.fab}
         activeOpacity={0.8}
         onPress={() => navigation.navigate("CreateCircleStart")}
+        accessibilityLabel="Create a new circle"
+        testID="button_new_circle"
       >
         <LinearGradient colors={["#00C6AE", "#00A896"]} style={styles.fabGradient}>
           <Ionicons name="add" size={28} color="#FFFFFF" />
         </LinearGradient>
       </TouchableOpacity>
+
+      <WalkthroughOverlay
+        visible={walkthroughActive}
+        walkthroughId={walkthroughId}
+        step={walkthroughStep}
+        onNext={() => setWalkthroughStep((s) => s + 1)}
+        onSkip={finishWalkthrough}
+        onComplete={finishWalkthrough}
+      />
     </View>
   );
 }

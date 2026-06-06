@@ -14,6 +14,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
 import { useXnScore } from "../context/XnScoreContext";
+import { useWalkthrough } from "../hooks/useWalkthrough";
 
 type SettingsNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -34,6 +35,31 @@ export default function SettingsMainScreen() {
   const navigation = useNavigation<SettingsNavigationProp>();
   const { user, logout } = useAuth();
   const { score } = useXnScore();
+  const { resetAllWalkthroughs } = useWalkthrough();
+
+  // DEV-only: wipe walkthrough completion flags so the next visit to a
+  // hub screen re-triggers the tour. Gated by __DEV__ so the button
+  // never ships to prod builds.
+  const handleResetWalkthroughs = () => {
+    Alert.alert(
+      "Reset walkthroughs",
+      "Wipe all walkthrough completion flags? Returning to any hub screen will replay the first-time tour.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: async () => {
+            await resetAllWalkthroughs();
+            Alert.alert(
+              "Done",
+              "Walkthroughs reset. Re-open Circles / Goals / Advance to see them again.",
+            );
+          },
+        },
+      ],
+    );
+  };
 
   const handleLogout = () => {
     Alert.alert(
@@ -280,6 +306,35 @@ export default function SettingsMainScreen() {
           <Text style={styles.footerText}>
             TandaXn v2.5.0 (Build 250115)
           </Text>
+
+          {/* DEV-only walkthrough reset. Lives under the footer so it's
+              never visible in prod builds and doesn't crowd the main
+              settings list. */}
+          {__DEV__ && (
+            <TouchableOpacity
+              onPress={handleResetWalkthroughs}
+              accessibilityRole="button"
+              accessibilityLabel="Reset walkthroughs (DEV only)"
+              style={{
+                marginTop: 12,
+                paddingVertical: 10,
+                paddingHorizontal: 16,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: "#E5E7EB",
+                backgroundColor: "#FFFFFF",
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              <Ionicons name="refresh-circle-outline" size={16} color="#0A2342" />
+              <Text style={{ color: "#0A2342", fontWeight: "600", fontSize: 13 }}>
+                Reset walkthroughs (debug)
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ScrollView>
 

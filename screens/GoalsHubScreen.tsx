@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useSavings, GOAL_TYPES, GoalType, SavingsGoal } from "../context/SavingsContext";
+import { useWalkthrough } from "../hooks/useWalkthrough";
+import WalkthroughOverlay from "../components/WalkthroughOverlay";
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -28,6 +30,31 @@ export default function GoalsHubScreen() {
     getTotalInterestUnlocked,
     isLoading,
   } = useSavings();
+
+  // First-time visitors get the goals_intro tour. Same shape as the
+  // CirclesScreen wiring; see config/walkthroughs.ts + useWalkthrough.
+  const { isWalkthroughCompleted, markWalkthroughCompleted } = useWalkthrough();
+  const [walkthroughActive, setWalkthroughActive] = useState(false);
+  const [walkthroughStep, setWalkthroughStep] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const done = await isWalkthroughCompleted("goals_intro");
+      if (!cancelled && !done) {
+        setWalkthroughStep(0);
+        setWalkthroughActive(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isWalkthroughCompleted]);
+
+  const finishWalkthrough = async () => {
+    setWalkthroughActive(false);
+    await markWalkthroughCompleted("goals_intro");
+  };
 
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
 
@@ -331,10 +358,21 @@ export default function GoalsHubScreen() {
       <TouchableOpacity
         style={styles.floatingHelp}
         onPress={() => navigation.navigate("HelpCenter" as any)}
+        accessibilityLabel="Open help center"
+        testID="button_new_goal"
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
         <Text style={styles.floatingHelpText}>Help</Text>
       </TouchableOpacity>
+
+      <WalkthroughOverlay
+        visible={walkthroughActive}
+        walkthroughId="goals_intro"
+        step={walkthroughStep}
+        onNext={() => setWalkthroughStep((s) => s + 1)}
+        onSkip={finishWalkthrough}
+        onComplete={finishWalkthrough}
+      />
     </SafeAreaView>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useAdvance, ADVANCE_TIERS, FuturePayout, AdvanceTierKey } from "../context/AdvanceContext";
 import { useXnScore } from "../context/XnScoreContext";
+import { useWalkthrough } from "../hooks/useWalkthrough";
+import WalkthroughOverlay from "../components/WalkthroughOverlay";
 
 type NavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -60,6 +62,31 @@ export default function AdvanceHubScreen() {
   const canRequest = canApplyForLoan(score);
   const advanceablePayouts = getAdvanceablePayouts();
   const totalOutstanding = getTotalOutstanding();
+
+  // First-time visitors get the advance_intro tour. Same wiring pattern
+  // as CirclesScreen / GoalsHubScreen; see hooks/useWalkthrough.
+  const { isWalkthroughCompleted, markWalkthroughCompleted } = useWalkthrough();
+  const [walkthroughActive, setWalkthroughActive] = useState(false);
+  const [walkthroughStep, setWalkthroughStep] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const done = await isWalkthroughCompleted("advance_intro");
+      if (!cancelled && !done) {
+        setWalkthroughStep(0);
+        setWalkthroughActive(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isWalkthroughCompleted]);
+
+  const finishWalkthrough = async () => {
+    setWalkthroughActive(false);
+    await markWalkthroughCompleted("advance_intro");
+  };
 
   // Calculate max advance capacity
   const totalMaxAdvance = useMemo(() => {
@@ -364,10 +391,21 @@ export default function AdvanceHubScreen() {
       <TouchableOpacity
         style={styles.floatingHelp}
         onPress={() => navigation.navigate("HelpCenter" as any)}
+        accessibilityLabel="Open help center"
+        testID="tab_advance_hub"
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
         <Text style={styles.floatingHelpText}>Help</Text>
       </TouchableOpacity>
+
+      <WalkthroughOverlay
+        visible={walkthroughActive}
+        walkthroughId="advance_intro"
+        step={walkthroughStep}
+        onNext={() => setWalkthroughStep((s) => s + 1)}
+        onSkip={finishWalkthrough}
+        onComplete={finishWalkthrough}
+      />
     </SafeAreaView>
   );
 }
