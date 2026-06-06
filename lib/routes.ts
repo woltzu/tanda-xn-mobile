@@ -112,6 +112,7 @@ export const Routes = {
   ElderTrainingHub: "ElderTrainingHub",
   EmailVerification: "EmailVerification",
   ExportData: "ExportData",
+  FAQ: "FAQ",
   FeedSettings: "FeedSettings",
   ForgotPassword: "ForgotPassword",
   Gatherings: "Gatherings",

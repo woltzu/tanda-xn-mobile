@@ -90,6 +90,7 @@ import PrivacySettingsScreen from "./screens/PrivacySettingsScreen";
 import LinkedAccountsScreen from "./screens/LinkedAccountsScreen";
 import ActiveSessionsScreen from "./screens/ActiveSessionsScreen";
 import HelpCenterScreen from "./screens/HelpCenterScreen";
+import FAQScreen from "./screens/FAQScreen";
 import AboutAppScreen from "./screens/AboutAppScreen";
 import ReportIssueScreen from "./screens/ReportIssueScreen";
 import PaymentHistoryScreen from "./screens/PaymentHistoryScreen";
@@ -422,6 +423,7 @@ export type RootStackParamList = {
   LinkedAccounts: undefined;
   ActiveSessions: undefined;
   HelpCenter: undefined;
+  FAQ: { category?: string; initialQuery?: string } | undefined;
   AboutApp: undefined;
   // Circle Actions Menu Screens
   ReportIssue: { circleName?: string; circleId?: string };
@@ -736,6 +738,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="NotificationsInbox" component={NotificationsInboxScreen} />
       <HomeStack.Screen name="Settings" component={SettingsMainScreen} />
       <HomeStack.Screen name="HelpCenter" component={HelpCenterScreen} />
+      <HomeStack.Screen name="FAQ" component={FAQScreen} />
       <HomeStack.Screen name="CommunityBrowser" component={CommunityBrowserScreen} />
       <HomeStack.Screen name="CommunityHub" component={CommunityHubScreen} />
       <HomeStack.Screen name="CreateCommunity" component={CreateCommunityScreen} />

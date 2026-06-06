@@ -105,6 +105,7 @@ export default function ProfileScreen() {
       section: "Support",
       items: [
         { icon: "help-circle-outline", label: "Help Center", onPress: () => navigation.navigate("HelpCenter") },
+        { icon: "book-outline", label: "FAQ", onPress: () => navigation.navigate("FAQ") },
         { icon: "information-circle-outline", label: "About TandaXn", onPress: () => navigation.navigate("AboutApp") },
       ],
     },
