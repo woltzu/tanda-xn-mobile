@@ -31,6 +31,40 @@ export default function EmailVerificationScreen() {
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  // Auto-route off the verification screen the moment Supabase tells
+  // us the email is confirmed. This fires on two paths:
+  //   1. The user taps the link in their email; AuthCallbackScreen
+  //      handles the deep link, Supabase emits TOKEN_REFRESHED /
+  //      USER_UPDATED with email_confirmed_at populated.
+  //   2. The user was already verified when they landed here (edge
+  //      case: stale navigation). We catch that on mount via getUser.
+  // Either way we navigation.reset to MainTabs so a back-press can't
+  // land them back on the verify screen.
+  useEffect(() => {
+    let cancelled = false;
+
+    const goToMain = () => {
+      if (cancelled) return;
+      navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] });
+    };
+
+    // Path 2: already-verified check on mount.
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data?.user?.email_confirmed_at) goToMain();
+    })();
+
+    // Path 1: subscribe to live auth changes.
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user?.email_confirmed_at) goToMain();
+    });
+
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, [navigation]);
+
   // Pulse animation for email icon
   useEffect(() => {
     Animated.loop(

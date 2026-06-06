@@ -1,7 +1,7 @@
 import "react-native-gesture-handler";
 import React, { useState, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
-import { NavigationContainer, CommonActions } from "@react-navigation/native";
+import { NavigationContainer, CommonActions, useNavigation } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -1221,6 +1221,24 @@ function AppContent() {
 }
 
 function MainTabs() {
+  const { isEmailVerified, user } = useAuth();
+  const navigation = useNavigation<any>();
+
+  // Email-verification gate. If a session lands here with email not
+  // confirmed (signed up + tapped "Already have an account?" before
+  // clicking the link, or a session that survived an expired link),
+  // bounce to EmailVerification with the email param. The screen
+  // there subscribes to onAuthStateChange and bounces back when
+  // verification completes, so this gate isn't a re-entry trap.
+  React.useEffect(() => {
+    if (!isEmailVerified && user?.email) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "EmailVerification", params: { email: user.email } }],
+      });
+    }
+  }, [isEmailVerified, user?.email, navigation]);
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({

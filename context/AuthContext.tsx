@@ -44,6 +44,11 @@ type AuthContextType = {
   session: Session | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  // True iff the active session's auth.users.email_confirmed_at is set.
+  // Drives the EmailVerificationScreen gate in App.tsx and the
+  // verification-status pill in SettingsMainScreen. Falls through to
+  // false when there's no session.
+  isEmailVerified: boolean;
   isLocked: boolean;
   biometricsEnabled: boolean;
   biometricsAvailable: boolean;
@@ -558,6 +563,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         session,
         isLoading,
         isAuthenticated: !!session && !!user,
+        // Supabase stamps email_confirmed_at when the magic-link target
+        // (auth/confirm) resolves successfully. The string is present
+        // and non-null on a verified session; missing on a fresh signup
+        // session that hasn't completed the link yet.
+        isEmailVerified: !!session?.user?.email_confirmed_at,
         isLocked,
         biometricsEnabled,
         biometricsAvailable,

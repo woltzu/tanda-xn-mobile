@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -12,9 +12,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, getEmailRedirectUrl } from "../context/AuthContext";
 import { useXnScore } from "../context/XnScoreContext";
 import { useWalkthrough } from "../hooks/useWalkthrough";
+import { supabase } from "../lib/supabase";
 
 type SettingsNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -33,9 +34,44 @@ interface SettingItem {
 
 export default function SettingsMainScreen() {
   const navigation = useNavigation<SettingsNavigationProp>();
-  const { user, logout } = useAuth();
+  const { user, logout, isEmailVerified } = useAuth();
   const { score } = useXnScore();
   const { resetAllWalkthroughs } = useWalkthrough();
+
+  // Email-verification resend state. Lives at component scope so the
+  // cooldown survives across re-renders; cleared automatically when
+  // isEmailVerified flips true and the card stops rendering.
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const [emailResent, setEmailResent] = useState(false);
+
+  const handleResendVerificationEmail = async () => {
+    if (!user?.email) {
+      Alert.alert("No email on file", "Sign out and sign back in to refresh your session.");
+      return;
+    }
+    setResendingEmail(true);
+    setEmailResent(false);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: user.email,
+        options: { emailRedirectTo: getEmailRedirectUrl("auth/confirm") },
+      });
+      if (error) {
+        Alert.alert("Couldn't send", error.message || "Try again in a moment.");
+        return;
+      }
+      setEmailResent(true);
+      // Auto-clear the success state so the button reverts to a
+      // tappable state after the user reads the confirmation.
+      setTimeout(() => setEmailResent(false), 6000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      Alert.alert("Couldn't send", msg);
+    } finally {
+      setResendingEmail(false);
+    }
+  };
 
   // DEV-only: wipe walkthrough completion flags so the next visit to a
   // hub screen re-triggers the tour. Gated by __DEV__ so the button
@@ -288,6 +324,82 @@ export default function SettingsMainScreen() {
             </View>
           </View>
         </LinearGradient>
+
+        {/* Email verification card. Renders only when the active
+            session's email_confirmed_at is missing. Pulled outside
+            the existing settings groups so it reads as a banner, not
+            as another row in the list. Once isEmailVerified flips true
+            the component unmounts and the cooldown state is GC'd. */}
+        {user && !isEmailVerified ? (
+          <View
+            style={{
+              marginHorizontal: 16,
+              marginTop: 16,
+              borderRadius: 14,
+              padding: 14,
+              backgroundColor: "#FEF3C7",
+              borderWidth: 1,
+              borderColor: "#FCD34D",
+            }}
+          >
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Ionicons name="mail-unread-outline" size={20} color="#92400E" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: "#92400E", fontWeight: "700", fontSize: 13 }}>
+                  Email not verified
+                </Text>
+                <Text style={{ color: "#92400E", fontSize: 12, marginTop: 2 }}>
+                  {user.email
+                    ? `Check ${user.email} for the verification link.`
+                    : "Check your inbox for the verification link."}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleResendVerificationEmail}
+              disabled={resendingEmail || emailResent}
+              accessibilityRole="button"
+              accessibilityLabel="Resend verification email"
+              style={{
+                marginTop: 10,
+                paddingVertical: 10,
+                borderRadius: 10,
+                alignItems: "center",
+                backgroundColor: emailResent ? "#10B981" : "#0A2342",
+                opacity: resendingEmail ? 0.6 : 1,
+              }}
+            >
+              <Text style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 13 }}>
+                {resendingEmail
+                  ? "Sending..."
+                  : emailResent
+                    ? "Sent. Check your inbox."
+                    : "Resend verification email"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : user ? (
+          <View
+            style={{
+              marginHorizontal: 16,
+              marginTop: 16,
+              borderRadius: 14,
+              padding: 12,
+              backgroundColor: "#D1FAE5",
+              borderWidth: 1,
+              borderColor: "#6EE7B7",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <Ionicons name="shield-checkmark" size={18} color="#065F46" />
+            <Text style={{ color: "#065F46", fontWeight: "700", fontSize: 13 }}>
+              Email verified
+            </Text>
+          </View>
+        ) : null}
 
         {/* Content */}
         <View style={styles.content}>
