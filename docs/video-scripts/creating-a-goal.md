@@ -1,61 +1,32 @@
-# Tutorial: Creating a goal
+# Creating a Goal
+**Runtime:** 75 seconds
 
-**Runtime:** 65 seconds (target ~160 spoken words)
-**Goal:** First-time user can create a personal savings goal, pick a
-savings type (Flexible / Emergency / Locked), and optionally link a
-circle for automated funding.
+## Scene 1: Hook (0:00 – 0:08)
+**Visuals:** Phone shows the Goals tab. A finger taps the `+ New Goal` button.
+**Narration:** "Goals are private savings targets. Give every dollar a job — a trip, a deposit, a rainy-day fund."
+**On-screen:** `Goals. Save for what's next.`
 
----
+## Scene 2: Pick a category (0:08 – 0:25)
+**Visuals:** Category picker shows a scrollable list with icons: 🏠 Home, 📚 Education, 🛡️ Emergency, ✈️ Travel, 🚗 Vehicle, 💼 Business, 💒 Wedding, 🏖️ Retirement, 🎯 Other. Finger taps Home.
+**Narration:** "Pick a category. The category sets the default suggestions for amount and timeline."
+**On-screen:** `9 categories — pick the fit`
 
-## Scene 1 -- Hook (0:00 -- 0:08)
+## Scene 3: Pick a specific goal (0:25 – 0:38)
+**Visuals:** Under Home category, three suggestion chips appear: "Down Payment", "Renovation", "Furniture". Finger taps Down Payment. A name field auto-fills with "Home down payment".
+**Narration:** "Each category has suggestions to get you started. Tap one or type your own name."
+**On-screen:** `Suggestions speed it up`
 
-- **Scene:** Phone shows the Goals tab. A finger taps the `+` button.
-- **Narration:** "Goals are private savings targets. Trip, deposit,
-  rainy-day fund -- give every dollar a job."
-- **On-screen:** `Goals. Save for what's next.`
+## Scene 4: Set target and savings type (0:38 – 0:55)
+**Visuals:** Goal form. Target = $5,000. Savings type tabs: Flexible (withdraw any time, lower rate), Emergency Fund (1-3 day cool-off, mid rate), Locked Savings (fixed term, highest rate). Finger taps Flexible.
+**Narration:** "Choose a target and a savings type. Flexible lets you withdraw any time. Emergency adds a short cool-off. Locked gives the highest rate but ties funds up for a fixed term."
+**On-screen:** `Flexible · Emergency · Locked`
 
-## Scene 2 -- Pick a type (0:08 -- 0:22)
+## Scene 5: Link a circle, optional (0:55 – 1:10)
+**Visuals:** "Link a circle?" screen. List of the user's active circles; finger taps "Family Saving Circle" — toggle on. Helper text: "Payouts from this circle will auto-deposit into your goal."
+**Narration:** "If you're already in a circle, link it. Payouts will roll into this goal automatically. You can skip this and link later."
+**On-screen:** `Link circle → payouts auto-deposit`
 
-- **Scene:** Goal type picker -- icons for Emergency, Education,
-  Travel, Home, Vehicle, Custom. Finger taps Travel.
-- **Narration:** "Pick a category. It sets the default suggestions for
-  amount and timeline, and you can tweak everything from there."
-- **On-screen:** `6 categories. Custom if none fit.`
-
-## Scene 3 -- Set target + savings type (0:22 -- 0:42)
-
-- **Scene:** Goal form. Target = $3,000. Savings type tabs: Flexible
-  (lower rate, withdraw any time), Emergency (mid rate, 1-3 day cool-
-  off), Locked (highest rate, fixed term). Finger taps Flexible.
-- **Narration:** "Choose how much you want to save and which savings
-  type fits. Flexible lets you withdraw any time. Emergency adds a
-  short cool-off. Locked gives the highest rate but ties funds up for
-  a fixed term."
-- **On-screen:** `Flexible / Emergency / Locked`
-
-## Scene 4 -- Link a circle (optional) (0:42 -- 0:58)
-
-- **Scene:** "Link a circle?" screen. List of circles the user is in;
-  finger taps "Family Saving Circle" -> toggle on. A note explains the
-  payout will auto-deposit into this goal.
-- **Narration:** "If you're already in a circle, link it. Your circle
-  payouts will roll into this goal automatically. You can skip and
-  link later."
-- **On-screen:** `Link circle -> payouts auto-deposit`
-
-## Scene 5 -- Created (0:58 -- 1:05)
-
-- **Scene:** Success animation -- the new goal card with progress bar
-  at 0% and the linked circle badge.
-- **Narration:** "Your goal is live. Track progress, top it up
-  manually, or let your circle do the work."
-- **On-screen:** `0% -> 100%. Watch it grow.`
-
-## End CTA (1:05 -- 1:05)
-
-- **Scene:** End card.
-- **On-screen:**
-  ```
-  Set a goal in under a minute.
-  Open Goals -> +
-  ```
+## End Card
+**Visuals:** TandaXn logo, App Store + Google Play badges.
+**Narration:** "Ready to set your first goal? Download TandaXn and start today."
+**On-screen:** `Open Goals → + New Goal.`

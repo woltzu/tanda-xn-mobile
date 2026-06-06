@@ -1,63 +1,32 @@
-# Tutorial: Joining a circle
+# Joining a Circle
+**Runtime:** 70 seconds
 
-**Runtime:** 70 seconds (target ~170 spoken words)
-**Goal:** First-time user can browse public circles, apply to one that
-fits, and understand what happens between Apply and Active.
+## Scene 1: Hook (0:00 – 0:08)
+**Visuals:** Phone shows the Circles tab. Finger swipes from "My Circles" to "Browse". Cards animate in.
+**Narration:** "Don't have anyone to start a circle with yet? Join one that's already running."
+**On-screen:** `Circles → Browse`
 
----
+## Scene 2: Read the cards (0:08 – 0:25)
+**Visuals:** Slow scroll through circle cards. Each card shows name, contribution amount, frequency, spots remaining, members already in. The "X of Y spots" pill is highlighted.
+**Narration:** "Each card shows what you'd contribute, how often, and how many spots are open. Tap any card to see who's already in and how the circle has performed."
+**On-screen callouts:** `Amount` · `Frequency` · `Spots left`
 
-## Scene 1 -- Hook (0:00 -- 0:08)
+## Scene 3: Tap Join (0:25 – 0:38)
+**Visuals:** A circle card is tapped. Detail screen opens with members, schedule, and the circle's reputation score visible. Finger taps the Join button.
+**Narration:** "Tap Join when you find a fit. The detail screen shows the rotation order, payout schedule, and the circle's track record."
+**On-screen:** `Step 1: Tap Join`
 
-- **Scene:** Phone shows the Circles tab. Finger swipes from "My
-  Circles" to "Browse". Cards animate in.
-- **Narration:** "Don't have anyone to start a circle with yet? Join
-  one that's already running."
-- **On-screen:** `Circles -> Browse`
+## Scene 4: Confirmation modal (0:38 – 0:55)
+**Visuals:** Confirmation modal slides up — contribution amount, first contribution due date, your XnScore, the circle's reputation. Finger taps Confirm.
+**Narration:** "Review the amount and dates, then confirm. Your first contribution is held until the circle is full and starts."
+**On-screen:** `Confirm: $100/week, starts Mar 4`
 
-## Scene 2 -- Read the cards (0:08 -- 0:25)
+## Scene 5: Pending → active (0:55 – 1:10)
+**Visuals:** Status banner shows "Pending admin approval". Push notification slides in: "You've been accepted into Family Saving Circle." Cuts to the circle now under My Circles with the next contribution date highlighted.
+**Narration:** "The circle admin usually approves within a day. You'll get a notification when you're in, and your first contribution goes out on the start date."
+**On-screen:** `Pending → Active → First contribution`
 
-- **Scene:** Slow scroll through circle cards. Each card shows: name,
-  contribution amount, frequency, spots remaining, members already in.
-  A subtle "X of Y spots" pill is highlighted.
-- **Narration:** "Each card shows what you'd contribute, how often,
-  and how many spots are still open. Tap any card to see who's already
-  in and how the circle has performed."
-- **On-screen:** Callouts at each field -> `Amount`, `Frequency`,
-  `Spots left`
-
-## Scene 3 -- Apply (0:25 -- 0:42)
-
-- **Scene:** A circle card is tapped. Detail screen opens, finger taps
-  Join. Confirmation modal appears -- amount, first contribution due
-  date, your XnScore, the circle's reputation score.
-- **Narration:** "Tap Join, review the contribution and dates, and
-  confirm. Your first contribution is held until the circle's full and
-  starts."
-- **On-screen:** `Confirm: $100/week, starts Mar 4`
-
-## Scene 4 -- Wait for approval (0:42 -- 1:00)
-
-- **Scene:** Status banner: "Pending admin approval". A push
-  notification slides in from the top: "You've been accepted into
-  Family Saving Circle."
-- **Narration:** "The circle admin gets your request and usually
-  approves within a day. You'll see a notification when you're in, and
-  the circle moves to your My Circles tab."
-- **On-screen:** `Pending -> Active. You're in.`
-
-## Scene 5 -- First contribution (1:00 -- 1:10)
-
-- **Scene:** Circle detail screen with the new member highlighted.
-  Next-contribution-due banner is visible.
-- **Narration:** "Your first contribution goes out on the start date.
-  After that, just show up each cycle -- the app handles the rest."
-- **On-screen:** `One contribution at a time.`
-
-## End CTA (1:10 -- 1:10)
-
-- **Scene:** End card.
-- **On-screen:**
-  ```
-  Find a circle that fits.
-  Open Circles -> Browse.
-  ```
+## End Card
+**Visuals:** TandaXn logo, App Store + Google Play badges.
+**Narration:** "Ready to join a circle? Download TandaXn and start today."
+**On-screen:** `Open Circles → Browse.`
