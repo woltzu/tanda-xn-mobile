@@ -29,6 +29,7 @@ import ProfileScreen from "./screens/ProfileScreen";
 import PersonalInfoScreen from "./screens/PersonalInfoScreen";
 import LanguageRegionScreen from "./screens/LanguageRegionScreen";
 import CreateCircleStartScreen from "./screens/CreateCircleStartScreen";
+import QuickCircleScreen from "./screens/QuickCircleScreen";
 import CreateCircleDetailsScreen from "./screens/CreateCircleDetailsScreen";
 import CreateCircleScheduleScreen from "./screens/CreateCircleScheduleScreen";
 import CreateCircleInviteScreen from "./screens/CreateCircleInviteScreen";
@@ -289,6 +290,7 @@ export type RootStackParamList = {
   LanguageRegion: undefined;
   // Create Circle Flow
   CreateCircleStart: undefined;
+  QuickCircle: undefined;
   CreateCircleDetails: {
     circleType: string;
   };
@@ -752,6 +754,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="WalletMain" component={WalletScreen} />
       <HomeStack.Screen name="Withdraw" component={WithdrawScreen} />
       <HomeStack.Screen name="CreateCircleStart" component={CreateCircleStartScreen} />
+      <HomeStack.Screen name="QuickCircle" component={QuickCircleScreen} />
       <HomeStack.Screen name="CreateCircleDetails" component={CreateCircleDetailsScreen} />
       <HomeStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} />
       <HomeStack.Screen name="CreateCircleInvite" component={CreateCircleInviteScreen} />
@@ -920,6 +923,7 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="CircleDetail" component={CircleDetailScreen} />
       <CirclesStack.Screen name="GroupChat" component={GroupChatScreen} options={{ headerShown: false }} />
       <CirclesStack.Screen name="CreateCircleStart" component={CreateCircleStartScreen} />
+      <CirclesStack.Screen name="QuickCircle" component={QuickCircleScreen} />
       <CirclesStack.Screen name="CreateCircleDetails" component={CreateCircleDetailsScreen} />
       <CirclesStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} />
       <CirclesStack.Screen name="CreateCircleInvite" component={CreateCircleInviteScreen} />

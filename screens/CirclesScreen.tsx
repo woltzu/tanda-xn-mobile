@@ -413,6 +413,38 @@ export default function CirclesScreen() {
         <Text style={styles.floatingHelpText}>Help</Text>
       </TouchableOpacity>
 
+      {/* Quick Circle FAB -- one-tap shortcut to the simplified flow.
+          Stacked above the full-wizard `+` FAB so first-time users can
+          discover it without obscuring the existing entry point. */}
+      <TouchableOpacity
+        style={{
+          position: "absolute",
+          right: 16,
+          bottom: 92,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+          paddingHorizontal: 14,
+          paddingVertical: 10,
+          borderRadius: 22,
+          backgroundColor: "#0A2342",
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.18,
+          shadowRadius: 8,
+          elevation: 5,
+        }}
+        activeOpacity={0.85}
+        onPress={() => navigation.navigate("QuickCircle" as never)}
+        accessibilityLabel="Open Quick Circle (simplified setup)"
+        accessibilityRole="button"
+      >
+        <Ionicons name="flash" size={16} color="#00C6AE" />
+        <Text style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 13 }}>
+          Quick Circle
+        </Text>
+      </TouchableOpacity>
+
       {/* Create Circle FAB */}
       <TouchableOpacity
         style={styles.fab}

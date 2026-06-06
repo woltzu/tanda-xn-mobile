@@ -211,6 +211,7 @@ export const Routes = {
   ProviderVerification: "ProviderVerification",
   QRCodeDisplay: "QRCodeDisplay",
   QRScanner: "QRScanner",
+  QuickCircle: "QuickCircle",
   QuickJoin: "QuickJoin",
   QuickJoinPaymentSuccess: "QuickJoinPaymentSuccess",
   QuickJoinPendingConfirmation: "QuickJoinPendingConfirmation",
