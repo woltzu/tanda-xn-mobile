@@ -30,6 +30,7 @@ import PersonalInfoScreen from "./screens/PersonalInfoScreen";
 import LanguageRegionScreen from "./screens/LanguageRegionScreen";
 import CreateCircleStartScreen from "./screens/CreateCircleStartScreen";
 import QuickCircleScreen from "./screens/QuickCircleScreen";
+import ReferralScreen from "./screens/ReferralScreen";
 import CreateCircleDetailsScreen from "./screens/CreateCircleDetailsScreen";
 import CreateCircleScheduleScreen from "./screens/CreateCircleScheduleScreen";
 import CreateCircleInviteScreen from "./screens/CreateCircleInviteScreen";
@@ -291,6 +292,7 @@ export type RootStackParamList = {
   // Create Circle Flow
   CreateCircleStart: undefined;
   QuickCircle: undefined;
+  Referral: undefined;
   CreateCircleDetails: {
     circleType: string;
   };
@@ -755,6 +757,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="Withdraw" component={WithdrawScreen} />
       <HomeStack.Screen name="CreateCircleStart" component={CreateCircleStartScreen} />
       <HomeStack.Screen name="QuickCircle" component={QuickCircleScreen} />
+      <HomeStack.Screen name="Referral" component={ReferralScreen} />
       <HomeStack.Screen name="CreateCircleDetails" component={CreateCircleDetailsScreen} />
       <HomeStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} />
       <HomeStack.Screen name="CreateCircleInvite" component={CreateCircleInviteScreen} />

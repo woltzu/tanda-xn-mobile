@@ -212,6 +212,7 @@ export const Routes = {
   QRCodeDisplay: "QRCodeDisplay",
   QRScanner: "QRScanner",
   QuickCircle: "QuickCircle",
+  Referral: "Referral",
   QuickJoin: "QuickJoin",
   QuickJoinPaymentSuccess: "QuickJoinPaymentSuccess",
   QuickJoinPendingConfirmation: "QuickJoinPendingConfirmation",
