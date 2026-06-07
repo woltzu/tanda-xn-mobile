@@ -202,17 +202,35 @@ export default function MyCommunitiesScreen() {
     }
   };
 
-  const handleDecline = async (s: Suggestion) => {
+  const handleDecline = async (s: Suggestion, neverAgain: boolean = false) => {
     if (actingOnId) return;
     setActingOnId(s.id);
     try {
       const { data, error } = await supabase.rpc("decline_suggestion", {
         p_suggestion_id: s.id,
+        p_never_again: neverAgain,
       });
       if (error) throw new Error(error.message);
-      const r = (data ?? {}) as { success?: boolean; error?: string };
+      const r = (data ?? {}) as {
+        success?: boolean;
+        error?: string;
+        opted_out_now?: boolean;
+      };
       if (!r.success) throw new Error(r.error ?? "Couldn't decline");
       setSuggestions((curr) => curr.filter((x) => x.id !== s.id));
+      if (r.opted_out_now) {
+        // Surface the opt-out so the user knows the toggle in Privacy
+        // Settings is now off. Best-effort message; the actual state is
+        // already persisted.
+        const label =
+          s.event_type === "sync_room_join"
+            ? "room-based suggestions"
+            : "location-based suggestions";
+        Alert.alert(
+          "Won't suggest again",
+          `We've turned off ${label} for you. You can re-enable them in Privacy Settings.`
+        );
+      }
     } catch (err) {
       Alert.alert(
         "Couldn't decline",
@@ -333,20 +351,43 @@ export default function MyCommunitiesScreen() {
                         <Text style={styles.suggestionAcceptText}>Join</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        style={[styles.suggestionBtn, styles.suggestionDeclineBtn]}
-                        onPress={() => handleDecline(s)}
-                        accessibilityRole="button"
-                        accessibilityLabel="Decline suggestion"
-                      >
-                        <Text style={styles.suggestionDeclineText}>No</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
                         style={[styles.suggestionBtn, styles.suggestionRemindBtn]}
                         onPress={() => handleRemindLater(s)}
                         accessibilityRole="button"
                         accessibilityLabel="Remind me later"
                       >
                         <Text style={styles.suggestionRemindText}>Later</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.suggestionBtn, styles.suggestionDeclineBtn]}
+                        onPress={() => handleDecline(s, false)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Decline this suggestion"
+                      >
+                        <Text style={styles.suggestionDeclineText}>No</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.suggestionBtn, styles.suggestionNeverBtn]}
+                        onPress={() => {
+                          Alert.alert(
+                            "Stop suggesting?",
+                            s.event_type === "sync_room_join"
+                              ? "We'll stop suggesting community groups based on rooms you join. You can re-enable this in Privacy Settings."
+                              : "We'll stop suggesting community groups based on your location. You can re-enable this in Privacy Settings.",
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              {
+                                text: "Stop",
+                                style: "destructive",
+                                onPress: () => handleDecline(s, true),
+                              },
+                            ]
+                          );
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Never suggest again"
+                      >
+                        <Text style={styles.suggestionNeverText}>Never</Text>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -551,4 +592,12 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
   },
   suggestionRemindText: { color: MUTED, fontSize: 11, fontWeight: "700" },
+  // Phase 1c — "Never" — persistent opt-out for the inference type. Red
+  // border + label to distinguish from the single-event Decline above.
+  suggestionNeverBtn: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  suggestionNeverText: { color: "#DC2626", fontSize: 11, fontWeight: "700" },
 });

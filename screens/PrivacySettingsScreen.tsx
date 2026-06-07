@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,12 +7,22 @@ import {
   TouchableOpacity,
   Switch,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
+
+// Phase 1c — Inference opt-out state, keyed by the two inference types
+// matching the user_inference_opt_outs CHECK constraint.
+type InferenceOptOuts = {
+  attendance: boolean;
+  location: boolean;
+};
 
 type PrivacySettingsNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -25,6 +35,7 @@ interface VisibilityOption {
 
 export default function PrivacySettingsScreen() {
   const navigation = useNavigation<PrivacySettingsNavigationProp>();
+  const { user } = useAuth();
 
   const [profileVisibility, setProfileVisibility] = useState("circle_members");
   const [showSavingsAmount, setShowSavingsAmount] = useState(false);
@@ -35,6 +46,67 @@ export default function PrivacySettingsScreen() {
   const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
   const [improvementsEnabled, setImprovementsEnabled] = useState(true);
   const [marketingEnabled, setMarketingEnabled] = useState(false);
+
+  // Phase 1c — community-inference opt-out toggles. The UI mirrors the
+  // ALLOW semantic (toggle ON = inference allowed), while the DB stores
+  // OPT-OUT rows (presence of a row = inference DISALLOWED). The fetch /
+  // setter flip the polarity at the boundary.
+  const [inferenceAllowed, setInferenceAllowed] = useState<InferenceOptOuts>({
+    attendance: true,
+    location: true,
+  });
+  const [inferenceLoading, setInferenceLoading] = useState(true);
+  const [savingType, setSavingType] = useState<null | keyof InferenceOptOuts>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!user?.id) return;
+      const { data } = await supabase
+        .from("user_inference_opt_outs")
+        .select("inference_type")
+        .eq("user_id", user.id);
+      if (cancelled) return;
+      const optedOut = new Set(
+        (data ?? []).map((r: { inference_type: string }) => r.inference_type)
+      );
+      setInferenceAllowed({
+        attendance: !optedOut.has("attendance"),
+        location: !optedOut.has("location"),
+      });
+      setInferenceLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  const handleInferenceToggle = async (
+    type: keyof InferenceOptOuts,
+    nextAllowed: boolean
+  ) => {
+    const previous = inferenceAllowed[type];
+    setSavingType(type);
+    setInferenceAllowed((curr) => ({ ...curr, [type]: nextAllowed }));
+    try {
+      // Allowed=true → opt-out=false (DELETE row); allowed=false → opt-out=true (INSERT row).
+      const { data, error } = await supabase.rpc("set_inference_opt_out", {
+        p_inference_type: type,
+        p_opt_out: !nextAllowed,
+      });
+      if (error) throw new Error(error.message);
+      const r = (data ?? {}) as { success?: boolean; error?: string };
+      if (!r.success) throw new Error(r.error ?? "Couldn't update");
+    } catch (err) {
+      setInferenceAllowed((curr) => ({ ...curr, [type]: previous }));
+      Alert.alert(
+        "Couldn't update",
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      setSavingType(null);
+    }
+  };
 
   const visibilityOptions: VisibilityOption[] = [
     {
@@ -224,6 +296,58 @@ export default function PrivacySettingsScreen() {
                   trackColor={{ false: "#E5E7EB", true: "#00C6AE" }}
                   thumbColor="#FFFFFF"
                 />
+              </View>
+            </View>
+          </View>
+
+          {/* Phase 1c — Community Suggestions opt-outs */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Community Suggestions</Text>
+            <View style={styles.card}>
+              <View style={[styles.toggleRow, styles.borderBottom]}>
+                <View style={[styles.toggleIcon, { backgroundColor: "#F5F3FF" }]}>
+                  <Ionicons name="videocam-outline" size={20} color="#7C3AED" />
+                </View>
+                <View style={styles.toggleContent}>
+                  <Text style={styles.toggleTitle}>From rooms you join</Text>
+                  <Text style={styles.toggleSubtitle}>
+                    Suggest groups when you attend a worship room
+                  </Text>
+                </View>
+                {savingType === "attendance" ? (
+                  <ActivityIndicator color="#7C3AED" size="small" />
+                ) : (
+                  <Switch
+                    value={inferenceAllowed.attendance}
+                    onValueChange={(v) => handleInferenceToggle("attendance", v)}
+                    disabled={inferenceLoading}
+                    trackColor={{ false: "#E5E7EB", true: "#00C6AE" }}
+                    thumbColor="#FFFFFF"
+                  />
+                )}
+              </View>
+
+              <View style={styles.toggleRow}>
+                <View style={[styles.toggleIcon, { backgroundColor: "#E0F2FE" }]}>
+                  <Ionicons name="location-outline" size={20} color="#0EA5E9" />
+                </View>
+                <View style={styles.toggleContent}>
+                  <Text style={styles.toggleTitle}>From your location</Text>
+                  <Text style={styles.toggleSubtitle}>
+                    Suggest neighborhood groups based on your city/country
+                  </Text>
+                </View>
+                {savingType === "location" ? (
+                  <ActivityIndicator color="#0EA5E9" size="small" />
+                ) : (
+                  <Switch
+                    value={inferenceAllowed.location}
+                    onValueChange={(v) => handleInferenceToggle("location", v)}
+                    disabled={inferenceLoading}
+                    trackColor={{ false: "#E5E7EB", true: "#00C6AE" }}
+                    thumbColor="#FFFFFF"
+                  />
+                )}
               </View>
             </View>
           </View>
