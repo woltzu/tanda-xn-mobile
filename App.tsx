@@ -181,6 +181,8 @@ import CommunityMemoryScreen from "./screens/CommunityMemoryScreen";
 import PostToCommunityScreen from "./screens/PostToCommunityScreen";
 // New Tab Screens (Navigation Restructure)
 import ActionScreen from "./screens/ActionScreen";
+import SyncLobbyScreen from "./screens/SyncLobbyScreen";
+import SyncRoomScreen from "./screens/SyncRoomScreen";
 import CommunityTabScreen from "./screens/CommunityTabScreen";
 // Trip Circle Screens (8 screens across 3 flows)
 import ProviderDiscoveryScreen from "./screens/ProviderDiscoveryScreen";
@@ -293,6 +295,8 @@ export type RootStackParamList = {
   CreateCircleStart: undefined;
   QuickCircle: undefined;
   Referral: undefined;
+  SyncLobby: undefined;
+  SyncRoom: { roomId: string };
   CreateCircleDetails: {
     circleType: string;
   };
@@ -704,6 +708,7 @@ const CirclesStack = createStackNavigator();
 const MarketStack = createStackNavigator();
 const CommunityStack = createStackNavigator();
 const KycStack = createStackNavigator();
+const SyncStack = createStackNavigator();
 
 // Home Tab Stack - includes Dashboard and related screens
 function HomeStackScreen() {
@@ -1060,6 +1065,19 @@ function CommunityStackScreen() {
   );
 }
 
+// Sync Tab Stack -- SyncStream (replaces the legacy Action tab as part
+// of feat(syncstream) phase 2). Lobby lists active rooms; Room is the
+// per-room shared-watch experience driven by the migration-124 RPCs +
+// realtime subscriptions.
+function SyncStackScreen() {
+  return (
+    <SyncStack.Navigator screenOptions={{ headerShown: false }}>
+      <SyncStack.Screen name="SyncLobby" component={SyncLobbyScreen} />
+      <SyncStack.Screen name="SyncRoom" component={SyncRoomScreen} />
+    </SyncStack.Navigator>
+  );
+}
+
 // DEPRECATED — Interest-First KYC (Phase KYC-2) uses individual
 // HomeStack screens, not this nested stack. The factory is kept
 // here as dormant reference; the root <Stack.Screen name="KycStack">
@@ -1320,9 +1338,14 @@ function MainTabs() {
     >
       <Tab.Screen name="Home" component={HomeStackScreen} />
       <Tab.Screen name="Circles" component={CirclesStackScreen} />
+      {/* Action tab key is preserved -- the center-button visual is keyed
+          off route.name === "Action" in the tabBarIcon switch above --
+          but the component now points at the SyncStack (feat(syncstream)
+          phase 2). The legacy ActionScreen import stays in case a
+          rollback is needed; remove after Sync ships to TestFlight. */}
       <Tab.Screen
         name="Action"
-        component={ActionScreen}
+        component={SyncStackScreen}
         options={{
           tabBarLabel: "",
         }}
