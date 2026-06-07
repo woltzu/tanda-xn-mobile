@@ -17,7 +17,7 @@
 // "neighborhood", "cultural").
 // =============================================================================
 
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -26,6 +26,8 @@ import {
   ScrollView,
   RefreshControl,
   TouchableOpacity,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -34,6 +36,25 @@ import {
   type Community,
   type CommunityType,
 } from "../context/CommunityContext";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
+
+// Phase 1b — pending suggestions enqueued by infer_groups_for_user.
+// Joined with the community row so we can render the name + icon.
+interface Suggestion {
+  id: string;
+  community_id: string;
+  event_type: "sync_room_join" | "location";
+  reminded_at: string | null;
+  community: {
+    id: string;
+    name: string;
+    icon: string | null;
+    community_type: string;
+  };
+}
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 // ─── Type-bucket presentation ───────────────────────────────────────────────
 // One entry per legacy + new community_type. The label is shown in the
@@ -111,21 +132,118 @@ const MUTED = "#6B7280";
 
 export default function MyCommunitiesScreen() {
   const navigation = useNavigation();
+  const { user } = useAuth();
   const { myCommunities, refreshCommunities } = useCommunity() as {
     myCommunities: Community[];
     refreshCommunities?: () => Promise<void>;
   };
 
   const [refreshing, setRefreshing] = useState(false);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [actingOnId, setActingOnId] = useState<string | null>(null);
+
+  // Phase 1b — fetch pending suggestions for the current user. Filter
+  // "active" (reminded_at NULL or older than 7 days) client-side so the
+  // RLS-scoped SELECT stays simple.
+  const fetchSuggestions = useCallback(async () => {
+    if (!user?.id) return;
+    const { data } = await supabase
+      .from("community_membership_suggestions")
+      .select(
+        "id, community_id, event_type, reminded_at, community:communities(id, name, icon, community_type)"
+      )
+      .eq("user_id", user.id);
+    const cutoff = Date.now() - SEVEN_DAYS_MS;
+    const active = ((data ?? []) as unknown as Suggestion[]).filter((s) => {
+      if (!s.reminded_at) return true;
+      try {
+        return new Date(s.reminded_at).getTime() < cutoff;
+      } catch {
+        return true;
+      }
+    });
+    setSuggestions(active);
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchSuggestions();
+  }, [fetchSuggestions]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       if (refreshCommunities) await refreshCommunities();
+      await fetchSuggestions();
     } finally {
       setRefreshing(false);
     }
-  }, [refreshCommunities]);
+  }, [refreshCommunities, fetchSuggestions]);
+
+  // ── Suggestion actions ──────────────────────────────────────────────────
+  const handleAccept = async (s: Suggestion) => {
+    if (actingOnId) return;
+    setActingOnId(s.id);
+    try {
+      const { data, error } = await supabase.rpc("accept_suggestion", {
+        p_suggestion_id: s.id,
+      });
+      if (error) throw new Error(error.message);
+      const r = (data ?? {}) as { success?: boolean; error?: string };
+      if (!r.success) throw new Error(r.error ?? "Couldn't accept");
+      setSuggestions((curr) => curr.filter((x) => x.id !== s.id));
+      if (refreshCommunities) await refreshCommunities();
+    } catch (err) {
+      Alert.alert(
+        "Couldn't join",
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      setActingOnId(null);
+    }
+  };
+
+  const handleDecline = async (s: Suggestion) => {
+    if (actingOnId) return;
+    setActingOnId(s.id);
+    try {
+      const { data, error } = await supabase.rpc("decline_suggestion", {
+        p_suggestion_id: s.id,
+      });
+      if (error) throw new Error(error.message);
+      const r = (data ?? {}) as { success?: boolean; error?: string };
+      if (!r.success) throw new Error(r.error ?? "Couldn't decline");
+      setSuggestions((curr) => curr.filter((x) => x.id !== s.id));
+    } catch (err) {
+      Alert.alert(
+        "Couldn't decline",
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      setActingOnId(null);
+    }
+  };
+
+  const handleRemindLater = async (s: Suggestion) => {
+    if (actingOnId) return;
+    setActingOnId(s.id);
+    try {
+      const { data, error } = await supabase.rpc("remind_suggestion_later", {
+        p_suggestion_id: s.id,
+      });
+      if (error) throw new Error(error.message);
+      const r = (data ?? {}) as { success?: boolean; error?: string };
+      if (!r.success) throw new Error(r.error ?? "Couldn't snooze");
+      // Hide for this session; the 7-day filter will re-surface it later.
+      setSuggestions((curr) => curr.filter((x) => x.id !== s.id));
+    } catch (err) {
+      Alert.alert(
+        "Couldn't snooze",
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      setActingOnId(null);
+    }
+  };
 
   // Group the user's communities into ordered buckets. Empty buckets are
   // omitted from render so the screen doesn't display placeholder
@@ -175,6 +293,69 @@ export default function MyCommunitiesScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
+        {/* Phase 1b — suggestion tray. Each row is independent so a user
+            can accept some + decline others without committing to all. */}
+        {suggestions.length > 0 && (
+          <View style={styles.suggestionTray}>
+            <View style={styles.suggestionTrayHeader}>
+              <Ionicons name="sparkles-outline" size={14} color="#7C3AED" />
+              <Text style={styles.suggestionTrayTitle}>
+                Suggested for you ({suggestions.length})
+              </Text>
+            </View>
+            {suggestions.map((s) => {
+              const acting = actingOnId === s.id;
+              return (
+                <View key={s.id} style={styles.suggestionRow}>
+                  <Text style={styles.suggestionEmoji}>
+                    {s.community?.icon ?? "👥"}
+                  </Text>
+                  <View style={styles.suggestionText}>
+                    <Text style={styles.suggestionName} numberOfLines={1}>
+                      {s.community?.name ?? "Community"}
+                    </Text>
+                    <Text style={styles.suggestionWhy}>
+                      {s.event_type === "sync_room_join"
+                        ? "Based on a worship room you joined"
+                        : "Based on your location"}
+                    </Text>
+                  </View>
+                  {acting ? (
+                    <ActivityIndicator color="#7C3AED" size="small" />
+                  ) : (
+                    <View style={styles.suggestionActions}>
+                      <TouchableOpacity
+                        style={[styles.suggestionBtn, styles.suggestionAcceptBtn]}
+                        onPress={() => handleAccept(s)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Accept suggestion"
+                      >
+                        <Text style={styles.suggestionAcceptText}>Join</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.suggestionBtn, styles.suggestionDeclineBtn]}
+                        onPress={() => handleDecline(s)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Decline suggestion"
+                      >
+                        <Text style={styles.suggestionDeclineText}>No</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.suggestionBtn, styles.suggestionRemindBtn]}
+                        onPress={() => handleRemindLater(s)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Remind me later"
+                      >
+                        <Text style={styles.suggestionRemindText}>Later</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
         {totalCommunities === 0 ? (
           <View style={styles.emptyBox}>
             <Ionicons name="people-outline" size={36} color={MUTED} />
@@ -311,4 +492,63 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 15, fontWeight: "700", color: NAVY, marginTop: 4 },
   emptyBody: { fontSize: 13, color: MUTED, textAlign: "center", lineHeight: 19 },
+
+  // Phase 1b — suggestion tray
+  suggestionTray: {
+    marginHorizontal: 12,
+    marginBottom: 14,
+    padding: 12,
+    backgroundColor: "#F5F3FF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+  suggestionTrayHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+  },
+  suggestionTrayTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#7C3AED",
+    letterSpacing: 0.5,
+  },
+  suggestionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#EDE9FE",
+    marginBottom: 8,
+  },
+  suggestionEmoji: { fontSize: 22 },
+  suggestionText: { flex: 1 },
+  suggestionName: { fontSize: 13, fontWeight: "700", color: NAVY },
+  suggestionWhy: { fontSize: 11, color: MUTED, marginTop: 2 },
+  suggestionActions: { flexDirection: "row", gap: 6 },
+  suggestionBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  suggestionAcceptBtn: { backgroundColor: "#7C3AED" },
+  suggestionAcceptText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
+  suggestionDeclineBtn: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  suggestionDeclineText: { color: "#1F2937", fontSize: 11, fontWeight: "700" },
+  suggestionRemindBtn: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  suggestionRemindText: { color: MUTED, fontSize: 11, fontWeight: "700" },
 });

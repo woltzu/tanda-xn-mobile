@@ -92,6 +92,14 @@ export default function HostDashboardScreen() {
   const [scriptureText, setScriptureText] = useState("");
   const [scriptureSaving, setScriptureSaving] = useState(false);
 
+  // Phase 1b — religion picker for worship rooms. Initial value loaded
+  // alongside the scripture text. Drives the inference engine: when set
+  // to a specific value (not 'other'), the trigger on sync_room_members
+  // INSERT fires and creates community suggestions for joining viewers.
+  const [religion, setReligion] = useState<string>("other");
+  const [religionSaving, setReligionSaving] = useState(false);
+  const [isWorshipRoom, setIsWorshipRoom] = useState(false);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -158,19 +166,45 @@ export default function HostDashboardScreen() {
     (async () => {
       const { data } = await supabase
         .from("sync_rooms")
-        .select("room_settings")
+        .select("room_type, room_settings")
         .eq("id", roomId)
         .maybeSingle();
       if (cancelled) return;
-      const text =
-        ((data?.room_settings as { scripture_overlay_text?: string } | null)
-          ?.scripture_overlay_text ?? "");
-      setScriptureText(text);
+      const settings = data?.room_settings as
+        | { scripture_overlay_text?: string; religion?: string }
+        | null;
+      setScriptureText(settings?.scripture_overlay_text ?? "");
+      setIsWorshipRoom(data?.room_type === "worship");
+      setReligion(settings?.religion ?? "other");
     })();
     return () => {
       cancelled = true;
     };
   }, [roomId]);
+
+  const handleSetReligion = async (next: string) => {
+    if (religionSaving || next === religion) return;
+    setReligionSaving(true);
+    const previous = religion;
+    setReligion(next);
+    try {
+      const { data, error } = await supabase.rpc("update_room_religion", {
+        p_room_id: roomId,
+        p_religion: next,
+      });
+      if (error) throw new Error(error.message);
+      const r = (data ?? {}) as { success?: boolean; error?: string };
+      if (!r.success) throw new Error(r.error ?? "Couldn't save religion");
+    } catch (err) {
+      setReligion(previous);
+      Alert.alert(
+        "Couldn't update religion",
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      setReligionSaving(false);
+    }
+  };
 
   const handleSaveScripture = async () => {
     if (scriptureSaving) return;
@@ -338,6 +372,64 @@ export default function HostDashboardScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* Phase 1b — religion picker. Only shown for worship rooms.
+            Setting a specific religion (not 'other') triggers the
+            community-suggestion engine for viewers who join after the
+            value is set. */}
+        {isWorshipRoom && (
+          <View style={styles.scriptureCard}>
+            <Text style={styles.scriptureCardTitle}>Worship Religion</Text>
+            <Text style={styles.scriptureCardHint}>
+              Categorises this room. When set, joining viewers may receive a
+              suggestion to join a "{religion === "other" ? "—" : religion}"
+              community group. Leave as Other to skip the suggestion engine.
+            </Text>
+            <View style={styles.religionChipsRow}>
+              {([
+                "catholic",
+                "protestant",
+                "orthodox",
+                "muslim",
+                "jewish",
+                "buddhist",
+                "hindu",
+                "other",
+              ] as const).map((value) => {
+                const isActive = religion === value;
+                return (
+                  <TouchableOpacity
+                    key={value}
+                    style={[
+                      styles.religionChip,
+                      isActive && styles.religionChipActive,
+                    ]}
+                    onPress={() => handleSetReligion(value)}
+                    disabled={religionSaving}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
+                  >
+                    <Text
+                      style={[
+                        styles.religionChipText,
+                        isActive && styles.religionChipTextActive,
+                      ]}
+                    >
+                      {value.charAt(0).toUpperCase() + value.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {religionSaving && (
+              <ActivityIndicator
+                color={TEAL}
+                size="small"
+                style={{ marginTop: 8 }}
+              />
+            )}
+          </View>
+        )}
 
         <View style={{ padding: 16, paddingTop: 0 }}>
         {loading ? (
@@ -619,4 +711,32 @@ const styles = StyleSheet.create({
   scriptureSecondaryBtnText: { color: NAVY, fontWeight: "700", fontSize: 14 },
   scriptureSaveBtn: { backgroundColor: TEAL },
   scriptureSaveBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
+
+  // Phase 1b — religion picker chips
+  religionChipsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  religionChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  religionChipActive: {
+    backgroundColor: NAVY,
+    borderColor: NAVY,
+  },
+  religionChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: NAVY,
+  },
+  religionChipTextActive: {
+    color: "#FFFFFF",
+  },
 });

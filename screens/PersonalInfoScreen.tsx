@@ -15,6 +15,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useNavigation } from "@react-navigation/native";
+import { useEffect } from "react";
+import { supabase } from "../lib/supabase";
 
 export default function PersonalInfoScreen() {
   const navigation = useNavigation();
@@ -22,16 +24,69 @@ export default function PersonalInfoScreen() {
 
   const [name, setName] = useState(user?.name || "");
   const [phone, setPhone] = useState(user?.phone || "");
+  // Phase 1b: city + country are direct columns on `profiles`. updateProfile
+  // (from AuthContext) doesn't accept these fields, so we save them via a
+  // direct supabase update inside handleSave. Initial values load from the
+  // DB on mount because the auth user object doesn't carry them.
+  const [city, setCity] = useState("");
+  const [country, setCountry] = useState("");
+  const [originalCity, setOriginalCity] = useState("");
+  const [originalCountry, setOriginalCountry] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!user?.id) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("city, country")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      const c = data?.city ?? "";
+      const co = data?.country ?? "";
+      setCity(c);
+      setCountry(co);
+      setOriginalCity(c);
+      setOriginalCountry(co);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  const recomputeChanges = (
+    n: string,
+    p: string,
+    c: string,
+    co: string
+  ): boolean =>
+    n !== (user?.name || "") ||
+    p !== (user?.phone || "") ||
+    c !== originalCity ||
+    co !== originalCountry;
 
   const handleNameChange = (text: string) => {
     setName(text);
-    setHasChanges(text !== user?.name || phone !== user?.phone);
+    setHasChanges(recomputeChanges(text, phone, city, country));
   };
 
   const handlePhoneChange = (text: string) => {
     setPhone(text);
-    setHasChanges(name !== user?.name || text !== user?.phone);
+    setHasChanges(recomputeChanges(name, text, city, country));
+  };
+
+  const handleCityChange = (text: string) => {
+    setCity(text);
+    setHasChanges(recomputeChanges(name, phone, text, country));
+  };
+
+  const handleCountryChange = (text: string) => {
+    // Country is stored as a free-form code (existing semantic: 'US', etc.).
+    // Uppercase the input so it normalises consistently.
+    setCountry(text.toUpperCase());
+    setHasChanges(recomputeChanges(name, phone, city, text.toUpperCase()));
   };
 
   const handleSave = async () => {
@@ -41,10 +96,41 @@ export default function PersonalInfoScreen() {
     }
 
     try {
+      // Auth-context fields (name + phone) go through the existing flow.
       await updateProfile({
         name: name.trim(),
         phone: phone.trim() || undefined,
       });
+
+      // city + country live directly on profiles. Empty strings → NULL so
+      // the inference engine's "skip when missing" guard fires correctly.
+      const cityChanged = city !== originalCity;
+      const countryChanged = country !== originalCountry;
+      if ((cityChanged || countryChanged) && user?.id) {
+        const { error } = await supabase
+          .from("profiles")
+          .update({
+            city: city.trim() || null,
+            country: country.trim() || null,
+          })
+          .eq("id", user.id);
+        if (error) throw error;
+
+        // Best-effort location inference. Phase 1b: kicks off whenever
+        // the user updates location with a non-empty city — server-side
+        // creates the suggestion. Errors are non-fatal because the
+        // profile update itself succeeded.
+        if (city.trim()) {
+          await supabase
+            .rpc("infer_groups_for_user", {
+              p_event_type: "location",
+              p_event_data: {},
+            })
+            .then(() => null)
+            .catch(() => null);
+        }
+      }
+
       Alert.alert("Success", "Your profile has been updated", [
         { text: "OK", onPress: () => navigation.goBack() },
       ]);
@@ -162,6 +248,55 @@ export default function PersonalInfoScreen() {
                   keyboardType="phone-pad"
                 />
               </View>
+            </View>
+
+            {/* City (Phase 1b) */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>City (optional)</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons
+                  name="location-outline"
+                  size={20}
+                  color="#6B7280"
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={styles.input}
+                  value={city}
+                  onChangeText={handleCityChange}
+                  placeholder="e.g. Atlanta"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="words"
+                />
+              </View>
+              <Text style={styles.helperText}>
+                Used to suggest neighborhood communities.
+              </Text>
+            </View>
+
+            {/* Country (Phase 1b) */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Country (optional)</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons
+                  name="globe-outline"
+                  size={20}
+                  color="#6B7280"
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={styles.input}
+                  value={country}
+                  onChangeText={handleCountryChange}
+                  placeholder="e.g. US"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="characters"
+                  maxLength={3}
+                />
+              </View>
+              <Text style={styles.helperText}>
+                Two-letter country code (e.g. US, CI, FR).
+              </Text>
             </View>
           </View>
 
