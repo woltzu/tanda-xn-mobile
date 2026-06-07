@@ -36,10 +36,12 @@ import {
   Animated,
   Easing,
   Share,
+  Modal,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -137,6 +139,27 @@ export default function SyncRoomScreen() {
   const [uploading, setUploading] = useState(false);
   const [floatReaction, setFloatReaction] = useState<string | null>(null);
   const floatAnim = useRef(new Animated.Value(0)).current;
+
+  // Worship-extension state (phase 6).
+  const [reactionPrefs, setReactionPrefs] = useState<Record<string, number>>({});
+  const [candleOpen, setCandleOpen] = useState(false);
+  const [candleIntention, setCandleIntention] = useState("");
+  const [candleDonation, setCandleDonation] = useState("0");
+  const [submittingCandle, setSubmittingCandle] = useState(false);
+  const [candleSuccess, setCandleSuccess] = useState(false);   // drives the flame modal
+  const candleAnim = useRef(new Animated.Value(0)).current;
+
+  const [massOpen, setMassOpen] = useState(false);
+  const [massName, setMassName] = useState("");
+  const [massIsDeceased, setMassIsDeceased] = useState(false);
+  const [massDate, setMassDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 7);
+    return d;
+  });
+  const [massShowPicker, setMassShowPicker] = useState(false);
+  const [massDonation, setMassDonation] = useState("10");      // dollars; default $10
+  const [submittingMass, setSubmittingMass] = useState(false);
 
   const isCreator = room?.created_by === user?.id;
   const memberCount = members.length;
@@ -266,6 +289,19 @@ export default function SyncRoomScreen() {
       supabase.rpc("heartbeat_sync_room", { p_room_id: roomId }).then(() => {});
     }, 30_000);
 
+    // Load the user's per-emoji donation amounts so handleReact can
+    // show "Donated 5¢" feedback without an extra round trip per tap.
+    void (async () => {
+      try {
+        const { data } = await supabase.rpc("get_user_reaction_preferences");
+        const r = (data ?? {}) as { preferences?: Record<string, number> };
+        if (!cancelled && r.preferences) setReactionPrefs(r.preferences);
+      } catch {
+        // Silent fallback to empty -- handleReact will just not show a
+        // donation amount.
+      }
+    })();
+
     return () => {
       cancelled = true;
       if (heartbeatTimer) clearInterval(heartbeatTimer);
@@ -378,18 +414,115 @@ export default function SyncRoomScreen() {
     if (reacting || !user?.id) return;
     setReacting(true);
     try {
-      await supabase.from("sync_room_reactions").insert({
+      // Always log the reaction (so the floating echo appears for
+      // every room member). Insert in parallel with the donation RPC --
+      // they don't depend on each other.
+      const reactionInsert = supabase.from("sync_room_reactions").insert({
         room_id: roomId,
         user_id: user.id,
         emoji,
       });
-      // Local optimistic float so the user sees their own reaction even
-      // before the realtime echo arrives.
+
+      let donationResult: { donated?: boolean; amount_cents?: number; error?: string } = {};
+      if ((reactionPrefs[emoji] ?? 0) > 0) {
+        const { data } = await supabase.rpc("send_reaction_donation", {
+          p_room_id: roomId,
+          p_emoji: emoji,
+        });
+        donationResult = (data ?? {}) as typeof donationResult;
+      }
+      await reactionInsert;
+
       showFloatingReaction(emoji);
-    } catch (err) {
+
+      if (donationResult.error === "insufficient_balance") {
+        Alert.alert("Top up to give", "Your wallet doesn't cover this donation.");
+      }
+    } catch {
       // Soft fail -- reactions are decorative.
     } finally {
       setReacting(false);
+    }
+  };
+
+  const handleSubmitCandle = async () => {
+    if (submittingCandle) return;
+    const intention = candleIntention.trim();
+    if (!intention) {
+      Alert.alert("Add your intention", "What would you like the candle lit for?");
+      return;
+    }
+    const cents = Math.max(0, Math.round(parseFloat(candleDonation || "0") * 100));
+    setSubmittingCandle(true);
+    try {
+      const { data, error } = await supabase.rpc("request_candle", {
+        p_room_id: roomId,
+        p_intention: intention,
+        p_donation_cents: cents,
+      });
+      if (error) throw new Error(error.message);
+      const r = (data ?? {}) as { success?: boolean; error?: string };
+      if (!r.success) {
+        if (r.error === "insufficient_balance") {
+          throw new Error("Your wallet doesn't cover this donation.");
+        }
+        throw new Error(r.error || "Couldn't submit");
+      }
+      // Close the form modal, show the flame animation modal.
+      setCandleOpen(false);
+      setCandleIntention("");
+      setCandleDonation("0");
+      setCandleSuccess(true);
+      candleAnim.setValue(0);
+      Animated.sequence([
+        Animated.timing(candleAnim, {
+          toValue: 1, duration: 600, easing: Easing.out(Easing.cubic), useNativeDriver: true,
+        }),
+        Animated.delay(1400),
+        Animated.timing(candleAnim, {
+          toValue: 0, duration: 500, useNativeDriver: true,
+        }),
+      ]).start(() => setCandleSuccess(false));
+    } catch (err) {
+      Alert.alert("Couldn't request", err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmittingCandle(false);
+    }
+  };
+
+  const handleSubmitMass = async () => {
+    if (submittingMass) return;
+    const name = massName.trim();
+    if (!name) {
+      Alert.alert("Who is the mass for?", "Add the name of the person.");
+      return;
+    }
+    const cents = Math.max(0, Math.round(parseFloat(massDonation || "0") * 100));
+    setSubmittingMass(true);
+    try {
+      const { data, error } = await supabase.rpc("request_mass_intention", {
+        p_room_id: roomId,
+        p_name: name,
+        p_is_deceased: massIsDeceased,
+        p_preferred_date: massDate.toISOString().slice(0, 10),
+        p_donation_cents: cents,
+      });
+      if (error) throw new Error(error.message);
+      const r = (data ?? {}) as { success?: boolean; error?: string };
+      if (!r.success) {
+        if (r.error === "insufficient_balance") {
+          throw new Error("Your wallet doesn't cover this donation.");
+        }
+        throw new Error(r.error || "Couldn't submit");
+      }
+      setMassOpen(false);
+      setMassName("");
+      setMassIsDeceased(false);
+      Alert.alert("Submitted", "Your mass intention has been added.");
+    } catch (err) {
+      Alert.alert("Couldn't request", err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmittingMass(false);
     }
   };
 
@@ -548,6 +681,16 @@ export default function SyncRoomScreen() {
             {room.is_public === false ? " · private" : ""}
           </Text>
         </View>
+        {isCreator ? (
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => navigation.navigate("HostDashboard" as never, { roomId } as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Host dashboard"
+          >
+            <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        ) : null}
         <TouchableOpacity
           style={styles.headerBtn}
           onPress={handleShareInvite}
@@ -648,23 +791,60 @@ export default function SyncRoomScreen() {
         </View>
 
         {/* Reactions -- driven by the room's room_settings.reaction_emojis
-            with a preset fallback for legacy rooms. */}
+            with a preset fallback for legacy rooms. Each button now
+            also shows the user's per-emoji donation amount underneath
+            if they've configured one (Profile -> Donation Preferences). */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>React</Text>
           <View style={styles.reactionRow}>
-            {reactions.map((e) => (
-              <TouchableOpacity
-                key={e}
-                style={styles.reactionBtn}
-                onPress={() => handleReact(e)}
-                accessibilityRole="button"
-                accessibilityLabel={`React ${e}`}
-              >
-                <Text style={styles.reactionEmoji}>{e}</Text>
-              </TouchableOpacity>
-            ))}
+            {reactions.map((e) => {
+              const cents = reactionPrefs[e] ?? 0;
+              return (
+                <TouchableOpacity
+                  key={e}
+                  style={styles.reactionBtn}
+                  onPress={() => handleReact(e)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`React ${e}`}
+                >
+                  <Text style={styles.reactionEmoji}>{e}</Text>
+                  {cents > 0 ? (
+                    <Text style={styles.reactionPrice}>
+                      {cents >= 100 ? `$${(cents / 100).toFixed(2)}` : `${cents}¢`}
+                    </Text>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
+
+        {/* Worship actions (visible on worship rooms only). */}
+        {room.room_type === "worship" ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Worship actions</Text>
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => setCandleOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Light a candle"
+              >
+                <Text style={styles.actionEmoji}>🕯️</Text>
+                <Text style={styles.actionLabel}>Light a candle</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() => setMassOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Request a mass"
+              >
+                <Text style={styles.actionEmoji}>✝️</Text>
+                <Text style={styles.actionLabel}>Request mass</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
 
         {/* Skip vote. Disabled (with explanation) when room_settings
             says so, or when only the host may vote and we're not. */}
@@ -784,6 +964,172 @@ export default function SyncRoomScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Candle request modal */}
+      <Modal
+        visible={candleOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !submittingCandle && setCandleOpen(false)}
+      >
+        <View style={styles.worshipBackdrop}>
+          <View style={styles.worshipCard}>
+            <Text style={styles.worshipTitle}>🕯️ Light a candle</Text>
+            <Text style={styles.worshipLabel}>Intention</Text>
+            <TextInput
+              style={styles.worshipInput}
+              value={candleIntention}
+              onChangeText={setCandleIntention}
+              placeholder="For peace, for my family…"
+              placeholderTextColor={MUTED}
+              multiline
+              maxLength={200}
+            />
+            <Text style={styles.worshipLabel}>Donation (optional, in dollars)</Text>
+            <TextInput
+              style={styles.worshipInput}
+              value={candleDonation}
+              onChangeText={setCandleDonation}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor={MUTED}
+              maxLength={8}
+            />
+            <View style={styles.worshipActions}>
+              <TouchableOpacity
+                style={styles.worshipCancel}
+                onPress={() => !submittingCandle && setCandleOpen(false)}
+              >
+                <Text style={styles.worshipCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.worshipSubmit, submittingCandle && { opacity: 0.6 }]}
+                onPress={handleSubmitCandle}
+                disabled={submittingCandle}
+              >
+                <Text style={styles.worshipSubmitText}>
+                  {submittingCandle ? "Sending…" : "Submit"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Mass intention modal */}
+      <Modal
+        visible={massOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !submittingMass && setMassOpen(false)}
+      >
+        <View style={styles.worshipBackdrop}>
+          <View style={styles.worshipCard}>
+            <Text style={styles.worshipTitle}>✝️ Request a mass</Text>
+            <Text style={styles.worshipLabel}>For whom</Text>
+            <TextInput
+              style={styles.worshipInput}
+              value={massName}
+              onChangeText={setMassName}
+              placeholder="Full name"
+              placeholderTextColor={MUTED}
+              maxLength={80}
+            />
+            <View style={styles.worshipRow}>
+              <TouchableOpacity
+                style={[styles.worshipChip, !massIsDeceased && styles.worshipChipActive]}
+                onPress={() => setMassIsDeceased(false)}
+              >
+                <Text style={[styles.worshipChipText, !massIsDeceased && { color: "#FFFFFF" }]}>
+                  Living
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.worshipChip, massIsDeceased && styles.worshipChipActive]}
+                onPress={() => setMassIsDeceased(true)}
+              >
+                <Text style={[styles.worshipChipText, massIsDeceased && { color: "#FFFFFF" }]}>
+                  Deceased
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.worshipLabel}>Preferred date</Text>
+            <TouchableOpacity
+              style={styles.worshipInput}
+              onPress={() => setMassShowPicker(true)}
+            >
+              <Text style={{ color: NAVY }}>{massDate.toISOString().slice(0, 10)}</Text>
+            </TouchableOpacity>
+            {massShowPicker ? (
+              <DateTimePicker
+                value={massDate}
+                mode="date"
+                display="default"
+                minimumDate={new Date()}
+                onChange={(_e, d) => {
+                  setMassShowPicker(false);
+                  if (d) setMassDate(d);
+                }}
+              />
+            ) : null}
+            <Text style={styles.worshipLabel}>Donation (in dollars)</Text>
+            <TextInput
+              style={styles.worshipInput}
+              value={massDonation}
+              onChangeText={setMassDonation}
+              keyboardType="decimal-pad"
+              placeholder="10"
+              placeholderTextColor={MUTED}
+              maxLength={8}
+            />
+            <View style={styles.worshipActions}>
+              <TouchableOpacity
+                style={styles.worshipCancel}
+                onPress={() => !submittingMass && setMassOpen(false)}
+              >
+                <Text style={styles.worshipCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.worshipSubmit, submittingMass && { opacity: 0.6 }]}
+                onPress={handleSubmitMass}
+                disabled={submittingMass}
+              >
+                <Text style={styles.worshipSubmitText}>
+                  {submittingMass ? "Sending…" : "Submit"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Candle success animation */}
+      <Modal visible={candleSuccess} transparent animationType="fade">
+        <Animated.View
+          style={[
+            styles.candleAnimBackdrop,
+            {
+              opacity: candleAnim,
+            },
+          ]}
+        >
+          <Animated.Text
+            style={[
+              styles.candleAnimFlame,
+              {
+                transform: [
+                  { scale: candleAnim.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1.2] }) },
+                ],
+              },
+            ]}
+          >
+            🕯️
+          </Animated.Text>
+          <Text style={styles.candleAnimText}>
+            Your candle has been lit in the church
+          </Text>
+        </Animated.View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -979,6 +1325,106 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  reactionPrice: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: TEAL,
+    marginTop: 2,
+  },
+
+  actionRow: { flexDirection: "row", gap: 10 },
+  actionBtn: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingVertical: 14,
+    alignItems: "center",
+    gap: 4,
+  },
+  actionEmoji: { fontSize: 22 },
+  actionLabel: { fontSize: 12, fontWeight: "700", color: NAVY },
+
+  worshipBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(10,35,66,0.55)",
+    justifyContent: "flex-end",
+  },
+  worshipCard: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 32,
+    gap: 8,
+  },
+  worshipTitle: { fontSize: 17, fontWeight: "700", color: NAVY, marginBottom: 6 },
+  worshipLabel: {
+    fontSize: 11,
+    color: MUTED,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginTop: 4,
+  },
+  worshipInput: {
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: NAVY,
+    minHeight: 44,
+  },
+  worshipRow: { flexDirection: "row", gap: 8 },
+  worshipChip: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+  },
+  worshipChipActive: { backgroundColor: NAVY, borderColor: NAVY },
+  worshipChipText: { fontSize: 12, fontWeight: "700", color: NAVY },
+  worshipActions: { flexDirection: "row", gap: 10, marginTop: 10 },
+  worshipCancel: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    alignItems: "center",
+  },
+  worshipCancelText: { color: NAVY, fontWeight: "700" },
+  worshipSubmit: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: NAVY,
+    alignItems: "center",
+  },
+  worshipSubmitText: { color: "#FFFFFF", fontWeight: "700" },
+
+  candleAnimBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  candleAnimFlame: { fontSize: 90 },
+  candleAnimText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    textAlign: "center",
+    paddingHorizontal: 32,
+  },
+
   uploadBtn: {
     marginTop: 10,
     paddingVertical: 12,

@@ -107,6 +107,7 @@ export default function ProfileScreen() {
         { icon: "help-circle-outline", label: "Help Center", onPress: () => navigation.navigate("HelpCenter") },
         { icon: "book-outline", label: "FAQ", onPress: () => navigation.navigate("FAQ") },
         { icon: "gift-outline", label: "Refer & Earn", onPress: () => navigation.navigate("Referral") },
+        { icon: "heart-outline", label: "Donation Preferences", onPress: () => navigation.navigate("DonationPreferences") },
         { icon: "information-circle-outline", label: "About TandaXn", onPress: () => navigation.navigate("AboutApp") },
       ],
     },

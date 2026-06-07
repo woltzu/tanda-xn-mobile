@@ -213,6 +213,8 @@ export const Routes = {
   QRScanner: "QRScanner",
   QuickCircle: "QuickCircle",
   Referral: "Referral",
+  DonationPreferences: "DonationPreferences",
+  HostDashboard: "HostDashboard",
   SyncLobby: "SyncLobby",
   SyncRoom: "SyncRoom",
   QuickJoin: "QuickJoin",

@@ -189,6 +189,8 @@ import PostToCommunityScreen from "./screens/PostToCommunityScreen";
 import ActionScreen from "./screens/ActionScreen";
 import SyncLobbyScreen from "./screens/SyncLobbyScreen";
 import SyncRoomScreen from "./screens/SyncRoomScreen";
+import DonationPreferencesScreen from "./screens/DonationPreferencesScreen";
+import HostDashboardScreen from "./screens/HostDashboardScreen";
 import CommunityTabScreen from "./screens/CommunityTabScreen";
 // Trip Circle Screens (8 screens across 3 flows)
 import ProviderDiscoveryScreen from "./screens/ProviderDiscoveryScreen";
@@ -303,6 +305,8 @@ export type RootStackParamList = {
   Referral: undefined;
   SyncLobby: undefined;
   SyncRoom: { roomId: string; inviteCode?: string };
+  DonationPreferences: undefined;
+  HostDashboard: { roomId: string };
   CreateCircleDetails: {
     circleType: string;
   };
@@ -796,6 +800,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="CreateCircleStart" component={CreateCircleStartScreen} />
       <HomeStack.Screen name="QuickCircle" component={QuickCircleScreen} />
       <HomeStack.Screen name="Referral" component={ReferralScreen} />
+      <HomeStack.Screen name="DonationPreferences" component={DonationPreferencesScreen} />
       <HomeStack.Screen name="CreateCircleDetails" component={CreateCircleDetailsScreen} />
       <HomeStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} />
       <HomeStack.Screen name="CreateCircleInvite" component={CreateCircleInviteScreen} />
@@ -1107,6 +1112,7 @@ function SyncStackScreen() {
     <SyncStack.Navigator screenOptions={{ headerShown: false }}>
       <SyncStack.Screen name="SyncLobby" component={SyncLobbyScreen} />
       <SyncStack.Screen name="SyncRoom" component={SyncRoomScreen} />
+      <SyncStack.Screen name="HostDashboard" component={HostDashboardScreen} />
     </SyncStack.Navigator>
   );
 }
