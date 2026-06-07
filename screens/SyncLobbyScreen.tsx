@@ -39,6 +39,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import {
+  ROOM_TYPE_PRESETS,
+  type RoomType,
+} from "../config/sync-room-presets";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -82,6 +86,10 @@ export default function SyncLobbyScreen() {
   // Public/private toggle added in phase 4. Defaults to public so the
   // most common case (open to anyone) is the no-extra-tap path.
   const [newIsPublic, setNewIsPublic] = useState(true);
+  // Room-type picker added in phase 5. Drives the room_settings preset
+  // applied by the server when we send NULL settings. Most users land
+  // on "general" so the picker collapses cleanly when not touched.
+  const [newRoomType, setNewRoomType] = useState<RoomType>("general");
   const [creating, setCreating] = useState(false);
 
   const oneHourAgo = useMemo(
@@ -190,6 +198,13 @@ export default function SyncLobbyScreen() {
         p_name: newName.trim(),
         p_vibe: newVibe,
         p_is_public: newIsPublic,
+        p_room_type: newRoomType,
+        // Pass NULL so the server applies the type-specific preset --
+        // the server is the source of truth for defaults so we don't
+        // double-encode the preset map on the client write path.
+        // (The client-side preset map in config/sync-room-presets.ts
+        // is still used for read fallbacks in SyncRoomScreen.)
+        p_room_settings: null,
       });
       if (error) throw new Error(error.message);
       const result = (data ?? {}) as {
@@ -205,6 +220,7 @@ export default function SyncLobbyScreen() {
       setNewName("");
       setNewVibe("chill");
       setNewIsPublic(true);
+      setNewRoomType("general");
       // Pass the invite code so the room screen can render the share
       // sheet without an extra round trip to fetch it.
       navigation.navigate("SyncRoom", {
@@ -364,6 +380,34 @@ export default function SyncLobbyScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+
+            <Text style={styles.modalLabel}>Room type</Text>
+            <View style={styles.roomTypeRow}>
+              {(Object.entries(ROOM_TYPE_PRESETS) as Array<[RoomType, typeof ROOM_TYPE_PRESETS[RoomType]]>).map(
+                ([id, cfg]) => {
+                  const active = newRoomType === id;
+                  return (
+                    <TouchableOpacity
+                      key={id}
+                      style={[styles.roomTypeChip, active && styles.roomTypeChipActive]}
+                      onPress={() => setNewRoomType(id)}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Text style={[styles.roomTypeEmoji, active && { color: "#FFFFFF" }]}>
+                        {cfg.emoji}
+                      </Text>
+                      <Text style={[styles.roomTypeLabel, active && { color: "#FFFFFF" }]}>
+                        {cfg.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                },
+              )}
+            </View>
+            <Text style={styles.roomTypeHint} numberOfLines={2}>
+              {ROOM_TYPE_PRESETS[newRoomType].description}
+            </Text>
 
             <Text style={styles.modalLabel}>Visibility</Text>
             <View style={styles.visibilityRow}>
@@ -547,6 +591,28 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   vibeChipText: { fontSize: 12, fontWeight: "600", color: NAVY },
+
+  roomTypeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  roomTypeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#FFFFFF",
+  },
+  roomTypeChipActive: { backgroundColor: NAVY, borderColor: NAVY },
+  roomTypeEmoji: { fontSize: 14 },
+  roomTypeLabel: { fontSize: 12, fontWeight: "600", color: NAVY },
+  roomTypeHint: {
+    fontSize: 11,
+    color: MUTED,
+    marginTop: 4,
+    fontStyle: "italic",
+  },
 
   visibilityRow: { flexDirection: "row", gap: 8 },
   visBtn: {

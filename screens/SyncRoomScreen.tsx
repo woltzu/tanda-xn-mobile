@@ -43,6 +43,12 @@ import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import {
+  resolveRoomSettings,
+  DEFAULT_REACTION_EMOJIS,
+  type RoomSettings,
+  type RoomType,
+} from "../config/sync-room-presets";
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const MAX_UPLOAD_SECONDS = 30;
@@ -62,10 +68,13 @@ type Room = {
   current_content_id: string | null;
   content_queue: Array<{ url: string; added_by?: string; added_at?: string }>;
   created_by: string;
-  // Added by migration 127. May be missing on pre-127 rows briefly
-  // before the screen re-fetches.
+  // Added by migration 127.
   is_public?: boolean;
   invite_code?: string | null;
+  // Added by migration 128 (phase 5).
+  room_type?: RoomType | string;
+  room_settings?: Partial<RoomSettings> | null;
+  ended_at?: string | null;
 };
 
 type Member = {
@@ -74,7 +83,11 @@ type Member = {
   full_name: string | null;
 };
 
-const REACTION_EMOJI = ["👍", "😂", "😮", "❤️", "🔥"] as const;
+// Reactions are now per-room (driven by room_settings.reaction_emojis,
+// resolved against the room_type preset). The constant below is the
+// safety-net default used only if both the room row and the preset
+// resolution produce nothing useful.
+const FALLBACK_REACTIONS = DEFAULT_REACTION_EMOJIS;
 
 // Pulls a YouTube video id out of common URL shapes. Returns null for
 // anything we don't recognize so the screen can fall back to a generic
@@ -129,15 +142,33 @@ export default function SyncRoomScreen() {
   const memberCount = members.length;
   const threshold = Math.max(1, Math.ceil(memberCount / 2));
 
+  // Resolve room settings (with preset fallback for legacy rows that
+  // pre-date phase 5). Memoize so the reaction array reference stays
+  // stable across re-renders.
+  const settings = useMemo(
+    () => resolveRoomSettings(room?.room_type, room?.room_settings),
+    [room?.room_type, room?.room_settings],
+  );
+  const reactions = settings.reaction_emojis.length > 0
+    ? settings.reaction_emojis
+    : FALLBACK_REACTIONS;
+  const skipDisabledByType = !settings.auto_skip_allowed;
+  const skipHostOnly = settings.skip_voter_role === "host_only";
+  const skipBlocked = skipDisabledByType || (skipHostOnly && !isCreator);
+  const isEnded = !!room?.ended_at;
+
   // ------- Fetch helpers -------
 
   const fetchRoom = useCallback(async () => {
     const { data } = await supabase
       .from("sync_rooms")
-      .select("id, name, vibe, current_content_id, content_queue, created_by, is_public, invite_code")
+      .select(
+        "id, name, vibe, current_content_id, content_queue, created_by, " +
+          "is_public, invite_code, room_type, room_settings, ended_at",
+      )
       .eq("id", roomId)
       .maybeSingle();
-    if (data) setRoom(data as Room);
+    if (data) setRoom(data as unknown as Room);
   }, [roomId]);
 
   const fetchMembers = useCallback(async () => {
@@ -290,18 +321,57 @@ export default function SyncRoomScreen() {
   };
 
   const handleVoteSkip = async () => {
-    if (voting || hasSkipVote) return;
+    if (voting || hasSkipVote || skipBlocked) return;
     setVoting(true);
     try {
-      const { error } = await supabase.rpc("vote_skip", { p_room_id: roomId });
+      const { data, error } = await supabase.rpc("vote_skip", { p_room_id: roomId });
       if (error) throw new Error(error.message);
-      // The RPC may have triggered advance_content -- realtime will pull
-      // both the updated room state and the cleared votes.
+      // Server can reject for two reasons even when the client thought
+      // it was allowed: legacy room with stale room_settings, or a
+      // race against an end_sync_room call. Surface either as an
+      // alert so the user understands why their tap was a no-op.
+      const r = (data ?? {}) as { success?: boolean; error?: string };
+      if (r.success === false) {
+        const msg =
+          r.error === "skip_not_allowed"
+            ? "Skip is disabled for this room type."
+            : r.error === "skip_host_only"
+              ? "Only the host can skip in this room."
+              : r.error || "Vote rejected.";
+        Alert.alert("Couldn't vote", msg);
+      }
     } catch (err) {
       Alert.alert("Couldn't vote", err instanceof Error ? err.message : String(err));
     } finally {
       setVoting(false);
     }
+  };
+
+  const handleEndRoom = async () => {
+    if (!isCreator || isEnded) return;
+    Alert.alert(
+      "End the room?",
+      "Members lose the live stream. Reactions stay; the room drops from the lobby.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "End",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const { error } = await supabase.rpc("end_sync_room", { p_room_id: roomId });
+              if (error) throw new Error(error.message);
+              navigation.goBack();
+            } catch (err) {
+              Alert.alert(
+                "Couldn't end",
+                err instanceof Error ? err.message : String(err),
+              );
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleReact = async (emoji: string) => {
@@ -577,11 +647,12 @@ export default function SyncRoomScreen() {
           </ScrollView>
         </View>
 
-        {/* Reactions */}
+        {/* Reactions -- driven by the room's room_settings.reaction_emojis
+            with a preset fallback for legacy rooms. */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>React</Text>
           <View style={styles.reactionRow}>
-            {REACTION_EMOJI.map((e) => (
+            {reactions.map((e) => (
               <TouchableOpacity
                 key={e}
                 style={styles.reactionBtn}
@@ -595,7 +666,8 @@ export default function SyncRoomScreen() {
           </View>
         </View>
 
-        {/* Skip vote */}
+        {/* Skip vote. Disabled (with explanation) when room_settings
+            says so, or when only the host may vote and we're not. */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Skip vote</Text>
           <View style={styles.voteCard}>
@@ -606,10 +678,10 @@ export default function SyncRoomScreen() {
               <TouchableOpacity
                 style={[
                   styles.voteBtn,
-                  (hasSkipVote || voting) && { opacity: 0.5 },
+                  (hasSkipVote || voting || skipBlocked) && { opacity: 0.5 },
                 ]}
                 onPress={handleVoteSkip}
-                disabled={hasSkipVote || voting}
+                disabled={hasSkipVote || voting || skipBlocked}
                 accessibilityRole="button"
                 accessibilityLabel="Vote to skip"
               >
@@ -627,14 +699,35 @@ export default function SyncRoomScreen() {
                 ]}
               />
             </View>
+            {skipBlocked ? (
+              <Text style={styles.skipHint}>
+                {skipDisabledByType
+                  ? "Skip is off for this room type."
+                  : "Only the host can skip in this room."}
+              </Text>
+            ) : null}
             {isCreator ? (
-              <TouchableOpacity
-                style={styles.adminAdvance}
-                onPress={handleAdvance}
-                accessibilityLabel="Admin: advance content"
-              >
-                <Text style={styles.adminAdvanceText}>Advance now (creator)</Text>
-              </TouchableOpacity>
+              <View style={styles.creatorActions}>
+                <TouchableOpacity
+                  style={styles.adminAdvance}
+                  onPress={handleAdvance}
+                  accessibilityLabel="Advance content"
+                >
+                  <Text style={styles.adminAdvanceText}>Advance now</Text>
+                </TouchableOpacity>
+                {!isEnded ? (
+                  <TouchableOpacity
+                    style={styles.endRoomBtn}
+                    onPress={handleEndRoom}
+                    accessibilityLabel="End the room"
+                  >
+                    <Ionicons name="stop-circle-outline" size={14} color="#FFFFFF" />
+                    <Text style={styles.endRoomText}>End room</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.endedTag}>Ended</Text>
+                )}
+              </View>
             ) : null}
           </View>
         </View>
@@ -812,8 +905,33 @@ const styles = StyleSheet.create({
   },
   progressFill: { height: 6, backgroundColor: TEAL },
 
-  adminAdvance: { marginTop: 10, alignSelf: "flex-end" },
+  skipHint: { marginTop: 8, fontSize: 11, color: MUTED, fontStyle: "italic" },
+
+  creatorActions: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  adminAdvance: { paddingVertical: 4 },
   adminAdvanceText: { color: TEAL, fontSize: 12, fontWeight: "700" },
+  endRoomBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#DC2626",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  endRoomText: { color: "#FFFFFF", fontSize: 12, fontWeight: "700" },
+  endedTag: {
+    color: MUTED,
+    fontSize: 11,
+    fontWeight: "700",
+    fontStyle: "italic",
+  },
 
   queueRow: {
     flexDirection: "row",
