@@ -1,7 +1,13 @@
 import "react-native-gesture-handler";
 import React, { useState, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
-import { NavigationContainer, CommonActions, useNavigation } from "@react-navigation/native";
+import {
+  NavigationContainer,
+  CommonActions,
+  useNavigation,
+  createNavigationContainerRef,
+} from "@react-navigation/native";
+import * as Linking from "expo-linking";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -296,7 +302,7 @@ export type RootStackParamList = {
   QuickCircle: undefined;
   Referral: undefined;
   SyncLobby: undefined;
-  SyncRoom: { roomId: string };
+  SyncRoom: { roomId: string; inviteCode?: string };
   CreateCircleDetails: {
     circleType: string;
   };
@@ -709,6 +715,33 @@ const MarketStack = createStackNavigator();
 const CommunityStack = createStackNavigator();
 const KycStack = createStackNavigator();
 const SyncStack = createStackNavigator();
+
+// Navigation ref so the SyncStream deep-link handler in App's effect
+// can call .navigate() without needing the useNavigation hook (which
+// is only available to children of NavigationContainer).
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+// Parse tandaxn://sync-room?id=...&invite=... links into route params.
+// Returns null for anything we don't recognize -- the caller leaves
+// the URL alone, letting other handlers (e.g. AuthCallback for
+// auth/confirm links) take it. The path can carry only the id; the
+// invite code is optional (public rooms don't need one).
+function parseSyncRoomUrl(url: string | null | undefined): { roomId: string; inviteCode?: string } | null {
+  if (!url) return null;
+  try {
+    const parsed = Linking.parse(url);
+    if (parsed.hostname !== "sync-room" && parsed.path !== "sync-room") {
+      return null;
+    }
+    const q = parsed.queryParams ?? {};
+    const id = typeof q.id === "string" ? q.id : null;
+    if (!id) return null;
+    const invite = typeof q.invite === "string" ? q.invite : undefined;
+    return { roomId: id, inviteCode: invite };
+  } catch {
+    return null;
+  }
+}
 
 // Home Tab Stack - includes Dashboard and related screens
 function HomeStackScreen() {
@@ -1131,6 +1164,36 @@ function AppContent() {
     isLocked,
   });
 
+  // SyncStream deep-link handler. Listens for tandaxn://sync-room?id=...
+  // intents (both cold-open via getInitialURL and warm via the url event).
+  // We only act once isAuthenticated -- a logged-out user landing on an
+  // invite link should clear the auth stack first; we re-fire once they
+  // sign in by re-reading the initial URL.
+  React.useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handle = (url: string | null) => {
+      const parsed = parseSyncRoomUrl(url);
+      if (!parsed) return;
+      // Use navigationRef so this works even if the user isn't
+      // currently on a screen with useNavigation context (e.g. the
+      // first paint after signup).
+      if (navigationRef.isReady()) {
+        navigationRef.navigate("SyncRoom", {
+          roomId: parsed.roomId,
+          inviteCode: parsed.inviteCode,
+        });
+      }
+    };
+
+    // Cold open (the app was launched by the URL).
+    Linking.getInitialURL().then(handle).catch(() => {});
+
+    // Warm open (the app was already running).
+    const sub = Linking.addEventListener("url", ({ url }) => handle(url));
+    return () => sub.remove();
+  }, [isAuthenticated]);
+
   // ── Event Logging: Set user ID when authenticated ─────────────────────
   React.useEffect(() => {
     if (user?.id) {
@@ -1396,6 +1459,7 @@ export default function App() {
                           <NotificationProvider>
                             <OnboardingProvider>
                               <NavigationContainer
+                                ref={navigationRef}
                                 linking={linkingConfig}
                                 onStateChange={(state) => {
                                   const currentRoute = getActiveRouteName(state);

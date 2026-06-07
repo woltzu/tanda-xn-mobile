@@ -35,12 +35,17 @@ import {
   Alert,
   Animated,
   Easing,
+  Share,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_UPLOAD_SECONDS = 30;
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -57,6 +62,10 @@ type Room = {
   current_content_id: string | null;
   content_queue: Array<{ url: string; added_by?: string; added_at?: string }>;
   created_by: string;
+  // Added by migration 127. May be missing on pre-127 rows briefly
+  // before the screen re-fetches.
+  is_public?: boolean;
+  invite_code?: string | null;
 };
 
 type Member = {
@@ -88,12 +97,20 @@ function extractYouTubeId(url: string | null | undefined): string | null {
   }
 }
 
-type SyncRoomRouteParams = { roomId: string };
+type SyncRoomRouteParams = {
+  roomId: string;
+  // Optional inviteCode -- set when the screen is entered via a deep
+  // link (tandaxn://sync-room?id=...&invite=...) or right after create.
+  // Passed straight through to join_sync_room so private-room joins
+  // succeed in the same flow as public-room joins.
+  inviteCode?: string;
+};
 
 export default function SyncRoomScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ SyncRoom: SyncRoomRouteParams }, "SyncRoom">>();
   const roomId = route.params.roomId;
+  const inviteCode = route.params.inviteCode ?? null;
   const { user } = useAuth();
 
   const [room, setRoom] = useState<Room | null>(null);
@@ -104,6 +121,7 @@ export default function SyncRoomScreen() {
   const [adding, setAdding] = useState(false);
   const [voting, setVoting] = useState(false);
   const [reacting, setReacting] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [floatReaction, setFloatReaction] = useState<string | null>(null);
   const floatAnim = useRef(new Animated.Value(0)).current;
 
@@ -116,7 +134,7 @@ export default function SyncRoomScreen() {
   const fetchRoom = useCallback(async () => {
     const { data } = await supabase
       .from("sync_rooms")
-      .select("id, name, vibe, current_content_id, content_queue, created_by")
+      .select("id, name, vibe, current_content_id, content_queue, created_by, is_public, invite_code")
       .eq("id", roomId)
       .maybeSingle();
     if (data) setRoom(data as Room);
@@ -155,13 +173,27 @@ export default function SyncRoomScreen() {
     let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
     (async () => {
-      // Make sure we're a member -- join is idempotent. Then prime
-      // the three queries.
+      // Make sure we're a member -- join is idempotent. The invite
+      // code passes through unconditionally; the server ignores it on
+      // public rooms and uses it on private ones.
       try {
-        await supabase.rpc("join_sync_room", { p_room_id: roomId });
+        const { data: joinData } = await supabase.rpc("join_sync_room", {
+          p_room_id: roomId,
+          p_invite_code: inviteCode,
+        });
+        const r = (joinData ?? {}) as { success?: boolean; error?: string };
+        if (r.success === false && r.error === "invite_required") {
+          // Surface the gate so a user who deep-linked without the code
+          // gets a clear "ask your friend for the link" message instead
+          // of silently failing to join.
+          Alert.alert(
+            "Invite required",
+            "This room is private. Ask the host to share the invite link.",
+          );
+        }
       } catch {
-        // join failure (e.g. inactive room) is surfaced via fetchRoom
-        // returning null; we let the render path handle the empty state.
+        // join failure surfaces via fetchRoom returning null; empty
+        // state handles the render.
       }
       if (cancelled) return;
       await Promise.all([fetchRoom(), fetchMembers(), fetchVotes()]);
@@ -291,6 +323,102 @@ export default function SyncRoomScreen() {
     }
   };
 
+  const handleShareInvite = async () => {
+    if (!room?.invite_code) {
+      Alert.alert("Couldn't share", "Invite code is still loading.");
+      return;
+    }
+    const url =
+      `tandaxn://sync-room?id=${roomId}&invite=${encodeURIComponent(room.invite_code)}`;
+    const label = room.is_public === false ? "private room" : "room";
+    try {
+      await Share.share({
+        message:
+          `Join my ${label} on TandaXn -- "${room.name}". ` +
+          `Tap the link to drop in: ${url}`,
+      });
+    } catch (err) {
+      Alert.alert("Couldn't share", err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleUploadVideo = async () => {
+    if (uploading || !user?.id) return;
+    setUploading(true);
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          "Permission needed",
+          "Allow library access to upload a video.",
+        );
+        return;
+      }
+
+      const pick = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        videoMaxDuration: MAX_UPLOAD_SECONDS,
+        quality: 0.8,
+        allowsEditing: false,
+      });
+      if (pick.canceled || !pick.assets?.length) return;
+
+      const asset = pick.assets[0];
+      if (asset.fileSize && asset.fileSize > MAX_UPLOAD_BYTES) {
+        Alert.alert(
+          "Too large",
+          `That file is over the ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB cap. Trim it and try again.`,
+        );
+        return;
+      }
+      if (asset.duration && asset.duration > MAX_UPLOAD_SECONDS * 1000) {
+        Alert.alert(
+          "Too long",
+          `Videos must be ${MAX_UPLOAD_SECONDS}s or shorter.`,
+        );
+        return;
+      }
+
+      // Convert the local file URI to a blob the storage client can
+      // upload. fetch(uri).blob() is the React Native idiom -- works
+      // for file:// and content:// (Android) URIs.
+      const resp = await fetch(asset.uri);
+      const blob = await resp.blob();
+
+      // Path layout: <userId>/<roomId>_<timestamp>.mp4. The storage
+      // RLS policy requires the first folder segment to equal
+      // auth.uid()::text, which prevents a malicious client from
+      // overwriting someone else's video.
+      const ts = Math.floor(Date.now() / 1000);
+      const path = `${user.id}/${roomId}_${ts}.mp4`;
+
+      const { error: upErr } = await supabase.storage
+        .from("room-videos")
+        .upload(path, blob, {
+          contentType: "video/mp4",
+          upsert: false,
+        });
+      if (upErr) throw new Error(upErr.message);
+
+      const { data: pub } = supabase.storage.from("room-videos").getPublicUrl(path);
+      const publicUrl = pub.publicUrl;
+
+      const { data: queueData, error: queueErr } = await supabase.rpc("add_to_queue", {
+        p_room_id: roomId,
+        p_content_url: publicUrl,
+      });
+      if (queueErr) throw new Error(queueErr.message);
+      const r = (queueData ?? {}) as { success?: boolean; error?: string };
+      if (!r.success) throw new Error(r.error || "Couldn't queue uploaded video");
+
+      Alert.alert("Uploaded", "Your video is in the queue.");
+    } catch (err) {
+      Alert.alert("Upload failed", err instanceof Error ? err.message : String(err));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleLeave = async () => {
     try {
       await supabase.rpc("leave_sync_room", { p_room_id: roomId });
@@ -345,8 +473,19 @@ export default function SyncRoomScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1, alignItems: "center" }}>
           <Text style={styles.headerTitle} numberOfLines={1}>{room.name}</Text>
-          <Text style={styles.headerSub}>{room.vibe} · {memberCount} watching</Text>
+          <Text style={styles.headerSub}>
+            {room.vibe} · {memberCount} watching
+            {room.is_public === false ? " · private" : ""}
+          </Text>
         </View>
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={handleShareInvite}
+          accessibilityRole="button"
+          accessibilityLabel="Share invite"
+        >
+          <Ionicons name="share-outline" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.headerBtn}
           onPress={handleLeave}
@@ -534,6 +673,22 @@ export default function SyncRoomScreen() {
               <Ionicons name="add" size={18} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
+
+          {/* Upload from device (room-videos bucket, 50 MB / 30 s cap
+              enforced both client-side here and server-side by the
+              storage bucket config in migration 127). */}
+          <TouchableOpacity
+            style={[styles.uploadBtn, uploading && { opacity: 0.6 }]}
+            onPress={handleUploadVideo}
+            disabled={uploading}
+            accessibilityRole="button"
+            accessibilityLabel="Upload a video"
+          >
+            <Ionicons name="cloud-upload-outline" size={16} color={NAVY} />
+            <Text style={styles.uploadBtnText}>
+              {uploading ? "Uploading..." : "Upload a video (up to 30s)"}
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -706,4 +861,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  uploadBtn: {
+    marginTop: 10,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#FFFFFF",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  uploadBtnText: { fontSize: 13, fontWeight: "700", color: NAVY },
 });

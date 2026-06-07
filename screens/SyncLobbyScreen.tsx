@@ -79,6 +79,9 @@ export default function SyncLobbyScreen() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newVibe, setNewVibe] = useState<Vibe>("chill");
+  // Public/private toggle added in phase 4. Defaults to public so the
+  // most common case (open to anyone) is the no-extra-tap path.
+  const [newIsPublic, setNewIsPublic] = useState(true);
   const [creating, setCreating] = useState(false);
 
   const oneHourAgo = useMemo(
@@ -89,10 +92,14 @@ export default function SyncLobbyScreen() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
+      // is_public=true gate added in migration 127. Private rooms are
+      // discoverable only via the deep-link/invite-code path -- the
+      // lobby intentionally hides them.
       const { data: roomRows, error } = await supabase
         .from("sync_rooms")
         .select("id, name, vibe, current_content_id, last_active")
         .eq("is_active", true)
+        .eq("is_public", true)
         .gte("last_active", oneHourAgo)
         .order("last_active", { ascending: false })
         .limit(50);
@@ -182,16 +189,28 @@ export default function SyncLobbyScreen() {
       const { data, error } = await supabase.rpc("create_sync_room", {
         p_name: newName.trim(),
         p_vibe: newVibe,
+        p_is_public: newIsPublic,
       });
       if (error) throw new Error(error.message);
-      const result = (data ?? {}) as { success?: boolean; room_id?: string; error?: string };
+      const result = (data ?? {}) as {
+        success?: boolean;
+        room_id?: string;
+        invite_code?: string;
+        error?: string;
+      };
       if (!result.success || !result.room_id) {
         throw new Error(result.error || "Couldn't create the room");
       }
       setCreateOpen(false);
       setNewName("");
       setNewVibe("chill");
-      navigation.navigate("SyncRoom", { roomId: result.room_id });
+      setNewIsPublic(true);
+      // Pass the invite code so the room screen can render the share
+      // sheet without an extra round trip to fetch it.
+      navigation.navigate("SyncRoom", {
+        roomId: result.room_id,
+        inviteCode: result.invite_code,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       Alert.alert("Couldn't create room", msg);
@@ -346,6 +365,50 @@ export default function SyncLobbyScreen() {
               ))}
             </View>
 
+            <Text style={styles.modalLabel}>Visibility</Text>
+            <View style={styles.visibilityRow}>
+              <TouchableOpacity
+                style={[styles.visBtn, newIsPublic && styles.visBtnActive]}
+                onPress={() => setNewIsPublic(true)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: newIsPublic }}
+              >
+                <Ionicons
+                  name="globe-outline"
+                  size={16}
+                  color={newIsPublic ? "#FFFFFF" : NAVY}
+                />
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <Text style={[styles.visBtnTitle, newIsPublic && { color: "#FFFFFF" }]}>
+                    Public
+                  </Text>
+                  <Text style={[styles.visBtnHint, newIsPublic && { color: "rgba(255,255,255,0.8)" }]}>
+                    Anyone signed in can find it.
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.visBtn, !newIsPublic && styles.visBtnActive]}
+                onPress={() => setNewIsPublic(false)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: !newIsPublic }}
+              >
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={16}
+                  color={!newIsPublic ? "#FFFFFF" : NAVY}
+                />
+                <View style={{ flex: 1, marginLeft: 8 }}>
+                  <Text style={[styles.visBtnTitle, !newIsPublic && { color: "#FFFFFF" }]}>
+                    Private
+                  </Text>
+                  <Text style={[styles.visBtnHint, !newIsPublic && { color: "rgba(255,255,255,0.8)" }]}>
+                    Invite-link only.
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.modalCancel}
@@ -484,6 +547,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   vibeChipText: { fontSize: 12, fontWeight: "600", color: NAVY },
+
+  visibilityRow: { flexDirection: "row", gap: 8 },
+  visBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#FFFFFF",
+  },
+  visBtnActive: { backgroundColor: NAVY, borderColor: NAVY },
+  visBtnTitle: { fontSize: 13, fontWeight: "700", color: NAVY },
+  visBtnHint: { fontSize: 11, color: MUTED, marginTop: 1 },
 
   modalActions: { flexDirection: "row", gap: 10, marginTop: 14 },
   modalCancel: {
