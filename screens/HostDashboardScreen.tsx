@@ -27,6 +27,9 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
+import AudienceMoodCard from "../components/AudienceMoodCard";
+import ActiveViewersList from "../components/ActiveViewersList";
+import ViewerHistoryModal from "../components/ViewerHistoryModal";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -77,6 +80,17 @@ export default function HostDashboardScreen() {
   const [resolveId, setResolveId] = useState<string | null>(null);
   const [resolveMsg, setResolveMsg] = useState("");
   const [resolving, setResolving] = useState(false);
+
+  // Phase 6b — viewer history modal state.
+  const [historyViewerId, setHistoryViewerId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Phase 6b — scripture overlay editor state. Initial text is fetched
+  // from sync_rooms.room_settings on mount; saving calls
+  // set_scripture_overlay RPC which UPDATEs the row, which fires the
+  // viewer-side realtime subscription on SyncRoomScreen.
+  const [scriptureText, setScriptureText] = useState("");
+  const [scriptureSaving, setScriptureSaving] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -133,6 +147,73 @@ export default function HostDashboardScreen() {
       supabase.removeChannel(ch);
     };
   }, [roomId, refresh]);
+
+  // Phase 6b — initial scripture text load. Re-runs only on roomId change.
+  // The set_scripture_overlay RPC fires sync_rooms UPDATE which doesn't
+  // re-trigger this hook; the viewer side picks it up via realtime
+  // subscription on SyncRoomScreen. We only refresh here on mount because
+  // the host sees their own typed text in the input field directly.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("sync_rooms")
+        .select("room_settings")
+        .eq("id", roomId)
+        .maybeSingle();
+      if (cancelled) return;
+      const text =
+        ((data?.room_settings as { scripture_overlay_text?: string } | null)
+          ?.scripture_overlay_text ?? "");
+      setScriptureText(text);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roomId]);
+
+  const handleSaveScripture = async () => {
+    if (scriptureSaving) return;
+    setScriptureSaving(true);
+    try {
+      const { data, error } = await supabase.rpc("set_scripture_overlay", {
+        p_room_id: roomId,
+        p_text: scriptureText,
+      });
+      if (error) throw new Error(error.message);
+      const r = (data ?? {}) as { success?: boolean; error?: string };
+      if (!r.success) throw new Error(r.error ?? "Couldn't save");
+    } catch (err) {
+      Alert.alert(
+        "Couldn't save scripture",
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      setScriptureSaving(false);
+    }
+  };
+
+  const handleClearScripture = async () => {
+    if (scriptureSaving) return;
+    setScriptureText("");
+    setScriptureSaving(true);
+    try {
+      await supabase.rpc("set_scripture_overlay", {
+        p_room_id: roomId,
+        p_text: "",
+      });
+    } finally {
+      setScriptureSaving(false);
+    }
+  };
+
+  const openViewerHistory = (viewerId: string) => {
+    setHistoryViewerId(viewerId);
+    setHistoryOpen(true);
+  };
+  const closeViewerHistory = () => {
+    setHistoryOpen(false);
+  };
 
   const openResolve = (kind: "candle" | "mass", id: string) => {
     setResolveKind(kind);
@@ -207,7 +288,58 @@ export default function HostDashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
+      <ScrollView contentContainerStyle={{ padding: 0, paddingBottom: 32 }}>
+        {/* Phase 6b — audience stats (group, visible-to-all on viewer side
+            too — host just sees the same card here for convenience). */}
+        <AudienceMoodCard roomId={roomId} />
+
+        {/* Phase 6b — active viewers with tap-to-open history (host-only;
+            server enforces via get_viewer_summary). */}
+        <ActiveViewersList roomId={roomId} onViewerPress={openViewerHistory} />
+
+        {/* Phase 6b — scripture overlay editor. Host-only via
+            set_scripture_overlay RPC. Empty value clears the overlay. */}
+        <View style={styles.scriptureCard}>
+          <Text style={styles.scriptureCardTitle}>Scripture Overlay</Text>
+          <Text style={styles.scriptureCardHint}>
+            Shown to viewers at the bottom of the player. Leave blank to clear.
+          </Text>
+          <TextInput
+            style={styles.scriptureInput}
+            value={scriptureText}
+            onChangeText={(t) => setScriptureText(t.slice(0, 280))}
+            placeholder="e.g. Psalm 23 — The Lord is my shepherd…"
+            placeholderTextColor={MUTED}
+            multiline
+            maxLength={280}
+            editable={!scriptureSaving}
+          />
+          <Text style={styles.scriptureCounter}>{scriptureText.length} / 280</Text>
+          <View style={styles.scriptureBtnRow}>
+            <TouchableOpacity
+              style={[styles.scriptureBtn, styles.scriptureSecondaryBtn]}
+              onPress={handleClearScripture}
+              disabled={scriptureSaving}
+              accessibilityRole="button"
+            >
+              <Text style={styles.scriptureSecondaryBtnText}>Clear</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.scriptureBtn, styles.scriptureSaveBtn]}
+              onPress={handleSaveScripture}
+              disabled={scriptureSaving}
+              accessibilityRole="button"
+            >
+              {scriptureSaving ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.scriptureSaveBtnText}>Save</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={{ padding: 16, paddingTop: 0 }}>
         {loading ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator color={TEAL} />
@@ -261,7 +393,16 @@ export default function HostDashboardScreen() {
             </View>
           ))
         )}
+        </View>
       </ScrollView>
+
+      {/* Phase 6b — host-only viewer history modal */}
+      <ViewerHistoryModal
+        visible={historyOpen}
+        viewerId={historyViewerId}
+        roomId={roomId}
+        onClose={closeViewerHistory}
+      />
 
       {/* Resolve modal */}
       <Modal
@@ -425,4 +566,57 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sendText: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
+
+  // Phase 6b — scripture overlay editor card
+  scriptureCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    marginHorizontal: 12,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  scriptureCardTitle: { fontSize: 14, fontWeight: "700", color: NAVY },
+  scriptureCardHint: {
+    fontSize: 12,
+    color: MUTED,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  scriptureInput: {
+    minHeight: 70,
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 14,
+    color: NAVY,
+    textAlignVertical: "top",
+  },
+  scriptureCounter: {
+    fontSize: 11,
+    color: MUTED,
+    textAlign: "right",
+    marginTop: 4,
+  },
+  scriptureBtnRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+  scriptureBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  scriptureSecondaryBtn: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  scriptureSecondaryBtnText: { color: NAVY, fontWeight: "700", fontSize: 14 },
+  scriptureSaveBtn: { backgroundColor: TEAL },
+  scriptureSaveBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
 });

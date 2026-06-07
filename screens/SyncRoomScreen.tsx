@@ -45,6 +45,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import AudienceMoodCard from "../components/AudienceMoodCard";
 import {
   resolveRoomSettings,
   DEFAULT_REACTION_EMOJIS,
@@ -765,6 +766,25 @@ export default function SyncRoomScreen() {
               <Text style={styles.floatReactionEmoji}>{floatReaction}</Text>
             </Animated.View>
           ) : null}
+
+          {/* Scripture overlay (Phase 6b) — host sets via
+              set_scripture_overlay RPC; viewers see the text reactively
+              because SyncRoomScreen already subscribes to sync_rooms
+              UPDATE and re-fetches room on any change. Empty / missing
+              key renders nothing. */}
+          {(() => {
+            const scripture =
+              ((room?.room_settings as { scripture_overlay_text?: string } | null)
+                ?.scripture_overlay_text ?? "").trim();
+            if (!scripture) return null;
+            return (
+              <View style={styles.scriptureOverlay} pointerEvents="none">
+                <Text style={styles.scriptureText} numberOfLines={3}>
+                  {scripture}
+                </Text>
+              </View>
+            );
+          })()}
         </View>
 
         {/* Members */}
@@ -789,6 +809,12 @@ export default function SyncRoomScreen() {
             ))}
           </ScrollView>
         </View>
+
+        {/* Audience Mood (Phase 6b) — group stats from
+            get_room_engagement_stats. Visible to all room members; the
+            host sees the same data (no extra fields). Refreshes every
+            30 seconds via the card's own timer. */}
+        <AudienceMoodCard roomId={roomId} />
 
         {/* Reactions -- driven by the room's room_settings.reaction_emojis
             with a preset fallback for legacy rooms. Each button now
@@ -1184,6 +1210,27 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   floatReactionEmoji: { fontSize: 44 },
+
+  // Scripture overlay (Phase 6b). Anchored to the bottom of the player
+  // box, full-width, semi-transparent black background, white text.
+  // pointerEvents="none" on the View itself so taps pass through to the
+  // player.
+  scriptureOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  scriptureText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+    fontStyle: "italic",
+  },
 
   section: { paddingHorizontal: 16, paddingTop: 14 },
   sectionLabel: {
