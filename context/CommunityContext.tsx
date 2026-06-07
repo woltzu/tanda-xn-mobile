@@ -24,7 +24,11 @@ export type CommunityType =
   | "local"
   | "school"
   | "interest"
-  | "general";
+  | "general"
+  // Phase 1a (migration 131): support sync-room-derived groups. Inference
+  // engine (Phase 1b) will write community.type='sync_room' on auto-
+  // created groups whose seed event was a SyncStream room join.
+  | "sync_room";
 
 export type CommunityPrivacy = "public" | "private";
 

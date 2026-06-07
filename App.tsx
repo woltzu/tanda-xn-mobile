@@ -78,6 +78,7 @@ import SavedRecipientsScreen from "./screens/SavedRecipientsScreen";
 import AddRecipientScreen from "./screens/AddRecipientScreen";
 import CommunityBrowserScreen from "./screens/CommunityBrowserScreen";
 import CommunityHubScreen from "./screens/CommunityHubScreen";
+import MyCommunitiesScreen from "./screens/MyCommunitiesScreen";
 import CreateCommunityScreen from "./screens/CreateCommunityScreen";
 import BecomeElderScreen from "./screens/BecomeElderScreen";
 import HonorScoreOverviewScreen from "./screens/HonorScoreOverviewScreen";
@@ -419,6 +420,8 @@ export type RootStackParamList = {
   CommunityBrowser: undefined;
   CommunityHub: { communityId: string };
   CreateCommunity: { parentId?: string } | undefined;
+  // Phase 1a (migration 131): read-only directory of the user's memberships
+  MyCommunities: undefined;
   // Elder Flow
   ElderDashboard: undefined;
   BecomeElder: undefined;
@@ -788,6 +791,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="CommunityBrowser" component={CommunityBrowserScreen} />
       <HomeStack.Screen name="CommunityHub" component={CommunityHubScreen} />
       <HomeStack.Screen name="CreateCommunity" component={CreateCommunityScreen} />
+      <HomeStack.Screen name="MyCommunities" component={MyCommunitiesScreen} />
       <HomeStack.Screen name="ElderDashboard" component={ElderDashboardScreen} />
       <HomeStack.Screen name="BecomeElder" component={BecomeElderScreen} />
       <HomeStack.Screen name="HonorScoreOverview" component={HonorScoreOverviewScreen} />
@@ -1083,6 +1087,7 @@ function CommunityStackScreen() {
       <CommunityStack.Screen name="CommunityBrowser" component={CommunityBrowserScreen} />
       <CommunityStack.Screen name="CommunityHub" component={CommunityHubScreen} />
       <CommunityStack.Screen name="CreateCommunity" component={CreateCommunityScreen} />
+      <CommunityStack.Screen name="MyCommunities" component={MyCommunitiesScreen} />
       <CommunityStack.Screen name="NearYou" component={NearYouScreen} />
       <CommunityStack.Screen name="NewArrivals" component={NewArrivalsScreen} />
       <CommunityStack.Screen name="Gatherings" component={GatheringsScreen} />

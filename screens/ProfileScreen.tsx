@@ -94,6 +94,12 @@ export default function ProfileScreen() {
       ],
     },
     {
+      section: "Community",
+      items: [
+        { icon: "people-circle-outline", label: "My Communities", onPress: () => navigation.navigate("MyCommunities") },
+      ],
+    },
+    {
       section: "Preferences",
       items: [
         { icon: "globe-outline", label: "Language & Region", onPress: () => navigation.navigate("LanguageRegion") },
