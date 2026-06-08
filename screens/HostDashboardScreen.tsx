@@ -23,6 +23,7 @@ import {
   Modal,
   Alert,
   ActivityIndicator,
+  Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -100,6 +101,14 @@ export default function HostDashboardScreen() {
   const [religionSaving, setReligionSaving] = useState(false);
   const [isWorshipRoom, setIsWorshipRoom] = useState(false);
 
+  // Phase R6 — adaptive-queue host controls. autoSuggestEnabled mirrors
+  // room_settings.auto_suggest_enabled (defaults to true when missing).
+  // refreshingSuggestion gates the "Refresh suggestions" button so the
+  // host can't pile up RPC calls.
+  const [autoSuggestEnabled, setAutoSuggestEnabled] = useState(true);
+  const [autoSuggestSaving, setAutoSuggestSaving] = useState(false);
+  const [refreshingSuggestion, setRefreshingSuggestion] = useState(false);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
@@ -171,16 +180,90 @@ export default function HostDashboardScreen() {
         .maybeSingle();
       if (cancelled) return;
       const settings = data?.room_settings as
-        | { scripture_overlay_text?: string; religion?: string }
+        | {
+            scripture_overlay_text?: string;
+            religion?: string;
+            auto_suggest_enabled?: boolean;
+          }
         | null;
       setScriptureText(settings?.scripture_overlay_text ?? "");
       setIsWorshipRoom(data?.room_type === "worship");
       setReligion(settings?.religion ?? "other");
+      // R6 — defaults to true when the key is absent (newly created
+      // rooms haven't run set_room_auto_suggest yet).
+      setAutoSuggestEnabled(settings?.auto_suggest_enabled !== false);
     })();
     return () => {
       cancelled = true;
     };
   }, [roomId]);
+
+  // Phase R6 — flip the per-room auto-suggest flag. Optimistic update +
+  // revert on failure to keep the Switch responsive.
+  const handleToggleAutoSuggest = async (next: boolean) => {
+    if (autoSuggestSaving) return;
+    const previous = autoSuggestEnabled;
+    setAutoSuggestEnabled(next);
+    setAutoSuggestSaving(true);
+    try {
+      const { data, error } = await supabase.rpc("set_room_auto_suggest", {
+        p_room_id: roomId,
+        p_enabled: next,
+      });
+      if (error) throw new Error(error.message);
+      const r = (data ?? {}) as { success?: boolean; error?: string };
+      if (!r.success) {
+        throw new Error(r.error ?? "Couldn't save");
+      }
+    } catch (err) {
+      setAutoSuggestEnabled(previous);
+      Alert.alert(
+        "Couldn't update setting",
+        err instanceof Error ? err.message : String(err),
+      );
+    } finally {
+      setAutoSuggestSaving(false);
+    }
+  };
+
+  // Phase R6 — manual suggest. RPC server-side either sets
+  // current_content_id (if nothing playing) or appends to the queue.
+  // Either way the room UPDATE fires and the viewer-side state catches up.
+  const handleRefreshSuggestion = async () => {
+    if (refreshingSuggestion) return;
+    setRefreshingSuggestion(true);
+    try {
+      const { data, error } = await supabase.rpc("suggest_next_video", {
+        p_room_id: roomId,
+      });
+      if (error) throw new Error(error.message);
+      const r = (data ?? {}) as {
+        success?: boolean;
+        error?: string;
+        placement?: string;
+      };
+      if (!r.success) {
+        throw new Error(
+          r.error === "auto_suggest_disabled"
+            ? "Auto-suggest is off for this room."
+            : r.error ?? "No suggestion available",
+        );
+      }
+      Alert.alert(
+        "Suggestion added",
+        r.placement === "current"
+          ? "Started playing the suggested video."
+          : "Added to the end of the queue.",
+      );
+    } catch (err) {
+      Alert.alert(
+        "Couldn't fetch a suggestion",
+        err instanceof Error ? err.message : String(err),
+      );
+    } finally {
+      setRefreshingSuggestion(false);
+    }
+  };
 
   const handleSetReligion = async (next: string) => {
     if (religionSaving || next === religion) return;
@@ -330,6 +413,47 @@ export default function HostDashboardScreen() {
         {/* Phase 6b — active viewers with tap-to-open history (host-only;
             server enforces via get_viewer_summary). */}
         <ActiveViewersList roomId={roomId} onViewerPress={openViewerHistory} />
+
+        {/* Phase R6 — adaptive queue. When the queue and current_content_id
+            both empty, the host's SyncRoomScreen client auto-fires
+            suggest_next_video. The toggle below disables that behaviour
+            per-room; the button below manually triggers it on-demand
+            (e.g. to pre-queue a video while one's still playing). */}
+        <View style={styles.scriptureCard}>
+          <Text style={styles.scriptureCardTitle}>Adaptive Queue</Text>
+          <Text style={styles.scriptureCardHint}>
+            When the queue empties, fetch a vibe-matched video automatically.
+          </Text>
+          <View style={styles.r6ToggleRow}>
+            <Text style={styles.r6ToggleLabel}>Auto-suggest videos</Text>
+            <Switch
+              value={autoSuggestEnabled}
+              onValueChange={handleToggleAutoSuggest}
+              disabled={autoSuggestSaving}
+              trackColor={{ false: BORDER, true: TEAL }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.scriptureBtn,
+              styles.scriptureSaveBtn,
+              refreshingSuggestion && { opacity: 0.6 },
+            ]}
+            onPress={handleRefreshSuggestion}
+            disabled={refreshingSuggestion}
+            accessibilityRole="button"
+            accessibilityLabel="Refresh suggestion"
+          >
+            {refreshingSuggestion ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.scriptureSaveBtnText}>
+                Refresh suggestion
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
         {/* Phase 6b — scripture overlay editor. Host-only via
             set_scripture_overlay RPC. Empty value clears the overlay. */}
@@ -711,6 +835,16 @@ const styles = StyleSheet.create({
   scriptureSecondaryBtnText: { color: NAVY, fontWeight: "700", fontSize: 14 },
   scriptureSaveBtn: { backgroundColor: TEAL },
   scriptureSaveBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
+
+  // Phase R6 — adaptive queue toggle row
+  r6ToggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    marginVertical: 4,
+  },
+  r6ToggleLabel: { fontSize: 14, fontWeight: "600", color: NAVY },
 
   // Phase 1b — religion picker chips
   religionChipsRow: {

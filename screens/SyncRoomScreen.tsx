@@ -118,6 +118,13 @@ const FRESH_HEARTBEAT_WINDOW_MS = 2 * 60 * 1000;
 const DEFAULT_AUTO_SKIP_TIMEOUT_MS = 30 * 1000;
 const AUTO_SKIP_NOTICE_MS = 2_500;
 
+// Phase R6 — adaptive queue. When the host's client sees both the queue
+// and current_content_id empty AND the room hasn't disabled
+// auto-suggest, fire suggest_next_video once. The RPC sets state
+// server-side (current_content_id or content_queue append); the
+// realtime UPDATE refreshes the client.
+const AUTO_SUGGEST_NOTICE_MS = 2_500;
+
 // Phase R4a — Swarm remix sticker palette. Static list for now; a future
 // commit can promote this to per-room settings so hosts can curate a set
 // that matches the vibe of their room. Emojis only — voice notes and
@@ -222,6 +229,17 @@ export default function SyncRoomScreen() {
   const attentionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autoSkipNotice, setAutoSkipNotice] = useState<string | null>(null);
   const autoSkipNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Phase R6 — adaptive queue. autoSuggesting is true while suggest_next_video
+  // is in flight (gates the effect so we don't double-fire). autoSuggestNotice
+  // surfaces the "Fetching a suggestion…" banner for AUTO_SUGGEST_NOTICE_MS.
+  const [autoSuggesting, setAutoSuggesting] = useState(false);
+  const [autoSuggestNotice, setAutoSuggestNotice] = useState<string | null>(
+    null
+  );
+  const autoSuggestNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
 
   // Phase R4a — Swarm remix. The bottom-sheet modal lets the user pick a
   // sticker; the floating overlay renders any sticker that lands (own
@@ -1477,8 +1495,74 @@ export default function SyncRoomScreen() {
         clearTimeout(autoSkipNoticeTimer.current);
         autoSkipNoticeTimer.current = null;
       }
+      if (autoSuggestNoticeTimer.current) {
+        clearTimeout(autoSuggestNoticeTimer.current);
+        autoSuggestNoticeTimer.current = null;
+      }
     };
   }, []);
+
+  // ------- Phase R6: adaptive queue auto-fill -------
+  //
+  // Only the host's client fires the suggestion (mirrors the R3 pattern
+  // -- one caller avoids concurrent RPC races between member clients).
+  // Triggers when BOTH current_content_id is null AND content_queue is
+  // empty -- i.e. the room ran out of content. The RPC server-side
+  // honours room_settings.auto_suggest_enabled (defaults to true) and
+  // applies a vibe-keyed pool pick directly to sync_rooms; the realtime
+  // UPDATE refreshes the client state.
+  //
+  // autoSuggesting guards the effect so a re-render mid-RPC doesn't
+  // re-fire. The room UPDATE that lands the picked URL clears
+  // currentContentId === null, which causes the effect to re-evaluate
+  // and short-circuit.
+  const autoSuggestAllowed = useMemo(() => {
+    const v = (room?.room_settings as any)?.auto_suggest_enabled;
+    return v !== false; // missing or undefined treated as enabled
+  }, [room?.room_settings]);
+
+  useEffect(() => {
+    if (!isCreator || isEnded || autoSuggesting) return;
+    if (!autoSuggestAllowed) return;
+    if (currentContentId || queueLen > 0) return;
+    // Both queue and current empty -- ask for a suggestion.
+    setAutoSuggesting(true);
+    setAutoSuggestNotice("No more videos — fetching a suggestion…");
+    if (autoSuggestNoticeTimer.current) {
+      clearTimeout(autoSuggestNoticeTimer.current);
+    }
+    autoSuggestNoticeTimer.current = setTimeout(() => {
+      setAutoSuggestNotice(null);
+    }, AUTO_SUGGEST_NOTICE_MS);
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase.rpc("suggest_next_video", {
+          p_room_id: roomId,
+        });
+        if (error) throw new Error(error.message);
+        const r = (data ?? {}) as { success?: boolean; error?: string };
+        if (r.success === false && r.error === "auto_suggest_disabled") {
+          // Host turned it off between render and dispatch. Silent
+          // accept -- the effect won't re-fire until state changes.
+          setAutoSuggestNotice(null);
+        }
+      } catch {
+        // Soft fail -- the next state change (manual queue add, host
+        // re-toggle, etc.) re-arms the effect naturally.
+      } finally {
+        setAutoSuggesting(false);
+      }
+    })();
+  }, [
+    isCreator,
+    isEnded,
+    autoSuggestAllowed,
+    autoSuggesting,
+    currentContentId,
+    queueLen,
+    roomId,
+  ]);
 
   // ------- Render -------
 
@@ -1554,6 +1638,16 @@ export default function SyncRoomScreen() {
           <View style={styles.autoSkipBanner} pointerEvents="none">
             <Ionicons name="play-skip-forward" size={14} color="#FFFFFF" />
             <Text style={styles.autoSkipBannerText}>{autoSkipNotice}</Text>
+          </View>
+        ) : null}
+
+        {/* Phase R6 — adaptive-queue suggestion banner. Renders while
+            suggest_next_video is in flight (and briefly after). Reuses
+            the autoSkipBanner style; only the icon differs. */}
+        {autoSuggestNotice ? (
+          <View style={styles.autoSkipBanner} pointerEvents="none">
+            <Ionicons name="sparkles" size={14} color="#FFFFFF" />
+            <Text style={styles.autoSkipBannerText}>{autoSuggestNotice}</Text>
           </View>
         ) : null}
 
