@@ -84,7 +84,27 @@ type Member = {
   user_id: string;
   avatar_url: string | null;
   full_name: string | null;
+  // Phase R2 — used by the avatar row to filter to recently-active members
+  // and to render the "green dot" liveness indicator. ISO string from
+  // sync_room_members.last_heartbeat.
+  last_heartbeat: string | null;
 };
+
+// Phase R2 — one entry per in-flight reaction popup. Multiple can be
+// active simultaneously (different users reacting, or the same user
+// reacting twice in quick succession). Each carries its own Animated.Value
+// so the timeline of each animation is independent.
+type AvatarReactionAnim = {
+  id: string;
+  user_id: string;
+  emoji: string;
+  anim: Animated.Value;
+};
+
+// Liveness windows. Mirror the cron-reaper window (5 min) for "active"
+// and a tighter 2 min for the green-dot "in the room right now" badge.
+const ACTIVE_MEMBER_WINDOW_MS = 5 * 60 * 1000;
+const FRESH_HEARTBEAT_WINDOW_MS = 2 * 60 * 1000;
 
 // Reactions are now per-room (driven by room_settings.reaction_emojis,
 // resolved against the room_type preset). The constant below is the
@@ -149,6 +169,13 @@ export default function SyncRoomScreen() {
   // editingEmoji = null hides the modal; non-null = the emoji being edited.
   const [editingEmoji, setEditingEmoji] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
+
+  // Phase R2 — per-avatar reaction popups. Each entry is a self-contained
+  // animation that scales + fades the emoji over its owner's avatar.
+  // Cleared automatically when the animation finishes (start callback).
+  const [avatarReactionAnims, setAvatarReactionAnims] = useState<
+    AvatarReactionAnim[]
+  >([]);
   const [candleOpen, setCandleOpen] = useState(false);
   const [candleIntention, setCandleIntention] = useState("");
   const [candleDonation, setCandleDonation] = useState("0");
@@ -204,12 +231,15 @@ export default function SyncRoomScreen() {
   const fetchMembers = useCallback(async () => {
     const { data } = await supabase
       .from("sync_room_members")
-      .select("user_id, profiles:profiles(avatar_url, full_name)")
+      .select(
+        "user_id, last_heartbeat, profiles:profiles(avatar_url, full_name)"
+      )
       .eq("room_id", roomId);
     const list = (data ?? []).map((m: any) => ({
       user_id: m.user_id,
       avatar_url: m.profiles?.avatar_url ?? null,
       full_name: m.profiles?.full_name ?? null,
+      last_heartbeat: m.last_heartbeat ?? null,
     })) as Member[];
     setMembers(list);
   }, [roomId]);
@@ -284,7 +314,16 @@ export default function SyncRoomScreen() {
         { event: "INSERT", schema: "public", table: "sync_room_reactions", filter: `room_id=eq.${roomId}` },
         (payload: any) => {
           const emoji = payload?.new?.emoji as string | undefined;
-          if (emoji) showFloatingReaction(emoji);
+          const reactingUserId = payload?.new?.user_id as string | undefined;
+          if (emoji) {
+            showFloatingReaction(emoji);
+            // Phase R2 — also animate over the reacting user's avatar.
+            // Skip self because handleReact already fired an optimistic
+            // local trigger; otherwise self would double-animate.
+            if (reactingUserId && reactingUserId !== user?.id) {
+              triggerAvatarReaction(reactingUserId, emoji);
+            }
+          }
         },
       )
       .subscribe();
@@ -339,6 +378,27 @@ export default function SyncRoomScreen() {
       useNativeDriver: true,
     }).start(() => setFloatReaction(null));
   };
+
+  // Phase R2 — start a per-avatar reaction popup. Each call adds an entry
+  // to avatarReactionAnims with its own Animated.Value, kicks off the
+  // animation, then prunes the entry when the animation completes. Safe
+  // to call concurrently — entries are keyed on a unique id.
+  const triggerAvatarReaction = useCallback(
+    (userId: string, emoji: string) => {
+      const id = `${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const anim = new Animated.Value(0);
+      setAvatarReactionAnims((prev) => [...prev, { id, user_id: userId, emoji, anim }]);
+      Animated.timing(anim, {
+        toValue: 1,
+        duration: 1000,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => {
+        setAvatarReactionAnims((prev) => prev.filter((a) => a.id !== id));
+      });
+    },
+    []
+  );
 
   // ------- Actions -------
 
@@ -451,6 +511,14 @@ export default function SyncRoomScreen() {
   const handleReact = async (emoji: string) => {
     if (reacting || !user?.id) return;
     setReacting(true);
+
+    // Phase R2 — optimistic per-avatar animation for the current user.
+    // Fires immediately so the user gets instant feedback even if the
+    // realtime echo or the donation RPC takes a moment. The realtime
+    // subscription handler skips self (user_id check) so this won't
+    // double-animate.
+    triggerAvatarReaction(user.id, emoji);
+
     try {
       // Always log the reaction (so the floating echo appears for
       // every room member). Insert in parallel with the donation RPC --
@@ -824,26 +892,87 @@ export default function SyncRoomScreen() {
           })()}
         </View>
 
-        {/* Members */}
+        {/* Members — Phase R2: filtered to active (last_heartbeat in last 5 min),
+            with a green dot for very recent (< 2 min) and per-avatar reaction
+            popups when any user reacts. The full members list is still
+            kept in state so we can derive active off it without re-fetching
+            on every clock tick. */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>In the room</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {members.map((m) => (
-              <View key={m.user_id} style={styles.memberCell}>
-                <View style={styles.avatar}>
-                  {m.avatar_url ? (
-                    <Image source={{ uri: m.avatar_url }} style={styles.avatarImg} />
-                  ) : (
-                    <Text style={styles.avatarInitial}>
-                      {(m.full_name ?? "?").slice(0, 1).toUpperCase()}
+            {members
+              .filter((m) => {
+                if (!m.last_heartbeat) return true; // legacy rows with no heartbeat — keep visible
+                try {
+                  return (
+                    Date.now() - new Date(m.last_heartbeat).getTime() <
+                    ACTIVE_MEMBER_WINDOW_MS
+                  );
+                } catch {
+                  return true;
+                }
+              })
+              .map((m) => {
+                const isFresh = !!m.last_heartbeat
+                  ? Date.now() - new Date(m.last_heartbeat).getTime() <
+                    FRESH_HEARTBEAT_WINDOW_MS
+                  : false;
+                const popups = avatarReactionAnims.filter(
+                  (a) => a.user_id === m.user_id
+                );
+                return (
+                  <View key={m.user_id} style={styles.memberCell}>
+                    {/* Per-avatar reaction popups float UP and OUT. Each
+                        has its own Animated.Value. Stacked when concurrent. */}
+                    {popups.map((a) => (
+                      <Animated.Text
+                        key={a.id}
+                        pointerEvents="none"
+                        style={[
+                          styles.memberAvatarReactionEmoji,
+                          {
+                            opacity: a.anim.interpolate({
+                              inputRange: [0, 0.15, 1],
+                              outputRange: [0, 1, 0],
+                            }),
+                            transform: [
+                              {
+                                translateY: a.anim.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [0, -42],
+                                }),
+                              },
+                              {
+                                scale: a.anim.interpolate({
+                                  inputRange: [0, 0.3, 1],
+                                  outputRange: [0.6, 1.4, 1.1],
+                                }),
+                              },
+                            ],
+                          },
+                        ]}
+                      >
+                        {a.emoji}
+                      </Animated.Text>
+                    ))}
+
+                    <View style={[styles.avatar, isFresh && styles.avatarFresh]}>
+                      {m.avatar_url ? (
+                        <Image source={{ uri: m.avatar_url }} style={styles.avatarImg} />
+                      ) : (
+                        <Text style={styles.avatarInitial}>
+                          {(m.full_name ?? "?").slice(0, 1).toUpperCase()}
+                        </Text>
+                      )}
+                      {/* Green dot for very-recent activity. */}
+                      {isFresh && <View style={styles.activeDot} />}
+                    </View>
+                    <Text style={styles.memberName} numberOfLines={1}>
+                      {m.full_name ?? "?"}
                     </Text>
-                  )}
-                </View>
-                <Text style={styles.memberName} numberOfLines={1}>
-                  {m.full_name ?? "?"}
-                </Text>
-              </View>
-            ))}
+                  </View>
+                );
+              })}
           </ScrollView>
         </View>
 
@@ -1354,7 +1483,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  memberCell: { alignItems: "center", width: 56 },
+  // Phase R2 — memberCell is the anchor for the per-avatar reaction popup
+  // (position:absolute children) so it needs position:relative.
+  memberCell: { alignItems: "center", width: 56, position: "relative" },
   avatar: {
     width: 40,
     height: 40,
@@ -1363,6 +1494,37 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+  },
+  // Phase R2 — teal ring around the avatar of a very-recently-active
+  // member. Distinct from the green dot — ring = "actively in the room
+  // right now", dot adds redundant signal for accessibility.
+  avatarFresh: {
+    borderWidth: 2,
+    borderColor: TEAL,
+  },
+  // Phase R2 — small green liveness dot at the top-right of the avatar.
+  // Placed inside the avatar's overflow:hidden bounds so we don't need to
+  // restructure the cell. White border lets it read against any avatar.
+  activeDot: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#22C55E",
+    borderWidth: 1,
+    borderColor: "#FFFFFF",
+  },
+  // Phase R2 — per-avatar reaction emoji. Absolute-positioned over the
+  // top of the member cell so the Animated.Value can lift it upward via
+  // translateY (negative Y). Multiple can overlap for rapid-fire reacts;
+  // useNativeDriver-compatible (only opacity / transform animated).
+  memberAvatarReactionEmoji: {
+    position: "absolute",
+    top: 0,
+    alignSelf: "center",
+    fontSize: 24,
   },
   avatarImg: { width: "100%", height: "100%" },
   avatarInitial: { fontSize: 14, fontWeight: "700", color: NAVY },
