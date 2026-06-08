@@ -10,6 +10,7 @@
 //   sync_room_members      INSERT/DELETE -> presence list churn
 //   sync_room_reactions    INSERT   -> floating emoji + per-avatar
 //                                       popup + auto-skip timer reset
+//   sync_room_remixes      INSERT   -> floating sticker overlay (R4a)
 // (sync_room_votes subscription removed in Phase R3 along with the
 // manual skip-vote UI.)
 //
@@ -114,6 +115,17 @@ const FRESH_HEARTBEAT_WINDOW_MS = 2 * 60 * 1000;
 const DEFAULT_AUTO_SKIP_TIMEOUT_MS = 30 * 1000;
 const AUTO_SKIP_NOTICE_MS = 2_500;
 
+// Phase R4a — Swarm remix sticker palette. Static list for now; a future
+// commit can promote this to per-room settings so hosts can curate a set
+// that matches the vibe of their room. Emojis only — voice notes and
+// short video replies arrive in R4b/R4c via the same sync_room_remixes
+// table.
+const REMIX_STICKERS = ["💥", "🎉", "😂", "❤️‍🔥", "🙌", "🤣", "🥳", "💀"];
+// How long the floating sticker overlay stays visible (ms). Slightly
+// longer than the floating-reaction echo because the sticker is larger
+// and meant to draw attention.
+const STICKER_OVERLAY_MS = 2_500;
+
 // Reactions are now per-room (driven by room_settings.reaction_emojis,
 // resolved against the room_type preset). The constant below is the
 // safety-net default used only if both the room row and the preset
@@ -192,6 +204,16 @@ export default function SyncRoomScreen() {
   const attentionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [autoSkipNotice, setAutoSkipNotice] = useState<string | null>(null);
   const autoSkipNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Phase R4a — Swarm remix. The bottom-sheet modal lets the user pick a
+  // sticker; the floating overlay renders any sticker that lands (own
+  // taps fire an optimistic overlay, others land via realtime). One
+  // sticker at a time -- a second arrival cancels the first by resetting
+  // the same Animated.Value; acceptable trade-off for the MVP.
+  const [remixSheetVisible, setRemixSheetVisible] = useState(false);
+  const [pickingSticker, setPickingSticker] = useState(false);
+  const [floatingSticker, setFloatingSticker] = useState<string | null>(null);
+  const stickerAnim = useRef(new Animated.Value(0)).current;
   const [candleOpen, setCandleOpen] = useState(false);
   const [candleIntention, setCandleIntention] = useState("");
   const [candleDonation, setCandleDonation] = useState("0");
@@ -343,6 +365,22 @@ export default function SyncRoomScreen() {
           }
         },
       )
+      // Phase R4a — Swarm remix. Stickers from other users land here and
+      // trigger the floating overlay. Self echo is skipped because
+      // handlePickSticker fires an optimistic overlay locally.
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "sync_room_remixes", filter: `room_id=eq.${roomId}` },
+        (payload: any) => {
+          const mediaType = payload?.new?.media_type as string | undefined;
+          const mediaUrl = payload?.new?.media_url as string | undefined;
+          const remixUserId = payload?.new?.user_id as string | undefined;
+          if (mediaType === "sticker" && mediaUrl && remixUserId !== user?.id) {
+            showStickerOverlay(mediaUrl);
+          }
+          // voice_note / video_reply branches land in R4b/R4c.
+        },
+      )
       .subscribe();
 
     // Heartbeat every 30s so the reaper cron (future) can purge stale
@@ -395,6 +433,24 @@ export default function SyncRoomScreen() {
       useNativeDriver: true,
     }).start(() => setFloatReaction(null));
   };
+
+  // Phase R4a — floating sticker overlay. Resets the shared
+  // Animated.Value so concurrent arrivals replace rather than queue
+  // (acceptable for MVP). Cleared at the end of the animation so the
+  // overlay node unmounts.
+  const showStickerOverlay = useCallback(
+    (emoji: string) => {
+      setFloatingSticker(emoji);
+      stickerAnim.setValue(0);
+      Animated.timing(stickerAnim, {
+        toValue: 1,
+        duration: STICKER_OVERLAY_MS,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => setFloatingSticker(null));
+    },
+    [stickerAnim]
+  );
 
   // Phase R2 — start a per-avatar reaction popup. Each call adds an entry
   // to avatarReactionAnims with its own Animated.Value, kicks off the
@@ -543,6 +599,35 @@ export default function SyncRoomScreen() {
       // Soft fail -- reactions are decorative.
     } finally {
       setReacting(false);
+    }
+  };
+
+  // Phase R4a — tap a sticker in the bottom sheet. Optimistic local
+  // overlay fires immediately, then a row lands in sync_room_remixes.
+  // RLS enforces (user_id = auth.uid() AND room membership) so we don't
+  // need a server-side RPC. Other members receive the row via the
+  // realtime sub above.
+  const handlePickSticker = async (emoji: string) => {
+    if (pickingSticker || !user?.id) return;
+    setPickingSticker(true);
+    showStickerOverlay(emoji);
+    setRemixSheetVisible(false);
+    try {
+      const { error } = await supabase.from("sync_room_remixes").insert({
+        room_id: roomId,
+        user_id: user.id,
+        media_type: "sticker",
+        media_url: emoji,
+      });
+      if (error) throw new Error(error.message);
+    } catch (err) {
+      // Soft fail -- the optimistic overlay already played and a sticker
+      // failing to broadcast isn't worth a blocking alert. Log for
+      // diagnostics only.
+      // eslint-disable-next-line no-console
+      console.warn("[remix] insert failed:", err);
+    } finally {
+      setPickingSticker(false);
     }
   };
 
@@ -1092,6 +1177,18 @@ export default function SyncRoomScreen() {
               );
             })}
           </View>
+          {/* Phase R4a — Remix entry point. Sits below the reaction row in
+              the same section. Tapping opens a bottom sheet with the
+              sticker grid; future R4b/R4c will add voice / video tabs. */}
+          <TouchableOpacity
+            style={styles.remixOpenBtn}
+            onPress={() => setRemixSheetVisible(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Open remix sticker picker"
+          >
+            <Text style={styles.remixOpenBtnEmoji}>🎨</Text>
+            <Text style={styles.remixOpenBtnText}>Remix</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Worship actions (visible on worship rooms only). */}
@@ -1452,6 +1549,75 @@ export default function SyncRoomScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Phase R4a — Swarm remix sticker picker. Slide-up sheet with a
+          grid of preset stickers. Tap fires handlePickSticker which
+          starts the optimistic overlay and inserts a row into
+          sync_room_remixes. */}
+      <Modal
+        visible={remixSheetVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !pickingSticker && setRemixSheetVisible(false)}
+      >
+        <View style={styles.remixBackdrop}>
+          <View style={styles.remixSheet}>
+            <View style={styles.remixHandle} />
+            <Text style={styles.remixTitle}>Pick a sticker</Text>
+            <View style={styles.stickerGrid}>
+              {REMIX_STICKERS.map((s) => (
+                <TouchableOpacity
+                  key={s}
+                  style={[styles.stickerCell, pickingSticker && { opacity: 0.5 }]}
+                  onPress={() => handlePickSticker(s)}
+                  disabled={pickingSticker}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Send ${s} sticker`}
+                >
+                  <Text style={styles.stickerCellEmoji}>{s}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={styles.remixCancel}
+              onPress={() => !pickingSticker && setRemixSheetVisible(false)}
+              disabled={pickingSticker}
+            >
+              <Text style={styles.remixCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Phase R4a — Floating sticker overlay. Sits at the very end of
+          the JSX so it paints on top of everything (except open modals,
+          which is acceptable -- a user with a sheet open doesn't need
+          to see the sticker layer). pointerEvents:none so it never
+          intercepts taps even while opacity > 0. */}
+      {floatingSticker ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.floatingSticker,
+            {
+              opacity: stickerAnim.interpolate({
+                inputRange: [0, 0.15, 0.75, 1],
+                outputRange: [0, 1, 1, 0],
+              }),
+              transform: [
+                {
+                  scale: stickerAnim.interpolate({
+                    inputRange: [0, 0.25, 1],
+                    outputRange: [0.5, 1.3, 1.0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Text style={styles.floatingStickerEmoji}>{floatingSticker}</Text>
+        </Animated.View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -1628,6 +1794,90 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 12,
     fontWeight: "700",
+  },
+
+  // Phase R4a — Swarm remix UI
+  remixOpenBtn: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: BG,
+  },
+  remixOpenBtnEmoji: { fontSize: 18 },
+  remixOpenBtnText: { fontSize: 13, fontWeight: "700", color: NAVY },
+
+  remixBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  remixSheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    padding: 16,
+    paddingBottom: 28,
+    gap: 12,
+  },
+  remixHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: BORDER,
+    borderRadius: 2,
+    alignSelf: "center",
+  },
+  remixTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: NAVY,
+    textAlign: "center",
+  },
+  stickerGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-around",
+    gap: 4,
+  },
+  stickerCell: {
+    width: 64,
+    height: 64,
+    alignItems: "center",
+    justifyContent: "center",
+    margin: 2,
+    borderRadius: 12,
+    backgroundColor: BG,
+  },
+  stickerCellEmoji: { fontSize: 36 },
+  remixCancel: {
+    paddingVertical: 12,
+    alignItems: "center",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  remixCancelText: { color: NAVY, fontWeight: "700" },
+
+  // Floating sticker overlay -- absolute, top: 30% so it sits in the
+  // upper-middle area where the YouTube embed lives (so the sticker
+  // visibly reacts to the content). zIndex large so it paints above
+  // the ScrollView content. pointerEvents:none is on the View itself.
+  floatingSticker: {
+    position: "absolute",
+    top: "30%",
+    alignSelf: "center",
+    zIndex: 1000,
+  },
+  floatingStickerEmoji: {
+    fontSize: 120,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 8,
   },
 
   creatorActions: {
