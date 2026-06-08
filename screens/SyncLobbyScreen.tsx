@@ -50,20 +50,82 @@ const BORDER = "#E5E7EB";
 const BG = "#F3F4F6";
 const MUTED = "#6B7280";
 
-type Vibe = "chill" | "chaos" | "learning" | "party" | "custom";
+// Phase R5 — added "reverent" for worship rooms. Existing rooms with
+// vibe='custom' or unrecognised vibe values still render via the
+// fallback in resolveVibe() below.
+type Vibe = "chill" | "chaos" | "learning" | "party" | "custom" | "reverent";
 
 const VIBES: { id: Vibe; label: string; emoji: string; color: string }[] = [
   { id: "chill",    label: "Chill",    emoji: "🌊", color: "#3B82F6" },
   { id: "chaos",    label: "Chaos",    emoji: "🎲", color: "#EF4444" },
   { id: "learning", label: "Learning", emoji: "📚", color: "#8B5CF6" },
   { id: "party",    label: "Party",    emoji: "🎉", color: "#F59E0B" },
+  { id: "reverent", label: "Reverent", emoji: "🕊️", color: "#D97706" },
   { id: "custom",   label: "Custom",   emoji: "✨", color: "#10B981" },
 ];
+
+// Phase R5 — Resolve the displayed vibe for a room. Order:
+//   1. Direct match on the vibe column.
+//   2. room_type === 'worship' implies 'reverent' even if vibe is
+//      stale or unset (worship rooms were created before the
+//      'reverent' option existed).
+//   3. Fall through to "chill" so the pill is always coloured.
+const resolveVibe = (vibe: string | null, roomType: string | null) => {
+  const direct = VIBES.find((v) => v.id === vibe);
+  if (direct) return direct;
+  if (roomType === "worship") {
+    return VIBES.find((v) => v.id === "reverent") ?? VIBES[0];
+  }
+  return VIBES[0];
+};
+
+// Phase R5 — Extract a YouTube video id from any common URL shape so
+// we can show https://img.youtube.com/vi/{id}/mqdefault.jpg as a card
+// thumbnail. Returns null for non-YouTube URLs (caller renders a
+// placeholder). Logic mirrors extractYouTubeId in SyncRoomScreen so
+// the lobby thumbnail and the player choose the same id.
+const extractYouTubeId = (raw: string | null): string | null => {
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.replace(/^www\./, "");
+    if (host === "youtu.be") {
+      return url.pathname.replace(/^\//, "").split("/")[0] || null;
+    }
+    if (host === "youtube.com" || host === "m.youtube.com") {
+      if (url.pathname === "/watch") return url.searchParams.get("v");
+      if (url.pathname.startsWith("/embed/")) {
+        return url.pathname.replace("/embed/", "").split("/")[0] || null;
+      }
+      if (url.pathname.startsWith("/shorts/")) {
+        return url.pathname.replace("/shorts/", "").split("/")[0] || null;
+      }
+    }
+    return null;
+  } catch {
+    // Not a parseable URL -- could be a raw video id, an Instagram
+    // URL, etc. We only thumbnail YouTube for now.
+    return null;
+  }
+};
+
+const getYouTubeThumbnail = (url: string | null): string | null => {
+  const id = extractYouTubeId(url);
+  return id ? `https://img.youtube.com/vi/${id}/mqdefault.jpg` : null;
+};
+
+// Five-minute heartbeat window for "active member" filtering on the
+// first-3 avatars. Matches the window used in SyncRoomScreen for the
+// in-room avatar row.
+const ACTIVE_MEMBER_WINDOW_MS = 5 * 60 * 1000;
 
 type Room = {
   id: string;
   name: string;
   vibe: Vibe;
+  // R5 — room_type is read so we can fall back to a sensible vibe for
+  // worship rooms that pre-date the 'reverent' option.
+  room_type: string | null;
   current_content_id: string | null;
   last_active: string;
 };
@@ -103,9 +165,11 @@ export default function SyncLobbyScreen() {
       // is_public=true gate added in migration 127. Private rooms are
       // discoverable only via the deep-link/invite-code path -- the
       // lobby intentionally hides them.
+      // R5: also fetch room_type so the vibe fallback can map worship
+      // rooms to 'reverent' when their stored vibe is stale.
       const { data: roomRows, error } = await supabase
         .from("sync_rooms")
-        .select("id, name, vibe, current_content_id, last_active")
+        .select("id, name, vibe, room_type, current_content_id, last_active")
         .eq("is_active", true)
         .eq("is_public", true)
         .gte("last_active", oneHourAgo)
@@ -124,11 +188,21 @@ export default function SyncLobbyScreen() {
 
       // One extra round trip for member-with-avatar joins -- cheaper
       // than a per-room loop and the limit:50 above caps the IN list.
+      // R5: filter by last_heartbeat so the "first 3 avatars" reflect
+      // people actually present, not historical joiners that the cron
+      // reaper hasn't pruned yet. Member count uses the same filter
+      // so the displayed number matches the avatars.
       const roomIds = list.map((r) => r.id);
+      const activeCutoff = new Date(
+        Date.now() - ACTIVE_MEMBER_WINDOW_MS,
+      ).toISOString();
       const { data: memberRows } = await supabase
         .from("sync_room_members")
-        .select("room_id, user_id, profiles:profiles(avatar_url, full_name)")
-        .in("room_id", roomIds);
+        .select(
+          "room_id, user_id, last_heartbeat, profiles:profiles(avatar_url, full_name)",
+        )
+        .in("room_id", roomIds)
+        .gte("last_heartbeat", activeCutoff);
 
       const counts: Record<string, number> = {};
       const avatars: Record<string, MemberMini[]> = {};
@@ -240,9 +314,14 @@ export default function SyncLobbyScreen() {
   };
 
   const renderRoom = ({ item }: { item: Room }) => {
-    const vibe = VIBES.find((v) => v.id === item.vibe) ?? VIBES[0];
+    const vibe = resolveVibe(item.vibe, item.room_type);
     const avatars = memberAvatars[item.id] ?? [];
     const count = memberCounts[item.id] ?? 0;
+    // R5: YouTube thumbnail for the playing content. Falls through to
+    // the placeholder header when current_content_id is null or not a
+    // YouTube URL.
+    const thumb = getYouTubeThumbnail(item.current_content_id);
+    const isLive = !!item.current_content_id;
 
     return (
       <TouchableOpacity
@@ -250,42 +329,87 @@ export default function SyncLobbyScreen() {
         onPress={() => handleOpenRoom(item)}
         accessibilityRole="button"
         accessibilityLabel={`Open ${item.name}`}
+        activeOpacity={0.8}
       >
-        <View style={[styles.vibePill, { backgroundColor: vibe.color }]}>
-          <Text style={styles.vibePillText}>
-            {vibe.emoji} {vibe.label}
-          </Text>
+        {/* Thumbnail strip. Always renders so card heights are uniform;
+            falls back to a gradient-like placeholder when no thumbnail
+            is available (live but non-YouTube, or queue empty). */}
+        <View style={styles.thumbWrap}>
+          {thumb ? (
+            <Image source={{ uri: thumb }} style={styles.thumbImg} />
+          ) : (
+            <View
+              style={[
+                styles.thumbPlaceholder,
+                { backgroundColor: vibe.color + "22" }, // 13% alpha
+              ]}
+            >
+              <Text style={styles.thumbPlaceholderEmoji}>{vibe.emoji}</Text>
+            </View>
+          )}
+          {isLive ? (
+            <View style={styles.liveBadge}>
+              <View style={styles.liveBadgeDot} />
+              <Text style={styles.liveBadgeText}>LIVE</Text>
+            </View>
+          ) : null}
+          <View
+            style={[
+              styles.vibePillOnThumb,
+              { backgroundColor: vibe.color },
+            ]}
+          >
+            <Text style={styles.vibePillText}>
+              {vibe.emoji} {vibe.label}
+            </Text>
+          </View>
         </View>
 
-        <Text style={styles.roomName} numberOfLines={1}>{item.name}</Text>
-
-        <View style={styles.metaRow}>
-          {/* Avatars (first 3) */}
-          <View style={styles.avatarStack}>
-            {avatars.map((m, i) => (
-              <View
-                key={m.user_id}
-                style={[
-                  styles.avatar,
-                  { marginLeft: i === 0 ? 0 : -8, zIndex: 10 - i },
-                ]}
-              >
-                {m.avatar_url ? (
-                  <Image source={{ uri: m.avatar_url }} style={styles.avatarImg} />
-                ) : (
-                  <Text style={styles.avatarInitial}>
-                    {(m.full_name ?? "?").slice(0, 1).toUpperCase()}
-                  </Text>
-                )}
-              </View>
-            ))}
-            {avatars.length === 0 ? (
-              <Text style={styles.emptyAvatarText}>nobody here yet</Text>
-            ) : null}
-          </View>
-          <Text style={styles.metaText}>
-            {count} watching{item.current_content_id ? " · live" : ""}
+        <View style={styles.cardBody}>
+          <Text style={styles.roomName} numberOfLines={1}>
+            {item.name}
           </Text>
+
+          <View style={styles.metaRow}>
+            {/* Avatars (first 3 active) */}
+            <View style={styles.avatarStack}>
+              {avatars.map((m, i) => (
+                <View
+                  key={m.user_id}
+                  style={[
+                    styles.avatar,
+                    { marginLeft: i === 0 ? 0 : -8, zIndex: 10 - i },
+                  ]}
+                >
+                  {m.avatar_url ? (
+                    <Image
+                      source={{ uri: m.avatar_url }}
+                      style={styles.avatarImg}
+                    />
+                  ) : (
+                    <Text style={styles.avatarInitial}>
+                      {(m.full_name ?? "?").slice(0, 1).toUpperCase()}
+                    </Text>
+                  )}
+                </View>
+              ))}
+              <Text style={styles.metaTextInline}>
+                {count > 0
+                  ? `${count} watching`
+                  : "be the first in"}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.joinBtn}
+              onPress={() => handleOpenRoom(item)}
+              accessibilityRole="button"
+              accessibilityLabel={`Join ${item.name}`}
+            >
+              <Text style={styles.joinBtnText}>Join</Text>
+              <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -498,30 +622,92 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 
+  // R5: card has zero padding now -- the thumbnail strip fills the
+  // top edge-to-edge. cardBody adds inset padding for the text + row.
   roomCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: BORDER,
+    overflow: "hidden",
+    // Subtle shadow on iOS; elevation on Android. No-op on web.
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  vibePill: {
-    alignSelf: "flex-start",
+  cardBody: { padding: 14 },
+
+  thumbWrap: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    backgroundColor: BG,
+    position: "relative",
+  },
+  thumbImg: { width: "100%", height: "100%" },
+  thumbPlaceholder: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  thumbPlaceholderEmoji: { fontSize: 56, opacity: 0.7 },
+
+  // Live badge -- pulses subtly via the red dot. Sits top-left of
+  // the thumbnail.
+  liveBadge: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0,0,0,0.6)",
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  liveBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#EF4444",
+  },
+  liveBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+
+  // Vibe pill moved onto the thumbnail (top-right). Same colour
+  // semantics as before; just repositioned for the new layout.
+  vibePillOnThumb: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 8,
-    marginBottom: 8,
   },
   vibePillText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
-  roomName: { fontSize: 16, fontWeight: "700", color: NAVY, marginBottom: 8 },
+
+  roomName: { fontSize: 16, fontWeight: "700", color: NAVY, marginBottom: 10 },
 
   metaRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 8,
   },
-  avatarStack: { flexDirection: "row", alignItems: "center" },
+  avatarStack: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 0,
+  },
   avatar: {
     width: 28,
     height: 28,
@@ -535,8 +721,26 @@ const styles = StyleSheet.create({
   },
   avatarImg: { width: "100%", height: "100%" },
   avatarInitial: { fontSize: 11, fontWeight: "700", color: NAVY },
-  emptyAvatarText: { fontSize: 11, color: MUTED, fontStyle: "italic" },
-  metaText: { fontSize: 12, color: MUTED, fontWeight: "600" },
+  metaTextInline: {
+    fontSize: 12,
+    color: MUTED,
+    fontWeight: "600",
+    marginLeft: 8,
+  },
+
+  // R5: explicit Join button replaces the implicit "tap-the-card"
+  // affordance. Whole card still navigates on press (kept for habit),
+  // but the button is the discoverable action.
+  joinBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: NAVY,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  joinBtnText: { color: "#FFFFFF", fontSize: 13, fontWeight: "700" },
 
   emptyBox: { alignItems: "center", paddingVertical: 60, paddingHorizontal: 24, gap: 8 },
   emptyTitle: { fontSize: 16, fontWeight: "700", color: NAVY, marginTop: 8 },
