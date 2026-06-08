@@ -143,6 +143,12 @@ export default function SyncRoomScreen() {
 
   // Worship-extension state (phase 6).
   const [reactionPrefs, setReactionPrefs] = useState<Record<string, number>>({});
+  // Phase R1 — inline editor for the per-emoji donation amount. Long-pressing
+  // a reaction button opens a small modal with +/- steppers (mirrors the
+  // DonationPreferencesScreen pattern so the storage call site is identical).
+  // editingEmoji = null hides the modal; non-null = the emoji being edited.
+  const [editingEmoji, setEditingEmoji] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
   const [candleOpen, setCandleOpen] = useState(false);
   const [candleIntention, setCandleIntention] = useState("");
   const [candleDonation, setCandleDonation] = useState("0");
@@ -409,6 +415,37 @@ export default function SyncRoomScreen() {
         },
       ],
     );
+  };
+
+  // Phase R1 — adjust the user's stored donation amount for a single emoji.
+  // Optimistic local update + RPC + revert on failure. `editSaving` guards
+  // against concurrent in-flight saves so a long press-hold on +/- doesn't
+  // pile up RPC calls. Matches the pattern in DonationPreferencesScreen.
+  const handleAdjustReactionAmount = async (emoji: string, delta: number) => {
+    if (editSaving) return;
+    const current = reactionPrefs[emoji] ?? 0;
+    const next = Math.max(0, current + delta);
+    if (next === current) return;
+
+    setEditSaving(true);
+    setReactionPrefs((prev) => ({ ...prev, [emoji]: next }));
+    try {
+      const { data, error } = await supabase.rpc("set_user_reaction_preference", {
+        p_emoji: emoji,
+        p_amount_cents: next,
+      });
+      if (error) throw new Error(error.message);
+      const r = (data ?? {}) as { success?: boolean; error?: string };
+      if (!r.success) throw new Error(r.error ?? "Couldn't save");
+    } catch (err) {
+      setReactionPrefs((prev) => ({ ...prev, [emoji]: current }));
+      Alert.alert(
+        "Couldn't update amount",
+        err instanceof Error ? err.message : String(err)
+      );
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const handleReact = async (emoji: string) => {
@@ -830,8 +867,11 @@ export default function SyncRoomScreen() {
                   key={e}
                   style={styles.reactionBtn}
                   onPress={() => handleReact(e)}
+                  // Phase R1 — long-press opens the in-room amount editor.
+                  onLongPress={() => setEditingEmoji(e)}
+                  delayLongPress={400}
                   accessibilityRole="button"
-                  accessibilityLabel={`React ${e}`}
+                  accessibilityLabel={`React ${e}, long press to change amount`}
                 >
                   <Text style={styles.reactionEmoji}>{e}</Text>
                   {cents > 0 ? (
@@ -1156,6 +1196,78 @@ export default function SyncRoomScreen() {
           </Text>
         </Animated.View>
       </Modal>
+
+      {/* Phase R1 — in-room donation amount editor. Opened via long-press
+          on a reaction button. Stepper rows mirror DonationPreferencesScreen
+          so the storage call site (set_user_reaction_preference) and step
+          values stay aligned. */}
+      <Modal
+        visible={editingEmoji !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !editSaving && setEditingEmoji(null)}
+      >
+        <View style={styles.worshipBackdrop}>
+          <View style={styles.worshipCard}>
+            {(() => {
+              const emoji = editingEmoji ?? "";
+              const cents = reactionPrefs[emoji] ?? 0;
+              const label =
+                cents >= 100 ? `$${(cents / 100).toFixed(2)}` : `${cents}¢`;
+              return (
+                <>
+                  <Text style={styles.worshipTitle}>
+                    {emoji}  Donation amount
+                  </Text>
+                  <Text style={styles.reactionEditAmount}>{label}</Text>
+                  <Text style={styles.reactionEditHint}>
+                    Tap to adjust. Saves automatically.
+                  </Text>
+
+                  <View style={styles.reactionStepperRow}>
+                    {[100, 25, 10, 5, 1].map((step) => (
+                      <TouchableOpacity
+                        key={`minus-${step}`}
+                        style={styles.reactionStepBtn}
+                        onPress={() => handleAdjustReactionAmount(emoji, -step)}
+                        disabled={editSaving || cents === 0}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Decrease by ${step} cents`}
+                      >
+                        <Text style={styles.reactionStepBtnText}>-{step}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  <View style={styles.reactionStepperRow}>
+                    {[1, 5, 10, 25, 100].map((step) => (
+                      <TouchableOpacity
+                        key={`plus-${step}`}
+                        style={[styles.reactionStepBtn, styles.reactionStepBtnPlus]}
+                        onPress={() => handleAdjustReactionAmount(emoji, step)}
+                        disabled={editSaving}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Increase by ${step} cents`}
+                      >
+                        <Text style={styles.reactionStepBtnTextPlus}>+{step}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <View style={styles.worshipActions}>
+                    <TouchableOpacity
+                      style={styles.worshipSubmit}
+                      onPress={() => setEditingEmoji(null)}
+                      disabled={editSaving}
+                    >
+                      <Text style={styles.worshipSubmitText}>Done</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1455,6 +1567,51 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   worshipSubmitText: { color: "#FFFFFF", fontWeight: "700" },
+
+  // Phase R1 — donation amount editor
+  reactionEditAmount: {
+    fontSize: 28,
+    fontWeight: "800",
+    color: NAVY,
+    textAlign: "center",
+    marginTop: 8,
+  },
+  reactionEditHint: {
+    fontSize: 12,
+    color: MUTED,
+    textAlign: "center",
+    marginTop: 4,
+    marginBottom: 14,
+  },
+  reactionStepperRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 6,
+    marginBottom: 8,
+  },
+  reactionStepBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: BORDER,
+    alignItems: "center",
+  },
+  reactionStepBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#DC2626",
+  },
+  reactionStepBtnPlus: {
+    backgroundColor: "#F0FDFA",
+    borderColor: TEAL,
+  },
+  reactionStepBtnTextPlus: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: TEAL,
+  },
 
   candleAnimBackdrop: {
     flex: 1,
