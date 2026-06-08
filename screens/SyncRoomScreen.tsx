@@ -8,8 +8,10 @@
 //   sync_rooms             UPDATE   -> reflect current_content_id +
 //                                       content_queue changes
 //   sync_room_members      INSERT/DELETE -> presence list churn
-//   sync_room_votes        *        -> skip-count progress bar
-//   sync_room_reactions    INSERT   -> floating emoji
+//   sync_room_reactions    INSERT   -> floating emoji + per-avatar
+//                                       popup + auto-skip timer reset
+// (sync_room_votes subscription removed in Phase R3 along with the
+// manual skip-vote UI.)
 //
 // YouTube embed: we detect the host pattern and render via WebView with
 // the embed URL. Non-YouTube URLs surface as a "Content URL" card with
@@ -106,6 +108,12 @@ type AvatarReactionAnim = {
 const ACTIVE_MEMBER_WINDOW_MS = 5 * 60 * 1000;
 const FRESH_HEARTBEAT_WINDOW_MS = 2 * 60 * 1000;
 
+// Phase R3 — group-attention timeout. Auto-skip triggers if the host's
+// client sees no reaction inserts in this window. Per-room override via
+// room_settings.auto_skip_timeout_seconds when present.
+const DEFAULT_AUTO_SKIP_TIMEOUT_MS = 30 * 1000;
+const AUTO_SKIP_NOTICE_MS = 2_500;
+
 // Reactions are now per-room (driven by room_settings.reaction_emojis,
 // resolved against the room_type preset). The constant below is the
 // safety-net default used only if both the room row and the preset
@@ -151,11 +159,10 @@ export default function SyncRoomScreen() {
 
   const [room, setRoom] = useState<Room | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
-  const [skipCount, setSkipCount] = useState(0);
-  const [hasSkipVote, setHasSkipVote] = useState(false);
+  // Phase R3 — skipCount/hasSkipVote/voting + vote_skip RPC removed.
+  // Manual-vote skip is gone; auto-skip (below) handles it now.
   const [queueInput, setQueueInput] = useState("");
   const [adding, setAdding] = useState(false);
-  const [voting, setVoting] = useState(false);
   const [reacting, setReacting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [floatReaction, setFloatReaction] = useState<string | null>(null);
@@ -176,6 +183,15 @@ export default function SyncRoomScreen() {
   const [avatarReactionAnims, setAvatarReactionAnims] = useState<
     AvatarReactionAnim[]
   >([]);
+
+  // Phase R3 — group-attention auto-skip. The host's client runs a
+  // 30-second timer; any reaction resets it. On expiry we call
+  // advance_content (same RPC as the manual "Advance now" button) and
+  // briefly show an in-room banner. Only the host runs the timer so
+  // there's no concurrent-advance race between member clients.
+  const attentionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [autoSkipNotice, setAutoSkipNotice] = useState<string | null>(null);
+  const autoSkipNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [candleOpen, setCandleOpen] = useState(false);
   const [candleIntention, setCandleIntention] = useState("");
   const [candleDonation, setCandleDonation] = useState("0");
@@ -196,8 +212,6 @@ export default function SyncRoomScreen() {
   const [submittingMass, setSubmittingMass] = useState(false);
 
   const isCreator = room?.created_by === user?.id;
-  const memberCount = members.length;
-  const threshold = Math.max(1, Math.ceil(memberCount / 2));
 
   // Resolve room settings (with preset fallback for legacy rows that
   // pre-date phase 5). Memoize so the reaction array reference stays
@@ -209,10 +223,21 @@ export default function SyncRoomScreen() {
   const reactions = settings.reaction_emojis.length > 0
     ? settings.reaction_emojis
     : FALLBACK_REACTIONS;
-  const skipDisabledByType = !settings.auto_skip_allowed;
-  const skipHostOnly = settings.skip_voter_role === "host_only";
-  const skipBlocked = skipDisabledByType || (skipHostOnly && !isCreator);
+  // Phase R3 — auto_skip_allowed gates the AUTO-skip timer (the
+  // manual vote UI is gone). worship rooms etc. that disable skipping
+  // entirely simply never start the timer.
+  const autoSkipAllowed = settings.auto_skip_allowed;
   const isEnded = !!room?.ended_at;
+  // Phase R3 — read the per-room override if the host has set one.
+  // room_settings JSONB may carry `auto_skip_timeout_seconds`; fall
+  // back to the global constant when missing or invalid.
+  const autoSkipTimeoutMs = useMemo(() => {
+    const raw = (room?.room_settings as any)?.auto_skip_timeout_seconds;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0
+      ? Math.round(n * 1000)
+      : DEFAULT_AUTO_SKIP_TIMEOUT_MS;
+  }, [room?.room_settings]);
 
   // ------- Fetch helpers -------
 
@@ -244,16 +269,7 @@ export default function SyncRoomScreen() {
     setMembers(list);
   }, [roomId]);
 
-  const fetchVotes = useCallback(async () => {
-    const { data } = await supabase
-      .from("sync_room_votes")
-      .select("user_id, vote_skip")
-      .eq("room_id", roomId)
-      .eq("vote_skip", true);
-    const list = data ?? [];
-    setSkipCount(list.length);
-    setHasSkipVote(list.some((v: any) => v.user_id === user?.id));
-  }, [roomId, user?.id]);
+  // Phase R3 — fetchVotes removed (vote_skip path deleted).
 
   // ------- Mount: join + initial fetch + realtime + heartbeat -------
 
@@ -287,7 +303,7 @@ export default function SyncRoomScreen() {
         // state handles the render.
       }
       if (cancelled) return;
-      await Promise.all([fetchRoom(), fetchMembers(), fetchVotes()]);
+      await Promise.all([fetchRoom(), fetchMembers()]);
     })();
 
     // Realtime: one channel, three filters tied to roomId so the
@@ -304,11 +320,8 @@ export default function SyncRoomScreen() {
         { event: "*", schema: "public", table: "sync_room_members", filter: `room_id=eq.${roomId}` },
         () => { fetchMembers(); },
       )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "sync_room_votes", filter: `room_id=eq.${roomId}` },
-        () => { fetchVotes(); },
-      )
+      // Phase R3 — sync_room_votes subscription removed; manual skip
+      // vote no longer exists. Auto-skip is driven from sync_room_reactions.
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "sync_room_reactions", filter: `room_id=eq.${roomId}` },
@@ -323,6 +336,10 @@ export default function SyncRoomScreen() {
             if (reactingUserId && reactingUserId !== user?.id) {
               triggerAvatarReaction(reactingUserId, emoji);
             }
+            // Phase R3 — any reaction in the room resets the host's
+            // attention timer. Members' clients also call this but the
+            // helper short-circuits when !isCreator.
+            resetAttentionTimer();
           }
         },
       )
@@ -423,32 +440,10 @@ export default function SyncRoomScreen() {
     }
   };
 
-  const handleVoteSkip = async () => {
-    if (voting || hasSkipVote || skipBlocked) return;
-    setVoting(true);
-    try {
-      const { data, error } = await supabase.rpc("vote_skip", { p_room_id: roomId });
-      if (error) throw new Error(error.message);
-      // Server can reject for two reasons even when the client thought
-      // it was allowed: legacy room with stale room_settings, or a
-      // race against an end_sync_room call. Surface either as an
-      // alert so the user understands why their tap was a no-op.
-      const r = (data ?? {}) as { success?: boolean; error?: string };
-      if (r.success === false) {
-        const msg =
-          r.error === "skip_not_allowed"
-            ? "Skip is disabled for this room type."
-            : r.error === "skip_host_only"
-              ? "Only the host can skip in this room."
-              : r.error || "Vote rejected.";
-        Alert.alert("Couldn't vote", msg);
-      }
-    } catch (err) {
-      Alert.alert("Couldn't vote", err instanceof Error ? err.message : String(err));
-    } finally {
-      setVoting(false);
-    }
-  };
+  // Phase R3 — handleVoteSkip removed. The manual "Skip vote" path
+  // (vote_skip RPC, sync_room_votes, threshold-meter UI) is gone;
+  // group attention drives advance_content automatically when no
+  // reaction lands inside the timeout window.
 
   const handleEndRoom = async () => {
     if (!isCreator || isEnded) return;
@@ -748,6 +743,82 @@ export default function SyncRoomScreen() {
     }
   };
 
+  // ------- Phase R3: group-attention auto-skip -------
+  //
+  // Pattern: the timer lives in a useEffect whose deps include a "tick"
+  // counter. Any reaction (own or others') bumps the counter, which
+  // re-runs the effect: the previous setTimeout is cleared (cleanup) and
+  // a fresh one is started. This keeps the realtime subscription's
+  // closure simple — it only needs the stable `resetAttentionTimer`
+  // callback — and avoids the ref-mutation timer pattern.
+  const [attentionResetTick, setAttentionResetTick] = useState(0);
+  const resetAttentionTimer = useCallback(() => {
+    setAttentionResetTick((t) => t + 1);
+  }, []);
+
+  const queueLen = room?.content_queue?.length ?? 0;
+  const currentContentId = room?.current_content_id ?? null;
+
+  useEffect(() => {
+    // Gates: only the host runs the timer (avoids concurrent
+    // advance_content calls between member clients); only when the room
+    // type allows skipping; only when content is playing AND something
+    // is queued to advance TO; never when the room has ended.
+    if (!isCreator || !autoSkipAllowed || isEnded) return;
+    if (!currentContentId || queueLen === 0) return;
+
+    attentionTimer.current = setTimeout(async () => {
+      try {
+        const { error } = await supabase.rpc("advance_content", {
+          p_room_id: roomId,
+        });
+        if (error) {
+          // Soft fail. A common cause is a race against end_sync_room;
+          // we just stop trying and let the next room UPDATE settle state.
+          return;
+        }
+        // Brief in-room banner. Cleared after AUTO_SKIP_NOTICE_MS so it
+        // doesn't pile up if multiple advances happen rapidly.
+        setAutoSkipNotice("Moving on — no reactions for a moment.");
+        if (autoSkipNoticeTimer.current) {
+          clearTimeout(autoSkipNoticeTimer.current);
+        }
+        autoSkipNoticeTimer.current = setTimeout(() => {
+          setAutoSkipNotice(null);
+        }, AUTO_SKIP_NOTICE_MS);
+      } catch {
+        // Swallow — same reasoning as above.
+      }
+    }, autoSkipTimeoutMs);
+
+    return () => {
+      if (attentionTimer.current) {
+        clearTimeout(attentionTimer.current);
+        attentionTimer.current = null;
+      }
+    };
+  }, [
+    isCreator,
+    autoSkipAllowed,
+    isEnded,
+    currentContentId,
+    queueLen,
+    autoSkipTimeoutMs,
+    attentionResetTick,
+    roomId,
+  ]);
+
+  // Clean up the notice timer on unmount. The attention timer is
+  // already cleaned up by the effect's own teardown above.
+  useEffect(() => {
+    return () => {
+      if (autoSkipNoticeTimer.current) {
+        clearTimeout(autoSkipNoticeTimer.current);
+        autoSkipNoticeTimer.current = null;
+      }
+    };
+  }, []);
+
   // ------- Render -------
 
   const youTubeId = useMemo(
@@ -816,6 +887,15 @@ export default function SyncRoomScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+        {/* Phase R3 — auto-skip notification banner. Renders for
+            AUTO_SKIP_NOTICE_MS after the timer fires successfully. */}
+        {autoSkipNotice ? (
+          <View style={styles.autoSkipBanner} pointerEvents="none">
+            <Ionicons name="play-skip-forward" size={14} color="#FFFFFF" />
+            <Text style={styles.autoSkipBannerText}>{autoSkipNotice}</Text>
+          </View>
+        ) : null}
+
         {/* Player */}
         <View style={styles.playerBox}>
           {youTubeId ? (
@@ -1041,47 +1121,16 @@ export default function SyncRoomScreen() {
           </View>
         ) : null}
 
-        {/* Skip vote. Disabled (with explanation) when room_settings
-            says so, or when only the host may vote and we're not. */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Skip vote</Text>
-          <View style={styles.voteCard}>
-            <View style={styles.voteRow}>
-              <Text style={styles.voteCount}>
-                {skipCount} / {threshold}
-              </Text>
-              <TouchableOpacity
-                style={[
-                  styles.voteBtn,
-                  (hasSkipVote || voting || skipBlocked) && { opacity: 0.5 },
-                ]}
-                onPress={handleVoteSkip}
-                disabled={hasSkipVote || voting || skipBlocked}
-                accessibilityRole="button"
-                accessibilityLabel="Vote to skip"
-              >
-                <Ionicons name="play-skip-forward" size={14} color="#FFFFFF" />
-                <Text style={styles.voteBtnText}>
-                  {hasSkipVote ? "Voted" : voting ? "..." : "Skip"}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${Math.min(100, (skipCount / threshold) * 100)}%` },
-                ]}
-              />
-            </View>
-            {skipBlocked ? (
-              <Text style={styles.skipHint}>
-                {skipDisabledByType
-                  ? "Skip is off for this room type."
-                  : "Only the host can skip in this room."}
-              </Text>
-            ) : null}
-            {isCreator ? (
+        {/* Phase R3 — Host controls. Manual "Skip vote" UI removed;
+            advance is auto-driven by group attention (see the timer
+            effect above). The host's "Advance now" button is still
+            here for explicit overrides — tapping it triggers the
+            same advance_content RPC that the timer would. The room
+            UPDATE that follows resets the timer naturally. */}
+        {isCreator ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Host controls</Text>
+            <View style={styles.voteCard}>
               <View style={styles.creatorActions}>
                 <TouchableOpacity
                   style={styles.adminAdvance}
@@ -1103,9 +1152,15 @@ export default function SyncRoomScreen() {
                   <Text style={styles.endedTag}>Ended</Text>
                 )}
               </View>
-            ) : null}
+              {autoSkipAllowed && !isEnded ? (
+                <Text style={styles.skipHint}>
+                  Auto-advance after{" "}
+                  {Math.round(autoSkipTimeoutMs / 1000)}s of silence.
+                </Text>
+              ) : null}
+            </View>
           </View>
-        </View>
+        ) : null}
 
         {/* Queue */}
         <View style={styles.section}>
@@ -1543,6 +1598,9 @@ const styles = StyleSheet.create({
   },
   reactionEmoji: { fontSize: 22 },
 
+  // voteCard reused by the Phase R3 Host controls card. voteRow style
+  // is gone (manual skip-vote row removed). voteCount/voteBtn/voteBtnText
+  // and the progress bar styles removed with the skip-vote UI.
   voteCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
@@ -1550,29 +1608,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
   },
-  voteRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  voteCount: { fontSize: 14, fontWeight: "700", color: NAVY },
-  voteBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: NAVY,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  voteBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 12 },
-
-  progressBar: {
-    height: 6,
-    backgroundColor: BG,
-    borderRadius: 3,
-    overflow: "hidden",
-    marginTop: 10,
-  },
-  progressFill: { height: 6, backgroundColor: TEAL },
 
   skipHint: { marginTop: 8, fontSize: 11, color: MUTED, fontStyle: "italic" },
+
+  // Phase R3 — small banner near the top of the scroll view that fires
+  // for AUTO_SKIP_NOTICE_MS after an auto-advance. pointerEvents:none
+  // so it doesn't intercept taps while it's showing.
+  autoSkipBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: NAVY,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    margin: 12,
+  },
+  autoSkipBannerText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
 
   creatorActions: {
     marginTop: 10,
