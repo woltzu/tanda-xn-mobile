@@ -46,7 +46,7 @@ import {
 import { WebView } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import { Audio } from "expo-av";
+import { Audio, Video, ResizeMode } from "expo-av";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
@@ -138,6 +138,12 @@ const VOICE_NOTE_MAX_SECONDS = 15;
 const VOICE_NOTE_DISMISS_MS = 10_000;
 const VOICE_NOTE_SIGNED_URL_TTL = 3_600;
 
+// Phase R4c — video reply limits. 10s cap (tighter than voice because
+// the bandwidth + storage cost is higher per second). Same dismiss
+// window + signed URL TTL as voice for consistency.
+const VIDEO_REPLY_MAX_SECONDS = 10;
+const VIDEO_REPLY_DISMISS_MS = 10_000;
+
 // Reactions are now per-room (driven by room_settings.reaction_emojis,
 // resolved against the room_type preset). The constant below is the
 // safety-net default used only if both the room row and the preset
@@ -227,11 +233,14 @@ export default function SyncRoomScreen() {
   const [floatingSticker, setFloatingSticker] = useState<string | null>(null);
   const stickerAnim = useRef(new Animated.Value(0)).current;
 
-  // Phase R4b — voice notes. The bottom sheet now has two tabs; this
-  // state tracks which is active. The voice-recording state machine
-  // walks through idle -> recording -> preview -> uploading and back
-  // to idle on success/cancel.
-  const [remixTab, setRemixTab] = useState<"sticker" | "voice">("sticker");
+  // Phase R4b/R4c — remix tabs. Stickers (R4a), Voice (R4b), Video
+  // (R4c). The voice-recording state machine walks through idle ->
+  // recording -> preview -> uploading and back to idle on
+  // success/cancel. Video has a similar machine but no in-app
+  // recording state -- the OS camera picker handles that.
+  const [remixTab, setRemixTab] = useState<"sticker" | "voice" | "video">(
+    "sticker"
+  );
   type VoiceRecState = "idle" | "recording" | "preview" | "uploading";
   const [voiceRecState, setVoiceRecState] = useState<VoiceRecState>("idle");
   const recordingRef = useRef<Audio.Recording | null>(null);
@@ -256,6 +265,25 @@ export default function SyncRoomScreen() {
   const [incomingVoicePlaying, setIncomingVoicePlaying] = useState(false);
   const incomingVoiceSoundRef = useRef<Audio.Sound | null>(null);
   const incomingVoiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Phase R4c — video reply state. The OS camera picker (launchCameraAsync)
+  // handles the actual recording, so there's no in-app "recording" UI
+  // state -- only idle, preview (we have a URI), and uploading.
+  const [videoUri, setVideoUri] = useState<string | null>(null);
+  const [videoDurationSec, setVideoDurationSec] = useState(0);
+  const [videoSending, setVideoSending] = useState(false);
+
+  // Phase R4c — incoming video overlay. One at a time, mirrors voice.
+  // Full-screen modal mounts when the user taps the card to play.
+  type IncomingVideo = {
+    rowId: string;
+    signedUrl: string;
+    userId: string;
+    durationSec: number | null;
+  };
+  const [incomingVideo, setIncomingVideo] = useState<IncomingVideo | null>(null);
+  const [incomingVideoFullscreen, setIncomingVideoFullscreen] = useState(false);
+  const incomingVideoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [candleOpen, setCandleOpen] = useState(false);
   const [candleIntention, setCandleIntention] = useState("");
   const [candleDonation, setCandleDonation] = useState("0");
@@ -445,7 +473,24 @@ export default function SyncRoomScreen() {
             })();
             return;
           }
-          // video_reply branch lands in R4c.
+          if (mediaType === "video_reply" && mediaUrl && rowId && remixUserId) {
+            // R4c — same signed-URL pattern as voice notes. The video
+            // card is a separate overlay (top-right, stacked below the
+            // voice card visually) so the two can coexist briefly.
+            void (async () => {
+              const { data: signed, error } = await supabase.storage
+                .from("sync-remix")
+                .createSignedUrl(mediaUrl, VOICE_NOTE_SIGNED_URL_TTL);
+              if (error || !signed?.signedUrl) return;
+              showIncomingVideoReply({
+                rowId,
+                signedUrl: signed.signedUrl,
+                userId: remixUserId,
+                durationSec: typeof durationSec === "number" ? durationSec : null,
+              });
+            })();
+            return;
+          }
         },
       )
       .subscribe();
@@ -1000,13 +1045,167 @@ export default function SyncRoomScreen() {
     }
   };
 
-  // Unmount cleanup: tear down both flows.
+  // ========================================================================
+  // Phase R4c — Video replies
+  // ========================================================================
+  // The OS camera picker (launchCameraAsync) does the actual recording so
+  // there is no in-app "recording" state -- we only see idle, preview
+  // (have a URI), and uploading. On web the picker degrades to an
+  // <input type="file" accept="video/*" capture> which is functional
+  // but a different UX than native.
+
+  const resetVideoFlow = useCallback(() => {
+    setVideoUri(null);
+    setVideoDurationSec(0);
+    setVideoSending(false);
+  }, []);
+
+  const handleStartVideoRecording = async () => {
+    if (videoSending) return;
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          "Camera access needed",
+          "Allow camera access in settings to record a video reply."
+        );
+        return;
+      }
+      const pick = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        videoMaxDuration: VIDEO_REPLY_MAX_SECONDS,
+        quality: 0.8,
+        allowsEditing: false,
+      });
+      if (pick.canceled || !pick.assets?.length) return;
+      const asset = pick.assets[0];
+      if (!asset.uri) return;
+      // ImagePicker returns duration in milliseconds; some web
+      // implementations omit it entirely (asset.duration is null).
+      const ms = typeof asset.duration === "number" ? asset.duration : 0;
+      setVideoUri(asset.uri);
+      setVideoDurationSec(Math.max(1, Math.round(ms / 1000)));
+    } catch (err) {
+      Alert.alert(
+        "Couldn't open camera",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  };
+
+  const handleRetryVideo = () => {
+    resetVideoFlow();
+  };
+
+  const handleSendVideoReply = async () => {
+    if (!videoUri || !user?.id || videoSending) return;
+    setVideoSending(true);
+    try {
+      const response = await fetch(videoUri);
+      const blob = await response.blob();
+      // Native camera emits .mp4; web MediaRecorder emits .webm (or
+      // .mp4 in newer Chrome). Trust blob.type when available;
+      // otherwise infer from platform. Same cross-platform caveat as
+      // voice notes -- mixed-platform rooms may not play one another's
+      // recordings.
+      const inferredExt = Platform.OS === "web" ? "webm" : "mp4";
+      const contentType =
+        blob.type || (inferredExt === "webm" ? "video/webm" : "video/mp4");
+      // Resolve the actual extension from blob.type when present so the
+      // stored filename matches reality (newer Chrome emits mp4).
+      const ext = contentType.includes("mp4")
+        ? "mp4"
+        : contentType.includes("webm")
+          ? "webm"
+          : inferredExt;
+      const timestamp = Date.now();
+      const path = `${roomId}/${user.id}/${timestamp}.${ext}`;
+
+      const { error: upErr } = await supabase.storage
+        .from("sync-remix")
+        .upload(path, blob, { contentType, upsert: false });
+      if (upErr) throw new Error(upErr.message);
+
+      const { error: insErr } = await supabase
+        .from("sync_room_remixes")
+        .insert({
+          room_id: roomId,
+          user_id: user.id,
+          media_type: "video_reply",
+          media_url: path,
+          duration_seconds: videoDurationSec,
+        });
+      if (insErr) throw new Error(insErr.message);
+
+      resetVideoFlow();
+      setRemixSheetVisible(false);
+    } catch (err) {
+      setVideoSending(false);
+      Alert.alert(
+        "Couldn't send video",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  };
+
+  // ----- Incoming video reply (overlay + full-screen modal) -----
+
+  const teardownIncomingVideo = useCallback(() => {
+    if (incomingVideoTimerRef.current) {
+      clearTimeout(incomingVideoTimerRef.current);
+      incomingVideoTimerRef.current = null;
+    }
+    setIncomingVideoFullscreen(false);
+    setIncomingVideo(null);
+  }, []);
+
+  const showIncomingVideoReply = useCallback(
+    (next: IncomingVideo) => {
+      // Swap any previous video out cleanly. We don't unload a Video
+      // component the way we do Audio.Sound -- the component unmounts
+      // when state clears.
+      if (incomingVideoTimerRef.current) {
+        clearTimeout(incomingVideoTimerRef.current);
+        incomingVideoTimerRef.current = null;
+      }
+      setIncomingVideoFullscreen(false);
+      setIncomingVideo(next);
+      incomingVideoTimerRef.current = setTimeout(() => {
+        teardownIncomingVideo();
+      }, VIDEO_REPLY_DISMISS_MS);
+    },
+    [teardownIncomingVideo]
+  );
+
+  const handleOpenIncomingVideo = () => {
+    if (!incomingVideo) return;
+    // Don't auto-dismiss while the modal is open; cleared on close.
+    if (incomingVideoTimerRef.current) {
+      clearTimeout(incomingVideoTimerRef.current);
+      incomingVideoTimerRef.current = null;
+    }
+    setIncomingVideoFullscreen(true);
+  };
+
+  const handleCloseIncomingVideoModal = () => {
+    setIncomingVideoFullscreen(false);
+    // Once the user has watched, dismiss the card after a brief beat.
+    if (incomingVideoTimerRef.current) {
+      clearTimeout(incomingVideoTimerRef.current);
+    }
+    incomingVideoTimerRef.current = setTimeout(() => {
+      teardownIncomingVideo();
+    }, 1_000);
+  };
+
+  // Unmount cleanup: tear down all three flows.
   useEffect(() => {
     return () => {
       void teardownRecordingFlow();
       void teardownIncomingVoice();
+      teardownIncomingVideo();
     };
-  }, [teardownRecordingFlow, teardownIncomingVoice]);
+  }, [teardownRecordingFlow, teardownIncomingVoice, teardownIncomingVideo]);
 
   const handleSubmitCandle = async () => {
     if (submittingCandle) return;
@@ -1935,8 +2134,15 @@ export default function SyncRoomScreen() {
         transparent
         animationType="slide"
         onRequestClose={() => {
-          if (pickingSticker || voiceRecState === "uploading") return;
+          if (
+            pickingSticker ||
+            voiceRecState === "uploading" ||
+            videoSending
+          ) {
+            return;
+          }
           void teardownRecordingFlow();
+          resetVideoFlow();
           setRemixSheetVisible(false);
         }}
       >
@@ -1972,10 +2178,10 @@ export default function SyncRoomScreen() {
                 style={[
                   styles.remixTabBtn,
                   remixTab === "voice" && styles.remixTabBtnActive,
-                  pickingSticker && { opacity: 0.5 },
+                  (pickingSticker || videoSending) && { opacity: 0.5 },
                 ]}
                 onPress={() => setRemixTab("voice")}
-                disabled={pickingSticker}
+                disabled={pickingSticker || videoSending}
                 accessibilityRole="tab"
                 accessibilityLabel="Voice note"
               >
@@ -1986,6 +2192,28 @@ export default function SyncRoomScreen() {
                   ]}
                 >
                   🎙️ Voice
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.remixTabBtn,
+                  remixTab === "video" && styles.remixTabBtnActive,
+                  (pickingSticker || voiceRecState !== "idle") && {
+                    opacity: 0.5,
+                  },
+                ]}
+                onPress={() => setRemixTab("video")}
+                disabled={pickingSticker || voiceRecState !== "idle"}
+                accessibilityRole="tab"
+                accessibilityLabel="Video reply"
+              >
+                <Text
+                  style={[
+                    styles.remixTabBtnText,
+                    remixTab === "video" && styles.remixTabBtnTextActive,
+                  ]}
+                >
+                  📹 Video
                 </Text>
               </TouchableOpacity>
             </View>
@@ -2011,7 +2239,7 @@ export default function SyncRoomScreen() {
                   ))}
                 </View>
               </>
-            ) : (
+            ) : remixTab === "voice" ? (
               <>
                 <Text style={styles.remixTitle}>Voice note</Text>
                 <Text style={styles.voiceHint}>
@@ -2119,16 +2347,96 @@ export default function SyncRoomScreen() {
                   </View>
                 ) : null}
               </>
+            ) : (
+              <>
+                <Text style={styles.remixTitle}>Video reply</Text>
+                <Text style={styles.voiceHint}>
+                  Up to {VIDEO_REPLY_MAX_SECONDS}s. Only room members can
+                  watch it.
+                </Text>
+
+                {!videoUri && !videoSending ? (
+                  <TouchableOpacity
+                    style={styles.videoRecordBtn}
+                    onPress={handleStartVideoRecording}
+                    accessibilityRole="button"
+                    accessibilityLabel="Record a video reply"
+                  >
+                    <Ionicons name="videocam" size={26} color="#FFFFFF" />
+                    <Text style={styles.videoRecordBtnText}>
+                      Record video
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                {videoUri && !videoSending ? (
+                  <View style={styles.videoPreviewBox}>
+                    <Video
+                      source={{ uri: videoUri }}
+                      style={styles.videoPreviewPlayer}
+                      useNativeControls
+                      resizeMode={ResizeMode.CONTAIN}
+                      shouldPlay={false}
+                      isLooping={false}
+                    />
+                    <Text style={styles.voiceTimer}>
+                      Captured {videoDurationSec}s
+                    </Text>
+                    <View style={styles.voicePreviewActions}>
+                      <TouchableOpacity
+                        style={styles.voicePreviewBtn}
+                        onPress={handleRetryVideo}
+                        accessibilityRole="button"
+                        accessibilityLabel="Retry video"
+                      >
+                        <Ionicons name="refresh" size={18} color={NAVY} />
+                        <Text style={styles.voicePreviewBtnText}>Retry</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.voiceSendBtn}
+                      onPress={handleSendVideoReply}
+                      accessibilityRole="button"
+                      accessibilityLabel="Send video reply"
+                    >
+                      <Ionicons
+                        name="paper-plane"
+                        size={18}
+                        color="#FFFFFF"
+                      />
+                      <Text style={styles.voiceSendBtnText}>Send</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
+                {videoSending ? (
+                  <View style={styles.voiceUploadingBox}>
+                    <ActivityIndicator color={TEAL} />
+                    <Text style={styles.voiceTimer}>Sending…</Text>
+                  </View>
+                ) : null}
+              </>
             )}
 
             <TouchableOpacity
               style={styles.remixCancel}
               onPress={() => {
-                if (pickingSticker || voiceRecState === "uploading") return;
+                if (
+                  pickingSticker ||
+                  voiceRecState === "uploading" ||
+                  videoSending
+                ) {
+                  return;
+                }
                 void teardownRecordingFlow();
+                resetVideoFlow();
                 setRemixSheetVisible(false);
               }}
-              disabled={pickingSticker || voiceRecState === "uploading"}
+              disabled={
+                pickingSticker ||
+                voiceRecState === "uploading" ||
+                videoSending
+              }
             >
               <Text style={styles.remixCancelText}>Cancel</Text>
             </TouchableOpacity>
@@ -2176,6 +2484,72 @@ export default function SyncRoomScreen() {
           </TouchableOpacity>
         </View>
       ) : null}
+
+      {/* Phase R4c — Incoming video reply overlay. Same top-right
+          position as the voice card; stacked below if both are present.
+          Tap to open the full-screen player modal. */}
+      {incomingVideo ? (
+        <View style={[styles.voiceOverlayCard, styles.videoOverlayCard]}>
+          <TouchableOpacity
+            style={styles.voiceOverlayPlay}
+            onPress={handleOpenIncomingVideo}
+            accessibilityRole="button"
+            accessibilityLabel="Open incoming video reply"
+          >
+            <Ionicons name="videocam" size={18} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.voiceOverlayTitle} numberOfLines={1}>
+              Video reply
+            </Text>
+            <Text style={styles.voiceOverlayMeta} numberOfLines={1}>
+              {incomingVideo.durationSec
+                ? `${incomingVideo.durationSec}s · tap to watch`
+                : "tap to watch"}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.voiceOverlayDismiss}
+            onPress={teardownIncomingVideo}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss video reply"
+          >
+            <Ionicons name="close" size={16} color={MUTED} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {/* Phase R4c — Full-screen video player modal. Opens when the
+          recipient taps the overlay card. Closes on the X or on
+          onRequestClose. Re-arms the overlay's auto-dismiss after
+          close. */}
+      <Modal
+        visible={incomingVideoFullscreen && !!incomingVideo}
+        transparent={false}
+        animationType="fade"
+        onRequestClose={handleCloseIncomingVideoModal}
+      >
+        <View style={styles.videoModalBg}>
+          {incomingVideo ? (
+            <Video
+              source={{ uri: incomingVideo.signedUrl }}
+              style={styles.videoModalPlayer}
+              useNativeControls
+              resizeMode={ResizeMode.CONTAIN}
+              shouldPlay
+              isLooping={false}
+            />
+          ) : null}
+          <TouchableOpacity
+            style={styles.videoModalClose}
+            onPress={handleCloseIncomingVideoModal}
+            accessibilityRole="button"
+            accessibilityLabel="Close video"
+          >
+            <Ionicons name="close" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+      </Modal>
 
       {/* Phase R4a — Floating sticker overlay. Sits at the very end of
           the JSX so it paints on top of everything (except open modals,
@@ -2604,6 +2978,55 @@ const styles = StyleSheet.create({
   voiceOverlayDismiss: {
     width: 24,
     height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Phase R4c — Video reply UI inside the sheet + overlay + modal
+  videoRecordBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#DC2626",
+    paddingVertical: 16,
+    borderRadius: 12,
+  },
+  videoRecordBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
+
+  videoPreviewBox: { gap: 10 },
+  videoPreviewPlayer: {
+    width: "100%",
+    aspectRatio: 16 / 9,
+    backgroundColor: "#000",
+    borderRadius: 10,
+  },
+
+  // Video overlay card -- sits below the voice card if both are
+  // present. Offset top: 156 vs voice top: 100 (gap of ~56px = card
+  // height + a touch of padding so they don't overlap).
+  videoOverlayCard: {
+    top: 156,
+  },
+
+  videoModalBg: {
+    flex: 1,
+    backgroundColor: "#000",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  videoModalPlayer: {
+    width: "100%",
+    height: "100%",
+  },
+  videoModalClose: {
+    position: "absolute",
+    top: 40,
+    right: 16,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.55)",
     alignItems: "center",
     justifyContent: "center",
   },
