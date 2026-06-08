@@ -40,10 +40,13 @@ import {
   Easing,
   Share,
   Modal,
+  ActivityIndicator,
+  Platform,
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
+import { Audio } from "expo-av";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { supabase } from "../lib/supabase";
@@ -125,6 +128,15 @@ const REMIX_STICKERS = ["💥", "🎉", "😂", "❤️‍🔥", "🙌", "🤣",
 // longer than the floating-reaction echo because the sticker is larger
 // and meant to draw attention.
 const STICKER_OVERLAY_MS = 2_500;
+
+// Phase R4b — voice note limits. The 15s cap matches the original R4
+// spec; the auto-dismiss window (10s) is how long an incoming voice
+// note overlay stays before silently dismissing when the recipient
+// doesn't tap to play. Signed URL TTL is 1 hour -- longer than any
+// realistic listening window so we never re-issue mid-playback.
+const VOICE_NOTE_MAX_SECONDS = 15;
+const VOICE_NOTE_DISMISS_MS = 10_000;
+const VOICE_NOTE_SIGNED_URL_TTL = 3_600;
 
 // Reactions are now per-room (driven by room_settings.reaction_emojis,
 // resolved against the room_type preset). The constant below is the
@@ -214,6 +226,36 @@ export default function SyncRoomScreen() {
   const [pickingSticker, setPickingSticker] = useState(false);
   const [floatingSticker, setFloatingSticker] = useState<string | null>(null);
   const stickerAnim = useRef(new Animated.Value(0)).current;
+
+  // Phase R4b — voice notes. The bottom sheet now has two tabs; this
+  // state tracks which is active. The voice-recording state machine
+  // walks through idle -> recording -> preview -> uploading and back
+  // to idle on success/cancel.
+  const [remixTab, setRemixTab] = useState<"sticker" | "voice">("sticker");
+  type VoiceRecState = "idle" | "recording" | "preview" | "uploading";
+  const [voiceRecState, setVoiceRecState] = useState<VoiceRecState>("idle");
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recordingMaxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recordingTickTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [recordedUri, setRecordedUri] = useState<string | null>(null);
+  const [recordedDurationSec, setRecordedDurationSec] = useState(0);
+  const [recordingElapsedSec, setRecordingElapsedSec] = useState(0);
+  const previewSoundRef = useRef<Audio.Sound | null>(null);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
+
+  // Phase R4b — incoming voice note overlay. One at a time; a newer
+  // arrival replaces the previous (unload the old sound). Auto-dismiss
+  // after VOICE_NOTE_DISMISS_MS of inactivity.
+  type IncomingVoice = {
+    rowId: string;
+    signedUrl: string;
+    userId: string;
+    durationSec: number | null;
+  };
+  const [incomingVoice, setIncomingVoice] = useState<IncomingVoice | null>(null);
+  const [incomingVoicePlaying, setIncomingVoicePlaying] = useState(false);
+  const incomingVoiceSoundRef = useRef<Audio.Sound | null>(null);
+  const incomingVoiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [candleOpen, setCandleOpen] = useState(false);
   const [candleIntention, setCandleIntention] = useState("");
   const [candleDonation, setCandleDonation] = useState("0");
@@ -365,9 +407,10 @@ export default function SyncRoomScreen() {
           }
         },
       )
-      // Phase R4a — Swarm remix. Stickers from other users land here and
-      // trigger the floating overlay. Self echo is skipped because
-      // handlePickSticker fires an optimistic overlay locally.
+      // Phase R4a/R4b — Swarm remix. Stickers from other users trigger
+      // the floating overlay; voice notes trigger the playback card.
+      // Self echo is skipped on both -- the local optimistic paths
+      // cover own-author feedback.
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "sync_room_remixes", filter: `room_id=eq.${roomId}` },
@@ -375,10 +418,34 @@ export default function SyncRoomScreen() {
           const mediaType = payload?.new?.media_type as string | undefined;
           const mediaUrl = payload?.new?.media_url as string | undefined;
           const remixUserId = payload?.new?.user_id as string | undefined;
-          if (mediaType === "sticker" && mediaUrl && remixUserId !== user?.id) {
+          const rowId = payload?.new?.id as string | undefined;
+          const durationSec = payload?.new?.duration_seconds as number | null | undefined;
+          if (remixUserId === user?.id) return; // self echo
+
+          if (mediaType === "sticker" && mediaUrl) {
             showStickerOverlay(mediaUrl);
+            return;
           }
-          // voice_note / video_reply branches land in R4b/R4c.
+          if (mediaType === "voice_note" && mediaUrl && rowId && remixUserId) {
+            // R4b — resolve the storage path to a 1h signed URL and
+            // surface the playback card. Async-IO inside a realtime
+            // callback is fine because the callback isn't expected to
+            // return a promise; we just don't await it here.
+            void (async () => {
+              const { data: signed, error } = await supabase.storage
+                .from("sync-remix")
+                .createSignedUrl(mediaUrl, VOICE_NOTE_SIGNED_URL_TTL);
+              if (error || !signed?.signedUrl) return;
+              showIncomingVoiceNote({
+                rowId,
+                signedUrl: signed.signedUrl,
+                userId: remixUserId,
+                durationSec: typeof durationSec === "number" ? durationSec : null,
+              });
+            })();
+            return;
+          }
+          // video_reply branch lands in R4c.
         },
       )
       .subscribe();
@@ -630,6 +697,316 @@ export default function SyncRoomScreen() {
       setPickingSticker(false);
     }
   };
+
+  // ========================================================================
+  // Phase R4b — Voice notes
+  // ========================================================================
+  // Recording state machine: idle -> recording -> preview -> uploading -> idle.
+  // Tear-down happens on sheet close, tab switch away from voice, and
+  // unmount. We don't unload the preview Sound aggressively (so the user
+  // can hit play multiple times); it's unloaded on retry/cancel/close.
+
+  // Stop + unload anything in-flight from the recording flow. Safe to
+  // call repeatedly. Used by sheet-close, tab-switch-away, retry,
+  // cancel, and unmount paths.
+  const teardownRecordingFlow = useCallback(async () => {
+    if (recordingMaxTimerRef.current) {
+      clearTimeout(recordingMaxTimerRef.current);
+      recordingMaxTimerRef.current = null;
+    }
+    if (recordingTickTimerRef.current) {
+      clearInterval(recordingTickTimerRef.current);
+      recordingTickTimerRef.current = null;
+    }
+    if (recordingRef.current) {
+      try {
+        await recordingRef.current.stopAndUnloadAsync();
+      } catch {
+        // already stopped, or never started
+      }
+      recordingRef.current = null;
+    }
+    if (previewSoundRef.current) {
+      try {
+        await previewSoundRef.current.unloadAsync();
+      } catch {
+        // already unloaded
+      }
+      previewSoundRef.current = null;
+    }
+    setVoiceRecState("idle");
+    setRecordedUri(null);
+    setRecordedDurationSec(0);
+    setRecordingElapsedSec(0);
+    setPreviewPlaying(false);
+  }, []);
+
+  const handleStartRecording = async () => {
+    if (voiceRecState !== "idle") return;
+    try {
+      const perm = await Audio.requestPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert(
+          "Microphone access needed",
+          "Allow microphone access in settings to record a voice note."
+        );
+        return;
+      }
+      // Required on iOS for the recording session to use the right
+      // audio category; harmless on web/Android. allowsRecording is
+      // the key flag.
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      recordingRef.current = recording;
+      setVoiceRecState("recording");
+      setRecordingElapsedSec(0);
+
+      // Live elapsed counter for the progress UI.
+      recordingTickTimerRef.current = setInterval(() => {
+        setRecordingElapsedSec((s) => Math.min(VOICE_NOTE_MAX_SECONDS, s + 1));
+      }, 1000);
+
+      // Hard cap at VOICE_NOTE_MAX_SECONDS — auto-stop if the user
+      // doesn't release. Fires the same path as a manual stop.
+      recordingMaxTimerRef.current = setTimeout(() => {
+        void handleStopRecording();
+      }, VOICE_NOTE_MAX_SECONDS * 1000);
+    } catch (err) {
+      Alert.alert(
+        "Couldn't start recording",
+        err instanceof Error ? err.message : String(err)
+      );
+      await teardownRecordingFlow();
+    }
+  };
+
+  const handleStopRecording = async () => {
+    if (voiceRecState !== "recording") return;
+    if (recordingMaxTimerRef.current) {
+      clearTimeout(recordingMaxTimerRef.current);
+      recordingMaxTimerRef.current = null;
+    }
+    if (recordingTickTimerRef.current) {
+      clearInterval(recordingTickTimerRef.current);
+      recordingTickTimerRef.current = null;
+    }
+    const rec = recordingRef.current;
+    if (!rec) {
+      await teardownRecordingFlow();
+      return;
+    }
+    try {
+      await rec.stopAndUnloadAsync();
+      const uri = rec.getURI();
+      // Read the duration that the platform actually recorded -- can
+      // diverge slightly from the elapsed counter if the user hit stop
+      // mid-tick. Defaults to recordingElapsedSec when status doesn't
+      // expose it (older Android SDK paths).
+      let durationSec = recordingElapsedSec;
+      try {
+        const status = await rec.getStatusAsync();
+        if (
+          status &&
+          (status as any).durationMillis &&
+          (status as any).durationMillis > 0
+        ) {
+          durationSec = Math.round((status as any).durationMillis / 1000);
+        }
+      } catch {
+        // ignore — fallback to elapsed
+      }
+      recordingRef.current = null;
+      if (!uri) {
+        await teardownRecordingFlow();
+        Alert.alert("Recording failed", "No file was captured.");
+        return;
+      }
+      setRecordedUri(uri);
+      setRecordedDurationSec(Math.max(1, durationSec));
+      setVoiceRecState("preview");
+    } catch (err) {
+      await teardownRecordingFlow();
+      Alert.alert(
+        "Couldn't stop recording",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  };
+
+  const handlePlayPreview = async () => {
+    if (!recordedUri || previewPlaying) return;
+    try {
+      if (previewSoundRef.current) {
+        await previewSoundRef.current.unloadAsync();
+        previewSoundRef.current = null;
+      }
+      const { sound } = await Audio.Sound.createAsync({ uri: recordedUri });
+      previewSoundRef.current = sound;
+      setPreviewPlaying(true);
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (!status.isLoaded) return;
+        if (status.didJustFinish) {
+          setPreviewPlaying(false);
+          // Hold the sound so the user can replay without re-loading.
+        }
+      });
+      await sound.playFromPositionAsync(0);
+    } catch (err) {
+      setPreviewPlaying(false);
+      Alert.alert(
+        "Couldn't play preview",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  };
+
+  const handleRetryRecording = async () => {
+    await teardownRecordingFlow();
+  };
+
+  const handleSendVoiceNote = async () => {
+    if (voiceRecState !== "preview" || !recordedUri || !user?.id) return;
+    setVoiceRecState("uploading");
+    try {
+      // Fetch the recorded asset as a Blob. Works on native (file://)
+      // and web (blob:) URIs alike.
+      const response = await fetch(recordedUri);
+      const blob = await response.blob();
+      // Platform-appropriate extension and content-type. expo-av's
+      // HIGH_QUALITY preset emits m4a on native, webm/opus on web.
+      // Cross-platform playback is best-effort; an iOS recipient may
+      // not play a web-origin webm and vice-versa. Documented as a
+      // known limitation.
+      const ext = Platform.OS === "web" ? "webm" : "m4a";
+      const contentType =
+        blob.type || (ext === "webm" ? "audio/webm" : "audio/m4a");
+      const timestamp = Date.now();
+      const path = `${roomId}/${user.id}/${timestamp}.${ext}`;
+
+      const { error: upErr } = await supabase.storage
+        .from("sync-remix")
+        .upload(path, blob, { contentType, upsert: false });
+      if (upErr) throw new Error(upErr.message);
+
+      const { error: insErr } = await supabase
+        .from("sync_room_remixes")
+        .insert({
+          room_id: roomId,
+          user_id: user.id,
+          media_type: "voice_note",
+          media_url: path,
+          duration_seconds: recordedDurationSec,
+        });
+      if (insErr) throw new Error(insErr.message);
+
+      // Success: tear down + close sheet. No self-echo overlay -- the
+      // author already heard their preview.
+      await teardownRecordingFlow();
+      setRemixSheetVisible(false);
+    } catch (err) {
+      setVoiceRecState("preview");
+      Alert.alert(
+        "Couldn't send voice note",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  };
+
+  // ----- Incoming voice note (overlay on other clients) -----
+
+  // Unload any playing incoming sound + clear the dismiss timer. Used
+  // when a newer voice note arrives, when the user dismisses, or on
+  // unmount.
+  const teardownIncomingVoice = useCallback(async () => {
+    if (incomingVoiceTimerRef.current) {
+      clearTimeout(incomingVoiceTimerRef.current);
+      incomingVoiceTimerRef.current = null;
+    }
+    if (incomingVoiceSoundRef.current) {
+      try {
+        await incomingVoiceSoundRef.current.unloadAsync();
+      } catch {
+        // ignore
+      }
+      incomingVoiceSoundRef.current = null;
+    }
+    setIncomingVoicePlaying(false);
+    setIncomingVoice(null);
+  }, []);
+
+  const showIncomingVoiceNote = useCallback(
+    (next: IncomingVoice) => {
+      // If a previous note is still on screen, swap it out cleanly.
+      if (incomingVoiceTimerRef.current) {
+        clearTimeout(incomingVoiceTimerRef.current);
+        incomingVoiceTimerRef.current = null;
+      }
+      if (incomingVoiceSoundRef.current) {
+        void incomingVoiceSoundRef.current.unloadAsync().catch(() => {});
+        incomingVoiceSoundRef.current = null;
+      }
+      setIncomingVoicePlaying(false);
+      setIncomingVoice(next);
+      // Auto-dismiss after VOICE_NOTE_DISMISS_MS if the user doesn't
+      // engage. Restarting the timer on play happens inside the
+      // play handler.
+      incomingVoiceTimerRef.current = setTimeout(() => {
+        void teardownIncomingVoice();
+      }, VOICE_NOTE_DISMISS_MS);
+    },
+    [teardownIncomingVoice]
+  );
+
+  const handlePlayIncomingVoice = async () => {
+    if (!incomingVoice || incomingVoicePlaying) return;
+    // Don't auto-dismiss while playing; reschedule on finish.
+    if (incomingVoiceTimerRef.current) {
+      clearTimeout(incomingVoiceTimerRef.current);
+      incomingVoiceTimerRef.current = null;
+    }
+    try {
+      const { sound } = await Audio.Sound.createAsync({
+        uri: incomingVoice.signedUrl,
+      });
+      incomingVoiceSoundRef.current = sound;
+      setIncomingVoicePlaying(true);
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (!status.isLoaded) return;
+        if (status.didJustFinish) {
+          setIncomingVoicePlaying(false);
+          // Tear down 1s after the audio ends so the overlay reads
+          // as a completed playback rather than vanishing mid-fade.
+          incomingVoiceTimerRef.current = setTimeout(() => {
+            void teardownIncomingVoice();
+          }, 1_000);
+        }
+      });
+      await sound.playFromPositionAsync(0);
+    } catch (err) {
+      setIncomingVoicePlaying(false);
+      // Schedule a normal dismiss so the failed overlay doesn't stick.
+      incomingVoiceTimerRef.current = setTimeout(() => {
+        void teardownIncomingVoice();
+      }, VOICE_NOTE_DISMISS_MS);
+      Alert.alert(
+        "Couldn't play voice note",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  };
+
+  // Unmount cleanup: tear down both flows.
+  useEffect(() => {
+    return () => {
+      void teardownRecordingFlow();
+      void teardownIncomingVoice();
+    };
+  }, [teardownRecordingFlow, teardownIncomingVoice]);
 
   const handleSubmitCandle = async () => {
     if (submittingCandle) return;
@@ -1550,44 +1927,255 @@ export default function SyncRoomScreen() {
         </View>
       </Modal>
 
-      {/* Phase R4a — Swarm remix sticker picker. Slide-up sheet with a
-          grid of preset stickers. Tap fires handlePickSticker which
-          starts the optimistic overlay and inserts a row into
-          sync_room_remixes. */}
+      {/* Phase R4a/R4b — Swarm remix sheet. Two tabs: Stickers (R4a)
+          and Voice (R4b). Switching away from Voice mid-recording
+          tears the recording down so we don't leave the mic open. */}
       <Modal
         visible={remixSheetVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => !pickingSticker && setRemixSheetVisible(false)}
+        onRequestClose={() => {
+          if (pickingSticker || voiceRecState === "uploading") return;
+          void teardownRecordingFlow();
+          setRemixSheetVisible(false);
+        }}
       >
         <View style={styles.remixBackdrop}>
           <View style={styles.remixSheet}>
             <View style={styles.remixHandle} />
-            <Text style={styles.remixTitle}>Pick a sticker</Text>
-            <View style={styles.stickerGrid}>
-              {REMIX_STICKERS.map((s) => (
-                <TouchableOpacity
-                  key={s}
-                  style={[styles.stickerCell, pickingSticker && { opacity: 0.5 }]}
-                  onPress={() => handlePickSticker(s)}
-                  disabled={pickingSticker}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Send ${s} sticker`}
+            <View style={styles.remixTabRow}>
+              {/* Both tabs are disabled while a voice recording is
+                  mid-flight so we don't leave the mic open or drop the
+                  user's preview by accident. The user has to finish,
+                  retry, or cancel first. */}
+              <TouchableOpacity
+                style={[
+                  styles.remixTabBtn,
+                  remixTab === "sticker" && styles.remixTabBtnActive,
+                  voiceRecState !== "idle" && { opacity: 0.5 },
+                ]}
+                onPress={() => setRemixTab("sticker")}
+                disabled={voiceRecState !== "idle"}
+                accessibilityRole="tab"
+                accessibilityLabel="Stickers"
+              >
+                <Text
+                  style={[
+                    styles.remixTabBtnText,
+                    remixTab === "sticker" && styles.remixTabBtnTextActive,
+                  ]}
                 >
-                  <Text style={styles.stickerCellEmoji}>{s}</Text>
-                </TouchableOpacity>
-              ))}
+                  🎨 Stickers
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.remixTabBtn,
+                  remixTab === "voice" && styles.remixTabBtnActive,
+                  pickingSticker && { opacity: 0.5 },
+                ]}
+                onPress={() => setRemixTab("voice")}
+                disabled={pickingSticker}
+                accessibilityRole="tab"
+                accessibilityLabel="Voice note"
+              >
+                <Text
+                  style={[
+                    styles.remixTabBtnText,
+                    remixTab === "voice" && styles.remixTabBtnTextActive,
+                  ]}
+                >
+                  🎙️ Voice
+                </Text>
+              </TouchableOpacity>
             </View>
+
+            {remixTab === "sticker" ? (
+              <>
+                <Text style={styles.remixTitle}>Pick a sticker</Text>
+                <View style={styles.stickerGrid}>
+                  {REMIX_STICKERS.map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      style={[
+                        styles.stickerCell,
+                        pickingSticker && { opacity: 0.5 },
+                      ]}
+                      onPress={() => handlePickSticker(s)}
+                      disabled={pickingSticker}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Send ${s} sticker`}
+                    >
+                      <Text style={styles.stickerCellEmoji}>{s}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.remixTitle}>Voice note</Text>
+                <Text style={styles.voiceHint}>
+                  Up to {VOICE_NOTE_MAX_SECONDS}s. Only room members can
+                  play it.
+                </Text>
+
+                {voiceRecState === "idle" ? (
+                  <TouchableOpacity
+                    style={styles.voiceRecordBtn}
+                    onPress={handleStartRecording}
+                    accessibilityRole="button"
+                    accessibilityLabel="Start recording"
+                  >
+                    <Ionicons name="mic" size={26} color="#FFFFFF" />
+                    <Text style={styles.voiceRecordBtnText}>
+                      Tap to record
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                {voiceRecState === "recording" ? (
+                  <View style={styles.voiceRecordingBox}>
+                    <View style={styles.voiceProgressBar}>
+                      <View
+                        style={[
+                          styles.voiceProgressFill,
+                          {
+                            width: `${Math.min(
+                              100,
+                              (recordingElapsedSec / VOICE_NOTE_MAX_SECONDS) *
+                                100,
+                            )}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.voiceTimer}>
+                      {recordingElapsedSec}s / {VOICE_NOTE_MAX_SECONDS}s
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.voiceStopBtn}
+                      onPress={handleStopRecording}
+                      accessibilityRole="button"
+                      accessibilityLabel="Stop recording"
+                    >
+                      <Ionicons name="stop" size={20} color="#FFFFFF" />
+                      <Text style={styles.voiceStopBtnText}>Stop</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
+                {voiceRecState === "preview" ? (
+                  <View style={styles.voicePreviewBox}>
+                    <Text style={styles.voiceTimer}>
+                      Captured {recordedDurationSec}s
+                    </Text>
+                    <View style={styles.voicePreviewActions}>
+                      <TouchableOpacity
+                        style={styles.voicePreviewBtn}
+                        onPress={handlePlayPreview}
+                        disabled={previewPlaying}
+                        accessibilityRole="button"
+                        accessibilityLabel="Play preview"
+                      >
+                        <Ionicons
+                          name={previewPlaying ? "pause" : "play"}
+                          size={18}
+                          color={NAVY}
+                        />
+                        <Text style={styles.voicePreviewBtnText}>
+                          {previewPlaying ? "Playing" : "Preview"}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.voicePreviewBtn}
+                        onPress={handleRetryRecording}
+                        accessibilityRole="button"
+                        accessibilityLabel="Retry recording"
+                      >
+                        <Ionicons name="refresh" size={18} color={NAVY} />
+                        <Text style={styles.voicePreviewBtnText}>Retry</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.voiceSendBtn}
+                      onPress={handleSendVoiceNote}
+                      accessibilityRole="button"
+                      accessibilityLabel="Send voice note"
+                    >
+                      <Ionicons
+                        name="paper-plane"
+                        size={18}
+                        color="#FFFFFF"
+                      />
+                      <Text style={styles.voiceSendBtnText}>Send</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
+
+                {voiceRecState === "uploading" ? (
+                  <View style={styles.voiceUploadingBox}>
+                    <ActivityIndicator color={TEAL} />
+                    <Text style={styles.voiceTimer}>Sending…</Text>
+                  </View>
+                ) : null}
+              </>
+            )}
+
             <TouchableOpacity
               style={styles.remixCancel}
-              onPress={() => !pickingSticker && setRemixSheetVisible(false)}
-              disabled={pickingSticker}
+              onPress={() => {
+                if (pickingSticker || voiceRecState === "uploading") return;
+                void teardownRecordingFlow();
+                setRemixSheetVisible(false);
+              }}
+              disabled={pickingSticker || voiceRecState === "uploading"}
             >
               <Text style={styles.remixCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
+
+      {/* Phase R4b — Incoming voice-note overlay. Top-right card so it
+          doesn't collide with the floating sticker (centered) or the
+          host controls (bottom). Tap to play; auto-dismisses after
+          VOICE_NOTE_DISMISS_MS unless the user taps. Replaced on
+          newer arrival. */}
+      {incomingVoice ? (
+        <View style={styles.voiceOverlayCard}>
+          <TouchableOpacity
+            style={styles.voiceOverlayPlay}
+            onPress={handlePlayIncomingVoice}
+            disabled={incomingVoicePlaying}
+            accessibilityRole="button"
+            accessibilityLabel="Play incoming voice note"
+          >
+            <Ionicons
+              name={incomingVoicePlaying ? "volume-high" : "play"}
+              size={18}
+              color="#FFFFFF"
+            />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.voiceOverlayTitle} numberOfLines={1}>
+              Voice note
+            </Text>
+            <Text style={styles.voiceOverlayMeta} numberOfLines={1}>
+              {incomingVoice.durationSec
+                ? `${incomingVoice.durationSec}s`
+                : "tap to play"}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.voiceOverlayDismiss}
+            onPress={() => void teardownIncomingVoice()}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss voice note"
+          >
+            <Ionicons name="close" size={16} color={MUTED} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {/* Phase R4a — Floating sticker overlay. Sits at the very end of
           the JSX so it paints on top of everything (except open modals,
@@ -1878,6 +2466,146 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(0,0,0,0.35)",
     textShadowOffset: { width: 0, height: 3 },
     textShadowRadius: 8,
+  },
+
+  // Phase R4b — voice recorder UI inside the bottom sheet
+  remixTabRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 4,
+  },
+  remixTabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: BG,
+    alignItems: "center",
+  },
+  remixTabBtnActive: { backgroundColor: NAVY },
+  remixTabBtnText: { color: NAVY, fontSize: 13, fontWeight: "700" },
+  remixTabBtnTextActive: { color: "#FFFFFF" },
+
+  voiceHint: {
+    fontSize: 11,
+    color: MUTED,
+    textAlign: "center",
+    marginTop: -4,
+  },
+
+  voiceRecordBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: TEAL,
+    paddingVertical: 16,
+    borderRadius: 12,
+  },
+  voiceRecordBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
+
+  voiceRecordingBox: {
+    alignItems: "stretch",
+    gap: 10,
+    paddingVertical: 6,
+  },
+  voiceProgressBar: {
+    height: 8,
+    backgroundColor: BG,
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  voiceProgressFill: { height: 8, backgroundColor: "#DC2626" },
+  voiceTimer: {
+    fontSize: 12,
+    color: NAVY,
+    textAlign: "center",
+    fontWeight: "700",
+  },
+  voiceStopBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#DC2626",
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  voiceStopBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
+
+  voicePreviewBox: { gap: 10 },
+  voicePreviewActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  voicePreviewBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: BORDER,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  voicePreviewBtnText: { color: NAVY, fontWeight: "700", fontSize: 13 },
+  voiceSendBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: NAVY,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  voiceSendBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 14 },
+
+  voiceUploadingBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 18,
+  },
+
+  // Incoming voice-note overlay (top-right card).
+  voiceOverlayCard: {
+    position: "absolute",
+    top: 100,
+    right: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    maxWidth: 220,
+    zIndex: 999,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  voiceOverlayPlay: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: TEAL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  voiceOverlayTitle: { fontSize: 12, fontWeight: "700", color: NAVY },
+  voiceOverlayMeta: { fontSize: 11, color: MUTED },
+  voiceOverlayDismiss: {
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   creatorActions: {
