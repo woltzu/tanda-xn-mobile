@@ -12,6 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useAdvance, ADVANCE_TIERS, FuturePayout, AdvanceTierKey } from "../context/AdvanceContext";
 import { useXnScore } from "../context/XnScoreContext";
@@ -45,6 +46,7 @@ const getAdvanceTierConfig = (tier: AdvanceTierKey) => {
 
 export default function AdvanceHubScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const { t } = useTranslation();
   const { score, level } = useXnScore();
   const {
     getAdvanceTier,
@@ -120,7 +122,7 @@ export default function AdvanceHubScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Advance on Payout</Text>
+          <Text style={styles.headerTitle}>{t("advance_hub.header")}</Text>
           <TouchableOpacity
             style={styles.helpButton}
             onPress={() => navigation.navigate("AdvanceExplanation")}
@@ -133,11 +135,11 @@ export default function AdvanceHubScreen() {
         <View style={styles.scoreSection}>
           <View style={styles.scoreCircle}>
             <Text style={styles.scoreValue}>{score}</Text>
-            <Text style={styles.scoreLabel}>XnScore</Text>
+            <Text style={styles.scoreLabel}>{t("advance_hub.score_label")}</Text>
           </View>
           <View style={styles.tierBadge}>
             <View style={[styles.tierDot, { backgroundColor: tierInfo.color }]} />
-            <Text style={styles.tierText}>{tierInfo.label} Tier</Text>
+            <Text style={styles.tierText}>{tierInfo.label} {t("advance_hub.tier_suffix")}</Text>
           </View>
         </View>
 
@@ -146,13 +148,15 @@ export default function AdvanceHubScreen() {
           <View style={styles.capacityCard}>
             <View style={styles.capacityHeader}>
               <Ionicons name="flash" size={18} color="#00C6AE" />
-              <Text style={styles.capacityLabel}>ADVANCE CAPACITY</Text>
+              <Text style={styles.capacityLabel}>{t("advance_hub.capacity_label")}</Text>
             </View>
             <Text style={styles.capacityAmount}>
-              Up to ${totalMaxAdvance.toLocaleString()}
+              {t("advance_hub.capacity_up_to", { amount: totalMaxAdvance.toLocaleString() })}
             </Text>
             <Text style={styles.capacityNote}>
-              Based on {advanceablePayouts.length} upcoming payout{advanceablePayouts.length !== 1 ? "s" : ""}
+              {advanceablePayouts.length === 1
+                ? t("advance_hub.capacity_based_on_one")
+                : t("advance_hub.capacity_based_on_other", { count: advanceablePayouts.length })}
             </Text>
           </View>
         )}
@@ -169,12 +173,14 @@ export default function AdvanceHubScreen() {
             />
             <View style={styles.statusBannerText}>
               <Text style={[styles.statusBannerTitle, { color: tierInfo.color }]}>
-                {tier === "locked" ? "Advances Locked" : "Preview Mode"}
+                {tier === "locked"
+                  ? t("advance_hub.advance_status_locked_title")
+                  : t("advance_hub.advance_status_preview_title")}
               </Text>
               <Text style={styles.statusBannerDesc}>
                 {tier === "locked"
-                  ? `Reach XnScore 25 to preview advance options (${25 - score} more points needed)`
-                  : `Reach XnScore 45 to start requesting advances (${45 - score} more points needed)`}
+                  ? t("advance_hub.advance_status_locked_desc", { points: 25 - score })
+                  : t("advance_hub.advance_status_preview_desc", { points: 45 - score })}
               </Text>
             </View>
           </View>
@@ -183,7 +189,7 @@ export default function AdvanceHubScreen() {
         {/* Active Advances Section */}
         {activeLoans.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>ACTIVE ADVANCES</Text>
+            <Text style={styles.sectionTitle}>{t("advance_hub.section_active_advances")}</Text>
             {activeLoans.map((advance) => (
               <TouchableOpacity
                 key={advance.id}
@@ -206,19 +212,23 @@ export default function AdvanceHubScreen() {
                       advance.status === "disbursed" && { color: "#1E40AF" },
                       advance.status === "repaying" && { color: "#5B21B6" },
                     ]}>
-                      {advance.status.charAt(0).toUpperCase() + advance.status.slice(1)}
+                      {t(`advance_hub.active_status_${advance.status}`, {
+                        defaultValue:
+                          advance.status.charAt(0).toUpperCase() +
+                          advance.status.slice(1),
+                      })}
                     </Text>
                   </View>
                 </View>
                 <View style={styles.activeAdvanceBody}>
                   <View>
-                    <Text style={styles.activeAdvanceAmountLabel}>Amount</Text>
+                    <Text style={styles.activeAdvanceAmountLabel}>{t("advance_hub.amount_label")}</Text>
                     <Text style={styles.activeAdvanceAmount}>
                       ${(advance.approvedAmount || advance.requestedAmount).toLocaleString()}
                     </Text>
                   </View>
                   <View style={styles.activeAdvanceRepay}>
-                    <Text style={styles.activeAdvanceAmountLabel}>Due</Text>
+                    <Text style={styles.activeAdvanceAmountLabel}>{t("advance_hub.active_due")}</Text>
                     <Text style={styles.activeAdvanceDue}>
                       {formatDate(advance.expectedPayoutDate)}
                     </Text>
@@ -235,7 +245,9 @@ export default function AdvanceHubScreen() {
                       />
                     </View>
                     <Text style={styles.progressText}>
-                      {((advance.repaidAmount / advance.totalRepayment) * 100).toFixed(0)}% repaid
+                      {t("advance_hub.repaid_progress", {
+                        percent: ((advance.repaidAmount / advance.totalRepayment) * 100).toFixed(0),
+                      })}
                     </Text>
                   </View>
                 )}
@@ -247,24 +259,24 @@ export default function AdvanceHubScreen() {
         {/* Upcoming Payouts Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>UPCOMING PAYOUTS</Text>
+            <Text style={styles.sectionTitle}>{t("advance_hub.section_upcoming_payouts")}</Text>
             <Text style={styles.sectionSubtitle}>
-              {advanceablePayouts.length} available to advance
+              {t("advance_hub.section_subtitle_available", { count: advanceablePayouts.length })}
             </Text>
           </View>
 
           {futurePayouts.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="calendar-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyStateTitle}>No Upcoming Payouts</Text>
+              <Text style={styles.emptyStateTitle}>{t("advance_hub.empty_upcoming_title")}</Text>
               <Text style={styles.emptyStateDesc}>
-                Join a savings circle to receive future payouts that you can advance
+                {t("advance_hub.empty_upcoming_join_desc")}
               </Text>
               <TouchableOpacity
                 style={styles.emptyStateButton}
                 onPress={() => navigation.navigate("Circles" as any)}
               >
-                <Text style={styles.emptyStateButtonText}>Browse Circles</Text>
+                <Text style={styles.emptyStateButtonText}>{t("advance_hub.empty_upcoming_browse")}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -287,7 +299,7 @@ export default function AdvanceHubScreen() {
 
         {/* How It Works Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>HOW IT WORKS</Text>
+          <Text style={styles.sectionTitle}>{t("advance_hub.section_how_it_works")}</Text>
           <TouchableOpacity
             style={styles.howItWorksCard}
             onPress={() => navigation.navigate("AdvanceExplanation")}
@@ -298,10 +310,10 @@ export default function AdvanceHubScreen() {
               </View>
               <View style={styles.howItWorksText}>
                 <Text style={styles.howItWorksTitle}>
-                  Understand Advance on Future Payout
+                  {t("advance_hub.how_it_works_title")}
                 </Text>
                 <Text style={styles.howItWorksDesc}>
-                  Learn how it works, fees, and automatic repayment
+                  {t("advance_hub.how_it_works_desc")}
                 </Text>
               </View>
             </View>
@@ -312,15 +324,15 @@ export default function AdvanceHubScreen() {
           <View style={styles.quickFacts}>
             <View style={styles.factItem}>
               <Ionicons name="shield-checkmark" size={20} color="#10B981" />
-              <Text style={styles.factText}>Not a loan - it's YOUR future money</Text>
+              <Text style={styles.factText}>{t("advance_hub.fact_not_a_loan")}</Text>
             </View>
             <View style={styles.factItem}>
               <Ionicons name="sync" size={20} color="#3B82F6" />
-              <Text style={styles.factText}>Auto-repaid from your payout</Text>
+              <Text style={styles.factText}>{t("advance_hub.fact_auto_repaid")}</Text>
             </View>
             <View style={styles.factItem}>
               <Ionicons name="trending-up" size={20} color="#8B5CF6" />
-              <Text style={styles.factText}>On-time repayment boosts XnScore</Text>
+              <Text style={styles.factText}>{t("advance_hub.fact_boosts_score")}</Text>
             </View>
           </View>
         </View>
@@ -328,7 +340,7 @@ export default function AdvanceHubScreen() {
         {/* Tier Progress Section */}
         {!canRequest && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>UNLOCK BETTER RATES</Text>
+            <Text style={styles.sectionTitle}>{t("advance_hub.section_unlock_better")}</Text>
             <View style={styles.tierProgressCard}>
               {(Object.entries(ADVANCE_TIERS) as [AdvanceTierKey, typeof ADVANCE_TIERS.locked][])
                 .filter(([key]) => key !== "locked")
@@ -359,12 +371,17 @@ export default function AdvanceHubScreen() {
                           {info.label}
                         </Text>
                         <Text style={styles.tierRowDesc}>
-                          Up to {keyTierConfig.maxAdvancePercent}% advance • {keyTierConfig.advanceFee}% fee
+                          {t("advance_hub.tier_row_desc", {
+                            percent: keyTierConfig.maxAdvancePercent,
+                            fee: keyTierConfig.advanceFee,
+                          })}
                         </Text>
                       </View>
                       {isCurrentTier && (
                         <View style={[styles.currentBadge, { backgroundColor: info.bgColor }]}>
-                          <Text style={[styles.currentBadgeText, { color: info.color }]}>Current</Text>
+                          <Text style={[styles.currentBadgeText, { color: info.color }]}>
+                            {t("advance_hub.tier_current")}
+                          </Text>
                         </View>
                       )}
                     </View>

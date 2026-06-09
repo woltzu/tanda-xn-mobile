@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -75,6 +76,7 @@ const WITHDRAW_METHODS: WithdrawMethod[] = [
 
 export default function WithdrawScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const { balance, withdraw } = useWallet();
   const { paymentMethods, createWithdrawal, isOnboarded, setupConnectedAccount } = usePayment();
   const [amount, setAmount] = useState("");
@@ -165,13 +167,13 @@ export default function WithdrawScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Withdraw</Text>
+            <Text style={styles.headerTitle}>{t("withdraw.header")}</Text>
             <View style={styles.placeholder} />
           </View>
 
           {/* Available Balance */}
           <View style={styles.balanceCard}>
-            <Text style={styles.balanceLabel}>Available Balance</Text>
+            <Text style={styles.balanceLabel}>{t("withdraw.available_label")}</Text>
             <Text style={styles.balanceAmount}>
               ${balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </Text>
@@ -186,9 +188,9 @@ export default function WithdrawScreen() {
           {/* Amount Input */}
           <View style={styles.amountSection}>
             <View style={styles.amountHeader}>
-              <Text style={styles.sectionTitle}>Withdraw Amount</Text>
+              <Text style={styles.sectionTitle}>{t("withdraw.section_amount")}</Text>
               <TouchableOpacity onPress={handleWithdrawAll}>
-                <Text style={styles.withdrawAllText}>Withdraw All</Text>
+                <Text style={styles.withdrawAllText}>{t("withdraw.withdraw_all")}</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.amountInputContainer}>
@@ -197,16 +199,16 @@ export default function WithdrawScreen() {
                 style={styles.amountInput}
                 value={amount}
                 onChangeText={setAmount}
-                placeholder="0.00"
+                placeholder={t("withdraw.amount_placeholder")}
                 placeholderTextColor="#9CA3AF"
                 keyboardType="decimal-pad"
               />
             </View>
             {numericAmount > balance && (
-              <Text style={styles.errorText}>Insufficient balance</Text>
+              <Text style={styles.errorText}>{t("withdraw.insufficient_inline")}</Text>
             )}
             {numericAmount > 0 && numericAmount < 10 && (
-              <Text style={styles.errorText}>Minimum withdrawal is $10.00</Text>
+              <Text style={styles.errorText}>{t("withdraw.min_withdraw_warning")}</Text>
             )}
           </View>
 
@@ -225,10 +227,10 @@ export default function WithdrawScreen() {
               <Ionicons name="alert-circle-outline" size={22} color="#EA580C" style={{ marginRight: 12 }} />
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 14, fontWeight: "600", color: "#9A3412", marginBottom: 4 }}>
-                  Payout account required
+                  {t("withdraw.payout_required_title")}
                 </Text>
                 <Text style={{ fontSize: 13, color: "#C2410C", marginBottom: 10 }}>
-                  Set up your payout account to withdraw funds to your bank.
+                  {t("withdraw.payout_required_body")}
                 </Text>
                 <TouchableOpacity
                   style={{
@@ -244,7 +246,7 @@ export default function WithdrawScreen() {
                     <ActivityIndicator size="small" color="#FFFFFF" />
                   ) : (
                     <Text style={{ fontSize: 14, fontWeight: "600", color: "#FFFFFF" }}>
-                      Set Up Payout Account
+                      {t("withdraw.payout_setup_btn")}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -254,7 +256,7 @@ export default function WithdrawScreen() {
 
           {/* Withdraw Methods */}
           <View style={styles.methodsSection}>
-            <Text style={styles.sectionTitle}>Withdraw To</Text>
+            <Text style={styles.sectionTitle}>{t("withdraw.section_destination")}</Text>
             {bankAccounts.length > 0 ? (
               bankAccounts.map((method: any) => (
                 <TouchableOpacity
@@ -281,7 +283,7 @@ export default function WithdrawScreen() {
                     <View style={styles.methodInfo}>
                       <View style={styles.methodNameRow}>
                         <Text style={styles.methodName}>
-                          {method.us_bank_account?.bank_name || "Bank Account"}
+                          {method.us_bank_account?.bank_name || t("withdraw.default_bank_label")}
                         </Text>
                       </View>
                       <Text style={styles.methodDescription}>
@@ -291,8 +293,8 @@ export default function WithdrawScreen() {
                   </View>
                   <View style={styles.methodRight}>
                     <View style={styles.methodDetails}>
-                      <Text style={styles.methodFee}>Free</Text>
-                      <Text style={styles.methodTime}>1-3 business days</Text>
+                      <Text style={styles.methodFee}>{t("withdraw.fee_free")}</Text>
+                      <Text style={styles.methodTime}>{t("withdraw.fee_business_days")}</Text>
                     </View>
                     <View
                       style={[
@@ -309,7 +311,7 @@ export default function WithdrawScreen() {
               <View style={{ paddingVertical: 20, alignItems: "center" }}>
                 <Ionicons name="business-outline" size={32} color="#D1D5DB" />
                 <Text style={{ fontSize: 14, color: "#6B7280", marginTop: 8, textAlign: "center" }}>
-                  No bank accounts linked yet
+                  {t("withdraw.no_bank_accounts")}
                 </Text>
               </View>
             )}
@@ -320,28 +322,28 @@ export default function WithdrawScreen() {
               onPress={() => navigation.navigate(Routes.LinkedAccounts)}
             >
               <Ionicons name="add-circle-outline" size={22} color="#00C6AE" />
-              <Text style={styles.addMethodText}>Add New Bank Account</Text>
+              <Text style={styles.addMethodText}>{t("withdraw.add_bank_account")}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Summary */}
           {numericAmount > 0 && selectedMethod && numericAmount <= balance && (
             <View style={styles.summarySection}>
-              <Text style={styles.sectionTitle}>Summary</Text>
+              <Text style={styles.sectionTitle}>{t("withdraw.section_summary")}</Text>
               <View style={styles.summaryCard}>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Withdrawal Amount</Text>
+                  <Text style={styles.summaryLabel}>{t("withdraw.summary_withdrawal_amount")}</Text>
                   <Text style={styles.summaryValue}>${numericAmount.toFixed(2)}</Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>
-                    Fee ({selectedMethodData?.fee})
+                    {t("withdraw.summary_fee_pct")} ({selectedMethodData?.fee})
                   </Text>
                   <Text style={styles.summaryValueNegative}>-${fee.toFixed(2)}</Text>
                 </View>
                 <View style={styles.summaryDivider} />
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryTotalLabel}>You Receive</Text>
+                  <Text style={styles.summaryTotalLabel}>{t("withdraw.summary_you_receive")}</Text>
                   <Text style={styles.summaryTotalValue}>${youReceive.toFixed(2)}</Text>
                 </View>
               </View>
@@ -350,7 +352,7 @@ export default function WithdrawScreen() {
               <View style={styles.noticeCard}>
                 <Ionicons name="time-outline" size={18} color="#1565C0" />
                 <Text style={styles.noticeText}>
-                  Processing time: {selectedMethodData?.processingTime}
+                  {t("withdraw.processing_time_label", { time: selectedMethodData?.processingTime ?? "" })}
                 </Text>
               </View>
             </View>
@@ -365,12 +367,14 @@ export default function WithdrawScreen() {
             disabled={!canContinue || isProcessing}
           >
             {isProcessing ? (
-              <Text style={styles.continueButtonText}>Processing...</Text>
+              <Text style={styles.continueButtonText}>{t("withdraw.btn_processing")}</Text>
             ) : (
               <>
                 <Ionicons name="arrow-up-circle" size={20} color="#FFFFFF" />
                 <Text style={styles.continueButtonText}>
-                  Withdraw ${numericAmount > 0 ? numericAmount.toFixed(2) : "0.00"}
+                  {t("withdraw.btn_withdraw", {
+                    amount: numericAmount > 0 ? numericAmount.toFixed(2) : "0.00",
+                  })}
                 </Text>
               </>
             )}

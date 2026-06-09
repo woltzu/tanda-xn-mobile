@@ -11,12 +11,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 
 type SendMoneyNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function SendMoneyScreen() {
   const navigation = useNavigation<SendMoneyNavigationProp>();
+  const { t } = useTranslation();
   const [sendType, setSendType] = useState<"domestic" | "international" | null>(null);
 
   const handleSelectDestination = (type: "domestic" | "international") => {
@@ -43,7 +45,7 @@ export default function SendMoneyScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Send Money</Text>
+            <Text style={styles.headerTitle}>{t("send_money.header")}</Text>
             <View style={styles.placeholder} />
           </View>
 
@@ -62,9 +64,9 @@ export default function SendMoneyScreen() {
         <View style={styles.content}>
           {/* Destination Type Selection */}
           <View style={styles.destinationContainer}>
-            <Text style={styles.destinationTitle}>Where are you sending?</Text>
+            <Text style={styles.destinationTitle}>{t("send_money.destination_title")}</Text>
             <Text style={styles.destinationSubtitle}>
-              Choose your transfer destination
+              {t("send_money.destination_subtitle")}
             </Text>
 
             <TouchableOpacity
@@ -78,9 +80,9 @@ export default function SendMoneyScreen() {
                 <Ionicons name="home-outline" size={28} color="#00C6AE" />
               </View>
               <View style={styles.destinationInfo}>
-                <Text style={styles.destinationLabel}>Domestic</Text>
+                <Text style={styles.destinationLabel}>{t("send_money.domestic_label")}</Text>
                 <Text style={styles.destinationDesc}>
-                  Send within the United States
+                  {t("send_money.domestic_desc")}
                 </Text>
               </View>
               <View style={styles.destinationArrow}>
@@ -99,9 +101,9 @@ export default function SendMoneyScreen() {
                 <Ionicons name="globe-outline" size={28} color="#6366F1" />
               </View>
               <View style={styles.destinationInfo}>
-                <Text style={styles.destinationLabel}>International</Text>
+                <Text style={styles.destinationLabel}>{t("send_money.international_label")}</Text>
                 <Text style={styles.destinationDesc}>
-                  Send abroad to family & friends
+                  {t("send_money.international_desc")}
                 </Text>
               </View>
               <View style={styles.destinationArrow}>
@@ -113,7 +115,7 @@ export default function SendMoneyScreen() {
             <View style={styles.infoCard}>
               <Ionicons name="information-circle-outline" size={20} color="#6B7280" />
               <Text style={styles.infoText}>
-                International transfers may include exchange rates and additional fees
+                {t("send_money.info_text")}
               </Text>
             </View>
           </View>

@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useSavings, GOAL_TYPES, GoalType, SavingsGoal } from "../context/SavingsContext";
 import { useWalkthrough } from "../hooks/useWalkthrough";
@@ -22,6 +23,7 @@ type FilterType = "all" | GoalType;
 
 export default function GoalsHubScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const { t } = useTranslation();
   const {
     goals,
     getActiveGoals,
@@ -78,11 +80,12 @@ export default function GoalsHubScreen() {
 
   const getTypeConfig = (type: GoalType) => GOAL_TYPES[type];
 
+  // i18n: filter labels resolve per-render via t().
   const filters: { key: FilterType; label: string }[] = [
-    { key: "all", label: "All" },
-    { key: "flexible", label: "Flexible" },
-    { key: "emergency", label: "Emergency" },
-    { key: "locked", label: "Locked" },
+    { key: "all", label: t("goals_hub.filter_all") },
+    { key: "flexible", label: t("goals_hub.filter_flexible") },
+    { key: "emergency", label: t("goals_hub.filter_emergency") },
+    { key: "locked", label: t("goals_hub.filter_locked") },
   ];
 
   return (
@@ -96,7 +99,7 @@ export default function GoalsHubScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Savings Goals</Text>
+          <Text style={styles.headerTitle}>{t("goals_hub.header")}</Text>
           <TouchableOpacity style={styles.helpButton}>
             <Ionicons name="help-circle-outline" size={24} color="#FFFFFF" />
           </TouchableOpacity>
@@ -105,24 +108,24 @@ export default function GoalsHubScreen() {
         {/* Summary Stats */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryMain}>
-            <Text style={styles.summaryLabel}>TOTAL SAVINGS</Text>
+            <Text style={styles.summaryLabel}>{t("goals_hub.stat_total_savings")}</Text>
             <Text style={styles.summaryAmount}>{formatCurrency(totalSavings)}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryStats}>
             <View style={styles.summaryStat}>
               <Text style={styles.statValue}>{formatCurrency(totalInterestEarned)}</Text>
-              <Text style={styles.statLabel}>Interest Earned</Text>
+              <Text style={styles.statLabel}>{t("goals_hub.stat_interest_earned")}</Text>
             </View>
             <View style={styles.summaryStat}>
               <Text style={[styles.statValue, { color: "#10B981" }]}>
                 {formatCurrency(totalInterestUnlocked)}
               </Text>
-              <Text style={styles.statLabel}>Unlocked</Text>
+              <Text style={styles.statLabel}>{t("goals_hub.stat_unlocked")}</Text>
             </View>
             <View style={styles.summaryStat}>
               <Text style={styles.statValue}>{activeGoals.length}</Text>
-              <Text style={styles.statLabel}>Active Goals</Text>
+              <Text style={styles.statLabel}>{t("goals_hub.stat_active_goals")}</Text>
             </View>
           </View>
         </View>
@@ -160,7 +163,7 @@ export default function GoalsHubScreen() {
 
         {/* Goal Type Cards */}
         <View style={styles.typeCardsContainer}>
-          <Text style={styles.sectionTitle}>Savings Types</Text>
+          <Text style={styles.sectionTitle}>{t("goals_hub.section_savings_types")}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {Object.values(GOAL_TYPES).map((type) => (
               <TouchableOpacity
@@ -173,7 +176,7 @@ export default function GoalsHubScreen() {
                 </View>
                 <Text style={styles.typeName}>{type.name}</Text>
                 <Text style={styles.typeRate}>
-                  {(type.interestRate * 100).toFixed(1)}% APY
+                  {t("goals_hub.apy_label", { percent: (type.interestRate * 100).toFixed(1) })}
                 </Text>
                 <View style={styles.typeFeatures}>
                   {type.features.slice(0, 2).map((feature, idx) => (
@@ -190,7 +193,7 @@ export default function GoalsHubScreen() {
         {/* Goals List */}
         <View style={styles.goalsSection}>
           <View style={styles.goalsSectionHeader}>
-            <Text style={styles.sectionTitle}>Your Goals</Text>
+            <Text style={styles.sectionTitle}>{t("goals_hub.section_your_goals")}</Text>
             <TouchableOpacity
               style={styles.addButton}
               onPress={() => navigation.navigate("CreateGoal", {})}
@@ -204,16 +207,14 @@ export default function GoalsHubScreen() {
               <View style={styles.emptyIcon}>
                 <Ionicons name="flag-outline" size={48} color="#9CA3AF" />
               </View>
-              <Text style={styles.emptyTitle}>No Goals Yet</Text>
-              <Text style={styles.emptyText}>
-                Create your first savings goal and start building wealth
-              </Text>
+              <Text style={styles.emptyTitle}>{t("goals_hub.empty_title")}</Text>
+              <Text style={styles.emptyText}>{t("goals_hub.empty_text")}</Text>
               <TouchableOpacity
                 style={styles.createButton}
                 onPress={() => navigation.navigate("CreateGoal", {})}
               >
                 <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-                <Text style={styles.createButtonText}>Create Goal</Text>
+                <Text style={styles.createButtonText}>{t("goals_hub.create_goal")}</Text>
               </TouchableOpacity>
             </View>
           ) : (
@@ -243,7 +244,7 @@ export default function GoalsHubScreen() {
                         {formatCurrency(goal.currentBalance)}
                       </Text>
                       <Text style={styles.goalBalanceLabel}>
-                        of {formatCurrency(goal.targetAmount)}
+                        {t("goals_hub.goal_of_target", { amount: formatCurrency(goal.targetAmount) })}
                       </Text>
                     </View>
                   </View>
@@ -266,14 +267,16 @@ export default function GoalsHubScreen() {
                     <View style={styles.goalStat}>
                       <Ionicons name="trending-up" size={14} color="#10B981" />
                       <Text style={styles.goalStatText}>
-                        +{formatCurrency(goal.interestEarned)} earned
+                        {t("goals_hub.goal_earned", { amount: formatCurrency(goal.interestEarned) })}
                       </Text>
                     </View>
                     {goal.type === "locked" && goal.maturityDate && (
                       <View style={styles.goalStat}>
                         <Ionicons name="calendar-outline" size={14} color="#6366F1" />
                         <Text style={styles.goalStatText}>
-                          Matures {new Date(goal.maturityDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                          {t("goals_hub.goal_matures", {
+                            date: new Date(goal.maturityDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+                          })}
                         </Text>
                       </View>
                     )}
@@ -281,7 +284,7 @@ export default function GoalsHubScreen() {
                       <View style={styles.goalStat}>
                         <Ionicons name="sync" size={14} color="#F59E0B" />
                         <Text style={styles.goalStatText}>
-                          Auto-save {goal.autoSavePercent}%
+                          {t("goals_hub.goal_auto_save", { percent: goal.autoSavePercent })}
                         </Text>
                       </View>
                     )}
@@ -320,7 +323,7 @@ export default function GoalsHubScreen() {
             <View style={[styles.quickActionIcon, { backgroundColor: "#D1FAE5" }]}>
               <Ionicons name="add-circle-outline" size={24} color="#10B981" />
             </View>
-            <Text style={styles.quickActionText}>New Goal</Text>
+            <Text style={styles.quickActionText}>{t("goals_hub.quick_new_goal")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -334,7 +337,7 @@ export default function GoalsHubScreen() {
             <View style={[styles.quickActionIcon, { backgroundColor: "#DBEAFE" }]}>
               <Ionicons name="arrow-down-circle-outline" size={24} color="#3B82F6" />
             </View>
-            <Text style={styles.quickActionText}>Deposit</Text>
+            <Text style={styles.quickActionText}>{t("goals_hub.quick_deposit")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -349,7 +352,7 @@ export default function GoalsHubScreen() {
             <View style={[styles.quickActionIcon, { backgroundColor: "#FEE2E2" }]}>
               <Ionicons name="arrow-up-circle-outline" size={24} color="#EF4444" />
             </View>
-            <Text style={styles.quickActionText}>Withdraw</Text>
+            <Text style={styles.quickActionText}>{t("goals_hub.quick_withdraw")}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -362,7 +365,7 @@ export default function GoalsHubScreen() {
         testID="button_new_goal"
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
-        <Text style={styles.floatingHelpText}>Help</Text>
+        <Text style={styles.floatingHelpText}>{t("common.help")}</Text>
       </TouchableOpacity>
 
       <WalkthroughOverlay

@@ -13,6 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useWallet, Transaction } from "../context/WalletContext";
 import { usePayment } from "../context/PaymentContext";
@@ -24,6 +25,7 @@ type WalletScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function WalletScreen() {
   const navigation = useNavigation<WalletScreenNavigationProp>();
+  const { t } = useTranslation();
   const { balance, currencies, transactions, addCurrencyWallet } = useWallet();
   const { paymentMethods, isOnboarded, isLoadingMethods } = usePayment();
   const { formatCurrency: formatCurrencyAmount, refreshRates, isLoadingRates, lastUpdated, autoRefreshEnabled, setAutoRefreshEnabled } = useCurrency();
@@ -131,7 +133,7 @@ export default function WalletScreen() {
         {/* Header */}
         <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
           <View style={styles.headerTop}>
-            <Text style={styles.headerTitle}>Wallet</Text>
+            <Text style={styles.headerTitle}>{t("wallet.header")}</Text>
             <TouchableOpacity
               onPress={handleGlobePress}
               disabled={isLoadingRates}
@@ -159,7 +161,7 @@ export default function WalletScreen() {
           <View style={styles.balanceCard}>
             <View style={styles.decorativeCircle} />
             <View style={styles.balanceContent}>
-              <Text style={styles.balanceLabel}>Total Balance (USD equivalent)</Text>
+              <Text style={styles.balanceLabel}>{t("wallet.balance_label")}</Text>
               <View style={styles.balanceRow}>
                 <Text style={styles.balanceAmount}>
                   {showBalance ? `$${balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "••••••"}
@@ -172,7 +174,9 @@ export default function WalletScreen() {
                   />
                 </TouchableOpacity>
               </View>
-              <Text style={styles.currencyCount}>Across {activeCurrencies.length} currencies</Text>
+              <Text style={styles.currencyCount}>
+                {t("wallet.currency_count", { count: activeCurrencies.length })}
+              </Text>
 
               {/* Quick Actions */}
               <View style={styles.quickActions}>
@@ -181,14 +185,14 @@ export default function WalletScreen() {
                   onPress={() => navigation.navigate("AddFunds")}
                 >
                   <Ionicons name="add" size={16} color="#FFFFFF" />
-                  <Text style={styles.actionButtonText}>Add Funds</Text>
+                  <Text style={styles.actionButtonText}>{t("wallet.action_add_funds")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.actionButtonOutline}
                   onPress={() => navigation.navigate("Withdraw")}
                 >
                   <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
-                  <Text style={styles.actionButtonText}>Withdraw</Text>
+                  <Text style={styles.actionButtonText}>{t("wallet.action_withdraw")}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -204,8 +208,8 @@ export default function WalletScreen() {
                 <Ionicons name="paper-plane" size={20} color="#00C6AE" />
               </View>
               <View>
-                <Text style={styles.remittanceTitle}>Send Money Abroad</Text>
-                <Text style={styles.remittanceSubtitle}>Transfer to family & friends worldwide</Text>
+                <Text style={styles.remittanceTitle}>{t("wallet.remittance_title")}</Text>
+                <Text style={styles.remittanceSubtitle}>{t("wallet.remittance_subtitle")}</Text>
               </View>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#00C6AE" />
@@ -218,11 +222,11 @@ export default function WalletScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={styles.liveRatesHeader}>
-                <Text style={styles.sectionTitle}>Live Rates (USD)</Text>
+                <Text style={styles.sectionTitle}>{t("wallet.section_live_rates")}</Text>
                 {autoRefreshEnabled && (
                   <View style={styles.liveTagContainer}>
                     <View style={styles.liveTagDot} />
-                    <Text style={styles.liveTagText}>LIVE</Text>
+                    <Text style={styles.liveTagText}>{t("wallet.live_tag")}</Text>
                   </View>
                 )}
               </View>
@@ -230,7 +234,12 @@ export default function WalletScreen() {
                 <View style={styles.refreshTimestamp}>
                   {lastUpdated && (
                     <Text style={styles.ratesTimestamp}>
-                      Updated {lastUpdated.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                      {t("wallet.rates_updated", {
+                        time: lastUpdated.toLocaleTimeString("en-US", {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        }),
+                      })}
                     </Text>
                   )}
                   <Ionicons
@@ -248,13 +257,13 @@ export default function WalletScreen() {
           {/* My Currencies */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>My Currencies</Text>
+              <Text style={styles.sectionTitle}>{t("wallet.section_my_currencies")}</Text>
               <TouchableOpacity
                 style={styles.addButton}
                 onPress={() => setShowAddCurrencyModal(true)}
               >
                 <Ionicons name="add" size={16} color="#00C6AE" />
-                <Text style={styles.addButtonText}>Add</Text>
+                <Text style={styles.addButtonText}>{t("wallet.add_button")}</Text>
               </TouchableOpacity>
             </View>
 
@@ -288,12 +297,12 @@ export default function WalletScreen() {
             {activeCurrencies.length === 0 && (
               <View style={styles.emptyState}>
                 <Ionicons name="wallet-outline" size={48} color="#D1D5DB" />
-                <Text style={styles.emptyText}>No currency wallets yet</Text>
+                <Text style={styles.emptyText}>{t("wallet.empty_currencies")}</Text>
                 <TouchableOpacity
                   style={styles.emptyButton}
                   onPress={() => setShowAddCurrencyModal(true)}
                 >
-                  <Text style={styles.emptyButtonText}>Add a currency</Text>
+                  <Text style={styles.emptyButtonText}>{t("wallet.empty_currencies_cta")}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -302,9 +311,9 @@ export default function WalletScreen() {
           {/* Payment Methods */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Payment Methods</Text>
+              <Text style={styles.sectionTitle}>{t("wallet.section_payment_methods")}</Text>
               <TouchableOpacity onPress={() => navigation.navigate("LinkedAccounts" as any)}>
-                <Text style={styles.manageText}>Manage</Text>
+                <Text style={styles.manageText}>{t("wallet.manage")}</Text>
               </TouchableOpacity>
             </View>
 
@@ -315,7 +324,7 @@ export default function WalletScreen() {
               >
                 <View style={styles.payoutBannerLeft}>
                   <Ionicons name="flash" size={18} color="#FFFFFF" />
-                  <Text style={styles.payoutBannerText}>Set up payouts to receive money</Text>
+                  <Text style={styles.payoutBannerText}>{t("wallet.payout_banner")}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
               </TouchableOpacity>
@@ -331,7 +340,7 @@ export default function WalletScreen() {
                     <Text style={styles.pmLabel}>{method.label}</Text>
                     {method.isDefault && (
                       <View style={styles.pmDefaultBadge}>
-                        <Text style={styles.pmDefaultText}>Default</Text>
+                        <Text style={styles.pmDefaultText}>{t("wallet.pm_default")}</Text>
                       </View>
                     )}
                   </View>
@@ -341,13 +350,13 @@ export default function WalletScreen() {
             ) : (
               <View style={styles.pmEmptyState}>
                 <Ionicons name="card-outline" size={36} color="#D1D5DB" />
-                <Text style={styles.pmEmptyText}>No payment methods yet</Text>
+                <Text style={styles.pmEmptyText}>{t("wallet.empty_pm")}</Text>
                 <TouchableOpacity
                   style={styles.pmAddButton}
                   onPress={() => navigation.navigate("LinkedAccounts" as any)}
                 >
                   <Ionicons name="add" size={16} color="#FFFFFF" />
-                  <Text style={styles.pmAddButtonText}>Add Card</Text>
+                  <Text style={styles.pmAddButtonText}>{t("wallet.pm_add_card")}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -357,9 +366,9 @@ export default function WalletScreen() {
           {rateAlerts.filter((a) => a.active).length > 0 ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Rate Alerts</Text>
+                <Text style={styles.sectionTitle}>{t("wallet.section_rate_alerts")}</Text>
                 <TouchableOpacity>
-                  <Text style={styles.manageText}>Manage</Text>
+                  <Text style={styles.manageText}>{t("wallet.manage")}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -375,11 +384,16 @@ export default function WalletScreen() {
                           {alert.from} → {alert.to}
                         </Text>
                         <Text style={styles.alertSubtitle}>
-                          Alert when {alert.direction} {alert.target.toLocaleString()}
+                          {t("wallet.rate_alert_when", {
+                            direction: alert.direction,
+                            target: alert.target.toLocaleString(),
+                          })}
                         </Text>
                       </View>
                     </View>
-                    <Text style={styles.alertCurrent}>Now: {alert.current.toLocaleString()}</Text>
+                    <Text style={styles.alertCurrent}>
+                      {t("wallet.rate_alert_now", { value: alert.current.toLocaleString() })}
+                    </Text>
                   </View>
                 ))}
             </View>
@@ -388,9 +402,9 @@ export default function WalletScreen() {
           {/* Recent Activity */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recent Activity</Text>
+              <Text style={styles.sectionTitle}>{t("wallet.section_recent_activity")}</Text>
               <TouchableOpacity>
-                <Text style={styles.manageText}>See All</Text>
+                <Text style={styles.manageText}>{t("wallet.see_all")}</Text>
               </TouchableOpacity>
             </View>
 
@@ -432,7 +446,7 @@ export default function WalletScreen() {
             {transactions.length === 0 && (
               <View style={styles.emptyState}>
                 <Ionicons name="receipt-outline" size={48} color="#D1D5DB" />
-                <Text style={styles.emptyText}>No transactions yet</Text>
+                <Text style={styles.emptyText}>{t("wallet.empty_transactions")}</Text>
               </View>
             )}
           </View>
@@ -445,7 +459,7 @@ export default function WalletScreen() {
         onPress={() => navigation.navigate("HelpCenter" as any)}
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
-        <Text style={styles.floatingHelpText}>Help</Text>
+        <Text style={styles.floatingHelpText}>{t("common.help")}</Text>
       </TouchableOpacity>
 
       {/* Add Currency Modal */}
@@ -457,27 +471,29 @@ export default function WalletScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Currency Wallet</Text>
+              <Text style={styles.modalTitle}>{t("wallet.modal_add_currency_title")}</Text>
               <TouchableOpacity onPress={() => setShowAddCurrencyModal(false)}>
                 <Ionicons name="close" size={24} color="#0A2342" />
               </TouchableOpacity>
             </View>
 
             <Text style={styles.modalSubtitle}>
-              Select a currency to add to your wallet
+              {t("wallet.modal_add_currency_subtitle")}
             </Text>
 
             <CurrencySelector
               selectedCurrency={selectedNewCurrency}
               onSelect={setSelectedNewCurrency}
-              label="Currency"
+              label={t("wallet.modal_currency_label")}
             />
 
             <TouchableOpacity
               style={styles.modalButton}
               onPress={handleAddCurrency}
             >
-              <Text style={styles.modalButtonText}>Add {selectedNewCurrency} Wallet</Text>
+              <Text style={styles.modalButtonText}>
+                {t("wallet.modal_add_wallet", { currency: selectedNewCurrency })}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

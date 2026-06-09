@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -22,14 +23,18 @@ import { usePayment } from "../context/PaymentContext";
 
 type AddFundsNavigationProp = StackNavigationProp<RootStackParamList>;
 
+// i18n: FundingMethod stores translation keys instead of literal strings so
+// the labels resolve per-render. The `feeKey` discriminates Free vs %-fee
+// rows (percent is a numeric fact, not translated).
 type FundingMethod = {
   id: string;
-  name: string;
-  description: string;
+  nameKey: string;
+  descKey: string;
   icon: keyof typeof Ionicons.glyphMap;
   available: boolean;
-  fee?: string;
-  processingTime?: string;
+  feeKey?: string;
+  feePercent?: string;
+  timeKey: string;
   recommended?: boolean;
   color?: string;
 };
@@ -37,43 +42,43 @@ type FundingMethod = {
 const FUNDING_METHODS: FundingMethod[] = [
   {
     id: "bank",
-    name: "Bank Transfer (ACH)",
-    description: "Link your bank account for free transfers",
+    nameKey: "add_funds.method_bank_name",
+    descKey: "add_funds.method_bank_desc",
     icon: "business-outline",
     available: true,
-    fee: "Free",
-    processingTime: "1-3 business days",
+    feeKey: "add_funds.fee_free",
+    timeKey: "add_funds.time_business_days",
     recommended: true,
     color: "#10B981",
   },
   {
     id: "debit",
-    name: "Debit Card",
-    description: "Instant funding with Visa or Mastercard",
+    nameKey: "add_funds.method_debit_name",
+    descKey: "add_funds.method_debit_desc",
     icon: "card-outline",
     available: true,
-    fee: "1.5%",
-    processingTime: "Instant",
+    feePercent: "1.5%",
+    timeKey: "add_funds.time_instant",
     color: "#3B82F6",
   },
   {
     id: "mobile",
-    name: "Mobile Money",
-    description: "M-Pesa, Orange Money, Wave, MTN",
+    nameKey: "add_funds.method_mobile_name",
+    descKey: "add_funds.method_mobile_desc",
     icon: "phone-portrait-outline",
     available: true,
-    fee: "1.5%",
-    processingTime: "Instant",
+    feePercent: "1.5%",
+    timeKey: "add_funds.time_instant",
     color: "#F59E0B",
   },
   {
     id: "apple_pay",
-    name: "Apple Pay / Google Pay",
-    description: "Quick payment with your phone",
+    nameKey: "add_funds.method_apple_name",
+    descKey: "add_funds.method_apple_desc",
     icon: "wallet-outline",
     available: true,
-    fee: "1.5%",
-    processingTime: "Instant",
+    feePercent: "1.5%",
+    timeKey: "add_funds.time_instant",
     color: "#6B7280",
   },
 ];
@@ -82,6 +87,7 @@ const QUICK_AMOUNTS = [25, 50, 100, 250, 500];
 
 export default function AddFundsScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const { addFunds } = useWallet();
   const { paymentMethods, isLoadingMethods, createDeposit, presentPaymentSheet, isStripeReady, makeTestCharge } = usePayment();
   const [amount, setAmount] = useState("");
@@ -139,7 +145,10 @@ export default function AddFundsScreen() {
         // Present the Stripe payment sheet
         const { error } = await presentPaymentSheet(clientSecret);
         if (error) {
-          Alert.alert("Payment Failed", error.message || "Your payment could not be processed.");
+          Alert.alert(
+            t("add_funds.alert_payment_failed_title"),
+            error.message || t("add_funds.alert_payment_failed_body"),
+          );
           return;
         }
       }
@@ -202,13 +211,13 @@ export default function AddFundsScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Add Funds</Text>
+            <Text style={styles.headerTitle}>{t("add_funds.header")}</Text>
             <View style={styles.placeholder} />
           </View>
 
           {/* Amount Display in Header */}
           <View style={styles.amountDisplay}>
-            <Text style={styles.amountDisplayLabel}>Amount to add</Text>
+            <Text style={styles.amountDisplayLabel}>{t("add_funds.amount_label")}</Text>
             <View style={styles.amountDisplayRow}>
               <Text style={styles.amountDisplayCurrency}>$</Text>
               <TextInput
@@ -221,7 +230,7 @@ export default function AddFundsScreen() {
               />
             </View>
             {numericAmount > 0 && numericAmount < 10 && (
-              <Text style={styles.amountWarning}>Minimum amount is $10</Text>
+              <Text style={styles.amountWarning}>{t("add_funds.amount_min_warning")}</Text>
             )}
           </View>
 
@@ -256,7 +265,7 @@ export default function AddFundsScreen() {
         >
           {/* Funding Methods */}
           <View style={styles.methodsSection}>
-            <Text style={styles.sectionTitle}>How would you like to add funds?</Text>
+            <Text style={styles.sectionTitle}>{t("add_funds.section_how")}</Text>
             {FUNDING_METHODS.map((method) => (
               <TouchableOpacity
                 key={method.id}
@@ -284,22 +293,22 @@ export default function AddFundsScreen() {
                   </View>
                   <View style={styles.methodInfo}>
                     <View style={styles.methodNameRow}>
-                      <Text style={styles.methodName}>{method.name}</Text>
+                      <Text style={styles.methodName}>{t(method.nameKey)}</Text>
                       {method.recommended && (
                         <View style={styles.recommendedBadge}>
-                          <Text style={styles.recommendedText}>Best Value</Text>
+                          <Text style={styles.recommendedText}>{t("add_funds.recommended_badge")}</Text>
                         </View>
                       )}
                     </View>
-                    <Text style={styles.methodDescription}>{method.description}</Text>
+                    <Text style={styles.methodDescription}>{t(method.descKey)}</Text>
                     <View style={styles.methodMeta}>
-                      <View style={[styles.methodMetaItem, method.fee === "Free" && styles.freeTag]}>
-                        <Text style={[styles.methodFee, method.fee === "Free" && styles.freeText]}>
-                          {method.fee}
+                      <View style={[styles.methodMetaItem, method.feeKey && styles.freeTag]}>
+                        <Text style={[styles.methodFee, method.feeKey && styles.freeText]}>
+                          {method.feeKey ? t(method.feeKey) : method.feePercent}
                         </Text>
                       </View>
                       <Text style={styles.methodDot}>•</Text>
-                      <Text style={styles.methodTime}>{method.processingTime}</Text>
+                      <Text style={styles.methodTime}>{t(method.timeKey)}</Text>
                     </View>
                   </View>
                 </View>
@@ -318,7 +327,7 @@ export default function AddFundsScreen() {
           {/* Saved Payment Methods for Selected Type */}
           {selectedMethod && (
             <View style={styles.methodsSection}>
-              <Text style={styles.sectionTitle}>Your Saved Methods</Text>
+              <Text style={styles.sectionTitle}>{t("add_funds.section_saved_methods")}</Text>
               {isLoadingMethods ? (
                 <ActivityIndicator size="small" color="#00C6AE" style={{ marginVertical: 16 }} />
               ) : savedMethodsForType.length > 0 ? (
@@ -371,11 +380,11 @@ export default function AddFundsScreen() {
               ) : (
                 <View style={{ paddingVertical: 12, alignItems: "center" }}>
                   <Text style={{ fontSize: 13, color: "#6B7280", marginBottom: 8 }}>
-                    No saved methods for this type
+                    {t("add_funds.no_saved_methods")}
                   </Text>
                   <TouchableOpacity onPress={() => navigation.navigate(Routes.LinkedAccounts)}>
                     <Text style={{ fontSize: 14, fontWeight: "600", color: "#00C6AE" }}>
-                      + Add a payment method
+                      {t("add_funds.add_payment_method")}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -389,23 +398,24 @@ export default function AddFundsScreen() {
               <View style={styles.summaryCard}>
                 <View style={styles.summaryHeader}>
                   <Ionicons name="receipt-outline" size={18} color="#00C6AE" />
-                  <Text style={styles.summaryHeaderText}>Transaction Summary</Text>
+                  <Text style={styles.summaryHeaderText}>{t("add_funds.summary_header")}</Text>
                 </View>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Amount to add</Text>
+                  <Text style={styles.summaryLabel}>{t("add_funds.summary_amount_label")}</Text>
                   <Text style={styles.summaryValue}>${numericAmount.toFixed(2)}</Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>
-                    Processing fee {selectedMethodData?.fee !== "Free" && `(${selectedMethodData?.fee})`}
+                    {t("add_funds.summary_processing_fee")}
+                    {selectedMethodData?.feePercent && ` (${selectedMethodData.feePercent})`}
                   </Text>
                   <Text style={[styles.summaryValue, fee === 0 && styles.freeValue]}>
-                    {fee === 0 ? "Free" : `$${fee.toFixed(2)}`}
+                    {fee === 0 ? t("add_funds.fee_free") : `$${fee.toFixed(2)}`}
                   </Text>
                 </View>
                 <View style={styles.summaryDivider} />
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryTotalLabel}>You'll pay</Text>
+                  <Text style={styles.summaryTotalLabel}>{t("add_funds.summary_total")}</Text>
                   <Text style={styles.summaryTotalValue}>${totalAmount.toFixed(2)}</Text>
                 </View>
                 <View style={styles.walletReceiveRow}>
@@ -413,7 +423,7 @@ export default function AddFundsScreen() {
                     <Ionicons name="wallet" size={16} color="#00C6AE" />
                   </View>
                   <Text style={styles.walletReceiveText}>
-                    ${numericAmount.toFixed(2)} will be added to your wallet
+                    {t("add_funds.wallet_receive", { amount: numericAmount.toFixed(2) })}
                   </Text>
                 </View>
               </View>
@@ -443,7 +453,7 @@ export default function AddFundsScreen() {
           <View style={styles.securityNote}>
             <Ionicons name="shield-checkmark" size={18} color="#10B981" />
             <Text style={styles.securityNoteText}>
-              All transactions are secured with bank-level encryption
+              {t("add_funds.security_note")}
             </Text>
           </View>
         </ScrollView>
@@ -456,14 +466,13 @@ export default function AddFundsScreen() {
             disabled={!canContinue || isProcessing}
           >
             {isProcessing ? (
-              <Text style={styles.continueButtonText}>Processing...</Text>
+              <Text style={styles.continueButtonText}>{t("add_funds.btn_processing")}</Text>
             ) : (
               <>
                 <Text style={styles.continueButtonText}>
                   {numericAmount >= 10 && selectedMethod
-                    ? `Add $${numericAmount.toFixed(2)} to Wallet`
-                    : "Enter amount & select method"
-                  }
+                    ? t("add_funds.btn_continue", { amount: numericAmount.toFixed(2) })
+                    : t("add_funds.btn_continue_disabled")}
                 </Text>
                 {canContinue && <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />}
               </>
