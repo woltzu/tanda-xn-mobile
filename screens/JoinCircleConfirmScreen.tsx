@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
@@ -71,6 +72,7 @@ const getRotationMethodLabel = (method: string): string => {
 export default function JoinCircleConfirmScreen() {
   const navigation = useNavigation<JoinCircleConfirmNavigationProp>();
   const route = useRoute<JoinCircleConfirmRouteProp>();
+  const { t } = useTranslation();
   const { circleId } = route.params;
   const { circles, browseCircles, joinCircle } = useCircles();
   const { user } = useAuth();
@@ -91,16 +93,16 @@ export default function JoinCircleConfirmScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Circle Not Found</Text>
+          <Text style={styles.headerTitle}>{t("join_circle_confirm.not_found_header")}</Text>
         </LinearGradient>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color="#9CA3AF" />
-          <Text style={styles.errorText}>This circle could not be found.</Text>
+          <Text style={styles.errorText}>{t("join_circle_confirm.not_found_body")}</Text>
           <TouchableOpacity
             style={styles.errorButton}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.errorButtonText}>Go Back</Text>
+            <Text style={styles.errorButtonText}>{t("join_circle_confirm.btn_go_back")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -165,7 +167,7 @@ export default function JoinCircleConfirmScreen() {
       navigation.navigate("JoinCircleSuccess", { circleId });
     } catch (error) {
       console.error("Error joining circle:", error);
-      Alert.alert("Error", "Failed to join circle. Please try again.");
+      Alert.alert(t("join_circle_confirm.alert_error_title"), t("join_circle_confirm.alert_failed_join"));
     } finally {
       setIsJoining(false);
     }
@@ -183,7 +185,7 @@ export default function JoinCircleConfirmScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Join Circle</Text>
+            <Text style={styles.headerTitle}>{t("join_circle_confirm.header_title")}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -199,7 +201,7 @@ export default function JoinCircleConfirmScreen() {
             {circle.verified && (
               <View style={styles.verifiedBadge}>
                 <Ionicons name="shield-checkmark" size={14} color="#00C6AE" />
-                <Text style={styles.verifiedText}>Verified</Text>
+                <Text style={styles.verifiedText}>{t("join_circle_confirm.tag_verified")}</Text>
               </View>
             )}
           </View>
@@ -214,7 +216,7 @@ export default function JoinCircleConfirmScreen() {
                 <Ionicons name="lock-closed" size={24} color="#D97706" />
               </View>
               <View style={styles.scoreWarningContent}>
-                <Text style={styles.scoreWarningTitle}>XnScore Required</Text>
+                <Text style={styles.scoreWarningTitle}>{t("join_circle_confirm.score_warning_title")}</Text>
                 <Text style={styles.scoreWarningText}>
                   This circle requires a minimum XnScore of {minScore}. Your current score is {userXnScore}.
                 </Text>
@@ -226,17 +228,17 @@ export default function JoinCircleConfirmScreen() {
           {isFull && (
             <View style={styles.fullWarning}>
               <Ionicons name="people" size={20} color="#DC2626" />
-              <Text style={styles.fullWarningText}>This circle is full</Text>
+              <Text style={styles.fullWarningText}>{t("join_circle_confirm.full_warning")}</Text>
             </View>
           )}
 
           {/* Contribution Summary */}
           <View style={styles.summaryCard}>
-            <Text style={styles.cardTitle}>Your Commitment</Text>
+            <Text style={styles.cardTitle}>{t("join_circle_confirm.card_commitment")}</Text>
 
             <View style={styles.commitmentRow}>
               <View style={styles.commitmentItem}>
-                <Text style={styles.commitmentLabel}>Contribution</Text>
+                <Text style={styles.commitmentLabel}>{t("join_circle_confirm.label_contribution")}</Text>
                 <Text style={styles.commitmentValue}>${circle.amount}</Text>
                 <Text style={styles.commitmentSubtext}>
                   {isOneTime ? "one-time" : `per ${getFrequencyLabel(circle.frequency).toLowerCase()}`}
@@ -244,7 +246,7 @@ export default function JoinCircleConfirmScreen() {
               </View>
               <View style={styles.commitmentDivider} />
               <View style={styles.commitmentItem}>
-                <Text style={styles.commitmentLabel}>Total Pot</Text>
+                <Text style={styles.commitmentLabel}>{t("join_circle_confirm.label_total_pot")}</Text>
                 <Text style={[styles.commitmentValue, { color: "#00C6AE" }]}>
                   ${totalPot.toLocaleString()}
                 </Text>
@@ -260,7 +262,7 @@ export default function JoinCircleConfirmScreen() {
                 <Ionicons name="trophy" size={24} color="#F59E0B" />
               </View>
               <View style={styles.positionContent}>
-                <Text style={styles.positionLabel}>Your Payout Position</Text>
+                <Text style={styles.positionLabel}>{t("join_circle_confirm.label_payout_position")}</Text>
                 <Text style={styles.positionNumber}>#{yourPosition}</Text>
                 <Text style={styles.positionSubtext}>
                   Based on {getRotationMethodLabel(circle.rotationMethod).toLowerCase()}
@@ -276,7 +278,7 @@ export default function JoinCircleConfirmScreen() {
                 <Ionicons name="person-circle" size={32} color="#00C6AE" />
               </View>
               <View style={styles.beneficiaryInfo}>
-                <Text style={styles.beneficiaryLabel}>Funds Go To</Text>
+                <Text style={styles.beneficiaryLabel}>{t("join_circle_confirm.label_funds_go_to")}</Text>
                 <Text style={styles.beneficiaryName}>{circle.beneficiaryName}</Text>
                 {circle.beneficiaryReason && (
                   <Text style={styles.beneficiaryReason}>{circle.beneficiaryReason}</Text>
@@ -287,13 +289,13 @@ export default function JoinCircleConfirmScreen() {
 
           {/* Circle Details */}
           <View style={styles.detailsCard}>
-            <Text style={styles.cardTitle}>Circle Details</Text>
+            <Text style={styles.cardTitle}>{t("join_circle_confirm.card_circle_details")}</Text>
 
             <View style={styles.detailRow}>
               <View style={styles.detailIcon}>
                 <Ionicons name="calendar-outline" size={18} color="#6B7280" />
               </View>
-              <Text style={styles.detailLabel}>Start Date</Text>
+              <Text style={styles.detailLabel}>{t("join_circle_confirm.detail_start_date")}</Text>
               <Text style={styles.detailValue}>{formatDate(circle.startDate)}</Text>
             </View>
 
@@ -301,7 +303,7 @@ export default function JoinCircleConfirmScreen() {
               <View style={styles.detailIcon}>
                 <Ionicons name="repeat-outline" size={18} color="#6B7280" />
               </View>
-              <Text style={styles.detailLabel}>Frequency</Text>
+              <Text style={styles.detailLabel}>{t("join_circle_confirm.detail_frequency")}</Text>
               <Text style={styles.detailValue}>{getFrequencyLabel(circle.frequency)}</Text>
             </View>
 
@@ -309,7 +311,7 @@ export default function JoinCircleConfirmScreen() {
               <View style={styles.detailIcon}>
                 <Ionicons name="people-outline" size={18} color="#6B7280" />
               </View>
-              <Text style={styles.detailLabel}>Members</Text>
+              <Text style={styles.detailLabel}>{t("join_circle_confirm.detail_members")}</Text>
               <Text style={styles.detailValue}>
                 {circle.currentMembers}/{circle.memberCount}
                 <Text style={{ color: spotsLeft <= 2 ? "#DC2626" : "#00C6AE" }}>
@@ -323,7 +325,7 @@ export default function JoinCircleConfirmScreen() {
                 <View style={styles.detailIcon}>
                   <Ionicons name="shuffle-outline" size={18} color="#6B7280" />
                 </View>
-                <Text style={styles.detailLabel}>Payout Order</Text>
+                <Text style={styles.detailLabel}>{t("join_circle_confirm.detail_payout_order")}</Text>
                 <Text style={styles.detailValue}>{getRotationMethodLabel(circle.rotationMethod)}</Text>
               </View>
             )}
@@ -332,7 +334,7 @@ export default function JoinCircleConfirmScreen() {
               <View style={styles.detailIcon}>
                 <Ionicons name="time-outline" size={18} color="#6B7280" />
               </View>
-              <Text style={styles.detailLabel}>Grace Period</Text>
+              <Text style={styles.detailLabel}>{t("join_circle_confirm.detail_grace_period")}</Text>
               <Text style={styles.detailValue}>
                 {circle.gracePeriodDays === 0 ? "None" : `${circle.gracePeriodDays} day${circle.gracePeriodDays > 1 ? "s" : ""}`}
               </Text>
@@ -343,7 +345,7 @@ export default function JoinCircleConfirmScreen() {
                 <View style={styles.detailIcon}>
                   <Ionicons name="location-outline" size={18} color="#6B7280" />
                 </View>
-                <Text style={styles.detailLabel}>Location</Text>
+                <Text style={styles.detailLabel}>{t("join_circle_confirm.detail_location")}</Text>
                 <Text style={styles.detailValue}>{circle.location}</Text>
               </View>
             )}
@@ -354,7 +356,7 @@ export default function JoinCircleConfirmScreen() {
             <View style={styles.firstContributionCard}>
               <Ionicons name="information-circle" size={20} color="#00897B" />
               <View style={styles.firstContributionContent}>
-                <Text style={styles.firstContributionTitle}>Your First Contribution</Text>
+                <Text style={styles.firstContributionTitle}>{t("join_circle_confirm.first_contribution_title")}</Text>
                 <Text style={styles.firstContributionText}>
                   Due on <Text style={styles.boldText}>{formatDate(getFirstContributionDate().toISOString())}</Text>
                 </Text>
@@ -401,11 +403,11 @@ export default function JoinCircleConfirmScreen() {
           disabled={!canJoin || isFull || !agreedToTerms || isJoining}
         >
           {isJoining ? (
-            <Text style={styles.joinButtonText}>Joining...</Text>
+            <Text style={styles.joinButtonText}>{t("join_circle_confirm.btn_joining")}</Text>
           ) : (
             <>
               <Ionicons name="people" size={20} color="#FFFFFF" />
-              <Text style={styles.joinButtonText}>Join Circle</Text>
+              <Text style={styles.joinButtonText}>{t("join_circle_confirm.btn_join_circle")}</Text>
             </>
           )}
         </TouchableOpacity>

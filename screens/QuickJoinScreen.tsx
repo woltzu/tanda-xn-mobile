@@ -25,6 +25,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
 
@@ -107,6 +108,7 @@ interface LoggedInUser {
 export default function QuickJoinScreen() {
   const navigation = useNavigation<QuickJoinNavProp>();
   const route = useRoute<QuickJoinRouteProp>();
+  const { t } = useTranslation();
   const inviteCode = (route.params?.inviteCode ?? "").trim();
 
   // Circle fetch state
@@ -551,7 +553,7 @@ export default function QuickJoinScreen() {
         <StatusBar barStyle="light-content" backgroundColor={NAVY} />
         <View style={styles.centered}>
           <Ionicons name="alert-circle-outline" size={56} color={MUTED} />
-          <Text style={styles.errorTitle}>Invite not found</Text>
+          <Text style={styles.errorTitle}>{t("quick_join.error_invite_not_found")}</Text>
           <Text style={styles.mutedLarge}>
             {lookupError ?? "This invite link isn't valid."}
           </Text>
@@ -567,7 +569,7 @@ export default function QuickJoinScreen() {
         <StatusBar barStyle="light-content" backgroundColor={NAVY} />
         <View style={styles.centered}>
           <Ionicons name="checkmark-circle" size={64} color={TEAL} />
-          <Text style={styles.errorTitle}>You're already in</Text>
+          <Text style={styles.errorTitle}>{t("quick_join.error_already_in")}</Text>
           <Text style={styles.mutedLarge}>
             You're an active member of {circle.name}
             {joinedAt
@@ -579,7 +581,7 @@ export default function QuickJoinScreen() {
             activeOpacity={0.85}
             onPress={() => navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] })}
           >
-            <Text style={styles.confirmButtonText}>Go to Dashboard</Text>
+            <Text style={styles.confirmButtonText}>{t("quick_join.btn_go_dashboard")}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -641,14 +643,14 @@ export default function QuickJoinScreen() {
                 <Text style={styles.circleStatValue}>
                   {formatMoney(circle.amount, circle.currency)}
                 </Text>
-                <Text style={styles.circleStatLabel}>Your first contribution</Text>
+                <Text style={styles.circleStatLabel}>{t("quick_join.stat_first_contribution")}</Text>
               </View>
               <View style={styles.circleDivider} />
               <View style={styles.circleStat}>
                 <Text style={styles.circleStatValue}>
                   {formatMoney(potSize, circle.currency)}
                 </Text>
-                <Text style={styles.circleStatLabel}>Your payout when elected</Text>
+                <Text style={styles.circleStatLabel}>{t("quick_join.stat_payout_when_elected")}</Text>
               </View>
             </View>
           </LinearGradient>
@@ -679,7 +681,7 @@ export default function QuickJoinScreen() {
             onPress={handleSwitchAccount}
             disabled={confirmingJoin}
           >
-            <Text style={styles.switchAccountText}>Use a different account?</Text>
+            <Text style={styles.switchAccountText}>{t("quick_join.btn_switch_account")}</Text>
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />
@@ -744,7 +746,7 @@ export default function QuickJoinScreen() {
           </LinearGradient>
 
           {/* ── Quick-pay buttons ────────────────────────────────────────── */}
-          <Text style={styles.sectionLabel}>Fast checkout</Text>
+          <Text style={styles.sectionLabel}>{t("quick_join.section_fast_checkout")}</Text>
           <View style={styles.quickPayRow}>
             <TouchableOpacity
               style={[styles.quickPayButton, { backgroundColor: "#000000" }]}
@@ -759,30 +761,30 @@ export default function QuickJoinScreen() {
               activeOpacity={0.85}
               onPress={() => showError("Coming soon", "Cash App will be available at launch.")}
             >
-              <Text style={[styles.quickPayText, { color: "#000" }]}>Cash App</Text>
+              <Text style={[styles.quickPayText, { color: "#000" }]}>{t("quick_join.btn_cash_app")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.quickPayButton, { backgroundColor: "#003087" }]}
               activeOpacity={0.85}
               onPress={() => showError("Coming soon", "PayPal will be available at launch.")}
             >
-              <Text style={styles.quickPayText}>PayPal</Text>
+              <Text style={styles.quickPayText}>{t("quick_join.btn_paypal")}</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.dividerRow}>
             <View style={styles.hr} />
-            <Text style={styles.dividerText}>OR PAY WITH DEBIT</Text>
+            <Text style={styles.dividerText}>{t("quick_join.divider_or_debit")}</Text>
             <View style={styles.hr} />
           </View>
 
           {/* ── Contact ──────────────────────────────────────────────────── */}
-          <Text style={styles.sectionLabel}>Your contact</Text>
+          <Text style={styles.sectionLabel}>{t("quick_join.section_contact")}</Text>
           <View style={styles.inputWrap}>
             <Ionicons name="mail-outline" size={18} color={MUTED} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Email or phone"
+              placeholder={t("quick_join.placeholder_email_phone")}
               placeholderTextColor={MUTED}
               keyboardType="email-address"
               autoCapitalize="none"
@@ -792,12 +794,12 @@ export default function QuickJoinScreen() {
           </View>
 
           {/* ── Debit card ───────────────────────────────────────────────── */}
-          <Text style={styles.sectionLabel}>Debit card</Text>
+          <Text style={styles.sectionLabel}>{t("quick_join.section_debit")}</Text>
           <View style={styles.inputWrap}>
             <Ionicons name="card-outline" size={18} color={MUTED} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="1234 5678 9012 3456"
+              placeholder={t("quick_join.placeholder_card_number")}
               placeholderTextColor={MUTED}
               keyboardType="number-pad"
               value={cardNumber}
@@ -810,7 +812,7 @@ export default function QuickJoinScreen() {
               <Ionicons name="calendar-outline" size={18} color={MUTED} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="MM/YY"
+                placeholder={t("quick_join.placeholder_expiry")}
                 placeholderTextColor={MUTED}
                 keyboardType="number-pad"
                 value={cardExpiry}
@@ -822,7 +824,7 @@ export default function QuickJoinScreen() {
               <Ionicons name="lock-closed-outline" size={18} color={MUTED} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="CVV"
+                placeholder={t("quick_join.placeholder_cvv")}
                 placeholderTextColor={MUTED}
                 keyboardType="number-pad"
                 value={cardCvv}
@@ -834,7 +836,7 @@ export default function QuickJoinScreen() {
           </View>
           <View style={styles.noCreditRow}>
             <Ionicons name="information-circle-outline" size={14} color={GOLD} />
-            <Text style={styles.noCreditText}>Debit cards only. Credit cards are not accepted.</Text>
+            <Text style={styles.noCreditText}>{t("quick_join.no_credit")}</Text>
           </View>
 
           {/* ── Agreement ────────────────────────────────────────────────── */}

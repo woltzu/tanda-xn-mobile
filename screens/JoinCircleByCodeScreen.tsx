@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 
@@ -22,6 +23,7 @@ type JoinCircleByCodeNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function JoinCircleByCodeScreen() {
   const navigation = useNavigation<JoinCircleByCodeNavigationProp>();
+  const { t } = useTranslation();
   const { browseCircles, findCircleByInviteCode, circles } = useCircles();
 
   const [inviteCode, setInviteCode] = useState("");
@@ -108,11 +110,11 @@ export default function JoinCircleByCodeScreen() {
         setInviteCode(text.trim().toUpperCase());
         setError(null);
       } else {
-        Alert.alert("Clipboard Empty", "No text found in clipboard. Copy an invite code first.");
+        Alert.alert(t("join_by_code.alert_clipboard_empty_title"), t("join_by_code.alert_clipboard_empty_body"));
       }
     } catch (err) {
       console.error("Error pasting:", err);
-      Alert.alert("Error", "Could not access clipboard. Please paste manually.");
+      Alert.alert(t("join_by_code.alert_error_title"), t("join_by_code.alert_clipboard_error_body"));
     }
   };
 
@@ -133,7 +135,7 @@ export default function JoinCircleByCodeScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Join Circle</Text>
+            <Text style={styles.headerTitle}>{t("join_by_code.header_title")}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -146,11 +148,11 @@ export default function JoinCircleByCodeScreen() {
         <View style={styles.content}>
           {/* Code Input Section */}
           <View style={styles.inputSection}>
-            <Text style={styles.inputLabel}>Invite Code or Link</Text>
+            <Text style={styles.inputLabel}>{t("join_by_code.label_invite_code")}</Text>
             <View style={styles.inputWrapper}>
               <TextInput
                 style={styles.input}
-                placeholder="Enter code (e.g., TANDA2024)"
+                placeholder={t("join_by_code.placeholder_code")}
                 placeholderTextColor="#9CA3AF"
                 value={inviteCode}
                 onChangeText={(text) => {
@@ -182,7 +184,7 @@ export default function JoinCircleByCodeScreen() {
               <Ionicons name="qr-code" size={24} color="#00C6AE" />
             </View>
             <View style={styles.qrContent}>
-              <Text style={styles.qrTitle}>Scan QR Code</Text>
+              <Text style={styles.qrTitle}>{t("join_by_code.qr_title")}</Text>
               <Text style={styles.qrSubtitle}>
                 Scan a QR code to join instantly
               </Text>
@@ -192,7 +194,7 @@ export default function JoinCircleByCodeScreen() {
 
           {/* Example Codes for Testing */}
           <View style={styles.exampleSection}>
-            <Text style={styles.exampleTitle}>Try These Demo Codes</Text>
+            <Text style={styles.exampleTitle}>{t("join_by_code.example_title")}</Text>
             <Text style={styles.exampleSubtitle}>
               For testing, use any of these invite codes:
             </Text>
@@ -211,7 +213,7 @@ export default function JoinCircleByCodeScreen() {
 
           {/* How It Works */}
           <View style={styles.infoCard}>
-            <Text style={styles.infoTitle}>How to get an invite code?</Text>
+            <Text style={styles.infoTitle}>{t("join_by_code.info_title")}</Text>
             <View style={styles.infoStep}>
               <View style={styles.stepNumber}>
                 <Text style={styles.stepNumberText}>1</Text>
@@ -263,11 +265,11 @@ export default function JoinCircleByCodeScreen() {
           disabled={inviteCode.trim().length < 4 || isSearching}
         >
           {isSearching ? (
-            <Text style={styles.joinButtonText}>Searching...</Text>
+            <Text style={styles.joinButtonText}>{t("join_by_code.btn_searching")}</Text>
           ) : (
             <>
               <Ionicons name="enter-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.joinButtonText}>Find Circle</Text>
+              <Text style={styles.joinButtonText}>{t("join_by_code.btn_find_circle")}</Text>
             </>
           )}
         </TouchableOpacity>

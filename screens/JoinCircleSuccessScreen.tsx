@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 import { useXnScore } from "../context/XnScoreContext";
@@ -56,6 +57,7 @@ const getFrequencyLabel = (frequency: string): string => {
 export default function JoinCircleSuccessScreen() {
   const navigation = useNavigation<JoinCircleSuccessNavigationProp>();
   const route = useRoute<JoinCircleSuccessRouteProp>();
+  const { t } = useTranslation();
   const { circleId } = route.params;
   const { circles, browseCircles, myCircles } = useCircles();
   const { processCircleEvent } = useXnScore();
@@ -100,12 +102,12 @@ export default function JoinCircleSuccessScreen() {
       <View style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color="#9CA3AF" />
-          <Text style={styles.errorText}>Circle not found</Text>
+          <Text style={styles.errorText}>{t("join_circle_success.error_not_found")}</Text>
           <TouchableOpacity
             style={styles.errorButton}
             onPress={() => navigation.navigate("MainTabs")}
           >
-            <Text style={styles.errorButtonText}>Go Home</Text>
+            <Text style={styles.errorButtonText}>{t("join_circle_success.btn_go_home")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -194,8 +196,8 @@ export default function JoinCircleSuccessScreen() {
               },
             ]}
           >
-            <Text style={styles.congratsText}>Welcome!</Text>
-            <Text style={styles.successTitle}>You've Joined</Text>
+            <Text style={styles.congratsText}>{t("join_circle_success.congrats")}</Text>
+            <Text style={styles.successTitle}>{t("join_circle_success.title_joined")}</Text>
             <View style={styles.circleNameRow}>
               <Text style={styles.circleEmoji}>{circle.emoji}</Text>
               <Text style={styles.circleName}>{circle.name}</Text>
@@ -240,14 +242,14 @@ export default function JoinCircleSuccessScreen() {
 
             {/* Next Steps Card */}
             <View style={styles.nextStepsCard}>
-              <Text style={styles.nextStepsTitle}>What's Next?</Text>
+              <Text style={styles.nextStepsTitle}>{t("join_circle_success.next_steps_title")}</Text>
 
               <View style={styles.stepItem}>
                 <View style={styles.stepIcon}>
                   <Ionicons name="calendar" size={18} color="#00C6AE" />
                 </View>
                 <View style={styles.stepContent}>
-                  <Text style={styles.stepLabel}>First Contribution Due</Text>
+                  <Text style={styles.stepLabel}>{t("join_circle_success.step_first_contribution")}</Text>
                   <Text style={styles.stepValue}>
                     {formatDate(getFirstContributionDate().toISOString())}
                   </Text>
@@ -259,7 +261,7 @@ export default function JoinCircleSuccessScreen() {
                   <Ionicons name="cash" size={18} color="#00C6AE" />
                 </View>
                 <View style={styles.stepContent}>
-                  <Text style={styles.stepLabel}>Amount</Text>
+                  <Text style={styles.stepLabel}>{t("join_circle_success.step_amount")}</Text>
                   <Text style={styles.stepValue}>
                     ${circle.amount} {isOneTime ? "(one-time)" : getFrequencyLabel(circle.frequency)}
                   </Text>
@@ -271,7 +273,7 @@ export default function JoinCircleSuccessScreen() {
                   <Ionicons name="people" size={18} color="#00C6AE" />
                 </View>
                 <View style={styles.stepContent}>
-                  <Text style={styles.stepLabel}>Circle Size</Text>
+                  <Text style={styles.stepLabel}>{t("join_circle_success.step_circle_size")}</Text>
                   <Text style={styles.stepValue}>
                     {circle.currentMembers} of {circle.memberCount} members
                   </Text>
@@ -283,7 +285,7 @@ export default function JoinCircleSuccessScreen() {
                   <Ionicons name="wallet" size={18} color="#00C6AE" />
                 </View>
                 <View style={styles.stepContent}>
-                  <Text style={styles.stepLabel}>Total Pot</Text>
+                  <Text style={styles.stepLabel}>{t("join_circle_success.step_total_pot")}</Text>
                   <Text style={[styles.stepValue, { color: "#00C6AE" }]}>
                     ${totalPot.toLocaleString()}
                   </Text>
@@ -305,11 +307,11 @@ export default function JoinCircleSuccessScreen() {
         <View style={styles.bottomActions}>
           <TouchableOpacity style={styles.viewCircleButton} onPress={handleViewCircle}>
             <Ionicons name="eye-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.viewCircleButtonText}>View Circle</Text>
+            <Text style={styles.viewCircleButtonText}>{t("join_circle_success.btn_view_circle")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.backButton} onPress={handleBackToCircles}>
-            <Text style={styles.backButtonText}>Back to Circles</Text>
+            <Text style={styles.backButtonText}>{t("join_circle_success.btn_back_to_circles")}</Text>
           </TouchableOpacity>
         </View>
       </LinearGradient>
