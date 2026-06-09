@@ -74,7 +74,7 @@ export default function AdvanceDetailsScreen() {
         [{ text: "OK" }]
       );
     } catch (error) {
-      Alert.alert("Error", "Failed to disburse funds. Please try again.");
+      Alert.alert(t("advance_details_v2.alert_error_title"), t("advance_details_v2.alert_failed_disburse"));
     } finally {
       setIsProcessing(false);
     }
@@ -107,7 +107,7 @@ export default function AdvanceDetailsScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#00C6AE" />
-          <Text style={styles.loadingText}>Loading advance details...</Text>
+          <Text style={styles.loadingText}>{t("advance_details_v2.loading_text")}</Text>
         </View>
       </SafeAreaView>
     );
@@ -155,7 +155,7 @@ export default function AdvanceDetailsScreen() {
         {/* Progress Section (for repaying status) */}
         {["disbursed", "repaying", "completed"].includes(advance.status) && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Repayment Progress</Text>
+            <Text style={styles.sectionTitle}>{t("advance_details_v2.section_progress")}</Text>
             <View style={styles.progressCard}>
               <View style={styles.progressHeader}>
                 <Text style={styles.progressLabel}>
@@ -168,13 +168,13 @@ export default function AdvanceDetailsScreen() {
               </View>
               <View style={styles.progressDetails}>
                 <View style={styles.progressItem}>
-                  <Text style={styles.progressItemLabel}>Remaining</Text>
+                  <Text style={styles.progressItemLabel}>{t("advance_details_v2.label_remaining")}</Text>
                   <Text style={styles.progressItemValue}>
                     {formatAmount(advance.remainingAmount, advance.currency)}
                   </Text>
                 </View>
                 <View style={styles.progressItem}>
-                  <Text style={styles.progressItemLabel}>Due Date</Text>
+                  <Text style={styles.progressItemLabel}>{t("advance_details_v2.label_due_date")}</Text>
                   <Text style={styles.progressItemValue}>{formatDate(advance.dueDate)}</Text>
                 </View>
               </View>
@@ -184,30 +184,30 @@ export default function AdvanceDetailsScreen() {
 
         {/* Details Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Advance Details</Text>
+          <Text style={styles.sectionTitle}>{t("advance_details_v2.section_details")}</Text>
           <View style={styles.detailsCard}>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Advance ID</Text>
+              <Text style={styles.detailLabel}>{t("advance_details_v2.detail_advance_id")}</Text>
               <Text style={styles.detailValue}>{advance.id.slice(0, 16)}...</Text>
             </View>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Request Date</Text>
+              <Text style={styles.detailLabel}>{t("advance_details_v2.detail_request_date")}</Text>
               <Text style={styles.detailValue}>{formatDateTime(advance.requestDate)}</Text>
             </View>
             {advance.approvalDate && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Approval Date</Text>
+                <Text style={styles.detailLabel}>{t("advance_details_v2.detail_approval_date")}</Text>
                 <Text style={styles.detailValue}>{formatDateTime(advance.approvalDate)}</Text>
               </View>
             )}
             {advance.disbursementDate && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Disbursement Date</Text>
+                <Text style={styles.detailLabel}>{t("advance_details_v2.detail_disbursement_date")}</Text>
                 <Text style={styles.detailValue}>{formatDateTime(advance.disbursementDate)}</Text>
               </View>
             )}
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Due Date</Text>
+              <Text style={styles.detailLabel}>{t("advance_details_v2.detail_due_date")}</Text>
               <Text style={styles.detailValue}>{formatDate(advance.dueDate)}</Text>
             </View>
             <View style={styles.divider} />
@@ -216,7 +216,7 @@ export default function AdvanceDetailsScreen() {
               <Text style={styles.detailValue}>{formatAmount(advance.fee, advance.currency)}</Text>
             </View>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Total Repayment</Text>
+              <Text style={styles.detailLabel}>{t("advance_details_v2.detail_total_repayment")}</Text>
               <Text style={[styles.detailValue, styles.totalValue]}>
                 {formatAmount(advance.totalRepayment, advance.currency)}
               </Text>
@@ -226,7 +226,7 @@ export default function AdvanceDetailsScreen() {
 
         {/* Reason Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Reason for Advance</Text>
+          <Text style={styles.sectionTitle}>{t("advance_details_v2.section_reason")}</Text>
           <View style={styles.reasonCard}>
             <Ionicons name="document-text-outline" size={20} color="#6B7280" />
             <Text style={styles.reasonText}>{advance.reason}</Text>
@@ -235,7 +235,7 @@ export default function AdvanceDetailsScreen() {
 
         {/* Repayment Method Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Repayment Method</Text>
+          <Text style={styles.sectionTitle}>{t("advance_details_v2.section_method")}</Text>
           <View style={styles.repaymentMethodCard}>
             <Ionicons
               name={
@@ -269,11 +269,11 @@ export default function AdvanceDetailsScreen() {
 
         {/* XnScore Context */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Trust Context</Text>
+          <Text style={styles.sectionTitle}>{t("advance_details_v2.section_trust")}</Text>
           <View style={styles.trustCard}>
             <View style={styles.trustRow}>
               <View style={styles.trustItem}>
-                <Text style={styles.trustLabel}>XnScore at Request</Text>
+                <Text style={styles.trustLabel}>{t("advance_details_v2.label_xnscore_at_request")}</Text>
                 <Text style={styles.trustValue}>{advance.xnScoreAtRequest}</Text>
               </View>
               <View style={styles.trustItem}>
@@ -285,11 +285,11 @@ export default function AdvanceDetailsScreen() {
             </View>
             <View style={styles.trustRow}>
               <View style={styles.trustItem}>
-                <Text style={styles.trustLabel}>Circle Position</Text>
+                <Text style={styles.trustLabel}>{t("advance_details_v2.label_circle_position")}</Text>
                 <Text style={styles.trustValue}>#{advance.memberPosition}</Text>
               </View>
               <View style={styles.trustItem}>
-                <Text style={styles.trustLabel}>Expected Payout</Text>
+                <Text style={styles.trustLabel}>{t("advance_details_v2.label_expected_payout")}</Text>
                 <Text style={styles.trustValue}>
                   {formatAmount(advance.expectedPayoutAmount, advance.currency)}
                 </Text>
@@ -300,7 +300,7 @@ export default function AdvanceDetailsScreen() {
 
         {/* Timeline */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Timeline</Text>
+          <Text style={styles.sectionTitle}>{t("advance_details_v2.section_timeline")}</Text>
           <View style={styles.timelineCard}>
             <TimelineItem
               icon="document-text"
@@ -364,7 +364,7 @@ export default function AdvanceDetailsScreen() {
             ) : (
               <>
                 <Ionicons name="cash-outline" size={20} color="#FFFFFF" />
-                <Text style={styles.actionButtonText}>Receive Funds</Text>
+                <Text style={styles.actionButtonText}>{t("advance_details_v2.btn_receive_funds")}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -378,7 +378,7 @@ export default function AdvanceDetailsScreen() {
             onPress={handleMakeRepayment}
           >
             <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Make Repayment</Text>
+            <Text style={styles.actionButtonText}>{t("advance_details_v2.btn_make_repayment")}</Text>
           </TouchableOpacity>
         </View>
       )}

@@ -384,7 +384,7 @@ export default function SubstitutePoolScreen() {
     if (!userId) return;
     const maxCents = Math.max(0, Math.round(Number(formMaxContrib) * 100));
     if (Number.isNaN(maxCents)) {
-      Alert.alert("Invalid amount", "Max contribution must be a number");
+      Alert.alert(t("substitute_pool_v2.alert_invalid_title"), t("substitute_pool_v2.alert_invalid_body"));
       return;
     }
     setSavingForm(true);
@@ -401,7 +401,7 @@ export default function SubstitutePoolScreen() {
           .update(payload)
           .eq("member_id", userId);
         if (error) {
-          Alert.alert("Could not update", error.message);
+          Alert.alert(t("substitute_pool_v2.alert_could_not_update"), error.message);
           return;
         }
       } else {
@@ -414,7 +414,7 @@ export default function SubstitutePoolScreen() {
             availability_radius_miles: 50,
           });
         if (error) {
-          Alert.alert("Could not join pool", error.message);
+          Alert.alert(t("substitute_pool_v2.alert_could_not_join"), error.message);
           return;
         }
       }
@@ -441,7 +441,7 @@ export default function SubstitutePoolScreen() {
               .update({ status: "removed", removed_at: new Date().toISOString() })
               .eq("member_id", userId);
             if (error) {
-              Alert.alert("Could not leave pool", error.message);
+              Alert.alert(t("substitute_pool_v2.alert_could_not_leave"), error.message);
               return;
             }
             await loadEligibilityAndEntry();
@@ -460,17 +460,17 @@ export default function SubstitutePoolScreen() {
         p_response: response,
       });
       if (error) {
-        Alert.alert("Could not respond", error.message);
+        Alert.alert(t("substitute_pool_v2.alert_could_not_respond"), error.message);
         return;
       }
       const result = data as { success: boolean; error?: string };
       if (!result.success) {
-        Alert.alert("Could not respond", result.error ?? "Unknown error");
+        Alert.alert(t("substitute_pool_v2.alert_could_not_respond"), result.error ?? t("substitute_pool_v2.alert_unknown_error"));
         return;
       }
       await Promise.all([loadOffers(), loadEligibilityAndEntry()]);
     } catch (err: any) {
-      Alert.alert("Could not respond", err?.message ?? "Unknown error");
+      Alert.alert(t("substitute_pool_v2.alert_could_not_respond"), err?.message ?? t("substitute_pool_v2.alert_unknown_error"));
     } finally {
       setBusyOfferId(null);
     }
@@ -484,17 +484,17 @@ export default function SubstitutePoolScreen() {
         action === "approve" ? "admin_approve_substitution" : "admin_decline_substitution";
       const { data, error } = await supabase.rpc(rpc, { p_record_id: row.id });
       if (error) {
-        Alert.alert("Could not respond", error.message);
+        Alert.alert(t("substitute_pool_v2.alert_could_not_respond"), error.message);
         return;
       }
       const result = data as { success: boolean; error?: string };
       if (!result.success) {
-        Alert.alert("Could not respond", result.error ?? "Unknown error");
+        Alert.alert(t("substitute_pool_v2.alert_could_not_respond"), result.error ?? t("substitute_pool_v2.alert_unknown_error"));
         return;
       }
       await loadAdminQueue();
     } catch (err: any) {
-      Alert.alert("Could not respond", err?.message ?? "Unknown error");
+      Alert.alert(t("substitute_pool_v2.alert_could_not_respond"), err?.message ?? t("substitute_pool_v2.alert_unknown_error"));
     } finally {
       setBusyAdminId(null);
     }
@@ -520,16 +520,16 @@ export default function SubstitutePoolScreen() {
     const color = eligibility.eligible || inPool ? "#10B981" : "#F59E0B";
     return (
       <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: color }]}>
-        <Text style={styles.cardTitle}>Pool eligibility</Text>
+        <Text style={styles.cardTitle}>{t("substitute_pool_v2.card_eligibility")}</Text>
         <View style={styles.row}>
-          <Text style={styles.label}>XnScore</Text>
+          <Text style={styles.label}>{t("substitute_pool_v2.label_xnscore")}</Text>
           <Text style={styles.value}>
             {eligibility.xn_score}
             {eligibility.xn_score >= 60 ? " ✓" : " (need 60+)"}
           </Text>
         </View>
         <View style={styles.row}>
-          <Text style={styles.label}>Completed circles</Text>
+          <Text style={styles.label}>{t("substitute_pool_v2.label_completed_circles")}</Text>
           <Text style={styles.value}>
             {eligibility.completed_circles}
             {eligibility.completed_circles >= 1 ? " ✓" : " (need 1+)"}
@@ -547,7 +547,7 @@ export default function SubstitutePoolScreen() {
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>You're in the substitute pool</Text>
+          <Text style={styles.cardTitle}>{t("substitute_pool_v2.card_in_pool")}</Text>
           <View
             style={[
               styles.badge,
@@ -560,16 +560,16 @@ export default function SubstitutePoolScreen() {
           </View>
         </View>
         <View style={styles.row}>
-          <Text style={styles.label}>Reliability score</Text>
+          <Text style={styles.label}>{t("substitute_pool_v2.label_reliability")}</Text>
           <Text style={styles.value}>{poolEntry!.substitute_reliability_score.toFixed(2)}</Text>
         </View>
         <View style={styles.row}>
-          <Text style={styles.label}>Total substitutions</Text>
+          <Text style={styles.label}>{t("substitute_pool_v2.label_total_substitutions")}</Text>
           <Text style={styles.value}>{poolEntry!.total_substitutions}</Text>
         </View>
         {successRate !== null && (
           <View style={styles.row}>
-            <Text style={styles.label}>Success rate</Text>
+            <Text style={styles.label}>{t("substitute_pool_v2.label_success_rate")}</Text>
             <Text style={styles.value}>{successRate}%</Text>
           </View>
         )}
@@ -585,7 +585,7 @@ export default function SubstitutePoolScreen() {
           </Text>
         </View>
         <View style={styles.row}>
-          <Text style={styles.label}>Max contribution</Text>
+          <Text style={styles.label}>{t("substitute_pool_v2.label_max_contribution")}</Text>
           <Text style={styles.value}>
             {poolEntry!.max_contribution_amount_cents === 0
               ? "No cap"
@@ -593,7 +593,7 @@ export default function SubstitutePoolScreen() {
           </Text>
         </View>
         <View style={styles.row}>
-          <Text style={styles.label}>Language</Text>
+          <Text style={styles.label}>{t("substitute_pool_v2.label_language")}</Text>
           <Text style={styles.value}>{poolEntry!.preferred_languages?.[0] ?? "en"}</Text>
         </View>
         <View style={styles.actionRow}>
@@ -608,7 +608,7 @@ export default function SubstitutePoolScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={styles.dangerButton} onPress={leavePool}>
             <Ionicons name="exit-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.dangerButtonText}>Leave pool</Text>
+            <Text style={styles.dangerButtonText}>{t("substitute_pool_v2.btn_leave_pool")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -622,7 +622,7 @@ export default function SubstitutePoolScreen() {
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{inPool ? "Edit preferences" : "Opt into the pool"}</Text>
 
-        <Text style={styles.fieldLabel}>Status</Text>
+        <Text style={styles.fieldLabel}>{t("substitute_pool_v2.field_status")}</Text>
         <View style={styles.segment}>
           {(["active", "standby"] as PoolStatus[]).map((s) => (
             <TouchableOpacity
@@ -646,11 +646,11 @@ export default function SubstitutePoolScreen() {
           keyboardType="decimal-pad"
           value={formMaxContrib}
           onChangeText={setFormMaxContrib}
-          placeholder="0 (no cap)"
+          placeholder={t("substitute_pool_v2.placeholder_no_cap")}
         />
         <Text style={styles.helpText}>0 means no cap — you can take any circle.</Text>
 
-        <Text style={styles.fieldLabel}>Preferred language</Text>
+        <Text style={styles.fieldLabel}>{t("substitute_pool_v2.field_preferred_language")}</Text>
         <View style={styles.segment}>
           {["en", "fr", "es"].map((l) => (
             <TouchableOpacity
@@ -687,7 +687,7 @@ export default function SubstitutePoolScreen() {
       return (
         <View style={styles.emptyBlock}>
           <Ionicons name="mail-open-outline" size={28} color="#9CA3AF" />
-          <Text style={styles.emptyText}>No pending offers right now.</Text>
+          <Text style={styles.emptyText}>{t("substitute_pool_v2.empty_no_offers")}</Text>
         </View>
       );
     }
@@ -704,21 +704,21 @@ export default function SubstitutePoolScreen() {
             </View>
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>Contribution</Text>
+            <Text style={styles.label}>{t("substitute_pool_v2.label_contribution")}</Text>
             <Text style={styles.value}>
               {o.circle_amount != null ? `$${Number(o.circle_amount).toFixed(2)}` : "—"}
             </Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>Remaining cycles</Text>
+            <Text style={styles.label}>{t("substitute_pool_v2.label_remaining_cycles")}</Text>
             <Text style={styles.value}>{o.remaining_cycles ?? 0}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>Payout position</Text>
+            <Text style={styles.label}>{t("substitute_pool_v2.label_payout_position")}</Text>
             <Text style={styles.value}>#{o.original_payout_position}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>Exiting member</Text>
+            <Text style={styles.label}>{t("substitute_pool_v2.label_exiting_member")}</Text>
             <Text style={styles.value}>{o.exiting_member_name ?? "—"}</Text>
           </View>
           {o.payout_entitlement_transfer_cents > 0 && (
@@ -739,7 +739,7 @@ export default function SubstitutePoolScreen() {
               disabled={busyOfferId === o.id}
             >
               <Ionicons name="close-circle-outline" size={16} color="#FFFFFF" />
-              <Text style={styles.dangerButtonText}>Decline</Text>
+              <Text style={styles.dangerButtonText}>{t("substitute_pool_v2.btn_decline")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -754,7 +754,7 @@ export default function SubstitutePoolScreen() {
               ) : (
                 <>
                   <Ionicons name="checkmark-circle-outline" size={16} color="#FFFFFF" />
-                  <Text style={styles.successButtonText}>Accept</Text>
+                  <Text style={styles.successButtonText}>{t("substitute_pool_v2.btn_accept")}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -768,13 +768,13 @@ export default function SubstitutePoolScreen() {
     if (adminCircles.length === 0) return null;
     return (
       <>
-        <Text style={styles.sectionTitle}>Admin queue</Text>
+        <Text style={styles.sectionTitle}>{t("substitute_pool_v2.section_admin_queue")}</Text>
         {adminCircles.map((c) => (
           <View key={c.id} style={styles.adminBlock}>
             <Text style={styles.adminCircleName}>{c.name}</Text>
             {c.pending.length === 0 ? (
               <View style={styles.emptyBlock}>
-                <Text style={styles.emptyText}>No pending substitutions.</Text>
+                <Text style={styles.emptyText}>{t("substitute_pool_v2.empty_no_pending")}</Text>
               </View>
             ) : (
               c.pending.map((row) => {
@@ -795,26 +795,26 @@ export default function SubstitutePoolScreen() {
                       </View>
                     </View>
                     <View style={styles.row}>
-                      <Text style={styles.label}>Substitute reliability</Text>
+                      <Text style={styles.label}>{t("substitute_pool_v2.label_substitute_reliability")}</Text>
                       <Text style={styles.value}>{row.substitute_reliability_score.toFixed(2)}</Text>
                     </View>
                     <View style={styles.row}>
-                      <Text style={styles.label}>Position</Text>
+                      <Text style={styles.label}>{t("substitute_pool_v2.label_position")}</Text>
                       <Text style={styles.value}>#{row.original_payout_position}</Text>
                     </View>
                     {row.original_payout_amount_cents > 0 && (
                       <View style={styles.splitBlock}>
                         <Text style={styles.splitTitle}>80/10/10 split</Text>
                         <View style={styles.row}>
-                          <Text style={styles.label}>Substitute</Text>
+                          <Text style={styles.label}>{t("substitute_pool_v2.label_substitute")}</Text>
                           <Text style={styles.value}>{fmtCents(row.substitute_share_cents)}</Text>
                         </View>
                         <View style={styles.row}>
-                          <Text style={styles.label}>Insurance pool</Text>
+                          <Text style={styles.label}>{t("substitute_pool_v2.label_insurance_pool")}</Text>
                           <Text style={styles.value}>{fmtCents(row.insurance_pool_share_cents)}</Text>
                         </View>
                         <View style={styles.row}>
-                          <Text style={styles.label}>Exiting member</Text>
+                          <Text style={styles.label}>{t("substitute_pool_v2.label_exiting_member")}</Text>
                           <Text style={styles.value}>{fmtCents(row.original_member_settlement_cents)}</Text>
                         </View>
                       </View>
@@ -826,7 +826,7 @@ export default function SubstitutePoolScreen() {
                         disabled={busyAdminId === row.id}
                       >
                         <Ionicons name="close-circle-outline" size={16} color="#FFFFFF" />
-                        <Text style={styles.dangerButtonText}>Decline</Text>
+                        <Text style={styles.dangerButtonText}>{t("substitute_pool_v2.btn_decline")}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.successButton, busyAdminId === row.id && styles.primaryButtonDisabled]}
@@ -838,7 +838,7 @@ export default function SubstitutePoolScreen() {
                         ) : (
                           <>
                             <Ionicons name="checkmark-circle-outline" size={16} color="#FFFFFF" />
-                            <Text style={styles.successButtonText}>Approve</Text>
+                            <Text style={styles.successButtonText}>{t("substitute_pool_v2.btn_approve")}</Text>
                           </>
                         )}
                       </TouchableOpacity>
@@ -874,7 +874,7 @@ export default function SubstitutePoolScreen() {
         {loading ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator color="#2563EB" />
-            <Text style={styles.loadingText}>Loading your substitute pool…</Text>
+            <Text style={styles.loadingText}>{t("substitute_pool_v2.loading_text")}</Text>
           </View>
         ) : (
           <>
@@ -882,7 +882,7 @@ export default function SubstitutePoolScreen() {
             {renderPoolEntry()}
             {renderForm()}
 
-            <Text style={styles.sectionTitle}>Pending offers</Text>
+            <Text style={styles.sectionTitle}>{t("substitute_pool_v2.section_pending_offers")}</Text>
             {renderOffers()}
 
             {renderAdmin()}

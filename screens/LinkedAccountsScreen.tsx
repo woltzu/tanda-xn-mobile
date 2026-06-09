@@ -43,7 +43,7 @@ export default function LinkedAccountsScreen() {
         await Linking.openURL(onboardingUrl);
       }
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Failed to start bank account setup.");
+      Alert.alert(t("linked_accounts_v2.alert_error_title"), err.message || t("linked_accounts_v2.alert_failed_start"));
     }
   };
 
@@ -67,7 +67,7 @@ export default function LinkedAccountsScreen() {
             try {
               await setDefaultPaymentMethod(method.id);
             } catch (err: any) {
-              Alert.alert("Error", err.message || "Failed to set default payment method.");
+              Alert.alert(t("linked_accounts_v2.alert_error_title"), err.message || t("linked_accounts_v2.alert_failed_default"));
             }
           },
         },
@@ -88,7 +88,7 @@ export default function LinkedAccountsScreen() {
             try {
               await removePaymentMethod(method.id);
             } catch (err: any) {
-              Alert.alert("Error", err.message || "Failed to remove payment method.");
+              Alert.alert(t("linked_accounts_v2.alert_error_title"), err.message || t("linked_accounts_v2.alert_failed_remove"));
             }
           },
         },
@@ -141,17 +141,17 @@ export default function LinkedAccountsScreen() {
           {isLoadingMethods ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#00C6AE" />
-              <Text style={styles.loadingText}>Loading payment methods...</Text>
+              <Text style={styles.loadingText}>{t("linked_accounts_v2.loading_text")}</Text>
             </View>
           ) : (
             <>
               {/* Bank Accounts */}
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Bank Accounts</Text>
+                  <Text style={styles.sectionTitle}>{t("linked_accounts_v2.section_bank_accounts")}</Text>
                   <TouchableOpacity style={styles.addButton} onPress={handleAddBank}>
                     <Ionicons name="add" size={18} color="#00C6AE" />
-                    <Text style={styles.addButtonText}>Add Bank</Text>
+                    <Text style={styles.addButtonText}>{t("linked_accounts_v2.btn_add_bank")}</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -177,7 +177,7 @@ export default function LinkedAccountsScreen() {
                             <Text style={styles.accountName}>{method.label}</Text>
                             {method.isDefault && (
                               <View style={styles.primaryBadge}>
-                                <Text style={styles.primaryBadgeText}>PRIMARY</Text>
+                                <Text style={styles.primaryBadgeText}>{t("linked_accounts_v2.badge_primary")}</Text>
                               </View>
                             )}
                           </View>
@@ -192,7 +192,7 @@ export default function LinkedAccountsScreen() {
                               size={12}
                               color="#00C6AE"
                             />
-                            <Text style={styles.verifiedText}>Verified</Text>
+                            <Text style={styles.verifiedText}>{t("linked_accounts_v2.tag_verified")}</Text>
                           </View>
                         </View>
                         <TouchableOpacity
@@ -230,12 +230,12 @@ export default function LinkedAccountsScreen() {
                 ) : (
                   <View style={styles.emptyCard}>
                     <Ionicons name="business-outline" size={40} color="#9CA3AF" />
-                    <Text style={styles.emptyText}>No bank accounts linked</Text>
+                    <Text style={styles.emptyText}>{t("linked_accounts_v2.empty_no_banks")}</Text>
                     <TouchableOpacity
                       style={styles.emptyButton}
                       onPress={handleAddBank}
                     >
-                      <Text style={styles.emptyButtonText}>Link a Bank</Text>
+                      <Text style={styles.emptyButtonText}>{t("linked_accounts_v2.btn_link_bank")}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -247,7 +247,7 @@ export default function LinkedAccountsScreen() {
                   <Text style={styles.sectionTitle}>Cards & Other</Text>
                   <TouchableOpacity style={styles.addButton} onPress={handleAddCard}>
                     <Ionicons name="add" size={18} color="#00C6AE" />
-                    <Text style={styles.addButtonText}>Add Card</Text>
+                    <Text style={styles.addButtonText}>{t("linked_accounts_v2.btn_add_card")}</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -273,7 +273,7 @@ export default function LinkedAccountsScreen() {
                             <Text style={styles.accountName}>{method.label}</Text>
                             {method.isDefault && (
                               <View style={styles.primaryBadge}>
-                                <Text style={styles.primaryBadgeText}>PRIMARY</Text>
+                                <Text style={styles.primaryBadgeText}>{t("linked_accounts_v2.badge_primary")}</Text>
                               </View>
                             )}
                           </View>
@@ -288,7 +288,7 @@ export default function LinkedAccountsScreen() {
                               size={12}
                               color="#00C6AE"
                             />
-                            <Text style={styles.verifiedText}>Verified</Text>
+                            <Text style={styles.verifiedText}>{t("linked_accounts_v2.tag_verified")}</Text>
                           </View>
                         </View>
                         <TouchableOpacity
@@ -326,12 +326,12 @@ export default function LinkedAccountsScreen() {
                 ) : (
                   <View style={styles.emptyCard}>
                     <Ionicons name="card-outline" size={40} color="#9CA3AF" />
-                    <Text style={styles.emptyText}>No cards added</Text>
+                    <Text style={styles.emptyText}>{t("linked_accounts_v2.empty_no_cards")}</Text>
                     <TouchableOpacity
                       style={styles.emptyButton}
                       onPress={handleAddCard}
                     >
-                      <Text style={styles.emptyButtonText}>Add a Card</Text>
+                      <Text style={styles.emptyButtonText}>{t("linked_accounts_v2.btn_add_a_card")}</Text>
                     </TouchableOpacity>
                   </View>
                 )}

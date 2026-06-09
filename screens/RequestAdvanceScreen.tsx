@@ -149,7 +149,7 @@ export default function RequestAdvanceScreen() {
       // Navigate to details screen
       navigation.navigate("AdvanceDetails", { advanceId: advance.id });
     } catch (error) {
-      Alert.alert("Error", "Failed to submit advance request. Please try again.");
+      Alert.alert(t("request_advance_v2.alert_error_title"), t("request_advance_v2.alert_failed_submit"));
     } finally {
       setIsProcessing(false);
     }
@@ -168,9 +168,9 @@ export default function RequestAdvanceScreen() {
         </LinearGradient>
         <View style={styles.emptyState}>
           <Ionicons name="alert-circle-outline" size={64} color="#9CA3AF" />
-          <Text style={styles.emptyStateText}>This payout could not be found</Text>
+          <Text style={styles.emptyStateText}>{t("request_advance_v2.empty_not_found")}</Text>
           <TouchableOpacity style={styles.backToHubButton} onPress={() => navigation.navigate("AdvanceHub")}>
-            <Text style={styles.backToHubText}>Back to Advance Hub</Text>
+            <Text style={styles.backToHubText}>{t("request_advance_v2.btn_back_to_hub")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -190,12 +190,12 @@ export default function RequestAdvanceScreen() {
         </LinearGradient>
         <View style={styles.emptyState}>
           <Ionicons name="checkmark-circle-outline" size={64} color="#00C6AE" />
-          <Text style={styles.emptyStateText}>You already have an advance for this payout</Text>
+          <Text style={styles.emptyStateText}>{t("request_advance_v2.empty_already_advance")}</Text>
           <TouchableOpacity
             style={styles.viewAdvanceButton}
             onPress={() => navigation.navigate("AdvanceDetails", { advanceId: existingAdvance.id })}
           >
-            <Text style={styles.viewAdvanceText}>View Advance Details</Text>
+            <Text style={styles.viewAdvanceText}>{t("request_advance_v2.btn_view_advance")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -246,7 +246,7 @@ export default function RequestAdvanceScreen() {
                   <Text style={styles.tierBadgeText}>{tierInfo.label}</Text>
                 </View>
                 <View style={styles.scoreDisplay}>
-                  <Text style={styles.scoreLabel}>XnScore</Text>
+                  <Text style={styles.scoreLabel}>{t("request_advance_v2.label_xnscore")}</Text>
                   <Text style={styles.scoreValue}>{score}</Text>
                 </View>
               </View>
@@ -261,14 +261,14 @@ export default function RequestAdvanceScreen() {
                     </Text>
                   </View>
                   <View style={styles.eligibilityRow}>
-                    <Text style={styles.eligibilityLabel}>Available now</Text>
+                    <Text style={styles.eligibilityLabel}>{t("request_advance_v2.label_available_now")}</Text>
                     <Text style={[styles.eligibilityValue, styles.highlightValue]}>
                       {currencyInfo?.symbol}
                       {formatCurrency(eligibility.availableAmount, payoutCurrency)}
                     </Text>
                   </View>
                   <View style={styles.eligibilityRow}>
-                    <Text style={styles.eligibilityLabel}>Advance fee</Text>
+                    <Text style={styles.eligibilityLabel}>{t("request_advance_v2.label_advance_fee")}</Text>
                     <Text style={styles.eligibilityValue}>{feePercent}%</Text>
                   </View>
                 </View>
@@ -286,7 +286,7 @@ export default function RequestAdvanceScreen() {
                     <View style={styles.previewBox}>
                       <Ionicons name="eye" size={20} color="#F59E0B" />
                       <View style={styles.previewContent}>
-                        <Text style={styles.previewTitle}>Preview Mode</Text>
+                        <Text style={styles.previewTitle}>{t("request_advance_v2.preview_title")}</Text>
                         <Text style={styles.previewText}>
                           You can see your potential advance amount, but you need XnScore 45+ to request.
                           You're {45 - score} points away!
@@ -308,12 +308,12 @@ export default function RequestAdvanceScreen() {
               <>
                 {/* Amount Input */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>How much do you need?</Text>
+                  <Text style={styles.sectionTitle}>{t("request_advance_v2.section_how_much")}</Text>
                   <View style={styles.amountInputContainer}>
                     <Text style={styles.currencySymbol}>{currencyInfo?.symbol}</Text>
                     <TextInput
                       style={styles.amountInput}
-                      placeholder="0"
+                      placeholder={t("request_advance_v2.placeholder_zero")}
                       placeholderTextColor="#9CA3AF"
                       keyboardType="decimal-pad"
                       value={amount}
@@ -347,7 +347,7 @@ export default function RequestAdvanceScreen() {
 
                 {/* Reason Selection */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>What's this for?</Text>
+                  <Text style={styles.sectionTitle}>{t("request_advance_v2.section_purpose")}</Text>
                   <View style={styles.reasonsGrid}>
                     {ADVANCE_REASONS.map((reason) => (
                       <TouchableOpacity
@@ -370,7 +370,7 @@ export default function RequestAdvanceScreen() {
                   {selectedReason === "other" && (
                     <TextInput
                       style={styles.customReasonInput}
-                      placeholder="Please specify your reason..."
+                      placeholder={t("request_advance_v2.placeholder_reason")}
                       placeholderTextColor="#9CA3AF"
                       value={customReason}
                       onChangeText={setCustomReason}
@@ -381,7 +381,7 @@ export default function RequestAdvanceScreen() {
 
                 {/* Repayment Method */}
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>How will you repay?</Text>
+                  <Text style={styles.sectionTitle}>{t("request_advance_v2.section_how_repay")}</Text>
                   {REPAYMENT_OPTIONS.map((option) => (
                     <TouchableOpacity
                       key={option.id}
@@ -409,10 +409,10 @@ export default function RequestAdvanceScreen() {
                 {/* Summary */}
                 {requestedAmount > 0 && (
                   <View style={styles.summaryCard}>
-                    <Text style={styles.sectionTitle}>Advance Summary</Text>
+                    <Text style={styles.sectionTitle}>{t("request_advance_v2.section_summary")}</Text>
 
                     <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>Advance amount</Text>
+                      <Text style={styles.summaryLabel}>{t("request_advance_v2.summary_amount")}</Text>
                       <Text style={styles.summaryValue}>
                         {currencyInfo?.symbol}
                         {formatCurrency(requestedAmount, payoutCurrency)}
@@ -430,7 +430,7 @@ export default function RequestAdvanceScreen() {
                     <View style={styles.summaryDivider} />
 
                     <View style={styles.summaryRow}>
-                      <Text style={styles.totalLabel}>Total to repay</Text>
+                      <Text style={styles.totalLabel}>{t("request_advance_v2.summary_total")}</Text>
                       <Text style={styles.totalValue}>
                         {currencyInfo?.symbol}
                         {formatCurrency(totalRepayment, payoutCurrency)}
@@ -445,7 +445,7 @@ export default function RequestAdvanceScreen() {
                     </View>
 
                     <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>You'll receive</Text>
+                      <Text style={styles.summaryLabel}>{t("request_advance_v2.summary_youll_receive")}</Text>
                       <Text style={[styles.summaryValue, { color: "#00C6AE", fontWeight: "700" }]}>
                         {currencyInfo?.symbol}
                         {formatCurrency(payout.expectedAmount - totalRepayment, payoutCurrency)}
@@ -458,7 +458,7 @@ export default function RequestAdvanceScreen() {
                 <View style={styles.infoCard}>
                   <Ionicons name="information-circle" size={20} color="#00C6AE" />
                   <View style={styles.infoContent}>
-                    <Text style={styles.infoTitle}>How it works</Text>
+                    <Text style={styles.infoTitle}>{t("request_advance_v2.info_title")}</Text>
                     <Text style={styles.infoText}>
                       When your payout arrives on{" "}
                       {dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, we'll automatically
@@ -502,11 +502,11 @@ export default function RequestAdvanceScreen() {
             disabled={!canSubmit || isProcessing}
           >
             {isProcessing ? (
-              <Text style={styles.submitButtonText}>Processing...</Text>
+              <Text style={styles.submitButtonText}>{t("request_advance_v2.btn_processing")}</Text>
             ) : (
               <>
                 <Ionicons name="flash-outline" size={20} color="#FFFFFF" />
-                <Text style={styles.submitButtonText}>Get Advance</Text>
+                <Text style={styles.submitButtonText}>{t("request_advance_v2.btn_get_advance")}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -521,7 +521,7 @@ export default function RequestAdvanceScreen() {
             onPress={() => navigation.navigate("XnScoreDashboard")}
           >
             <Ionicons name="trending-up" size={20} color="#00C6AE" />
-            <Text style={styles.improveScoreText}>Improve Your XnScore</Text>
+            <Text style={styles.improveScoreText}>{t("request_advance_v2.btn_improve_score")}</Text>
           </TouchableOpacity>
         </View>
       )}

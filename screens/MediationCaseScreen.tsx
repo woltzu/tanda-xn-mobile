@@ -147,7 +147,7 @@ export default function MediationCaseScreen() {
 
   const handleSubmitRuling = async () => {
     if (!selectedCase || !rulingText.trim() || !explanationText.trim()) {
-      Alert.alert("Error", "Please provide both a ruling and an explanation.");
+      Alert.alert(t("mediation_case_v2.alert_error_title"), t("mediation_case_v2.alert_provide_both"));
       return;
     }
 
@@ -157,7 +157,7 @@ export default function MediationCaseScreen() {
     setRulingText("");
     setExplanationText("");
 
-    Alert.alert("Success", "Your ruling has been submitted successfully!");
+    Alert.alert(t("mediation_case_v2.alert_success_title"), t("mediation_case_v2.alert_ruling_submitted"));
   };
 
   const handleEscalateCase = (caseItem: MediationCase) => {
@@ -319,7 +319,7 @@ export default function MediationCaseScreen() {
               onPress={() => handleAcceptCase(caseItem)}
             >
               <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
-              <Text style={styles.acceptButtonText}>Accept Case</Text>
+              <Text style={styles.acceptButtonText}>{t("mediation_case_v2.btn_accept_case")}</Text>
             </TouchableOpacity>
           ) : (
             <>
@@ -329,14 +329,14 @@ export default function MediationCaseScreen() {
                     style={styles.escalateButton}
                     onPress={() => handleEscalateCase(caseItem)}
                   >
-                    <Text style={styles.escalateButtonText}>Escalate</Text>
+                    <Text style={styles.escalateButtonText}>{t("mediation_case_v2.btn_escalate")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.rulingButton}
                     onPress={() => handleOpenRuling(caseItem)}
                   >
                     <Ionicons name="document-text" size={18} color="#FFFFFF" />
-                    <Text style={styles.rulingButtonText}>Submit Ruling</Text>
+                    <Text style={styles.rulingButtonText}>{t("mediation_case_v2.btn_submit_ruling")}</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -363,26 +363,26 @@ export default function MediationCaseScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{elderProfile.activeCases}</Text>
-            <Text style={styles.statLabel}>Active</Text>
+            <Text style={styles.statLabel}>{t("mediation_case_v2.stat_active")}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statValue}>
               {elderProfile.maxConcurrentCases - elderProfile.activeCases}
             </Text>
-            <Text style={styles.statLabel}>Available Slots</Text>
+            <Text style={styles.statLabel}>{t("mediation_case_v2.stat_available_slots")}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{elderProfile.totalCasesResolved}</Text>
-            <Text style={styles.statLabel}>Resolved</Text>
+            <Text style={styles.statLabel}>{t("mediation_case_v2.stat_resolved")}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: "#00C6AE" }]}>
               {elderProfile.successRate}%
             </Text>
-            <Text style={styles.statLabel}>Success Rate</Text>
+            <Text style={styles.statLabel}>{t("mediation_case_v2.stat_success_rate")}</Text>
           </View>
         </View>
       </View>
@@ -473,7 +473,7 @@ export default function MediationCaseScreen() {
           <View style={styles.legend}>
             <View style={styles.legendItem}>
               <Ionicons name="star" size={14} color="#D97706" />
-              <Text style={styles.legendText}>Matches your specialization</Text>
+              <Text style={styles.legendText}>{t("mediation_case_v2.legend_matches")}</Text>
             </View>
           </View>
         )}
@@ -486,7 +486,7 @@ export default function MediationCaseScreen() {
             ) : (
               <View style={styles.emptyState}>
                 <Ionicons name="folder-open-outline" size={48} color="#D1D5DB" />
-                <Text style={styles.emptyStateTitle}>No Available Cases</Text>
+                <Text style={styles.emptyStateTitle}>{t("mediation_case_v2.empty_no_available")}</Text>
                 <Text style={styles.emptyStateText}>
                   Check back later for new cases
                 </Text>
@@ -497,7 +497,7 @@ export default function MediationCaseScreen() {
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="briefcase-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyStateTitle}>No Active Cases</Text>
+              <Text style={styles.emptyStateTitle}>{t("mediation_case_v2.empty_no_active")}</Text>
               <Text style={styles.emptyStateText}>
                 Accept cases from the Available tab
               </Text>
@@ -524,9 +524,9 @@ export default function MediationCaseScreen() {
                 setExplanationText("");
               }}
             >
-              <Text style={styles.modalCancel}>Cancel</Text>
+              <Text style={styles.modalCancel}>{t("mediation_case_v2.modal_cancel")}</Text>
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>Submit Ruling</Text>
+            <Text style={styles.modalTitle}>{t("mediation_case_v2.modal_title")}</Text>
             <TouchableOpacity
               onPress={handleSubmitRuling}
               disabled={!rulingText.trim() || !explanationText.trim()}
@@ -555,7 +555,7 @@ export default function MediationCaseScreen() {
                   <Text style={styles.modalSectionTitle}>Ruling Decision *</Text>
                   <TextInput
                     style={styles.rulingInput}
-                    placeholder="e.g., In favor of the complainant, Split decision..."
+                    placeholder={t("mediation_case_v2.placeholder_ruling")}
                     value={rulingText}
                     onChangeText={setRulingText}
                     multiline
@@ -566,7 +566,7 @@ export default function MediationCaseScreen() {
                   <Text style={styles.modalSectionTitle}>Explanation *</Text>
                   <TextInput
                     style={[styles.rulingInput, styles.explanationInput]}
-                    placeholder="Provide a detailed explanation of your ruling and reasoning..."
+                    placeholder={t("mediation_case_v2.placeholder_explanation")}
                     value={explanationText}
                     onChangeText={setExplanationText}
                     multiline
@@ -575,7 +575,7 @@ export default function MediationCaseScreen() {
                 </View>
 
                 <View style={styles.rulingTemplates}>
-                  <Text style={styles.templatesTitle}>Quick Templates</Text>
+                  <Text style={styles.templatesTitle}>{t("mediation_case_v2.templates_title")}</Text>
                   {[
                     "In favor of complainant - clear evidence supports their claim",
                     "In favor of respondent - insufficient evidence",
