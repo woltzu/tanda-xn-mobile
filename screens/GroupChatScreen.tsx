@@ -24,6 +24,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
 
@@ -68,6 +69,7 @@ const formatMessageTime = (iso: string): string => {
 export default function GroupChatScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteParams>();
+  const { t } = useTranslation();
   const circleId = route.params?.circleId ?? "";
   const circleName = route.params?.circleName ?? "Circle";
 

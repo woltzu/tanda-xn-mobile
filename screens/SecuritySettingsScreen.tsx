@@ -11,12 +11,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 
 type SecuritySettingsNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function SecuritySettingsScreen() {
   const navigation = useNavigation<SecuritySettingsNavigationProp>();
+  const { t } = useTranslation();
 
   const [biometricsEnabled, setBiometricsEnabled] = useState(true);
   const [loginAlerts, setLoginAlerts] = useState(true);
@@ -60,7 +62,7 @@ export default function SecuritySettingsScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View>
-              <Text style={styles.headerTitle}>Security</Text>
+              <Text style={styles.headerTitle}>{t("screen_headers.security_settings")}</Text>
               <Text style={styles.headerSubtitle}>Protect your account</Text>
             </View>
             <View style={{ width: 40 }} />

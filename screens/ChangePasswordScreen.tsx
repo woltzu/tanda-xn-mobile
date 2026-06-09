@@ -12,12 +12,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 
 type ChangePasswordNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function ChangePasswordScreen() {
   const navigation = useNavigation<ChangePasswordNavigationProp>();
+  const { t } = useTranslation();
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -104,7 +106,7 @@ export default function ChangePasswordScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View>
-              <Text style={styles.headerTitle}>Change Password</Text>
+              <Text style={styles.headerTitle}>{t("screen_headers.change_password")}</Text>
               <Text style={styles.headerSubtitle}>Create a strong password</Text>
             </View>
           </View>

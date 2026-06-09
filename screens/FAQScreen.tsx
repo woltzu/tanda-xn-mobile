@@ -32,6 +32,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import {
   FAQ_ITEMS,
   FAQ_CATEGORIES,
@@ -57,6 +58,7 @@ type FAQRouteProp = RouteProp<{ FAQ: FAQRouteParams }, "FAQ">;
 export default function FAQScreen() {
   const navigation = useNavigation();
   const route = useRoute<FAQRouteProp>();
+  const { t } = useTranslation();
 
   // Deep-link support: callers can preselect a category and/or seed the
   // search box. See header note about in-app error -> Help integration.
@@ -107,7 +109,7 @@ export default function FAQScreen() {
         >
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Help & FAQ</Text>
+        <Text style={styles.headerTitle}>{t("screen_headers.faq")}</Text>
         <View style={styles.headerBtn} />
       </View>
 

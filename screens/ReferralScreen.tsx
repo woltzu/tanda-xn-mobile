@@ -33,6 +33,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 
@@ -51,6 +52,7 @@ type Stats = {
 
 export default function ReferralScreen() {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const { user } = useAuth();
 
   const [code, setCode] = useState<string | null>(null);
@@ -163,7 +165,7 @@ export default function ReferralScreen() {
         >
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Refer & Earn</Text>
+        <Text style={styles.headerTitle}>{t("screen_headers.referral")}</Text>
         <TouchableOpacity
           style={styles.headerBtn}
           onPress={refresh}

@@ -12,6 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import {
   useNotifications,
@@ -57,6 +58,7 @@ const formatNotificationTime = (dateString: string): string => {
 
 export default function NotificationsInboxScreen() {
   const navigation = useNavigation<NotificationsInboxNavigationProp>();
+  const { t } = useTranslation();
   const {
     notifications,
     unreadCount,
@@ -118,7 +120,7 @@ export default function NotificationsInboxScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Notifications</Text>
+            <Text style={styles.headerTitle}>{t("screen_headers.notifications")}</Text>
             <View style={styles.settingsButton} />
           </View>
         </LinearGradient>
@@ -141,7 +143,7 @@ export default function NotificationsInboxScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Notifications</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.notifications")}</Text>
           <TouchableOpacity
             style={styles.settingsButton}
             onPress={() => navigation.navigate("NotificationPrefs" as any)}
