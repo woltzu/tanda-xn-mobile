@@ -16,6 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import {
   useSavings,
@@ -32,6 +33,7 @@ type CreateGoalRouteProp = RouteProp<RootStackParamList, "CreateGoal">;
 export default function CreateGoalScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<CreateGoalRouteProp>();
+  const { t } = useTranslation();
   const { createGoal, deposit } = useSavings();
 
   const preselectedType = route.params?.goalType;
@@ -75,11 +77,11 @@ export default function CreateGoalScreen() {
 
   const handleNext = () => {
     if (step === 1 && !goalType) {
-      Alert.alert("Select Goal Type", "Please select a savings type to continue");
+      Alert.alert(t("create_goal_v2.alert_select_type_title"), t("create_goal_v2.alert_select_type_body"));
       return;
     }
     if (step === 2 && (!goalName || !targetAmount)) {
-      Alert.alert("Missing Information", "Please enter a name and target amount");
+      Alert.alert(t("create_goal_v2.alert_missing_title"), t("create_goal_v2.alert_missing_body"));
       return;
     }
     if (step < 3) {
@@ -147,7 +149,7 @@ export default function CreateGoalScreen() {
       );
     } catch (error) {
       console.error("[CreateGoal] Error:", error);
-      Alert.alert("Error", "Failed to create goal. Please try again.");
+      Alert.alert(t("create_goal_v2.alert_error_title"), t("create_goal_v2.alert_failed_create"));
       showToast("Failed to create goal", "error");
     } finally {
       setIsProcessing(false);
@@ -156,7 +158,7 @@ export default function CreateGoalScreen() {
 
   const renderStep1 = () => (
     <View style={styles.stepContent}>
-      <Text style={styles.stepTitle}>Choose Savings Type</Text>
+      <Text style={styles.stepTitle}>{t("create_goal_v2.step_choose_type")}</Text>
       <Text style={styles.stepSubtitle}>
         Select the type of savings that fits your goal
       </Text>
@@ -205,7 +207,7 @@ export default function CreateGoalScreen() {
 
   const renderStep2 = () => (
     <View style={styles.stepContent}>
-      <Text style={styles.stepTitle}>Goal Details</Text>
+      <Text style={styles.stepTitle}>{t("create_goal_v2.step_goal_details")}</Text>
       <Text style={styles.stepSubtitle}>
         Tell us about your savings goal
       </Text>
@@ -243,24 +245,24 @@ export default function CreateGoalScreen() {
       </ScrollView>
 
       {/* Goal Name */}
-      <Text style={styles.inputLabel}>Goal Name</Text>
+      <Text style={styles.inputLabel}>{t("create_goal_v2.label_goal_name")}</Text>
       <TextInput
         style={styles.textInput}
         value={goalName}
         onChangeText={setGoalName}
-        placeholder="e.g., First Home, Emergency Fund"
+        placeholder={t("create_goal_v2.placeholder_goal_name")}
         placeholderTextColor="#9CA3AF"
       />
 
       {/* Target Amount */}
-      <Text style={styles.inputLabel}>Target Amount</Text>
+      <Text style={styles.inputLabel}>{t("create_goal_v2.label_target_amount")}</Text>
       <View style={styles.amountInputContainer}>
         <Text style={styles.currencyPrefix}>$</Text>
         <TextInput
           style={styles.amountInput}
           value={targetAmount}
           onChangeText={setTargetAmount}
-          placeholder="0.00"
+          placeholder={t("create_goal_v2.placeholder_amount")}
           placeholderTextColor="#9CA3AF"
           keyboardType="numeric"
         />
@@ -274,7 +276,7 @@ export default function CreateGoalScreen() {
           style={styles.amountInput}
           value={initialDeposit}
           onChangeText={setInitialDeposit}
-          placeholder="0.00"
+          placeholder={t("create_goal_v2.placeholder_amount")}
           placeholderTextColor="#9CA3AF"
           keyboardType="numeric"
         />
@@ -283,7 +285,7 @@ export default function CreateGoalScreen() {
       {/* Lock Term (for locked goals) */}
       {goalType === "locked" && (
         <>
-          <Text style={styles.inputLabel}>Lock Period</Text>
+          <Text style={styles.inputLabel}>{t("create_goal_v2.label_lock_period")}</Text>
           <View style={styles.lockTermOptions}>
             {LOCKED_TERM_OPTIONS.map((option) => (
               <TouchableOpacity
@@ -343,21 +345,21 @@ export default function CreateGoalScreen() {
         <View style={styles.summaryDivider} />
 
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Target Amount</Text>
+          <Text style={styles.summaryLabel}>{t("create_goal_v2.summary_target")}</Text>
           <Text style={styles.summaryValue}>
             ${parseFloat(targetAmount || "0").toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </Text>
         </View>
 
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Initial Deposit</Text>
+          <Text style={styles.summaryLabel}>{t("create_goal_v2.summary_initial")}</Text>
           <Text style={styles.summaryValue}>
             ${parseFloat(initialDeposit || "0").toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </Text>
         </View>
 
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Interest Rate</Text>
+          <Text style={styles.summaryLabel}>{t("create_goal_v2.summary_rate")}</Text>
           <Text style={[styles.summaryValue, { color: "#10B981" }]}>
             {(getInterestRate() * 100).toFixed(1)}% APY
           </Text>
@@ -365,13 +367,13 @@ export default function CreateGoalScreen() {
 
         {goalType === "locked" && (
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Lock Period</Text>
+            <Text style={styles.summaryLabel}>{t("create_goal_v2.summary_lock")}</Text>
             <Text style={styles.summaryValue}>{lockTerm} months</Text>
           </View>
         )}
 
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Projected Interest</Text>
+          <Text style={styles.summaryLabel}>{t("create_goal_v2.summary_projected")}</Text>
           <Text style={[styles.summaryValue, { color: "#10B981" }]}>
             +${calculateProjectedEarnings().toLocaleString("en-US", { minimumFractionDigits: 2 })}
           </Text>
@@ -501,7 +503,7 @@ export default function CreateGoalScreen() {
             {/* Priority Selector (when replenish is off) */}
             {!autoReplenish && (
               <View style={styles.prioritySection}>
-                <Text style={styles.priorityLabel}>Savings Priority</Text>
+                <Text style={styles.priorityLabel}>{t("create_goal_v2.priority_label")}</Text>
                 <View style={styles.priorityOptions}>
                   {[
                     { value: 1, label: "High", desc: "Save first" },

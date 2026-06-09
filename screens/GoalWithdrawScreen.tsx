@@ -39,6 +39,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useGoalActions } from "../hooks/useGoalActions";
 import { useFormDraft } from "../hooks/useFormDraft";
@@ -143,6 +144,7 @@ type PenaltyInfo = {
 export default function GoalWithdrawScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalWithdrawRouteProp>();
+  const { t } = useTranslation();
   const { withdraw } = useGoalActions();
 
   const goal = route.params?.goal ?? DEFAULT_GOAL;
@@ -351,7 +353,7 @@ export default function GoalWithdrawScreen() {
     setSubmitting(false);
 
     if (error) {
-      Alert.alert("Withdrawal failed", error.message ?? "Please try again.");
+      Alert.alert(t("goal_withdraw.alert_failed_title"), error.message ?? t("goal_withdraw.alert_please_try_again"));
       return;
     }
 
@@ -407,12 +409,12 @@ export default function GoalWithdrawScreen() {
             </Text>
           </View>
 
-          <Text style={styles.confirmTitle}>Confirm Withdrawal</Text>
+          <Text style={styles.confirmTitle}>{t("goal_withdraw.confirm_title")}</Text>
 
           {/* Summary */}
           <View style={styles.confirmSummary}>
             <View style={styles.confirmRow}>
-              <Text style={styles.confirmRowLabel}>Withdraw amount</Text>
+              <Text style={styles.confirmRowLabel}>{t("goal_withdraw.confirm_amount")}</Text>
               <Text style={styles.confirmRowValue}>
                 $
                 {numAmount.toLocaleString("en-US", {
@@ -436,7 +438,7 @@ export default function GoalWithdrawScreen() {
             )}
 
             <View style={styles.confirmTotalRow}>
-              <Text style={styles.confirmTotalLabel}>You receive</Text>
+              <Text style={styles.confirmTotalLabel}>{t("goal_withdraw.confirm_receive")}</Text>
               <Text
                 style={[
                   styles.confirmTotalValue,
@@ -466,7 +468,7 @@ export default function GoalWithdrawScreen() {
               accessibilityRole="button"
               style={[styles.confirmGoBack, submitting && { opacity: 0.5 }]}
             >
-              <Text style={styles.confirmGoBackText}>Go Back</Text>
+              <Text style={styles.confirmGoBackText}>{t("goal_withdraw.btn_go_back")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={handleConfirm}
@@ -482,7 +484,7 @@ export default function GoalWithdrawScreen() {
               {submitting ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.confirmWithdrawText}>Withdraw</Text>
+                <Text style={styles.confirmWithdrawText}>{t("goal_withdraw.btn_withdraw_confirm")}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -520,7 +522,7 @@ export default function GoalWithdrawScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Withdraw</Text>
+            <Text style={styles.headerTitle}>{t("goal_withdraw.header_title")}</Text>
           </View>
 
           {/* Goal info */}
@@ -542,7 +544,7 @@ export default function GoalWithdrawScreen() {
               </View>
             </View>
             <View style={{ alignItems: "flex-end" }}>
-              <Text style={styles.availLabel}>Available</Text>
+              <Text style={styles.availLabel}>{t("goal_withdraw.label_available")}</Text>
               <Text style={styles.availValue}>
                 $
                 {availableBalance.toLocaleString("en-US", {
@@ -625,7 +627,7 @@ export default function GoalWithdrawScreen() {
 
           {/* Amount input */}
           <View style={styles.card}>
-            <Text style={styles.fieldLabel}>AMOUNT TO WITHDRAW</Text>
+            <Text style={styles.fieldLabel}>{t("goal_withdraw.field_amount")}</Text>
             <View
               style={[
                 styles.amountInputWrap,
@@ -636,7 +638,7 @@ export default function GoalWithdrawScreen() {
               <TextInput
                 value={amount}
                 onChangeText={(t) => setAmount(t.replace(/[^0-9.]/g, ""))}
-                placeholder="0.00"
+                placeholder={t("goal_withdraw.placeholder_amount")}
                 placeholderTextColor="#9CA3AF"
                 keyboardType="numeric"
                 style={styles.amountInput}
@@ -665,7 +667,7 @@ export default function GoalWithdrawScreen() {
                 accessibilityRole="button"
                 style={styles.quickPillAll}
               >
-                <Text style={styles.quickPillAllText}>Withdraw All</Text>
+                <Text style={styles.quickPillAllText}>{t("goal_withdraw.btn_withdraw_all")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -732,7 +734,7 @@ export default function GoalWithdrawScreen() {
                 <TextInput
                   value={otherReasonText}
                   onChangeText={setOtherReasonText}
-                  placeholder="Please describe your reason..."
+                  placeholder={t("goal_withdraw.placeholder_reason")}
                   placeholderTextColor="#9CA3AF"
                   style={styles.otherInput}
                 />
@@ -742,7 +744,7 @@ export default function GoalWithdrawScreen() {
 
           {/* Destination */}
           <View style={styles.card}>
-            <Text style={[styles.fieldLabel, { marginBottom: 12 }]}>SEND TO</Text>
+            <Text style={[styles.fieldLabel, { marginBottom: 12 }]}>{t("goal_withdraw.field_send_to")}</Text>
             <View style={{ gap: 10 }}>
               {withdrawDestinations.map((dest) => {
                 const isSelected = destination === dest.id;
@@ -800,7 +802,7 @@ export default function GoalWithdrawScreen() {
 
                   <View style={styles.penaltyBreakdown}>
                     <View style={styles.penaltyBreakRow}>
-                      <Text style={styles.penaltyBreakLabel}>Withdraw</Text>
+                      <Text style={styles.penaltyBreakLabel}>{t("goal_withdraw.penalty_withdraw")}</Text>
                       <Text style={styles.penaltyBreakValue}>
                         ${numAmount.toFixed(2)}
                       </Text>
@@ -814,7 +816,7 @@ export default function GoalWithdrawScreen() {
                       </Text>
                     </View>
                     <View style={styles.penaltyBreakTotalRow}>
-                      <Text style={styles.penaltyBreakTotalLabel}>You receive</Text>
+                      <Text style={styles.penaltyBreakTotalLabel}>{t("goal_withdraw.penalty_receive")}</Text>
                       <Text style={styles.penaltyBreakTotalValue}>
                         ${finalAmount.toFixed(2)}
                       </Text>
@@ -883,7 +885,7 @@ export default function GoalWithdrawScreen() {
           accessibilityRole="button"
           style={styles.cancelButton}
         >
-          <Text style={styles.cancelText}>Cancel</Text>
+          <Text style={styles.cancelText}>{t("goal_withdraw.btn_cancel")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

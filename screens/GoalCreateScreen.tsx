@@ -39,6 +39,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useFormDraft } from "../hooks/useFormDraft";
 import { useGoalActions } from "../hooks/useGoalActions";
@@ -175,6 +176,7 @@ type GoalDraft = {
 export default function GoalCreateScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalCreateRouteProp>();
+  const { t } = useTranslation();
 
   const goalType = route.params?.goalType ?? DEFAULT_GOAL_TYPE;
   const availableCircles = route.params?.availableCircles ?? DEFAULT_CIRCLES;
@@ -339,7 +341,7 @@ export default function GoalCreateScreen() {
       const msg =
         (result.error as { message?: string } | null)?.message ??
         "Could not create goal. Please try again.";
-      Alert.alert("Couldn't create goal", msg);
+      Alert.alert(t("goal_create.alert_failed"), msg);
       return;
     }
 
@@ -374,7 +376,7 @@ export default function GoalCreateScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Create Goal</Text>
+            <Text style={styles.headerTitle}>{t("goal_create.header_title")}</Text>
           </View>
 
           {/* Goal type preview */}
@@ -403,14 +405,14 @@ export default function GoalCreateScreen() {
                   onPress={handleRestoreDraft}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.draftBannerButtonText}>Restore</Text>
+                  <Text style={styles.draftBannerButtonText}>{t("goal_create.draft_restore")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.draftBannerButton}
                   onPress={handleDiscardDraft}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.draftBannerButtonText}>Discard</Text>
+                  <Text style={styles.draftBannerButtonText}>{t("goal_create.draft_discard")}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -420,7 +422,7 @@ export default function GoalCreateScreen() {
           <View style={styles.card}>
             <View style={styles.cardTitleRow}>
               <Text style={styles.cardTitleEmoji}>💰</Text>
-              <Text style={styles.cardTitle}>Savings Type</Text>
+              <Text style={styles.cardTitle}>{t("goal_create.card_savings_type")}</Text>
             </View>
             <Text style={styles.cardHelp}>
               Choose how accessible your savings should be. Less access = higher
@@ -517,7 +519,7 @@ export default function GoalCreateScreen() {
             <View style={styles.card}>
               <View style={styles.cardTitleRow}>
                 <Text style={styles.cardTitleEmoji}>📅</Text>
-                <Text style={styles.cardTitle}>Lock Period</Text>
+                <Text style={styles.cardTitle}>{t("goal_create.card_lock_period")}</Text>
               </View>
               <Text style={styles.cardHelp}>
                 Longer lock = higher interest. You cannot withdraw until this
@@ -569,11 +571,11 @@ export default function GoalCreateScreen() {
 
           {/* Goal name */}
           <View style={styles.card}>
-            <Text style={styles.fieldLabel}>GOAL NAME</Text>
+            <Text style={styles.fieldLabel}>{t("goal_create.field_goal_name")}</Text>
             <TextInput
               value={goalName}
               onChangeText={setGoalName}
-              placeholder="e.g., First Home in Atlanta"
+              placeholder={t("goal_create.placeholder_goal_name")}
               placeholderTextColor="#9CA3AF"
               style={styles.textInput}
             />
@@ -581,7 +583,7 @@ export default function GoalCreateScreen() {
 
           {/* Target amount */}
           <View style={styles.card}>
-            <Text style={styles.fieldLabel}>TARGET AMOUNT</Text>
+            <Text style={styles.fieldLabel}>{t("goal_create.field_target")}</Text>
             <View
               style={[
                 styles.amountInputWrap,
@@ -634,7 +636,7 @@ export default function GoalCreateScreen() {
 
           {/* Monthly contribution */}
           <View style={styles.card}>
-            <Text style={styles.fieldLabel}>MONTHLY CONTRIBUTION</Text>
+            <Text style={styles.fieldLabel}>{t("goal_create.field_monthly")}</Text>
             <View style={styles.monthlyRow}>
               <TouchableOpacity
                 onPress={() =>
@@ -667,7 +669,7 @@ export default function GoalCreateScreen() {
               <View style={styles.timelineLeft}>
                 <Text style={styles.timelineEmoji}>🎯</Text>
                 <View>
-                  <Text style={styles.timelineLabel}>Estimated completion</Text>
+                  <Text style={styles.timelineLabel}>{t("goal_create.timeline_label")}</Text>
                   <Text style={styles.timelineDate}>{estimatedDateStr}</Text>
                 </View>
               </View>
@@ -725,7 +727,7 @@ export default function GoalCreateScreen() {
                   onPress={() => setLinkedCircleId(null)}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.linkedRemove}>Remove</Text>
+                  <Text style={styles.linkedRemove}>{t("goal_create.linked_remove")}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -769,7 +771,7 @@ export default function GoalCreateScreen() {
             end={{ x: 1, y: 1 }}
             style={styles.summaryCard}
           >
-            <Text style={styles.summaryHeading}>YOUR GOAL</Text>
+            <Text style={styles.summaryHeading}>{t("goal_create.summary_heading")}</Text>
             <View style={styles.summaryTop}>
               <View style={styles.summaryEmojiBox}>
                 <Text style={styles.summaryEmoji}>{goalType.emoji}</Text>
@@ -787,17 +789,17 @@ export default function GoalCreateScreen() {
 
             <View style={styles.summaryStats}>
               <View style={styles.summaryStat}>
-                <Text style={styles.summaryStatLabel}>Target</Text>
+                <Text style={styles.summaryStatLabel}>{t("goal_create.summary_stat_target")}</Text>
                 <Text style={styles.summaryStatValue}>
                   ${targetAmount.toLocaleString()}
                 </Text>
               </View>
               <View style={styles.summaryStat}>
-                <Text style={styles.summaryStatLabel}>Monthly</Text>
+                <Text style={styles.summaryStatLabel}>{t("goal_create.summary_stat_monthly")}</Text>
                 <Text style={styles.summaryStatValue}>${monthlyContribution}</Text>
               </View>
               <View style={styles.summaryStat}>
-                <Text style={styles.summaryStatLabel}>Achieve</Text>
+                <Text style={styles.summaryStatLabel}>{t("goal_create.summary_stat_achieve")}</Text>
                 <Text style={[styles.summaryStatValue, { color: TEAL }]}>
                   {estimatedDateStr}
                 </Text>

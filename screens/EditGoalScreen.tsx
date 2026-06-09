@@ -12,6 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useSavings, GOAL_TYPES, GoalType } from "../context/SavingsContext";
 
@@ -27,6 +28,7 @@ const UPGRADE_PATHS: Record<GoalType, GoalType[]> = {
 export default function EditGoalScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<EditGoalRouteProp>();
+  const { t } = useTranslation();
   const { goalId } = route.params;
 
   const { getGoalById, updateGoal } = useSavings();
@@ -93,12 +95,12 @@ export default function EditGoalScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Goal not found</Text>
+          <Text style={styles.errorText}>{t("edit_goal.error_not_found")}</Text>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.backButtonText}>Go Back</Text>
+            <Text style={styles.backButtonText}>{t("edit_goal.btn_go_back")}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -153,7 +155,7 @@ export default function EditGoalScreen() {
         [{ text: "OK", onPress: () => navigation.goBack() }]
       );
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to save changes");
+      Alert.alert(t("edit_goal.alert_error_title"), error.message || t("edit_goal.alert_failed_save"));
     } finally {
       setIsProcessing(false);
     }
@@ -171,7 +173,7 @@ export default function EditGoalScreen() {
         >
           <Ionicons name="close" size={24} color="#0A2342" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Goal</Text>
+        <Text style={styles.headerTitle}>{t("edit_goal.header_title")}</Text>
         <TouchableOpacity
           style={[styles.saveButton, !hasChanges && styles.saveButtonDisabled]}
           onPress={handleSave}
@@ -208,29 +210,29 @@ export default function EditGoalScreen() {
 
         {/* Goal Details */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Goal Details</Text>
+          <Text style={styles.sectionTitle}>{t("edit_goal.section_details")}</Text>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Goal Name</Text>
+            <Text style={styles.inputLabel}>{t("edit_goal.label_goal_name")}</Text>
             <TextInput
               style={styles.textInput}
               value={goalName}
               onChangeText={setGoalName}
-              placeholder="Enter goal name"
+              placeholder={t("edit_goal.placeholder_goal_name")}
               placeholderTextColor="#9CA3AF"
               maxLength={30}
             />
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Target Amount</Text>
+            <Text style={styles.inputLabel}>{t("edit_goal.label_target")}</Text>
             <View style={styles.amountInputContainer}>
               <Text style={styles.currencySymbol}>$</Text>
               <TextInput
                 style={styles.amountInput}
                 value={targetAmount}
                 onChangeText={setTargetAmount}
-                placeholder="0"
+                placeholder={t("edit_goal.placeholder_amount")}
                 placeholderTextColor="#9CA3AF"
                 keyboardType="numeric"
               />
@@ -361,7 +363,7 @@ export default function EditGoalScreen() {
                 {/* Priority */}
                 {!autoReplenish && (
                   <View style={styles.prioritySection}>
-                    <Text style={styles.priorityLabel}>Savings Priority</Text>
+                    <Text style={styles.priorityLabel}>{t("edit_goal.priority_label")}</Text>
                     <View style={styles.priorityOptions}>
                       {[
                         { value: 1, label: "High", desc: "Save first" },
@@ -411,7 +413,7 @@ export default function EditGoalScreen() {
             >
               <View style={styles.upgradeToggleLeft}>
                 <Ionicons name="arrow-up-circle" size={22} color="#6366F1" />
-                <Text style={styles.upgradeToggleText}>Upgrade Goal Type</Text>
+                <Text style={styles.upgradeToggleText}>{t("edit_goal.btn_upgrade_type")}</Text>
               </View>
               <Ionicons
                 name={showUpgradeSection ? "chevron-up" : "chevron-down"}
@@ -491,10 +493,10 @@ export default function EditGoalScreen() {
         {/* Interest Comparison */}
         {selectedUpgrade && (
           <View style={styles.comparisonCard}>
-            <Text style={styles.comparisonTitle}>Interest Rate Comparison</Text>
+            <Text style={styles.comparisonTitle}>{t("edit_goal.comparison_title")}</Text>
             <View style={styles.comparisonRow}>
               <View style={styles.comparisonItem}>
-                <Text style={styles.comparisonLabel}>Current</Text>
+                <Text style={styles.comparisonLabel}>{t("edit_goal.comparison_current")}</Text>
                 <Text style={styles.comparisonValue}>{(goal.interestRate * 100).toFixed(1)}%</Text>
                 <Text style={styles.comparisonType}>{typeConfig.name}</Text>
               </View>
