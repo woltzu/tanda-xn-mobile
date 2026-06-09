@@ -16,10 +16,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useNavigation } from "@react-navigation/native";
 import { useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 
 export default function PersonalInfoScreen() {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const { user, updateProfile, isLoading } = useAuth();
 
   const [name, setName] = useState(user?.name || "");
@@ -91,7 +93,7 @@ export default function PersonalInfoScreen() {
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert("Error", "Name cannot be empty");
+      Alert.alert(t("common.error"), t("personal_info.validation_name_empty"));
       return;
     }
 
@@ -131,11 +133,13 @@ export default function PersonalInfoScreen() {
         }
       }
 
-      Alert.alert("Success", "Your profile has been updated", [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
+      Alert.alert(
+        t("common.success"),
+        t("personal_info.save_success_body"),
+        [{ text: t("common.ok"), onPress: () => navigation.goBack() }],
+      );
     } catch (error) {
-      Alert.alert("Error", "Failed to update profile. Please try again.");
+      Alert.alert(t("common.error"), t("personal_info.save_failed_body"));
     }
   };
 
@@ -154,7 +158,7 @@ export default function PersonalInfoScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Personal Information</Text>
+            <Text style={styles.headerTitle}>{t("personal_info.header")}</Text>
             <View style={styles.placeholder} />
           </View>
         </LinearGradient>
@@ -179,14 +183,14 @@ export default function PersonalInfoScreen() {
                 <Ionicons name="camera" size={16} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
-            <Text style={styles.changePhotoText}>Change Photo</Text>
+            <Text style={styles.changePhotoText}>{t("personal_info.change_photo")}</Text>
           </View>
 
           {/* Form Fields */}
           <View style={styles.formSection}>
             {/* Full Name */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Full Name</Text>
+              <Text style={styles.label}>{t("personal_info.full_name_label")}</Text>
               <View style={styles.inputContainer}>
                 <Ionicons
                   name="person-outline"
@@ -198,7 +202,7 @@ export default function PersonalInfoScreen() {
                   style={styles.input}
                   value={name}
                   onChangeText={handleNameChange}
-                  placeholder="Enter your full name"
+                  placeholder={t("personal_info.full_name_placeholder")}
                   placeholderTextColor="#9CA3AF"
                   autoCapitalize="words"
                 />
@@ -207,7 +211,7 @@ export default function PersonalInfoScreen() {
 
             {/* Email (Read-only) */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.label}>{t("personal_info.email_label")}</Text>
               <View style={[styles.inputContainer, styles.inputDisabled]}>
                 <Ionicons
                   name="mail-outline"
@@ -219,19 +223,17 @@ export default function PersonalInfoScreen() {
                   style={[styles.input, styles.inputTextDisabled]}
                   value={user?.email || ""}
                   editable={false}
-                  placeholder="Email address"
+                  placeholder={t("personal_info.email_placeholder")}
                   placeholderTextColor="#9CA3AF"
                 />
                 <Ionicons name="lock-closed" size={16} color="#9CA3AF" />
               </View>
-              <Text style={styles.helperText}>
-                Contact support to change your email
-              </Text>
+              <Text style={styles.helperText}>{t("personal_info.email_helper")}</Text>
             </View>
 
             {/* Phone */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phone Number</Text>
+              <Text style={styles.label}>{t("personal_info.phone_label")}</Text>
               <View style={styles.inputContainer}>
                 <Ionicons
                   name="call-outline"
@@ -243,7 +245,7 @@ export default function PersonalInfoScreen() {
                   style={styles.input}
                   value={phone}
                   onChangeText={handlePhoneChange}
-                  placeholder="+1 (555) 000-0000"
+                  placeholder={t("personal_info.phone_placeholder")}
                   placeholderTextColor="#9CA3AF"
                   keyboardType="phone-pad"
                 />
@@ -252,7 +254,7 @@ export default function PersonalInfoScreen() {
 
             {/* City (Phase 1b) */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>City (optional)</Text>
+              <Text style={styles.label}>{t("personal_info.city_label")}</Text>
               <View style={styles.inputContainer}>
                 <Ionicons
                   name="location-outline"
@@ -264,19 +266,17 @@ export default function PersonalInfoScreen() {
                   style={styles.input}
                   value={city}
                   onChangeText={handleCityChange}
-                  placeholder="e.g. Atlanta"
+                  placeholder={t("personal_info.city_placeholder")}
                   placeholderTextColor="#9CA3AF"
                   autoCapitalize="words"
                 />
               </View>
-              <Text style={styles.helperText}>
-                Used to suggest neighborhood communities.
-              </Text>
+              <Text style={styles.helperText}>{t("personal_info.city_helper")}</Text>
             </View>
 
             {/* Country (Phase 1b) */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Country (optional)</Text>
+              <Text style={styles.label}>{t("personal_info.country_label")}</Text>
               <View style={styles.inputContainer}>
                 <Ionicons
                   name="globe-outline"
@@ -288,15 +288,13 @@ export default function PersonalInfoScreen() {
                   style={styles.input}
                   value={country}
                   onChangeText={handleCountryChange}
-                  placeholder="e.g. US"
+                  placeholder={t("personal_info.country_placeholder")}
                   placeholderTextColor="#9CA3AF"
                   autoCapitalize="characters"
                   maxLength={3}
                 />
               </View>
-              <Text style={styles.helperText}>
-                Two-letter country code (e.g. US, CI, FR).
-              </Text>
+              <Text style={styles.helperText}>{t("personal_info.country_helper")}</Text>
             </View>
           </View>
 
@@ -305,14 +303,10 @@ export default function PersonalInfoScreen() {
             <View style={styles.xnScoreCard}>
               <View style={styles.xnScoreHeader}>
                 <Text style={styles.xnScoreIcon}>⭐</Text>
-                <Text style={styles.xnScoreTitle}>Your XnScore</Text>
+                <Text style={styles.xnScoreTitle}>{t("personal_info.xn_score_title")}</Text>
               </View>
               <Text style={styles.xnScoreValue}>{user?.xnScore || 15}</Text>
-              <Text style={styles.xnScoreDesc}>
-                Your XnScore reflects your reliability and trustworthiness in
-                the TandaXn community. Complete circles and make timely payments
-                to improve your score.
-              </Text>
+              <Text style={styles.xnScoreDesc}>{t("personal_info.xn_score_description")}</Text>
             </View>
           </View>
         </ScrollView>
@@ -330,7 +324,7 @@ export default function PersonalInfoScreen() {
             {isLoading ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.saveButtonText}>Save Changes</Text>
+              <Text style={styles.saveButtonText}>{t("personal_info.save_changes")}</Text>
             )}
           </TouchableOpacity>
         </View>

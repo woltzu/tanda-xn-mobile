@@ -16,12 +16,14 @@ import { useWallet } from "../context/WalletContext";
 import { supabase } from "../lib/supabase";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 
 type ProfileScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function ProfileScreen() {
   const navigation = useNavigation<ProfileScreenNavigationProp>();
+  const { t } = useTranslation();
   const { user, signOut } = useAuth();
   const { score, level } = useXnScore();
   const { balance: walletBalance } = useWallet();
@@ -34,15 +36,15 @@ export default function ProfileScreen() {
     // native. Each path resolves a single boolean.
     const confirmed: boolean = Platform.OS === "web"
       ? (typeof window !== "undefined" && typeof window.confirm === "function"
-          ? window.confirm("Are you sure you want to sign out?")
+          ? window.confirm(t("profile.sign_out_confirm_body"))
           : true)
       : await new Promise<boolean>((resolve) => {
           Alert.alert(
-            "Sign Out",
-            "Are you sure you want to sign out?",
+            t("profile.sign_out_confirm_title"),
+            t("profile.sign_out_confirm_body"),
             [
-              { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-              { text: "Sign Out", style: "destructive", onPress: () => resolve(true) },
+              { text: t("common.cancel"), style: "cancel", onPress: () => resolve(false) },
+              { text: t("profile.sign_out"), style: "destructive", onPress: () => resolve(true) },
             ],
             { cancelable: true, onDismiss: () => resolve(false) },
           );
@@ -67,54 +69,58 @@ export default function ProfileScreen() {
       });
     } catch (err: any) {
       console.error("[ProfileScreen] sign out error", err);
+      const msg = err?.message ?? t("profile.sign_out_failed_default");
       if (Platform.OS === "web" && typeof window !== "undefined") {
-        window.alert(`Sign out failed: ${err?.message ?? "Please try again."}`);
+        window.alert(`${t("profile.sign_out_failed_title")}: ${msg}`);
       } else {
-        Alert.alert("Sign Out Failed", err?.message ?? "Please try again.");
+        Alert.alert(t("profile.sign_out_failed_title"), msg);
       }
     }
   };
 
+  // i18n: menuItems is built inside the component so t() reads the
+  // current language on every render. Each section uses a translated
+  // section title; each item a translated label.
   const menuItems = [
     {
-      section: "Account",
+      section: t("profile.section_account"),
       items: [
-        { icon: "person-outline", label: "Personal Information", onPress: () => navigation.navigate("PersonalInfo") },
-        { icon: "shield-checkmark-outline", label: "Security", onPress: () => navigation.navigate("SecuritySettings") },
-        { icon: "card-outline", label: "Payment Methods", onPress: () => navigation.navigate("LinkedAccounts") },
-        { icon: "wallet-outline", label: "Wallet & Balance", value: `$${walletBalance.toFixed(2)}`, onPress: () => navigation.navigate("WalletMain") },
-        { icon: "notifications-outline", label: "Notifications", onPress: () => navigation.navigate("NotificationPrefs") },
+        { icon: "person-outline", label: t("profile.item_personal_info"), onPress: () => navigation.navigate("PersonalInfo") },
+        { icon: "shield-checkmark-outline", label: t("profile.item_security"), onPress: () => navigation.navigate("SecuritySettings") },
+        { icon: "card-outline", label: t("profile.item_payment_methods"), onPress: () => navigation.navigate("LinkedAccounts") },
+        { icon: "wallet-outline", label: t("profile.item_wallet"), value: `$${walletBalance.toFixed(2)}`, onPress: () => navigation.navigate("WalletMain") },
+        { icon: "notifications-outline", label: t("profile.item_notifications"), onPress: () => navigation.navigate("NotificationPrefs") },
       ],
     },
     {
-      section: "Trust & Honor",
+      section: t("profile.section_trust"),
       items: [
-        { icon: "ribbon-outline", label: "Honor System", onPress: () => navigation.navigate("HonorSystem") },
-        { icon: "hand-right-outline", label: "Vouch for Members", onPress: () => navigation.navigate("VouchMember") },
+        { icon: "ribbon-outline", label: t("profile.item_honor_system"), onPress: () => navigation.navigate("HonorSystem") },
+        { icon: "hand-right-outline", label: t("profile.item_vouch"), onPress: () => navigation.navigate("VouchMember") },
       ],
     },
     {
-      section: "Community",
+      section: t("profile.section_community"),
       items: [
-        { icon: "people-circle-outline", label: "My Communities", onPress: () => navigation.navigate("MyCommunities") },
+        { icon: "people-circle-outline", label: t("profile.item_my_communities"), onPress: () => navigation.navigate("MyCommunities") },
       ],
     },
     {
-      section: "Preferences",
+      section: t("profile.section_preferences"),
       items: [
-        { icon: "globe-outline", label: "Language & Region", onPress: () => navigation.navigate("LanguageRegion") },
-        { icon: "eye-off-outline", label: "Privacy", onPress: () => navigation.navigate("PrivacySettings") },
-        { icon: "cog-outline", label: "All Settings", onPress: () => navigation.navigate("Settings") },
+        { icon: "globe-outline", label: t("profile.item_language"), onPress: () => navigation.navigate("LanguageRegion") },
+        { icon: "eye-off-outline", label: t("profile.item_privacy"), onPress: () => navigation.navigate("PrivacySettings") },
+        { icon: "cog-outline", label: t("profile.item_all_settings"), onPress: () => navigation.navigate("Settings") },
       ],
     },
     {
-      section: "Support",
+      section: t("profile.section_support"),
       items: [
-        { icon: "help-circle-outline", label: "Help Center", onPress: () => navigation.navigate("HelpCenter") },
-        { icon: "book-outline", label: "FAQ", onPress: () => navigation.navigate("FAQ") },
-        { icon: "gift-outline", label: "Refer & Earn", onPress: () => navigation.navigate("Referral") },
-        { icon: "heart-outline", label: "Donation Preferences", onPress: () => navigation.navigate("DonationPreferences") },
-        { icon: "information-circle-outline", label: "About TandaXn", onPress: () => navigation.navigate("AboutApp") },
+        { icon: "help-circle-outline", label: t("profile.item_help"), onPress: () => navigation.navigate("HelpCenter") },
+        { icon: "book-outline", label: t("profile.item_faq"), onPress: () => navigation.navigate("FAQ") },
+        { icon: "gift-outline", label: t("profile.item_refer"), onPress: () => navigation.navigate("Referral") },
+        { icon: "heart-outline", label: t("profile.item_donation_prefs"), onPress: () => navigation.navigate("DonationPreferences") },
+        { icon: "information-circle-outline", label: t("profile.item_about"), onPress: () => navigation.navigate("AboutApp") },
       ],
     },
   ];
@@ -124,7 +130,7 @@ export default function ProfileScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
         <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
-          <Text style={styles.headerTitle}>Profile</Text>
+          <Text style={styles.headerTitle}>{t("profile.header")}</Text>
 
           {/* Profile Card */}
           <View style={styles.profileCard}>
@@ -142,7 +148,7 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.userName}>{user?.name || "User"}</Text>
+            <Text style={styles.userName}>{user?.name || t("profile.default_user")}</Text>
             <Text style={styles.userEmail}>{user?.email || ""}</Text>
 
             {/* XnScore Badge */}
@@ -157,10 +163,10 @@ export default function ProfileScreen() {
                   color={level.color}
                 />
                 <Text style={styles.xnScoreValue}>{score}</Text>
-                <Text style={styles.xnScoreLabel}>XnScore™</Text>
+                <Text style={styles.xnScoreLabel}>{t("profile.xn_score_label")}</Text>
               </View>
               <View style={styles.improveButton}>
-                <Text style={styles.improveButtonText}>View Details</Text>
+                <Text style={styles.improveButtonText}>{t("profile.view_details")}</Text>
                 <Ionicons name="chevron-forward" size={14} color="#00C6AE" />
               </View>
             </TouchableOpacity>
@@ -203,11 +209,11 @@ export default function ProfileScreen() {
           {/* Sign Out Button */}
           <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
             <Ionicons name="log-out-outline" size={20} color="#DC2626" />
-            <Text style={styles.signOutText}>Sign Out</Text>
+            <Text style={styles.signOutText}>{t("profile.sign_out")}</Text>
           </TouchableOpacity>
 
           {/* App Version */}
-          <Text style={styles.versionText}>TandaXn v1.0.0</Text>
+          <Text style={styles.versionText}>{t("profile.version")}</Text>
         </View>
       </ScrollView>
 
@@ -217,7 +223,7 @@ export default function ProfileScreen() {
         onPress={() => navigation.navigate("HelpCenter" as any)}
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
-        <Text style={styles.floatingHelpText}>Help</Text>
+        <Text style={styles.floatingHelpText}>{t("common.help")}</Text>
       </TouchableOpacity>
     </View>
   );

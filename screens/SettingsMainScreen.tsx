@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useAuth, getEmailRedirectUrl } from "../context/AuthContext";
 import { useXnScore } from "../context/XnScoreContext";
@@ -34,6 +35,7 @@ interface SettingItem {
 
 export default function SettingsMainScreen() {
   const navigation = useNavigation<SettingsNavigationProp>();
+  const { t } = useTranslation();
   const { user, logout, isEmailVerified } = useAuth();
   const { score } = useXnScore();
   const { resetAllWalkthroughs } = useWalkthrough();
@@ -46,7 +48,10 @@ export default function SettingsMainScreen() {
 
   const handleResendVerificationEmail = async () => {
     if (!user?.email) {
-      Alert.alert("No email on file", "Sign out and sign back in to refresh your session.");
+      Alert.alert(
+        t("settings_main.no_email_title"),
+        t("settings_main.no_email_body"),
+      );
       return;
     }
     setResendingEmail(true);
@@ -58,7 +63,10 @@ export default function SettingsMainScreen() {
         options: { emailRedirectTo: getEmailRedirectUrl("auth/confirm") },
       });
       if (error) {
-        Alert.alert("Couldn't send", error.message || "Try again in a moment.");
+        Alert.alert(
+          t("settings_main.couldnt_send_title"),
+          error.message || t("settings_main.couldnt_send_body"),
+        );
         return;
       }
       setEmailResent(true);
@@ -67,7 +75,7 @@ export default function SettingsMainScreen() {
       setTimeout(() => setEmailResent(false), 6000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      Alert.alert("Couldn't send", msg);
+      Alert.alert(t("settings_main.couldnt_send_title"), msg);
     } finally {
       setResendingEmail(false);
     }
@@ -78,18 +86,18 @@ export default function SettingsMainScreen() {
   // never ships to prod builds.
   const handleResetWalkthroughs = () => {
     Alert.alert(
-      "Reset walkthroughs",
-      "Wipe all walkthrough completion flags? Returning to any hub screen will replay the first-time tour.",
+      t("settings_main.reset_walkthroughs_title"),
+      t("settings_main.reset_walkthroughs_body"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Reset",
+          text: t("settings_main.reset_walkthroughs_action"),
           style: "destructive",
           onPress: async () => {
             await resetAllWalkthroughs();
             Alert.alert(
-              "Done",
-              "Walkthroughs reset. Re-open Circles / Goals / Advance to see them again.",
+              t("settings_main.reset_walkthroughs_done_title"),
+              t("settings_main.reset_walkthroughs_done_body"),
             );
           },
         },
@@ -99,12 +107,12 @@ export default function SettingsMainScreen() {
 
   const handleLogout = () => {
     Alert.alert(
-      "Log Out",
-      "Are you sure you want to log out of your account?",
+      t("settings_main.logout_confirm_title"),
+      t("settings_main.logout_confirm_body"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Log Out",
+          text: t("settings_main.logout"),
           style: "destructive",
           onPress: () => {
             logout();
@@ -118,14 +126,17 @@ export default function SettingsMainScreen() {
     );
   };
 
+  // i18n: groups + items are computed inside the component so t() picks
+  // up the current language on every render. Keeping the static config
+  // shape (SettingItem[]) means renderSettingItem doesn't change.
   const accountSettings: SettingItem[] = [
     {
       id: "profile",
       icon: "person-outline",
       iconBg: "#F0FDFB",
       iconColor: "#00C6AE",
-      title: "Personal Information",
-      subtitle: "Name, email, phone number",
+      title: t("settings_main.item_personal_info"),
+      subtitle: t("settings_main.item_personal_info_subtitle"),
       route: "PersonalInfo",
     },
     {
@@ -133,9 +144,9 @@ export default function SettingsMainScreen() {
       icon: "shield-checkmark-outline",
       iconBg: "#FEF3C7",
       iconColor: "#D97706",
-      title: "Verification Status",
-      subtitle: "Identity verification",
-      badge: "Verified",
+      title: t("settings_main.item_verification"),
+      subtitle: t("settings_main.item_verification_subtitle"),
+      badge: t("settings_main.item_verification_badge"),
       badgeColor: "#00C6AE",
     },
     {
@@ -143,8 +154,8 @@ export default function SettingsMainScreen() {
       icon: "link-outline",
       iconBg: "#EFF6FF",
       iconColor: "#3B82F6",
-      title: "Linked Accounts",
-      subtitle: "Banks & payment methods",
+      title: t("settings_main.item_linked_accounts"),
+      subtitle: t("settings_main.item_linked_accounts_subtitle"),
       route: "LinkedAccounts",
     },
   ];
@@ -155,8 +166,8 @@ export default function SettingsMainScreen() {
       icon: "lock-closed-outline",
       iconBg: "#F0FDFB",
       iconColor: "#00C6AE",
-      title: "Security",
-      subtitle: "Password & 2FA",
+      title: t("settings_main.item_security"),
+      subtitle: t("settings_main.item_security_subtitle"),
       route: "SecuritySettings",
     },
     {
@@ -164,8 +175,8 @@ export default function SettingsMainScreen() {
       icon: "phone-portrait-outline",
       iconBg: "#F5F7FA",
       iconColor: "#0A2342",
-      title: "Active Sessions",
-      subtitle: "3 devices logged in",
+      title: t("settings_main.item_sessions"),
+      subtitle: t("settings_main.item_sessions_subtitle"),
       route: "ActiveSessions",
     },
   ];
@@ -176,8 +187,8 @@ export default function SettingsMainScreen() {
       icon: "notifications-outline",
       iconBg: "#FEE2E2",
       iconColor: "#DC2626",
-      title: "Notifications",
-      subtitle: "Push, email & SMS",
+      title: t("settings_main.item_notifications"),
+      subtitle: t("settings_main.item_notifications_subtitle"),
       route: "NotificationPrefs",
     },
     {
@@ -185,8 +196,8 @@ export default function SettingsMainScreen() {
       icon: "globe-outline",
       iconBg: "#EFF6FF",
       iconColor: "#3B82F6",
-      title: "Language & Region",
-      subtitle: "English (US), USD",
+      title: t("settings_main.item_language"),
+      subtitle: t("settings_main.item_language_subtitle"),
       route: "LanguageRegion",
     },
     {
@@ -194,8 +205,8 @@ export default function SettingsMainScreen() {
       icon: "eye-off-outline",
       iconBg: "#F5F3FF",
       iconColor: "#8B5CF6",
-      title: "Privacy",
-      subtitle: "Profile visibility, data sharing",
+      title: t("settings_main.item_privacy"),
+      subtitle: t("settings_main.item_privacy_subtitle"),
       route: "PrivacySettings",
     },
   ];
@@ -206,8 +217,8 @@ export default function SettingsMainScreen() {
       icon: "help-circle-outline",
       iconBg: "#F0FDFB",
       iconColor: "#00C6AE",
-      title: "Help Center",
-      subtitle: "FAQs, contact support",
+      title: t("settings_main.item_help"),
+      subtitle: t("settings_main.item_help_subtitle"),
       route: "HelpCenter",
     },
     {
@@ -215,8 +226,8 @@ export default function SettingsMainScreen() {
       icon: "information-circle-outline",
       iconBg: "#F5F7FA",
       iconColor: "#6B7280",
-      title: "About",
-      subtitle: "Version 2.5.0",
+      title: t("settings_main.item_about"),
+      subtitle: t("settings_main.item_about_subtitle"),
       route: "AboutApp",
     },
   ];
@@ -282,7 +293,7 @@ export default function SettingsMainScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Settings</Text>
+            <Text style={styles.headerTitle}>{t("settings_main.header")}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -297,11 +308,13 @@ export default function SettingsMainScreen() {
               </Text>
             </View>
             <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>{user?.name || "User"}</Text>
+              <Text style={styles.profileName}>
+                {user?.name || t("settings_main.default_user")}
+              </Text>
               <Text style={styles.profilePhone}>{user?.phone || "+1 (***) ***-****"}</Text>
             </View>
             <View style={styles.xnScoreBadge}>
-              <Text style={styles.xnScoreLabel}>XnScore</Text>
+              <Text style={styles.xnScoreLabel}>{t("settings_main.xn_score_label")}</Text>
               <Text style={styles.xnScoreValue}>{score}</Text>
             </View>
           </TouchableOpacity>
@@ -310,17 +323,17 @@ export default function SettingsMainScreen() {
           <View style={styles.quickStats}>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>$2,450</Text>
-              <Text style={styles.statLabel}>Total Saved</Text>
+              <Text style={styles.statLabel}>{t("settings_main.stat_total_saved")}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statValue}>3</Text>
-              <Text style={styles.statLabel}>Active Circles</Text>
+              <Text style={styles.statLabel}>{t("settings_main.stat_active_circles")}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statValue}>12</Text>
-              <Text style={styles.statLabel}>Contributions</Text>
+              <Text style={styles.statLabel}>{t("settings_main.stat_contributions")}</Text>
             </View>
           </View>
         </LinearGradient>
@@ -346,12 +359,14 @@ export default function SettingsMainScreen() {
               <Ionicons name="mail-unread-outline" size={20} color="#92400E" />
               <View style={{ flex: 1 }}>
                 <Text style={{ color: "#92400E", fontWeight: "700", fontSize: 13 }}>
-                  Email not verified
+                  {t("settings_main.email_unverified_title")}
                 </Text>
                 <Text style={{ color: "#92400E", fontSize: 12, marginTop: 2 }}>
                   {user.email
-                    ? `Check ${user.email} for the verification link.`
-                    : "Check your inbox for the verification link."}
+                    ? t("settings_main.email_unverified_with_address", {
+                        email: user.email,
+                      })
+                    : t("settings_main.email_unverified_generic")}
                 </Text>
               </View>
             </View>
@@ -372,10 +387,10 @@ export default function SettingsMainScreen() {
             >
               <Text style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 13 }}>
                 {resendingEmail
-                  ? "Sending..."
+                  ? t("settings_main.email_resend_sending")
                   : emailResent
-                    ? "Sent. Check your inbox."
-                    : "Resend verification email"}
+                    ? t("settings_main.email_resend_sent")
+                    : t("settings_main.email_resend")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -396,28 +411,26 @@ export default function SettingsMainScreen() {
           >
             <Ionicons name="shield-checkmark" size={18} color="#065F46" />
             <Text style={{ color: "#065F46", fontWeight: "700", fontSize: 13 }}>
-              Email verified
+              {t("settings_main.email_verified")}
             </Text>
           </View>
         ) : null}
 
         {/* Content */}
         <View style={styles.content}>
-          {renderSettingsGroup("Account", accountSettings)}
-          {renderSettingsGroup("Security", securitySettings)}
-          {renderSettingsGroup("Preferences", preferenceSettings)}
-          {renderSettingsGroup("Support", supportSettings)}
+          {renderSettingsGroup(t("settings_main.section_account"), accountSettings)}
+          {renderSettingsGroup(t("settings_main.section_security"), securitySettings)}
+          {renderSettingsGroup(t("settings_main.section_preferences"), preferenceSettings)}
+          {renderSettingsGroup(t("settings_main.section_support"), supportSettings)}
 
           {/* Logout Button */}
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={20} color="#DC2626" />
-            <Text style={styles.logoutText}>Log Out</Text>
+            <Text style={styles.logoutText}>{t("settings_main.logout")}</Text>
           </TouchableOpacity>
 
           {/* Footer */}
-          <Text style={styles.footerText}>
-            TandaXn v2.5.0 (Build 250115)
-          </Text>
+          <Text style={styles.footerText}>{t("settings_main.footer")}</Text>
 
           {/* DEV-only walkthrough reset. Lives under the footer so it's
               never visible in prod builds and doesn't crowd the main
@@ -443,7 +456,7 @@ export default function SettingsMainScreen() {
             >
               <Ionicons name="refresh-circle-outline" size={16} color="#0A2342" />
               <Text style={{ color: "#0A2342", fontWeight: "600", fontSize: 13 }}>
-                Reset walkthroughs (debug)
+                {t("settings_main.reset_walkthroughs_button")}
               </Text>
             </TouchableOpacity>
           )}
@@ -456,7 +469,7 @@ export default function SettingsMainScreen() {
         onPress={() => navigation.navigate("HelpCenter" as any)}
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
-        <Text style={styles.floatingHelpText}>Help</Text>
+        <Text style={styles.floatingHelpText}>{t("common.help")}</Text>
       </TouchableOpacity>
     </View>
   );

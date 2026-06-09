@@ -13,6 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -35,6 +36,7 @@ interface VisibilityOption {
 
 export default function PrivacySettingsScreen() {
   const navigation = useNavigation<PrivacySettingsNavigationProp>();
+  const { t } = useTranslation();
   const { user } = useAuth();
 
   const [profileVisibility, setProfileVisibility] = useState("circle_members");
@@ -100,7 +102,7 @@ export default function PrivacySettingsScreen() {
     } catch (err) {
       setInferenceAllowed((curr) => ({ ...curr, [type]: previous }));
       Alert.alert(
-        "Couldn't update",
+        t("privacy.update_failed_title"),
         err instanceof Error ? err.message : String(err)
       );
     } finally {
@@ -108,29 +110,34 @@ export default function PrivacySettingsScreen() {
     }
   };
 
+  // i18n: visibilityOptions built inside the component so t() re-runs
+  // on language change.
   const visibilityOptions: VisibilityOption[] = [
     {
       id: "public",
-      label: "Everyone",
-      description: "Anyone on TandaXn can see your profile",
+      label: t("privacy.visibility_everyone"),
+      description: t("privacy.visibility_everyone_desc"),
       icon: "globe-outline",
     },
     {
       id: "circle_members",
-      label: "Circle Members Only",
-      description: "Only people in your circles",
+      label: t("privacy.visibility_circle"),
+      description: t("privacy.visibility_circle_desc"),
       icon: "people-outline",
     },
     {
       id: "private",
-      label: "Private",
-      description: "Only you can see your profile",
+      label: t("privacy.visibility_private"),
+      description: t("privacy.visibility_private_desc"),
       icon: "lock-closed-outline",
     },
   ];
 
   const handleSave = () => {
-    Alert.alert("Settings Saved", "Your privacy settings have been updated.");
+    Alert.alert(
+      t("privacy.save_success_title"),
+      t("privacy.save_success_body"),
+    );
   };
 
   return (
@@ -146,8 +153,8 @@ export default function PrivacySettingsScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View>
-              <Text style={styles.headerTitle}>Privacy</Text>
-              <Text style={styles.headerSubtitle}>Control what others see</Text>
+              <Text style={styles.headerTitle}>{t("privacy.header")}</Text>
+              <Text style={styles.headerSubtitle}>{t("privacy.subtitle")}</Text>
             </View>
           </View>
         </LinearGradient>
@@ -156,7 +163,7 @@ export default function PrivacySettingsScreen() {
         <View style={styles.content}>
           {/* Profile Visibility */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Profile Visibility</Text>
+            <Text style={styles.sectionTitle}>{t("privacy.section_visibility")}</Text>
             <View style={styles.card}>
               {visibilityOptions.map((option) => (
                 <TouchableOpacity
@@ -205,19 +212,17 @@ export default function PrivacySettingsScreen() {
 
           {/* What Others See */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>What Others Can See</Text>
+            <Text style={styles.sectionTitle}>{t("privacy.section_what_others_see")}</Text>
             <View style={styles.card}>
               <View style={[styles.toggleRow, styles.borderBottom]}>
                 <View style={styles.toggleContent}>
                   <View style={styles.toggleTitleRow}>
-                    <Text style={styles.toggleTitle}>Savings Amount</Text>
+                    <Text style={styles.toggleTitle}>{t("privacy.toggle_savings")}</Text>
                     <View style={styles.sensitiveBadge}>
-                      <Text style={styles.sensitiveBadgeText}>SENSITIVE</Text>
+                      <Text style={styles.sensitiveBadgeText}>{t("privacy.toggle_savings_badge")}</Text>
                     </View>
                   </View>
-                  <Text style={styles.toggleSubtitle}>
-                    Show how much you've saved
-                  </Text>
+                  <Text style={styles.toggleSubtitle}>{t("privacy.toggle_savings_desc")}</Text>
                 </View>
                 <Switch
                   value={showSavingsAmount}
@@ -229,10 +234,8 @@ export default function PrivacySettingsScreen() {
 
               <View style={[styles.toggleRow, styles.borderBottom]}>
                 <View style={styles.toggleContent}>
-                  <Text style={styles.toggleTitle}>XnScore Badge</Text>
-                  <Text style={styles.toggleSubtitle}>
-                    Display your credit score badge
-                  </Text>
+                  <Text style={styles.toggleTitle}>{t("privacy.toggle_xn_score")}</Text>
+                  <Text style={styles.toggleSubtitle}>{t("privacy.toggle_xn_score_desc")}</Text>
                 </View>
                 <Switch
                   value={showXnScore}
@@ -244,10 +247,8 @@ export default function PrivacySettingsScreen() {
 
               <View style={[styles.toggleRow, styles.borderBottom]}>
                 <View style={styles.toggleContent}>
-                  <Text style={styles.toggleTitle}>Circle Membership</Text>
-                  <Text style={styles.toggleSubtitle}>
-                    Show which circles you're in
-                  </Text>
+                  <Text style={styles.toggleTitle}>{t("privacy.toggle_circle_membership")}</Text>
+                  <Text style={styles.toggleSubtitle}>{t("privacy.toggle_circle_membership_desc")}</Text>
                 </View>
                 <Switch
                   value={showCircleMembership}
@@ -259,10 +260,8 @@ export default function PrivacySettingsScreen() {
 
               <View style={styles.toggleRow}>
                 <View style={styles.toggleContent}>
-                  <Text style={styles.toggleTitle}>Activity in Feed</Text>
-                  <Text style={styles.toggleSubtitle}>
-                    Share achievements publicly
-                  </Text>
+                  <Text style={styles.toggleTitle}>{t("privacy.toggle_activity_feed")}</Text>
+                  <Text style={styles.toggleSubtitle}>{t("privacy.toggle_activity_feed_desc")}</Text>
                 </View>
                 <Switch
                   value={showActivityInFeed}
@@ -276,7 +275,7 @@ export default function PrivacySettingsScreen() {
 
           {/* Discoverability */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Discoverability</Text>
+            <Text style={styles.sectionTitle}>{t("privacy.section_discoverability")}</Text>
             <View style={styles.card}>
               <View style={styles.toggleRow}>
                 <View
@@ -285,10 +284,8 @@ export default function PrivacySettingsScreen() {
                   <Ionicons name="search" size={20} color="#3B82F6" />
                 </View>
                 <View style={styles.toggleContent}>
-                  <Text style={styles.toggleTitle}>Allow Discovery</Text>
-                  <Text style={styles.toggleSubtitle}>
-                    Let others find you by phone or email
-                  </Text>
+                  <Text style={styles.toggleTitle}>{t("privacy.toggle_discovery")}</Text>
+                  <Text style={styles.toggleSubtitle}>{t("privacy.toggle_discovery_desc")}</Text>
                 </View>
                 <Switch
                   value={allowDiscovery}
@@ -302,17 +299,15 @@ export default function PrivacySettingsScreen() {
 
           {/* Phase 1c — Community Suggestions opt-outs */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Community Suggestions</Text>
+            <Text style={styles.sectionTitle}>{t("privacy.section_community_suggestions")}</Text>
             <View style={styles.card}>
               <View style={[styles.toggleRow, styles.borderBottom]}>
                 <View style={[styles.toggleIcon, { backgroundColor: "#F5F3FF" }]}>
                   <Ionicons name="videocam-outline" size={20} color="#7C3AED" />
                 </View>
                 <View style={styles.toggleContent}>
-                  <Text style={styles.toggleTitle}>From rooms you join</Text>
-                  <Text style={styles.toggleSubtitle}>
-                    Suggest groups when you attend a worship room
-                  </Text>
+                  <Text style={styles.toggleTitle}>{t("privacy.toggle_inference_attendance")}</Text>
+                  <Text style={styles.toggleSubtitle}>{t("privacy.toggle_inference_attendance_desc")}</Text>
                 </View>
                 {savingType === "attendance" ? (
                   <ActivityIndicator color="#7C3AED" size="small" />
@@ -332,10 +327,8 @@ export default function PrivacySettingsScreen() {
                   <Ionicons name="location-outline" size={20} color="#0EA5E9" />
                 </View>
                 <View style={styles.toggleContent}>
-                  <Text style={styles.toggleTitle}>From your location</Text>
-                  <Text style={styles.toggleSubtitle}>
-                    Suggest neighborhood groups based on your city/country
-                  </Text>
+                  <Text style={styles.toggleTitle}>{t("privacy.toggle_inference_location")}</Text>
+                  <Text style={styles.toggleSubtitle}>{t("privacy.toggle_inference_location_desc")}</Text>
                 </View>
                 {savingType === "location" ? (
                   <ActivityIndicator color="#0EA5E9" size="small" />
@@ -354,14 +347,12 @@ export default function PrivacySettingsScreen() {
 
           {/* Data Sharing */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Data Sharing</Text>
+            <Text style={styles.sectionTitle}>{t("privacy.section_data_sharing")}</Text>
             <View style={styles.card}>
               <View style={[styles.toggleRow, styles.borderBottom]}>
                 <View style={styles.toggleContent}>
-                  <Text style={styles.toggleTitle}>Usage Analytics</Text>
-                  <Text style={styles.toggleSubtitle}>
-                    Help us understand how you use the app
-                  </Text>
+                  <Text style={styles.toggleTitle}>{t("privacy.toggle_analytics")}</Text>
+                  <Text style={styles.toggleSubtitle}>{t("privacy.toggle_analytics_desc")}</Text>
                 </View>
                 <Switch
                   value={analyticsEnabled}
@@ -373,10 +364,8 @@ export default function PrivacySettingsScreen() {
 
               <View style={[styles.toggleRow, styles.borderBottom]}>
                 <View style={styles.toggleContent}>
-                  <Text style={styles.toggleTitle}>Product Improvements</Text>
-                  <Text style={styles.toggleSubtitle}>
-                    Share insights to improve features
-                  </Text>
+                  <Text style={styles.toggleTitle}>{t("privacy.toggle_improvements")}</Text>
+                  <Text style={styles.toggleSubtitle}>{t("privacy.toggle_improvements_desc")}</Text>
                 </View>
                 <Switch
                   value={improvementsEnabled}
@@ -388,10 +377,8 @@ export default function PrivacySettingsScreen() {
 
               <View style={styles.toggleRow}>
                 <View style={styles.toggleContent}>
-                  <Text style={styles.toggleTitle}>Marketing Purposes</Text>
-                  <Text style={styles.toggleSubtitle}>
-                    Receive personalized offers
-                  </Text>
+                  <Text style={styles.toggleTitle}>{t("privacy.toggle_marketing")}</Text>
+                  <Text style={styles.toggleSubtitle}>{t("privacy.toggle_marketing_desc")}</Text>
                 </View>
                 <Switch
                   value={marketingEnabled}
@@ -406,10 +393,7 @@ export default function PrivacySettingsScreen() {
           {/* Info Note */}
           <View style={styles.infoCard}>
             <Ionicons name="shield-checkmark" size={18} color="#00897B" />
-            <Text style={styles.infoText}>
-              Your financial data is never shared with third parties. We only use
-              data to improve your experience and keep you safe.
-            </Text>
+            <Text style={styles.infoText}>{t("privacy.info_text")}</Text>
           </View>
         </View>
       </ScrollView>
@@ -417,7 +401,7 @@ export default function PrivacySettingsScreen() {
       {/* Save Button */}
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save Settings</Text>
+          <Text style={styles.saveButtonText}>{t("privacy.save_button")}</Text>
         </TouchableOpacity>
       </View>
     </View>
