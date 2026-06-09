@@ -17,6 +17,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useWallet } from "../context/WalletContext";
 import { usePayment } from "../context/PaymentContext";
@@ -40,14 +41,16 @@ type RecentRecipient = {
   verified?: boolean;
 };
 
+// i18n: MethodOption stores translation keys for the user-visible
+// strings. Resolved per-render via t() inside the component body.
 type MethodOption = {
   id: string;
-  name: string;
+  nameKey: string;
   fee: number;
-  estimate: string;
+  estimateKey: string;
   icon: string;
-  description: string;
-  badge?: string;
+  descKey: string;
+  badgeKey?: string;
 };
 
 const RECENT_RECIPIENTS: RecentRecipient[] = [
@@ -86,36 +89,36 @@ const PICKUP_LOCATIONS = [
 const METHOD_OPTIONS: Record<string, MethodOption> = {
   wallet: {
     id: "wallet",
-    name: "TandaXn Wallet",
+    nameKey: "domestic_send.method_wallet_name",
     fee: 0,
-    estimate: "Instant",
+    estimateKey: "domestic_send.method_wallet_estimate",
     icon: "\u{1F4B0}",
-    description: "Free to TandaXn users",
-    badge: "FREE",
+    descKey: "domestic_send.method_wallet_desc",
+    badgeKey: "domestic_send.method_wallet_badge",
   },
   bank: {
     id: "bank",
-    name: "Bank Transfer",
+    nameKey: "domestic_send.method_bank_name",
     fee: 100,
-    estimate: "Within minutes",
+    estimateKey: "domestic_send.method_bank_estimate",
     icon: "\u{1F3E6}",
-    description: "Any Nigerian bank",
+    descKey: "domestic_send.method_bank_desc",
   },
   mobile: {
     id: "mobile",
-    name: "Mobile Money",
+    nameKey: "domestic_send.method_mobile_name",
     fee: 75,
-    estimate: "Instant",
+    estimateKey: "domestic_send.method_mobile_estimate",
     icon: "\u{1F4F1}",
-    description: "MTN, Glo, Airtel, 9mobile",
+    descKey: "domestic_send.method_mobile_desc",
   },
   cash: {
     id: "cash",
-    name: "Cash Pickup",
+    nameKey: "domestic_send.method_cash_name",
     fee: 200,
-    estimate: "~15 minutes",
+    estimateKey: "domestic_send.method_cash_estimate",
     icon: "\u{1F4B5}",
-    description: "Pickup at agent",
+    descKey: "domestic_send.method_cash_desc",
   },
 };
 
@@ -128,6 +131,7 @@ const COUNTRY_FLAG = "\u{1F1F3}\u{1F1EC}";
 
 export default function DomesticSendMoneyScreen() {
   const navigation = useNavigation<NavProp>();
+  const { t } = useTranslation();
   const { balance, sendMoney } = useWallet();
   const { paymentMethods, createDeposit, presentPaymentSheet } = usePayment();
   const userBalance = balance;
@@ -233,7 +237,7 @@ export default function DomesticSendMoneyScreen() {
 
       if (value.includes("@") || value.length >= 10) {
         setWalletUserFound({
-          name: recipientName || "TandaXn User",
+          name: recipientName || t("domestic_send.wallet_default_user"),
           username: value.startsWith("@") ? value : `@${value.replace(/\s/g, "").toLowerCase()}`,
           verified: true,
         });
@@ -260,14 +264,19 @@ export default function DomesticSendMoneyScreen() {
         );
         const { success, error } = await presentPaymentSheet(clientSecret);
         if (!success) {
-          Alert.alert("Payment Failed", error || "Payment was not completed.");
+          Alert.alert(
+            t("domestic_send.alert_payment_failed_title"),
+            error || t("domestic_send.alert_payment_failed_body"),
+          );
           setIsProcessing(false);
           return;
         }
       }
 
       const name = recipientTab === "recent" ? selectedRecipient?.name || "" : recipientName;
-      const method = `Domestic - ${currentMethod?.name || ""}`;
+      const method = t("domestic_send.method_label_domestic", {
+        name: currentMethod ? t(currentMethod.nameKey) : "",
+      });
 
       const txnId = await sendMoney(numericAmount, name, method, "NGN");
 
@@ -279,7 +288,10 @@ export default function DomesticSendMoneyScreen() {
         transactionId: txnId || `TXN${Date.now()}`,
       });
     } catch (error) {
-      Alert.alert("Transfer Failed", "Something went wrong. Please try again.");
+      Alert.alert(
+        t("domestic_send.alert_transfer_failed_title"),
+        t("domestic_send.alert_transfer_failed_body"),
+      );
       console.error("Error sending money:", error);
     } finally {
       setIsProcessing(false);
@@ -311,15 +323,15 @@ export default function DomesticSendMoneyScreen() {
                 <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
               </TouchableOpacity>
               <View style={styles.headerTitleContainer}>
-                <Text style={styles.headerTitle}>Send Money</Text>
-                <Text style={styles.headerSubtitle}>{COUNTRY_FLAG} Domestic Transfer</Text>
+                <Text style={styles.headerTitle}>{t("domestic_send.header")}</Text>
+                <Text style={styles.headerSubtitle}>{COUNTRY_FLAG} {t("domestic_send.header_subtitle")}</Text>
               </View>
               <View style={styles.placeholder} />
             </View>
 
             {/* Balance */}
             <View style={styles.balanceCard}>
-              <Text style={styles.balanceLabel}>Available Balance</Text>
+              <Text style={styles.balanceLabel}>{t("domestic_send.balance_label")}</Text>
               <Text style={styles.balanceAmount}>
                 {CURRENCY_SYMBOL}{formatCurrency(userBalance)}
               </Text>
@@ -345,7 +357,7 @@ export default function DomesticSendMoneyScreen() {
                 onPress={() => { setRecipientTab("new"); setSelectedRecipient(null); }}
               >
                 <Text style={[styles.tabText, recipientTab === "new" && styles.tabTextActive]}>
-                  + Add New
+                  {t("domestic_send.tab_new")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -353,7 +365,7 @@ export default function DomesticSendMoneyScreen() {
                 onPress={() => setRecipientTab("recent")}
               >
                 <Text style={[styles.tabText, recipientTab === "recent" && styles.tabTextActive]}>
-                  Recent
+                  {t("domestic_send.tab_recent")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -397,7 +409,7 @@ export default function DomesticSendMoneyScreen() {
               <>
                 {/* Send Method Selection */}
                 <View style={styles.sectionGroup}>
-                  <Text style={styles.label}>Send via</Text>
+                  <Text style={styles.label}>{t("domestic_send.send_via")}</Text>
                   <View style={styles.methodGrid}>
                     {Object.values(METHOD_OPTIONS).map((method) => (
                       <TouchableOpacity
@@ -408,9 +420,9 @@ export default function DomesticSendMoneyScreen() {
                         ]}
                         onPress={() => handleMethodChange(method.id)}
                       >
-                        {method.badge && (
+                        {method.badgeKey && (
                           <View style={styles.methodBadge}>
-                            <Text style={styles.methodBadgeText}>{method.badge}</Text>
+                            <Text style={styles.methodBadgeText}>{t(method.badgeKey)}</Text>
                           </View>
                         )}
                         <View style={styles.methodCardRow}>
@@ -422,7 +434,7 @@ export default function DomesticSendMoneyScreen() {
                                 selectedMethod === method.id && styles.methodNameSelected,
                               ]}
                             >
-                              {method.name}
+                              {t(method.nameKey)}
                             </Text>
                             <Text
                               style={[
@@ -430,7 +442,12 @@ export default function DomesticSendMoneyScreen() {
                                 method.fee === 0 && styles.methodFeeFree,
                               ]}
                             >
-                              {method.fee === 0 ? "Free" : `${CURRENCY_SYMBOL}${method.fee} fee`}
+                              {method.fee === 0
+                                ? t("domestic_send.fee_free")
+                                : t("domestic_send.fee_with_currency", {
+                                    symbol: CURRENCY_SYMBOL,
+                                    fee: method.fee,
+                                  })}
                             </Text>
                           </View>
                         </View>
@@ -441,12 +458,12 @@ export default function DomesticSendMoneyScreen() {
 
                 {/* Recipient Name */}
                 <View style={styles.sectionGroup}>
-                  <Text style={styles.label}>Recipient Name</Text>
+                  <Text style={styles.label}>{t("domestic_send.recipient_name")}</Text>
                   <TextInput
                     style={styles.textInput}
                     value={recipientName}
                     onChangeText={setRecipientName}
-                    placeholder="Enter full name"
+                    placeholder={t("domestic_send.recipient_name_placeholder")}
                     placeholderTextColor="#9CA3AF"
                   />
                 </View>
@@ -454,7 +471,7 @@ export default function DomesticSendMoneyScreen() {
                 {/* WALLET FIELDS */}
                 {selectedMethod === "wallet" && (
                   <View style={styles.sectionGroup}>
-                    <Text style={styles.label}>Phone Number or @Username</Text>
+                    <Text style={styles.label}>{t("domestic_send.wallet_phone_or_username")}</Text>
                     <View style={styles.lookupRow}>
                       <TextInput
                         style={[
@@ -464,7 +481,7 @@ export default function DomesticSendMoneyScreen() {
                         ]}
                         value={walletLookup}
                         onChangeText={handleWalletLookup}
-                        placeholder="@username or phone number"
+                        placeholder={t("domestic_send.wallet_phone_or_username_placeholder")}
                         placeholderTextColor="#9CA3AF"
                       />
                       {isLookingUp && (
@@ -491,11 +508,11 @@ export default function DomesticSendMoneyScreen() {
                             {recipientName || walletUserFound.name}
                           </Text>
                           <Text style={styles.walletUserUsername}>
-                            {walletUserFound.username} {"\u2022"} TandaXn User
+                            {walletUserFound.username}{t("domestic_send.wallet_user_suffix")}
                           </Text>
                         </View>
                         <View style={styles.verifiedBadge}>
-                          <Text style={styles.verifiedText}>VERIFIED</Text>
+                          <Text style={styles.verifiedText}>{t("domestic_send.wallet_verified_badge")}</Text>
                         </View>
                       </View>
                     )}
@@ -506,19 +523,19 @@ export default function DomesticSendMoneyScreen() {
                 {selectedMethod === "bank" && (
                   <>
                     <View style={styles.sectionGroup}>
-                      <Text style={styles.label}>Bank</Text>
+                      <Text style={styles.label}>{t("domestic_send.bank_label")}</Text>
                       <TouchableOpacity
                         style={[styles.pickerButton, selectedBank && styles.pickerButtonSelected]}
                         onPress={() => setShowBankPicker(true)}
                       >
                         <Text style={[styles.pickerText, !selectedBank && styles.pickerPlaceholder]}>
-                          {selectedBank || "Select bank"}
+                          {selectedBank || t("domestic_send.bank_select")}
                         </Text>
                         <Ionicons name="chevron-down" size={16} color="#6B7280" />
                       </TouchableOpacity>
                     </View>
                     <View style={styles.sectionGroup}>
-                      <Text style={styles.label}>Account Number</Text>
+                      <Text style={styles.label}>{t("domestic_send.account_number_label")}</Text>
                       <TextInput
                         style={[
                           styles.textInput,
@@ -527,7 +544,7 @@ export default function DomesticSendMoneyScreen() {
                         ]}
                         value={accountNumber}
                         onChangeText={(v) => setAccountNumber(v.replace(/\D/g, "").slice(0, 10))}
-                        placeholder="10-digit account number"
+                        placeholder={t("domestic_send.account_number_placeholder")}
                         placeholderTextColor="#9CA3AF"
                         keyboardType="number-pad"
                         maxLength={10}
@@ -552,7 +569,7 @@ export default function DomesticSendMoneyScreen() {
                 {selectedMethod === "mobile" && (
                   <>
                     <View style={styles.sectionGroup}>
-                      <Text style={styles.label}>Mobile Network</Text>
+                      <Text style={styles.label}>{t("domestic_send.network_label")}</Text>
                       <View style={styles.networkRow}>
                         {MOBILE_NETWORKS.map((network) => (
                           <TouchableOpacity
@@ -577,7 +594,7 @@ export default function DomesticSendMoneyScreen() {
                       </View>
                     </View>
                     <View style={styles.sectionGroup}>
-                      <Text style={styles.label}>Phone Number</Text>
+                      <Text style={styles.label}>{t("domestic_send.phone_label")}</Text>
                       <TextInput
                         style={[
                           styles.textInput,
@@ -586,7 +603,7 @@ export default function DomesticSendMoneyScreen() {
                         ]}
                         value={phoneNumber}
                         onChangeText={(v) => setPhoneNumber(v.replace(/[^0-9+]/g, "").slice(0, 14))}
-                        placeholder="08012345678"
+                        placeholder={t("domestic_send.phone_placeholder_ng")}
                         placeholderTextColor="#9CA3AF"
                         keyboardType="phone-pad"
                       />
@@ -597,7 +614,7 @@ export default function DomesticSendMoneyScreen() {
                 {/* CASH PICKUP FIELDS */}
                 {selectedMethod === "cash" && (
                   <View style={styles.sectionGroup}>
-                    <Text style={styles.label}>Pickup Location</Text>
+                    <Text style={styles.label}>{t("domestic_send.pickup_label")}</Text>
                     <TouchableOpacity
                       style={[styles.pickerButton, selectedLocation && styles.pickerButtonSelected]}
                       onPress={() => setShowLocationPicker(true)}
@@ -605,7 +622,7 @@ export default function DomesticSendMoneyScreen() {
                       <View style={styles.pickerLeftRow}>
                         <Text style={styles.pickerEmoji}>{"\u{1F4CD}"}</Text>
                         <Text style={[styles.pickerText, !selectedLocation && styles.pickerPlaceholder]}>
-                          {selectedLocation || "Select pickup location"}
+                          {selectedLocation || t("domestic_send.pickup_select")}
                         </Text>
                       </View>
                       <Ionicons name="chevron-down" size={16} color="#6B7280" />
@@ -620,7 +637,7 @@ export default function DomesticSendMoneyScreen() {
           {/* AMOUNT SECTION                 */}
           {/* ============================== */}
           <View style={[styles.card, numericAmount > userBalance && styles.cardError]}>
-            <Text style={styles.cardTitle}>Amount</Text>
+            <Text style={styles.cardTitle}>{t("domestic_send.card_amount")}</Text>
             <View style={styles.amountInputRow}>
               <View style={styles.currencyBadge}>
                 <Text style={styles.currencyFlag}>{COUNTRY_FLAG}</Text>
@@ -640,7 +657,10 @@ export default function DomesticSendMoneyScreen() {
               <View style={styles.errorBar}>
                 <Ionicons name="alert-circle" size={16} color="#DC2626" />
                 <Text style={styles.errorBarText}>
-                  Exceeds balance of {CURRENCY_SYMBOL}{formatCurrency(userBalance)}
+                  {t("domestic_send.exceeds_balance", {
+                    symbol: CURRENCY_SYMBOL,
+                    balance: formatCurrency(userBalance),
+                  })}
                 </Text>
               </View>
             )}
@@ -650,28 +670,28 @@ export default function DomesticSendMoneyScreen() {
           {/* TRANSFER SUMMARY               */}
           {/* ============================== */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Summary</Text>
+            <Text style={styles.cardTitle}>{t("domestic_send.card_summary")}</Text>
 
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Amount</Text>
+              <Text style={styles.summaryLabel}>{t("domestic_send.summary_amount")}</Text>
               <Text style={styles.summaryValue}>
                 {CURRENCY_SYMBOL}{numericAmount > 0 ? formatCurrency(numericAmount) : "0.00"}
               </Text>
             </View>
             <View style={styles.summaryRow}>
               <View style={styles.summaryLabelRow}>
-                <Text style={styles.summaryLabel}>Fee</Text>
+                <Text style={styles.summaryLabel}>{t("domestic_send.summary_fee")}</Text>
                 <Text style={styles.summaryLabelIcon}>{currentMethod?.icon}</Text>
               </View>
               <Text style={[styles.summaryValue, currentFee === 0 && styles.summaryValueFree]}>
-                {currentFee === 0 ? "FREE" : `${CURRENCY_SYMBOL}${currentFee.toFixed(2)}`}
+                {currentFee === 0 ? t("domestic_send.summary_free") : `${CURRENCY_SYMBOL}${currentFee.toFixed(2)}`}
               </Text>
             </View>
 
             <View style={styles.summaryDivider} />
 
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryTotalLabel}>Total</Text>
+              <Text style={styles.summaryTotalLabel}>{t("domestic_send.summary_total")}</Text>
               <Text style={styles.summaryTotalValue}>
                 {CURRENCY_SYMBOL}{numericAmount > 0 ? formatCurrency(totalToPay) : "0.00"}
               </Text>
@@ -681,7 +701,7 @@ export default function DomesticSendMoneyScreen() {
             <View style={styles.deliveryInfo}>
               <Text style={styles.deliveryIcon}>{currentMethod?.icon}</Text>
               <Text style={styles.deliveryText}>
-                {currentMethod?.name} {"\u2022"} {currentMethod?.estimate}
+                {currentMethod ? t(currentMethod.nameKey) : ""} {"\u2022"} {currentMethod ? t(currentMethod.estimateKey) : ""}
               </Text>
             </View>
           </View>
@@ -691,7 +711,7 @@ export default function DomesticSendMoneyScreen() {
         {/* PAY FROM                       */}
         {/* ============================== */}
         <View style={styles.payFromContainer}>
-          <Text style={styles.payFromTitle}>Pay From</Text>
+          <Text style={styles.payFromTitle}>{t("domestic_send.pay_from")}</Text>
 
           {/* Wallet option */}
           <TouchableOpacity
@@ -704,8 +724,8 @@ export default function DomesticSendMoneyScreen() {
             </View>
             <Ionicons name="wallet" size={20} color={fundingSource === "wallet" ? "#00C6AE" : "#6B7280"} />
             <View style={styles.payFromInfo}>
-              <Text style={[styles.payFromLabel, fundingSource === "wallet" && styles.payFromLabelSelected]}>TandaXn Wallet</Text>
-              <Text style={styles.payFromSub}>{CURRENCY_SYMBOL}{formatCurrency(userBalance)} available</Text>
+              <Text style={[styles.payFromLabel, fundingSource === "wallet" && styles.payFromLabelSelected]}>{t("domestic_send.tandaxn_wallet")}</Text>
+              <Text style={styles.payFromSub}>{CURRENCY_SYMBOL}{formatCurrency(userBalance)} {t("domestic_send.available_suffix")}</Text>
             </View>
           </TouchableOpacity>
 
@@ -723,7 +743,7 @@ export default function DomesticSendMoneyScreen() {
               <Ionicons name={pm.icon as any} size={20} color={fundingSource === pm.id ? "#00C6AE" : "#6B7280"} />
               <View style={styles.payFromInfo}>
                 <Text style={[styles.payFromLabel, fundingSource === pm.id && styles.payFromLabelSelected]}>{pm.label}</Text>
-                {pm.isDefault && <Text style={styles.payFromDefault}>Default</Text>}
+                {pm.isDefault && <Text style={styles.payFromDefault}>{t("domestic_send.pm_default")}</Text>}
               </View>
             </TouchableOpacity>
           ))}
@@ -741,10 +761,12 @@ export default function DomesticSendMoneyScreen() {
           >
             <Text style={[styles.sendButtonText, (!isFormValid() || isProcessing) && styles.sendButtonTextDisabled]}>
               {isProcessing
-                ? "Sending..."
+                ? t("domestic_send.btn_sending")
                 : numericAmount > 0
-                ? `Send ${CURRENCY_SYMBOL}${formatCurrency(totalToPay)}${currentFee === 0 ? " \u2022 FREE" : ""}`
-                : "Send Money"}
+                  ? currentFee === 0
+                    ? t("domestic_send.btn_send_amount_free", { amount: `${CURRENCY_SYMBOL}${formatCurrency(totalToPay)}` })
+                    : t("domestic_send.btn_send_amount", { amount: `${CURRENCY_SYMBOL}${formatCurrency(totalToPay)}` })
+                  : t("domestic_send.btn_send_money")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -757,7 +779,7 @@ export default function DomesticSendMoneyScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Bank</Text>
+              <Text style={styles.modalTitle}>{t("domestic_send.modal_select_bank")}</Text>
               <TouchableOpacity onPress={() => setShowBankPicker(false)} style={styles.modalClose}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
@@ -786,7 +808,7 @@ export default function DomesticSendMoneyScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Pickup Location</Text>
+              <Text style={styles.modalTitle}>{t("domestic_send.modal_select_pickup")}</Text>
               <TouchableOpacity onPress={() => setShowLocationPicker(false)} style={styles.modalClose}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>

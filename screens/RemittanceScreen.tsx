@@ -16,6 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useWallet } from "../context/WalletContext";
 import { usePayment } from "../context/PaymentContext";
@@ -36,6 +37,9 @@ type Recipient = {
 
 type Country = {
   code: string;
+  // `name` retained as the source English name (used as a defaultValue
+  // fallback when no per-country translation key exists). The displayed
+  // name resolves via t(`remittance.country_${code}`).
   name: string;
   flag: string;
   currency: string;
@@ -45,10 +49,12 @@ type Country = {
   decimals: number;
 };
 
+// i18n: DeliveryOption stores translation keys for label + time. Resolved
+// per-render via t() so language flips re-paint without re-instantiating.
 type DeliveryOption = {
   id: string;
-  label: string;
-  time: string;
+  labelKey: string;
+  timeKey: string;
   fee: number;
   icon: string;
 };
@@ -94,9 +100,9 @@ const COUNTRIES: Country[] = [
 ];
 
 const DELIVERY_OPTIONS: DeliveryOption[] = [
-  { id: "standard", label: "Standard", time: "3-5 days", fee: 2.99, icon: "\u{1F4E6}" },
-  { id: "express", label: "Express", time: "1-2 days", fee: 4.99, icon: "\u{1F680}" },
-  { id: "instant", label: "Instant", time: "Minutes", fee: 7.99, icon: "\u{26A1}" },
+  { id: "standard", labelKey: "remittance.delivery_standard", timeKey: "remittance.delivery_standard_time", fee: 2.99, icon: "\u{1F4E6}" },
+  { id: "express", labelKey: "remittance.delivery_express", timeKey: "remittance.delivery_express_time", fee: 4.99, icon: "\u{1F680}" },
+  { id: "instant", labelKey: "remittance.delivery_instant", timeKey: "remittance.delivery_instant_time", fee: 7.99, icon: "\u{26A1}" },
 ];
 
 // =============================================================================
@@ -105,8 +111,14 @@ const DELIVERY_OPTIONS: DeliveryOption[] = [
 
 export default function RemittanceScreen() {
   const navigation = useNavigation<NavProp>();
+  const { t } = useTranslation();
   const { balance, sendMoney } = useWallet();
   const { paymentMethods, createDeposit, presentPaymentSheet } = usePayment();
+
+  // i18n: resolve a country's displayed name. Falls back to the source
+  // English name for codes without a dedicated translation key.
+  const countryName = (c: { code: string; name: string }) =>
+    t(`remittance.country_${c.code}`, { defaultValue: c.name });
 
   // Funding source
   const [fundingSource, setFundingSource] = useState<"wallet" | string>("wallet");
@@ -138,26 +150,31 @@ export default function RemittanceScreen() {
   const numericReceiveAmount = parseFloat(receiveAmount) || 0;
   const totalToPay = numericSendAmount + currentFee;
 
-  const filteredCountries = COUNTRIES.filter(
-    (c) =>
-      c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
-      c.currency.toLowerCase().includes(countrySearch.toLowerCase()) ||
-      c.code.toLowerCase().includes(countrySearch.toLowerCase())
-  );
+  const filteredCountries = COUNTRIES.filter((c) => {
+    const q = countrySearch.toLowerCase();
+    // Match against both the source English name AND the localized name
+    // so French speakers can find "Sénégal" by typing either form.
+    return (
+      c.name.toLowerCase().includes(q) ||
+      countryName(c).toLowerCase().includes(q) ||
+      c.currency.toLowerCase().includes(q) ||
+      c.code.toLowerCase().includes(q)
+    );
+  });
 
   // Validation
   const validateForm = useCallback(() => {
     const newErrors: Record<string, string> = {};
-    if (!selectedRecipient && !showAddNew) newErrors.recipient = "Please select or add a recipient";
+    if (!selectedRecipient && !showAddNew) newErrors.recipient = t("remittance.validation_recipient");
     if (showAddNew) {
-      if (!newRecipientName.trim() || newRecipientName.length < 2) newErrors.name = "Please enter recipient's full name";
-      if (!newRecipientPhone || newRecipientPhone.length < 8) newErrors.phone = "Please enter a valid phone number";
+      if (!newRecipientName.trim() || newRecipientName.length < 2) newErrors.name = t("remittance.validation_name");
+      if (!newRecipientPhone || newRecipientPhone.length < 8) newErrors.phone = t("remittance.validation_phone");
     }
-    if (numericSendAmount <= 0) newErrors.amount = "Please enter an amount to send";
-    else if (totalToPay > balance) newErrors.amount = "Insufficient balance for amount + fee";
+    if (numericSendAmount <= 0) newErrors.amount = t("remittance.validation_amount");
+    else if (totalToPay > balance) newErrors.amount = t("remittance.validation_insufficient");
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [selectedRecipient, showAddNew, newRecipientName, newRecipientPhone, numericSendAmount, totalToPay, balance]);
+  }, [selectedRecipient, showAddNew, newRecipientName, newRecipientPhone, numericSendAmount, totalToPay, balance, t]);
 
   const isFormValid = useCallback(() => {
     const hasRecipient = selectedRecipient || (showAddNew && newRecipientName.length >= 2 && newRecipientPhone.length >= 8);
@@ -212,14 +229,21 @@ export default function RemittanceScreen() {
         );
         const { success, error } = await presentPaymentSheet(clientSecret);
         if (!success) {
-          Alert.alert("Payment Failed", error || "Payment was not completed.");
+          Alert.alert(
+            t("remittance.alert_payment_failed_title"),
+            error || t("remittance.alert_payment_failed_body"),
+          );
           setIsProcessing(false);
           return;
         }
       }
 
-      const name = selectedRecipient?.name || newRecipientName || "Recipient";
-      const method = `International - ${DELIVERY_OPTIONS.find((d) => d.id === selectedSpeed)?.label || "Standard"}`;
+      const name = selectedRecipient?.name || newRecipientName || t("remittance.default_recipient_name");
+      const selectedDelivery = DELIVERY_OPTIONS.find((d) => d.id === selectedSpeed);
+      const deliveryLabel = selectedDelivery
+        ? t(selectedDelivery.labelKey)
+        : t("remittance.delivery_standard");
+      const method = t("remittance.method_label_intl", { label: deliveryLabel });
       const txnId = await sendMoney(numericSendAmount, name, method, selectedCountry.currency);
       navigation.navigate("WalletTransactionSuccess", {
         type: "send",
@@ -229,7 +253,10 @@ export default function RemittanceScreen() {
         transactionId: txnId || `TXN${Date.now()}`,
       });
     } catch (error) {
-      Alert.alert("Transfer Failed", "Something went wrong. Please try again.");
+      Alert.alert(
+        t("remittance.alert_transfer_failed_title"),
+        t("remittance.alert_transfer_failed_body"),
+      );
     } finally {
       setIsProcessing(false);
     }
@@ -256,19 +283,24 @@ export default function RemittanceScreen() {
                 <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
               </TouchableOpacity>
               <View style={s.headerTitleContainer}>
-                <Text style={s.headerTitle}>Send Money</Text>
-                <Text style={s.headerSubtitle}>Fast & secure transfers</Text>
+                <Text style={s.headerTitle}>{t("remittance.header")}</Text>
+                <Text style={s.headerSubtitle}>{t("remittance.header_subtitle")}</Text>
               </View>
               <View style={s.placeholder} />
             </View>
             <View style={s.headerCards}>
               <View style={s.balanceCard}>
-                <Text style={s.balanceLabel}>Your Balance</Text>
+                <Text style={s.balanceLabel}>{t("remittance.balance_label")}</Text>
                 <Text style={s.balanceAmount}>${formatCurrency(balance)}</Text>
               </View>
               <View style={s.rateCard}>
-                <Text style={s.rateLabel}>Exchange Rate</Text>
-                <Text style={s.rateAmount}>1 USD = {formatCurrency(exchangeRate, 2)} {selectedCountry.currency}</Text>
+                <Text style={s.rateLabel}>{t("remittance.rate_label")}</Text>
+                <Text style={s.rateAmount}>
+                  {t("remittance.rate_value", {
+                    rate: formatCurrency(exchangeRate, 2),
+                    currency: selectedCountry.currency,
+                  })}
+                </Text>
               </View>
             </View>
           </SafeAreaView>
@@ -278,7 +310,7 @@ export default function RemittanceScreen() {
 
           {/* RECIPIENT */}
           <View style={s.card}>
-            <Text style={s.cardTitle}>Recipient</Text>
+            <Text style={s.cardTitle}>{t("remittance.card_recipient")}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.chipScroll} contentContainerStyle={s.chipScrollContent}>
               {RECENT_RECIPIENTS.map((r) => (
                 <TouchableOpacity key={r.id} style={[s.chip, selectedRecipient?.id === r.id && s.chipSelected]} onPress={() => handleSelectRecipient(r)} activeOpacity={0.7}>
@@ -292,26 +324,26 @@ export default function RemittanceScreen() {
                 <View style={[s.chipAvatar, showAddNew && s.chipAvatarSelected]}>
                   <Ionicons name="add" size={22} color={showAddNew ? "#FFFFFF" : "#6B7280"} />
                 </View>
-                <Text style={[s.chipName, showAddNew && s.chipNameSelected]}>Add New</Text>
+                <Text style={[s.chipName, showAddNew && s.chipNameSelected]}>{t("remittance.add_new")}</Text>
               </TouchableOpacity>
             </ScrollView>
 
             {showAddNew && (
               <View style={s.addNewForm}>
                 <View style={s.inputGroup}>
-                  <Text style={s.label}>Full Name</Text>
-                  <TextInput style={[s.textInput, errors.name && s.textInputError]} value={newRecipientName} onChangeText={(v) => { setNewRecipientName(v); if (errors.name) setErrors((p) => ({ ...p, name: "" })); }} placeholder="Enter recipient's full name" placeholderTextColor="#9CA3AF" />
+                  <Text style={s.label}>{t("remittance.name_label")}</Text>
+                  <TextInput style={[s.textInput, errors.name && s.textInputError]} value={newRecipientName} onChangeText={(v) => { setNewRecipientName(v); if (errors.name) setErrors((p) => ({ ...p, name: "" })); }} placeholder={t("remittance.name_placeholder")} placeholderTextColor="#9CA3AF" />
                   {errors.name ? <Text style={s.errorText}>{errors.name}</Text> : null}
                 </View>
                 <View style={s.inputGroup}>
-                  <Text style={s.label}>Phone Number</Text>
+                  <Text style={s.label}>{t("remittance.phone_label")}</Text>
                   <View style={s.phoneRow}>
                     <TouchableOpacity style={s.dialCodeButton} onPress={() => setShowCountryPicker(true)}>
                       <Text style={s.dialCodeFlag}>{selectedCountry.flag}</Text>
                       <Text style={s.dialCodeText}>{selectedCountry.dialCode}</Text>
                       <Ionicons name="chevron-down" size={14} color="#6B7280" />
                     </TouchableOpacity>
-                    <TextInput style={[s.phoneInput, errors.phone && s.textInputError]} value={newRecipientPhone} onChangeText={(v) => { setNewRecipientPhone(v); if (errors.phone) setErrors((p) => ({ ...p, phone: "" })); }} placeholder="Phone number" placeholderTextColor="#9CA3AF" keyboardType="phone-pad" />
+                    <TextInput style={[s.phoneInput, errors.phone && s.textInputError]} value={newRecipientPhone} onChangeText={(v) => { setNewRecipientPhone(v); if (errors.phone) setErrors((p) => ({ ...p, phone: "" })); }} placeholder={t("remittance.phone_placeholder")} placeholderTextColor="#9CA3AF" keyboardType="phone-pad" />
                   </View>
                   {errors.phone ? <Text style={s.errorText}>{errors.phone}</Text> : null}
                 </View>
@@ -332,9 +364,9 @@ export default function RemittanceScreen() {
 
           {/* AMOUNT */}
           <View style={[s.card, errors.amount && s.cardError]}>
-            <Text style={s.cardTitle}>Amount</Text>
+            <Text style={s.cardTitle}>{t("remittance.card_amount")}</Text>
             <View style={s.amountGroup}>
-              <Text style={s.label}>You send (USD)</Text>
+              <Text style={s.label}>{t("remittance.you_send_usd")}</Text>
               <View style={[s.amountRow, lastEditedField === "send" && s.amountRowActive]}>
                 <View style={s.currencyBadge}>
                   <Text style={s.currencyFlag}>{"\u{1F1FA}\u{1F1F8}"}</Text>
@@ -349,7 +381,7 @@ export default function RemittanceScreen() {
               </TouchableOpacity>
             </View>
             <View style={s.amountGroup}>
-              <Text style={s.label}>They receive ({selectedCountry.currency})</Text>
+              <Text style={s.label}>{t("remittance.they_receive", { currency: selectedCountry.currency })}</Text>
               <View style={[s.amountRow, lastEditedField === "receive" && s.amountRowActive]}>
                 <TouchableOpacity style={s.currencyBadge} onPress={() => setShowCountryPicker(true)}>
                   <Text style={s.currencyFlag}>{selectedCountry.flag}</Text>
@@ -364,13 +396,13 @@ export default function RemittanceScreen() {
 
           {/* DELIVERY SPEED */}
           <View style={s.card}>
-            <Text style={s.cardTitle}>Delivery Speed</Text>
+            <Text style={s.cardTitle}>{t("remittance.card_delivery")}</Text>
             <View style={s.speedRow}>
               {DELIVERY_OPTIONS.map((o) => (
                 <TouchableOpacity key={o.id} style={[s.speedCard, selectedSpeed === o.id && s.speedCardSelected]} onPress={() => setSelectedSpeed(o.id)} activeOpacity={0.7}>
                   <Text style={s.speedIcon}>{o.icon}</Text>
-                  <Text style={[s.speedLabel, selectedSpeed === o.id && s.speedLabelSelected]}>{o.label}</Text>
-                  <Text style={s.speedTime}>{o.time}</Text>
+                  <Text style={[s.speedLabel, selectedSpeed === o.id && s.speedLabelSelected]}>{t(o.labelKey)}</Text>
+                  <Text style={s.speedTime}>{t(o.timeKey)}</Text>
                   <Text style={[s.speedFee, selectedSpeed === o.id && s.speedFeeSelected]}>${o.fee.toFixed(2)}</Text>
                 </TouchableOpacity>
               ))}
@@ -379,26 +411,30 @@ export default function RemittanceScreen() {
 
           {/* SUMMARY */}
           <View style={s.card}>
-            <Text style={s.cardTitle}>Transfer Summary</Text>
-            <View style={s.summaryRow}><Text style={s.summaryLabel}>You send</Text><Text style={s.summaryValue}>${numericSendAmount > 0 ? formatCurrency(numericSendAmount) : "0.00"}</Text></View>
-            <View style={s.summaryRow}><Text style={s.summaryLabel}>Transfer fee</Text><Text style={s.summaryValue}>${currentFee.toFixed(2)}</Text></View>
-            <View style={s.summaryRow}><Text style={s.summaryLabel}>Exchange rate</Text><Text style={s.summaryValue}>1 USD = {formatCurrency(exchangeRate, 2)} {selectedCountry.currency}</Text></View>
+            <Text style={s.cardTitle}>{t("remittance.card_summary")}</Text>
+            <View style={s.summaryRow}><Text style={s.summaryLabel}>{t("remittance.summary_you_send")}</Text><Text style={s.summaryValue}>${numericSendAmount > 0 ? formatCurrency(numericSendAmount) : "0.00"}</Text></View>
+            <View style={s.summaryRow}><Text style={s.summaryLabel}>{t("remittance.summary_transfer_fee")}</Text><Text style={s.summaryValue}>${currentFee.toFixed(2)}</Text></View>
+            <View style={s.summaryRow}><Text style={s.summaryLabel}>{t("remittance.summary_exchange_rate")}</Text><Text style={s.summaryValue}>{t("remittance.rate_value", { rate: formatCurrency(exchangeRate, 2), currency: selectedCountry.currency })}</Text></View>
             <View style={s.summaryDivider} />
-            <View style={s.summaryRow}><Text style={s.summaryTotalLabel}>Total to pay</Text><Text style={s.summaryTotalValue}>${numericSendAmount > 0 ? formatCurrency(totalToPay) : "0.00"}</Text></View>
-            <View style={s.summaryRow}><Text style={[s.summaryTotalLabel, { color: "#00897B" }]}>They receive</Text><Text style={s.summaryReceiveValue}>{numericReceiveAmount > 0 ? formatReceiveAmount(numericReceiveAmount) : "0"} {selectedCountry.currency}</Text></View>
+            <View style={s.summaryRow}><Text style={s.summaryTotalLabel}>{t("remittance.summary_total_to_pay")}</Text><Text style={s.summaryTotalValue}>${numericSendAmount > 0 ? formatCurrency(totalToPay) : "0.00"}</Text></View>
+            <View style={s.summaryRow}><Text style={[s.summaryTotalLabel, { color: "#00897B" }]}>{t("remittance.summary_they_receive")}</Text><Text style={s.summaryReceiveValue}>{numericReceiveAmount > 0 ? formatReceiveAmount(numericReceiveAmount) : "0"} {selectedCountry.currency}</Text></View>
           </View>
 
           {numericSendAmount > 0 && (
             <View style={s.savingsCard}>
               <Text style={s.savingsIcon}>{"\u{1F4B0}"}</Text>
-              <Text style={s.savingsText}>You save <Text style={s.savingsBold}>${((numericSendAmount * 0.07) - currentFee).toFixed(2)}</Text> compared to traditional services</Text>
+              <Text style={s.savingsText}>
+                {t("remittance.savings_text_prefix")}{" "}
+                <Text style={s.savingsBold}>${((numericSendAmount * 0.07) - currentFee).toFixed(2)}</Text>
+                {t("remittance.savings_text_suffix")}
+              </Text>
             </View>
           )}
         </ScrollView>
 
         {/* PAY FROM */}
         <View style={s.payFromContainer}>
-          <Text style={s.payFromTitle}>Pay From</Text>
+          <Text style={s.payFromTitle}>{t("remittance.pay_from")}</Text>
 
           {/* Wallet option */}
           <TouchableOpacity
@@ -411,8 +447,8 @@ export default function RemittanceScreen() {
             </View>
             <Ionicons name="wallet" size={20} color={fundingSource === "wallet" ? "#00C6AE" : "#6B7280"} />
             <View style={s.payFromInfo}>
-              <Text style={[s.payFromLabel, fundingSource === "wallet" && s.payFromLabelSelected]}>TandaXn Wallet</Text>
-              <Text style={s.payFromSub}>${formatCurrency(balance)} available</Text>
+              <Text style={[s.payFromLabel, fundingSource === "wallet" && s.payFromLabelSelected]}>{t("remittance.tandaxn_wallet")}</Text>
+              <Text style={s.payFromSub}>${formatCurrency(balance)} {t("remittance.available_suffix")}</Text>
             </View>
           </TouchableOpacity>
 
@@ -430,7 +466,7 @@ export default function RemittanceScreen() {
               <Ionicons name={pm.icon as any} size={20} color={fundingSource === pm.id ? "#00C6AE" : "#6B7280"} />
               <View style={s.payFromInfo}>
                 <Text style={[s.payFromLabel, fundingSource === pm.id && s.payFromLabelSelected]}>{pm.label}</Text>
-                {pm.isDefault && <Text style={s.payFromDefault}>Default</Text>}
+                {pm.isDefault && <Text style={s.payFromDefault}>{t("remittance.pm_default")}</Text>}
               </View>
             </TouchableOpacity>
           ))}
@@ -440,10 +476,14 @@ export default function RemittanceScreen() {
         <View style={s.bottomBar}>
           <TouchableOpacity style={[s.sendButton, (!isFormValid() || isProcessing) && s.sendButtonDisabled]} onPress={handleSend} disabled={!isFormValid() || isProcessing} activeOpacity={0.8}>
             <Text style={[s.sendButtonText, (!isFormValid() || isProcessing) && s.sendButtonTextDisabled]}>
-              {isProcessing ? "Sending..." : numericSendAmount > 0 ? `Send $${formatCurrency(totalToPay)}` : "Send Money"}
+              {isProcessing
+                ? t("remittance.btn_sending")
+                : numericSendAmount > 0
+                  ? t("remittance.btn_send_amount", { amount: `$${formatCurrency(totalToPay)}` })
+                  : t("remittance.btn_send_money")}
             </Text>
           </TouchableOpacity>
-          <Text style={s.securityNote}>{"\u{1F512}"} Secured by TandaXn - Your money is protected</Text>
+          <Text style={s.securityNote}>{t("remittance.security_note")}</Text>
         </View>
       </KeyboardAvoidingView>
 
@@ -452,21 +492,21 @@ export default function RemittanceScreen() {
         <View style={s.modalOverlay}>
           <View style={s.modalContent}>
             <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>Select Country</Text>
+              <Text style={s.modalTitle}>{t("remittance.modal_select_country")}</Text>
               <TouchableOpacity onPress={() => { setShowCountryPicker(false); setCountrySearch(""); }} style={s.modalClose}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
             <View style={s.modalSearchContainer}>
               <Ionicons name="search" size={18} color="#9CA3AF" />
-              <TextInput style={s.modalSearchInput} value={countrySearch} onChangeText={setCountrySearch} placeholder="Search country or currency..." placeholderTextColor="#9CA3AF" />
+              <TextInput style={s.modalSearchInput} value={countrySearch} onChangeText={setCountrySearch} placeholder={t("remittance.modal_search_placeholder")} placeholderTextColor="#9CA3AF" />
             </View>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               {filteredCountries.map((c) => (
                 <TouchableOpacity key={c.code} style={[s.countryOption, selectedCountry.code === c.code && s.countryOptionSelected]} onPress={() => { setSelectedCountry(c); setShowCountryPicker(false); setCountrySearch(""); }} activeOpacity={0.7}>
                   <Text style={s.countryFlag}>{c.flag}</Text>
                   <View style={s.flex1}>
-                    <Text style={s.countryName}>{c.name}</Text>
+                    <Text style={s.countryName}>{countryName(c)}</Text>
                     <Text style={s.countryCurrency}>{c.currency} - 1 USD = {c.rate} {c.currency}</Text>
                   </View>
                   {selectedCountry.code === c.code && <Ionicons name="checkmark" size={22} color="#00C6AE" />}
