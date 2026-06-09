@@ -32,6 +32,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { kycDraft } from "../lib/kycDraft";
@@ -61,20 +62,22 @@ const COUNTRIES: Country[] = [
   { code: "OTHER", name: "Other country...", flag: "🌍" },
 ];
 
-const ID_TYPES: { id: IdType; icon: string; name: string }[] = [
-  { id: "passport", icon: "🛂", name: "Passport" },
-  { id: "national-id", icon: "🪪", name: "National ID Card" },
-  { id: "drivers", icon: "🚗", name: "Driver's License" },
+// i18n: nameKey/textKey resolved per-render via t() at call site.
+const ID_TYPES: { id: IdType; icon: string; nameKey: string }[] = [
+  { id: "passport", icon: "🛂", nameKey: "international_verification.id_passport" },
+  { id: "national-id", icon: "🪪", nameKey: "international_verification.id_national" },
+  { id: "drivers", icon: "🚗", nameKey: "international_verification.id_drivers" },
 ];
 
 const NEXT_STEPS = [
-  { num: 1, text: "Take a photo of your ID" },
-  { num: 2, text: "Take a selfie for verification" },
-  { num: 3, text: "Start using TandaXn!" },
+  { num: 1, textKey: "international_verification.step_1_text" },
+  { num: 2, textKey: "international_verification.step_2_text" },
+  { num: 3, textKey: "international_verification.step_3_text" },
 ];
 
 export default function InternationalVerificationScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
 
   const [country, setCountry] = useState<Country | null>(null);
   const [idType, setIdType] = useState<IdType | null>(null);
@@ -153,10 +156,10 @@ export default function InternationalVerificationScreen() {
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
                 <Text style={styles.headerTitle}>
-                  International Verification
+                  {t("international_verification.header")}
                 </Text>
                 <Text style={styles.headerSubtitle}>
-                  For users outside the US
+                  {t("international_verification.header_subtitle")}
                 </Text>
               </View>
             </View>
@@ -167,17 +170,16 @@ export default function InternationalVerificationScreen() {
             <View style={styles.welcomeBanner}>
               <Text style={styles.welcomeEmoji}>🌍</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.welcomeTitle}>Welcome from abroad!</Text>
+                <Text style={styles.welcomeTitle}>{t("international_verification.welcome_title")}</Text>
                 <Text style={styles.welcomeBody}>
-                  International verification is simpler — just your ID and
-                  country.
+                  {t("international_verification.welcome_body")}
                 </Text>
               </View>
             </View>
 
             {/* Country Selection */}
             <View style={styles.sectionCard}>
-              <Text style={styles.fieldLabel}>What country do you live in?</Text>
+              <Text style={styles.fieldLabel}>{t("international_verification.field_country")}</Text>
               <TouchableOpacity
                 style={styles.pickerInput}
                 onPress={() => setPickerOpen(true)}
@@ -190,7 +192,7 @@ export default function InternationalVerificationScreen() {
                   </Text>
                 ) : (
                   <Text style={styles.pickerInputPlaceholder}>
-                    Select your country
+                    {t("international_verification.placeholder_country")}
                   </Text>
                 )}
                 <Ionicons name="chevron-down" size={18} color={MUTED} />
@@ -199,7 +201,7 @@ export default function InternationalVerificationScreen() {
 
             {/* ID Type Selection */}
             <View style={styles.sectionCard}>
-              <Text style={styles.fieldLabel}>What ID will you use?</Text>
+              <Text style={styles.fieldLabel}>{t("international_verification.field_id_type")}</Text>
               <View style={styles.idList}>
                 {ID_TYPES.map((type) => {
                   const isSelected = idType === type.id;
@@ -215,7 +217,7 @@ export default function InternationalVerificationScreen() {
                       accessibilityState={{ selected: isSelected }}
                     >
                       <Text style={styles.idIcon}>{type.icon}</Text>
-                      <Text style={styles.idName}>{type.name}</Text>
+                      <Text style={styles.idName}>{t(type.nameKey)}</Text>
                       {isSelected && (
                         <Ionicons
                           name="checkmark"
@@ -233,11 +235,10 @@ export default function InternationalVerificationScreen() {
             {/* Tax ID Question */}
             <View style={styles.sectionCard}>
               <Text style={styles.fieldLabel}>
-                Do you have a tax ID in your country?
+                {t("international_verification.field_tax_id")}
               </Text>
               <Text style={styles.fieldHint}>
-                This could be a National Identification Number, Tax ID, or
-                equivalent
+                {t("international_verification.field_tax_id_hint")}
               </Text>
               <View style={styles.yesNoRow}>
                 <TouchableOpacity
@@ -249,7 +250,7 @@ export default function InternationalVerificationScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Yes, I have a tax ID"
                 >
-                  <Text style={styles.yesNoText}>Yes, I have one</Text>
+                  <Text style={styles.yesNoText}>{t("international_verification.btn_yes")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
@@ -260,7 +261,7 @@ export default function InternationalVerificationScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="No or not sure"
                 >
-                  <Text style={styles.yesNoText}>No / Not sure</Text>
+                  <Text style={styles.yesNoText}>{t("international_verification.btn_no")}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -268,13 +269,13 @@ export default function InternationalVerificationScreen() {
               {hasTaxId === true && (
                 <View style={{ marginTop: 16 }}>
                   <Text style={styles.fieldLabelSmall}>
-                    Enter your Tax ID (optional)
+                    {t("international_verification.label_tax_id_optional")}
                   </Text>
                   <TextInput
                     style={styles.textInput}
                     value={taxId}
                     onChangeText={setTaxId}
-                    placeholder="Your country's tax ID number"
+                    placeholder={t("international_verification.placeholder_tax_id")}
                     placeholderTextColor="#9CA3AF"
                   />
                 </View>
@@ -285,8 +286,8 @@ export default function InternationalVerificationScreen() {
                 <View style={styles.tealCallout}>
                   <Text style={styles.tealCalloutEmoji}>✅</Text>
                   <Text style={styles.tealCalloutText}>
-                    <Text style={styles.tealCalloutStrong}>That's OK!</Text> You
-                    can still use TandaXn. We'll just verify your ID.
+                    <Text style={styles.tealCalloutStrong}>{t("international_verification.no_tax_callout_strong")}</Text>
+                    {t("international_verification.no_tax_callout_body")}
                   </Text>
                 </View>
               )}
@@ -294,14 +295,14 @@ export default function InternationalVerificationScreen() {
 
             {/* Next steps */}
             <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Next steps</Text>
+              <Text style={styles.sectionTitle}>{t("international_verification.section_next_steps")}</Text>
               <View style={styles.stepsList}>
                 {NEXT_STEPS.map((step) => (
                   <View key={step.num} style={styles.stepRow}>
                     <View style={styles.stepNumBox}>
                       <Text style={styles.stepNumText}>{step.num}</Text>
                     </View>
-                    <Text style={styles.stepText}>{step.text}</Text>
+                    <Text style={styles.stepText}>{t(step.textKey)}</Text>
                   </View>
                 ))}
               </View>
@@ -328,7 +329,7 @@ export default function InternationalVerificationScreen() {
                 !canContinue && styles.continueButtonTextDisabled,
               ]}
             >
-              Continue to ID Verification
+              {t("international_verification.btn_continue")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -345,7 +346,7 @@ export default function InternationalVerificationScreen() {
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select your country</Text>
+              <Text style={styles.modalTitle}>{t("international_verification.modal_title")}</Text>
               <TouchableOpacity
                 onPress={() => setPickerOpen(false)}
                 accessibilityRole="button"
@@ -367,7 +368,9 @@ export default function InternationalVerificationScreen() {
                   accessibilityRole="button"
                 >
                   <Text style={styles.countryFlag}>{item.flag}</Text>
-                  <Text style={styles.countryName}>{item.name}</Text>
+                  <Text style={styles.countryName}>
+                    {item.code === "OTHER" ? t("international_verification.country_other") : item.name}
+                  </Text>
                   {country?.code === item.code && (
                     <Ionicons
                       name="checkmark"

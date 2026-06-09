@@ -39,6 +39,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import * as ImagePicker from "expo-image-picker";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
@@ -62,30 +63,33 @@ type DocumentUploadRouteProp = RouteProp<
   "DocumentUpload"
 >;
 
-const ID_TYPE_LABELS: Record<IDDocType, string> = {
-  passport: "Passport",
-  "national-id": "National ID Card",
-  "drivers-license": "Driver's License",
-  "residence-permit": "Residence Permit",
+// i18n: keys resolved per-render via t() at the call site so language
+// flips re-paint without re-instantiating.
+const ID_TYPE_LABEL_KEYS: Record<IDDocType, string> = {
+  passport: "document_upload.id_label_passport",
+  "national-id": "document_upload.id_label_national",
+  "drivers-license": "document_upload.id_label_drivers",
+  "residence-permit": "document_upload.id_label_permit",
 };
 
-const TIPS: Record<Side, string[]> = {
+const TIP_KEYS: Record<Side, string[]> = {
   front: [
-    "Place document on a flat, dark surface",
-    "Make sure all 4 corners are visible",
-    "Avoid glare and shadows",
-    "Text should be readable",
+    "document_upload.tip_front_1",
+    "document_upload.tip_front_2",
+    "document_upload.tip_front_3",
+    "document_upload.tip_front_4",
   ],
   back: [
-    "Flip your document over",
-    "Capture the full back side",
-    "Include any barcodes or chips",
+    "document_upload.tip_back_1",
+    "document_upload.tip_back_2",
+    "document_upload.tip_back_3",
   ],
 };
 
 export default function DocumentUploadScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<DocumentUploadRouteProp>();
+  const { t } = useTranslation();
   const idType = route.params?.idType ?? "passport";
   const side = route.params?.side ?? "front";
 
@@ -97,8 +101,8 @@ export default function DocumentUploadScreen() {
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  const idTypeLabel = ID_TYPE_LABELS[idType] ?? "Document";
-  const tipsForSide = TIPS[side];
+  const idTypeLabel = ID_TYPE_LABEL_KEYS[idType] ? t(ID_TYPE_LABEL_KEYS[idType]) : t("document_upload.id_label_default");
+  const tipsForSide = TIP_KEYS[side];
 
   // ── Aspect ratio used both for the on-screen pane and the cropper ───────
   // Passport (booklet open) reads as 4:3; ID cards / licences / permits as 3:2.
@@ -115,7 +119,7 @@ export default function DocumentUploadScreen() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        Alert.alert("Sign-in required", "Please sign in again before uploading.");
+        Alert.alert(t("document_upload.alert_signin_title"), t("document_upload.alert_signin_body"));
         return;
       }
 
@@ -130,7 +134,7 @@ export default function DocumentUploadScreen() {
 
       if (!res.success || !res.url) {
         setPreviewUri(null);
-        Alert.alert("Upload failed", res.error ?? "Could not upload the document.");
+        Alert.alert(t("document_upload.alert_upload_failed_title"), res.error ?? t("document_upload.alert_upload_failed_default"));
         return;
       }
 
@@ -159,8 +163,8 @@ export default function DocumentUploadScreen() {
         // the underlying error so we know what went wrong.
         console.warn("[DocumentUpload] user_kyc upsert failed", dbErr);
         Alert.alert(
-          "Saved file, but record failed",
-          `The image uploaded but we couldn't update your verification record. ${dbErr.message}`
+          t("document_upload.alert_saved_record_failed_title"),
+          t("document_upload.alert_saved_record_failed_body", { error: dbErr.message })
         );
         return;
       }
@@ -169,7 +173,7 @@ export default function DocumentUploadScreen() {
     } catch (err: any) {
       setPreviewUri(null);
       console.error("[DocumentUpload] uploadAsset error", err);
-      Alert.alert("Upload error", err?.message ?? "An unknown error occurred.");
+      Alert.alert(t("document_upload.alert_upload_error_title"), err?.message ?? t("document_upload.alert_upload_error_default"));
     } finally {
       setUploading(false);
     }
@@ -181,8 +185,8 @@ export default function DocumentUploadScreen() {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (!perm.granted) {
         Alert.alert(
-          "Camera access needed",
-          "TandaXn needs camera access to capture your ID. Please grant permission in your device settings."
+          t("document_upload.alert_camera_perm_title"),
+          t("document_upload.alert_camera_perm_body")
         );
         return;
       }
@@ -196,7 +200,7 @@ export default function DocumentUploadScreen() {
       await uploadAsset(result.assets[0]);
     } catch (err: any) {
       console.error("[DocumentUpload] pickFromCamera error", err);
-      Alert.alert("Camera error", err?.message ?? "Could not open the camera.");
+      Alert.alert(t("document_upload.alert_camera_error_title"), err?.message ?? t("document_upload.alert_camera_error_default"));
     }
   };
 
@@ -206,8 +210,8 @@ export default function DocumentUploadScreen() {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
         Alert.alert(
-          "Photo library access needed",
-          "TandaXn needs photo library access to upload your ID. Please grant permission in your device settings."
+          t("document_upload.alert_library_perm_title"),
+          t("document_upload.alert_library_perm_body")
         );
         return;
       }
@@ -221,7 +225,7 @@ export default function DocumentUploadScreen() {
       await uploadAsset(result.assets[0]);
     } catch (err: any) {
       console.error("[DocumentUpload] pickFromLibrary error", err);
-      Alert.alert("Picker error", err?.message ?? "Could not open the photo library.");
+      Alert.alert(t("document_upload.alert_picker_error_title"), err?.message ?? t("document_upload.alert_picker_error_default"));
     }
   };
 
@@ -268,7 +272,7 @@ export default function DocumentUploadScreen() {
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{idTypeLabel}</Text>
           <Text style={styles.headerSubtitle}>
-            {side === "front" ? "Front Side" : "Back Side"}
+            {side === "front" ? t("document_upload.side_front") : t("document_upload.side_back")}
           </Text>
         </View>
         <View style={{ width: 40 }} />
@@ -315,7 +319,7 @@ export default function DocumentUploadScreen() {
                   />
                 </View>
                 <Text style={styles.positionText}>
-                  Position {idTypeLabel.toLowerCase()} here
+                  {t("document_upload.position_prefix")}{idTypeLabel.toLowerCase()}{t("document_upload.position_suffix")}
                 </Text>
               </View>
             )}
@@ -331,7 +335,7 @@ export default function DocumentUploadScreen() {
             {uploading && (
               <View style={styles.uploadOverlay} pointerEvents="none">
                 <ActivityIndicator size="large" color="#FFFFFF" />
-                <Text style={styles.uploadOverlayText}>Uploading…</Text>
+                <Text style={styles.uploadOverlayText}>{t("document_upload.uploading")}</Text>
               </View>
             )}
 
@@ -339,7 +343,7 @@ export default function DocumentUploadScreen() {
             {!uploading && uploadedUrl && (
               <View style={styles.successBadge} pointerEvents="none">
                 <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-                <Text style={styles.successBadgeText}>Uploaded</Text>
+                <Text style={styles.successBadgeText}>{t("document_upload.uploaded_badge")}</Text>
               </View>
             )}
           </View>
@@ -353,18 +357,18 @@ export default function DocumentUploadScreen() {
               accessibilityLabel="Take or pick a different photo"
             >
               <Ionicons name="refresh" size={16} color={TEAL} />
-              <Text style={styles.recaptureText}>Re-capture</Text>
+              <Text style={styles.recaptureText}>{t("document_upload.recapture")}</Text>
             </TouchableOpacity>
           )}
 
           {/* Tips */}
           <View style={styles.tipsCard}>
-            <Text style={styles.tipsTitle}>Tips for a clear capture</Text>
+            <Text style={styles.tipsTitle}>{t("document_upload.tips_title")}</Text>
             <View style={styles.tipsList}>
-              {tipsForSide.map((tip, idx) => (
+              {tipsForSide.map((tipKey, idx) => (
                 <View key={idx} style={styles.tipRow}>
                   <Ionicons name="checkmark" size={14} color={TEAL} />
-                  <Text style={styles.tipText}>{tip}</Text>
+                  <Text style={styles.tipText}>{t(tipKey)}</Text>
                 </View>
               ))}
             </View>
@@ -382,7 +386,7 @@ export default function DocumentUploadScreen() {
               accessibilityState={{ selected: captureMode === "camera" }}
             >
               <Ionicons name="camera-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.modeButtonText}>Take Photo</Text>
+              <Text style={styles.modeButtonText}>{t("document_upload.mode_camera")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
@@ -394,7 +398,7 @@ export default function DocumentUploadScreen() {
               accessibilityState={{ selected: captureMode === "upload" }}
             >
               <Ionicons name="cloud-upload-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.modeButtonText}>Upload File</Text>
+              <Text style={styles.modeButtonText}>{t("document_upload.mode_upload")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -418,7 +422,7 @@ export default function DocumentUploadScreen() {
           >
             <Ionicons name="arrow-forward" size={22} color="#FFFFFF" />
             <Text style={styles.captureButtonText}>
-              {side === "front" ? "Continue to Back" : "Continue"}
+              {side === "front" ? t("document_upload.continue_back") : t("document_upload.continue_done")}
             </Text>
           </TouchableOpacity>
         ) : captureMode === "camera" ? (
@@ -435,7 +439,7 @@ export default function DocumentUploadScreen() {
               <>
                 <Ionicons name="ellipse-outline" size={22} color="#FFFFFF" />
                 <Text style={styles.captureButtonText}>
-                  Capture {side === "front" ? "Front" : "Back"}
+                  {side === "front" ? t("document_upload.capture_front") : t("document_upload.capture_back")}
                 </Text>
               </>
             )}
@@ -453,7 +457,7 @@ export default function DocumentUploadScreen() {
             ) : (
               <>
                 <Ionicons name="cloud-upload-outline" size={22} color="#FFFFFF" />
-                <Text style={styles.uploadButtonText}>Choose File</Text>
+                <Text style={styles.uploadButtonText}>{t("document_upload.choose_file")}</Text>
               </>
             )}
           </TouchableOpacity>

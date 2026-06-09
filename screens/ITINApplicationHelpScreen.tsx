@@ -32,6 +32,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -44,36 +45,26 @@ const RED = "#DC2626";
 const IRS_CAA_URL = "https://www.irs.gov/tin/itin/itin-acceptance-agents";
 const IRS_W7_URL = "https://www.irs.gov/forms-pubs/about-form-w-7";
 
+// i18n: nameKey/noteKey/qKey/aKey resolved per-render via t() at call site.
 const DOCUMENTS_ACCEPTED = [
-  { icon: "🛂", name: "Valid Passport", note: "Most common - standalone document" },
-  { icon: "🪪", name: "National ID Card", note: "With photo, name, DOB, expiration" },
-  { icon: "🚗", name: "Foreign Driver's License", note: "Must show photo and DOB" },
-  { icon: "📄", name: "Birth Certificate", note: "Required for dependents under 18" },
-  { icon: "🏥", name: "Medical Records", note: "For dependents under 6" },
-  { icon: "🎓", name: "School Records", note: "For dependents under 18" },
+  { icon: "🛂", nameKey: "itin_application_help.doc_passport_name", noteKey: "itin_application_help.doc_passport_note" },
+  { icon: "🪪", nameKey: "itin_application_help.doc_national_name", noteKey: "itin_application_help.doc_national_note" },
+  { icon: "🚗", nameKey: "itin_application_help.doc_drivers_name", noteKey: "itin_application_help.doc_drivers_note" },
+  { icon: "📄", nameKey: "itin_application_help.doc_birth_name", noteKey: "itin_application_help.doc_birth_note" },
+  { icon: "🏥", nameKey: "itin_application_help.doc_medical_name", noteKey: "itin_application_help.doc_medical_note" },
+  { icon: "🎓", nameKey: "itin_application_help.doc_school_name", noteKey: "itin_application_help.doc_school_note" },
 ];
 
 const FAQS = [
-  {
-    q: "How long does it take to get an ITIN?",
-    a: "Usually 7-11 weeks if you apply by mail. If you use a Certified Acceptance Agent (CAA), it can be faster and you don't have to mail your original documents.",
-  },
-  {
-    q: "Do I need to mail my original passport?",
-    a: "If you apply by mail directly to IRS, yes. But if you use a Certified Acceptance Agent, they can verify your documents in person and you keep your passport.",
-  },
-  {
-    q: "How much does it cost?",
-    a: "The IRS doesn't charge for ITINs. However, Certified Acceptance Agents may charge $50-$100 for their services. We recommend using a CAA for convenience.",
-  },
-  {
-    q: "Will this affect my immigration status?",
-    a: "No. The IRS is legally prohibited from sharing your information with immigration agencies. Getting an ITIN has no effect on your immigration status.",
-  },
+  { qKey: "itin_application_help.faq_time_q", aKey: "itin_application_help.faq_time_a" },
+  { qKey: "itin_application_help.faq_mail_q", aKey: "itin_application_help.faq_mail_a" },
+  { qKey: "itin_application_help.faq_cost_q", aKey: "itin_application_help.faq_cost_a" },
+  { qKey: "itin_application_help.faq_immigration_q", aKey: "itin_application_help.faq_immigration_a" },
 ];
 
 export default function ITINApplicationHelpScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
 
   return (
@@ -101,11 +92,11 @@ export default function ITINApplicationHelpScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Get Your ITIN</Text>
+            <Text style={styles.headerTitle}>{t("itin_application_help.header")}</Text>
             <View style={{ width: 40 }} />
           </View>
           <Text style={styles.headerSubtitle}>
-            We'll guide you through the process
+            {t("itin_application_help.header_subtitle")}
           </Text>
         </LinearGradient>
 
@@ -113,12 +104,12 @@ export default function ITINApplicationHelpScreen() {
         <View style={styles.contentWrap}>
           {/* Two options card */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Choose how to apply</Text>
+            <Text style={styles.sectionTitle}>{t("itin_application_help.section_apply")}</Text>
 
             {/* Option 1: CAA (Recommended) */}
             <View style={styles.optionCAA}>
               <View style={styles.recommendedTag}>
-                <Text style={styles.recommendedTagText}>RECOMMENDED</Text>
+                <Text style={styles.recommendedTagText}>{t("itin_application_help.recommended_tag")}</Text>
               </View>
               <View style={styles.optionInner}>
                 <View style={[styles.optionIconBox, { backgroundColor: TEAL }]}>
@@ -126,18 +117,17 @@ export default function ITINApplicationHelpScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.optionTitle}>
-                    Use a Certified Acceptance Agent
+                    {t("itin_application_help.option_caa_title")}
                   </Text>
                   <Text style={styles.optionDesc}>
-                    Faster, easier, and you keep your passport. We'll help you
-                    find one near you.
+                    {t("itin_application_help.option_caa_desc")}
                   </Text>
                   <View style={styles.optionBenefits}>
                     <Text style={styles.optionBenefitText}>
-                      ✓ Keep documents
+                      {t("itin_application_help.benefit_keep_docs")}
                     </Text>
                     <Text style={styles.optionBenefitText}>
-                      ✓ Faster processing
+                      {t("itin_application_help.benefit_faster")}
                     </Text>
                   </View>
                 </View>
@@ -147,14 +137,14 @@ export default function ITINApplicationHelpScreen() {
                 onPress={() =>
                   navigation.navigate(Routes.WebView, {
                     url: IRS_CAA_URL,
-                    title: "Find a Certified Acceptance Agent",
+                    title: t("itin_application_help.webview_title_agent"),
                   })
                 }
                 accessibilityRole="button"
                 accessibilityLabel="Find an agent near me"
               >
                 <Text style={styles.optionCtaPrimaryText}>
-                  Find an Agent Near Me
+                  {t("itin_application_help.btn_find_agent")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -166,19 +156,18 @@ export default function ITINApplicationHelpScreen() {
                   <Text style={styles.optionIcon}>📬</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.optionTitle}>Apply by Mail</Text>
+                  <Text style={styles.optionTitle}>{t("itin_application_help.option_mail_title")}</Text>
                   <Text style={styles.optionDesc}>
-                    Fill out Form W-7 and mail it with your original documents
-                    to the IRS.
+                    {t("itin_application_help.option_mail_desc")}
                   </Text>
                   <View style={styles.optionBenefits}>
                     <Text style={[styles.optionBenefitText, { color: RED }]}>
-                      ⚠ Mail original passport
+                      {t("itin_application_help.mail_warn_passport")}
                     </Text>
                     <Text
                       style={[styles.optionBenefitText, { color: MUTED }]}
                     >
-                      7-11 weeks
+                      {t("itin_application_help.mail_warn_time")}
                     </Text>
                   </View>
                 </View>
@@ -188,14 +177,14 @@ export default function ITINApplicationHelpScreen() {
                 onPress={() =>
                   navigation.navigate(Routes.WebView, {
                     url: IRS_W7_URL,
-                    title: "Form W-7",
+                    title: t("itin_application_help.webview_title_w7"),
                   })
                 }
                 accessibilityRole="button"
                 accessibilityLabel="Download Form W-7"
               >
                 <Text style={styles.optionCtaSecondaryText}>
-                  Download Form W-7
+                  {t("itin_application_help.btn_download_w7")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -203,14 +192,14 @@ export default function ITINApplicationHelpScreen() {
 
           {/* Documents you can use */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Documents you can use</Text>
+            <Text style={styles.sectionTitle}>{t("itin_application_help.section_docs")}</Text>
             <View style={styles.docsList}>
               {DOCUMENTS_ACCEPTED.map((doc, idx) => (
                 <View key={idx} style={styles.docRow}>
                   <Text style={styles.docIcon}>{doc.icon}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.docName}>{doc.name}</Text>
-                    <Text style={styles.docNote}>{doc.note}</Text>
+                    <Text style={styles.docName}>{t(doc.nameKey)}</Text>
+                    <Text style={styles.docNote}>{t(doc.noteKey)}</Text>
                   </View>
                 </View>
               ))}
@@ -219,7 +208,7 @@ export default function ITINApplicationHelpScreen() {
 
           {/* FAQs */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Common Questions</Text>
+            <Text style={styles.sectionTitle}>{t("itin_application_help.section_faqs")}</Text>
             <View style={styles.faqsList}>
               {FAQS.map((faq, idx) => {
                 const isOpen = expandedFaq === idx;
@@ -236,7 +225,7 @@ export default function ITINApplicationHelpScreen() {
                       accessibilityRole="button"
                       accessibilityState={{ expanded: isOpen }}
                     >
-                      <Text style={styles.faqQuestion}>{faq.q}</Text>
+                      <Text style={styles.faqQuestion}>{t(faq.qKey)}</Text>
                       <Ionicons
                         name={isOpen ? "chevron-up" : "chevron-down"}
                         size={16}
@@ -245,7 +234,7 @@ export default function ITINApplicationHelpScreen() {
                     </TouchableOpacity>
                     {isOpen && (
                       <View style={styles.faqAnswerWrap}>
-                        <Text style={styles.faqAnswer}>{faq.a}</Text>
+                        <Text style={styles.faqAnswer}>{t(faq.aKey)}</Text>
                       </View>
                     )}
                   </View>
@@ -258,14 +247,14 @@ export default function ITINApplicationHelpScreen() {
           <View style={styles.helpCard}>
             <View style={styles.helpLeft}>
               <Text style={styles.helpEmoji}>💬</Text>
-              <Text style={styles.helpText}>Need help? Chat with us</Text>
+              <Text style={styles.helpText}>{t("itin_application_help.help_chat_text")}</Text>
             </View>
             <TouchableOpacity
               style={styles.helpButton}
               accessibilityRole="button"
               accessibilityLabel="Open support chat"
             >
-              <Text style={styles.helpButtonText}>Chat</Text>
+              <Text style={styles.helpButtonText}>{t("itin_application_help.help_chat_btn")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -280,7 +269,7 @@ export default function ITINApplicationHelpScreen() {
           accessibilityLabel="Continue with limited features"
         >
           <Text style={styles.continueLaterText}>
-            I'll apply later — continue with limited features
+            {t("itin_application_help.btn_skip")}
           </Text>
         </TouchableOpacity>
       </View>

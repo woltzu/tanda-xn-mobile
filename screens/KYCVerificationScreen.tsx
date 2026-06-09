@@ -5,41 +5,44 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useAuth } from "../context/AuthContext";
 import { useKYCStatus, useKYCActions } from "../hooks/useKYCVerification";
 
-const KYC_STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
-  approved: { label: "Verified", color: "#10B981", icon: "checkmark-circle" },
-  pending: { label: "Pending", color: "#F59E0B", icon: "time" },
-  provider_pending: { label: "Processing", color: "#3B82F6", icon: "hourglass" },
-  provider_review: { label: "In Review", color: "#8B5CF6", icon: "eye" },
-  admin_review: { label: "Manual Review", color: "#F59E0B", icon: "person" },
-  rejected: { label: "Rejected", color: "#EF4444", icon: "close-circle" },
-  expired: { label: "Expired", color: "#6B7280", icon: "alarm" },
-  not_started: { label: "Not Started", color: "#6B7280", icon: "document-outline" },
+// i18n: labelKey resolved per-render via t() so language flips re-paint
+// without re-instantiating.
+const KYC_STATUS_CONFIG: Record<string, { labelKey: string; color: string; icon: string }> = {
+  approved: { labelKey: "kyc_verification.status_approved", color: "#10B981", icon: "checkmark-circle" },
+  pending: { labelKey: "kyc_verification.status_pending", color: "#F59E0B", icon: "time" },
+  provider_pending: { labelKey: "kyc_verification.status_provider_pending", color: "#3B82F6", icon: "hourglass" },
+  provider_review: { labelKey: "kyc_verification.status_provider_review", color: "#8B5CF6", icon: "eye" },
+  admin_review: { labelKey: "kyc_verification.status_admin_review", color: "#F59E0B", icon: "person" },
+  rejected: { labelKey: "kyc_verification.status_rejected", color: "#EF4444", icon: "close-circle" },
+  expired: { labelKey: "kyc_verification.status_expired", color: "#6B7280", icon: "alarm" },
+  not_started: { labelKey: "kyc_verification.status_not_started", color: "#6B7280", icon: "document-outline" },
 };
 
-const TIER_LABELS: Record<number, { label: string; description: string; icon: string }> = {
-  0: { label: "Unverified", description: "Complete KYC to unlock features", icon: "lock-closed" },
-  1: { label: "Basic", description: "Fallback verification complete", icon: "shield-outline" },
-  2: { label: "Standard", description: "Identity verified with documents", icon: "shield-half" },
-  3: { label: "Enhanced", description: "Full verification with liveness check", icon: "shield-checkmark" },
+const TIER_LABELS: Record<number, { labelKey: string; descKey: string; icon: string }> = {
+  0: { labelKey: "kyc_verification.tier_0_label", descKey: "kyc_verification.tier_0_desc", icon: "lock-closed" },
+  1: { labelKey: "kyc_verification.tier_1_label", descKey: "kyc_verification.tier_1_desc", icon: "shield-outline" },
+  2: { labelKey: "kyc_verification.tier_2_label", descKey: "kyc_verification.tier_2_desc", icon: "shield-half" },
+  3: { labelKey: "kyc_verification.tier_3_label", descKey: "kyc_verification.tier_3_desc", icon: "shield-checkmark" },
 };
 
 const VERIFICATION_METHODS = [
   {
     key: "persona_standard" as const,
-    label: "Standard Verification",
-    description: "Upload a government-issued ID",
+    labelKey: "kyc_verification.method_standard_label",
+    descKey: "kyc_verification.method_standard_desc",
     icon: "card-outline",
     tier: 2,
   },
   {
     key: "persona_liveness" as const,
-    label: "Enhanced Verification",
-    description: "ID + selfie liveness check",
+    labelKey: "kyc_verification.method_liveness_label",
+    descKey: "kyc_verification.method_liveness_desc",
     icon: "camera-outline",
     tier: 3,
   },
@@ -47,6 +50,7 @@ const VERIFICATION_METHODS = [
 
 export default function KYCVerificationScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [startingMethod, setStartingMethod] = useState<string | null>(null);
 
@@ -82,14 +86,14 @@ export default function KYCVerificationScreen() {
         // providers expect users to see in the header.
         navigation.navigate(Routes.WebView, {
           url: result.inquiryUrl,
-          title: "KYC Verification",
+          title: t("kyc_verification.webview_title"),
         });
       } else if (result?.inquiryId) {
-        Alert.alert("Verification Started", "Your verification is being processed. You will be notified when complete.");
+        Alert.alert(t("kyc_verification.alert_started_title"), t("kyc_verification.alert_started_body"));
         refresh();
       }
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Failed to start verification. Please try again.");
+      Alert.alert(t("kyc_verification.alert_error_title"), err.message || t("kyc_verification.alert_error_default"));
     } finally {
       setStartingMethod(null);
     }
@@ -102,7 +106,7 @@ export default function KYCVerificationScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#00C6AE" />
-        <Text style={styles.loadingText}>Checking verification status...</Text>
+        <Text style={styles.loadingText}>{t("kyc_verification.loading")}</Text>
       </View>
     );
   }
@@ -115,7 +119,7 @@ export default function KYCVerificationScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Identity Verification</Text>
+          <Text style={styles.headerTitle}>{t("kyc_verification.header")}</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -124,10 +128,10 @@ export default function KYCVerificationScreen() {
           <View style={[styles.statusCircle, { borderColor: statusConfig.color }]}>
             <Ionicons name={statusConfig.icon as any} size={36} color={statusConfig.color} />
           </View>
-          <Text style={styles.statusLabel}>{statusConfig.label}</Text>
+          <Text style={styles.statusLabel}>{t(statusConfig.labelKey)}</Text>
           <View style={styles.tierPill}>
             <Ionicons name={tierInfo.icon as any} size={14} color="#FFFFFF" />
-            <Text style={styles.tierPillText}>Tier {kycTier}: {tierInfo.label}</Text>
+            <Text style={styles.tierPillText}>{t("kyc_verification.tier_pill", { tier: kycTier, label: t(tierInfo.labelKey) })}</Text>
           </View>
         </View>
       </LinearGradient>
@@ -149,11 +153,13 @@ export default function KYCVerificationScreen() {
           <View style={styles.warningBanner}>
             <Ionicons name="alarm" size={18} color="#F59E0B" />
             <View style={styles.warningInfo}>
-              <Text style={styles.warningTitle}>Verification Deadline</Text>
+              <Text style={styles.warningTitle}>{t("kyc_verification.deadline_title")}</Text>
               <Text style={styles.warningText}>
                 {deadlineDays === 0
-                  ? "Deadline is today! Complete verification now."
-                  : `${deadlineDays} day${deadlineDays !== 1 ? "s" : ""} remaining to complete full KYC.`}
+                  ? t("kyc_verification.deadline_today")
+                  : deadlineDays === 1
+                    ? t("kyc_verification.deadline_one")
+                    : t("kyc_verification.deadline_other", { count: deadlineDays })}
               </Text>
             </View>
           </View>
@@ -164,32 +170,32 @@ export default function KYCVerificationScreen() {
           <View style={styles.card}>
             <View style={styles.cardTitleRow}>
               <Ionicons name="information-circle" size={18} color="#3B82F6" />
-              <Text style={styles.cardTitle}>Verification Details</Text>
+              <Text style={styles.cardTitle}>{t("kyc_verification.details_title")}</Text>
             </View>
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Status</Text>
+              <Text style={styles.detailLabel}>{t("kyc_verification.details_status")}</Text>
               <View style={[styles.detailBadge, { backgroundColor: statusConfig.color + "15" }]}>
                 <Ionicons name={statusConfig.icon as any} size={12} color={statusConfig.color} />
-                <Text style={[styles.detailBadgeText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+                <Text style={[styles.detailBadgeText, { color: statusConfig.color }]}>{t(statusConfig.labelKey)}</Text>
               </View>
             </View>
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>KYC Type</Text>
+              <Text style={styles.detailLabel}>{t("kyc_verification.details_type")}</Text>
               <Text style={styles.detailValue}>
-                {verification.kycType === "fallback" ? "Fallback" : "Full Verification"}
+                {verification.kycType === "fallback" ? t("kyc_verification.details_type_fallback") : t("kyc_verification.details_type_full")}
               </Text>
             </View>
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Verification Tier</Text>
-              <Text style={styles.detailValue}>Tier {kycTier} - {tierInfo.label}</Text>
+              <Text style={styles.detailLabel}>{t("kyc_verification.details_tier")}</Text>
+              <Text style={styles.detailValue}>{t("kyc_verification.details_tier_value", { tier: kycTier, label: t(tierInfo.labelKey) })}</Text>
             </View>
 
             {verification.verifiedAt && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Verified On</Text>
+                <Text style={styles.detailLabel}>{t("kyc_verification.details_verified_on")}</Text>
                 <Text style={styles.detailValue}>
                   {new Date(verification.verifiedAt).toLocaleDateString()}
                 </Text>
@@ -198,7 +204,7 @@ export default function KYCVerificationScreen() {
 
             {isRejected && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Attempts Remaining</Text>
+                <Text style={styles.detailLabel}>{t("kyc_verification.details_attempts")}</Text>
                 <Text style={[styles.detailValue, { color: attemptsRemaining <= 1 ? "#EF4444" : "#0A2342" }]}>
                   {attemptsRemaining}
                 </Text>
@@ -211,9 +217,9 @@ export default function KYCVerificationScreen() {
         {isVerified && (
           <View style={styles.successCard}>
             <Ionicons name="shield-checkmark" size={40} color="#10B981" />
-            <Text style={styles.successTitle}>Identity Verified</Text>
+            <Text style={styles.successTitle}>{t("kyc_verification.success_title")}</Text>
             <Text style={styles.successText}>
-              Your identity has been verified. You have full access to all TandaXn features.
+              {t("kyc_verification.success_text")}
             </Text>
 
             {kycTier < 3 && (
@@ -223,7 +229,7 @@ export default function KYCVerificationScreen() {
                 disabled={initiating}
               >
                 <Ionicons name="arrow-up-circle" size={16} color="#8B5CF6" />
-                <Text style={styles.upgradeBtnText}>Upgrade to Enhanced (Tier 3)</Text>
+                <Text style={styles.upgradeBtnText}>{t("kyc_verification.upgrade_btn")}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -233,11 +239,11 @@ export default function KYCVerificationScreen() {
         {isPending && (
           <View style={styles.pendingCard}>
             <ActivityIndicator size="large" color="#3B82F6" />
-            <Text style={styles.pendingTitle}>Verification In Progress</Text>
+            <Text style={styles.pendingTitle}>{t("kyc_verification.pending_title")}</Text>
             <Text style={styles.pendingText}>
               {needsReview
-                ? "Your documents are being reviewed by our team. This usually takes 1-2 business days."
-                : "Your verification is being processed. This usually takes a few minutes."}
+                ? t("kyc_verification.pending_text_review")
+                : t("kyc_verification.pending_text_processing")}
             </Text>
           </View>
         )}
@@ -248,7 +254,7 @@ export default function KYCVerificationScreen() {
             <View style={styles.cardTitleRow}>
               <Ionicons name="rocket-outline" size={18} color="#00C6AE" />
               <Text style={styles.cardTitle}>
-                {isRejected ? "Retry Verification" : "Start Verification"}
+                {isRejected ? t("kyc_verification.retry_title") : t("kyc_verification.start_title")}
               </Text>
             </View>
 
@@ -256,7 +262,7 @@ export default function KYCVerificationScreen() {
               <View style={styles.blockedBanner}>
                 <Ionicons name="hand-left" size={16} color="#EF4444" />
                 <Text style={styles.blockedText}>
-                  Maximum verification attempts reached. Please contact support.
+                  {t("kyc_verification.blocked_text")}
                 </Text>
               </View>
             )}
@@ -264,7 +270,7 @@ export default function KYCVerificationScreen() {
             {(!isRejected || canRetry) && (
               <>
                 <Text style={styles.methodsIntro}>
-                  Choose a verification method to get started:
+                  {t("kyc_verification.methods_intro")}
                 </Text>
 
                 {VERIFICATION_METHODS.map((method) => (
@@ -278,11 +284,11 @@ export default function KYCVerificationScreen() {
                       <Ionicons name={method.icon as any} size={24} color="#00C6AE" />
                     </View>
                     <View style={styles.methodInfo}>
-                      <Text style={styles.methodLabel}>{method.label}</Text>
-                      <Text style={styles.methodDesc}>{method.description}</Text>
+                      <Text style={styles.methodLabel}>{t(method.labelKey)}</Text>
+                      <Text style={styles.methodDesc}>{t(method.descKey)}</Text>
                       <View style={styles.methodTier}>
                         <Ionicons name="shield-outline" size={12} color="#8B5CF6" />
-                        <Text style={styles.methodTierText}>Unlocks Tier {method.tier}</Text>
+                        <Text style={styles.methodTierText}>{t("kyc_verification.method_tier_hint", { tier: method.tier })}</Text>
                       </View>
                     </View>
                     {startingMethod === method.key ? (
@@ -301,7 +307,7 @@ export default function KYCVerificationScreen() {
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
             <Ionicons name="layers-outline" size={18} color="#0A2342" />
-            <Text style={styles.cardTitle}>Verification Tiers</Text>
+            <Text style={styles.cardTitle}>{t("kyc_verification.tiers_title")}</Text>
           </View>
 
           {Object.entries(TIER_LABELS).map(([tier, info]) => {
@@ -319,13 +325,13 @@ export default function KYCVerificationScreen() {
                 </View>
                 <View style={styles.tierInfo}>
                   <Text style={[styles.tierLabel, isCurrent && { fontWeight: "700", color: "#0A2342" }]}>
-                    {info.label}
+                    {t(info.labelKey)}
                   </Text>
-                  <Text style={styles.tierDesc}>{info.description}</Text>
+                  <Text style={styles.tierDesc}>{t(info.descKey)}</Text>
                 </View>
                 {isCurrent && (
                   <View style={styles.currentPill}>
-                    <Text style={styles.currentPillText}>Current</Text>
+                    <Text style={styles.currentPillText}>{t("kyc_verification.current_pill")}</Text>
                   </View>
                 )}
               </View>

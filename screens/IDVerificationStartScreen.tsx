@@ -27,6 +27,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -44,50 +45,53 @@ export type IDDocType =
 type IDOption = {
   id: IDDocType;
   icon: string;
-  title: string;
-  desc: string;
+  titleKey: string;
+  descKey: string;
   popular: boolean;
 };
 
+// i18n: titleKey/descKey resolved per-render via t() so language flips
+// re-paint without re-instantiating.
 const ID_TYPES: IDOption[] = [
   {
     id: "passport",
     icon: "🛂",
-    title: "Passport",
-    desc: "From any country",
+    titleKey: "id_verification_start.id_passport_title",
+    descKey: "id_verification_start.id_passport_desc",
     popular: true,
   },
   {
     id: "national-id",
     icon: "🪪",
-    title: "National ID Card",
-    desc: "Government-issued ID",
+    titleKey: "id_verification_start.id_national_title",
+    descKey: "id_verification_start.id_national_desc",
     popular: true,
   },
   {
     id: "drivers-license",
     icon: "🚗",
-    title: "Driver's License",
-    desc: "From any country",
+    titleKey: "id_verification_start.id_drivers_title",
+    descKey: "id_verification_start.id_drivers_desc",
     popular: false,
   },
   {
     id: "residence-permit",
     icon: "📄",
-    title: "Residence Permit",
-    desc: "Green card, visa, etc.",
+    titleKey: "id_verification_start.id_permit_title",
+    descKey: "id_verification_start.id_permit_desc",
     popular: false,
   },
 ];
 
 const WHAT_YOU_NEED = [
-  { icon: "📸", text: "Your ID document (not expired)" },
-  { icon: "💡", text: "Good lighting" },
-  { icon: "🤳", text: "A quick selfie to match your ID" },
+  { icon: "📸", textKey: "id_verification_start.need_id" },
+  { icon: "💡", textKey: "id_verification_start.need_lighting" },
+  { icon: "🤳", textKey: "id_verification_start.need_selfie" },
 ];
 
 export default function IDVerificationStartScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const [selectedID, setSelectedID] = useState<IDDocType | null>(null);
 
   const handleContinue = () => {
@@ -124,8 +128,8 @@ export default function IDVerificationStartScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Verify Your Identity</Text>
-              <Text style={styles.headerSubtitle}>Tier 2 Verification</Text>
+              <Text style={styles.headerTitle}>{t("id_verification_start.header")}</Text>
+              <Text style={styles.headerSubtitle}>{t("id_verification_start.header_subtitle")}</Text>
             </View>
           </View>
 
@@ -143,16 +147,16 @@ export default function IDVerificationStartScreen() {
             <Text style={styles.welcomeEmoji}>🌍</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.welcomeTitle}>
-                We accept IDs from any country
+                {t("id_verification_start.welcome_title")}
               </Text>
               <Text style={styles.welcomeBody}>
-                No SSN required for this step
+                {t("id_verification_start.welcome_body")}
               </Text>
             </View>
           </View>
 
           {/* ID Selection */}
-          <Text style={styles.sectionLabel}>What ID will you use?</Text>
+          <Text style={styles.sectionLabel}>{t("id_verification_start.section_what_id")}</Text>
           <View style={styles.idList}>
             {ID_TYPES.map((idOption) => {
               const isSelected = selectedID === idOption.id;
@@ -163,18 +167,18 @@ export default function IDVerificationStartScreen() {
                   onPress={() => setSelectedID(idOption.id)}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: isSelected }}
-                  accessibilityLabel={idOption.title}
+                  accessibilityLabel={t(idOption.titleKey)}
                 >
                   <View style={styles.idIconBox}>
                     <Text style={styles.idIcon}>{idOption.icon}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.idTitle}>{idOption.title}</Text>
-                    <Text style={styles.idDesc}>{idOption.desc}</Text>
+                    <Text style={styles.idTitle}>{t(idOption.titleKey)}</Text>
+                    <Text style={styles.idDesc}>{t(idOption.descKey)}</Text>
                   </View>
                   {idOption.popular && (
                     <View style={styles.popularTag}>
-                      <Text style={styles.popularTagText}>Popular</Text>
+                      <Text style={styles.popularTagText}>{t("id_verification_start.popular_tag")}</Text>
                     </View>
                   )}
                   <View
@@ -194,12 +198,12 @@ export default function IDVerificationStartScreen() {
 
           {/* What you'll need */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>What you'll need</Text>
+            <Text style={styles.sectionTitle}>{t("id_verification_start.needs_title")}</Text>
             <View style={styles.needsList}>
               {WHAT_YOU_NEED.map((item, idx) => (
                 <View key={idx} style={styles.needRow}>
                   <Text style={styles.needIcon}>{item.icon}</Text>
-                  <Text style={styles.needText}>{item.text}</Text>
+                  <Text style={styles.needText}>{t(item.textKey)}</Text>
                 </View>
               ))}
             </View>
@@ -214,8 +218,7 @@ export default function IDVerificationStartScreen() {
               style={{ marginTop: 2 }}
             />
             <Text style={styles.privacyText}>
-              Your ID is used only for verification. We don't check immigration
-              status or share your information with any government agency.
+              {t("id_verification_start.privacy_text")}
             </Text>
           </View>
         </View>
@@ -240,7 +243,7 @@ export default function IDVerificationStartScreen() {
               !selectedID && styles.continueButtonTextDisabled,
             ]}
           >
-            Continue
+            {t("id_verification_start.btn_continue")}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -249,7 +252,7 @@ export default function IDVerificationStartScreen() {
           accessibilityRole="button"
           accessibilityLabel="Verify later"
         >
-          <Text style={styles.skipButtonText}>I'll verify later</Text>
+          <Text style={styles.skipButtonText}>{t("id_verification_start.btn_skip")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

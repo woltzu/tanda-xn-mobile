@@ -37,6 +37,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -60,34 +61,27 @@ type ITINPendingRouteProp = RouteProp<
   "ITINPending"
 >;
 
+// i18n: qKey/aKey/textKey resolved per-render via t() at call site.
 const FAQS = [
-  {
-    q: "How long does it take?",
-    a: "Usually 7-11 weeks if submitted by mail. Using a Certified Acceptance Agent can sometimes be faster.",
-  },
-  {
-    q: "How will I know when it's approved?",
-    a: "The IRS will mail you a letter with your ITIN. We'll also notify you in the app as soon as you add it.",
-  },
-  {
-    q: "Can I track my application?",
-    a: "Unfortunately, the IRS doesn't provide online tracking. You can call 1-800-829-1040 after 7 weeks to check status.",
-  },
+  { qKey: "itin_pending.faq_time_q", aKey: "itin_pending.faq_time_a" },
+  { qKey: "itin_pending.faq_notify_q", aKey: "itin_pending.faq_notify_a" },
+  { qKey: "itin_pending.faq_track_q", aKey: "itin_pending.faq_track_a" },
 ];
 
-const WAIT_FEATURES = [
-  "Join and contribute to savings circles",
-  "Receive payouts up to $600/year",
-  "Build your reputation in the community",
-  "Create your own circles",
+const WAIT_FEATURE_KEYS = [
+  "itin_pending.wait_join",
+  "itin_pending.wait_receive",
+  "itin_pending.wait_reputation",
+  "itin_pending.wait_create",
 ];
 
 export default function ITINPendingScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<ITINPendingRouteProp>();
+  const { t } = useTranslation();
   const applicationDate = route.params?.applicationDate ?? "—";
   const estimatedCompletion =
-    route.params?.estimatedCompletion ?? "7-11 weeks from submission";
+    route.params?.estimatedCompletion ?? t("itin_pending.default_estimated_completion");
   const applicationMethod: ApplicationMethod =
     route.params?.applicationMethod ?? "caa";
 
@@ -101,27 +95,27 @@ export default function ITINPendingScreen() {
   }[] = [
     {
       step: 1,
-      title: "Application Submitted",
+      title: t("itin_pending.step_1_title"),
       desc: applicationDate,
       status: "completed",
     },
     {
       step: 2,
-      title: "Documents Received by IRS",
+      title: t("itin_pending.step_2_title"),
       desc:
-        applicationMethod === "caa" ? "Verified by agent" : "Mailed to IRS",
+        applicationMethod === "caa" ? t("itin_pending.step_2_desc_caa") : t("itin_pending.step_2_desc_mail"),
       status: "completed",
     },
     {
       step: 3,
-      title: "Under Review",
-      desc: "IRS is processing your application",
+      title: t("itin_pending.step_3_title"),
+      desc: t("itin_pending.step_3_desc"),
       status: "current",
     },
     {
       step: 4,
-      title: "ITIN Assigned",
-      desc: "You'll receive your number",
+      title: t("itin_pending.step_4_title"),
+      desc: t("itin_pending.step_4_desc"),
       status: "pending",
     },
   ];
@@ -151,7 +145,7 @@ export default function ITINPendingScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>ITIN Application</Text>
+            <Text style={styles.headerTitle}>{t("itin_pending.header")}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -160,10 +154,10 @@ export default function ITINPendingScreen() {
             <View style={styles.statusIconBox}>
               <Ionicons name="time-outline" size={32} color="#FFFFFF" />
             </View>
-            <Text style={styles.statusLabel}>Status</Text>
-            <Text style={styles.statusValue}>Processing</Text>
+            <Text style={styles.statusLabel}>{t("itin_pending.status_label")}</Text>
+            <Text style={styles.statusValue}>{t("itin_pending.status_value")}</Text>
             <Text style={styles.statusEstimate}>
-              Estimated: {estimatedCompletion}
+              {t("itin_pending.status_estimate_prefix")}{estimatedCompletion}
             </Text>
           </View>
         </LinearGradient>
@@ -177,17 +171,17 @@ export default function ITINPendingScreen() {
             <Text style={styles.interestGrowingEmoji}>💰</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.interestGrowingTitle}>
-                Your interest is still growing
+                {t("itin_pending.interest_growing_title")}
               </Text>
               <Text style={styles.interestGrowingBody}>
-                You'll unlock it as soon as your ITIN is verified.
+                {t("itin_pending.interest_growing_body")}
               </Text>
             </View>
           </View>
 
           {/* Timeline */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Application Progress</Text>
+            <Text style={styles.sectionTitle}>{t("itin_pending.section_progress")}</Text>
             <View>
               {timeline.map((item, idx) => {
                 const isLast = idx === timeline.length - 1;
@@ -244,7 +238,7 @@ export default function ITINPendingScreen() {
                         {item.status === "current" && (
                           <View style={styles.inProgressChip}>
                             <Text style={styles.inProgressChipText}>
-                              IN PROGRESS
+                              {t("itin_pending.in_progress_chip")}
                             </Text>
                           </View>
                         )}
@@ -268,12 +262,12 @@ export default function ITINPendingScreen() {
 
           {/* While you wait */}
           <View style={styles.waitCard}>
-            <Text style={styles.waitTitle}>While you wait, you can still:</Text>
+            <Text style={styles.waitTitle}>{t("itin_pending.wait_title")}</Text>
             <View style={styles.waitList}>
-              {WAIT_FEATURES.map((text, idx) => (
+              {WAIT_FEATURE_KEYS.map((textKey, idx) => (
                 <View key={idx} style={styles.waitRow}>
                   <Ionicons name="checkmark" size={14} color={GREEN} />
-                  <Text style={styles.waitText}>{text}</Text>
+                  <Text style={styles.waitText}>{t(textKey)}</Text>
                 </View>
               ))}
             </View>
@@ -281,7 +275,7 @@ export default function ITINPendingScreen() {
 
           {/* FAQs (collapsible) */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Common Questions</Text>
+            <Text style={styles.sectionTitle}>{t("itin_pending.section_faqs")}</Text>
             <View style={styles.faqsList}>
               {FAQS.map((faq, idx) => {
                 const isOpen = expandedFaq === idx;
@@ -298,7 +292,7 @@ export default function ITINPendingScreen() {
                       accessibilityRole="button"
                       accessibilityState={{ expanded: isOpen }}
                     >
-                      <Text style={styles.faqQuestion}>{faq.q}</Text>
+                      <Text style={styles.faqQuestion}>{t(faq.qKey)}</Text>
                       <Ionicons
                         name={isOpen ? "chevron-up" : "chevron-down"}
                         size={16}
@@ -307,7 +301,7 @@ export default function ITINPendingScreen() {
                     </TouchableOpacity>
                     {isOpen && (
                       <View style={styles.faqAnswerWrap}>
-                        <Text style={styles.faqAnswer}>{faq.a}</Text>
+                        <Text style={styles.faqAnswer}>{t(faq.aKey)}</Text>
                       </View>
                     )}
                   </View>
@@ -330,7 +324,7 @@ export default function ITINPendingScreen() {
             accessibilityLabel="Need help, chat with us"
           >
             <Text style={styles.helpEmoji}>💬</Text>
-            <Text style={styles.helpText}>Need help? Chat with us</Text>
+            <Text style={styles.helpText}>{t("itin_pending.help_text")}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -343,7 +337,7 @@ export default function ITINPendingScreen() {
           accessibilityRole="button"
           accessibilityLabel="Continue to TandaXn"
         >
-          <Text style={styles.primaryButtonText}>Continue to TandaXn</Text>
+          <Text style={styles.primaryButtonText}>{t("itin_pending.btn_continue")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

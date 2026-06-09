@@ -55,6 +55,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -87,39 +88,40 @@ type StepId = "email" | "phone" | "identity" | "taxId";
 type StepConfig = {
   id: StepId;
   icon: string;
-  title: string;
-  desc: string;
+  titleKey: string;
+  descKey: string;
   tier: 1 | 2 | 3;
   optional?: boolean;
 };
 
+// i18n: titleKey/descKey resolved per-render via t() at call site.
 const STEPS: StepConfig[] = [
   {
     id: "email",
     icon: "📧",
-    title: "Email Verified",
-    desc: "Your email is confirmed",
+    titleKey: "verification_hub.step_email_title",
+    descKey: "verification_hub.step_email_desc",
     tier: 1,
   },
   {
     id: "phone",
     icon: "📱",
-    title: "Phone Verified",
-    desc: "Your phone number is confirmed",
+    titleKey: "verification_hub.step_phone_title",
+    descKey: "verification_hub.step_phone_desc",
     tier: 1,
   },
   {
     id: "identity",
     icon: "🪪",
-    title: "Identity Verified",
-    desc: "ID document + selfie",
+    titleKey: "verification_hub.step_identity_title",
+    descKey: "verification_hub.step_identity_desc",
     tier: 2,
   },
   {
     id: "taxId",
     icon: "📋",
-    title: "Tax Information",
-    desc: "SSN or ITIN (for payouts over $600)",
+    titleKey: "verification_hub.step_tax_title",
+    descKey: "verification_hub.step_tax_desc",
     tier: 3,
     optional: true,
   },
@@ -139,17 +141,17 @@ function statusColor(status: StepStatus): string {
   }
 }
 
-function statusLabel(status: StepStatus): string {
+function statusLabelKey(status: StepStatus): string {
   switch (status) {
     case "completed":
-      return "Complete";
+      return "verification_hub.status_complete";
     case "pending":
-      return "Pending";
+      return "verification_hub.status_pending";
     case "in_progress":
-      return "In Progress";
+      return "verification_hub.status_in_progress";
     case "not_started":
     default:
-      return "Not Started";
+      return "verification_hub.status_not_started";
   }
 }
 
@@ -168,8 +170,12 @@ function statusIcon(
   }
 }
 
-function tierName(tier: 1 | 2 | 3): string {
-  return tier === 1 ? "Basic" : tier === 2 ? "Verified" : "Full Access";
+function tierNameKey(tier: 1 | 2 | 3): string {
+  return tier === 1
+    ? "verification_hub.tier_name_basic"
+    : tier === 2
+      ? "verification_hub.tier_name_verified"
+      : "verification_hub.tier_name_full";
 }
 
 function tierEmoji(tier: 1 | 2 | 3): string {
@@ -179,6 +185,7 @@ function tierEmoji(tier: 1 | 2 | 3): string {
 export default function VerificationHubScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<VerificationHubRouteProp>();
+  const { t } = useTranslation();
   const params = route.params ?? {};
   const currentTier = params.currentTier ?? 1;
   const verificationStatus: Required<VerificationStatus> = {
@@ -200,14 +207,14 @@ export default function VerificationHubScreen() {
         break;
       case "email":
         Alert.alert(
-          "Verify your email",
-          "Check your inbox for the confirmation link we sent during signup. If you can't find it, request a new one from Settings → Account.",
+          t("verification_hub.alert_email_title"),
+          t("verification_hub.alert_email_body"),
         );
         break;
       case "phone":
         Alert.alert(
-          "Verify your phone",
-          "Confirm your phone via the SMS code we sent during signup. If you didn't get one, you can request a new code from Settings → Account.",
+          t("verification_hub.alert_phone_title"),
+          t("verification_hub.alert_phone_body"),
         );
         break;
     }
@@ -253,16 +260,16 @@ export default function VerificationHubScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Verification Status</Text>
+            <Text style={styles.headerTitle}>{t("verification_hub.header")}</Text>
             <View style={{ width: 40 }} />
           </View>
 
           {/* Current tier card */}
           <View style={styles.tierCard}>
             <View>
-              <Text style={styles.tierCardLabel}>Current Level</Text>
+              <Text style={styles.tierCardLabel}>{t("verification_hub.tier_label")}</Text>
               <Text style={styles.tierCardName}>
-                Tier {currentTier}: {tierName(currentTier)}
+                {t("verification_hub.tier_display", { tier: currentTier, name: t(tierNameKey(currentTier)) })}
               </Text>
             </View>
             <View style={styles.tierEmojiBox}>
@@ -280,11 +287,10 @@ export default function VerificationHubScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.payoutTitle}>
-                  Payout waiting: ${pendingPayout.amount.toLocaleString()}
+                  {t("verification_hub.payout_title", { amount: pendingPayout.amount.toLocaleString() })}
                 </Text>
                 <Text style={styles.payoutBody}>
-                  Complete tax verification to receive your payout from{" "}
-                  {pendingPayout.circleName}
+                  {t("verification_hub.payout_body_prefix")}{pendingPayout.circleName}
                 </Text>
               </View>
             </View>
@@ -298,11 +304,10 @@ export default function VerificationHubScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.itinPendingTitle}>
-                  ITIN Application Pending
+                  {t("verification_hub.itin_pending_title")}
                 </Text>
                 <Text style={styles.itinPendingBody}>
-                  Your ITIN application is being processed. This usually takes
-                  7-11 weeks. We'll notify you when it's approved.
+                  {t("verification_hub.itin_pending_body")}
                 </Text>
               </View>
             </View>
@@ -310,7 +315,7 @@ export default function VerificationHubScreen() {
 
           {/* Verification steps */}
           <View style={styles.stepsCard}>
-            <Text style={styles.stepsTitle}>Verification Steps</Text>
+            <Text style={styles.stepsTitle}>{t("verification_hub.section_steps")}</Text>
             <View>
               {STEPS.map((step, idx) => {
                 const status = verificationStatus[step.id];
@@ -331,7 +336,7 @@ export default function VerificationHubScreen() {
                       disabled={isCompleted}
                       accessibilityRole="button"
                       accessibilityState={{ disabled: isCompleted }}
-                      accessibilityLabel={`${step.title}, ${statusLabel(status)}`}
+                      accessibilityLabel={`${t(step.titleKey)}, ${t(statusLabelKey(status))}`}
                     >
                       {/* Status circle */}
                       <View
@@ -348,16 +353,16 @@ export default function VerificationHubScreen() {
                       <View style={{ flex: 1 }}>
                         <View style={styles.stepHeaderRow}>
                           <Text style={styles.stepEmoji}>{step.icon}</Text>
-                          <Text style={styles.stepTitle}>{step.title}</Text>
+                          <Text style={styles.stepTitle}>{t(step.titleKey)}</Text>
                           {step.optional && (
                             <View style={styles.optionalChip}>
                               <Text style={styles.optionalChipText}>
-                                Optional
+                                {t("verification_hub.optional_chip")}
                               </Text>
                             </View>
                           )}
                         </View>
-                        <Text style={styles.stepDesc}>{step.desc}</Text>
+                        <Text style={styles.stepDesc}>{t(step.descKey)}</Text>
                       </View>
 
                       {/* Status badge */}
@@ -370,7 +375,7 @@ export default function VerificationHubScreen() {
                         <Text
                           style={[styles.statusBadgeText, { color }]}
                         >
-                          {statusLabel(status)}
+                          {t(statusLabelKey(status))}
                         </Text>
                       </View>
                     </TouchableOpacity>
@@ -393,9 +398,9 @@ export default function VerificationHubScreen() {
               <View style={styles.itinHelpHeader}>
                 <Text style={styles.itinHelpEmoji}>💡</Text>
                 <View>
-                  <Text style={styles.itinHelpTitle}>Don't have an SSN?</Text>
+                  <Text style={styles.itinHelpTitle}>{t("verification_hub.itin_help_title")}</Text>
                   <Text style={styles.itinHelpBody}>
-                    You can use an ITIN instead
+                    {t("verification_hub.itin_help_body")}
                   </Text>
                 </View>
               </View>
@@ -405,7 +410,7 @@ export default function VerificationHubScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Learn about ITIN"
               >
-                <Text style={styles.itinHelpButtonText}>Learn About ITIN</Text>
+                <Text style={styles.itinHelpButtonText}>{t("verification_hub.btn_learn_itin")}</Text>
               </TouchableOpacity>
             </View>
           )}

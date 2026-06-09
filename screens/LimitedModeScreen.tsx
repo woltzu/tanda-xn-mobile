@@ -37,6 +37,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -59,32 +60,28 @@ type LimitedModeRouteProp = RouteProp<
 // Six things the user CAN still do without verifying. The last item
 // ("Interest keeps growing") is the bridge that motivates them to
 // come back and verify — it's there whether they verify or not.
-const AVAILABLE_FEATURES = [
-  "Join savings circles",
-  "Contribute monthly payments",
-  "Track your savings progress",
-  "Chat with circle members",
-  "View your dashboard",
-  "Interest keeps growing",
+// i18n: keys resolved per-render via t() at call site.
+const AVAILABLE_FEATURE_KEYS = [
+  "limited_mode.avail_join",
+  "limited_mode.avail_contribute",
+  "limited_mode.avail_track",
+  "limited_mode.avail_chat",
+  "limited_mode.avail_dashboard",
+  "limited_mode.avail_interest",
 ];
 
-type LimitedFeature = { text: string; tier: 2 | 3 };
+type LimitedFeature = { textKey: string; tier: 2 | 3 };
 
-// Three rewards behind verification. All gated at Tier 3 because the
-// new Interest-First flow's headline reward (claiming earned
-// interest, unlimited payouts, international transfers) requires
-// tax-ID submission. The earlier per-currentTier split is gone —
-// every limited-mode user, regardless of partial progress, sees the
-// same unlock-targets list.
 const LIMITED_FEATURES: LimitedFeature[] = [
-  { text: "Receive payouts over $600/year", tier: 3 },
-  { text: "Earn interest on savings", tier: 3 },
-  { text: "Send money internationally", tier: 3 },
+  { textKey: "limited_mode.limited_payouts", tier: 3 },
+  { textKey: "limited_mode.limited_interest", tier: 3 },
+  { textKey: "limited_mode.limited_international", tier: 3 },
 ];
 
 export default function LimitedModeScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<LimitedModeRouteProp>();
+  const { t } = useTranslation();
   // currentTier param is still accepted for future use (badge swap,
   // analytics tagging) but no longer branches the feature lists —
   // the Interest-First flow shows the same single list to all
@@ -115,12 +112,12 @@ export default function LimitedModeScreen() {
             <Text style={styles.heroIcon}>{isPending ? "⏳" : "👋"}</Text>
           </View>
           <Text style={styles.heroTitle}>
-            {isPending ? "We'll Notify You!" : "No Problem!"}
+            {isPending ? t("limited_mode.hero_title_pending") : t("limited_mode.hero_title_skipped")}
           </Text>
           <Text style={styles.heroSubtitle}>
             {isPending
-              ? "Your ITIN application is being processed"
-              : "You can still start using TandaXn"}
+              ? t("limited_mode.hero_subtitle_pending")
+              : t("limited_mode.hero_subtitle_skipped")}
           </Text>
         </LinearGradient>
 
@@ -132,10 +129,9 @@ export default function LimitedModeScreen() {
                 <Ionicons name="time-outline" size={20} color="#FFFFFF" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.itinPendingTitle}>ITIN Processing Time</Text>
+                <Text style={styles.itinPendingTitle}>{t("limited_mode.itin_processing_title")}</Text>
                 <Text style={styles.itinPendingBody}>
-                  ITINs usually take 7-11 weeks to process. We'll automatically
-                  upgrade your account when it's approved.
+                  {t("limited_mode.itin_processing_body")}
                 </Text>
               </View>
             </View>
@@ -143,12 +139,12 @@ export default function LimitedModeScreen() {
 
           {/* What you CAN do */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>What you can do now</Text>
+            <Text style={styles.sectionTitle}>{t("limited_mode.section_can_do")}</Text>
             <View style={styles.availableList}>
-              {AVAILABLE_FEATURES.map((text, idx) => (
+              {AVAILABLE_FEATURE_KEYS.map((textKey, idx) => (
                 <View key={idx} style={styles.availableRow}>
                   <Ionicons name="checkmark" size={16} color="#059669" />
-                  <Text style={styles.availableText}>{text}</Text>
+                  <Text style={styles.availableText}>{t(textKey)}</Text>
                 </View>
               ))}
             </View>
@@ -156,15 +152,15 @@ export default function LimitedModeScreen() {
 
           {/* What's Limited */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Unlock later by verifying</Text>
+            <Text style={styles.sectionTitle}>{t("limited_mode.section_unlock")}</Text>
             <View style={styles.limitedList}>
               {limitedFeatures.map((feature, idx) => (
                 <View key={idx} style={styles.limitedRow}>
                   <Ionicons name="lock-closed" size={14} color={MUTED} />
-                  <Text style={styles.limitedText}>{feature.text}</Text>
+                  <Text style={styles.limitedText}>{t(feature.textKey)}</Text>
                   <View style={styles.tierChip}>
                     <Text style={styles.tierChipText}>
-                      Tier {feature.tier}
+                      {t("limited_mode.tier_chip", { tier: feature.tier })}
                     </Text>
                   </View>
                 </View>
@@ -176,11 +172,9 @@ export default function LimitedModeScreen() {
           <View style={styles.reassuranceCard}>
             <Text style={styles.reassuranceEmoji}>💚</Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.reassuranceTitle}>Take your time</Text>
+              <Text style={styles.reassuranceTitle}>{t("limited_mode.reassure_title")}</Text>
               <Text style={styles.reassuranceBody}>
-                You can complete verification whenever you're ready. We'll
-                remind you when you need it (like when you're about to receive
-                a payout).
+                {t("limited_mode.reassure_body")}
               </Text>
             </View>
           </View>
@@ -198,7 +192,7 @@ export default function LimitedModeScreen() {
           }
         >
           <Text style={styles.primaryButtonText}>
-            {isPending ? "Continue to TandaXn" : "Start Using TandaXn"}
+            {isPending ? t("limited_mode.btn_continue") : t("limited_mode.btn_start")}
           </Text>
         </TouchableOpacity>
         {!isPending && (
@@ -209,7 +203,7 @@ export default function LimitedModeScreen() {
             accessibilityLabel="Actually, I'll verify now"
           >
             <Text style={styles.secondaryButtonText}>
-              Actually, I'll verify now
+              {t("limited_mode.btn_verify_now")}
             </Text>
           </TouchableOpacity>
         )}

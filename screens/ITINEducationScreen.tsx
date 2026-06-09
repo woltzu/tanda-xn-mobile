@@ -25,6 +25,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -33,23 +34,25 @@ const TEAL = "#00C6AE";
 const BORDER = "#E5E7EB";
 const MUTED = "#6B7280";
 
+// i18n: textKey/titleKey/descKey resolved per-render via t() at call site.
 const BENEFITS = [
-  { icon: "✅", text: "Available to anyone, regardless of immigration status" },
-  { icon: "🔒", text: "IRS doesn't share info with immigration authorities" },
-  { icon: "📈", text: "Helps you build a financial history in the US" },
-  { icon: "💳", text: "Can help you get credit cards and loans" },
-  { icon: "🏠", text: "Needed for buying property or starting a business" },
+  { icon: "✅", textKey: "itin_education.benefit_available" },
+  { icon: "🔒", textKey: "itin_education.benefit_irs_no_share" },
+  { icon: "📈", textKey: "itin_education.benefit_history" },
+  { icon: "💳", textKey: "itin_education.benefit_credit" },
+  { icon: "🏠", textKey: "itin_education.benefit_property" },
 ];
 
 const STEPS = [
-  { num: 1, title: "Fill out Form W-7", desc: "We'll help you complete it" },
-  { num: 2, title: "Gather documents", desc: "Passport or national ID" },
-  { num: 3, title: "Submit application", desc: "By mail or through an agent" },
-  { num: 4, title: "Receive your ITIN", desc: "Usually 7-11 weeks" },
+  { num: 1, titleKey: "itin_education.step_1_title", descKey: "itin_education.step_1_desc" },
+  { num: 2, titleKey: "itin_education.step_2_title", descKey: "itin_education.step_2_desc" },
+  { num: 3, titleKey: "itin_education.step_3_title", descKey: "itin_education.step_3_desc" },
+  { num: 4, titleKey: "itin_education.step_4_title", descKey: "itin_education.step_4_desc" },
 ];
 
 export default function ITINEducationScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -76,7 +79,7 @@ export default function ITINEducationScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>What is an ITIN?</Text>
+            <Text style={styles.headerTitle}>{t("itin_education.header")}</Text>
             <View style={{ width: 40 }} />
           </View>
         </LinearGradient>
@@ -94,26 +97,25 @@ export default function ITINEducationScreen() {
               <Text style={styles.heroIcon}>📋</Text>
             </View>
             <Text style={styles.heroTitle}>
-              Individual Taxpayer Identification Number
+              {t("itin_education.hero_title")}
             </Text>
             <Text style={styles.heroBody}>
-              An ITIN is a tax ID number issued by the IRS. It lets you pay
-              taxes and access financial services —{" "}
+              {t("itin_education.hero_body_prefix")}
               <Text style={styles.heroBodyStrong}>
-                no matter your immigration status
+                {t("itin_education.hero_body_strong")}
               </Text>
-              .
+              {t("itin_education.hero_body_suffix")}
             </Text>
           </LinearGradient>
 
           {/* Why get an ITIN? */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Why get an ITIN?</Text>
+            <Text style={styles.sectionTitle}>{t("itin_education.section_why")}</Text>
             <View style={styles.benefitsList}>
               {BENEFITS.map((item, idx) => (
                 <View key={idx} style={styles.benefitRow}>
                   <Text style={styles.benefitIcon}>{item.icon}</Text>
-                  <Text style={styles.benefitText}>{item.text}</Text>
+                  <Text style={styles.benefitText}>{t(item.textKey)}</Text>
                 </View>
               ))}
             </View>
@@ -126,21 +128,19 @@ export default function ITINEducationScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.privacyTitle}>
-                Your privacy is protected by law
+                {t("itin_education.privacy_title")}
               </Text>
               <Text style={styles.privacyBody}>
-                The IRS is{" "}
-                <Text style={styles.privacyBodyStrong}>legally prohibited</Text>{" "}
-                from sharing your information with immigration agencies
-                (Section 6103 of the Internal Revenue Code). Getting an ITIN
-                does not affect your immigration status.
+                {t("itin_education.privacy_body_prefix")}
+                <Text style={styles.privacyBodyStrong}>{t("itin_education.privacy_body_strong")}</Text>
+                {t("itin_education.privacy_body_suffix")}
               </Text>
             </View>
           </View>
 
           {/* Steps */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>How to get an ITIN</Text>
+            <Text style={styles.sectionTitle}>{t("itin_education.section_how")}</Text>
             <View style={styles.stepsList}>
               {STEPS.map((step, idx) => (
                 <View key={idx} style={styles.stepRow}>
@@ -148,8 +148,8 @@ export default function ITINEducationScreen() {
                     <Text style={styles.stepNumText}>{step.num}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.stepTitle}>{step.title}</Text>
-                    <Text style={styles.stepDesc}>{step.desc}</Text>
+                    <Text style={styles.stepTitle}>{t(step.titleKey)}</Text>
+                    <Text style={styles.stepDesc}>{t(step.descKey)}</Text>
                   </View>
                 </View>
               ))}
@@ -163,7 +163,7 @@ export default function ITINEducationScreen() {
             accessibilityRole="button"
             accessibilityLabel="I already have an ITIN"
           >
-            <Text style={styles.haveItinText}>I already have an ITIN</Text>
+            <Text style={styles.haveItinText}>{t("itin_education.have_itin")}</Text>
             <Ionicons name="arrow-forward" size={16} color={NAVY} />
           </TouchableOpacity>
         </View>
@@ -177,7 +177,7 @@ export default function ITINEducationScreen() {
           accessibilityRole="button"
           accessibilityLabel="Help me get an ITIN"
         >
-          <Text style={styles.primaryButtonText}>Help Me Get an ITIN</Text>
+          <Text style={styles.primaryButtonText}>{t("itin_education.btn_help_get")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.skipButton}
@@ -186,7 +186,7 @@ export default function ITINEducationScreen() {
           accessibilityLabel="Continue with limited features"
         >
           <Text style={styles.skipButtonText}>
-            I'll do this later — continue with limited features
+            {t("itin_education.btn_skip")}
           </Text>
         </TouchableOpacity>
       </View>

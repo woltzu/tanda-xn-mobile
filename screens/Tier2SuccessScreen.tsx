@@ -29,6 +29,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useAuth } from "../context/AuthContext";
@@ -40,23 +41,25 @@ const BORDER = "#E5E7EB";
 const MUTED = "#6B7280";
 const GREEN = "#059669";
 
+// i18n: titleKey/descKey resolved per-render via t() at call site.
 const UNLOCKED_FEATURES = [
-  { icon: "💰", title: "Receive payouts", desc: "Up to $600/year" },
-  { icon: "🔄", title: "Create circles", desc: "Start your own savings groups" },
-  { icon: "👥", title: "Become an Elder", desc: "Help your community" },
-  { icon: "⭐", title: "Build your reputation", desc: "Earn trust in the community" },
+  { icon: "💰", titleKey: "tier2_success.feat_payout_title", descKey: "tier2_success.feat_payout_desc" },
+  { icon: "🔄", titleKey: "tier2_success.feat_circle_title", descKey: "tier2_success.feat_circle_desc" },
+  { icon: "👥", titleKey: "tier2_success.feat_elder_title", descKey: "tier2_success.feat_elder_desc" },
+  { icon: "⭐", titleKey: "tier2_success.feat_reputation_title", descKey: "tier2_success.feat_reputation_desc" },
 ];
 
 const TIER3_FEATURES = [
-  { icon: "💵", title: "Unlimited payouts", desc: "No yearly limit" },
-  { icon: "📈", title: "Earn interest", desc: "On your savings" },
-  { icon: "🌍", title: "Send internationally", desc: "To family abroad" },
+  { icon: "💵", titleKey: "tier2_success.feat_unlimited_title", descKey: "tier2_success.feat_unlimited_desc" },
+  { icon: "📈", titleKey: "tier2_success.feat_interest_title", descKey: "tier2_success.feat_interest_desc" },
+  { icon: "🌍", titleKey: "tier2_success.feat_international_title", descKey: "tier2_success.feat_international_desc" },
 ];
 
 export default function Tier2SuccessScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const { user } = useAuth();
-  const userName = user?.name ?? "there";
+  const userName = user?.name ?? t("tier2_success.fallback_name");
 
   // Terminal screen for the international + ID-document KYC path. Wipe
   // the resume draft so a future re-entry to the KYC flow starts clean.
@@ -92,29 +95,29 @@ export default function Tier2SuccessScreen() {
             </View>
           </View>
 
-          <Text style={styles.heroTitle}>You're Verified! 🎉</Text>
+          <Text style={styles.heroTitle}>{t("tier2_success.hero_title")}</Text>
           <Text style={styles.heroSubtitle}>
-            Welcome to TandaXn, {userName}
+            {t("tier2_success.hero_subtitle", { name: userName })}
           </Text>
 
           {/* Tier 2 badge */}
           <View style={styles.tierBadge}>
             <Text style={styles.tierBadgeEmoji}>✨</Text>
-            <Text style={styles.tierBadgeText}>Tier 2: Verified</Text>
+            <Text style={styles.tierBadgeText}>{t("tier2_success.tier_badge")}</Text>
           </View>
         </LinearGradient>
 
         <View style={styles.contentWrap}>
           {/* What you can do now */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>What you can do now</Text>
+            <Text style={styles.sectionTitle}>{t("tier2_success.section_can_do")}</Text>
             <View style={styles.unlockedList}>
               {UNLOCKED_FEATURES.map((feature, idx) => (
                 <View key={idx} style={styles.unlockedRow}>
                   <Text style={styles.unlockedIcon}>{feature.icon}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.unlockedTitle}>{feature.title}</Text>
-                    <Text style={styles.unlockedDesc}>{feature.desc}</Text>
+                    <Text style={styles.unlockedTitle}>{t(feature.titleKey)}</Text>
+                    <Text style={styles.unlockedDesc}>{t(feature.descKey)}</Text>
                   </View>
                   <Ionicons name="checkmark" size={18} color={GREEN} />
                 </View>
@@ -125,21 +128,21 @@ export default function Tier2SuccessScreen() {
           {/* Tier 3 teaser */}
           <View style={styles.sectionCard}>
             <View style={styles.tier3Header}>
-              <Text style={styles.sectionTitle}>Want full access?</Text>
+              <Text style={styles.sectionTitle}>{t("tier2_success.section_full_access")}</Text>
               <View style={styles.optionalTag}>
-                <Text style={styles.optionalTagText}>OPTIONAL</Text>
+                <Text style={styles.optionalTagText}>{t("tier2_success.optional_tag")}</Text>
               </View>
             </View>
             <Text style={styles.tier3Subtitle}>
-              Add your tax ID (SSN or ITIN) to unlock:
+              {t("tier2_success.subtitle_tier3")}
             </Text>
             <View style={styles.tier3List}>
               {TIER3_FEATURES.map((feature, idx) => (
                 <View key={idx} style={styles.tier3Row}>
                   <Text style={styles.tier3Icon}>{feature.icon}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.tier3Title}>{feature.title}</Text>
-                    <Text style={styles.tier3Desc}>{feature.desc}</Text>
+                    <Text style={styles.tier3Title}>{t(feature.titleKey)}</Text>
+                    <Text style={styles.tier3Desc}>{t(feature.descKey)}</Text>
                   </View>
                 </View>
               ))}
@@ -150,7 +153,7 @@ export default function Tier2SuccessScreen() {
               accessibilityRole="button"
               accessibilityLabel="Add tax ID later"
             >
-              <Text style={styles.addTaxIdButtonText}>Add Tax ID Later</Text>
+              <Text style={styles.addTaxIdButtonText}>{t("tier2_success.btn_add_tax_later")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -158,10 +161,9 @@ export default function Tier2SuccessScreen() {
           <View style={styles.itinNote}>
             <Text style={styles.itinNoteEmoji}>💡</Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.itinNoteTitle}>No SSN? No problem!</Text>
+              <Text style={styles.itinNoteTitle}>{t("tier2_success.itin_note_title")}</Text>
               <Text style={styles.itinNoteBody}>
-                You can use an ITIN instead. Anyone can get one, regardless of
-                immigration status. We can help you apply when you're ready.
+                {t("tier2_success.itin_note_body")}
               </Text>
             </View>
           </View>
@@ -176,7 +178,7 @@ export default function Tier2SuccessScreen() {
           accessibilityRole="button"
           accessibilityLabel="Start using TandaXn"
         >
-          <Text style={styles.primaryButtonText}>Start Using TandaXn</Text>
+          <Text style={styles.primaryButtonText}>{t("tier2_success.btn_start")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.secondaryButton}
@@ -184,7 +186,7 @@ export default function Tier2SuccessScreen() {
           accessibilityRole="button"
           accessibilityLabel="Go to dashboard"
         >
-          <Text style={styles.secondaryButtonText}>Go to Dashboard</Text>
+          <Text style={styles.secondaryButtonText}>{t("tier2_success.btn_dashboard")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

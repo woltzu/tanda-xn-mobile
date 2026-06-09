@@ -44,6 +44,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { kycDraft } from "../lib/kycDraft";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
@@ -86,6 +87,7 @@ const MOCK_TOTAL_INTEREST = 47.83;
 export default function TaxIDEntryScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<TaxIDEntryRouteProp>();
+  const { t } = useTranslation();
   const totalInterest = route.params?.totalInterest ?? MOCK_TOTAL_INTEREST;
 
   const [idType, setIdType] = useState<IdType | null>(null);
@@ -153,16 +155,16 @@ export default function TaxIDEntryScreen() {
 
   const taxIdLabel =
     idType === "ssn"
-      ? "Social Security Number"
+      ? t("tax_id_entry.label_tax_id_ssn")
       : idType === "itin"
-        ? "ITIN"
-        : "Tax ID";
+        ? t("tax_id_entry.label_tax_id_itin")
+        : t("tax_id_entry.label_tax_id_default");
   const confirmLabel =
     idType === "ssn"
-      ? "SSN"
+      ? t("tax_id_entry.label_confirm_ssn")
       : idType === "itin"
-        ? "ITIN"
-        : "Tax ID";
+        ? t("tax_id_entry.label_confirm_itin")
+        : t("tax_id_entry.label_confirm_default");
 
   const monoFont = Platform.OS === "ios" ? "Courier" : "monospace";
 
@@ -197,9 +199,9 @@ export default function TaxIDEntryScreen() {
                 <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
-                <Text style={styles.headerTitle}>Tax Information</Text>
+                <Text style={styles.headerTitle}>{t("tax_id_entry.header")}</Text>
                 <Text style={styles.headerSubtitle}>
-                  Required for payouts over $600
+                  {t("tax_id_entry.header_subtitle")}
                 </Text>
               </View>
             </View>
@@ -216,7 +218,7 @@ export default function TaxIDEntryScreen() {
             {/* ID Type Selection */}
             <View style={styles.sectionCard}>
               <Text style={styles.fieldLabel}>
-                What type of Tax ID do you have?
+                {t("tax_id_entry.field_id_type")}
               </Text>
               <View style={styles.idTypeRow}>
                 <TouchableOpacity
@@ -229,8 +231,8 @@ export default function TaxIDEntryScreen() {
                   accessibilityState={{ selected: idType === "ssn" }}
                 >
                   <Text style={styles.idTypeFlag}>🇺🇸</Text>
-                  <Text style={styles.idTypeName}>SSN</Text>
-                  <Text style={styles.idTypeDesc}>Social Security</Text>
+                  <Text style={styles.idTypeName}>{t("tax_id_entry.id_type_ssn_name")}</Text>
+                  <Text style={styles.idTypeDesc}>{t("tax_id_entry.id_type_ssn_desc")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
@@ -242,8 +244,8 @@ export default function TaxIDEntryScreen() {
                   accessibilityState={{ selected: idType === "itin" }}
                 >
                   <Text style={styles.idTypeFlag}>📋</Text>
-                  <Text style={styles.idTypeName}>ITIN</Text>
-                  <Text style={styles.idTypeDesc}>Individual Taxpayer ID</Text>
+                  <Text style={styles.idTypeName}>{t("tax_id_entry.id_type_itin_name")}</Text>
+                  <Text style={styles.idTypeDesc}>{t("tax_id_entry.id_type_itin_desc")}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -255,9 +257,9 @@ export default function TaxIDEntryScreen() {
                     color="#3B82F6"
                   />
                   <Text style={styles.itinNoteText}>
-                    ITINs always start with{" "}
-                    <Text style={{ fontWeight: "700" }}>9</Text> (e.g.,
-                    9XX-XX-XXXX)
+                    {t("tax_id_entry.itin_note_prefix")}
+                    <Text style={{ fontWeight: "700" }}>{t("tax_id_entry.itin_note_digit")}</Text>
+                    {t("tax_id_entry.itin_note_suffix")}
                   </Text>
                 </View>
               )}
@@ -267,12 +269,12 @@ export default function TaxIDEntryScreen() {
             <View style={styles.sectionCard}>
               {/* Legal Name */}
               <View style={styles.field}>
-                <Text style={styles.fieldLabel}>Legal Full Name</Text>
+                <Text style={styles.fieldLabel}>{t("tax_id_entry.label_legal_name")}</Text>
                 <TextInput
                   style={styles.input}
                   value={legalName}
                   onChangeText={setLegalName}
-                  placeholder="As it appears on your tax documents"
+                  placeholder={t("tax_id_entry.placeholder_legal_name")}
                   placeholderTextColor="#9CA3AF"
                   autoComplete="name"
                 />
@@ -280,12 +282,12 @@ export default function TaxIDEntryScreen() {
 
               {/* DOB */}
               <View style={styles.field}>
-                <Text style={styles.fieldLabel}>Date of Birth</Text>
+                <Text style={styles.fieldLabel}>{t("tax_id_entry.label_dob")}</Text>
                 <TextInput
                   style={styles.input}
                   value={dateOfBirth}
                   onChangeText={(v) => setDateOfBirth(formatDate(v))}
-                  placeholder="MM/DD/YYYY"
+                  placeholder={t("tax_id_entry.placeholder_dob")}
                   placeholderTextColor="#9CA3AF"
                   keyboardType="number-pad"
                   maxLength={10}
@@ -302,7 +304,7 @@ export default function TaxIDEntryScreen() {
                   ]}
                   value={taxId}
                   onChangeText={(v) => setTaxId(formatTaxId(v))}
-                  placeholder="XXX-XX-XXXX"
+                  placeholder={t("tax_id_entry.placeholder_tax_id")}
                   placeholderTextColor="#9CA3AF"
                   keyboardType="number-pad"
                   maxLength={11}
@@ -312,7 +314,7 @@ export default function TaxIDEntryScreen() {
 
               {/* Confirm Tax ID */}
               <View style={styles.fieldNoMargin}>
-                <Text style={styles.fieldLabel}>Confirm {confirmLabel}</Text>
+                <Text style={styles.fieldLabel}>{t("tax_id_entry.label_confirm_prefix")}{confirmLabel}</Text>
                 <TextInput
                   style={[
                     styles.input,
@@ -324,14 +326,14 @@ export default function TaxIDEntryScreen() {
                   ]}
                   value={confirmTaxId}
                   onChangeText={(v) => setConfirmTaxId(formatTaxId(v))}
-                  placeholder="Re-enter to confirm"
+                  placeholder={t("tax_id_entry.placeholder_confirm")}
                   placeholderTextColor="#9CA3AF"
                   keyboardType="number-pad"
                   maxLength={11}
                   secureTextEntry
                 />
                 {!!rawTaxId && !!rawConfirm && !idsMatch && (
-                  <Text style={styles.errorText}>Numbers don't match</Text>
+                  <Text style={styles.errorText}>{t("tax_id_entry.error_no_match")}</Text>
                 )}
                 {!!rawTaxId &&
                   !!rawConfirm &&
@@ -339,7 +341,7 @@ export default function TaxIDEntryScreen() {
                   rawTaxId.length === 9 && (
                     <View style={styles.matchRow}>
                       <Ionicons name="checkmark" size={14} color="#059669" />
-                      <Text style={styles.matchText}>Numbers match</Text>
+                      <Text style={styles.matchText}>{t("tax_id_entry.match_confirmed")}</Text>
                     </View>
                   )}
               </View>
@@ -354,10 +356,9 @@ export default function TaxIDEntryScreen() {
                 style={{ marginTop: 2 }}
               />
               <View style={{ flex: 1 }}>
-                <Text style={styles.privacyTitle}>Bank-level security</Text>
+                <Text style={styles.privacyTitle}>{t("tax_id_entry.privacy_title")}</Text>
                 <Text style={styles.privacyBody}>
-                  Your information is encrypted and only used for IRS tax
-                  reporting. We never share it with anyone else.
+                  {t("tax_id_entry.privacy_body")}
                 </Text>
               </View>
             </View>
@@ -371,7 +372,7 @@ export default function TaxIDEntryScreen() {
             >
               <Text style={styles.needHelpEmoji}>🤔</Text>
               <Text style={styles.needHelpText}>
-                Don't have SSN or ITIN? We can help
+                {t("tax_id_entry.need_help")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -396,7 +397,7 @@ export default function TaxIDEntryScreen() {
                 !canContinue && styles.continueButtonTextDisabled,
               ]}
             >
-              Verify & Unlock Interest
+              {t("tax_id_entry.btn_verify")}
             </Text>
           </TouchableOpacity>
         </View>
