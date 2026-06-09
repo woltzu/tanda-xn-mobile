@@ -126,7 +126,7 @@ export default function NotificationsInboxScreen() {
         </LinearGradient>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#00C6AE" />
-          <Text style={styles.loadingText}>Loading notifications...</Text>
+          <Text style={styles.loadingText}>{t("notifications_inbox.loading")}</Text>
         </View>
       </View>
     );
@@ -185,7 +185,7 @@ export default function NotificationsInboxScreen() {
         {unreadCount > 0 && (
           <TouchableOpacity style={styles.markAllButton} onPress={markAllAsRead}>
             <Ionicons name="checkmark-done" size={18} color="#00C6AE" />
-            <Text style={styles.markAllText}>Mark all as read</Text>
+            <Text style={styles.markAllText}>{t("notifications_inbox.btn_mark_all_read")}</Text>
           </TouchableOpacity>
         )}
 

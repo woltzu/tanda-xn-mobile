@@ -161,7 +161,7 @@ export default function InsurancePoolScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.teal} />
-        <Text style={styles.loadingText}>Loading insurance pool...</Text>
+        <Text style={styles.loadingText}>{t("insurance_pool.loading")}</Text>
       </View>
     );
   }
@@ -174,7 +174,7 @@ export default function InsurancePoolScreen() {
         <Ionicons name="alert-circle" size={48} color={COLORS.red} />
         <Text style={styles.errorText}>{poolError}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={refetchPool}>
-          <Text style={styles.retryText}>Retry</Text>
+          <Text style={styles.retryText}>{t("insurance_pool.btn_retry")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -219,7 +219,7 @@ export default function InsurancePoolScreen() {
             <Text style={styles.circleName}>{pool.circleName}</Text>
           )}
           <Text style={styles.balanceAmount}>{balanceFormatted}</Text>
-          <Text style={styles.balanceLabel}>Pool Balance</Text>
+          <Text style={styles.balanceLabel}>{t("insurance_pool.label_balance")}</Text>
 
           {/* Health Status */}
           <View style={styles.healthRow}>
@@ -246,7 +246,7 @@ export default function InsurancePoolScreen() {
           <View style={styles.statsRow}>
             <View style={styles.statBlock}>
               <Text style={styles.statValue}>{rateDisplayFormatted}</Text>
-              <Text style={styles.statLabel}>Premium Rate</Text>
+              <Text style={styles.statLabel}>{t("insurance_pool.stat_premium_rate")}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBlock}>
@@ -257,14 +257,14 @@ export default function InsurancePoolScreen() {
                     )
                   : "$0.00"}
               </Text>
-              <Text style={styles.statLabel}>Your Premium</Text>
+              <Text style={styles.statLabel}>{t("insurance_pool.stat_your_premium")}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBlock}>
               <Text style={styles.statValue}>
                 {pool?.memberCount ?? 0}
               </Text>
-              <Text style={styles.statLabel}>Members</Text>
+              <Text style={styles.statLabel}>{t("insurance_pool.stat_members")}</Text>
             </View>
           </View>
         </View>
@@ -296,7 +296,7 @@ export default function InsurancePoolScreen() {
         {activeTab === "overview" && (
           <View style={styles.tabContent}>
             {/* How It Works */}
-            <Text style={styles.sectionTitle}>How It Works</Text>
+            <Text style={styles.sectionTitle}>{t("insurance_pool.section_how")}</Text>
             <View style={styles.card}>
               {[
                 {
@@ -333,21 +333,21 @@ export default function InsurancePoolScreen() {
             </Text>
             <View style={styles.card}>
               <View style={styles.breakdownRow}>
-                <Text style={styles.breakdownLabel}>Total Premiums Collected</Text>
+                <Text style={styles.breakdownLabel}>{t("insurance_pool.breakdown_premiums")}</Text>
                 <Text style={styles.breakdownValue}>
                   {formatCents(totals.totalWithheldCents)}
                 </Text>
               </View>
               <View style={styles.breakdownDivider} />
               <View style={styles.breakdownRow}>
-                <Text style={styles.breakdownLabel}>Total Claims Paid</Text>
+                <Text style={styles.breakdownLabel}>{t("insurance_pool.breakdown_claims")}</Text>
                 <Text style={[styles.breakdownValue, { color: COLORS.orange }]}>
                   -{formatCents(totals.totalPayoutsCents)}
                 </Text>
               </View>
               <View style={styles.breakdownDivider} />
               <View style={[styles.breakdownRow, { paddingTop: 12 }]}>
-                <Text style={styles.breakdownTotalLabel}>Current Balance</Text>
+                <Text style={styles.breakdownTotalLabel}>{t("insurance_pool.breakdown_balance")}</Text>
                 <Text style={styles.breakdownTotalValue}>
                   {balanceFormatted}
                 </Text>
@@ -359,7 +359,7 @@ export default function InsurancePoolScreen() {
         {/* ─── CLAIMS TAB ──────────────────────────────────────────── */}
         {activeTab === "claims" && (
           <View style={styles.tabContent}>
-            <Text style={styles.sectionTitle}>Claim History</Text>
+            <Text style={styles.sectionTitle}>{t("insurance_pool.section_claims")}</Text>
             <Text style={styles.sectionSubtitle}>
               All claims are anonymous — member identities are protected
             </Text>
@@ -367,7 +367,7 @@ export default function InsurancePoolScreen() {
             {claimTransactions.length === 0 && !txLoading && (
               <View style={styles.emptyState}>
                 <Ionicons name="shield-outline" size={40} color={COLORS.muted} />
-                <Text style={styles.emptyText}>No claims yet</Text>
+                <Text style={styles.emptyText}>{t("insurance_pool.empty_claims")}</Text>
               </View>
             )}
 
@@ -404,7 +404,7 @@ export default function InsurancePoolScreen() {
         {/* ─── PREMIUMS TAB ────────────────────────────────────────── */}
         {activeTab === "premiums" && (
           <View style={styles.tabContent}>
-            <Text style={styles.sectionTitle}>Premium Payments</Text>
+            <Text style={styles.sectionTitle}>{t("insurance_pool.section_premiums")}</Text>
             <Text style={styles.sectionSubtitle}>
               Your {premiumRatePct.toFixed(1)}% contribution to the pool each cycle
             </Text>
@@ -412,7 +412,7 @@ export default function InsurancePoolScreen() {
             {premiumTransactions.length === 0 && !txLoading && (
               <View style={styles.emptyState}>
                 <Ionicons name="wallet-outline" size={40} color={COLORS.muted} />
-                <Text style={styles.emptyText}>No premiums collected yet</Text>
+                <Text style={styles.emptyText}>{t("insurance_pool.empty_premiums")}</Text>
               </View>
             )}
 

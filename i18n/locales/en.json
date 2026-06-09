@@ -3454,5 +3454,75 @@
     "request_label": "Request ID",
     "steps_title": "What happens next",
     "btn_done": "Return to Circle"
+  },
+  "notifications_inbox": {
+    "loading": "Loading notifications...",
+    "btn_mark_all_read": "Mark all as read"
+  },
+  "group_chat": {
+    "alert_could_not_send_title": "Could not send",
+    "alert_please_try_again": "Please try again",
+    "placeholder_message": "Type a message…"
+  },
+  "referral": {
+    "alert_could_not_load": "Couldn't load referrals",
+    "alert_could_not_generate": "Couldn't generate code",
+    "alert_could_not_share": "Couldn't share",
+    "alert_copied_title": "Copied",
+    "alert_copied_body": "Referral code copied to clipboard.",
+    "hero_title": "Earn $10 per friend",
+    "hero_body": "Share your code. When a friend signs up and makes their first on-time contribution, you both get a $10 credit.",
+    "code_label": "Your referral code",
+    "code_a11y": "Referral code {{code}}",
+    "a11y_copy_code": "Copy code",
+    "a11y_share_code": "Share code",
+    "btn_copy": "Copy",
+    "btn_share": "Share",
+    "a11y_generate": "Generate referral code",
+    "btn_generating": "Generating...",
+    "btn_generate": "Generate my code",
+    "stat_referrals": "Referrals",
+    "stat_completed": "Completed",
+    "stat_earned": "Earned",
+    "pending_one": "{{count}} referral pending — you'll earn the credit once they make their first contribution.",
+    "pending_other": "{{count}} referrals pending — you'll earn the credit once they make their first contribution.",
+    "how_title": "How it works",
+    "how_step_1": "Share your code with a friend.",
+    "how_step_2": "They enter the code when they sign up.",
+    "how_step_3": "They make their first on-time contribution.",
+    "how_step_4": "You both get a $10 credit. No cap on referrals."
+  },
+  "insurance_pool": {
+    "loading": "Loading insurance pool...",
+    "btn_retry": "Retry",
+    "label_balance": "Pool Balance",
+    "stat_premium_rate": "Premium Rate",
+    "stat_your_premium": "Your Premium",
+    "stat_members": "Members",
+    "section_how": "How It Works",
+    "breakdown_premiums": "Total Premiums Collected",
+    "breakdown_claims": "Total Claims Paid",
+    "breakdown_balance": "Current Balance",
+    "section_claims": "Claim History",
+    "empty_claims": "No claims yet",
+    "section_premiums": "Premium Payments",
+    "empty_premiums": "No premiums collected yet"
+  },
+  "discover_circles": {
+    "error_load": "Couldn't load recommendations",
+    "btn_try_again": "Try again",
+    "empty_text": "No recommendations yet",
+    "btn_refresh": "Refresh"
+  },
+  "book_service_v2": {
+    "alert_error_title": "Error",
+    "alert_failed_create": "Could not create booking",
+    "label_original_price": "Original price",
+    "label_total": "Total",
+    "section_how_pay": "How would you like to pay?",
+    "label_pay_payout": "Pay on Payout Day",
+    "tag_recommended": "Recommended",
+    "label_pay_now": "Pay Now",
+    "placeholder_requests": "Any special requests..."
   }
 }

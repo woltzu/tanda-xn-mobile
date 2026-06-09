@@ -220,7 +220,7 @@ export default function GroupChatScreen() {
       if (Platform.OS === "web" && typeof window !== "undefined") {
         window.alert(`Could not send: ${error.message}`);
       } else {
-        Alert.alert("Could not send", error.message || "Please try again");
+        Alert.alert(t("group_chat.alert_could_not_send_title"), error.message || t("group_chat.alert_please_try_again"));
       }
     } else {
       setInputText("");
@@ -310,7 +310,7 @@ export default function GroupChatScreen() {
           <TextInput
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Type a message…"
+            placeholder={t("group_chat.placeholder_message")}
             placeholderTextColor="#94A3B8"
             multiline
             maxLength={2000}

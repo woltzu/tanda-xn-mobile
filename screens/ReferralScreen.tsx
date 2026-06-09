@@ -104,7 +104,7 @@ export default function ReferralScreen() {
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert("Couldn't load referrals", msg);
+      Alert.alert(t("referral.alert_could_not_load"), msg);
     } finally {
       setLoading(false);
     }
@@ -127,7 +127,7 @@ export default function ReferralScreen() {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert("Couldn't generate code", msg);
+      Alert.alert(t("referral.alert_could_not_generate"), msg);
     } finally {
       setGenerating(false);
     }
@@ -142,14 +142,14 @@ export default function ReferralScreen() {
       await Share.share({ message });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert("Couldn't share", msg);
+      Alert.alert(t("referral.alert_could_not_share"), msg);
     }
   };
 
   const handleCopy = () => {
     if (!code) return;
     Clipboard.setString(code);
-    Alert.alert("Copied", "Referral code copied to clipboard.");
+    Alert.alert(t("referral.alert_copied_title"), t("referral.alert_copied_body"));
   };
 
   const fmtDollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
@@ -182,23 +182,22 @@ export default function ReferralScreen() {
       >
         <View style={styles.heroCard}>
           <Ionicons name="gift" size={28} color={TEAL} />
-          <Text style={styles.heroTitle}>Earn $10 per friend</Text>
+          <Text style={styles.heroTitle}>{t("referral.hero_title")}</Text>
           <Text style={styles.heroBody}>
-            Share your code. When a friend signs up and makes their first
-            on-time contribution, you both get a $10 credit.
+            {t("referral.hero_body")}
           </Text>
         </View>
 
         {/* Code block */}
         <View style={styles.codeCard}>
-          <Text style={styles.codeLabel}>Your referral code</Text>
+          <Text style={styles.codeLabel}>{t("referral.code_label")}</Text>
           {loading ? (
             <View style={styles.codeLoading}>
               <ActivityIndicator color={TEAL} />
             </View>
           ) : code ? (
             <>
-              <Text style={styles.codeValue} selectable accessibilityLabel={`Referral code ${code}`}>
+              <Text style={styles.codeValue} selectable accessibilityLabel={t("referral.code_a11y", { code })}>
                 {code}
               </Text>
               <View style={styles.codeActions}>
@@ -206,19 +205,19 @@ export default function ReferralScreen() {
                   style={styles.codeActionBtn}
                   onPress={handleCopy}
                   accessibilityRole="button"
-                  accessibilityLabel="Copy code"
+                  accessibilityLabel={t("referral.a11y_copy_code")}
                 >
                   <Ionicons name="copy-outline" size={16} color={NAVY} />
-                  <Text style={styles.codeActionText}>Copy</Text>
+                  <Text style={styles.codeActionText}>{t("referral.btn_copy")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.codeActionBtn, styles.codeActionPrimary]}
                   onPress={handleShare}
                   accessibilityRole="button"
-                  accessibilityLabel="Share code"
+                  accessibilityLabel={t("referral.a11y_share_code")}
                 >
                   <Ionicons name="share-social-outline" size={16} color="#FFFFFF" />
-                  <Text style={[styles.codeActionText, { color: "#FFFFFF" }]}>Share</Text>
+                  <Text style={[styles.codeActionText, { color: "#FFFFFF" }]}>{t("referral.btn_share")}</Text>
                 </TouchableOpacity>
               </View>
             </>
@@ -228,11 +227,11 @@ export default function ReferralScreen() {
               onPress={handleGenerate}
               disabled={generating}
               accessibilityRole="button"
-              accessibilityLabel="Generate referral code"
+              accessibilityLabel={t("referral.a11y_generate")}
             >
               <Ionicons name="flash" size={16} color="#FFFFFF" />
               <Text style={styles.generateBtnText}>
-                {generating ? "Generating..." : "Generate my code"}
+                {generating ? t("referral.btn_generating") : t("referral.btn_generate")}
               </Text>
             </TouchableOpacity>
           )}
@@ -242,17 +241,17 @@ export default function ReferralScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statCell}>
             <Text style={styles.statValue}>{stats.totalReferrals}</Text>
-            <Text style={styles.statLabel}>Referrals</Text>
+            <Text style={styles.statLabel}>{t("referral.stat_referrals")}</Text>
           </View>
           <View style={styles.statCell}>
             <Text style={styles.statValue}>{stats.completed}</Text>
-            <Text style={styles.statLabel}>Completed</Text>
+            <Text style={styles.statLabel}>{t("referral.stat_completed")}</Text>
           </View>
           <View style={styles.statCell}>
             <Text style={[styles.statValue, { color: TEAL }]}>
               {fmtDollars(stats.totalCentsEarned)}
             </Text>
-            <Text style={styles.statLabel}>Earned</Text>
+            <Text style={styles.statLabel}>{t("referral.stat_earned")}</Text>
           </View>
         </View>
 
@@ -260,34 +259,35 @@ export default function ReferralScreen() {
           <View style={styles.pendingBox}>
             <Ionicons name="time-outline" size={16} color="#92400E" />
             <Text style={styles.pendingText}>
-              {stats.pending} referral{stats.pending === 1 ? "" : "s"} pending —
-              you'll earn the credit once they make their first contribution.
+              {stats.pending === 1
+                ? t("referral.pending_one", { count: stats.pending })
+                : t("referral.pending_other", { count: stats.pending })}
             </Text>
           </View>
         ) : null}
 
         <View style={styles.howCard}>
-          <Text style={styles.howTitle}>How it works</Text>
+          <Text style={styles.howTitle}>{t("referral.how_title")}</Text>
           <View style={styles.howRow}>
             <Text style={styles.howNum}>1</Text>
-            <Text style={styles.howText}>Share your code with a friend.</Text>
+            <Text style={styles.howText}>{t("referral.how_step_1")}</Text>
           </View>
           <View style={styles.howRow}>
             <Text style={styles.howNum}>2</Text>
             <Text style={styles.howText}>
-              They enter the code when they sign up.
+              {t("referral.how_step_2")}
             </Text>
           </View>
           <View style={styles.howRow}>
             <Text style={styles.howNum}>3</Text>
             <Text style={styles.howText}>
-              They make their first on-time contribution.
+              {t("referral.how_step_3")}
             </Text>
           </View>
           <View style={styles.howRow}>
             <Text style={styles.howNum}>4</Text>
             <Text style={styles.howText}>
-              You both get a $10 credit. No cap on referrals.
+              {t("referral.how_step_4")}
             </Text>
           </View>
         </View>

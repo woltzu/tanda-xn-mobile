@@ -213,10 +213,10 @@ export default function DiscoverCirclesScreen() {
         <Header navigation={navigation} />
         <View style={styles.center}>
           <Ionicons name="cloud-offline-outline" size={48} color={MUTED} />
-          <Text style={styles.centerText}>Couldn't load recommendations</Text>
+          <Text style={styles.centerText}>{t("discover_circles.error_load")}</Text>
           <Text style={styles.centerSubtext}>{error}</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={onRefresh}>
-            <Text style={styles.retryBtnText}>Try again</Text>
+            <Text style={styles.retryBtnText}>{t("discover_circles.btn_try_again")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -230,12 +230,12 @@ export default function DiscoverCirclesScreen() {
         <Header navigation={navigation} />
         <View style={styles.center}>
           <Ionicons name="compass-outline" size={48} color={MUTED} />
-          <Text style={styles.centerText}>No recommendations yet</Text>
+          <Text style={styles.centerText}>{t("discover_circles.empty_text")}</Text>
           <Text style={styles.centerSubtext}>
             New circles matching your profile will show up here. Check back later, or pull to refresh.
           </Text>
           <TouchableOpacity style={styles.retryBtn} onPress={onRefresh}>
-            <Text style={styles.retryBtnText}>Refresh</Text>
+            <Text style={styles.retryBtnText}>{t("discover_circles.btn_refresh")}</Text>
           </TouchableOpacity>
         </View>
       </View>

@@ -3454,5 +3454,75 @@
     "request_label": "ID de la demande",
     "steps_title": "Et après",
     "btn_done": "Retour au cercle"
+  },
+  "notifications_inbox": {
+    "loading": "Chargement des notifications...",
+    "btn_mark_all_read": "Tout marquer comme lu"
+  },
+  "group_chat": {
+    "alert_could_not_send_title": "Impossible d'envoyer",
+    "alert_please_try_again": "Veuillez réessayer",
+    "placeholder_message": "Tapez un message…"
+  },
+  "referral": {
+    "alert_could_not_load": "Impossible de charger les parrainages",
+    "alert_could_not_generate": "Impossible de générer le code",
+    "alert_could_not_share": "Impossible de partager",
+    "alert_copied_title": "Copié",
+    "alert_copied_body": "Code de parrainage copié dans le presse-papiers.",
+    "hero_title": "Gagnez 10 $ par ami",
+    "hero_body": "Partagez votre code. Lorsqu'un ami s'inscrit et effectue sa première contribution à temps, vous recevez tous les deux un crédit de 10 $.",
+    "code_label": "Votre code de parrainage",
+    "code_a11y": "Code de parrainage {{code}}",
+    "a11y_copy_code": "Copier le code",
+    "a11y_share_code": "Partager le code",
+    "btn_copy": "Copier",
+    "btn_share": "Partager",
+    "a11y_generate": "Générer un code de parrainage",
+    "btn_generating": "Génération...",
+    "btn_generate": "Générer mon code",
+    "stat_referrals": "Parrainages",
+    "stat_completed": "Complétés",
+    "stat_earned": "Gagné",
+    "pending_one": "{{count}} parrainage en attente — vous gagnerez le crédit dès qu'il effectuera sa première contribution.",
+    "pending_other": "{{count}} parrainages en attente — vous gagnerez le crédit dès qu'ils effectueront leur première contribution.",
+    "how_title": "Comment ça marche",
+    "how_step_1": "Partagez votre code avec un ami.",
+    "how_step_2": "Il saisit le code lors de son inscription.",
+    "how_step_3": "Il effectue sa première contribution à temps.",
+    "how_step_4": "Vous obtenez tous les deux un crédit de 10 $. Aucune limite de parrainages."
+  },
+  "insurance_pool": {
+    "loading": "Chargement du fonds d'assurance...",
+    "btn_retry": "Réessayer",
+    "label_balance": "Solde du fonds",
+    "stat_premium_rate": "Taux de prime",
+    "stat_your_premium": "Votre prime",
+    "stat_members": "Membres",
+    "section_how": "Comment ça marche",
+    "breakdown_premiums": "Primes totales collectées",
+    "breakdown_claims": "Total des réclamations payées",
+    "breakdown_balance": "Solde actuel",
+    "section_claims": "Historique des réclamations",
+    "empty_claims": "Aucune réclamation pour le moment",
+    "section_premiums": "Paiements de primes",
+    "empty_premiums": "Aucune prime collectée pour le moment"
+  },
+  "discover_circles": {
+    "error_load": "Impossible de charger les recommandations",
+    "btn_try_again": "Réessayer",
+    "empty_text": "Aucune recommandation pour le moment",
+    "btn_refresh": "Actualiser"
+  },
+  "book_service_v2": {
+    "alert_error_title": "Erreur",
+    "alert_failed_create": "Impossible de créer la réservation",
+    "label_original_price": "Prix initial",
+    "label_total": "Total",
+    "section_how_pay": "Comment souhaitez-vous payer ?",
+    "label_pay_payout": "Payer le jour du paiement",
+    "tag_recommended": "Recommandé",
+    "label_pay_now": "Payer maintenant",
+    "placeholder_requests": "Demandes spéciales..."
   }
 }

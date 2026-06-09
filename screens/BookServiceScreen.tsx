@@ -64,7 +64,7 @@ export default function BookServiceScreen() {
         [{ text: "OK", onPress: () => navigation.popToTop() }]
       );
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "Could not create booking");
+      Alert.alert(t("book_service_v2.alert_error_title"), err?.message ?? t("book_service_v2.alert_failed_create"));
     } finally {
       setSubmitting(false);
     }
@@ -98,7 +98,7 @@ export default function BookServiceScreen() {
           <View style={styles.pricingSection}>
             {discountAmountCents > 0 && (
               <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>Original price</Text>
+                <Text style={styles.priceLabel}>{t("book_service_v2.label_original_price")}</Text>
                 <Text style={styles.originalPrice}>{formatPrice(originalAmountCents)}</Text>
               </View>
             )}
@@ -109,14 +109,14 @@ export default function BookServiceScreen() {
               </View>
             )}
             <View style={[styles.priceRow, styles.totalRow]}>
-              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalLabel}>{t("book_service_v2.label_total")}</Text>
               <Text style={styles.totalPrice}>{formatPrice(finalAmountCents)}</Text>
             </View>
           </View>
         </View>
 
         {/* Payment Method */}
-        <Text style={styles.sectionLabel}>How would you like to pay?</Text>
+        <Text style={styles.sectionLabel}>{t("book_service_v2.section_how_pay")}</Text>
 
         {/* Payout Day Option */}
         {canPayOnPayoutDay && (
@@ -129,10 +129,10 @@ export default function BookServiceScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <View style={styles.paymentLabelRow}>
-                <Text style={styles.paymentLabel}>Pay on Payout Day</Text>
+                <Text style={styles.paymentLabel}>{t("book_service_v2.label_pay_payout")}</Text>
                 <View style={styles.recommendedBadge}>
                   <Ionicons name="flash" size={10} color="#F59E0B" />
-                  <Text style={styles.recommendedText}>Recommended</Text>
+                  <Text style={styles.recommendedText}>{t("book_service_v2.tag_recommended")}</Text>
                 </View>
               </View>
               <Text style={styles.paymentDesc}>
@@ -155,7 +155,7 @@ export default function BookServiceScreen() {
             {paymentType === "immediate" && <View style={styles.paymentRadioDot} />}
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.paymentLabel}>Pay Now</Text>
+            <Text style={styles.paymentLabel}>{t("book_service_v2.label_pay_now")}</Text>
             <Text style={styles.paymentDesc}>
               Pay {formatPrice(finalAmountCents)} with your debit card or wallet
             </Text>
@@ -166,7 +166,7 @@ export default function BookServiceScreen() {
         <Text style={styles.sectionLabel}>Notes (optional)</Text>
         <TextInput
           style={styles.notesInput}
-          placeholder="Any special requests..."
+          placeholder={t("book_service_v2.placeholder_requests")}
           placeholderTextColor="#9CA3AF"
           value={notes}
           onChangeText={setNotes}
