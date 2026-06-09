@@ -12,6 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useTrust } from "../context/TrustContext";
 import { useXnScore } from "../context/XnScoreContext";
@@ -51,6 +52,7 @@ const USERS_NEEDING_VOUCH = [
 export default function VouchMemberScreen() {
   const navigation = useNavigation<VouchMemberNavigationProp>();
   const route = useRoute<VouchMemberRouteProp>();
+  const { t } = useTranslation();
   const { score } = useXnScore();
   const {
     canVouchForOthers,
@@ -127,7 +129,7 @@ export default function VouchMemberScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Vouch for Member</Text>
+          <Text style={styles.headerTitle}>{t("vouch_member.header_title")}</Text>
           <View style={styles.placeholder} />
         </View>
 

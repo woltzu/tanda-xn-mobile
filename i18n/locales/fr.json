@@ -3092,5 +3092,68 @@
     "label_why": "Pourquoi en avez-vous besoin ?",
     "placeholder_why": "Une brève note sur ce que vous cherchez…",
     "btn_send": "Envoyer la demande"
+  },
+  "honor_system": {
+    "header_title": "Système d'honneur",
+    "section_vouching_status": "Votre statut de vouching",
+    "section_badges": "Badges d'honneur",
+    "section_tiers": "Paliers d'honneur",
+    "section_how_works": "Comment fonctionne le système d'honneur"
+  },
+  "vouch_system": { "header_title": "Système de vouching" },
+  "mediation_case": { "header_title": "Cas de médiation" },
+  "circle_voting": { "header_title": "Vote du cercle" },
+  "dynamic_payout": {
+    "header_title": "Calendrier de paiement",
+    "section_order": "Ordre de paiement",
+    "section_how_order": "Comment l'ordre est déterminé"
+  },
+  "position_swap": {
+    "header_title": "Position de paiement",
+    "section_positions": "Positions du cercle",
+    "section_requests": "Demandes d'échange",
+    "section_history": "Historique d'échanges"
+  },
+  "pause_circle": {
+    "header_title": "Mettre en pause le cercle",
+    "section_current_status": "État actuel",
+    "section_duration": "Durée de la pause",
+    "section_reason": "Raison de la pause",
+    "section_notes": "Notes supplémentaires (facultatif)"
+  },
+  "close_circle": {
+    "header_title": "Fermer le cercle",
+    "section_reason": "Raison de la fermeture",
+    "section_method": "Méthode de fermeture"
+  },
+  "manage_members": { "header_title": "Gérer les membres" },
+  "export_data": {
+    "header_title": "Exporter les données",
+    "section_format": "Format d'export",
+    "section_date_range": "Plage de dates",
+    "section_include": "Inclure les données"
+  },
+  "become_elder": {
+    "header_title_status": "Statut d'Aîné",
+    "header_title_become": "Devenir un Aîné",
+    "section_journey": "Votre parcours d'Aîné",
+    "section_requirements": "Exigences",
+    "section_benefits": "Avantages d'Aîné",
+    "section_tiers": "Paliers d'Aîné"
+  },
+  "vouch_member": {
+    "header_title": "Vouching pour un membre",
+    "section_active": "Vos vouchings actifs ({{count}})",
+    "section_need": "Personnes ayant besoin de vouching",
+    "section_how": "Comment fonctionne le vouching"
+  },
+  "elder_training": {
+    "header_title": "Centre de formation des Aînés",
+    "section_required": "Cours obligatoires",
+    "section_elective": "Cours optionnels"
+  },
+  "leave_circle": {
+    "header_title": "Quitter le cercle",
+    "section_reason": "Pourquoi partez-vous ?"
   }
 }

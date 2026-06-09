@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useTranslation } from "react-i18next";
 import { useElder, MediationCase, CaseType, CaseSeverity } from "../context/ElderContext";
 
 type RootStackParamList = {
@@ -26,6 +27,7 @@ type FilterType = "all" | CaseType;
 
 export default function MediationCaseScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const { t } = useTranslation();
   const {
     elderProfile,
     availableCases,
@@ -396,7 +398,7 @@ export default function MediationCaseScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#1a1a2e" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mediation Cases</Text>
+        <Text style={styles.headerTitle}>{t("mediation_case.header_title")}</Text>
         <View style={styles.placeholder} />
       </View>
 

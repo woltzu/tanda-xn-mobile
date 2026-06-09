@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useTranslation } from "react-i18next";
 import { useElder } from "../context/ElderContext";
 
 type RootStackParamList = {
@@ -23,6 +24,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function BecomeElderScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const { t } = useTranslation();
   const {
     getElderRequirements,
     checkEligibility,
@@ -125,7 +127,7 @@ export default function BecomeElderScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#1a1a2e" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Elder Status</Text>
+          <Text style={styles.headerTitle}>{t("become_elder.header_title_status")}</Text>
           <View style={styles.placeholder} />
         </View>
 
@@ -242,7 +244,7 @@ export default function BecomeElderScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#1a1a2e" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Become an Elder</Text>
+        <Text style={styles.headerTitle}>{t("become_elder.header_title_become")}</Text>
         <View style={styles.placeholder} />
       </View>
 

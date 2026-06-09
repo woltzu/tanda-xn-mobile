@@ -3092,5 +3092,68 @@
     "label_why": "Why do you need it?",
     "placeholder_why": "A short note about what you're looking for…",
     "btn_send": "Send Request"
+  },
+  "honor_system": {
+    "header_title": "Honor System",
+    "section_vouching_status": "Your Vouching Status",
+    "section_badges": "Honor Badges",
+    "section_tiers": "Honor Tiers",
+    "section_how_works": "How the Honor System Works"
+  },
+  "vouch_system": { "header_title": "Vouch System" },
+  "mediation_case": { "header_title": "Mediation Cases" },
+  "circle_voting": { "header_title": "Circle Voting" },
+  "dynamic_payout": {
+    "header_title": "Payout Schedule",
+    "section_order": "Payout Order",
+    "section_how_order": "How Order Is Determined"
+  },
+  "position_swap": {
+    "header_title": "Payout Position",
+    "section_positions": "Circle Positions",
+    "section_requests": "Swap Requests",
+    "section_history": "Swap History"
+  },
+  "pause_circle": {
+    "header_title": "Pause Circle",
+    "section_current_status": "Current Status",
+    "section_duration": "Pause Duration",
+    "section_reason": "Reason for Pausing",
+    "section_notes": "Additional Notes (Optional)"
+  },
+  "close_circle": {
+    "header_title": "Close Circle",
+    "section_reason": "Reason for Closing",
+    "section_method": "Closure Method"
+  },
+  "manage_members": { "header_title": "Manage Members" },
+  "export_data": {
+    "header_title": "Export Data",
+    "section_format": "Export Format",
+    "section_date_range": "Date Range",
+    "section_include": "Include Data"
+  },
+  "become_elder": {
+    "header_title_status": "Elder Status",
+    "header_title_become": "Become an Elder",
+    "section_journey": "Your Elder Journey",
+    "section_requirements": "Requirements",
+    "section_benefits": "Elder Benefits",
+    "section_tiers": "Elder Tiers"
+  },
+  "vouch_member": {
+    "header_title": "Vouch for Member",
+    "section_active": "Your Active Vouches ({{count}})",
+    "section_need": "People Who Need Vouching",
+    "section_how": "How Vouching Works"
+  },
+  "elder_training": {
+    "header_title": "Elder Training Hub",
+    "section_required": "Required Courses",
+    "section_elective": "Elective Courses"
+  },
+  "leave_circle": {
+    "header_title": "Leave Circle",
+    "section_reason": "Why are you leaving?"
   }
 }

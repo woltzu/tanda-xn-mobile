@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useFormKeyboardOffset } from "../hooks/useFormKeyboardOffset";
 
 interface Member {
@@ -104,6 +105,7 @@ const mockMembers: Member[] = [
 export default function ManageMembersScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { t } = useTranslation();
   const params = (route.params as ManageMembersParams) || {};
   const circleName = params.circleName || "Family Savings Circle";
   const { offset: keyboardOffset, measure: measureChrome } = useFormKeyboardOffset();
@@ -380,7 +382,7 @@ export default function ManageMembersScreen() {
           <Ionicons name="arrow-back" size={24} color="#1F2937" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Manage Members</Text>
+          <Text style={styles.headerTitle}>{t("manage_members.header_title")}</Text>
           <Text style={styles.headerSubtitle}>
             {members.length} members • {circleName}
           </Text>

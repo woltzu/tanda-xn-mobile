@@ -28,6 +28,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
@@ -105,6 +106,7 @@ function fmtCents(cents: number): string {
 export default function LeaveCircleScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { t } = useTranslation();
   const params = (route.params as LeaveCircleParams) || {};
   const { user } = useAuth();
   const circleId = params.circleId ?? "";
@@ -475,7 +477,7 @@ export default function LeaveCircleScreen() {
         >
           <Ionicons name="close" size={24} color="#1F2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Leave Circle</Text>
+        <Text style={styles.headerTitle}>{t("leave_circle.header_title")}</Text>
         <View style={styles.headerPlaceholder} />
       </View>
 

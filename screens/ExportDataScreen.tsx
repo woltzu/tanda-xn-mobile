@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 
 interface ExportDataParams {
   circleName?: string;
@@ -29,6 +30,7 @@ interface ExportOption {
 export default function ExportDataScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { t } = useTranslation();
   const params = (route.params as ExportDataParams) || {};
   const circleName = params.circleName || "Family Savings Circle";
 
@@ -239,7 +241,7 @@ export default function ExportDataScreen() {
           >
             <Ionicons name="close" size={24} color="#1F2937" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Export Data</Text>
+          <Text style={styles.headerTitle}>{t("export_data.header_title")}</Text>
           <View style={styles.headerPlaceholder} />
         </View>
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -260,7 +262,7 @@ export default function ExportDataScreen() {
           <Ionicons name="arrow-back" size={24} color="#1F2937" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Export Data</Text>
+          <Text style={styles.headerTitle}>{t("export_data.header_title")}</Text>
           <Text style={styles.headerSubtitle}>{circleName}</Text>
         </View>
         <View style={styles.headerPlaceholder} />

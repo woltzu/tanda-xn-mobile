@@ -10,6 +10,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useTrust } from "../context/TrustContext";
 import { useXnScore } from "../context/XnScoreContext";
@@ -126,6 +127,7 @@ const getBadgeTierColor = (tier: string) => {
 
 export default function HonorSystemScreen() {
   const navigation = useNavigation<HonorSystemNavigationProp>();
+  const { t } = useTranslation();
   const { score } = useXnScore();
   const {
     honorStats,
@@ -176,7 +178,7 @@ export default function HonorSystemScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Honor System</Text>
+          <Text style={styles.headerTitle}>{t("honor_system.header_title")}</Text>
           <View style={styles.placeholder} />
         </View>
 
@@ -260,7 +262,7 @@ export default function HonorSystemScreen() {
       >
         {/* Vouching Status */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your Vouching Status</Text>
+          <Text style={styles.sectionTitle}>{t("honor_system.section_vouching_status")}</Text>
 
           <View style={styles.statusCard}>
             <View style={styles.statusRow}>
@@ -330,7 +332,7 @@ export default function HonorSystemScreen() {
 
         {/* Honor Badges */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Honor Badges</Text>
+          <Text style={styles.sectionTitle}>{t("honor_system.section_badges")}</Text>
           <Text style={styles.sectionSubtitle}>
             Earn badges by helping others join the community
           </Text>
@@ -386,7 +388,7 @@ export default function HonorSystemScreen() {
 
         {/* Honor Tiers */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Honor Tiers</Text>
+          <Text style={styles.sectionTitle}>{t("honor_system.section_tiers")}</Text>
           <Text style={styles.sectionSubtitle}>
             Progress through tiers by vouching for trustworthy members
           </Text>
@@ -446,7 +448,7 @@ export default function HonorSystemScreen() {
 
         {/* How It Works */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>How the Honor System Works</Text>
+          <Text style={styles.sectionTitle}>{t("honor_system.section_how_works")}</Text>
 
           <View style={styles.infoCard}>
             <View style={styles.infoItem}>

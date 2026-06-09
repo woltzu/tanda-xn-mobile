@@ -6,6 +6,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useCircleProposals, useCreateProposal, useCastVote } from "../hooks/useCircleDemocracy";
 
 type RouteParams = { CircleVoting: { circleId: string } };
@@ -27,6 +28,7 @@ const STATUS_STYLES: Record<string, { color: string; icon: string; label: string
 export default function CircleVotingScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RouteParams, "CircleVoting">>();
+  const { t } = useTranslation();
   const { circleId } = route.params;
 
   const [activeTab, setActiveTab] = useState<"active" | "closed">("active");
@@ -89,7 +91,7 @@ export default function CircleVotingScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Circle Voting</Text>
+          <Text style={styles.headerTitle}>{t("circle_voting.header_title")}</Text>
           <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateModal(true)}>
             <Ionicons name="add" size={24} color="#FFFFFF" />
           </TouchableOpacity>

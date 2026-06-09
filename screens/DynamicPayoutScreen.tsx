@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import {
   useMyExplanation,
   useStabilityScore,
@@ -32,6 +33,7 @@ const formatCents = (c: number) =>
 export default function DynamicPayoutScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RouteParams, "DynamicPayout">>();
+  const { t } = useTranslation();
   const { circleId } = route.params;
 
   const {
@@ -86,7 +88,7 @@ export default function DynamicPayoutScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={22} color={COLORS.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Payout Schedule</Text>
+        <Text style={styles.headerTitle}>{t("dynamic_payout.header_title")}</Text>
         <TouchableOpacity style={styles.headerBtn}>
           <Ionicons name="information-circle-outline" size={22} color={COLORS.white} />
         </TouchableOpacity>
@@ -124,7 +126,7 @@ export default function DynamicPayoutScreen() {
 
         {/* Payout Order */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payout Order</Text>
+          <Text style={styles.sectionTitle}>{t("dynamic_payout.section_order")}</Text>
 
           <View style={styles.methodBadge}>
             <Ionicons name="sparkles-outline" size={16} color={COLORS.teal} />
@@ -182,7 +184,7 @@ export default function DynamicPayoutScreen() {
         {/* How Order Is Determined */}
         {componentsByImpact && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>How Order Is Determined</Text>
+            <Text style={styles.sectionTitle}>{t("dynamic_payout.section_how_order")}</Text>
 
             {explanation?.components.map((factor, i) => (
               <View key={i} style={styles.card}>

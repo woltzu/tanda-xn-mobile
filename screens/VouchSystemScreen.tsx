@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useTranslation } from "react-i18next";
 import { useElder, VouchRequest, ActiveVouch, VouchHistory } from "../context/ElderContext";
 
 type RootStackParamList = {
@@ -23,6 +24,7 @@ type TabType = "requests" | "active" | "history";
 
 export default function VouchSystemScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const { t } = useTranslation();
   const {
     elderProfile,
     elderStats,
@@ -471,7 +473,7 @@ export default function VouchSystemScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#1a1a2e" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Vouch System</Text>
+        <Text style={styles.headerTitle}>{t("vouch_system.header_title")}</Text>
         <View style={styles.placeholder} />
       </View>
 

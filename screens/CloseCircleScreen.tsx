@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 
 interface CloseCircleParams {
   circleName?: string;
@@ -35,6 +36,7 @@ type CloseMethod = "immediate" | "after_payouts" | "after_cycle";
 export default function CloseCircleScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { t } = useTranslation();
   const params = (route.params as CloseCircleParams) || {};
 
   const circleName = params.circleName || "Family Savings Circle";
@@ -558,7 +560,7 @@ export default function CloseCircleScreen() {
         >
           <Ionicons name="close" size={24} color="#1F2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Close Circle</Text>
+        <Text style={styles.headerTitle}>{t("close_circle.header_title")}</Text>
         <View style={styles.headerPlaceholder} />
       </View>
 

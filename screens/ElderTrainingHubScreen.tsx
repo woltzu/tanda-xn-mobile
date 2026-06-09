@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useTranslation } from "react-i18next";
 import { useElder, TrainingCourse, ElderBadge } from "../context/ElderContext";
 
 type RootStackParamList = {
@@ -23,6 +24,7 @@ type TabType = "courses" | "badges" | "progress";
 
 export default function ElderTrainingHubScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const { t } = useTranslation();
   const {
     elderProfile,
     trainingCourses,
@@ -493,7 +495,7 @@ export default function ElderTrainingHubScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#1a1a2e" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Elder Training Hub</Text>
+        <Text style={styles.headerTitle}>{t("elder_training.header_title")}</Text>
         <View style={styles.placeholder} />
       </View>
 

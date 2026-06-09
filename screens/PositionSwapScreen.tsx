@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import {
   useCircleMembersForSwap,
   useMySwapRequests,
@@ -37,6 +38,7 @@ type RouteParams = { circleId: string };
 export default function PositionSwapScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: RouteParams }, "params">>();
+  const { t } = useTranslation();
   const { circleId } = route.params;
 
   const [activeTab, setActiveTab] = useState<"positions" | "requests" | "history">("positions");
@@ -131,7 +133,7 @@ export default function PositionSwapScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Payout Position</Text>
+        <Text style={styles.headerTitle}>{t("position_swap.header_title")}</Text>
         <TouchableOpacity>
           <Ionicons name="information-circle-outline" size={24} color="#FFF" />
         </TouchableOpacity>
