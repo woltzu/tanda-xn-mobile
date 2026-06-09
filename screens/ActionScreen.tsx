@@ -147,8 +147,8 @@ const ActionScreen: React.FC = () => {
     const items: ActionItem[] = [
       {
         id: "start_circle",
-        title: "Start a Circle",
-        subtitle: "Plant something new together",
+        title: t("action_screen.action_start_circle_title"),
+        subtitle: t("action_screen.action_start_circle_sub"),
         icon: "people-circle",
         iconBgColor: COLORS.tealLight,
         iconColor: COLORS.teal,
@@ -160,8 +160,8 @@ const ActionScreen: React.FC = () => {
       },
       {
         id: "contribute",
-        title: "Contribute",
-        subtitle: "Keep the circle moving",
+        title: t("action_screen.action_contribute_title"),
+        subtitle: t("action_screen.action_contribute_sub"),
         icon: "cash",
         iconBgColor: contributionDueSoon ? COLORS.goldLight : COLORS.tealLight,
         iconColor: contributionDueSoon ? COLORS.gold : COLORS.teal,
@@ -173,8 +173,8 @@ const ActionScreen: React.FC = () => {
       },
       {
         id: "send_money",
-        title: "Send to Someone",
-        subtitle: "Send to a face, not a number",
+        title: t("action_screen.action_send_title"),
+        subtitle: t("action_screen.action_send_sub"),
         icon: "send",
         iconBgColor: COLORS.navyIconBg,
         iconColor: COLORS.navy,
@@ -186,8 +186,8 @@ const ActionScreen: React.FC = () => {
       },
       {
         id: "vouch",
-        title: "Vouch for Someone",
-        subtitle: "Stake your reputation for someone",
+        title: t("action_screen.action_vouch_title"),
+        subtitle: t("action_screen.action_vouch_sub"),
         icon: "shield-checkmark",
         iconBgColor: COLORS.goldLight,
         iconColor: COLORS.gold,
@@ -199,8 +199,8 @@ const ActionScreen: React.FC = () => {
       },
       {
         id: "share_moment",
-        title: "Share a Moment",
-        subtitle: "Celebrate, ask, or welcome someone",
+        title: t("action_screen.action_share_title"),
+        subtitle: t("action_screen.action_share_sub"),
         icon: "camera",
         iconBgColor: COLORS.tealLight,
         iconColor: COLORS.teal,
@@ -212,8 +212,8 @@ const ActionScreen: React.FC = () => {
       },
       {
         id: "request_help",
-        title: "Request Help",
-        subtitle: "Ask for a vouch, guidance, or a warm welcome",
+        title: t("action_screen.action_request_help_title"),
+        subtitle: t("action_screen.action_request_help_sub"),
         icon: "hand-left",
         iconBgColor: COLORS.purpleLight,
         iconColor: COLORS.purple,
@@ -225,8 +225,8 @@ const ActionScreen: React.FC = () => {
       },
       {
         id: "open_session",
-        title: "Open a Session",
-        subtitle: "Share wisdom or host a Q&A",
+        title: t("action_screen.action_session_title"),
+        subtitle: t("action_screen.action_session_sub"),
         icon: "school",
         iconBgColor: COLORS.goldLight,
         iconColor: COLORS.gold,
@@ -248,6 +248,7 @@ const ActionScreen: React.FC = () => {
     isTrustedTierPlus,
     isNewMember,
     isElder,
+    t,
   ]);
 
   // ---- Entrance Animation ----
@@ -304,24 +305,24 @@ const ActionScreen: React.FC = () => {
   const handleAction = (action: ActionItem) => {
     if (action.route === null) {
       Alert.alert(
-        "Request Help",
-        "What kind of help do you need?",
+        t("action_screen.action_request_help_title"),
+        t("action_screen.alert_help_body"),
         [
           {
-            text: "I need a vouch",
+            text: t("action_screen.alert_help_vouch"),
             onPress: () => {
               navigation.goBack();
               setTimeout(() => navigation.navigate("CommunityBrowser"), 100);
             },
           },
           {
-            text: "I need guidance",
+            text: t("action_screen.alert_help_guidance"),
             onPress: () => {
               navigation.goBack();
               setTimeout(() => navigation.navigate("CommunityBrowser"), 100);
             },
           },
-          { text: "Cancel", style: "cancel" },
+          { text: t("action_screen.alert_help_cancel"), style: "cancel" },
         ],
         { cancelable: true }
       );
@@ -392,12 +393,12 @@ const ActionScreen: React.FC = () => {
               </Text>
               {action.isUrgent && (
                 <View style={styles.urgentBadge}>
-                  <Text style={styles.urgentBadgeText}>Due Soon</Text>
+                  <Text style={styles.urgentBadgeText}>{t("action_screen.badge_due_soon")}</Text>
                 </View>
               )}
               {action.isPrimary && !action.isUrgent && (
                 <View style={styles.primaryBadge}>
-                  <Text style={styles.primaryBadgeText}>Suggested</Text>
+                  <Text style={styles.primaryBadgeText}>{t("action_screen.badge_suggested")}</Text>
                 </View>
               )}
             </View>
@@ -421,11 +422,11 @@ const ActionScreen: React.FC = () => {
   // ---- Contextual Greeting ----
 
   const greeting = useMemo(() => {
-    if (isNewMember) return "Welcome. What do you need today?";
-    if (contributionDueSoon) return "You have a contribution coming up.";
-    if (!hasCircles) return "Ready to start your first circle?";
-    return "What do you want to make happen?";
-  }, [isNewMember, contributionDueSoon, hasCircles]);
+    if (isNewMember) return t("action_screen.greet_new_member");
+    if (contributionDueSoon) return t("action_screen.greet_contrib_due");
+    if (!hasCircles) return t("action_screen.greet_no_circles");
+    return t("action_screen.greet_default");
+  }, [isNewMember, contributionDueSoon, hasCircles, t]);
 
   const firstName = user?.name ? user.name.split(" ")[0] : null;
 
@@ -459,8 +460,8 @@ const ActionScreen: React.FC = () => {
             {firstName && (
               <Text style={styles.headerName}>
                 {isNewMember
-                  ? `Welcome, ${firstName}. Your community is here for you.`
-                  : `${firstName}, let\u2019s make it happen.`}
+                  ? t("action_screen.name_new_member", { name: firstName })
+                  : t("action_screen.name_default", { name: firstName })}
               </Text>
             )}
           </View>
@@ -494,7 +495,7 @@ const ActionScreen: React.FC = () => {
           >
             <Ionicons name="close" size={24} color={COLORS.navy} />
           </TouchableOpacity>
-          <Text style={styles.closeLabel}>Close</Text>
+          <Text style={styles.closeLabel}>{t("action_screen.btn_close")}</Text>
         </View>
       </SafeAreaView>
     </Animated.View>

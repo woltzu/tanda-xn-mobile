@@ -46,60 +46,61 @@ const GREEN = "#059669";
 
 type TierLevel = 1 | 2 | 3;
 
+// i18n: nameKey/requirementKey/textKey resolved per-render via t() at call site.
 type Tier = {
   level: TierLevel;
-  name: string;
+  nameKey: string;
   icon: string;
-  requirement: string;
+  requirementKey: string;
   color: string;
-  features: { text: string; included: boolean }[];
+  features: { textKey: string; included: boolean }[];
 };
 
 const TIERS: Tier[] = [
   {
     level: 1,
-    name: "Basic",
+    nameKey: "account_tiers.tier_basic_name",
     icon: "🌱",
-    requirement: "Email & Phone",
+    requirementKey: "account_tiers.tier_basic_req",
     color: MUTED,
     features: [
-      { text: "Join savings circles", included: true },
-      { text: "Contribute to circles", included: true },
-      { text: "Track your progress", included: true },
-      { text: "Chat with circle members", included: true },
-      { text: "Receive payouts up to $600/year", included: false },
-      { text: "Earn interest on savings", included: false },
-      { text: "Send money internationally", included: false },
+      { textKey: "account_tiers.tier_basic_feat_1", included: true },
+      { textKey: "account_tiers.tier_basic_feat_2", included: true },
+      { textKey: "account_tiers.tier_basic_feat_3", included: true },
+      { textKey: "account_tiers.tier_basic_feat_4", included: true },
+      { textKey: "account_tiers.tier_basic_feat_5", included: false },
+      { textKey: "account_tiers.tier_basic_feat_6", included: false },
+      { textKey: "account_tiers.tier_basic_feat_7", included: false },
     ],
   },
   {
     level: 2,
-    name: "Verified",
+    nameKey: "account_tiers.tier_verified_name",
     icon: "✨",
-    requirement: "Any Valid ID",
+    requirementKey: "account_tiers.tier_verified_req",
     color: "#3B82F6",
     features: [
-      { text: "Everything in Basic", included: true },
-      { text: "Receive payouts up to $600/year", included: true },
-      { text: "Create your own circles", included: true },
-      { text: "Become an Elder", included: true },
-      { text: "Receive unlimited payouts", included: false },
-      { text: "Earn interest on savings", included: false },
+      { textKey: "account_tiers.tier_verified_feat_1", included: true },
+      { textKey: "account_tiers.tier_verified_feat_2", included: true },
+      { textKey: "account_tiers.tier_verified_feat_3", included: true },
+      { textKey: "account_tiers.tier_verified_feat_4", included: true },
+      { textKey: "account_tiers.tier_verified_feat_5", included: false },
+      { textKey: "account_tiers.tier_verified_feat_6", included: false },
     ],
   },
   {
     level: 3,
-    name: "Full Access",
+    nameKey: "account_tiers.tier_full_name",
     icon: "🏆",
-    requirement: "Tax ID (SSN or ITIN)",
+    requirementKey: "account_tiers.tier_full_req",
     color: TEAL,
     features: [
-      { text: "Everything in Verified", included: true },
-      { text: "Receive unlimited payouts", included: true },
-      { text: "Earn interest on savings", included: true },
-      { text: "Send money internationally", included: true },
-      { text: "Access to TandaXn Credit", included: true },
-      { text: "Priority support", included: true },
+      { textKey: "account_tiers.tier_full_feat_1", included: true },
+      { textKey: "account_tiers.tier_full_feat_2", included: true },
+      { textKey: "account_tiers.tier_full_feat_3", included: true },
+      { textKey: "account_tiers.tier_full_feat_4", included: true },
+      { textKey: "account_tiers.tier_full_feat_5", included: true },
+      { textKey: "account_tiers.tier_full_feat_6", included: true },
     ],
   },
 ];
@@ -150,7 +151,7 @@ export default function AccountTiersExplainedScreen() {
               style={styles.backButton}
               onPress={() => navigation.goBack()}
               accessibilityRole="button"
-              accessibilityLabel="Back"
+              accessibilityLabel={t("account_tiers.a11y_back")}
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
@@ -158,7 +159,7 @@ export default function AccountTiersExplainedScreen() {
             <View style={{ width: 40 }} />
           </View>
           <Text style={styles.headerSubtitle}>
-            Unlock more features as you verify
+            {t("account_tiers.header_subtitle")}
           </Text>
         </LinearGradient>
 
@@ -176,9 +177,9 @@ export default function AccountTiersExplainedScreen() {
               </Text>
             </View>
             <View>
-              <Text style={styles.currentLevelLabel}>Your current level</Text>
+              <Text style={styles.currentLevelLabel}>{t("account_tiers.current_level_label")}</Text>
               <Text style={styles.currentLevelName}>
-                Tier {currentTier}: {currentTierData.name}
+                {t("account_tiers.tier_name_label", { level: currentTier, name: t(currentTierData.nameKey) })}
               </Text>
             </View>
           </View>
@@ -212,14 +213,14 @@ export default function AccountTiersExplainedScreen() {
                         { backgroundColor: tier.color },
                       ]}
                     >
-                      <Text style={styles.tierBadgeText}>CURRENT</Text>
+                      <Text style={styles.tierBadgeText}>{t("account_tiers.badge_current")}</Text>
                     </View>
                   )}
                   {isCompleted && (
                     <View
                       style={[styles.tierBadge, { backgroundColor: GREEN }]}
                     >
-                      <Text style={styles.tierBadgeText}>✓ COMPLETE</Text>
+                      <Text style={styles.tierBadgeText}>{t("account_tiers.badge_complete")}</Text>
                     </View>
                   )}
 
@@ -241,10 +242,10 @@ export default function AccountTiersExplainedScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.tierName}>
-                        Tier {tier.level}: {tier.name}
+                        {t("account_tiers.tier_name_label", { level: tier.level, name: t(tier.nameKey) })}
                       </Text>
                       <Text style={styles.tierRequirement}>
-                        Requires: {tier.requirement}
+                        {t("account_tiers.requires_label", { req: t(tier.requirementKey) })}
                       </Text>
                     </View>
                   </View>
@@ -268,7 +269,7 @@ export default function AccountTiersExplainedScreen() {
                             !feature.included && styles.featureTextDisabled,
                           ]}
                         >
-                          {feature.text}
+                          {t(feature.textKey)}
                         </Text>
                       </View>
                     ))}
@@ -280,10 +281,10 @@ export default function AccountTiersExplainedScreen() {
                       style={[styles.upgradeButton, { backgroundColor: tier.color }]}
                       onPress={() => handleUpgrade(tier.level)}
                       accessibilityRole="button"
-                      accessibilityLabel={`Upgrade to ${tier.name}`}
+                      accessibilityLabel={t("account_tiers.a11y_upgrade", { name: t(tier.nameKey) })}
                     >
                       <Text style={styles.upgradeButtonText}>
-                        Upgrade to {tier.name}
+                        {t("account_tiers.btn_upgrade", { name: t(tier.nameKey) })}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -297,12 +298,10 @@ export default function AccountTiersExplainedScreen() {
             <Text style={styles.itinEmoji}>💡</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.itinTitle}>
-                Don't have a Social Security Number?
+                {t("account_tiers.itin_title")}
               </Text>
               <Text style={styles.itinBody}>
-                No problem! You can use an ITIN (Individual Taxpayer ID)
-                instead. Anyone can get one, regardless of immigration status.
-                We'll help you apply.
+                {t("account_tiers.itin_body")}
               </Text>
             </View>
           </View>
@@ -316,11 +315,11 @@ export default function AccountTiersExplainedScreen() {
           onPress={handleContinue}
           accessibilityRole="button"
           accessibilityLabel={
-            currentTier < 3 ? "Continue to verification" : "Done"
+            currentTier < 3 ? t("account_tiers.a11y_continue") : t("account_tiers.a11y_done")
           }
         >
           <Text style={styles.continueButtonText}>
-            {currentTier < 3 ? "Continue to Verification" : "Done"}
+            {currentTier < 3 ? t("account_tiers.btn_continue") : t("account_tiers.btn_done")}
           </Text>
         </TouchableOpacity>
       </View>
