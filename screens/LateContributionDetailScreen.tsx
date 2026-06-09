@@ -48,6 +48,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useLateContributionDetails } from "../hooks/useLateContributions";
@@ -72,6 +73,7 @@ type LateContributionDetailRouteProp = RouteProp<
 export default function LateContributionDetailScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<LateContributionDetailRouteProp>();
+  const { t } = useTranslation();
   const lateContributionId = route.params?.lateContributionId ?? "";
 
   const {
@@ -138,7 +140,7 @@ export default function LateContributionDetailScreen() {
             onPress={() => refresh()}
             accessibilityRole="button"
           >
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t("late_contribution.btn_retry")}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -191,7 +193,7 @@ export default function LateContributionDetailScreen() {
               {statusInfo.label}
             </Text>
           </View>
-          <Text style={styles.dueLabel}>Total due</Text>
+          <Text style={styles.dueLabel}>{t("late_contribution.label_total_due")}</Text>
           <Text style={styles.dueAmount}>{formatMoney(totalDue)}</Text>
           {daysOverdue > 0 && (
             <Text style={styles.overdueText}>

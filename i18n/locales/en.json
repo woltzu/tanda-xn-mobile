@@ -2373,5 +2373,60 @@
     "menu_mediation_desc": "Resolve member disputes",
     "menu_audit": "Audit Trail",
     "menu_audit_desc": "Complete activity history"
+  },
+  "make_contribution": {
+    "not_found_header": "Circle Not Found",
+    "not_found_body": "This circle could not be found.",
+    "btn_go_back": "Go Back",
+    "header_title": "Make Contribution",
+    "amount_label": "Contribution Amount",
+    "section_pay_with": "Pay With",
+    "beneficiary_supporting": "Supporting",
+    "section_payment_method": "Payment Method",
+    "tag_insufficient": "Insufficient",
+    "section_payment_summary": "Payment Summary",
+    "summary_circle_contribution": "Circle Contribution",
+    "summary_exchange_rate": "Exchange Rate",
+    "summary_you_pay": "You Pay",
+    "summary_processing_fee": "Processing Fee",
+    "summary_total": "Total",
+    "bottom_total_amount": "Total Amount",
+    "btn_processing": "Processing...",
+    "btn_confirm_payment": "Confirm Payment"
+  },
+  "partial_contribution": {
+    "alert_could_not_activate": "Could not activate",
+    "alert_could_not_cancel": "Could not cancel",
+    "alert_unknown_error": "Unknown error",
+    "header_title": "Flexible Payment",
+    "hero_title": "Need More Time?",
+    "section_breakdown": "Payment Breakdown",
+    "due_today": "Due today",
+    "original_amount": "Original Amount",
+    "section_what_happens": "What Happens",
+    "section_insurance": "Insurance Coverage",
+    "shortfall": "Shortfall",
+    "pool_will_honor": "Pool will honor",
+    "btn_pay_full_instead": "Pay Full Amount Instead"
+  },
+  "contribution_success": {
+    "error_not_found": "Circle not found",
+    "btn_go_home": "Go Home",
+    "title_success": "Payment Successful!",
+    "detail_transaction_id": "Transaction ID",
+    "detail_payment_method": "Payment Method",
+    "detail_payment_method_value": "TandaXn Wallet",
+    "detail_status": "Status",
+    "status_confirmed": "Confirmed",
+    "progress_title": "Cycle Progress",
+    "beneficiary_supporting": "Your contribution is supporting",
+    "next_payout": "Next Payout",
+    "btn_share_receipt": "Share Receipt",
+    "btn_view_circle": "View Circle",
+    "btn_home": "Go Home"
+  },
+  "late_contribution": {
+    "btn_retry": "Retry",
+    "label_total_due": "Total due"
   }
 }

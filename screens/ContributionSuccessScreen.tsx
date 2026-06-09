@@ -12,6 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 
@@ -21,6 +22,7 @@ type ContributionSuccessRouteProp = RouteProp<RootStackParamList, "ContributionS
 export default function ContributionSuccessScreen() {
   const navigation = useNavigation<ContributionSuccessNavigationProp>();
   const route = useRoute<ContributionSuccessRouteProp>();
+  const { t } = useTranslation();
   const { circleId, amount, transactionId } = route.params;
   const { circles, browseCircles, myCircles } = useCircles();
 
@@ -70,12 +72,12 @@ export default function ContributionSuccessScreen() {
       <View style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color="#9CA3AF" />
-          <Text style={styles.errorText}>Circle not found</Text>
+          <Text style={styles.errorText}>{t("contribution_success.error_not_found")}</Text>
           <TouchableOpacity
             style={styles.errorButton}
             onPress={() => navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] })}
           >
-            <Text style={styles.errorButtonText}>Go Home</Text>
+            <Text style={styles.errorButtonText}>{t("contribution_success.btn_go_home")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -192,7 +194,7 @@ export default function ContributionSuccessScreen() {
               },
             ]}
           >
-            <Text style={styles.successTitle}>Payment Successful!</Text>
+            <Text style={styles.successTitle}>{t("contribution_success.title_success")}</Text>
             <Text style={styles.successSubtitle}>
               Your contribution has been received
             </Text>
@@ -226,7 +228,7 @@ export default function ContributionSuccessScreen() {
             ]}
           >
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Transaction ID</Text>
+              <Text style={styles.detailLabel}>{t("contribution_success.detail_transaction_id")}</Text>
               <Text style={styles.detailValue}>{transactionId}</Text>
             </View>
 
@@ -236,15 +238,15 @@ export default function ContributionSuccessScreen() {
             </View>
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Payment Method</Text>
-              <Text style={styles.detailValue}>TandaXn Wallet</Text>
+              <Text style={styles.detailLabel}>{t("contribution_success.detail_payment_method")}</Text>
+              <Text style={styles.detailValue}>{t("contribution_success.detail_payment_method_value")}</Text>
             </View>
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Status</Text>
+              <Text style={styles.detailLabel}>{t("contribution_success.detail_status")}</Text>
               <View style={styles.statusBadge}>
                 <Ionicons name="checkmark-circle" size={14} color="#059669" />
-                <Text style={styles.statusText}>Confirmed</Text>
+                <Text style={styles.statusText}>{t("contribution_success.status_confirmed")}</Text>
               </View>
             </View>
           </Animated.View>
@@ -260,7 +262,7 @@ export default function ContributionSuccessScreen() {
             ]}
           >
             <View style={styles.progressHeader}>
-              <Text style={styles.progressTitle}>Cycle Progress</Text>
+              <Text style={styles.progressTitle}>{t("contribution_success.progress_title")}</Text>
               <Text style={styles.progressPercentage}>{Math.round(paymentProgress)}%</Text>
             </View>
 
@@ -302,7 +304,7 @@ export default function ContributionSuccessScreen() {
             >
               <Ionicons name="heart" size={24} color="#FFFFFF" />
               <View style={styles.beneficiaryContent}>
-                <Text style={styles.beneficiaryLabel}>Your contribution is supporting</Text>
+                <Text style={styles.beneficiaryLabel}>{t("contribution_success.beneficiary_supporting")}</Text>
                 <Text style={styles.beneficiaryName}>{circle.beneficiaryName}</Text>
               </View>
             </Animated.View>
@@ -323,7 +325,7 @@ export default function ContributionSuccessScreen() {
                 <Ionicons name="calendar" size={20} color="#F59E0B" />
               </View>
               <View style={styles.nextPayoutContent}>
-                <Text style={styles.nextPayoutLabel}>Next Payout</Text>
+                <Text style={styles.nextPayoutLabel}>{t("contribution_success.next_payout")}</Text>
                 <Text style={styles.nextPayoutDate}>
                   {formatDate(getNextPayoutDate())}
                 </Text>
@@ -335,7 +337,7 @@ export default function ContributionSuccessScreen() {
           {/* Share Button */}
           <TouchableOpacity style={styles.shareButton} onPress={handleShareReceipt}>
             <Ionicons name="share-outline" size={18} color="#FFFFFF" />
-            <Text style={styles.shareButtonText}>Share Receipt</Text>
+            <Text style={styles.shareButtonText}>{t("contribution_success.btn_share_receipt")}</Text>
           </TouchableOpacity>
         </ScrollView>
 
@@ -343,12 +345,12 @@ export default function ContributionSuccessScreen() {
         <View style={styles.bottomActions}>
           <TouchableOpacity style={styles.viewCircleButton} onPress={handleViewCircle}>
             <Ionicons name="eye-outline" size={20} color="#059669" />
-            <Text style={styles.viewCircleButtonText}>View Circle</Text>
+            <Text style={styles.viewCircleButtonText}>{t("contribution_success.btn_view_circle")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>
             <Ionicons name="home-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.homeButtonText}>Go Home</Text>
+            <Text style={styles.homeButtonText}>{t("contribution_success.btn_home")}</Text>
           </TouchableOpacity>
         </View>
       </LinearGradient>

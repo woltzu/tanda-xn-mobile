@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
@@ -92,6 +93,7 @@ const getFrequencyLabel = (frequency: string): string => {
 export default function MakeContributionScreen() {
   const navigation = useNavigation<MakeContributionNavigationProp>();
   const route = useRoute<MakeContributionRouteProp>();
+  const { t } = useTranslation();
   const { circleId } = route.params;
   const { circles, browseCircles, myCircles } = useCircles();
   const { user } = useAuth();
@@ -161,16 +163,16 @@ export default function MakeContributionScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Circle Not Found</Text>
+          <Text style={styles.headerTitle}>{t("make_contribution.not_found_header")}</Text>
         </LinearGradient>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color="#9CA3AF" />
-          <Text style={styles.errorText}>This circle could not be found.</Text>
+          <Text style={styles.errorText}>{t("make_contribution.not_found_body")}</Text>
           <TouchableOpacity
             style={styles.errorButton}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.errorButtonText}>Go Back</Text>
+            <Text style={styles.errorButtonText}>{t("make_contribution.btn_go_back")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -347,7 +349,7 @@ export default function MakeContributionScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Make Contribution</Text>
+            <Text style={styles.headerTitle}>{t("make_contribution.header_title")}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -371,7 +373,7 @@ export default function MakeContributionScreen() {
         <View style={styles.content}>
           {/* Amount Card */}
           <View style={styles.amountCard}>
-            <Text style={styles.amountLabel}>Contribution Amount</Text>
+            <Text style={styles.amountLabel}>{t("make_contribution.amount_label")}</Text>
             <Text style={styles.amountValue}>
               {circleCurrencyInfo?.symbol}{formatCurrency(amount, circleCurrency)}
             </Text>
@@ -383,7 +385,7 @@ export default function MakeContributionScreen() {
           {/* Currency Selection for Cross-Border */}
           <View style={styles.currencySection}>
             <View style={styles.currencySectionHeader}>
-              <Text style={styles.sectionTitle}>Pay With</Text>
+              <Text style={styles.sectionTitle}>{t("make_contribution.section_pay_with")}</Text>
               <TouchableOpacity onPress={() => setShowCurrencyOptions(!showCurrencyOptions)}>
                 <Text style={styles.changeCurrency}>
                   {showCurrencyOptions ? "Hide options" : "Change currency"}
@@ -473,7 +475,7 @@ export default function MakeContributionScreen() {
                 <Ionicons name="heart" size={20} color="#00C6AE" />
               </View>
               <View style={styles.beneficiaryContent}>
-                <Text style={styles.beneficiaryLabel}>Supporting</Text>
+                <Text style={styles.beneficiaryLabel}>{t("make_contribution.beneficiary_supporting")}</Text>
                 <Text style={styles.beneficiaryName}>{circle.beneficiaryName}</Text>
               </View>
             </View>
@@ -492,7 +494,7 @@ export default function MakeContributionScreen() {
 
           {/* Payment Methods */}
           <View style={styles.paymentSection}>
-            <Text style={styles.sectionTitle}>Payment Method</Text>
+            <Text style={styles.sectionTitle}>{t("make_contribution.section_payment_method")}</Text>
 
             {paymentMethods.map((method) => {
               const isSelected = selectedMethod === method.id;
@@ -534,7 +536,7 @@ export default function MakeContributionScreen() {
                         </Text>
                         {insufficientBalance && (
                           <View style={styles.insufficientBadge}>
-                            <Text style={styles.insufficientText}>Insufficient</Text>
+                            <Text style={styles.insufficientText}>{t("make_contribution.tag_insufficient")}</Text>
                           </View>
                         )}
                       </View>
@@ -556,18 +558,18 @@ export default function MakeContributionScreen() {
 
           {/* Payment Summary */}
           <View style={styles.summaryCard}>
-            <Text style={styles.sectionTitle}>Payment Summary</Text>
+            <Text style={styles.sectionTitle}>{t("make_contribution.section_payment_summary")}</Text>
 
             {isCrossBorder && (
               <>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Circle Contribution</Text>
+                  <Text style={styles.summaryLabel}>{t("make_contribution.summary_circle_contribution")}</Text>
                   <Text style={styles.summaryValue}>
                     {circleCurrencyInfo?.symbol}{formatCurrency(amount, circleCurrency)} {circleCurrency}
                   </Text>
                 </View>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Exchange Rate</Text>
+                  <Text style={styles.summaryLabel}>{t("make_contribution.summary_exchange_rate")}</Text>
                   <Text style={styles.summaryValue}>
                     1 {paymentCurrency} = {exchangeInfo?.rate.toFixed(4)} {circleCurrency}
                   </Text>
@@ -576,14 +578,14 @@ export default function MakeContributionScreen() {
             )}
 
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>You Pay</Text>
+              <Text style={styles.summaryLabel}>{t("make_contribution.summary_you_pay")}</Text>
               <Text style={styles.summaryValue}>
                 {currencyInfo?.symbol}{formatCurrency(paymentAmount, paymentCurrency)} {paymentCurrency}
               </Text>
             </View>
 
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Processing Fee</Text>
+              <Text style={styles.summaryLabel}>{t("make_contribution.summary_processing_fee")}</Text>
               <Text style={[styles.summaryValue, { color: "#00C6AE" }]}>
                 {currencyInfo?.symbol}0.00
               </Text>
@@ -592,7 +594,7 @@ export default function MakeContributionScreen() {
             <View style={styles.summaryDivider} />
 
             <View style={styles.summaryRow}>
-              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalLabel}>{t("make_contribution.summary_total")}</Text>
               <Text style={styles.totalValue}>
                 {currencyInfo?.symbol}{formatCurrency(paymentAmount, paymentCurrency)} {paymentCurrency}
               </Text>
@@ -614,7 +616,7 @@ export default function MakeContributionScreen() {
       <View style={styles.bottomBar}>
         <View style={styles.bottomBarRow}>
           <View style={styles.bottomSummary}>
-            <Text style={styles.bottomLabel}>Total Amount</Text>
+            <Text style={styles.bottomLabel}>{t("make_contribution.bottom_total_amount")}</Text>
             <Text style={styles.bottomAmount}>
               {currencyInfo?.symbol}{formatCurrency(paymentAmount, paymentCurrency)}
             </Text>
@@ -634,11 +636,11 @@ export default function MakeContributionScreen() {
             disabled={isProcessing}
           >
             {isProcessing ? (
-              <Text style={styles.confirmButtonText}>Processing...</Text>
+              <Text style={styles.confirmButtonText}>{t("make_contribution.btn_processing")}</Text>
             ) : (
               <>
                 <Ionicons name="lock-closed" size={18} color="#FFFFFF" />
-                <Text style={styles.confirmButtonText}>Confirm Payment</Text>
+                <Text style={styles.confirmButtonText}>{t("make_contribution.btn_confirm_payment")}</Text>
               </>
             )}
           </TouchableOpacity>

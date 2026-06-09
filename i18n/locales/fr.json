@@ -2373,5 +2373,60 @@
     "menu_mediation_desc": "Résoudre les disputes entre membres",
     "menu_audit": "Piste d'audit",
     "menu_audit_desc": "Historique d'activité complet"
+  },
+  "make_contribution": {
+    "not_found_header": "Cercle introuvable",
+    "not_found_body": "Ce cercle n'a pas pu être trouvé.",
+    "btn_go_back": "Retour",
+    "header_title": "Effectuer une contribution",
+    "amount_label": "Montant de la contribution",
+    "section_pay_with": "Payer avec",
+    "beneficiary_supporting": "Soutien à",
+    "section_payment_method": "Mode de paiement",
+    "tag_insufficient": "Insuffisant",
+    "section_payment_summary": "Résumé du paiement",
+    "summary_circle_contribution": "Contribution au cercle",
+    "summary_exchange_rate": "Taux de change",
+    "summary_you_pay": "Vous payez",
+    "summary_processing_fee": "Frais de traitement",
+    "summary_total": "Total",
+    "bottom_total_amount": "Montant total",
+    "btn_processing": "Traitement...",
+    "btn_confirm_payment": "Confirmer le paiement"
+  },
+  "partial_contribution": {
+    "alert_could_not_activate": "Impossible d'activer",
+    "alert_could_not_cancel": "Impossible d'annuler",
+    "alert_unknown_error": "Erreur inconnue",
+    "header_title": "Paiement flexible",
+    "hero_title": "Besoin de plus de temps ?",
+    "section_breakdown": "Ventilation du paiement",
+    "due_today": "Dû aujourd'hui",
+    "original_amount": "Montant initial",
+    "section_what_happens": "Ce qui se passe",
+    "section_insurance": "Couverture d'assurance",
+    "shortfall": "Manque",
+    "pool_will_honor": "Le pool honorera",
+    "btn_pay_full_instead": "Payer le montant complet à la place"
+  },
+  "contribution_success": {
+    "error_not_found": "Cercle introuvable",
+    "btn_go_home": "Aller à l'accueil",
+    "title_success": "Paiement réussi !",
+    "detail_transaction_id": "ID de transaction",
+    "detail_payment_method": "Mode de paiement",
+    "detail_payment_method_value": "Portefeuille TandaXn",
+    "detail_status": "Statut",
+    "status_confirmed": "Confirmé",
+    "progress_title": "Progression du cycle",
+    "beneficiary_supporting": "Votre contribution soutient",
+    "next_payout": "Prochain paiement",
+    "btn_share_receipt": "Partager le reçu",
+    "btn_view_circle": "Voir le cercle",
+    "btn_home": "Aller à l'accueil"
+  },
+  "late_contribution": {
+    "btn_retry": "Réessayer",
+    "label_total_due": "Total dû"
   }
 }

@@ -34,6 +34,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useActivePlan } from "../hooks/usePartialContribution";
@@ -97,6 +98,7 @@ const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
 export default function PartialContributionScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: RouteParams }, "params">>();
+  const { t } = useTranslation();
   const { circleId, cycleId: paramCycleId } = route.params;
   const { user } = useAuth();
 
@@ -197,19 +199,19 @@ export default function PartialContributionScreen() {
         p_cycle_id: resolvedCycleId,
       });
       if (error) {
-        Alert.alert("Could not activate", error.message);
+        Alert.alert(t("partial_contribution.alert_could_not_activate"), error.message);
         return;
       }
       const result = data as { success: boolean; error?: string; plan_id?: string };
       if (!result.success) {
-        Alert.alert("Could not activate", result.error ?? "Unknown error");
+        Alert.alert(t("partial_contribution.alert_could_not_activate"), result.error ?? t("partial_contribution.alert_unknown_error"));
         return;
       }
       // Refresh both preview (eligibility now blocks) and the active plan
       await Promise.all([fetchPreview(), refetchPlan()]);
       setViewMode("tracking");
     } catch (err: any) {
-      Alert.alert("Could not activate", err?.message ?? "Unknown error");
+      Alert.alert(t("partial_contribution.alert_could_not_activate"), err?.message ?? t("partial_contribution.alert_unknown_error"));
     } finally {
       setActivating(false);
     }
@@ -239,7 +241,7 @@ export default function PartialContributionScreen() {
                 })
                 .eq("id", plan.id);
               if (error) {
-                Alert.alert("Could not cancel", error.message);
+                Alert.alert(t("partial_contribution.alert_could_not_cancel"), error.message);
                 return;
               }
               await Promise.all([fetchPreview(), refetchPlan()]);
@@ -294,7 +296,7 @@ export default function PartialContributionScreen() {
           <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={22} color="#FFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Flexible Payment</Text>
+          <Text style={styles.headerTitle}>{t("partial_contribution.header_title")}</Text>
           <View style={styles.headerBtn} />
         </View>
         <View style={styles.errorBox}>
@@ -319,7 +321,7 @@ export default function PartialContributionScreen() {
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={22} color="#FFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Flexible Payment</Text>
+        <Text style={styles.headerTitle}>{t("partial_contribution.header_title")}</Text>
         <View style={styles.headerBtn} />
       </View>
 
@@ -389,7 +391,7 @@ export default function PartialContributionScreen() {
                 <View style={styles.heroIcon}>
                   <Ionicons name="calendar-outline" size={32} color={COLORS.teal} />
                 </View>
-                <Text style={styles.heroTitle}>Need More Time?</Text>
+                <Text style={styles.heroTitle}>{t("partial_contribution.hero_title")}</Text>
                 <Text style={styles.heroSubtitle}>
                   Pay 50% now and split the rest over the next 2 cycles. No
                   penalty to your XnScore.
@@ -428,14 +430,14 @@ export default function PartialContributionScreen() {
             {/* Payment Breakdown */}
             {summary && (
               <View style={styles.card}>
-                <Text style={styles.sectionTitle}>Payment Breakdown</Text>
+                <Text style={styles.sectionTitle}>{t("partial_contribution.section_breakdown")}</Text>
 
                 <View style={styles.breakdownRow}>
                   <View style={styles.breakdownLeft}>
                     <View style={[styles.dot, { backgroundColor: COLORS.teal }]} />
                     <View>
                       <Text style={styles.breakdownLabel}>Pay Now (50%)</Text>
-                      <Text style={styles.mutedText}>Due today</Text>
+                      <Text style={styles.mutedText}>{t("partial_contribution.due_today")}</Text>
                     </View>
                   </View>
                   <Text style={styles.breakdownAmount}>
@@ -468,7 +470,7 @@ export default function PartialContributionScreen() {
                 ))}
 
                 <View style={[styles.breakdownRow, { borderBottomWidth: 0 }]}>
-                  <Text style={styles.mutedText}>Original Amount</Text>
+                  <Text style={styles.mutedText}>{t("partial_contribution.original_amount")}</Text>
                   <Text
                     style={[
                       styles.breakdownAmount,
@@ -484,7 +486,7 @@ export default function PartialContributionScreen() {
 
             {/* What happens */}
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>What Happens</Text>
+              <Text style={styles.sectionTitle}>{t("partial_contribution.section_what_happens")}</Text>
               {[
                 {
                   icon: "shield-checkmark" as const,
@@ -513,15 +515,15 @@ export default function PartialContributionScreen() {
             {/* Coverage detail */}
             {coverage && coverage.coverage_status !== "no_pool" && summary && (
               <View style={styles.card}>
-                <Text style={styles.sectionTitle}>Insurance Coverage</Text>
+                <Text style={styles.sectionTitle}>{t("partial_contribution.section_insurance")}</Text>
                 <View style={styles.row}>
-                  <Text style={styles.mutedText}>Shortfall</Text>
+                  <Text style={styles.mutedText}>{t("partial_contribution.shortfall")}</Text>
                   <Text style={styles.value}>
                     {formatCents(coverage.shortfall_cents)}
                   </Text>
                 </View>
                 <View style={styles.row}>
-                  <Text style={styles.mutedText}>Pool will honor</Text>
+                  <Text style={styles.mutedText}>{t("partial_contribution.pool_will_honor")}</Text>
                   <Text
                     style={[
                       styles.value,
@@ -577,7 +579,7 @@ export default function PartialContributionScreen() {
               style={styles.secondaryButton}
               onPress={() => navigation.goBack()}
             >
-              <Text style={styles.secondaryButtonText}>Pay Full Amount Instead</Text>
+              <Text style={styles.secondaryButtonText}>{t("partial_contribution.btn_pay_full_instead")}</Text>
             </TouchableOpacity>
           </>
         ) : (
