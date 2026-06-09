@@ -46,6 +46,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useFormDraft } from "../hooks/useFormDraft";
 import { Routes } from "../lib/routes";
@@ -96,6 +97,7 @@ const DEFAULT_PAYOUTS: PayoutOption[] = [
 export default function ApplicationFlowScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<ApplicationFlowRouteProp>();
+  const { t } = useTranslation();
 
   const upcomingPayouts = route.params?.upcomingPayouts ?? DEFAULT_PAYOUTS;
 
@@ -281,8 +283,10 @@ export default function ApplicationFlowScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Request Advance</Text>
-              <Text style={styles.headerSubtitle}>Step {step} of 3</Text>
+              <Text style={styles.headerTitle}>{t("application_flow.header")}</Text>
+              <Text style={styles.headerSubtitle}>
+                {t("application_flow.step_indicator", { step, total: 3 })}
+              </Text>
             </View>
           </View>
 
@@ -306,7 +310,7 @@ export default function ApplicationFlowScreen() {
           {hasDraft && !bannerDismissed && (
             <View style={styles.draftBanner}>
               <Text style={styles.draftBannerText}>
-                You have an unfinished advance application. Restore it?
+                {t("application_flow.draft_banner_text")}
               </Text>
               <View style={styles.draftBannerActions}>
                 <TouchableOpacity
@@ -315,7 +319,7 @@ export default function ApplicationFlowScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Restore draft application"
                 >
-                  <Text style={styles.draftBannerButtonText}>Restore</Text>
+                  <Text style={styles.draftBannerButtonText}>{t("application_flow.draft_restore")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.draftBannerButton}
@@ -323,7 +327,7 @@ export default function ApplicationFlowScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Discard draft application"
                 >
-                  <Text style={styles.draftBannerButtonText}>Discard</Text>
+                  <Text style={styles.draftBannerButtonText}>{t("application_flow.draft_discard")}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -334,11 +338,10 @@ export default function ApplicationFlowScreen() {
             <View>
               <View style={styles.sectionCard}>
                 <Text style={styles.fieldLabel}>
-                  Which circle payout do you want to advance?
+                  {t("application_flow.step1_field_label")}
                 </Text>
                 <Text style={styles.fieldHint}>
-                  Select the payout you want to receive early. We'll
-                  automatically withhold repayment when it arrives.
+                  {t("application_flow.step1_field_hint")}
                 </Text>
 
                 <View style={styles.payoutList}>
@@ -374,7 +377,7 @@ export default function ApplicationFlowScreen() {
                               {payout.circleName}
                             </Text>
                             <Text style={styles.payoutDate}>
-                              Payout: {payout.date}
+                              {t("application_flow.step1_payout_date", { date: payout.date })}
                             </Text>
                           </View>
                         </View>
@@ -388,7 +391,7 @@ export default function ApplicationFlowScreen() {
                             ${payout.amount}
                           </Text>
                           <Text style={styles.payoutMax}>
-                            Up to ${payout.maxAdvance}
+                            {t("application_flow.step1_payout_max", { amount: payout.maxAdvance })}
                           </Text>
                         </View>
                       </TouchableOpacity>
@@ -400,12 +403,14 @@ export default function ApplicationFlowScreen() {
               {selectedPayout && (
                 <View style={styles.selectedBanner}>
                   <Text style={styles.selectedBannerText}>
-                    <Text style={styles.selectedBannerStrong}>Selected:</Text>{" "}
-                    {selectedPayout.circleName} payout of $
-                    {selectedPayout.amount}
+                    <Text style={styles.selectedBannerStrong}>{t("application_flow.step1_selected_prefix")}</Text>
+                    {t("application_flow.step1_selected_text", {
+                      circle: selectedPayout.circleName,
+                      amount: selectedPayout.amount,
+                    })}
                     {"\n"}
                     <Text style={styles.selectedBannerSub}>
-                      You can advance up to 80% (${selectedPayout.maxAdvance})
+                      {t("application_flow.step1_selected_sub", { amount: selectedPayout.maxAdvance })}
                     </Text>
                   </Text>
                 </View>
@@ -417,32 +422,32 @@ export default function ApplicationFlowScreen() {
           {step === 2 && selectedPayout && (
             <View>
               <View style={styles.sectionCard}>
-                <Text style={styles.detailsTitle}>Advance Details</Text>
+                <Text style={styles.detailsTitle}>{t("application_flow.step2_details_title")}</Text>
                 <View style={styles.detailsList}>
                   <DetailRow
-                    label="Advancing from"
+                    label={t("application_flow.step2_detail_advancing_from")}
                     value={selectedPayout.circleName}
                   />
-                  <DetailRow label="Payout date" value={selectedPayout.date} />
+                  <DetailRow label={t("application_flow.step2_detail_payout_date")} value={selectedPayout.date} />
                   <DetailRow
-                    label="Payout amount"
+                    label={t("application_flow.step2_detail_payout_amount")}
                     value={`$${selectedPayout.amount}`}
                   />
                   <View style={styles.divider} />
                   <DetailRow
-                    label="Advance amount"
+                    label={t("application_flow.step2_detail_advance_amount")}
                     value={`$${advanceDetails.amount}`}
                     valueStyle={styles.tealLargeValue}
                   />
                   <DetailRow
-                    label={`Advance fee (${advanceDetails.rate}%)`}
+                    label={t("application_flow.step2_detail_advance_fee", { rate: advanceDetails.rate })}
                     value={`+$${advanceDetails.fee.toFixed(2)}`}
                     valueStyle={styles.amberValue}
                   />
                   <View style={styles.divider} />
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabelStrong}>
-                      Total withheld from payout
+                      {t("application_flow.step2_detail_total_withheld")}
                     </Text>
                     <Text style={styles.detailValueBig}>
                       ${advanceDetails.total.toFixed(2)}
@@ -453,40 +458,42 @@ export default function ApplicationFlowScreen() {
 
               {/* After-withhold card */}
               <View style={styles.afterCard}>
-                <Text style={styles.afterLabel}>After repayment, you keep:</Text>
+                <Text style={styles.afterLabel}>{t("application_flow.step2_after_label")}</Text>
                 <Text style={styles.afterAmount}>
                   $
                   {(selectedPayout.amount - advanceDetails.total).toFixed(2)}
                 </Text>
                 <Text style={styles.afterSub}>
-                  From your ${selectedPayout.amount} payout
+                  {t("application_flow.step2_after_sub", { amount: selectedPayout.amount })}
                 </Text>
               </View>
 
               {/* Timeline */}
               <View style={styles.sectionCard}>
-                <Text style={styles.detailsTitle}>What happens next</Text>
+                <Text style={styles.detailsTitle}>{t("application_flow.step2_timeline_title")}</Text>
                 <View style={styles.timelineList}>
                   {[
                     {
                       icon: "⚡",
-                      title: "Instant",
-                      text: `$${advanceDetails.amount} sent to your wallet now`,
+                      title: t("application_flow.step2_timeline_instant_title"),
+                      text: t("application_flow.step2_timeline_instant_text", { amount: advanceDetails.amount }),
                     },
                     {
                       icon: "📅",
                       title: selectedPayout.date,
-                      text: "Your circle payout arrives",
+                      text: t("application_flow.step2_timeline_payout_text"),
                     },
                     {
                       icon: "🔄",
-                      title: "Auto-withhold",
-                      text: `$${advanceDetails.total.toFixed(2)} deducted automatically`,
+                      title: t("application_flow.step2_timeline_auto_title"),
+                      text: t("application_flow.step2_timeline_auto_text", { amount: advanceDetails.total.toFixed(2) }),
                     },
                     {
                       icon: "✅",
-                      title: "Done",
-                      text: `$${(selectedPayout.amount - advanceDetails.total).toFixed(2)} credited to your wallet`,
+                      title: t("application_flow.step2_timeline_done_title"),
+                      text: t("application_flow.step2_timeline_done_text", {
+                        amount: (selectedPayout.amount - advanceDetails.total).toFixed(2),
+                      }),
                     },
                   ].map((item, idx) => (
                     <View key={idx} style={styles.timelineRow}>
@@ -508,7 +515,7 @@ export default function ApplicationFlowScreen() {
           {step === 3 && (
             <View>
               <View style={styles.sectionCard}>
-                <Text style={styles.detailsTitle}>Auto-Repayment Agreement</Text>
+                <Text style={styles.detailsTitle}>{t("application_flow.step3_title")}</Text>
 
                 <CheckboxRow
                   checked={agreedToWithholding}
@@ -516,12 +523,13 @@ export default function ApplicationFlowScreen() {
                   accent={TEAL}
                   bgChecked="#F0FDFB"
                 >
-                  I authorize TandaXn to{" "}
+                  {t("application_flow.step3_agree_withholding_prefix")}
                   <Text style={styles.checkboxStrong}>
-                    withhold ${advanceDetails.total.toFixed(2)}
-                  </Text>{" "}
-                  from my {selectedPayout?.circleName} payout on{" "}
-                  <Text style={styles.checkboxStrong}>{selectedPayout?.date}</Text>.
+                    {t("application_flow.step3_agree_withholding_strong", { amount: advanceDetails.total.toFixed(2) })}
+                  </Text>
+                  {t("application_flow.step3_agree_withholding_middle", { circle: selectedPayout?.circleName ?? "" })}
+                  <Text style={styles.checkboxStrong}>{selectedPayout?.date}</Text>
+                  {t("application_flow.step3_agree_withholding_suffix")}
                 </CheckboxRow>
 
                 <CheckboxRow
@@ -530,9 +538,9 @@ export default function ApplicationFlowScreen() {
                   accent={AMBER}
                   bgChecked="#FEF3C7"
                 >
-                  I understand that if my payout is insufficient, my{" "}
-                  <Text style={styles.checkboxStrong}>XnScore drops 20 points</Text>{" "}
-                  and I may be restricted from circles until I repay.
+                  {t("application_flow.step3_agree_default_prefix")}
+                  <Text style={styles.checkboxStrong}>{t("application_flow.step3_agree_default_strong")}</Text>
+                  {t("application_flow.step3_agree_default_suffix")}
                 </CheckboxRow>
 
                 <CheckboxRow
@@ -541,23 +549,23 @@ export default function ApplicationFlowScreen() {
                   accent={TEAL}
                   bgChecked="#F0FDFB"
                 >
-                  I have read and agree to the{" "}
-                  <Text style={styles.linkText}>Advance Payout Terms</Text> and
-                  understand this is not a traditional loan.
+                  {t("application_flow.step3_agree_terms_prefix")}
+                  <Text style={styles.linkText}>{t("application_flow.step3_agree_terms_link")}</Text>
+                  {t("application_flow.step3_agree_terms_suffix")}
                 </CheckboxRow>
               </View>
 
               {/* Summary card */}
               <View style={styles.summaryCard}>
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>You receive now</Text>
+                  <Text style={styles.summaryLabel}>{t("application_flow.step3_summary_you_receive")}</Text>
                   <Text style={styles.summaryReceive}>
                     ${advanceDetails.amount}
                   </Text>
                 </View>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>
-                    Withheld on {selectedPayout?.date}
+                    {t("application_flow.step3_summary_withheld_on", { date: selectedPayout?.date ?? "" })}
                   </Text>
                   <Text style={styles.summaryWithheld}>
                     ${advanceDetails.total.toFixed(2)}
@@ -588,8 +596,8 @@ export default function ApplicationFlowScreen() {
             ]}
           >
             {step < 3
-              ? "Continue"
-              : `Confirm & Get $${advanceDetails.amount} Now`}
+              ? t("application_flow.btn_continue")
+              : t("application_flow.btn_confirm_get", { amount: advanceDetails.amount })}
           </Text>
         </TouchableOpacity>
       </View>

@@ -43,6 +43,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -99,15 +100,18 @@ const BASE_RATES: Record<AdvanceType, number> = {
 const MAX_ADVANCE_PERCENT = 80;
 const LOCAL_LENDER_RATE = 15;
 
-const TYPE_TITLES: Record<AdvanceType, string> = {
-  contribution: "Contribution Cover",
-  quick: "Quick Advance",
-  flex: "Flex Advance",
+// i18n: type → translation key. Resolved per-render via t() at the
+// call site so language flips re-paint without re-instantiating.
+const TYPE_TITLE_KEYS: Record<AdvanceType, string> = {
+  contribution: "smart_calculator.type_contribution",
+  quick: "smart_calculator.type_quick",
+  flex: "smart_calculator.type_flex",
 };
 
 export default function SmartCalculatorScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<SmartCalculatorRouteProp>();
+  const { t } = useTranslation();
 
   const advanceType: AdvanceType = route.params?.advanceType ?? "quick";
   const user = route.params?.user ?? DEFAULT_USER;
@@ -223,8 +227,8 @@ export default function SmartCalculatorScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>{TYPE_TITLES[advanceType]}</Text>
-              <Text style={styles.headerSubtitle}>Calculate your advance</Text>
+              <Text style={styles.headerTitle}>{t(TYPE_TITLE_KEYS[advanceType])}</Text>
+              <Text style={styles.headerSubtitle}>{t("smart_calculator.header_subtitle")}</Text>
             </View>
           </View>
 
@@ -236,12 +240,12 @@ export default function SmartCalculatorScreen() {
               </View>
               <View>
                 <Text style={styles.rateScoreLabel}>
-                  Your XnScore {user.xnScore} →
+                  {t("smart_calculator.rate_score_arrow", { score: user.xnScore })}
                 </Text>
                 <Text style={styles.rateValue}>
                   {rateInfo.type === "flat"
-                    ? `$${rateInfo.fee} flat fee`
-                    : `${rateInfo.rate.toFixed(1)}% rate`}
+                    ? t("smart_calculator.rate_flat_fee", { fee: rateInfo.fee })
+                    : t("smart_calculator.rate_percent", { rate: rateInfo.rate.toFixed(1) })}
                 </Text>
               </View>
             </View>
@@ -251,7 +255,7 @@ export default function SmartCalculatorScreen() {
               accessibilityRole="button"
               accessibilityLabel="Why this rate?"
             >
-              <Text style={styles.whyButtonText}>Why this rate?</Text>
+              <Text style={styles.whyButtonText}>{t("smart_calculator.why_this_rate")}</Text>
             </TouchableOpacity>
           </View>
         </LinearGradient>
@@ -259,28 +263,28 @@ export default function SmartCalculatorScreen() {
         <View style={styles.contentWrap}>
           {/* Advancing against */}
           <View style={styles.sectionCard}>
-            <Text style={styles.fieldLabel}>Advancing against</Text>
+            <Text style={styles.fieldLabel}>{t("smart_calculator.field_advancing_against")}</Text>
             <View style={styles.payoutRow}>
               <View>
                 <Text style={styles.payoutCircle}>
                   {upcomingPayout.circleName}
                 </Text>
                 <Text style={styles.payoutDate}>
-                  Payout: {upcomingPayout.date}
+                  {t("smart_calculator.payout_date_prefix", { date: upcomingPayout.date })}
                 </Text>
               </View>
               <View style={{ alignItems: "flex-end" }}>
                 <Text style={styles.payoutAmount}>
                   ${upcomingPayout.amount}
                 </Text>
-                <Text style={styles.payoutMax}>Max: ${maxAdvance}</Text>
+                <Text style={styles.payoutMax}>{t("smart_calculator.payout_max_prefix", { amount: maxAdvance })}</Text>
               </View>
             </View>
           </View>
 
           {/* Amount controls */}
           <View style={styles.sectionCard}>
-            <Text style={styles.fieldLabel}>How much do you need?</Text>
+            <Text style={styles.fieldLabel}>{t("smart_calculator.field_how_much")}</Text>
 
             <View style={styles.amountDisplay}>
               <Text style={styles.amountText}>${amount}</Text>
@@ -324,7 +328,7 @@ export default function SmartCalculatorScreen() {
 
             <View style={styles.rangeLabels}>
               <Text style={styles.rangeLabel}>${minAmount}</Text>
-              <Text style={styles.rangeLabel}>${maxAdvance} (80% max)</Text>
+              <Text style={styles.rangeLabel}>{t("smart_calculator.range_max_suffix", { amount: maxAdvance })}</Text>
             </View>
 
             {/* Quick amount buttons */}
@@ -352,21 +356,23 @@ export default function SmartCalculatorScreen() {
           {/* Term selector — hidden for contribution */}
           {advanceType !== "contribution" && (
             <View style={styles.sectionCard}>
-              <Text style={styles.fieldLabel}>Repayment Term</Text>
+              <Text style={styles.fieldLabel}>{t("smart_calculator.field_repayment_term")}</Text>
               <View style={styles.termRow}>
-                {termOptions.map((t) => {
-                  const isActive = term === t;
+                {termOptions.map((termOpt) => {
+                  const isActive = term === termOpt;
                   return (
                     <TouchableOpacity
-                      key={t}
+                      key={termOpt}
                       style={[styles.termButton, isActive && styles.termButtonActive]}
-                      onPress={() => setTerm(t)}
+                      onPress={() => setTerm(termOpt)}
                       accessibilityRole="button"
                       accessibilityState={{ selected: isActive }}
                     >
-                      <Text style={styles.termValue}>{t}</Text>
+                      <Text style={styles.termValue}>{termOpt}</Text>
                       <Text style={styles.termUnit}>
-                        {advanceType === "quick" ? "weeks" : "months"}
+                        {advanceType === "quick"
+                          ? t("smart_calculator.term_unit_weeks")
+                          : t("smart_calculator.term_unit_months")}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -377,15 +383,16 @@ export default function SmartCalculatorScreen() {
 
           {/* Cost summary */}
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Your Advance Summary</Text>
+            <Text style={styles.summaryTitle}>{t("smart_calculator.summary_title")}</Text>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Advance amount</Text>
+              <Text style={styles.summaryLabel}>{t("smart_calculator.summary_advance_amount")}</Text>
               <Text style={styles.summaryValue}>${amount}</Text>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>
-                Advance fee{" "}
-                {rateInfo.type !== "flat" && `(${rateInfo.rate.toFixed(1)}%)`}
+                {rateInfo.type === "flat"
+                  ? t("smart_calculator.summary_advance_fee_flat")
+                  : t("smart_calculator.summary_advance_fee_pct", { rate: rateInfo.rate.toFixed(1) })}
               </Text>
               <Text style={styles.summaryFee}>+${advanceFee.toFixed(2)}</Text>
             </View>
@@ -393,8 +400,8 @@ export default function SmartCalculatorScreen() {
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabelStrong}>
                 {advanceType === "contribution"
-                  ? "Auto-withheld from payout"
-                  : "Total to repay"}
+                  ? t("smart_calculator.summary_total_withheld")
+                  : t("smart_calculator.summary_total_to_repay")}
               </Text>
               <Text style={styles.summaryTotal}>
                 ${totalRepayment.toFixed(2)}
@@ -402,9 +409,9 @@ export default function SmartCalculatorScreen() {
             </View>
             {monthlyPayment != null && (
               <View style={[styles.summaryRow, { marginTop: 8 }]}>
-                <Text style={styles.summaryLabel}>Monthly payment</Text>
+                <Text style={styles.summaryLabel}>{t("smart_calculator.summary_monthly_payment")}</Text>
                 <Text style={styles.summaryValue}>
-                  ${monthlyPayment.toFixed(2)}/mo
+                  {t("smart_calculator.summary_monthly_value", { amount: monthlyPayment.toFixed(2) })}
                 </Text>
               </View>
             )}
@@ -432,7 +439,7 @@ export default function SmartCalculatorScreen() {
                     { color: isAffordable ? "#065F46" : "#92400E" },
                   ]}
                 >
-                  {isAffordable ? "Affordable ✓" : "High payment warning"}
+                  {isAffordable ? t("smart_calculator.affordability_ok") : t("smart_calculator.affordability_warn")}
                 </Text>
                 <Text
                   style={[
@@ -440,9 +447,12 @@ export default function SmartCalculatorScreen() {
                     { color: isAffordable ? "#047857" : "#B45309" },
                   ]}
                 >
-                  Monthly payment: ${monthlyPayment.toFixed(2)} (
-                  {affordabilityPercent.toFixed(0)}% of your ${user.smc} SMC)
-                  {!isAffordable && " — Consider a smaller amount or longer term"}
+                  {t("smart_calculator.affordability_body", {
+                    payment: monthlyPayment.toFixed(2),
+                    percent: affordabilityPercent.toFixed(0),
+                    smc: user.smc,
+                  })}
+                  {!isAffordable && t("smart_calculator.affordability_body_warn_suffix")}
                 </Text>
               </View>
             </View>
@@ -451,32 +461,32 @@ export default function SmartCalculatorScreen() {
           {/* Comparison */}
           <View style={styles.sectionCard}>
             <Text style={[styles.fieldLabel, { marginBottom: 12 }]}>
-              Compare & Save
+              {t("smart_calculator.comparison_label")}
             </Text>
             <View style={styles.comparisonRow}>
               <View style={styles.compChip}>
-                <Text style={styles.compLabel}>Local money lender</Text>
+                <Text style={styles.compLabel}>{t("smart_calculator.comp_local_label")}</Text>
                 <Text style={styles.compRateStrike}>{LOCAL_LENDER_RATE}%</Text>
                 <Text style={styles.compFee}>
-                  Fee: ${localLenderFee.toFixed(2)}
+                  {t("smart_calculator.comp_fee_prefix", { amount: localLenderFee.toFixed(2) })}
                 </Text>
               </View>
               <View style={styles.compChipWin}>
-                <Text style={styles.compLabelWin}>TandaXn</Text>
+                <Text style={styles.compLabelWin}>{t("smart_calculator.comp_tandaxn_label")}</Text>
                 <Text style={styles.compRateWin}>
                   {rateInfo.type === "flat"
-                    ? "Flat fee"
-                    : `${rateInfo.rate.toFixed(1)}%`}
+                    ? t("smart_calculator.comp_flat_fee")
+                    : t("smart_calculator.comp_percent", { rate: rateInfo.rate.toFixed(1) })}
                 </Text>
                 <Text style={styles.compFeeWin}>
-                  Fee: ${advanceFee.toFixed(2)}
+                  {t("smart_calculator.comp_fee_prefix", { amount: advanceFee.toFixed(2) })}
                 </Text>
               </View>
             </View>
             {savings > 0 && (
               <View style={styles.savingsBanner}>
                 <Text style={styles.savingsText}>
-                  💰 You save ${savings.toFixed(2)} with TandaXn!
+                  {t("smart_calculator.savings_text", { amount: savings.toFixed(2) })}
                 </Text>
               </View>
             )}
@@ -503,7 +513,7 @@ export default function SmartCalculatorScreen() {
               continueDisabled && styles.primaryButtonTextDisabled,
             ]}
           >
-            Request ${amount} Advance
+            {t("smart_calculator.btn_request_advance", { amount })}
           </Text>
         </TouchableOpacity>
       </View>

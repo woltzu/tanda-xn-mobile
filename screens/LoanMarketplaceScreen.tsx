@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useLoan, LOAN_PRODUCTS, LoanProduct, LoanType, ELIGIBILITY_TIERS } from "../context/AdvanceContext";
@@ -21,6 +22,7 @@ const TYPE_LABELS: Record<LoanType, { label: string; color: string; icon: string
 
 export default function LoanMarketplaceScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const { getEligibility, getAvailableProducts, activeLoans, getTotalOutstanding } = useLoan();
   const { score } = useXnScore();
 
@@ -95,14 +97,14 @@ export default function LoanMarketplaceScreen() {
               <View style={styles.lockedBadge}>
                 <Ionicons name="lock-closed" size={10} color="#6B7280" />
                 <Text style={styles.lockedBadgeText}>
-                  {product.minXnScore}+ XnScore
+                  {t("loan_marketplace.locked_badge", { score: product.minXnScore })}
                 </Text>
               </View>
             )}
             {available && feeRate !== null && (
               <View style={[styles.rateBadge, { backgroundColor: `${typeInfo.color}20` }]}>
                 <Text style={[styles.rateBadgeText, { color: typeInfo.color }]}>
-                  {feeRate}% fee
+                  {t("loan_marketplace.rate_badge", { rate: feeRate })}
                 </Text>
               </View>
             )}
@@ -124,8 +126,11 @@ export default function LoanMarketplaceScreen() {
           </Text>
           <Text style={styles.termRange}>
             {product.minTermMonths === product.maxTermMonths
-              ? `${product.minTermMonths} mo`
-              : `${product.minTermMonths}-${product.maxTermMonths} mo`}
+              ? t("loan_marketplace.term_single", { months: product.minTermMonths })
+              : t("loan_marketplace.term_range", {
+                  min: product.minTermMonths,
+                  max: product.maxTermMonths,
+                })}
           </Text>
         </View>
 
@@ -165,7 +170,7 @@ export default function LoanMarketplaceScreen() {
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Loan Marketplace</Text>
+            <Text style={styles.headerTitle}>{t("loan_marketplace.header")}</Text>
             <TouchableOpacity
               style={styles.calculatorButton}
               onPress={() => navigation.navigate(Routes.LoanCalculator)}
@@ -187,13 +192,13 @@ export default function LoanMarketplaceScreen() {
               </View>
               <Text style={styles.eligibilityLabel}>
                 {eligibility.canApply
-                  ? `${availableProducts.length} products available`
+                  ? t("loan_marketplace.products_available", { count: availableProducts.length })
                   : eligibility.tierInfo.description}
               </Text>
             </View>
             <View style={styles.eligibilityRight}>
               <Text style={styles.xnScoreValue}>{score}</Text>
-              <Text style={styles.xnScoreLabel}>XnScore</Text>
+              <Text style={styles.xnScoreLabel}>{t("loan_marketplace.score_label")}</Text>
             </View>
           </View>
 
@@ -206,12 +211,14 @@ export default function LoanMarketplaceScreen() {
               <View style={styles.activeLoansLeft}>
                 <Ionicons name="wallet" size={18} color="#F59E0B" />
                 <Text style={styles.activeLoansText}>
-                  {activeLoans.length} active loan{activeLoans.length > 1 ? "s" : ""}
+                  {activeLoans.length === 1
+                    ? t("loan_marketplace.active_loans_one")
+                    : t("loan_marketplace.active_loans_many", { count: activeLoans.length })}
                 </Text>
               </View>
               <View style={styles.activeLoansRight}>
                 <Text style={styles.activeLoansAmount}>
-                  ${totalOutstanding.toLocaleString()} remaining
+                  {t("loan_marketplace.remaining_amount", { amount: totalOutstanding.toLocaleString() })}
                 </Text>
                 <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.6)" />
               </View>
@@ -227,8 +234,8 @@ export default function LoanMarketplaceScreen() {
                 <Ionicons name="flash" size={18} color="#10B981" />
               </View>
               <View style={styles.sectionTitleContainer}>
-                <Text style={styles.sectionTitle}>Quick Advances</Text>
-                <Text style={styles.sectionSubtitle}>Instant cash against your circle payouts</Text>
+                <Text style={styles.sectionTitle}>{t("loan_marketplace.section_quick_title")}</Text>
+                <Text style={styles.sectionSubtitle}>{t("loan_marketplace.section_quick_subtitle")}</Text>
               </View>
             </View>
             {productsByType.small.map(renderProductCard)}
@@ -241,8 +248,8 @@ export default function LoanMarketplaceScreen() {
                 <Ionicons name="trending-up" size={18} color="#3B82F6" />
               </View>
               <View style={styles.sectionTitleContainer}>
-                <Text style={styles.sectionTitle}>Growth Loans</Text>
-                <Text style={styles.sectionSubtitle}>Finance your education, business & more</Text>
+                <Text style={styles.sectionTitle}>{t("loan_marketplace.section_growth_title")}</Text>
+                <Text style={styles.sectionSubtitle}>{t("loan_marketplace.section_growth_subtitle")}</Text>
               </View>
             </View>
             {productsByType.medium.map(renderProductCard)}
@@ -255,8 +262,8 @@ export default function LoanMarketplaceScreen() {
                 <Ionicons name="home" size={18} color="#8B5CF6" />
               </View>
               <View style={styles.sectionTitleContainer}>
-                <Text style={styles.sectionTitle}>Major Purchases</Text>
-                <Text style={styles.sectionSubtitle}>Home loans & large financing</Text>
+                <Text style={styles.sectionTitle}>{t("loan_marketplace.section_major_title")}</Text>
+                <Text style={styles.sectionSubtitle}>{t("loan_marketplace.section_major_subtitle")}</Text>
               </View>
             </View>
             {productsByType.mortgage.map(renderProductCard)}
@@ -270,9 +277,9 @@ export default function LoanMarketplaceScreen() {
             <View style={styles.howItWorksLeft}>
               <Ionicons name="help-circle" size={24} color="#00C6AE" />
               <View style={styles.howItWorksContent}>
-                <Text style={styles.howItWorksTitle}>How TandaXn Loans Work</Text>
+                <Text style={styles.howItWorksTitle}>{t("loan_marketplace.how_it_works_title")}</Text>
                 <Text style={styles.howItWorksSubtitle}>
-                  Learn about eligibility, fees & repayment
+                  {t("loan_marketplace.how_it_works_subtitle")}
                 </Text>
               </View>
             </View>
@@ -288,10 +295,11 @@ export default function LoanMarketplaceScreen() {
               >
                 <View style={styles.unlockContent}>
                   <Ionicons name="lock-open-outline" size={32} color="#00C6AE" />
-                  <Text style={styles.unlockTitle}>Unlock More Loan Options</Text>
+                  <Text style={styles.unlockTitle}>{t("loan_marketplace.unlock_title")}</Text>
                   <Text style={styles.unlockText}>
-                    Build your XnScore to {eligibility.tier === "locked" ? 45 : 60}+ to access
-                    {eligibility.tier === "locked" ? " Quick Advances" : " Growth Loans"}
+                    {eligibility.tier === "locked"
+                      ? t("loan_marketplace.unlock_text_locked_quick")
+                      : t("loan_marketplace.unlock_text_other_growth")}
                   </Text>
                   <View style={styles.unlockProgressContainer}>
                     <View style={styles.unlockProgressBar}>
@@ -308,14 +316,14 @@ export default function LoanMarketplaceScreen() {
                       />
                     </View>
                     <Text style={styles.unlockProgressText}>
-                      {score} / {eligibility.tier === "locked" ? 45 : 60}
+                      {score}{t("loan_marketplace.unlock_score_separator")}{eligibility.tier === "locked" ? 45 : 60}
                     </Text>
                   </View>
                   <TouchableOpacity
                     style={styles.unlockButton}
                     onPress={() => navigation.navigate(Routes.XnScoreDashboard)}
                   >
-                    <Text style={styles.unlockButtonText}>View XnScore Tips</Text>
+                    <Text style={styles.unlockButtonText}>{t("loan_marketplace.unlock_button")}</Text>
                     <Ionicons name="arrow-forward" size={16} color="#0A2342" />
                   </TouchableOpacity>
                 </View>

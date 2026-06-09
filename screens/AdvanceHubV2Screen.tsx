@@ -39,6 +39,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -53,18 +54,21 @@ const GREEN_BODY = "#047857";
 type ProductState = "active" | "preview" | "locked";
 type ProductId = "contribution" | "quick" | "flex" | "premium";
 
+// i18n: name/tagline/description/advanceFee/repayment carry translation
+// keys instead of literal strings. Resolved per-render via t() at the
+// call site so language flips re-paint without re-instantiating the list.
 type Product = {
   id: ProductId;
-  name: string;
+  nameKey: string;
   icon: string;
-  tagline: string;
-  description: string;
+  taglineKey: string;
+  descriptionKey: string;
   maxAdvance: number;
-  advanceFee: string;
-  repayment: string;
+  advanceFeeKey: string;
+  repaymentKey: string;
   minScore: number;
   state: ProductState;
-  userRate: string | null;
+  userRateKey: string | null;
   scoreNeeded?: number;
 };
 
@@ -100,56 +104,56 @@ function buildProducts(xnScore: number): Product[] {
   return [
     {
       id: "contribution",
-      name: "Contribution Cover",
+      nameKey: "advance_hub_v2.product_contribution_name",
       icon: "🛡️",
-      tagline: "Never miss a contribution",
-      description: "Cover your circle payment, auto-repay from next payout",
+      taglineKey: "advance_hub_v2.product_contribution_tagline",
+      descriptionKey: "advance_hub_v2.product_contribution_desc",
       maxAdvance: 500,
-      advanceFee: "$5 flat",
-      repayment: "Next payout",
+      advanceFeeKey: "advance_hub_v2.fee_flat",
+      repaymentKey: "advance_hub_v2.repayment_next_payout",
       minScore: 50,
       state: stateFor(50),
-      userRate: null,
+      userRateKey: null,
     },
     {
       id: "quick",
-      name: "Quick Advance",
+      nameKey: "advance_hub_v2.product_quick_name",
       icon: "⚡",
-      tagline: "Bridge to your next payout",
-      description: "Advance up to 80% of your upcoming circle payout",
+      taglineKey: "advance_hub_v2.product_quick_tagline",
+      descriptionKey: "advance_hub_v2.product_quick_desc",
       maxAdvance: 400,
-      advanceFee: "9.5%",
-      repayment: "1-4 weeks",
+      advanceFeeKey: "advance_hub_v2.fee_9_5",
+      repaymentKey: "advance_hub_v2.repayment_1_4_weeks",
       minScore: 65,
       state: stateFor(65),
-      userRate: xnScore >= 65 ? "9.5%" : null,
+      userRateKey: xnScore >= 65 ? "advance_hub_v2.fee_9_5" : null,
     },
     {
       id: "flex",
-      name: "Flex Advance",
+      nameKey: "advance_hub_v2.product_flex_name",
       icon: "📊",
-      tagline: "Larger amounts, flexible terms",
-      description: "For bigger needs with 3-12 month repayment",
+      taglineKey: "advance_hub_v2.product_flex_tagline",
+      descriptionKey: "advance_hub_v2.product_flex_desc",
       maxAdvance: 2500,
-      advanceFee: "From 8%",
-      repayment: "3-12 months",
+      advanceFeeKey: "advance_hub_v2.fee_from_8",
+      repaymentKey: "advance_hub_v2.repayment_3_12_months",
       minScore: 75,
       state: stateFor(75),
-      userRate: null,
+      userRateKey: null,
       scoreNeeded: 75,
     },
     {
       id: "premium",
-      name: "Premium Advance",
+      nameKey: "advance_hub_v2.product_premium_name",
       icon: "💎",
-      tagline: "Best rates for top performers",
-      description: "Up to $5,000 at our lowest rates",
+      taglineKey: "advance_hub_v2.product_premium_tagline",
+      descriptionKey: "advance_hub_v2.product_premium_desc",
       maxAdvance: 5000,
-      advanceFee: "From 6%",
-      repayment: "Up to 24 months",
+      advanceFeeKey: "advance_hub_v2.fee_from_6",
+      repaymentKey: "advance_hub_v2.repayment_up_to_24",
       minScore: 85,
       state: stateFor(85),
-      userRate: null,
+      userRateKey: null,
       scoreNeeded: 85,
     },
   ];
@@ -158,18 +162,19 @@ function buildProducts(xnScore: number): Product[] {
 export default function AdvanceHubV2Screen() {
   const navigation = useTypedNavigation();
   const route = useRoute<AdvanceHubV2RouteProp>();
+  const { t } = useTranslation();
   const user = route.params?.user ?? DEFAULT_USER;
   const products = buildProducts(user.xnScore);
 
   const availableCount = products.filter((p) => p.state === "active").length;
   const availabilityLabel =
     availableCount >= 3
-      ? `${availableCount} advances available!`
+      ? t("advance_hub_v2.availability_many", { count: availableCount })
       : availableCount === 2
-        ? "2 advances available"
+        ? t("advance_hub_v2.availability_two")
         : availableCount === 1
-          ? "1 advance available"
-          : "Build your score to unlock";
+          ? t("advance_hub_v2.availability_one")
+          : t("advance_hub_v2.availability_locked");
 
   const handleSelectProduct = (product: Product) => {
     if (product.state !== "active") return;
@@ -201,7 +206,7 @@ export default function AdvanceHubV2Screen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Advance Payouts</Text>
+            <Text style={styles.headerTitle}>{t("advance_hub_v2.header")}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -209,13 +214,15 @@ export default function AdvanceHubV2Screen() {
           <View style={styles.scoreRow}>
             <View style={styles.scoreRing}>
               <Text style={styles.scoreValue}>{user.xnScore}</Text>
-              <Text style={styles.scoreLabel}>XnScore</Text>
+              <Text style={styles.scoreLabel}>{t("advance_hub_v2.score_label")}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.availabilityText}>{availabilityLabel}</Text>
               <Text style={styles.statsText}>
-                {user.circlesCompleted} circles completed •{" "}
-                {user.onTimePayments} on-time payments
+                {t("advance_hub_v2.stats_text", {
+                  circles: user.circlesCompleted,
+                  payments: user.onTimePayments,
+                })}
               </Text>
               <TouchableOpacity
                 style={styles.improvementPill}
@@ -225,7 +232,7 @@ export default function AdvanceHubV2Screen() {
               >
                 <Ionicons name="bar-chart-outline" size={12} color="#FFFFFF" />
                 <Text style={styles.improvementPillText}>
-                  See improvement path
+                  {t("advance_hub_v2.see_improvement_path")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -240,15 +247,18 @@ export default function AdvanceHubV2Screen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.payoutLabel}>
-                Next Payout Available to Advance
+                {t("advance_hub_v2.payout_label")}
               </Text>
               <Text style={styles.payoutAmount}>
-                ${user.nextPayout.amount} on {user.nextPayout.date}
+                {t("advance_hub_v2.payout_amount", {
+                  amount: user.nextPayout.amount,
+                  date: user.nextPayout.date,
+                })}
               </Text>
               <Text style={styles.payoutCircle}>{user.nextPayout.circleName}</Text>
             </View>
             <View style={{ alignItems: "flex-end" }}>
-              <Text style={styles.advanceUpToLabel}>Advance up to</Text>
+              <Text style={styles.advanceUpToLabel}>{t("advance_hub_v2.advance_up_to_label")}</Text>
               <Text style={styles.advanceUpToValue}>
                 ${Math.floor(user.nextPayout.amount * 0.8)}
               </Text>
@@ -267,10 +277,10 @@ export default function AdvanceHubV2Screen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.learnTitle}>
-                What is an "Advance Payout"?
+                {t("advance_hub_v2.learn_title")}
               </Text>
               <Text style={styles.learnBody}>
-                Not a loan — you're borrowing from your own future winnings
+                {t("advance_hub_v2.learn_body")}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={TEAL} />
@@ -284,6 +294,7 @@ export default function AdvanceHubV2Screen() {
                 product={product}
                 userXnScore={user.xnScore}
                 onPress={() => handleSelectProduct(product)}
+                t={t}
               />
             ))}
           </View>
@@ -292,17 +303,15 @@ export default function AdvanceHubV2Screen() {
           <View style={styles.comparisonNote}>
             <View style={styles.comparisonHeader}>
               <Ionicons name="star" size={18} color="#00897B" />
-              <Text style={styles.comparisonTitle}>Why TandaXn Advances?</Text>
+              <Text style={styles.comparisonTitle}>{t("advance_hub_v2.comparison_title")}</Text>
             </View>
             <Text style={styles.comparisonBody}>
-              <Text style={styles.comparisonStrong}>Local money lender: 15-25%</Text>
+              <Text style={styles.comparisonStrong}>{t("advance_hub_v2.comparison_local")}</Text>
               {" | "}
-              <Text style={styles.comparisonStrong}>Payday lender: 400%+</Text>
+              <Text style={styles.comparisonStrong}>{t("advance_hub_v2.comparison_payday")}</Text>
               {" | "}
-              <Text style={styles.comparisonStrong}>TandaXn: From 6%</Text>
-              {"\n"}
-              Plus, repayment is automatic from your payout — no stress, no
-              collectors.
+              <Text style={styles.comparisonStrong}>{t("advance_hub_v2.comparison_tandaxn")}</Text>
+              {t("advance_hub_v2.comparison_tagline")}
             </Text>
           </View>
         </View>
@@ -317,16 +326,19 @@ function ProductCard({
   product,
   userXnScore,
   onPress,
+  t,
 }: {
   product: Product;
   userXnScore: number;
   onPress: () => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
-  const styling = stateStyling(product.state);
+  const styling = stateStyling(product.state, t);
   const progress = product.scoreNeeded
     ? Math.min(100, Math.round((userXnScore / product.scoreNeeded) * 100))
     : 100;
   const pointsNeeded = product.scoreNeeded ? product.scoreNeeded - userXnScore : 0;
+  const productName = t(product.nameKey);
 
   return (
     <TouchableOpacity
@@ -344,7 +356,7 @@ function ProductCard({
       activeOpacity={product.state === "active" ? 0.85 : 1}
       accessibilityRole="button"
       accessibilityState={{ disabled: product.state === "locked" }}
-      accessibilityLabel={`${product.name}, ${styling.badgeLabel}`}
+      accessibilityLabel={`${productName}, ${styling.badgeLabel}`}
     >
       <View style={[styles.stateBadge, { backgroundColor: styling.badgeBg }]}>
         <Text style={styles.stateBadgeText}>{styling.badgeLabel}</Text>
@@ -369,7 +381,7 @@ function ProductCard({
         </View>
 
         <View style={{ flex: 1 }}>
-          <Text style={styles.productName}>{product.name}</Text>
+          <Text style={styles.productName}>{productName}</Text>
           <Text
             style={[
               styles.productTagline,
@@ -383,29 +395,29 @@ function ProductCard({
               },
             ]}
           >
-            {product.tagline}
+            {t(product.taglineKey)}
           </Text>
-          <Text style={styles.productDescription}>{product.description}</Text>
+          <Text style={styles.productDescription}>{t(product.descriptionKey)}</Text>
 
           {/* Stats row */}
           <View style={styles.statsRow}>
             <View>
-              <Text style={styles.statLabel}>Max Advance</Text>
+              <Text style={styles.statLabel}>{t("advance_hub_v2.stat_max_advance")}</Text>
               <Text style={styles.statValueNavy}>
-                Up to ${product.maxAdvance.toLocaleString()}
+                {t("advance_hub_v2.stat_max_advance_value", { amount: product.maxAdvance.toLocaleString() })}
               </Text>
             </View>
             <View>
-              <Text style={styles.statLabel}>Advance Fee</Text>
+              <Text style={styles.statLabel}>{t("advance_hub_v2.stat_advance_fee")}</Text>
               <Text style={styles.statValueTeal}>
-                {product.state === "active" && product.userRate
-                  ? product.userRate
-                  : product.advanceFee}
+                {product.state === "active" && product.userRateKey
+                  ? t(product.userRateKey)
+                  : t(product.advanceFeeKey)}
               </Text>
             </View>
             <View>
-              <Text style={styles.statLabel}>Repayment</Text>
-              <Text style={styles.statValueNavy}>{product.repayment}</Text>
+              <Text style={styles.statLabel}>{t("advance_hub_v2.stat_repayment")}</Text>
+              <Text style={styles.statValueNavy}>{t(product.repaymentKey)}</Text>
             </View>
           </View>
 
@@ -415,7 +427,7 @@ function ProductCard({
               <View style={styles.unlockBlock}>
                 <View style={styles.unlockTopRow}>
                   <Text style={styles.unlockLabel}>
-                    XnScore progress to unlock
+                    {t("advance_hub_v2.unlock_progress_label")}
                   </Text>
                   <Text
                     style={[
@@ -445,8 +457,11 @@ function ProductCard({
                   ]}
                 >
                   {product.state === "preview"
-                    ? `Increase your XnScore by ${pointsNeeded} points to unlock`
-                    : `Make ${Math.ceil(pointsNeeded / 2)} more on-time payments to reach ${product.scoreNeeded}`}
+                    ? t("advance_hub_v2.unlock_hint_preview", { points: pointsNeeded })
+                    : t("advance_hub_v2.unlock_hint_locked", {
+                        payments: Math.ceil(pointsNeeded / 2),
+                        target: product.scoreNeeded,
+                      })}
                 </Text>
               </View>
             )}
@@ -460,7 +475,10 @@ function ProductCard({
   );
 }
 
-function stateStyling(state: ProductState) {
+function stateStyling(
+  state: ProductState,
+  t: (key: string) => string,
+) {
   switch (state) {
     case "active":
       return {
@@ -469,7 +487,7 @@ function stateStyling(state: ProductState) {
         borderWidth: 2,
         opacity: 1,
         badgeBg: TEAL,
-        badgeLabel: "ACTIVE ✅",
+        badgeLabel: t("advance_hub_v2.badge_active"),
       };
     case "preview":
       return {
@@ -478,7 +496,7 @@ function stateStyling(state: ProductState) {
         borderWidth: 1,
         opacity: 1,
         badgeBg: BLUE,
-        badgeLabel: "PREVIEW 👁️",
+        badgeLabel: t("advance_hub_v2.badge_preview"),
       };
     case "locked":
       return {
@@ -487,7 +505,7 @@ function stateStyling(state: ProductState) {
         borderWidth: 1,
         opacity: 0.7,
         badgeBg: MUTED,
-        badgeLabel: "LOCKED 🔒",
+        badgeLabel: t("advance_hub_v2.badge_locked"),
       };
   }
 }
