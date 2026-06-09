@@ -29,6 +29,7 @@ import {
   StatusBar,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { kycDraft, type KycDraft } from "../lib/kycDraft";
@@ -38,22 +39,25 @@ const TEAL = "#00C6AE";
 const BORDER = "#E5E7EB";
 const MUTED = "#6B7280";
 
+// i18n: titleKey / descKey carry translation keys instead of literal
+// strings. Resolved per-render via t() at the call site.
 const HIGHLIGHTS = [
-  { icon: "🌍", title: "Built for diaspora", desc: "By the community, for the community" },
-  { icon: "🤝", title: "No SSN required", desc: "Use any valid ID to get started" },
-  { icon: "🔒", title: "Safe & secure", desc: "Bank-level security, your data protected" },
-  { icon: "💚", title: "We don't judge", desc: "Everyone's welcome here" },
+  { icon: "🌍", titleKey: "onboarding_welcome.highlight_diaspora_title", descKey: "onboarding_welcome.highlight_diaspora_desc" },
+  { icon: "🤝", titleKey: "onboarding_welcome.highlight_no_ssn_title", descKey: "onboarding_welcome.highlight_no_ssn_desc" },
+  { icon: "🔒", titleKey: "onboarding_welcome.highlight_secure_title", descKey: "onboarding_welcome.highlight_secure_desc" },
+  { icon: "💚", titleKey: "onboarding_welcome.highlight_inclusive_title", descKey: "onboarding_welcome.highlight_inclusive_desc" },
 ];
 
 const FLAGS = ["🇸🇳", "🇳🇬", "🇬🇭", "🇨🇲", "🇰🇪", "🇪🇹", "🇿🇦", "🇲🇦"];
 
 const TRUST_BADGES = [
-  { icon: "🔐", text: "256-bit encryption" },
-  { icon: "🏦", text: "FDIC partner banks" },
+  { icon: "🔐", textKey: "onboarding_welcome.trust_encryption" },
+  { icon: "🏦", textKey: "onboarding_welcome.trust_fdic" },
 ];
 
 export default function OnboardingWelcomeScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
 
   // ── KYC draft restore banner ─────────────────────────────────────────────
   // Read once on mount. If a draft exists, surface the yellow banner. The
@@ -137,9 +141,9 @@ export default function OnboardingWelcomeScreen() {
             <Text style={styles.logoText}>Tx</Text>
           </View>
 
-          <Text style={styles.heroTitle}>Welcome Home</Text>
+          <Text style={styles.heroTitle}>{t("onboarding_welcome.hero_title")}</Text>
           <Text style={styles.heroSubtitle}>
-            Join millions saving together through trusted community circles
+            {t("onboarding_welcome.hero_subtitle")}
           </Text>
 
           {/* Flag row */}
@@ -158,7 +162,7 @@ export default function OnboardingWelcomeScreen() {
           {showBanner && (
             <View style={styles.draftBanner}>
               <Text style={styles.draftBannerText}>
-                You have an unfinished verification. Pick up where you left off?
+                {t("onboarding_welcome.draft_banner")}
               </Text>
               <View style={styles.draftBannerActions}>
                 <TouchableOpacity
@@ -166,14 +170,14 @@ export default function OnboardingWelcomeScreen() {
                   onPress={handleRestoreDraft}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.draftBannerButtonText}>Restore</Text>
+                  <Text style={styles.draftBannerButtonText}>{t("onboarding_welcome.draft_restore")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.draftBannerButton}
                   onPress={handleDiscardDraft}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.draftBannerButtonText}>Discard</Text>
+                  <Text style={styles.draftBannerButtonText}>{t("onboarding_welcome.draft_discard")}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -189,8 +193,8 @@ export default function OnboardingWelcomeScreen() {
                   <Text style={styles.highlightIconText}>{item.icon}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.highlightTitle}>{item.title}</Text>
-                  <Text style={styles.highlightDesc}>{item.desc}</Text>
+                  <Text style={styles.highlightTitle}>{t(item.titleKey)}</Text>
+                  <Text style={styles.highlightDesc}>{t(item.descKey)}</Text>
                 </View>
               </View>
             ))}
@@ -201,7 +205,7 @@ export default function OnboardingWelcomeScreen() {
             {TRUST_BADGES.map((badge, idx) => (
               <View key={idx} style={styles.trustBadge}>
                 <Text style={styles.trustBadgeIcon}>{badge.icon}</Text>
-                <Text style={styles.trustBadgeText}>{badge.text}</Text>
+                <Text style={styles.trustBadgeText}>{t(badge.textKey)}</Text>
               </View>
             ))}
           </View>
@@ -216,7 +220,7 @@ export default function OnboardingWelcomeScreen() {
           accessibilityRole="button"
           accessibilityLabel="Get started"
         >
-          <Text style={styles.primaryButtonText}>Get Started</Text>
+          <Text style={styles.primaryButtonText}>{t("onboarding_welcome.btn_get_started")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.secondaryButton}
@@ -224,7 +228,7 @@ export default function OnboardingWelcomeScreen() {
           accessibilityRole="button"
           accessibilityLabel="I already have an account"
         >
-          <Text style={styles.secondaryButtonText}>I already have an account</Text>
+          <Text style={styles.secondaryButtonText}>{t("onboarding_welcome.btn_have_account")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

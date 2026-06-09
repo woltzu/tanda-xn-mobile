@@ -14,6 +14,7 @@ import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
 
@@ -21,6 +22,7 @@ type SignupScreenNavigationProp = StackNavigationProp<RootStackParamList, "Signu
 
 export default function SignupScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const { signUp, isLoading } = useAuth();
 
   const [formData, setFormData] = useState({
@@ -49,28 +51,28 @@ export default function SignupScreen() {
   const passwordsDontMatch = formData.confirmPassword && formData.password !== formData.confirmPassword;
 
   const getStrengthLabel = () => {
-    if (passwordStrength === 0) return "Weak";
-    if (passwordStrength <= 2) return "Fair";
-    if (passwordStrength === 3) return "Good";
-    return "Strong";
+    if (passwordStrength === 0) return t("signup.strength_weak");
+    if (passwordStrength <= 2) return t("signup.strength_fair");
+    if (passwordStrength === 3) return t("signup.strength_good");
+    return t("signup.strength_strong");
   };
 
   const handleSubmit = async () => {
     const newErrors: Record<string, string> = {};
-    if (!formData.fullName.trim()) newErrors.fullName = "Name is required";
-    if (!formData.email.trim()) newErrors.email = "Email is required";
-    if (!formData.phone.trim()) newErrors.phone = "Phone is required";
-    if (formData.password.length < 8) newErrors.password = "Min 8 characters";
-    if (!formData.confirmPassword) newErrors.confirmPassword = "Please confirm password";
+    if (!formData.fullName.trim()) newErrors.fullName = t("signup.err_name_required");
+    if (!formData.email.trim()) newErrors.email = t("signup.err_email_required");
+    if (!formData.phone.trim()) newErrors.phone = t("signup.err_phone_required");
+    if (formData.password.length < 8) newErrors.password = t("signup.err_password_min");
+    if (!formData.confirmPassword) newErrors.confirmPassword = t("signup.err_confirm_required");
     if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = "Passwords don't match";
+      newErrors.confirmPassword = t("signup.err_passwords_no_match");
     }
-    if (!formData.agreedToTerms) newErrors.terms = "You must agree to terms";
+    if (!formData.agreedToTerms) newErrors.terms = t("signup.err_terms_required");
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (formData.email && !emailRegex.test(formData.email)) {
-      newErrors.email = "Please enter a valid email address";
+      newErrors.email = t("signup.err_email_invalid");
     }
 
     setErrors(newErrors);
@@ -84,17 +86,17 @@ export default function SignupScreen() {
         navigation.navigate(Routes.EmailVerification, { email: formData.email });
       } catch (err: any) {
         // Show specific error messages from Supabase
-        let errorMessage = "Failed to create account. Please try again.";
+        let errorMessage = t("signup.err_create_default");
 
         if (err?.message) {
           if (err.message.includes("User already registered")) {
-            errorMessage = "An account with this email already exists. Please log in or use a different email.";
+            errorMessage = t("signup.err_user_exists");
           } else if (err.message.includes("Invalid email")) {
-            errorMessage = "Please enter a valid email address.";
+            errorMessage = t("signup.err_email_format");
           } else if (err.message.includes("Password")) {
             errorMessage = err.message;
           } else if (err.message.includes("rate limit") || err.message.includes("too many")) {
-            errorMessage = "Too many attempts. Please wait a few minutes and try again.";
+            errorMessage = t("signup.err_rate_limit");
           } else {
             errorMessage = err.message;
           }
@@ -129,14 +131,12 @@ export default function SignupScreen() {
             onPress={() => navigation.goBack()}
           >
             <Ionicons name="arrow-back" size={20} color="#0A2342" />
-            <Text style={styles.backButtonText}>Back</Text>
+            <Text style={styles.backButtonText}>{t("signup.back")}</Text>
           </TouchableOpacity>
 
           {/* Header */}
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>
-            Join thousands building their financial future
-          </Text>
+          <Text style={styles.title}>{t("signup.title")}</Text>
+          <Text style={styles.subtitle}>{t("signup.subtitle")}</Text>
 
           {/* Form */}
           <View style={styles.form}>
@@ -149,12 +149,12 @@ export default function SignupScreen() {
 
             {/* Full Name */}
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Full Name</Text>
+              <Text style={styles.label}>{t("signup.label_full_name")}</Text>
               <View style={[styles.inputWrapper, errors.fullName ? styles.inputError : null]}>
                 <Ionicons name="person-outline" size={18} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Marcus Johnson"
+                  placeholder={t("signup.placeholder_full_name")}
                   placeholderTextColor="#999"
                   value={formData.fullName}
                   onChangeText={(text) => updateFormData("fullName", text)}
@@ -166,12 +166,12 @@ export default function SignupScreen() {
 
             {/* Email */}
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Email Address</Text>
+              <Text style={styles.label}>{t("signup.label_email")}</Text>
               <View style={[styles.inputWrapper, errors.email ? styles.inputError : null]}>
                 <Ionicons name="mail-outline" size={18} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="marcus@email.com"
+                  placeholder={t("signup.placeholder_email")}
                   placeholderTextColor="#999"
                   value={formData.email}
                   onChangeText={(text) => updateFormData("email", text)}
@@ -185,12 +185,12 @@ export default function SignupScreen() {
 
             {/* Phone */}
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Phone Number</Text>
+              <Text style={styles.label}>{t("signup.label_phone")}</Text>
               <View style={[styles.inputWrapper, errors.phone ? styles.inputError : null]}>
                 <Ionicons name="call-outline" size={18} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="+1 (555) 123-4567"
+                  placeholder={t("signup.placeholder_phone")}
                   placeholderTextColor="#999"
                   value={formData.phone}
                   onChangeText={(text) => updateFormData("phone", text)}
@@ -202,12 +202,12 @@ export default function SignupScreen() {
 
             {/* Password */}
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Password</Text>
+              <Text style={styles.label}>{t("signup.label_password")}</Text>
               <View style={[styles.inputWrapper, errors.password ? styles.inputError : null]}>
                 <Ionicons name="lock-closed-outline" size={18} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Min. 8 characters"
+                  placeholder={t("signup.placeholder_password")}
                   placeholderTextColor="#999"
                   value={formData.password}
                   onChangeText={(text) => updateFormData("password", text)}
@@ -229,7 +229,7 @@ export default function SignupScreen() {
               {formData.password.length > 0 ? (
                 <View style={styles.strengthContainer}>
                   <View style={styles.strengthHeader}>
-                    <Text style={styles.strengthLabel}>Password strength:</Text>
+                    <Text style={styles.strengthLabel}>{t("signup.strength_label")}</Text>
                     <Text style={[
                       styles.strengthValue,
                       { color: passwordStrength >= 3 ? "#00C6AE" : "#666" }
@@ -255,7 +255,7 @@ export default function SignupScreen() {
 
             {/* Confirm Password */}
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>Confirm Password</Text>
+              <Text style={styles.label}>{t("signup.label_confirm_password")}</Text>
               <View style={[
                 styles.inputWrapper,
                 passwordsDontMatch ? styles.inputError : null,
@@ -264,7 +264,7 @@ export default function SignupScreen() {
                 <Ionicons name="lock-closed-outline" size={18} color="#666" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Repeat your password"
+                  placeholder={t("signup.placeholder_confirm_password")}
                   placeholderTextColor="#999"
                   value={formData.confirmPassword}
                   onChangeText={(text) => updateFormData("confirmPassword", text)}
@@ -295,7 +295,7 @@ export default function SignupScreen() {
                   styles.matchText,
                   { color: passwordsMatch ? "#00C6AE" : "#FF4444" }
                 ]}>
-                  {passwordsMatch ? "Passwords match" : "Passwords don't match"}
+                  {passwordsMatch ? t("signup.passwords_match") : t("signup.passwords_no_match")}
                 </Text>
               ) : null}
             </View>
@@ -315,10 +315,10 @@ export default function SignupScreen() {
                 ) : null}
               </View>
               <Text style={styles.termsText}>
-                I agree to the{" "}
-                <Text style={styles.termsLink}>Terms of Service</Text>
-                {" "}and{" "}
-                <Text style={styles.termsLink}>Privacy Policy</Text>
+                {t("signup.terms_prefix")}
+                <Text style={styles.termsLink}>{t("signup.terms_link")}</Text>
+                {t("signup.terms_and")}
+                <Text style={styles.termsLink}>{t("signup.privacy_link")}</Text>
               </Text>
             </TouchableOpacity>
             {errors.terms ? <Text style={styles.fieldError}>{errors.terms}</Text> : null}
@@ -333,7 +333,7 @@ export default function SignupScreen() {
               {isLoading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.submitButtonText}>Create Account</Text>
+                <Text style={styles.submitButtonText}>{t("signup.btn_create_account")}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -344,8 +344,8 @@ export default function SignupScreen() {
             onPress={() => navigation.navigate(Routes.Login)}
           >
             <Text style={styles.loginText}>
-              Already have an account?{" "}
-              <Text style={styles.loginLinkText}>Log In</Text>
+              {t("signup.have_account_prefix")}
+              <Text style={styles.loginLinkText}>{t("signup.log_in")}</Text>
             </Text>
           </TouchableOpacity>
         </ScrollView>

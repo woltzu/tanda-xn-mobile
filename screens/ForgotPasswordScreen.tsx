@@ -16,6 +16,7 @@ import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
 import { getEmailRedirectUrl } from "../context/AuthContext";
@@ -24,6 +25,7 @@ type ForgotPasswordScreenNavigationProp = StackNavigationProp<RootStackParamList
 
 export default function ForgotPasswordScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
@@ -36,12 +38,12 @@ export default function ForgotPasswordScreen() {
 
   const handleSendResetEmail = async () => {
     if (!email.trim()) {
-      setError("Please enter your email address");
+      setError(t("forgot_password.err_email_required"));
       return;
     }
 
     if (!validateEmail(email)) {
-      setError("Please enter a valid email address");
+      setError(t("forgot_password.err_email_invalid"));
       return;
     }
 
@@ -60,7 +62,7 @@ export default function ForgotPasswordScreen() {
 
       setEmailSent(true);
     } catch (err: any) {
-      setError(err.message || "Failed to send reset email. Please try again.");
+      setError(err.message || t("forgot_password.err_send_failed"));
     } finally {
       setIsLoading(false);
     }
@@ -89,11 +91,11 @@ export default function ForgotPasswordScreen() {
         <View style={styles.logoBox}>
           <Ionicons name="key-outline" size={36} color="#0A2342" />
         </View>
-        <Text style={styles.title}>Forgot Password?</Text>
+        <Text style={styles.title}>{t("forgot_password.title")}</Text>
         <Text style={styles.subtitle}>
           {emailSent
-            ? "Check your inbox for the reset link"
-            : "Enter your email to receive a password reset link"}
+            ? t("forgot_password.subtitle_sent")
+            : t("forgot_password.subtitle_initial")}
         </Text>
       </LinearGradient>
 
@@ -113,21 +115,20 @@ export default function ForgotPasswordScreen() {
               <View style={styles.successIcon}>
                 <Ionicons name="mail-open" size={60} color="#00C6AE" />
               </View>
-              <Text style={styles.successTitle}>Email Sent!</Text>
+              <Text style={styles.successTitle}>{t("forgot_password.success_title")}</Text>
               <Text style={styles.successText}>
-                We've sent a password reset link to:
+                {t("forgot_password.success_text")}
               </Text>
               <Text style={styles.emailText}>{email}</Text>
               <Text style={styles.instructionText}>
-                Please check your email and click the reset link to create a new password.
-                Don't forget to check your spam folder!
+                {t("forgot_password.instruction")}
               </Text>
 
               <TouchableOpacity
                 style={styles.primaryButton}
                 onPress={() => navigation.navigate(Routes.Login)}
               >
-                <Text style={styles.primaryButtonText}>Back to Login</Text>
+                <Text style={styles.primaryButtonText}>{t("forgot_password.btn_back_to_login")}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -135,7 +136,7 @@ export default function ForgotPasswordScreen() {
                 onPress={handleTryAgain}
               >
                 <Text style={styles.secondaryButtonText}>
-                  Didn't receive it? Try again
+                  {t("forgot_password.btn_try_again")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -152,7 +153,7 @@ export default function ForgotPasswordScreen() {
 
               {/* Email Input */}
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Email Address</Text>
+                <Text style={styles.label}>{t("forgot_password.label_email")}</Text>
                 <View style={[styles.inputWrapper, error ? styles.inputError : null]}>
                   <Ionicons
                     name="mail-outline"
@@ -162,7 +163,7 @@ export default function ForgotPasswordScreen() {
                   />
                   <TextInput
                     style={styles.input}
-                    placeholder="Enter your email address"
+                    placeholder={t("forgot_password.placeholder_email")}
                     placeholderTextColor="#999"
                     value={email}
                     onChangeText={(text) => {
@@ -189,7 +190,7 @@ export default function ForgotPasswordScreen() {
                 ) : (
                   <>
                     <Ionicons name="send" size={18} color="#FFFFFF" />
-                    <Text style={styles.primaryButtonText}>Send Reset Link</Text>
+                    <Text style={styles.primaryButtonText}>{t("forgot_password.btn_send_reset_link")}</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -200,7 +201,7 @@ export default function ForgotPasswordScreen() {
                 onPress={() => navigation.navigate(Routes.Login)}
               >
                 <Ionicons name="arrow-back" size={16} color="#00C6AE" />
-                <Text style={styles.backToLoginText}>Back to Login</Text>
+                <Text style={styles.backToLoginText}>{t("forgot_password.back_to_login")}</Text>
               </TouchableOpacity>
             </>
           )}

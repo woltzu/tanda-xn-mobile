@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 
 type OTPScreenNavigationProp = StackNavigationProp<RootStackParamList, "OTP">;
@@ -23,6 +24,7 @@ type OTPScreenRouteProp = RouteProp<RootStackParamList, "OTP">;
 export default function OTPScreen() {
   const navigation = useNavigation<OTPScreenNavigationProp>();
   const route = useRoute<OTPScreenRouteProp>();
+  const { t } = useTranslation();
   const phoneNumber = route.params?.phone || "+1 (555) 123-4567";
 
   const [otpCode, setOtpCode] = useState(["", "", "", "", "", ""]);
@@ -99,7 +101,7 @@ export default function OTPScreen() {
           routes: [{ name: "MainTabs" }],
         });
       } else {
-        setError("Invalid code. Please try again.");
+        setError(t("otp.err_invalid_code"));
         setOtpCode(["", "", "", "", "", ""]);
         setIsComplete(false);
         inputRefs.current[0]?.focus();
@@ -139,7 +141,7 @@ export default function OTPScreen() {
               onPress={() => navigation.goBack()}
             >
               <Ionicons name="arrow-back" size={18} color="#FFFFFF" />
-              <Text style={styles.backButtonText}>Back</Text>
+              <Text style={styles.backButtonText}>{t("otp.back")}</Text>
             </TouchableOpacity>
 
             {/* Animated Phone Icon */}
@@ -152,8 +154,8 @@ export default function OTPScreen() {
               </LinearGradient>
             </Animated.View>
 
-            <Text style={styles.title}>Verify Your Phone</Text>
-            <Text style={styles.subtitle}>We sent a 6-digit code to</Text>
+            <Text style={styles.title}>{t("otp.title")}</Text>
+            <Text style={styles.subtitle}>{t("otp.subtitle")}</Text>
             <Text style={styles.phoneText}>{phoneNumber}</Text>
           </LinearGradient>
 
@@ -194,7 +196,7 @@ export default function OTPScreen() {
               <View style={styles.successContainer}>
                 <Ionicons name="checkmark-circle" size={18} color="#00C6AE" />
                 <Text style={styles.successText}>
-                  Code complete! Tap verify to continue.
+                  {t("otp.complete_hint")}
                 </Text>
               </View>
             ) : null}
@@ -212,21 +214,21 @@ export default function OTPScreen() {
               {isVerifying ? (
                 <View style={styles.verifyingContainer}>
                   <ActivityIndicator color="#FFFFFF" size="small" />
-                  <Text style={styles.verifyButtonText}>Verifying...</Text>
+                  <Text style={styles.verifyButtonText}>{t("otp.verifying")}</Text>
                 </View>
               ) : (
                 <Text style={[
                   styles.verifyButtonText,
                   (!isComplete || isVerifying) ? styles.verifyButtonTextDisabled : null,
                 ]}>
-                  Verify Code
+                  {t("otp.btn_verify")}
                 </Text>
               )}
             </TouchableOpacity>
 
             {/* Resend Section */}
             <View style={styles.resendContainer}>
-              <Text style={styles.resendLabel}>Didn't receive the code?</Text>
+              <Text style={styles.resendLabel}>{t("otp.resend_label")}</Text>
               <TouchableOpacity
                 style={[
                   styles.resendButton,
@@ -245,7 +247,7 @@ export default function OTPScreen() {
                   styles.resendButtonText,
                   resendTimer === 0 ? styles.resendButtonTextActive : null,
                 ]}>
-                  {resendTimer > 0 ? `Resend in ${resendTimer}s` : "Resend Code"}
+                  {resendTimer > 0 ? t("otp.resend_in", { seconds: resendTimer }) : t("otp.resend_btn")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -253,7 +255,7 @@ export default function OTPScreen() {
             {/* Help Link */}
             <TouchableOpacity style={styles.helpLink}>
               <Text style={styles.helpText}>
-                Having trouble? <Text style={styles.helpLinkText}>Get Help</Text>
+                {t("otp.help_prefix")}<Text style={styles.helpLinkText}>{t("otp.help_link")}</Text>
               </Text>
             </TouchableOpacity>
           </View>

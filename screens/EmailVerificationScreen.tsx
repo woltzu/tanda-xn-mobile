@@ -13,6 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
 import { getEmailRedirectUrl } from "../context/AuthContext";
@@ -23,7 +24,8 @@ type EmailVerificationRouteProp = RouteProp<RootStackParamList, "EmailVerificati
 export default function EmailVerificationScreen() {
   const navigation = useNavigation<EmailVerificationNavigationProp>();
   const route = useRoute<EmailVerificationRouteProp>();
-  const email = route.params?.email || "your email";
+  const { t } = useTranslation();
+  const email = route.params?.email || t("email_verification.fallback_email");
 
   const [isResending, setIsResending] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
@@ -109,8 +111,8 @@ export default function EmailVerificationScreen() {
 
       if (error) {
         Alert.alert(
-          "Error",
-          error.message || "Failed to resend verification email. Please try again."
+          t("email_verification.alert_error_title"),
+          error.message || t("email_verification.alert_resend_failed")
         );
       } else {
         setResendSuccess(true);
@@ -118,7 +120,7 @@ export default function EmailVerificationScreen() {
         setTimeout(() => setResendSuccess(false), 5000);
       }
     } catch (err) {
-      Alert.alert("Error", "Something went wrong. Please try again.");
+      Alert.alert(t("email_verification.alert_error_title"), t("email_verification.alert_generic_failure"));
     } finally {
       setIsResending(false);
     }
@@ -150,7 +152,7 @@ export default function EmailVerificationScreen() {
           onPress={() => navigation.goBack()}
         >
           <Ionicons name="arrow-back" size={18} color="#FFFFFF" />
-          <Text style={styles.backButtonText}>Back</Text>
+          <Text style={styles.backButtonText}>{t("email_verification.back")}</Text>
         </TouchableOpacity>
 
         {/* Animated Email Icon */}
@@ -163,8 +165,8 @@ export default function EmailVerificationScreen() {
           </LinearGradient>
         </Animated.View>
 
-        <Text style={styles.title}>Check Your Email</Text>
-        <Text style={styles.subtitle}>We sent a verification link to</Text>
+        <Text style={styles.title}>{t("email_verification.title")}</Text>
+        <Text style={styles.subtitle}>{t("email_verification.subtitle")}</Text>
         <Text style={styles.emailText}>{email}</Text>
       </LinearGradient>
 
@@ -174,20 +176,20 @@ export default function EmailVerificationScreen() {
         {resendSuccess && (
           <View style={styles.successBanner}>
             <Ionicons name="checkmark-circle" size={20} color="#00C6AE" />
-            <Text style={styles.successText}>Verification email sent!</Text>
+            <Text style={styles.successText}>{t("email_verification.success_banner")}</Text>
           </View>
         )}
 
         {/* Instructions Card */}
         <View style={styles.instructionsCard}>
-          <Text style={styles.instructionsTitle}>What to do next:</Text>
+          <Text style={styles.instructionsTitle}>{t("email_verification.instructions_title")}</Text>
 
           <View style={styles.step}>
             <View style={styles.stepNumber}>
               <Text style={styles.stepNumberText}>1</Text>
             </View>
             <Text style={styles.stepText}>
-              Open your email inbox (check spam/junk folder too)
+              {t("email_verification.step_1")}
             </Text>
           </View>
 
@@ -196,7 +198,7 @@ export default function EmailVerificationScreen() {
               <Text style={styles.stepNumberText}>2</Text>
             </View>
             <Text style={styles.stepText}>
-              Click the verification link in the email from TandaXn
+              {t("email_verification.step_2")}
             </Text>
           </View>
 
@@ -205,7 +207,7 @@ export default function EmailVerificationScreen() {
               <Text style={styles.stepNumberText}>3</Text>
             </View>
             <Text style={styles.stepText}>
-              Return to this app and log in with your credentials
+              {t("email_verification.step_3")}
             </Text>
           </View>
         </View>
@@ -217,7 +219,7 @@ export default function EmailVerificationScreen() {
           activeOpacity={0.8}
         >
           <Ionicons name="mail-open-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.primaryButtonText}>Open Email App</Text>
+          <Text style={styles.primaryButtonText}>{t("email_verification.btn_open_email")}</Text>
         </TouchableOpacity>
 
         {/* Resend Email Button */}
@@ -246,20 +248,18 @@ export default function EmailVerificationScreen() {
             ]}
           >
             {isResending
-              ? "Sending..."
+              ? t("email_verification.btn_sending")
               : resendTimer > 0
-              ? `Resend in ${resendTimer}s`
-              : "Resend Verification Email"}
+              ? t("email_verification.btn_resend_in", { seconds: resendTimer })
+              : t("email_verification.btn_resend")}
           </Text>
         </TouchableOpacity>
 
         {/* Help Section */}
         <View style={styles.helpSection}>
-          <Text style={styles.helpTitle}>Email not arriving?</Text>
+          <Text style={styles.helpTitle}>{t("email_verification.help_title")}</Text>
           <Text style={styles.helpText}>
-            • Check your spam or junk folder{"\n"}
-            • Make sure {email} is correct{"\n"}
-            • Wait a few minutes and try again
+            {t("email_verification.help_body", { email })}
           </Text>
         </View>
 
@@ -269,7 +269,7 @@ export default function EmailVerificationScreen() {
             style={styles.linkButton}
             onPress={handleTryDifferentEmail}
           >
-            <Text style={styles.linkButtonText}>Use Different Email</Text>
+            <Text style={styles.linkButtonText}>{t("email_verification.use_different_email")}</Text>
           </TouchableOpacity>
 
           <View style={styles.separator} />
@@ -278,7 +278,7 @@ export default function EmailVerificationScreen() {
             style={styles.linkButton}
             onPress={handleBackToLogin}
           >
-            <Text style={styles.linkButtonText}>Back to Login</Text>
+            <Text style={styles.linkButtonText}>{t("email_verification.back_to_login")}</Text>
           </TouchableOpacity>
         </View>
       </View>

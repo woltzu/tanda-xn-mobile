@@ -22,6 +22,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
 
@@ -43,6 +44,7 @@ type NavProp = StackNavigationProp<RootStackParamList, "SetPassword">;
 
 export default function SetPasswordScreen() {
   const navigation = useNavigation<NavProp>();
+  const { t } = useTranslation();
 
   // Auth state — populated on mount
   const [userId, setUserId] = useState<string | null>(null);
@@ -140,21 +142,21 @@ export default function SetPasswordScreen() {
   // Inline message under inputs (real-time)
   const inlineMessage: { text: string; tone: "muted" | "danger" } | null = (() => {
     if (newPassword.length === 0 && confirmPassword.length === 0) {
-      return { text: `At least ${MIN_PASSWORD_LENGTH} characters.`, tone: "muted" };
+      return { text: t("set_password.inline_default", { min: MIN_PASSWORD_LENGTH }), tone: "muted" };
     }
     if (!lengthOk) {
       return {
-        text: `Password must be at least ${MIN_PASSWORD_LENGTH} characters (${newPassword.length}/${MIN_PASSWORD_LENGTH}).`,
+        text: t("set_password.inline_too_short", { min: MIN_PASSWORD_LENGTH, current: newPassword.length }),
         tone: "danger",
       };
     }
     if (confirmPassword.length === 0) {
-      return { text: "Confirm your password.", tone: "muted" };
+      return { text: t("set_password.inline_confirm_needed"), tone: "muted" };
     }
     if (!matchOk) {
-      return { text: "Passwords don't match.", tone: "danger" };
+      return { text: t("set_password.inline_no_match"), tone: "danger" };
     }
-    return { text: "Looks good — ready to save.", tone: "muted" };
+    return { text: t("set_password.inline_ready"), tone: "muted" };
   })();
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -169,7 +171,7 @@ export default function SetPasswordScreen() {
       });
       if (updateErr) {
         console.log("[SetPassword] error", { error: updateErr });
-        setError(`Could not save password: ${updateErr.message}`);
+        setError(`${t("set_password.err_save_prefix")}${updateErr.message}`);
         setSaving(false);
         return;
       }
@@ -199,7 +201,7 @@ export default function SetPasswordScreen() {
       }, 1100);
     } catch (err: any) {
       console.log("[SetPassword] error", { error: err });
-      setError(err?.message ?? "Something went wrong. Please try again.");
+      setError(err?.message ?? t("set_password.err_generic"));
       setSaving(false);
     }
   };
@@ -209,11 +211,11 @@ export default function SetPasswordScreen() {
   const confirmSkip = () => {
     if (saving || saved) return;
     Alert.alert(
-      "Skip password setup?",
-      "Without a password, you can only sign in by email magic-link. If you lose access to your email or the link expires, you won't be able to log back in to your TandaXn account.\n\nAre you sure you want to skip?",
+      t("set_password.alert_skip_title"),
+      t("set_password.alert_skip_body"),
       [
-        { text: "Cancel", style: "cancel" },
-        { text: "Skip anyway", style: "destructive", onPress: handleSkip },
+        { text: t("set_password.alert_skip_cancel"), style: "cancel" },
+        { text: t("set_password.alert_skip_confirm"), style: "destructive", onPress: handleSkip },
       ],
       { cancelable: true },
     );
@@ -265,10 +267,9 @@ export default function SetPasswordScreen() {
           <View style={styles.errorIconWrap}>
             <Ionicons name="alert-circle-outline" size={56} color={DANGER} />
           </View>
-          <Text style={styles.title}>Session expired</Text>
+          <Text style={styles.title}>{t("set_password.session_expired_title")}</Text>
           <Text style={styles.subtitle}>
-            Your magic-link session ended. Please return to the home screen and
-            request a fresh login link.
+            {t("set_password.session_expired_subtitle")}
           </Text>
           <TouchableOpacity
             style={styles.primaryBtn}
@@ -281,7 +282,7 @@ export default function SetPasswordScreen() {
               }
             }}
           >
-            <Text style={styles.primaryBtnText}>Return home</Text>
+            <Text style={styles.primaryBtnText}>{t("set_password.btn_return_home")}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -297,8 +298,8 @@ export default function SetPasswordScreen() {
           <View style={styles.successIconWrap}>
             <Ionicons name="checkmark-circle" size={72} color={SUCCESS} />
           </View>
-          <Text style={styles.title}>Password saved!</Text>
-          <Text style={styles.subtitle}>Taking you to your dashboard…</Text>
+          <Text style={styles.title}>{t("set_password.saved_title")}</Text>
+          <Text style={styles.subtitle}>{t("set_password.saved_subtitle")}</Text>
         </View>
       </SafeAreaView>
     );
@@ -320,26 +321,26 @@ export default function SetPasswordScreen() {
           {/* Brand */}
           <View style={styles.brandRow}>
             <View style={styles.brandDot} />
-            <Text style={styles.brand}>TandaXn</Text>
+            <Text style={styles.brand}>{t("set_password.brand")}</Text>
           </View>
 
           {/* Header */}
-          <Text style={styles.heading}>Welcome to TandaXn 🎉</Text>
+          <Text style={styles.heading}>{t("set_password.heading")}</Text>
           <Text style={styles.subheading}>
-            Set a password so you can log back in anytime
+            {t("set_password.subheading")}
           </Text>
           <Text style={styles.explainer}>
-            Your email magic-link login still works, but a password is faster.
+            {t("set_password.explainer")}
           </Text>
 
           {/* New password */}
-          <Text style={styles.label}>New password</Text>
+          <Text style={styles.label}>{t("set_password.label_new")}</Text>
           <View style={styles.inputWrap}>
             <Ionicons name="lock-closed-outline" size={18} color={MUTED} style={styles.inputIcon} />
             <TextInput
               ref={firstInputRef}
               style={styles.input}
-              placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+              placeholder={t("set_password.placeholder_new", { min: MIN_PASSWORD_LENGTH })}
               placeholderTextColor={MUTED}
               value={newPassword}
               onChangeText={setNewPassword}
@@ -363,12 +364,12 @@ export default function SetPasswordScreen() {
           </View>
 
           {/* Confirm password */}
-          <Text style={styles.label}>Confirm password</Text>
+          <Text style={styles.label}>{t("set_password.label_confirm")}</Text>
           <View style={styles.inputWrap}>
             <Ionicons name="lock-closed-outline" size={18} color={MUTED} style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Type it again"
+              placeholder={t("set_password.placeholder_confirm")}
               placeholderTextColor={MUTED}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
@@ -424,7 +425,7 @@ export default function SetPasswordScreen() {
             ) : (
               <>
                 <Ionicons name="shield-checkmark" size={18} color={NAVY} />
-                <Text style={styles.primaryBtnText}>Save password</Text>
+                <Text style={styles.primaryBtnText}>{t("set_password.btn_save")}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -437,7 +438,7 @@ export default function SetPasswordScreen() {
             disabled={saving}
             accessibilityRole="button"
           >
-            <Text style={styles.skipText}>Skip for now</Text>
+            <Text style={styles.skipText}>{t("set_password.skip")}</Text>
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />

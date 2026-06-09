@@ -15,6 +15,7 @@ import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
 
@@ -22,6 +23,7 @@ type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, "Login"
 
 export default function LoginScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const { signIn, isLoading } = useAuth();
   const [loginMethod, setLoginMethod] = useState<"email" | "phone">("email");
   const [identifier, setIdentifier] = useState("");
@@ -32,7 +34,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!identifier.trim() || !password.trim()) {
-      setError("Please fill in all fields");
+      setError(t("login.error_required"));
       return;
     }
     setError("");
@@ -43,7 +45,7 @@ export default function LoginScreen() {
         routes: [{ name: "MainTabs" }],
       });
     } catch (err) {
-      setError("Invalid credentials. Please try again.");
+      setError(t("login.error_invalid_credentials"));
     }
   };
 
@@ -62,8 +64,8 @@ export default function LoginScreen() {
         <View style={styles.logoBox}>
           <Text style={styles.logoText}>Xn</Text>
         </View>
-        <Text style={styles.title}>Welcome Back</Text>
-        <Text style={styles.subtitle}>Sign in to continue your savings journey</Text>
+        <Text style={styles.title}>{t("login.title")}</Text>
+        <Text style={styles.subtitle}>{t("login.subtitle")}</Text>
       </LinearGradient>
 
       {/* Form Card */}
@@ -96,7 +98,7 @@ export default function LoginScreen() {
                   loginMethod === "email" ? styles.toggleTextActive : null,
                 ]}
               >
-                Email
+                {t("login.method_email")}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -117,7 +119,7 @@ export default function LoginScreen() {
                   loginMethod === "phone" ? styles.toggleTextActive : null,
                 ]}
               >
-                Phone
+                {t("login.method_phone")}
               </Text>
             </TouchableOpacity>
           </View>
@@ -133,7 +135,7 @@ export default function LoginScreen() {
           {/* Email/Phone Input */}
           <View style={styles.inputContainer}>
             <Text style={styles.label}>
-              {loginMethod === "email" ? "Email Address" : "Phone Number"}
+              {loginMethod === "email" ? t("login.label_email") : t("login.label_phone")}
             </Text>
             <View style={[styles.inputWrapper, error ? styles.inputError : null]}>
               <Ionicons
@@ -144,7 +146,7 @@ export default function LoginScreen() {
               />
               <TextInput
                 style={styles.input}
-                placeholder={loginMethod === "email" ? "marcus@email.com" : "+1 (555) 123-4567"}
+                placeholder={loginMethod === "email" ? t("login.placeholder_email") : t("login.placeholder_phone")}
                 placeholderTextColor="#999"
                 value={identifier}
                 onChangeText={(text) => {
@@ -160,7 +162,7 @@ export default function LoginScreen() {
 
           {/* Password Input */}
           <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>{t("login.label_password")}</Text>
             <View style={[styles.inputWrapper, error ? styles.inputError : null]}>
               <Ionicons
                 name="lock-closed-outline"
@@ -170,7 +172,7 @@ export default function LoginScreen() {
               />
               <TextInput
                 style={styles.input}
-                placeholder="Enter your password"
+                placeholder={t("login.placeholder_password")}
                 placeholderTextColor="#999"
                 value={password}
                 onChangeText={(text) => {
@@ -201,11 +203,11 @@ export default function LoginScreen() {
               <View style={[styles.checkbox, rememberMe ? styles.checkboxChecked : null]}>
                 {rememberMe ? <Ionicons name="checkmark" size={12} color="#FFFFFF" /> : null}
               </View>
-              <Text style={styles.rememberText}>Remember me</Text>
+              <Text style={styles.rememberText}>{t("login.remember_me")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => navigation.navigate(Routes.ForgotPassword)}>
-              <Text style={styles.forgotText}>Forgot password?</Text>
+              <Text style={styles.forgotText}>{t("login.forgot_password")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -220,7 +222,7 @@ export default function LoginScreen() {
               <ActivityIndicator color="#FFFFFF" />
             ) : (
               <>
-                <Text style={styles.loginButtonText}>Sign In</Text>
+                <Text style={styles.loginButtonText}>{t("login.btn_sign_in")}</Text>
                 <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
               </>
             )}
@@ -229,7 +231,7 @@ export default function LoginScreen() {
           {/* Divider */}
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
+            <Text style={styles.dividerText}>{t("login.divider_or")}</Text>
             <View style={styles.dividerLine} />
           </View>
 
@@ -239,18 +241,18 @@ export default function LoginScreen() {
             onPress={handleBiometric}
           >
             <Ionicons name="finger-print" size={24} color="#00C6AE" />
-            <Text style={styles.biometricText}>Sign in with Biometrics</Text>
+            <Text style={styles.biometricText}>{t("login.biometric")}</Text>
           </TouchableOpacity>
 
           {/* Sign Up Link */}
           <View style={styles.signupContainer}>
             <Text style={styles.signupText}>
-              Don't have an account?{" "}
+              {t("login.no_account_prefix")}
               <Text
                 style={styles.signupLink}
                 onPress={() => navigation.navigate(Routes.Signup)}
               >
-                Sign Up
+                {t("login.sign_up")}
               </Text>
             </Text>
           </View>

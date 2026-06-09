@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
 
@@ -23,6 +24,7 @@ type ResetPasswordScreenRouteProp = RouteProp<RootStackParamList, "ResetPassword
 export default function ResetPasswordScreen() {
   const navigation = useNavigation<ResetPasswordScreenNavigationProp>();
   const route = useRoute<ResetPasswordScreenRouteProp>();
+  const { t } = useTranslation();
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -45,12 +47,12 @@ export default function ResetPasswordScreen() {
 
   const handleResetPassword = async () => {
     if (!isPasswordValid) {
-      setError("Password does not meet requirements");
+      setError(t("reset_password.err_password_requirements"));
       return;
     }
 
     if (!passwordsMatch) {
-      setError("Passwords do not match");
+      setError(t("reset_password.err_passwords_no_match"));
       return;
     }
 
@@ -75,7 +77,7 @@ export default function ResetPasswordScreen() {
         });
       }, 3000);
     } catch (err: any) {
-      setError(err.message || "Failed to update password. Please try again.");
+      setError(err.message || t("reset_password.err_update_failed"));
     } finally {
       setIsLoading(false);
     }
@@ -105,12 +107,12 @@ export default function ResetPasswordScreen() {
           <Ionicons name="lock-open-outline" size={36} color="#0A2342" />
         </View>
         <Text style={styles.title}>
-          {success ? "Password Updated!" : "Set New Password"}
+          {success ? t("reset_password.title_success") : t("reset_password.title_initial")}
         </Text>
         <Text style={styles.subtitle}>
           {success
-            ? "Your password has been changed successfully"
-            : "Create a strong password for your account"}
+            ? t("reset_password.subtitle_success")
+            : t("reset_password.subtitle_initial")}
         </Text>
       </LinearGradient>
 
@@ -130,12 +132,12 @@ export default function ResetPasswordScreen() {
               <View style={styles.successIcon}>
                 <Ionicons name="checkmark-circle" size={80} color="#10B981" />
               </View>
-              <Text style={styles.successTitle}>All Done!</Text>
+              <Text style={styles.successTitle}>{t("reset_password.success_title")}</Text>
               <Text style={styles.successText}>
-                Your password has been reset successfully.
+                {t("reset_password.success_text")}
               </Text>
               <Text style={styles.redirectText}>
-                Redirecting to login...
+                {t("reset_password.redirecting")}
               </Text>
               <ActivityIndicator color="#00C6AE" style={{ marginTop: 20 }} />
             </View>
@@ -152,7 +154,7 @@ export default function ResetPasswordScreen() {
 
               {/* New Password Input */}
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>New Password</Text>
+                <Text style={styles.label}>{t("reset_password.label_new_password")}</Text>
                 <View style={[styles.inputWrapper, error ? styles.inputError : null]}>
                   <Ionicons
                     name="lock-closed-outline"
@@ -162,7 +164,7 @@ export default function ResetPasswordScreen() {
                   />
                   <TextInput
                     style={styles.input}
-                    placeholder="Enter new password"
+                    placeholder={t("reset_password.placeholder_new_password")}
                     placeholderTextColor="#999"
                     value={password}
                     onChangeText={(text) => {
@@ -187,16 +189,16 @@ export default function ResetPasswordScreen() {
 
               {/* Password Requirements */}
               <View style={styles.checksContainer}>
-                <Text style={styles.checksTitle}>Password must have:</Text>
-                <PasswordCheck passed={passwordChecks.length} label="At least 8 characters" />
-                <PasswordCheck passed={passwordChecks.uppercase} label="One uppercase letter" />
-                <PasswordCheck passed={passwordChecks.lowercase} label="One lowercase letter" />
-                <PasswordCheck passed={passwordChecks.number} label="One number" />
+                <Text style={styles.checksTitle}>{t("reset_password.checks_title")}</Text>
+                <PasswordCheck passed={passwordChecks.length} label={t("reset_password.check_length")} />
+                <PasswordCheck passed={passwordChecks.uppercase} label={t("reset_password.check_uppercase")} />
+                <PasswordCheck passed={passwordChecks.lowercase} label={t("reset_password.check_lowercase")} />
+                <PasswordCheck passed={passwordChecks.number} label={t("reset_password.check_number")} />
               </View>
 
               {/* Confirm Password Input */}
               <View style={styles.inputContainer}>
-                <Text style={styles.label}>Confirm Password</Text>
+                <Text style={styles.label}>{t("reset_password.label_confirm_password")}</Text>
                 <View style={[
                   styles.inputWrapper,
                   confirmPassword.length > 0 && !passwordsMatch ? styles.inputError : null,
@@ -210,7 +212,7 @@ export default function ResetPasswordScreen() {
                   />
                   <TextInput
                     style={styles.input}
-                    placeholder="Confirm new password"
+                    placeholder={t("reset_password.placeholder_confirm_password")}
                     placeholderTextColor="#999"
                     value={confirmPassword}
                     onChangeText={(text) => {
@@ -236,7 +238,7 @@ export default function ResetPasswordScreen() {
                     styles.matchText,
                     passwordsMatch ? styles.matchTextSuccess : styles.matchTextError,
                   ]}>
-                    {passwordsMatch ? "✓ Passwords match" : "Passwords do not match"}
+                    {passwordsMatch ? t("reset_password.match_success") : t("reset_password.match_error")}
                   </Text>
                 )}
               </View>
@@ -256,7 +258,7 @@ export default function ResetPasswordScreen() {
                 ) : (
                   <>
                     <Ionicons name="shield-checkmark" size={18} color="#FFFFFF" />
-                    <Text style={styles.primaryButtonText}>Update Password</Text>
+                    <Text style={styles.primaryButtonText}>{t("reset_password.btn_update_password")}</Text>
                   </>
                 )}
               </TouchableOpacity>

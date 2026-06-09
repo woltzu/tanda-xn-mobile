@@ -11,32 +11,37 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 
 type WelcomeScreenNavigationProp = StackNavigationProp<RootStackParamList, "Welcome">;
 
 const { width } = Dimensions.get("window");
 
+// i18n: title / description carry translation keys instead of literal
+// strings. Resolved per-render via t() at the call site so language
+// flips re-paint without re-instantiating.
 const carouselSlides = [
   {
-    title: "Save Together",
-    description: "Join rotating savings groups and reach your financial goals faster with community support.",
+    titleKey: "welcome.slide_save_title",
+    descriptionKey: "welcome.slide_save_desc",
     icon: "people-outline" as const,
   },
   {
-    title: "Build Your XnScore™",
-    description: "Your in-app credit score that unlocks better rates and trusted partnerships.",
+    titleKey: "welcome.slide_score_title",
+    descriptionKey: "welcome.slide_score_desc",
     icon: "trending-up-outline" as const,
   },
   {
-    title: "Achieve Your Goals",
-    description: "Whether it's a home, business, or dream vacation - we help you get there.",
+    titleKey: "welcome.slide_goals_title",
+    descriptionKey: "welcome.slide_goals_desc",
     icon: "flag-outline" as const,
   },
 ];
 
 export default function WelcomeScreen() {
   const navigation = useNavigation<WelcomeScreenNavigationProp>();
+  const { t } = useTranslation();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList<typeof carouselSlides[0]>>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -72,8 +77,8 @@ export default function WelcomeScreen() {
       <View style={styles.iconContainer}>
         <Ionicons name={item.icon} size={80} color="#00C6AE" />
       </View>
-      <Text style={styles.title}>{item.title}</Text>
-      <Text style={styles.description}>{item.description}</Text>
+      <Text style={styles.title}>{t(item.titleKey)}</Text>
+      <Text style={styles.description}>{t(item.descriptionKey)}</Text>
     </View>
   );
 
@@ -131,7 +136,7 @@ export default function WelcomeScreen() {
             onPress={handleBack}
             activeOpacity={0.8}
           >
-            <Text style={styles.backButtonText}>Back</Text>
+            <Text style={styles.backButtonText}>{t("welcome.btn_back")}</Text>
           </TouchableOpacity>
         ) : null}
 
@@ -144,7 +149,7 @@ export default function WelcomeScreen() {
           activeOpacity={0.8}
         >
           <Text style={styles.nextButtonText}>
-            {currentIndex < carouselSlides.length - 1 ? "Next" : "Create Account"}
+            {currentIndex < carouselSlides.length - 1 ? t("welcome.btn_next") : t("welcome.btn_create_account")}
           </Text>
           <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
         </TouchableOpacity>
@@ -156,7 +161,8 @@ export default function WelcomeScreen() {
         onPress={() => navigation.navigate("Login")}
       >
         <Text style={styles.loginText}>
-          Already have an account? <Text style={styles.loginLinkText}>Log In</Text>
+          {t("welcome.have_account_prefix")}
+          <Text style={styles.loginLinkText}>{t("welcome.log_in")}</Text>
         </Text>
       </TouchableOpacity>
     </View>
