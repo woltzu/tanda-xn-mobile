@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useLoan, LOAN_PRODUCTS, LoanProduct, LoanType } from "../context/AdvanceContext";
 import { useXnScore } from "../context/XnScoreContext";
@@ -31,6 +32,7 @@ const TERM_OPTIONS = [
 
 export default function LoanCalculatorScreen() {
   const navigation = useNavigation<LoanCalculatorNavigationProp>();
+  const { t } = useTranslation();
   const { calculateLoan, getAvailableProducts, getEligibility, getEligibilityTier } = useLoan();
   const { score } = useXnScore();
   const { formatCurrency } = useCurrency();
@@ -130,7 +132,7 @@ export default function LoanCalculatorScreen() {
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Loan Calculator</Text>
+            <Text style={styles.headerTitle}>{t("loan_calculator.header_title")}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -142,7 +144,7 @@ export default function LoanCalculatorScreen() {
         <View style={styles.content}>
           {/* Product Selection */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Loan Type</Text>
+            <Text style={styles.sectionTitle}>{t("loan_calculator.section_type")}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.productsScroll}>
               <View style={styles.productsRow}>
                 {LOAN_PRODUCTS.map(product => {
@@ -189,12 +191,12 @@ export default function LoanCalculatorScreen() {
 
           {/* Amount Slider */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Loan Amount</Text>
+            <Text style={styles.sectionTitle}>{t("loan_calculator.section_amount")}</Text>
             <View style={styles.amountInputContainer}>
               <Text style={styles.currencySymbol}>$</Text>
               <TextInput
                 style={styles.amountInput}
-                placeholder="0"
+                placeholder={t("loan_calculator.placeholder_zero")}
                 placeholderTextColor="#9CA3AF"
                 keyboardType="decimal-pad"
                 value={amount}
@@ -237,7 +239,7 @@ export default function LoanCalculatorScreen() {
 
           {/* Term Selection */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Loan Term</Text>
+            <Text style={styles.sectionTitle}>{t("loan_calculator.section_term")}</Text>
             <View style={styles.termOptions}>
               {availableTerms.map(term => (
                 <TouchableOpacity
@@ -262,19 +264,19 @@ export default function LoanCalculatorScreen() {
           {/* Calculation Results */}
           {calculation && (
             <View style={styles.resultsCard}>
-              <Text style={styles.cardTitle}>Your Estimate</Text>
+              <Text style={styles.cardTitle}>{t("loan_calculator.card_estimate")}</Text>
 
               {/* Main Result */}
               <View style={styles.mainResult}>
                 <View style={styles.mainResultItem}>
-                  <Text style={styles.mainResultLabel}>Monthly Payment</Text>
+                  <Text style={styles.mainResultLabel}>{t("loan_calculator.label_monthly")}</Text>
                   <Text style={styles.mainResultValue}>
                     ${formatCurrency(calculation.monthlyPayment, "USD")}
                   </Text>
                 </View>
                 <View style={styles.resultDivider} />
                 <View style={styles.mainResultItem}>
-                  <Text style={styles.mainResultLabel}>Total to Repay</Text>
+                  <Text style={styles.mainResultLabel}>{t("loan_calculator.label_total")}</Text>
                   <Text style={styles.mainResultValue}>
                     ${formatCurrency(calculation.totalToRepay, "USD")}
                   </Text>
@@ -284,7 +286,7 @@ export default function LoanCalculatorScreen() {
               {/* Breakdown */}
               <View style={styles.breakdown}>
                 <View style={styles.breakdownRow}>
-                  <Text style={styles.breakdownLabel}>Principal</Text>
+                  <Text style={styles.breakdownLabel}>{t("loan_calculator.label_principal")}</Text>
                   <Text style={styles.breakdownValue}>
                     ${formatCurrency(calculation.approvedAmount, "USD")}
                   </Text>
@@ -344,7 +346,7 @@ export default function LoanCalculatorScreen() {
           {/* Tier Comparison */}
           {tierComparison.length > 1 && calculation && (
             <View style={styles.comparisonCard}>
-              <Text style={styles.cardTitle}>Rates by Tier</Text>
+              <Text style={styles.cardTitle}>{t("loan_calculator.card_rates")}</Text>
               <Text style={styles.comparisonSubtitle}>
                 Better XnScore = Lower fees
               </Text>
@@ -380,7 +382,7 @@ export default function LoanCalculatorScreen() {
                     )}
                     {comp.isCurrent && (
                       <View style={styles.currentBadge}>
-                        <Text style={styles.currentBadgeText}>Your Rate</Text>
+                        <Text style={styles.currentBadgeText}>{t("loan_calculator.badge_your_rate")}</Text>
                       </View>
                     )}
                   </View>

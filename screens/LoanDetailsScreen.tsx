@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useLoan, LoanStatus, RepaymentScheduleItem } from "../context/AdvanceContext";
 import { useCurrency } from "../context/CurrencyContext";
@@ -35,6 +36,7 @@ const STATUS_CONFIG: Record<LoanStatus, { color: string; bgColor: string; icon: 
 export default function LoanDetailsScreen() {
   const navigation = useNavigation<LoanDetailsNavigationProp>();
   const route = useRoute<LoanDetailsRouteProp>();
+  const { t } = useTranslation();
   const { loanId } = route.params;
 
   const { getLoanById, makePayment, cancelLoan, getProductById } = useLoan();
@@ -51,13 +53,13 @@ export default function LoanDetailsScreen() {
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Loan Not Found</Text>
+            <Text style={styles.headerTitle}>{t("loan_details.header_not_found")}</Text>
             <View style={{ width: 40 }} />
           </View>
         </LinearGradient>
         <View style={styles.emptyState}>
           <Ionicons name="alert-circle-outline" size={64} color="#9CA3AF" />
-          <Text style={styles.emptyStateText}>This loan could not be found</Text>
+          <Text style={styles.emptyStateText}>{t("loan_details.empty_state")}</Text>
         </View>
       </View>
     );
@@ -83,12 +85,12 @@ export default function LoanDetailsScreen() {
             if (amount > 0 && amount <= loan.amountRemaining) {
               try {
                 await makePayment(loan.id, amount, "wallet");
-                Alert.alert("Success", "Payment processed successfully!");
+                Alert.alert(t("loan_details.alert_success_title"), t("loan_details.alert_success_body"));
               } catch {
-                Alert.alert("Error", "Failed to process payment");
+                Alert.alert(t("loan_details.alert_error_title"), t("loan_details.alert_failed_payment"));
               }
             } else {
-              Alert.alert("Invalid Amount", "Please enter a valid amount");
+              Alert.alert(t("loan_details.alert_invalid_amount_title"), t("loan_details.alert_invalid_amount_body"));
             }
           },
         },
@@ -115,7 +117,7 @@ export default function LoanDetailsScreen() {
               await cancelLoan(loan.id);
               navigation.goBack();
             } catch {
-              Alert.alert("Error", "Failed to cancel loan application");
+              Alert.alert(t("loan_details.alert_error_title"), t("loan_details.alert_failed_cancel"));
             }
           },
         },
@@ -183,7 +185,7 @@ export default function LoanDetailsScreen() {
             <Text style={styles.paidLabel}>Paid</Text>
           )}
           {item.status === "scheduled" && (
-            <Text style={styles.scheduledLabel}>Scheduled</Text>
+            <Text style={styles.scheduledLabel}>{t("loan_details.scheduled_label")}</Text>
           )}
           {isNext && (
             <Text style={styles.nextLabel}>Next</Text>
@@ -202,7 +204,7 @@ export default function LoanDetailsScreen() {
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Loan Details</Text>
+            <Text style={styles.headerTitle}>{t("loan_details.header_title")}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -247,7 +249,7 @@ export default function LoanDetailsScreen() {
           {/* Quick Stats */}
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
-              <Text style={styles.statLabel}>Monthly Payment</Text>
+              <Text style={styles.statLabel}>{t("loan_details.stat_monthly")}</Text>
               <Text style={styles.statValue}>
                 ${loan.nextPaymentAmount ? formatCurrency(loan.nextPaymentAmount, "USD") : "0"}
               </Text>
@@ -257,7 +259,7 @@ export default function LoanDetailsScreen() {
               <Text style={styles.statValue}>{loan.termMonths} months</Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statLabel}>Fee Rate</Text>
+              <Text style={styles.statLabel}>{t("loan_details.stat_fee_rate")}</Text>
               <Text style={styles.statValue}>{loan.feeRate}%</Text>
             </View>
           </View>
@@ -270,7 +272,7 @@ export default function LoanDetailsScreen() {
                   <Ionicons name="calendar" size={24} color="#F59E0B" />
                 </View>
                 <View style={styles.nextPaymentInfo}>
-                  <Text style={styles.nextPaymentLabel}>Next Payment Due</Text>
+                  <Text style={styles.nextPaymentLabel}>{t("loan_details.next_payment_due")}</Text>
                   <Text style={styles.nextPaymentDate}>
                     {new Date(loan.nextPaymentDate).toLocaleDateString("en-US", {
                       weekday: "short",
@@ -281,7 +283,7 @@ export default function LoanDetailsScreen() {
                 </View>
               </View>
               <TouchableOpacity style={styles.payNowButton} onPress={handleMakePayment}>
-                <Text style={styles.payNowText}>Pay Now</Text>
+                <Text style={styles.payNowText}>{t("loan_details.btn_pay_now")}</Text>
                 <Ionicons name="arrow-forward" size={16} color="#00C6AE" />
               </TouchableOpacity>
             </View>
@@ -289,17 +291,17 @@ export default function LoanDetailsScreen() {
 
           {/* Loan Details */}
           <View style={styles.detailsCard}>
-            <Text style={styles.cardTitle}>Loan Details</Text>
+            <Text style={styles.cardTitle}>{t("loan_details.card_details")}</Text>
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Principal</Text>
+              <Text style={styles.detailLabel}>{t("loan_details.detail_principal")}</Text>
               <Text style={styles.detailValue}>
                 ${formatCurrency(loan.requestedAmount, "USD")}
               </Text>
             </View>
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Fee Amount</Text>
+              <Text style={styles.detailLabel}>{t("loan_details.detail_fee")}</Text>
               <Text style={styles.detailValue}>
                 ${formatCurrency(loan.feeAmount, "USD")}
               </Text>
@@ -308,7 +310,7 @@ export default function LoanDetailsScreen() {
             <View style={styles.divider} />
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabelBold}>Total to Repay</Text>
+              <Text style={styles.detailLabelBold}>{t("loan_details.detail_total")}</Text>
               <Text style={styles.detailValueBold}>
                 ${formatCurrency(loan.totalToRepay, "USD")}
               </Text>
@@ -317,12 +319,12 @@ export default function LoanDetailsScreen() {
             <View style={styles.divider} />
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Purpose</Text>
+              <Text style={styles.detailLabel}>{t("loan_details.detail_purpose")}</Text>
               <Text style={styles.detailValue}>{loan.category}</Text>
             </View>
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Repayment Method</Text>
+              <Text style={styles.detailLabel}>{t("loan_details.detail_method")}</Text>
               <Text style={styles.detailValue}>
                 {loan.repaymentMethod === "hybrid"
                   ? "Hybrid"
@@ -333,7 +335,7 @@ export default function LoanDetailsScreen() {
             </View>
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Applied On</Text>
+              <Text style={styles.detailLabel}>{t("loan_details.detail_applied")}</Text>
               <Text style={styles.detailValue}>
                 {new Date(loan.createdAt).toLocaleDateString("en-US", {
                   month: "short",
@@ -345,7 +347,7 @@ export default function LoanDetailsScreen() {
 
             {loan.approvedAt && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Approved On</Text>
+                <Text style={styles.detailLabel}>{t("loan_details.detail_approved")}</Text>
                 <Text style={styles.detailValue}>
                   {new Date(loan.approvedAt).toLocaleDateString("en-US", {
                     month: "short",
@@ -367,7 +369,7 @@ export default function LoanDetailsScreen() {
           {/* Repayment Schedule */}
           {loan.repaymentSchedule.length > 0 && (
             <View style={styles.scheduleCard}>
-              <Text style={styles.cardTitle}>Payment Schedule</Text>
+              <Text style={styles.cardTitle}>{t("loan_details.card_schedule")}</Text>
               <View style={styles.scheduleList}>
                 {loan.repaymentSchedule.map((item, index) =>
                   renderPaymentScheduleItem(item, index)
@@ -380,10 +382,10 @@ export default function LoanDetailsScreen() {
           <View style={styles.riskCard}>
             <View style={styles.riskHeader}>
               <Ionicons name="shield-checkmark" size={20} color="#00C6AE" />
-              <Text style={styles.riskTitle}>At Time of Application</Text>
+              <Text style={styles.riskTitle}>{t("loan_details.risk_title")}</Text>
             </View>
             <View style={styles.riskRow}>
-              <Text style={styles.riskLabel}>XnScore</Text>
+              <Text style={styles.riskLabel}>{t("loan_details.risk_xnscore")}</Text>
               <Text style={styles.riskValue}>{loan.xnScoreAtRequest}</Text>
             </View>
             <View style={styles.riskRow}>
@@ -393,7 +395,7 @@ export default function LoanDetailsScreen() {
               </Text>
             </View>
             <View style={styles.riskRow}>
-              <Text style={styles.riskLabel}>Monthly Contribution</Text>
+              <Text style={styles.riskLabel}>{t("loan_details.risk_monthly")}</Text>
               <Text style={styles.riskValue}>${loan.smcAtRequest}</Text>
             </View>
           </View>
@@ -402,7 +404,7 @@ export default function LoanDetailsScreen() {
           {["draft", "submitted", "under_review"].includes(loan.status) && (
             <TouchableOpacity style={styles.cancelButton} onPress={handleCancelLoan}>
               <Ionicons name="close-circle-outline" size={20} color="#DC2626" />
-              <Text style={styles.cancelButtonText}>Cancel Application</Text>
+              <Text style={styles.cancelButtonText}>{t("loan_details.btn_cancel_app")}</Text>
             </TouchableOpacity>
           )}
 

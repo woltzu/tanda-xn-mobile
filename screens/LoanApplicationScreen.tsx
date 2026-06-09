@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import {
   useLoan,
@@ -79,6 +80,7 @@ const TERM_OPTIONS = [
 export default function LoanApplicationScreen() {
   const navigation = useNavigation<LoanApplicationNavigationProp>();
   const route = useRoute<LoanApplicationRouteProp>();
+  const { t } = useTranslation();
   const { productId } = route.params;
 
   const {
@@ -192,7 +194,7 @@ export default function LoanApplicationScreen() {
       // Navigate to loan details
       navigation.replace("LoanDetails", { loanId: loan.id });
     } catch (error) {
-      Alert.alert("Error", "Failed to submit loan application. Please try again.");
+      Alert.alert(t("loan_application.alert_error"), t("loan_application.alert_failed_submit"));
     } finally {
       setIsProcessing(false);
     }
@@ -205,7 +207,7 @@ export default function LoanApplicationScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Product Not Found</Text>
+          <Text style={styles.headerTitle}>{t("loan_application.header_not_found")}</Text>
         </LinearGradient>
       </View>
     );
@@ -224,7 +226,7 @@ export default function LoanApplicationScreen() {
               <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                 <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
               </TouchableOpacity>
-              <Text style={styles.headerTitle}>Apply for Loan</Text>
+              <Text style={styles.headerTitle}>{t("loan_application.header_title")}</Text>
               <View style={{ width: 40 }} />
             </View>
 
@@ -244,12 +246,12 @@ export default function LoanApplicationScreen() {
           <View style={styles.content}>
             {/* Amount Input */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Loan Amount</Text>
+              <Text style={styles.sectionTitle}>{t("loan_application.section_amount")}</Text>
               <View style={styles.amountInputContainer}>
                 <Text style={styles.currencySymbol}>$</Text>
                 <TextInput
                   style={styles.amountInput}
-                  placeholder="0"
+                  placeholder={t("loan_application.placeholder_zero")}
                   placeholderTextColor="#9CA3AF"
                   keyboardType="decimal-pad"
                   value={amount}
@@ -285,7 +287,7 @@ export default function LoanApplicationScreen() {
 
             {/* Loan Term */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Loan Term</Text>
+              <Text style={styles.sectionTitle}>{t("loan_application.section_term")}</Text>
               <View style={styles.termOptions}>
                 {availableTerms.map((term) => (
                   <TouchableOpacity
@@ -311,7 +313,7 @@ export default function LoanApplicationScreen() {
 
             {/* Loan Purpose */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Purpose</Text>
+              <Text style={styles.sectionTitle}>{t("loan_application.section_purpose")}</Text>
               <View style={styles.purposeGrid}>
                 {availablePurposes.map((purpose) => (
                   <TouchableOpacity
@@ -341,7 +343,7 @@ export default function LoanApplicationScreen() {
 
               <TextInput
                 style={styles.detailsInput}
-                placeholder="Tell us more about how you'll use this loan (optional)..."
+                placeholder={t("loan_application.placeholder_purpose")}
                 placeholderTextColor="#9CA3AF"
                 value={purposeDetails}
                 onChangeText={setPurposeDetails}
@@ -352,7 +354,7 @@ export default function LoanApplicationScreen() {
             {/* Source Payout (for small advances) */}
             {product.type === "small" && advanceablePayouts.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Advance Against Payout</Text>
+                <Text style={styles.sectionTitle}>{t("loan_application.section_advance")}</Text>
                 {advanceablePayouts.map((payout) => (
                   <TouchableOpacity
                     key={payout.id}
@@ -389,7 +391,7 @@ export default function LoanApplicationScreen() {
 
             {/* Repayment Method */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Repayment Method</Text>
+              <Text style={styles.sectionTitle}>{t("loan_application.section_repayment_method")}</Text>
               {REPAYMENT_METHODS.map((method) => (
                 <TouchableOpacity
                   key={method.id}
@@ -431,7 +433,7 @@ export default function LoanApplicationScreen() {
 
             {/* Disbursement Method */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Receive Funds To</Text>
+              <Text style={styles.sectionTitle}>{t("loan_application.section_receive_funds")}</Text>
               <View style={styles.disbursementOptions}>
                 {DISBURSEMENT_METHODS.map((method) => (
                   <TouchableOpacity
@@ -464,10 +466,10 @@ export default function LoanApplicationScreen() {
             {/* Loan Summary */}
             {calculation && requestedAmount > 0 && (
               <View style={styles.summaryCard}>
-                <Text style={styles.sectionTitle}>Loan Summary</Text>
+                <Text style={styles.sectionTitle}>{t("loan_application.section_summary")}</Text>
 
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Loan Amount</Text>
+                  <Text style={styles.summaryLabel}>{t("loan_application.summary_loan_amount")}</Text>
                   <Text style={styles.summaryValue}>
                     ${formatCurrency(calculation.approvedAmount, "USD")}
                   </Text>
@@ -495,14 +497,14 @@ export default function LoanApplicationScreen() {
                 <View style={styles.summaryDivider} />
 
                 <View style={styles.summaryRow}>
-                  <Text style={styles.totalLabel}>Total to Repay</Text>
+                  <Text style={styles.totalLabel}>{t("loan_application.total_to_repay")}</Text>
                   <Text style={styles.totalValue}>
                     ${formatCurrency(calculation.totalToRepay, "USD")}
                   </Text>
                 </View>
 
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Monthly Payment</Text>
+                  <Text style={styles.summaryLabel}>{t("loan_application.summary_monthly")}</Text>
                   <Text style={[styles.summaryValue, { color: "#00C6AE", fontWeight: "700" }]}>
                     ${formatCurrency(calculation.monthlyPayment, "USD")}/mo
                   </Text>
@@ -589,11 +591,11 @@ export default function LoanApplicationScreen() {
           disabled={!canSubmit || isProcessing}
         >
           {isProcessing ? (
-            <Text style={styles.submitButtonText}>Submitting...</Text>
+            <Text style={styles.submitButtonText}>{t("loan_application.btn_submitting")}</Text>
           ) : (
             <>
               <Ionicons name="paper-plane-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.submitButtonText}>Submit Application</Text>
+              <Text style={styles.submitButtonText}>{t("loan_application.btn_submit")}</Text>
             </>
           )}
         </TouchableOpacity>

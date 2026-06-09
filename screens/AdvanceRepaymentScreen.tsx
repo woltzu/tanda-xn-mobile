@@ -15,6 +15,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useAdvance, AdvanceRequest } from "../context/AdvanceContext";
 import { useWallet } from "../context/WalletContext";
@@ -27,6 +28,7 @@ type NavigationProp = StackNavigationProp<RootStackParamList>;
 export default function AdvanceRepaymentScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<AdvanceRepaymentRouteProp>();
+  const { t } = useTranslation();
   const { advanceId } = route.params;
   const { getAdvanceById, makeRepayment } = useAdvance();
   const { balance } = useWallet();
@@ -84,7 +86,7 @@ export default function AdvanceRepaymentScreen() {
         const { success, error } = await presentPaymentSheet(clientSecret);
         if (!success) {
           if (error && error !== "Payment canceled") {
-            Alert.alert("Payment Failed", error);
+            Alert.alert(t("advance_repayment.alert_payment_failed_title"), error);
           }
           return;
         }
@@ -108,7 +110,7 @@ export default function AdvanceRepaymentScreen() {
         ]
       );
     } catch (error) {
-      Alert.alert("Payment Failed", "Unable to process your payment. Please try again.");
+      Alert.alert(t("advance_repayment.alert_payment_failed_title"), t("advance_repayment.alert_payment_failed_body"));
     } finally {
       setIsProcessing(false);
     }
@@ -119,7 +121,7 @@ export default function AdvanceRepaymentScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#00C6AE" />
-          <Text style={styles.loadingText}>Loading advance details...</Text>
+          <Text style={styles.loadingText}>{t("advance_repayment.loading_text")}</Text>
         </View>
       </SafeAreaView>
     );
@@ -143,7 +145,7 @@ export default function AdvanceRepaymentScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Make Repayment</Text>
+          <Text style={styles.headerTitle}>{t("advance_repayment.header_title")}</Text>
           <View style={styles.placeholder} />
         </View>
 
@@ -154,7 +156,7 @@ export default function AdvanceRepaymentScreen() {
 
             <View style={styles.progressSection}>
               <View style={styles.progressHeader}>
-                <Text style={styles.progressLabel}>Repayment Progress</Text>
+                <Text style={styles.progressLabel}>{t("advance_repayment.progress_label")}</Text>
                 <Text style={styles.progressPercent}>{repaymentProgress.toFixed(0)}%</Text>
               </View>
               <View style={styles.progressBarContainer}>
@@ -164,13 +166,13 @@ export default function AdvanceRepaymentScreen() {
 
             <View style={styles.summaryRow}>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryItemLabel}>Total Owed</Text>
+                <Text style={styles.summaryItemLabel}>{t("advance_repayment.summary_total_owed")}</Text>
                 <Text style={styles.summaryItemValue}>
                   {formatAmount(advance.totalRepayment, advance.currency)}
                 </Text>
               </View>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryItemLabel}>Already Paid</Text>
+                <Text style={styles.summaryItemLabel}>{t("advance_repayment.summary_already_paid")}</Text>
                 <Text style={[styles.summaryItemValue, styles.paidValue]}>
                   {formatAmount(advance.repaidAmount, advance.currency)}
                 </Text>
@@ -188,7 +190,7 @@ export default function AdvanceRepaymentScreen() {
 
           {/* Payment Amount */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Payment Amount</Text>
+            <Text style={styles.sectionTitle}>{t("advance_repayment.section_amount")}</Text>
             <View style={styles.amountInputCard}>
               <View style={styles.amountInputRow}>
                 <Text style={styles.currencySymbol}>{currencyInfo?.symbol || "$"}</Text>
@@ -197,7 +199,7 @@ export default function AdvanceRepaymentScreen() {
                   value={amount}
                   onChangeText={setAmount}
                   keyboardType="decimal-pad"
-                  placeholder="0.00"
+                  placeholder={t("advance_repayment.placeholder_amount")}
                   placeholderTextColor="#9CA3AF"
                 />
               </View>
@@ -232,14 +234,14 @@ export default function AdvanceRepaymentScreen() {
                 style={[styles.quickAmountBtn, styles.fullPayBtn]}
                 onPress={handlePayFull}
               >
-                <Text style={[styles.quickAmountText, styles.fullPayText]}>Pay Full</Text>
+                <Text style={[styles.quickAmountText, styles.fullPayText]}>{t("advance_repayment.btn_pay_full")}</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           {/* Payment Method */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Payment Method</Text>
+            <Text style={styles.sectionTitle}>{t("advance_repayment.section_method")}</Text>
 
             <TouchableOpacity
               style={[
@@ -253,7 +255,7 @@ export default function AdvanceRepaymentScreen() {
                   <Ionicons name="wallet" size={20} color="#10B981" />
                 </View>
                 <View style={styles.paymentInfo}>
-                  <Text style={styles.paymentTitle}>TandaXn Wallet</Text>
+                  <Text style={styles.paymentTitle}>{t("advance_repayment.payment_wallet")}</Text>
                   <Text style={styles.paymentBalance}>
                     Balance: {formatAmount(walletBalance, advance.currency)}
                   </Text>
@@ -283,7 +285,7 @@ export default function AdvanceRepaymentScreen() {
                   <View style={styles.paymentInfo}>
                     <Text style={styles.paymentTitle}>{method.label}</Text>
                     {method.isDefault && (
-                      <Text style={styles.paymentBalance}>Default</Text>
+                      <Text style={styles.paymentBalance}>{t("advance_repayment.tag_default")}</Text>
                     )}
                   </View>
                 </View>
@@ -309,16 +311,16 @@ export default function AdvanceRepaymentScreen() {
           {/* Payment Summary */}
           {parsedAmount > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Payment Summary</Text>
+              <Text style={styles.sectionTitle}>{t("advance_repayment.section_summary")}</Text>
               <View style={styles.paymentSummaryCard}>
                 <View style={styles.paymentSummaryRow}>
-                  <Text style={styles.paymentSummaryLabel}>Payment Amount</Text>
+                  <Text style={styles.paymentSummaryLabel}>{t("advance_repayment.summary_amount")}</Text>
                   <Text style={styles.paymentSummaryValue}>
                     {formatAmount(parsedAmount, advance.currency)}
                   </Text>
                 </View>
                 <View style={styles.paymentSummaryRow}>
-                  <Text style={styles.paymentSummaryLabel}>Remaining After Payment</Text>
+                  <Text style={styles.paymentSummaryLabel}>{t("advance_repayment.summary_remaining")}</Text>
                   <Text style={[styles.paymentSummaryValue, styles.remainingAfter]}>
                     {formatAmount(Math.max(0, advance.remainingAmount - parsedAmount), advance.currency)}
                   </Text>
@@ -340,7 +342,7 @@ export default function AdvanceRepaymentScreen() {
             <View style={styles.benefitsCard}>
               <View style={styles.benefitsHeader}>
                 <Ionicons name="star" size={20} color="#F59E0B" />
-                <Text style={styles.benefitsTitle}>Benefits of Early Repayment</Text>
+                <Text style={styles.benefitsTitle}>{t("advance_repayment.benefits_title")}</Text>
               </View>
               <View style={styles.benefitItem}>
                 <Ionicons name="trending-up" size={16} color="#10B981" />
@@ -348,11 +350,11 @@ export default function AdvanceRepaymentScreen() {
               </View>
               <View style={styles.benefitItem}>
                 <Ionicons name="ribbon" size={16} color="#10B981" />
-                <Text style={styles.benefitText}>Unlock higher advance limits</Text>
+                <Text style={styles.benefitText}>{t("advance_repayment.benefit_unlock")}</Text>
               </View>
               <View style={styles.benefitItem}>
                 <Ionicons name="shield-checkmark" size={16} color="#10B981" />
-                <Text style={styles.benefitText}>Build trust within your circles</Text>
+                <Text style={styles.benefitText}>{t("advance_repayment.benefit_trust")}</Text>
               </View>
             </View>
           </View>

@@ -35,6 +35,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -102,6 +103,7 @@ const BENEFITS = [
 export default function EarlyRepaymentScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<EarlyRepaymentRouteProp>();
+  const { t } = useTranslation();
 
   const advance = route.params?.advance ?? DEFAULT_ADVANCE;
   const advanceId = route.params?.advanceId ?? advance.id;
@@ -156,7 +158,7 @@ export default function EarlyRepaymentScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Early Repayment</Text>
+              <Text style={styles.headerTitle}>{t("early_repayment.header_title")}</Text>
               <Text style={styles.headerSubtitle}>
                 Pay off your advance today
               </Text>
@@ -164,7 +166,7 @@ export default function EarlyRepaymentScreen() {
           </View>
 
           <View style={styles.payoffBlock}>
-            <Text style={styles.payoffLabel}>Pay off amount</Text>
+            <Text style={styles.payoffLabel}>{t("early_repayment.payoff_label")}</Text>
             <Text style={styles.payoffAmount}>${payoffAmount}</Text>
           </View>
         </LinearGradient>
@@ -187,10 +189,10 @@ export default function EarlyRepaymentScreen() {
 
           {/* Comparison */}
           <View style={styles.sectionCard}>
-            <Text style={styles.fieldLabel}>Compare Your Options</Text>
+            <Text style={styles.fieldLabel}>{t("early_repayment.compare_label")}</Text>
             <View style={styles.comparisonRow}>
               <View style={styles.compChip}>
-                <Text style={styles.compEyebrow}>WAIT FOR PAYOUT</Text>
+                <Text style={styles.compEyebrow}>{t("early_repayment.compare_eyebrow")}</Text>
                 <Text style={styles.compHint}>
                   Pay on {advance.withholdingDate}
                 </Text>
@@ -216,7 +218,7 @@ export default function EarlyRepaymentScreen() {
 
           {/* Payment method */}
           <View style={styles.sectionCard}>
-            <Text style={styles.fieldLabel}>Pay From</Text>
+            <Text style={styles.fieldLabel}>{t("early_repayment.field_pay_from")}</Text>
             <View style={styles.methodsList}>
               {paymentMethods.map((method) => (
                 <MethodRow
