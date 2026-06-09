@@ -15,6 +15,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { Circle, CircleMember, CircleActivity, useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
@@ -91,6 +92,7 @@ const getRotationMethodLabel = (method: string): string => {
 export default function CircleDetailScreen() {
   const navigation = useNavigation<CircleDetailNavigationProp>();
   const route = useRoute<CircleDetailRouteProp>();
+  const { t } = useTranslation();
   const { circleId } = route.params;
   const { circles, browseCircles, myCircles, getCircleMembers, getCircleActivities, refreshCircles } = useCircles();
   const { user } = useAuth();
@@ -167,16 +169,16 @@ export default function CircleDetailScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Circle Not Found</Text>
+          <Text style={styles.headerTitle}>{t("circle_detail.not_found_header")}</Text>
         </LinearGradient>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color="#9CA3AF" />
-          <Text style={styles.errorText}>This circle could not be found.</Text>
+          <Text style={styles.errorText}>{t("circle_detail.not_found_body")}</Text>
           <TouchableOpacity
             style={styles.errorButton}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.errorButtonText}>Go Back</Text>
+            <Text style={styles.errorButtonText}>{t("circle_detail.btn_go_back")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -219,8 +221,8 @@ export default function CircleDetailScreen() {
       "Edit Circle",
       "What would you like to edit?",
       [
-        { text: "Change Name", onPress: () => Alert.alert("Coming Soon", "Circle name editing will be available in a future update.") },
-        { text: "Change Emoji", onPress: () => Alert.alert("Coming Soon", "Emoji editing will be available in a future update.") },
+        { text: t("circle_detail.alert_change_name_title"), onPress: () => Alert.alert(t("circle_detail.alert_coming_soon_title"), t("circle_detail.alert_coming_soon_name")) },
+        { text: t("circle_detail.alert_change_emoji_title"), onPress: () => Alert.alert(t("circle_detail.alert_coming_soon_title"), t("circle_detail.alert_coming_soon_emoji")) },
         { text: "Cancel", style: "cancel" },
       ]
     );
@@ -319,9 +321,9 @@ export default function CircleDetailScreen() {
       "Payment Reminders",
       "Set up your payment reminders",
       [
-        { text: "1 Day Before", onPress: () => Alert.alert("Reminder Set", "You'll be reminded 1 day before each payment.") },
-        { text: "3 Days Before", onPress: () => Alert.alert("Reminder Set", "You'll be reminded 3 days before each payment.") },
-        { text: "1 Week Before", onPress: () => Alert.alert("Reminder Set", "You'll be reminded 1 week before each payment.") },
+        { text: t("circle_detail.alert_reminder_1d"), onPress: () => Alert.alert(t("circle_detail.alert_reminder_set_title"), t("circle_detail.alert_reminder_1d_body")) },
+        { text: t("circle_detail.alert_reminder_3d"), onPress: () => Alert.alert(t("circle_detail.alert_reminder_set_title"), t("circle_detail.alert_reminder_3d_body")) },
+        { text: t("circle_detail.alert_reminder_1w"), onPress: () => Alert.alert(t("circle_detail.alert_reminder_set_title"), t("circle_detail.alert_reminder_1w_body")) },
         { text: "Manage All", onPress: () => navigation.navigate("NotificationPrefs" as any) },
         { text: "Cancel", style: "cancel" },
       ]
@@ -425,12 +427,12 @@ export default function CircleDetailScreen() {
       {/* Stats Cards */}
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Contribution</Text>
+          <Text style={styles.statLabel}>{t("circle_detail.stat_contribution")}</Text>
           <Text style={styles.statValue}>${circle.amount}</Text>
           <Text style={styles.statSubtext}>per {isOneTime ? "member" : getFrequencyLabel(circle.frequency).toLowerCase()}</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statLabel}>Total Pot</Text>
+          <Text style={styles.statLabel}>{t("circle_detail.stat_total_pot")}</Text>
           <Text style={[styles.statValue, { color: "#00C6AE" }]}>${totalPot.toLocaleString()}</Text>
           <Text style={styles.statSubtext}>{circle.memberCount} members</Text>
         </View>
@@ -503,7 +505,7 @@ export default function CircleDetailScreen() {
                     REPUTATION · {tier.label}
                   </Text>
                 </View>
-                <Text style={styles.repCardTitle}>Circle Reputation</Text>
+                <Text style={styles.repCardTitle}>{t("circle_detail.rep_card_title")}</Text>
               </View>
               <View style={styles.repScoreBox}>
                 <Text style={[styles.repScore, { color: tier.color }]}>
@@ -664,7 +666,7 @@ export default function CircleDetailScreen() {
               ) : (
                 <>
                   <Ionicons name="refresh-outline" size={14} color="#2563EB" />
-                  <Text style={styles.healthRefreshText}>Refresh score</Text>
+                  <Text style={styles.healthRefreshText}>{t("circle_detail.health_refresh")}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -685,7 +687,7 @@ export default function CircleDetailScreen() {
               <Ionicons name="calendar-outline" size={20} color="#00C6AE" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.partialPlanBadge}>FLEXIBLE PAYMENT ACTIVE</Text>
+              <Text style={styles.partialPlanBadge}>{t("circle_detail.partial_plan_badge")}</Text>
               <Text style={styles.partialPlanTitle}>
                 ${partialRemaining.toFixed(2)} remaining
               </Text>
@@ -729,7 +731,7 @@ export default function CircleDetailScreen() {
             accessibilityRole="button"
             accessibilityLabel="View Flexible Payment plan details"
           >
-            <Text style={styles.partialPlanButtonText}>View plan details</Text>
+            <Text style={styles.partialPlanButtonText}>{t("circle_detail.partial_plan_btn")}</Text>
             <Ionicons name="arrow-forward" size={14} color="#00C6AE" />
           </TouchableOpacity>
         </View>
@@ -737,7 +739,7 @@ export default function CircleDetailScreen() {
 
       {/* Payment Progress */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Current Cycle Payment Status</Text>
+        <Text style={styles.cardTitle}>{t("circle_detail.card_current_status")}</Text>
         <View style={styles.progressContainer}>
           <View style={styles.progressBarBg}>
             <View style={[styles.progressBarFill, { width: `${paymentProgress}%` }]} />
@@ -764,7 +766,7 @@ export default function CircleDetailScreen() {
             <Ionicons name="person-circle" size={32} color="#00C6AE" />
           </View>
           <View style={styles.beneficiaryInfo}>
-            <Text style={styles.beneficiaryLabel}>Beneficiary</Text>
+            <Text style={styles.beneficiaryLabel}>{t("circle_detail.beneficiary_label")}</Text>
             <Text style={styles.beneficiaryName}>{circle.beneficiaryName}</Text>
             {circle.beneficiaryReason && (
               <Text style={styles.beneficiaryReason}>{circle.beneficiaryReason}</Text>
@@ -776,13 +778,13 @@ export default function CircleDetailScreen() {
 
       {/* Circle Details */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Circle Details</Text>
+        <Text style={styles.cardTitle}>{t("circle_detail.card_circle_details")}</Text>
 
         <View style={styles.detailRow}>
           <View style={styles.detailIcon}>
             <Ionicons name="calendar-outline" size={18} color="#6B7280" />
           </View>
-          <Text style={styles.detailLabel}>Start Date</Text>
+          <Text style={styles.detailLabel}>{t("circle_detail.detail_start_date")}</Text>
           <Text style={styles.detailValue}>{formatDate(circle.startDate)}</Text>
         </View>
 
@@ -790,7 +792,7 @@ export default function CircleDetailScreen() {
           <View style={styles.detailIcon}>
             <Ionicons name="repeat-outline" size={18} color="#6B7280" />
           </View>
-          <Text style={styles.detailLabel}>Frequency</Text>
+          <Text style={styles.detailLabel}>{t("circle_detail.detail_frequency")}</Text>
           <Text style={styles.detailValue}>{getFrequencyLabel(circle.frequency)}</Text>
         </View>
 
@@ -799,7 +801,7 @@ export default function CircleDetailScreen() {
             <View style={styles.detailIcon}>
               <Ionicons name="shuffle-outline" size={18} color="#6B7280" />
             </View>
-            <Text style={styles.detailLabel}>Payout Order</Text>
+            <Text style={styles.detailLabel}>{t("circle_detail.detail_payout_order")}</Text>
             <Text style={styles.detailValue}>{getRotationMethodLabel(circle.rotationMethod)}</Text>
           </View>
         )}
@@ -808,7 +810,7 @@ export default function CircleDetailScreen() {
           <View style={styles.detailIcon}>
             <Ionicons name="time-outline" size={18} color="#6B7280" />
           </View>
-          <Text style={styles.detailLabel}>Grace Period</Text>
+          <Text style={styles.detailLabel}>{t("circle_detail.detail_grace_period")}</Text>
           <Text style={styles.detailValue}>
             {circle.gracePeriodDays === 0 ? "None" : `${circle.gracePeriodDays} day${circle.gracePeriodDays > 1 ? "s" : ""}`}
           </Text>
@@ -819,7 +821,7 @@ export default function CircleDetailScreen() {
             <View style={styles.detailIcon}>
               <Ionicons name="cash-outline" size={18} color="#6B7280" />
             </View>
-            <Text style={styles.detailLabel}>Next Payout</Text>
+            <Text style={styles.detailLabel}>{t("circle_detail.detail_next_payout")}</Text>
             <Text style={[styles.detailValue, { color: "#00C6AE" }]}>
               {formatDate(getNextPayoutDate().toISOString())}
             </Text>
@@ -831,7 +833,7 @@ export default function CircleDetailScreen() {
             <View style={styles.detailIcon}>
               <Ionicons name="trophy-outline" size={18} color="#6B7280" />
             </View>
-            <Text style={styles.detailLabel}>Your Position</Text>
+            <Text style={styles.detailLabel}>{t("circle_detail.detail_your_position")}</Text>
             <Text style={[styles.detailValue, { color: "#00C6AE", fontWeight: "700" }]}>
               #{circle.myPosition}
             </Text>
@@ -848,7 +850,7 @@ export default function CircleDetailScreen() {
           <View style={[styles.actionIcon, { backgroundColor: "#F0FDFB" }]}>
             <Ionicons name="wallet-outline" size={22} color="#00C6AE" />
           </View>
-          <Text style={styles.actionText}>Make Payment</Text>
+          <Text style={styles.actionText}>{t("circle_detail.action_make_payment")}</Text>
           <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
         </TouchableOpacity>
 
@@ -859,7 +861,7 @@ export default function CircleDetailScreen() {
           <View style={[styles.actionIcon, { backgroundColor: "#EEF2FF" }]}>
             <Ionicons name="share-social-outline" size={22} color="#6366F1" />
           </View>
-          <Text style={styles.actionText}>Invite Members</Text>
+          <Text style={styles.actionText}>{t("circle_detail.action_invite_members")}</Text>
           <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
         </TouchableOpacity>
 
@@ -870,7 +872,7 @@ export default function CircleDetailScreen() {
           <View style={[styles.actionIcon, { backgroundColor: "#FEF3C7" }]}>
             <Ionicons name="chatbubbles-outline" size={22} color="#D97706" />
           </View>
-          <Text style={styles.actionText}>Group Chat</Text>
+          <Text style={styles.actionText}>{t("circle_detail.action_group_chat")}</Text>
           <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
         </TouchableOpacity>
       </View>
@@ -886,12 +888,12 @@ export default function CircleDetailScreen() {
       {isLoadingMembers ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#00C6AE" />
-          <Text style={styles.loadingText}>Loading members...</Text>
+          <Text style={styles.loadingText}>{t("circle_detail.loading_members")}</Text>
         </View>
       ) : members.length === 0 ? (
         <View style={styles.emptyMembersContainer}>
           <Ionicons name="people-outline" size={48} color="#9CA3AF" />
-          <Text style={styles.emptyMembersText}>No members yet</Text>
+          <Text style={styles.emptyMembersText}>{t("circle_detail.empty_no_members")}</Text>
         </View>
       ) : (
         members.map((member) => {
@@ -925,7 +927,7 @@ export default function CircleDetailScreen() {
                   )}
                   {isElder && (
                     <View style={[styles.adminTag, { backgroundColor: "#EEF2FF" }]}>
-                      <Text style={[styles.adminTagText, { color: "#6366F1" }]}>Elder</Text>
+                      <Text style={[styles.adminTagText, { color: "#6366F1" }]}>{t("circle_detail.tag_elder")}</Text>
                     </View>
                   )}
                 </View>
@@ -992,17 +994,17 @@ export default function CircleDetailScreen() {
 
   const renderActivityTab = () => (
     <View style={styles.tabContent}>
-      <Text style={styles.sectionTitle}>Recent Activity</Text>
+      <Text style={styles.sectionTitle}>{t("circle_detail.section_recent_activity")}</Text>
 
       {isLoadingActivities ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color="#00C6AE" />
-          <Text style={styles.loadingText}>Loading activities...</Text>
+          <Text style={styles.loadingText}>{t("circle_detail.loading_activities")}</Text>
         </View>
       ) : activities.length === 0 ? (
         <View style={styles.emptyActivities}>
           <Ionicons name="time-outline" size={48} color="#D1D5DB" />
-          <Text style={styles.emptyActivitiesText}>No activity yet</Text>
+          <Text style={styles.emptyActivitiesText}>{t("circle_detail.empty_no_activity")}</Text>
           <Text style={styles.emptyActivitiesSubtext}>
             Activity will appear here once members start contributing
           </Text>
@@ -1092,7 +1094,7 @@ export default function CircleDetailScreen() {
             {circle.verified && (
               <View style={styles.verifiedBadge}>
                 <Ionicons name="shield-checkmark" size={14} color="#00C6AE" />
-                <Text style={styles.verifiedText}>Verified</Text>
+                <Text style={styles.verifiedText}>{t("circle_detail.tag_verified")}</Text>
               </View>
             )}
           </View>
@@ -1169,7 +1171,7 @@ export default function CircleDetailScreen() {
               {/* Header */}
               <View style={styles.menuHeader}>
                 <View>
-                  <Text style={styles.menuTitle}>Circle Options</Text>
+                  <Text style={styles.menuTitle}>{t("circle_detail.menu_title")}</Text>
                   <View style={styles.menuRoleBadge}>
                     <Ionicons
                       name={isAdmin ? "shield-checkmark" : isElder ? "eye" : "person"}
@@ -1191,14 +1193,14 @@ export default function CircleDetailScreen() {
 
               {/* === ALL USERS Section === */}
               <View style={styles.menuSection}>
-                <Text style={styles.menuSectionTitle}>General</Text>
+                <Text style={styles.menuSectionTitle}>{t("circle_detail.menu_general")}</Text>
 
                 <TouchableOpacity style={styles.menuItem} onPress={handleViewCircleRules}>
                   <View style={[styles.menuItemIcon, { backgroundColor: "#F0FDFB" }]}>
                     <Ionicons name="document-text-outline" size={20} color="#00C6AE" />
                   </View>
                   <View style={styles.menuItemContent}>
-                    <Text style={styles.menuItemText}>View Circle Rules</Text>
+                    <Text style={styles.menuItemText}>{t("circle_detail.menu_rules")}</Text>
                     <Text style={styles.menuItemDesc}>Terms, contributions & guidelines</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
@@ -1209,8 +1211,8 @@ export default function CircleDetailScreen() {
                     <Ionicons name="share-social-outline" size={20} color="#6366F1" />
                   </View>
                   <View style={styles.menuItemContent}>
-                    <Text style={styles.menuItemText}>Share Circle</Text>
-                    <Text style={styles.menuItemDesc}>Invite friends via link or code</Text>
+                    <Text style={styles.menuItemText}>{t("circle_detail.menu_share")}</Text>
+                    <Text style={styles.menuItemDesc}>{t("circle_detail.menu_share_desc")}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                 </TouchableOpacity>
@@ -1223,8 +1225,8 @@ export default function CircleDetailScreen() {
                     <Ionicons name="qr-code-outline" size={20} color="#00C6AE" />
                   </View>
                   <View style={styles.menuItemContent}>
-                    <Text style={styles.menuItemText}>Show QR Code</Text>
-                    <Text style={styles.menuItemDesc}>Let others scan to join instantly</Text>
+                    <Text style={styles.menuItemText}>{t("circle_detail.menu_qr")}</Text>
+                    <Text style={styles.menuItemDesc}>{t("circle_detail.menu_qr_desc")}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                 </TouchableOpacity>
@@ -1245,8 +1247,8 @@ export default function CircleDetailScreen() {
                     <Ionicons name="flag-outline" size={20} color="#DC2626" />
                   </View>
                   <View style={styles.menuItemContent}>
-                    <Text style={styles.menuItemText}>Report Issue</Text>
-                    <Text style={styles.menuItemDesc}>Flag problems or disputes</Text>
+                    <Text style={styles.menuItemText}>{t("circle_detail.menu_report")}</Text>
+                    <Text style={styles.menuItemDesc}>{t("circle_detail.menu_report_desc")}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                 </TouchableOpacity>
@@ -1254,15 +1256,15 @@ export default function CircleDetailScreen() {
 
               {/* === MEMBER Section === */}
               <View style={styles.menuSection}>
-                <Text style={styles.menuSectionTitle}>Your Activity</Text>
+                <Text style={styles.menuSectionTitle}>{t("circle_detail.menu_your_activity")}</Text>
 
                 <TouchableOpacity style={styles.menuItem} onPress={handlePaymentHistory}>
                   <View style={[styles.menuItemIcon, { backgroundColor: "#F0FDFB" }]}>
                     <Ionicons name="receipt-outline" size={20} color="#00C6AE" />
                   </View>
                   <View style={styles.menuItemContent}>
-                    <Text style={styles.menuItemText}>Payment History</Text>
-                    <Text style={styles.menuItemDesc}>View your contributions</Text>
+                    <Text style={styles.menuItemText}>{t("circle_detail.menu_payment_history")}</Text>
+                    <Text style={styles.menuItemDesc}>{t("circle_detail.menu_payment_history_desc")}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                 </TouchableOpacity>
@@ -1272,8 +1274,8 @@ export default function CircleDetailScreen() {
                     <Ionicons name="notifications-outline" size={20} color="#6366F1" />
                   </View>
                   <View style={styles.menuItemContent}>
-                    <Text style={styles.menuItemText}>Payment Reminders</Text>
-                    <Text style={styles.menuItemDesc}>Set up alerts for due dates</Text>
+                    <Text style={styles.menuItemText}>{t("circle_detail.menu_reminders")}</Text>
+                    <Text style={styles.menuItemDesc}>{t("circle_detail.menu_reminders_desc")}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                 </TouchableOpacity>
@@ -1286,7 +1288,7 @@ export default function CircleDetailScreen() {
                     <Ionicons name="swap-horizontal" size={20} color="#1D4ED8" />
                   </View>
                   <View style={styles.menuItemContent}>
-                    <Text style={styles.menuItemText}>Swap Position</Text>
+                    <Text style={styles.menuItemText}>{t("circle_detail.menu_swap_position")}</Text>
                     <Text style={styles.menuItemDesc}>
                       Trade your payout position with another member
                     </Text>
@@ -1299,8 +1301,8 @@ export default function CircleDetailScreen() {
                     <Ionicons name="exit-outline" size={20} color="#DC2626" />
                   </View>
                   <View style={styles.menuItemContent}>
-                    <Text style={[styles.menuItemText, { color: "#DC2626" }]}>Leave Circle</Text>
-                    <Text style={styles.menuItemDesc}>Exit this savings circle</Text>
+                    <Text style={[styles.menuItemText, { color: "#DC2626" }]}>{t("circle_detail.menu_leave_circle")}</Text>
+                    <Text style={styles.menuItemDesc}>{t("circle_detail.menu_leave_desc")}</Text>
                   </View>
                   <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                 </TouchableOpacity>
@@ -1310,7 +1312,7 @@ export default function CircleDetailScreen() {
               {isAdmin && (
                 <View style={styles.menuSection}>
                   <View style={styles.menuSectionHeader}>
-                    <Text style={styles.menuSectionTitle}>Admin Controls</Text>
+                    <Text style={styles.menuSectionTitle}>{t("circle_detail.menu_admin_controls")}</Text>
                     <View style={styles.adminBadgeSmall}>
                       <Ionicons name="shield-checkmark" size={10} color="#FFFFFF" />
                     </View>
@@ -1321,7 +1323,7 @@ export default function CircleDetailScreen() {
                       <Ionicons name="create-outline" size={20} color="#D97706" />
                     </View>
                     <View style={styles.menuItemContent}>
-                      <Text style={styles.menuItemText}>Edit Circle Details</Text>
+                      <Text style={styles.menuItemText}>{t("circle_detail.menu_edit_details")}</Text>
                       <Text style={styles.menuItemDesc}>Name, emoji & description</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
@@ -1332,7 +1334,7 @@ export default function CircleDetailScreen() {
                       <Ionicons name="people-outline" size={20} color="#6366F1" />
                     </View>
                     <View style={styles.menuItemContent}>
-                      <Text style={styles.menuItemText}>Manage Members</Text>
+                      <Text style={styles.menuItemText}>{t("circle_detail.menu_manage_members")}</Text>
                       <Text style={styles.menuItemDesc}>Add, remove & assign roles</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
@@ -1343,8 +1345,8 @@ export default function CircleDetailScreen() {
                       <Ionicons name="pause-circle-outline" size={20} color="#D97706" />
                     </View>
                     <View style={styles.menuItemContent}>
-                      <Text style={styles.menuItemText}>Pause Circle</Text>
-                      <Text style={styles.menuItemDesc}>Temporarily stop activity</Text>
+                      <Text style={styles.menuItemText}>{t("circle_detail.menu_pause")}</Text>
+                      <Text style={styles.menuItemDesc}>{t("circle_detail.menu_pause_desc")}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                   </TouchableOpacity>
@@ -1354,7 +1356,7 @@ export default function CircleDetailScreen() {
                       <Ionicons name="download-outline" size={20} color="#00C6AE" />
                     </View>
                     <View style={styles.menuItemContent}>
-                      <Text style={styles.menuItemText}>Export Data</Text>
+                      <Text style={styles.menuItemText}>{t("circle_detail.menu_export")}</Text>
                       <Text style={styles.menuItemDesc}>PDF, CSV & audit reports</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
@@ -1365,7 +1367,7 @@ export default function CircleDetailScreen() {
                       <Ionicons name="settings-outline" size={20} color="#6B7280" />
                     </View>
                     <View style={styles.menuItemContent}>
-                      <Text style={styles.menuItemText}>Admin Settings</Text>
+                      <Text style={styles.menuItemText}>{t("circle_detail.menu_admin_settings")}</Text>
                       <Text style={styles.menuItemDesc}>Contributions, visibility & more</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
@@ -1376,8 +1378,8 @@ export default function CircleDetailScreen() {
                       <Ionicons name="close-circle-outline" size={20} color="#DC2626" />
                     </View>
                     <View style={styles.menuItemContent}>
-                      <Text style={[styles.menuItemText, { color: "#DC2626" }]}>Close Circle</Text>
-                      <Text style={styles.menuItemDesc}>End circle permanently</Text>
+                      <Text style={[styles.menuItemText, { color: "#DC2626" }]}>{t("circle_detail.menu_close_circle")}</Text>
+                      <Text style={styles.menuItemDesc}>{t("circle_detail.menu_close_desc")}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                   </TouchableOpacity>
@@ -1388,7 +1390,7 @@ export default function CircleDetailScreen() {
               {(isElder || isAdmin) && (
                 <View style={styles.menuSection}>
                   <View style={styles.menuSectionHeader}>
-                    <Text style={styles.menuSectionTitle}>Oversight Tools</Text>
+                    <Text style={styles.menuSectionTitle}>{t("circle_detail.menu_oversight_tools")}</Text>
                     <View style={[styles.adminBadgeSmall, { backgroundColor: "#6366F1" }]}>
                       <Ionicons name="eye" size={10} color="#FFFFFF" />
                     </View>
@@ -1399,7 +1401,7 @@ export default function CircleDetailScreen() {
                       <Ionicons name="analytics-outline" size={20} color="#6366F1" />
                     </View>
                     <View style={styles.menuItemContent}>
-                      <Text style={styles.menuItemText}>Oversight Dashboard</Text>
+                      <Text style={styles.menuItemText}>{t("circle_detail.menu_oversight_dashboard")}</Text>
                       <Text style={styles.menuItemDesc}>Circle health & compliance</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
@@ -1410,8 +1412,8 @@ export default function CircleDetailScreen() {
                       <Ionicons name="hand-left-outline" size={20} color="#EC4899" />
                     </View>
                     <View style={styles.menuItemContent}>
-                      <Text style={styles.menuItemText}>Mediation Tools</Text>
-                      <Text style={styles.menuItemDesc}>Resolve member disputes</Text>
+                      <Text style={styles.menuItemText}>{t("circle_detail.menu_mediation")}</Text>
+                      <Text style={styles.menuItemDesc}>{t("circle_detail.menu_mediation_desc")}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                   </TouchableOpacity>
@@ -1421,8 +1423,8 @@ export default function CircleDetailScreen() {
                       <Ionicons name="list-outline" size={20} color="#00C6AE" />
                     </View>
                     <View style={styles.menuItemContent}>
-                      <Text style={styles.menuItemText}>Audit Trail</Text>
-                      <Text style={styles.menuItemDesc}>Complete activity history</Text>
+                      <Text style={styles.menuItemText}>{t("circle_detail.menu_audit")}</Text>
+                      <Text style={styles.menuItemDesc}>{t("circle_detail.menu_audit_desc")}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                   </TouchableOpacity>
