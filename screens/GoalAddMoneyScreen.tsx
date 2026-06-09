@@ -43,6 +43,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useFormDraft } from "../hooks/useFormDraft";
 import { useGoalActions } from "../hooks/useGoalActions";
@@ -192,6 +193,7 @@ function Radio({ selected, size = 22 }: { selected: boolean; size?: number }) {
 export default function GoalAddMoneyScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalAddMoneyRouteProp>();
+  const { t } = useTranslation();
   const { addMoney } = useGoalActions();
   const { presentPaymentSheet } = usePayment();
   const { user } = useAuth();
@@ -325,7 +327,7 @@ export default function GoalAddMoneyScreen() {
     !!selectedSource;
 
   const comingSoon = (label: string) =>
-    Alert.alert(label, "This will be available soon.");
+    Alert.alert(label, t("goal_add_money.alert_coming_soon_body"));
 
   // ── Card deposit path (migration 074 + extended create-payment-intent) ─────
   // 1. Convert dollars → cents and call our edge function with
@@ -346,8 +348,8 @@ export default function GoalAddMoneyScreen() {
   const handleCardDeposit = async () => {
     if (!UUID_RE.test(goalId)) {
       Alert.alert(
-        "Goal not loaded",
-        "Open this screen from your goal's detail page so the deposit can be saved."
+        t("goal_add_money.alert_goal_not_loaded_title"),
+        t("goal_add_money.alert_goal_not_loaded_body")
       );
       return;
     }
@@ -356,7 +358,10 @@ export default function GoalAddMoneyScreen() {
     // with Math.round to avoid float precision issues.
     const amountCents = Math.round(numAmount * 100);
     if (amountCents < 50) {
-      Alert.alert("Amount too small", "Minimum card deposit is $0.50.");
+      Alert.alert(
+        t("goal_add_money.alert_amount_too_small_title"),
+        t("goal_add_money.alert_amount_too_small_card_body")
+      );
       return;
     }
 
@@ -390,7 +395,7 @@ export default function GoalAddMoneyScreen() {
         // failure scarier than it is. The Stripe SDK distinguishes
         // "Canceled" vs other errors in the error.message — surface as-is.
         if (sheet.error) {
-          Alert.alert("Payment not completed", sheet.error);
+          Alert.alert(t("goal_add_money.alert_payment_not_completed_title"), sheet.error);
         }
         return;
       }
@@ -399,12 +404,15 @@ export default function GoalAddMoneyScreen() {
       // Wipe the draft now so a fresh entry starts clean next time.
       clearDraft();
       Alert.alert(
-        "Deposit on its way",
-        "Your card was charged. The goal balance will update in a moment.",
-        [{ text: "OK", onPress: () => navigation.goBack() }]
+        t("goal_add_money.alert_deposit_on_way_title"),
+        t("goal_add_money.alert_deposit_on_way_body"),
+        [{ text: t("common.ok"), onPress: () => navigation.goBack() }]
       );
     } catch (err: any) {
-      Alert.alert("Payment failed", err?.message ?? "Please try again.");
+      Alert.alert(
+        t("goal_add_money.alert_payment_failed_title"),
+        err?.message ?? t("goal_add_money.alert_default_retry")
+      );
     } finally {
       setSubmitting(false);
     }
@@ -431,20 +439,23 @@ export default function GoalAddMoneyScreen() {
   const handleBankDeposit = async () => {
     if (!UUID_RE.test(goalId)) {
       Alert.alert(
-        "Goal not loaded",
-        "Open this screen from your goal's detail page so the deposit can be saved."
+        t("goal_add_money.alert_goal_not_loaded_title"),
+        t("goal_add_money.alert_goal_not_loaded_body")
       );
       return;
     }
     const amountCents = Math.round(numAmount * 100);
     if (amountCents < 50) {
-      Alert.alert("Amount too small", "Minimum bank deposit is $0.50.");
+      Alert.alert(
+        t("goal_add_money.alert_amount_too_small_title"),
+        t("goal_add_money.alert_amount_too_small_bank_body")
+      );
       return;
     }
     if (Platform.OS === "web") {
       Alert.alert(
-        "Not available on web",
-        "Bank linking via Financial Connections is only available in the mobile app."
+        t("goal_add_money.alert_not_available_web_title"),
+        t("goal_add_money.alert_not_available_web_body")
       );
       return;
     }
@@ -544,14 +555,14 @@ export default function GoalAddMoneyScreen() {
       // Wipe the draft now so a fresh entry starts clean next time.
       clearDraft();
       Alert.alert(
-        "Bank transfer initiated",
-        "Your deposit will appear in this goal in 3-5 business days once your bank confirms the transfer.",
-        [{ text: "OK", onPress: () => navigation.goBack() }]
+        t("goal_add_money.alert_bank_transfer_initiated_title"),
+        t("goal_add_money.alert_bank_transfer_initiated_body"),
+        [{ text: t("common.ok"), onPress: () => navigation.goBack() }]
       );
     } catch (err: any) {
       Alert.alert(
-        "Bank deposit failed",
-        err?.message ?? "Please try again or pick a different payment method."
+        t("goal_add_money.alert_bank_deposit_failed_title"),
+        err?.message ?? t("goal_add_money.alert_bank_deposit_failed_body")
       );
     } finally {
       setLinkingBank(false);
@@ -566,8 +577,8 @@ export default function GoalAddMoneyScreen() {
   const linkBankOnly = async () => {
     if (Platform.OS === "web") {
       Alert.alert(
-        "Not available on web",
-        "Bank linking via Financial Connections is only available in the mobile app."
+        t("goal_add_money.alert_not_available_web_title"),
+        t("goal_add_money.alert_not_available_web_body")
       );
       return;
     }
@@ -610,13 +621,16 @@ export default function GoalAddMoneyScreen() {
 
       await fetchSavedBanks();
       Alert.alert(
-        "Bank linked",
-        `${accounts[0].bankName ?? "Your bank"} (••••${accounts[0].last4 ?? "????"}) is now available. Pick it as the funding source to deposit.`
+        t("goal_add_money.alert_bank_linked_title"),
+        t("goal_add_money.alert_bank_linked_body", {
+          bank: accounts[0].bankName ?? t("goal_add_money.default_bank_name"),
+          last4: accounts[0].last4 ?? t("goal_add_money.default_bank_last4"),
+        })
       );
     } catch (err: any) {
       Alert.alert(
-        "Bank linking failed",
-        err?.message ?? "Please try again."
+        t("goal_add_money.alert_bank_linking_failed_title"),
+        err?.message ?? t("goal_add_money.alert_default_retry")
       );
     } finally {
       setLinkingBank(false);
@@ -638,8 +652,8 @@ export default function GoalAddMoneyScreen() {
 
     if (!UUID_RE.test(goalId)) {
       Alert.alert(
-        "Goal not loaded",
-        "Open this screen from your goal's detail page so the deposit can be saved."
+        t("goal_add_money.alert_goal_not_loaded_title"),
+        t("goal_add_money.alert_goal_not_loaded_body")
       );
       return;
     }
@@ -651,7 +665,10 @@ export default function GoalAddMoneyScreen() {
     setSubmitting(false);
 
     if (error) {
-      Alert.alert("Deposit failed", error.message ?? "Please try again.");
+      Alert.alert(
+        t("goal_add_money.alert_deposit_failed_title"),
+        error.message ?? t("goal_add_money.alert_default_retry")
+      );
       return;
     }
 
@@ -687,7 +704,7 @@ export default function GoalAddMoneyScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Add Money</Text>
+            <Text style={styles.headerTitle}>{t("goal_add_money.header")}</Text>
           </View>
 
           {/* Goal summary */}
@@ -698,8 +715,10 @@ export default function GoalAddMoneyScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.goalName}>{goal.name}</Text>
               <Text style={styles.goalMeta}>
-                ${goal.balance.toLocaleString()} saved • $
-                {remainingToTarget.toLocaleString()} to go
+                {t("goal_add_money.summary_meta", {
+                  saved: goal.balance.toLocaleString(),
+                  remaining: remainingToTarget.toLocaleString(),
+                })}
               </Text>
             </View>
           </View>
@@ -709,7 +728,7 @@ export default function GoalAddMoneyScreen() {
         <View style={styles.contentWrap}>
           {/* Amount input */}
           <View style={styles.card}>
-            <Text style={styles.fieldLabel}>AMOUNT TO ADD</Text>
+            <Text style={styles.fieldLabel}>{t("goal_add_money.amount_label")}</Text>
             <View style={styles.amountInputWrap}>
               <Text style={styles.amountCurrency}>$</Text>
               <TextInput
@@ -750,14 +769,14 @@ export default function GoalAddMoneyScreen() {
                 accessibilityRole="button"
                 style={styles.fillPill}
               >
-                <Text style={styles.fillPillText}>Fill to Target</Text>
+                <Text style={styles.fillPillText}>{t("goal_add_money.fill_to_target")}</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           {/* Funding source */}
           <View style={styles.card}>
-            <Text style={[styles.fieldLabel, { marginBottom: 12 }]}>FUND FROM</Text>
+            <Text style={[styles.fieldLabel, { marginBottom: 12 }]}>{t("goal_add_money.fund_from")}</Text>
 
             {/* Wallet */}
             <TouchableOpacity
@@ -775,9 +794,9 @@ export default function GoalAddMoneyScreen() {
                   <Text style={styles.sourceIconEmoji}>💵</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.sourceName}>TandaXn Wallet</Text>
+                  <Text style={styles.sourceName}>{t("goal_add_money.source_wallet_name")}</Text>
                   <Text style={styles.sourceMeta}>
-                    Balance: ${walletBalance.toLocaleString()}
+                    {t("goal_add_money.source_wallet_balance", { amount: walletBalance.toLocaleString() })}
                   </Text>
                 </View>
               </View>
@@ -792,14 +811,14 @@ export default function GoalAddMoneyScreen() {
             {bankRowsForRender.length === 0 ? (
               <View style={[styles.sourceRow, { justifyContent: "center" }]}>
                 <Text style={styles.sourceMeta}>
-                  No banks linked yet — tap "+ Link a bank account" below.
+                  {t("goal_add_money.no_banks_linked")}
                 </Text>
               </View>
             ) : (
               bankRowsForRender.map((bank) => {
                 const isSel = selectedSource === "bank" && selectedBankId === bank.id;
-                const displayName = bank.bank_name ?? "Bank account";
-                const last4 = bank.last4 ?? "????";
+                const displayName = bank.bank_name ?? t("goal_add_money.source_bank_default_name");
+                const last4 = bank.last4 ?? t("goal_add_money.default_bank_last4");
                 return (
                   <TouchableOpacity
                     key={bank.id}
@@ -821,7 +840,7 @@ export default function GoalAddMoneyScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.sourceName}>{displayName}</Text>
                         <Text style={styles.sourceMeta}>
-                          ••••{last4} • bank account
+                          {t("goal_add_money.source_bank_meta", { last4 })}
                         </Text>
                       </View>
                     </View>
@@ -856,7 +875,7 @@ export default function GoalAddMoneyScreen() {
                       <Text style={styles.sourceName}>
                         {card.name} ••••{card.last4}
                       </Text>
-                      <Text style={styles.sourceMeta}>Debit card • 1.5% fee</Text>
+                      <Text style={styles.sourceMeta}>{t("goal_add_money.source_card_meta")}</Text>
                     </View>
                   </View>
                   <Radio selected={isSel} />
@@ -874,22 +893,22 @@ export default function GoalAddMoneyScreen() {
                 style={[styles.addNewButton, linkingBank && { opacity: 0.5 }]}
               >
                 <Text style={styles.addNewText}>
-                  {linkingBank ? "Linking…" : "+ Link a bank account"}
+                  {linkingBank ? t("goal_add_money.linking") : t("goal_add_money.link_bank")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => comingSoon("Add Card")}
+                onPress={() => comingSoon(t("goal_add_money.alert_add_card_label"))}
                 accessibilityRole="button"
                 style={styles.addNewButton}
               >
-                <Text style={styles.addNewText}>+ Add Card</Text>
+                <Text style={styles.addNewText}>{t("goal_add_money.add_card")}</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           {/* Auto-deposit upsell */}
           <TouchableOpacity
-            onPress={() => comingSoon("Set Up Auto-Deposit")}
+            onPress={() => comingSoon(t("goal_add_money.alert_setup_autodeposit_label"))}
             activeOpacity={0.9}
             accessibilityRole="button"
           >
@@ -901,10 +920,8 @@ export default function GoalAddMoneyScreen() {
             >
               <Text style={styles.upsellEmoji}>⚡</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.upsellTitle}>Set Up Auto-Deposit</Text>
-                <Text style={styles.upsellBody}>
-                  Never miss a contribution. Save automatically.
-                </Text>
+                <Text style={styles.upsellTitle}>{t("goal_add_money.upsell_title")}</Text>
+                <Text style={styles.upsellBody}>{t("goal_add_money.upsell_body")}</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
             </LinearGradient>
@@ -915,8 +932,7 @@ export default function GoalAddMoneyScreen() {
             <View style={styles.feeNotice}>
               <Text style={styles.feeEmoji}>💡</Text>
               <Text style={styles.feeText}>
-                Card deposits have a 1.5% fee (${(numAmount * 0.015).toFixed(2)}).
-                Bank transfers are free.
+                {t("goal_add_money.fee_card_text", { fee: (numAmount * 0.015).toFixed(2) })}
               </Text>
             </View>
           )}
@@ -926,8 +942,7 @@ export default function GoalAddMoneyScreen() {
             <View style={styles.feeNotice}>
               <Text style={styles.feeEmoji}>🕒</Text>
               <Text style={styles.feeText}>
-                Bank transfers are free but take 3-5 business days to
-                appear in your goal.
+                {t("goal_add_money.fee_bank_text")}
               </Text>
             </View>
           )}
@@ -957,9 +972,9 @@ export default function GoalAddMoneyScreen() {
             >
               {amount.length > 0
                 ? selectedSource === "bank"
-                  ? `Link Bank & Send $${numAmount.toLocaleString()}`
-                  : `Add $${numAmount.toLocaleString()} to Goal`
-                : "Enter Amount"}
+                  ? t("goal_add_money.cta_link_bank_send", { amount: numAmount.toLocaleString() })
+                  : t("goal_add_money.cta_add_to_goal", { amount: numAmount.toLocaleString() })
+                : t("goal_add_money.cta_enter_amount")}
             </Text>
           )}
         </TouchableOpacity>

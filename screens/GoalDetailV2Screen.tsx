@@ -46,6 +46,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useGoalActions } from "../hooks/useGoalActions";
@@ -330,6 +331,7 @@ function mapRealTxnsToActivities(txns: RealTxn[]): Activity[] {
 export default function GoalDetailV2Screen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalDetailV2RouteProp>();
+  const { t } = useTranslation();
 
   const goalId = (route.params as { goalId?: string } | undefined)?.goalId;
   const passedGoal = (route.params?.goal as Goal | undefined) ?? null;
@@ -470,7 +472,7 @@ export default function GoalDetailV2Screen() {
         <StatusBar barStyle="light-content" backgroundColor={NAVY} />
         <View style={styles.centerFill}>
           <Text style={styles.emptyEmoji}>🔎</Text>
-          <Text style={styles.emptyTitle}>Goal not found</Text>
+          <Text style={styles.emptyTitle}>{t("goal_detail.not_found_title")}</Text>
           <Text style={styles.emptyBody}>
             We couldn't load this goal. Try again from the goals list.
           </Text>
@@ -479,7 +481,7 @@ export default function GoalDetailV2Screen() {
             onPress={() => navigation.goBack()}
             accessibilityRole="button"
           >
-            <Text style={styles.emptyButtonText}>Back</Text>
+            <Text style={styles.emptyButtonText}>{t("goal_detail.back")}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -616,7 +618,7 @@ export default function GoalDetailV2Screen() {
 
           {/* Balance display */}
           <View style={{ alignItems: "center" }}>
-            <Text style={styles.balanceLabel}>TOTAL VALUE</Text>
+            <Text style={styles.balanceLabel}>{t("goal_detail.total_value")}</Text>
             <Text style={styles.balanceValue}>
               $
               {totalWithInterest.toLocaleString("en-US", {
@@ -627,14 +629,14 @@ export default function GoalDetailV2Screen() {
             {/* Breakdown */}
             <View style={styles.breakdownRow}>
               <View style={styles.breakdownItem}>
-                <Text style={styles.breakdownLabel}>Saved</Text>
+                <Text style={styles.breakdownLabel}>{t("goal_detail.breakdown_saved")}</Text>
                 <Text style={styles.breakdownValue}>
                   ${goal.balance.toLocaleString()}
                 </Text>
               </View>
               <View style={styles.breakdownDivider} />
               <View style={styles.breakdownItem}>
-                <Text style={styles.breakdownLabel}>Interest</Text>
+                <Text style={styles.breakdownLabel}>{t("goal_detail.breakdown_interest")}</Text>
                 <Text
                   style={[
                     styles.breakdownValue,
@@ -646,7 +648,7 @@ export default function GoalDetailV2Screen() {
               </View>
               <View style={styles.breakdownDivider} />
               <View style={styles.breakdownItem}>
-                <Text style={styles.breakdownLabel}>Target</Text>
+                <Text style={styles.breakdownLabel}>{t("goal_detail.breakdown_target")}</Text>
                 <Text style={styles.breakdownValue}>
                   ${goal.target.toLocaleString()}
                 </Text>
@@ -702,7 +704,7 @@ export default function GoalDetailV2Screen() {
                 accessibilityRole="button"
                 accessibilityLabel="Dismiss celebration banner"
               >
-                <Text style={styles.celebrationBannerDismissText}>Dismiss</Text>
+                <Text style={styles.celebrationBannerDismissText}>{t("goal_detail.dismiss")}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -733,7 +735,7 @@ export default function GoalDetailV2Screen() {
                 >
                   {goal.apy}%
                 </Text>
-                <Text style={styles.typeCardApyLabel}>APY</Text>
+                <Text style={styles.typeCardApyLabel}>{t("goal_detail.apy_label")}</Text>
               </View>
             </View>
 
@@ -750,7 +752,7 @@ export default function GoalDetailV2Screen() {
                 ) : (
                   <>
                     <View>
-                      <Text style={styles.lockMutedLabel}>Unlocks</Text>
+                      <Text style={styles.lockMutedLabel}>{t("goal_detail.unlocks_label")}</Text>
                       <Text style={styles.lockEndDate}>{lockStatus.endDate}</Text>
                     </View>
                     <View style={styles.lockDaysBox}>
@@ -778,7 +780,7 @@ export default function GoalDetailV2Screen() {
                 <View style={{ flex: 1 }}>
                   <View style={styles.interestTitleRow}>
                     <Text style={styles.interestTitleEmoji}>📈</Text>
-                    <Text style={styles.interestTitle}>INTEREST EARNED</Text>
+                    <Text style={styles.interestTitle}>{t("goal_detail.interest_section_title")}</Text>
                   </View>
                   <Text style={styles.interestValue}>
                     ${goal.interestEarned.toFixed(2)}
@@ -788,7 +790,7 @@ export default function GoalDetailV2Screen() {
                   </Text>
                 </View>
                 <View style={styles.interestActiveBox}>
-                  <Text style={styles.interestActiveLabel}>Active</Text>
+                  <Text style={styles.interestActiveLabel}>{t("goal_detail.interest_active")}</Text>
                   <Text style={styles.interestActiveValue}>
                     {goal.daysActive} days
                   </Text>
@@ -875,7 +877,7 @@ export default function GoalDetailV2Screen() {
                     <Text style={styles.linkedIconEmoji}>🔗</Text>
                   </View>
                   <View>
-                    <Text style={styles.linkedKicker}>LINKED CIRCLE</Text>
+                    <Text style={styles.linkedKicker}>{t("goal_detail.linked_kicker")}</Text>
                     <Text style={styles.linkedName}>{goal.linkedCircle.name}</Text>
                   </View>
                 </View>
@@ -883,13 +885,13 @@ export default function GoalDetailV2Screen() {
                   onPress={handleLinkCircle}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.linkAction}>Edit</Text>
+                  <Text style={styles.linkAction}>{t("goal_detail.edit")}</Text>
                 </TouchableOpacity>
               </View>
 
               <View style={styles.payoutBox}>
                 <View>
-                  <Text style={styles.payoutLabel}>Next payout</Text>
+                  <Text style={styles.payoutLabel}>{t("goal_detail.next_payout")}</Text>
                   <Text style={styles.payoutValue}>
                     ${goal.linkedCircle.payoutAmount.toLocaleString()} on{" "}
                     {goal.linkedCircle.nextPayout}
@@ -909,7 +911,7 @@ export default function GoalDetailV2Screen() {
             >
               <Text style={styles.linkCircleEmoji}>🔗</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.linkCircleTitle}>Link a Circle</Text>
+                <Text style={styles.linkCircleTitle}>{t("goal_detail.link_circle_title")}</Text>
                 <Text style={styles.linkCircleBody}>
                   Auto-transfer Circle payouts to this goal
                 </Text>
@@ -920,7 +922,7 @@ export default function GoalDetailV2Screen() {
           {/* Recent activity */}
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardHeading}>Recent Activity</Text>
+              <Text style={styles.cardHeading}>{t("goal_detail.section_recent_activity")}</Text>
               <TouchableOpacity
                 onPress={() =>
                   navigation.navigate(Routes.GoalActivity, {
@@ -930,7 +932,7 @@ export default function GoalDetailV2Screen() {
                 }
                 accessibilityRole="button"
               >
-                <Text style={styles.linkAction}>See All</Text>
+                <Text style={styles.linkAction}>{t("goal_detail.see_all")}</Text>
               </TouchableOpacity>
             </View>
 
@@ -980,14 +982,14 @@ export default function GoalDetailV2Screen() {
           style={styles.addMoneyButton}
         >
           <Ionicons name="add" size={18} color="#FFFFFF" />
-          <Text style={styles.addMoneyText}>Add Money</Text>
+          <Text style={styles.addMoneyText}>{t("goal_detail.add_money")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={handleWithdraw}
           accessibilityRole="button"
           style={styles.withdrawButton}
         >
-          <Text style={styles.withdrawText}>Withdraw</Text>
+          <Text style={styles.withdrawText}>{t("goal_detail.withdraw")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

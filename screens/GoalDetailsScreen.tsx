@@ -18,6 +18,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useSavings, GOAL_TYPES, GoalTransaction } from "../context/SavingsContext";
 import { useInterest } from "../hooks/useInterest";
@@ -52,6 +53,7 @@ type GoalDetailsRouteProp = RouteProp<RootStackParamList, "GoalDetails">;
 export default function GoalDetailsScreen() {
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<GoalDetailsRouteProp>();
+  const { t } = useTranslation();
   const { goalId } = route.params;
 
   const {
@@ -98,12 +100,12 @@ export default function GoalDetailsScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Goal not found</Text>
+          <Text style={styles.errorText}>{t("goal_detail.not_found_title")}</Text>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.backButtonText}>Go Back</Text>
+            <Text style={styles.backButtonText}>{t("goal_detail.go_back")}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -524,7 +526,7 @@ export default function GoalDetailsScreen() {
 
         {/* Balance */}
         <View style={styles.balanceSection}>
-          <Text style={styles.balanceLabel}>CURRENT BALANCE</Text>
+          <Text style={styles.balanceLabel}>{t("goal_detail.current_balance")}</Text>
           <Text style={styles.balanceAmount}>{formatCurrency(goal.currentBalance)}</Text>
           <Text style={styles.targetText}>of {formatCurrency(goal.targetAmount)} target</Text>
         </View>
@@ -553,12 +555,12 @@ export default function GoalDetailsScreen() {
           <View style={styles.statCard}>
             <Ionicons name="trending-up" size={20} color="#10B981" />
             <Text style={styles.statValue}>{formatCurrency(goal.interestEarned)}</Text>
-            <Text style={styles.statLabel}>Interest Earned</Text>
+            <Text style={styles.statLabel}>{t("goal_detail.stat_interest_earned")}</Text>
           </View>
           <View style={styles.statCard}>
             <Ionicons name="wallet-outline" size={20} color="#3B82F6" />
             <Text style={styles.statValue}>{formatCurrency(goal.interestUnlocked)}</Text>
-            <Text style={styles.statLabel}>Unlocked</Text>
+            <Text style={styles.statLabel}>{t("goal_detail.stat_unlocked")}</Text>
           </View>
           <View style={styles.statCard}>
             <Ionicons name="calendar-outline" size={20} color="#8B5CF6" />
@@ -574,7 +576,7 @@ export default function GoalDetailsScreen() {
               <Ionicons name="lock-closed" size={24} color="#6366F1" />
             </View>
             <View style={styles.maturityInfo}>
-              <Text style={styles.maturityTitle}>Locked Until</Text>
+              <Text style={styles.maturityTitle}>{t("goal_detail.maturity_title")}</Text>
               <Text style={styles.maturityDate}>{formatDate(goal.maturityDate)}</Text>
               {daysUntilMaturity && daysUntilMaturity > 0 && (
                 <Text style={styles.maturityDays}>{daysUntilMaturity} days remaining</Text>
@@ -639,20 +641,20 @@ export default function GoalDetailsScreen() {
             onPress={() => navigation.navigate("DepositToGoal", { goalId })}
           >
             <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Deposit</Text>
+            <Text style={styles.actionButtonText}>{t("goal_detail.action_deposit")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionButton, styles.withdrawButton]}
             onPress={handleWithdraw}
           >
             <Ionicons name="arrow-up-circle-outline" size={20} color="#EF4444" />
-            <Text style={[styles.actionButtonText, { color: "#EF4444" }]}>Withdraw</Text>
+            <Text style={[styles.actionButtonText, { color: "#EF4444" }]}>{t("goal_detail.action_withdraw")}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Milestones */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Milestones</Text>
+          <Text style={styles.sectionTitle}>{t("goal_detail.section_milestones")}</Text>
           <View style={styles.milestonesContainer}>
             {goal.milestones.map((milestone, idx) => (
               <View key={milestone.id} style={styles.milestoneItem}>
@@ -722,7 +724,7 @@ export default function GoalDetailsScreen() {
               )}
             </View>
             <View style={styles.editButton}>
-              <Text style={styles.editButtonText}>Edit</Text>
+              <Text style={styles.editButtonText}>{t("goal_detail.edit")}</Text>
               <Ionicons name="chevron-forward" size={16} color="#00C6AE" />
             </View>
           </TouchableOpacity>
@@ -731,10 +733,10 @@ export default function GoalDetailsScreen() {
         {/* Transaction History */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            <Text style={styles.sectionTitle}>{t("goal_detail.section_recent_activity")}</Text>
             {transactions.length > 5 && (
               <TouchableOpacity>
-                <Text style={styles.viewAllText}>View All</Text>
+                <Text style={styles.viewAllText}>{t("goal_detail.view_all")}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -742,7 +744,7 @@ export default function GoalDetailsScreen() {
           {transactions.length === 0 ? (
             <View style={styles.emptyTransactions}>
               <Ionicons name="receipt-outline" size={32} color="#9CA3AF" />
-              <Text style={styles.emptyText}>No transactions yet</Text>
+              <Text style={styles.emptyText}>{t("goal_detail.empty_transactions")}</Text>
             </View>
           ) : (
             transactions.slice(0, 5).map((txn) => {
@@ -791,7 +793,7 @@ export default function GoalDetailsScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={styles.managementButton} onPress={() => setShowMenu(true)}>
             <Ionicons name="ellipsis-horizontal" size={18} color="#6B7280" />
-            <Text style={styles.managementButtonText}>More Options</Text>
+            <Text style={styles.managementButtonText}>{t("goal_detail.more_options")}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -802,7 +804,7 @@ export default function GoalDetailsScreen() {
         onPress={() => navigation.navigate("HelpCenter" as any)}
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
-        <Text style={styles.floatingHelpText}>Help</Text>
+        <Text style={styles.floatingHelpText}>{t("goal_detail.help")}</Text>
       </TouchableOpacity>
 
       {/* 3-Dots Menu Modal */}
@@ -820,7 +822,7 @@ export default function GoalDetailsScreen() {
           <View style={styles.menuContainer}>
             <View style={styles.menuHeader}>
               <View>
-                <Text style={styles.menuTitle}>Goal Options</Text>
+                <Text style={styles.menuTitle}>{t("goal_detail.menu_title")}</Text>
                 <View style={styles.menuGoalBadge}>
                   <Text style={styles.menuGoalEmoji}>{goal?.emoji}</Text>
                   <Text style={styles.menuGoalName}>{goal?.name}</Text>
@@ -834,7 +836,7 @@ export default function GoalDetailsScreen() {
               {/* General Actions */}
               {groupedMenuItems.general && (
                 <View style={styles.menuSection}>
-                  <Text style={styles.menuSectionTitle}>GENERAL</Text>
+                  <Text style={styles.menuSectionTitle}>{t("goal_detail.menu_section_general")}</Text>
                   {groupedMenuItems.general.map((item) => (
                     <TouchableOpacity
                       key={item.id}
@@ -887,7 +889,7 @@ export default function GoalDetailsScreen() {
               {/* Locked Savings Options */}
               {groupedMenuItems.locked && (
                 <View style={styles.menuSection}>
-                  <Text style={styles.menuSectionTitle}>LOCKED SAVINGS</Text>
+                  <Text style={styles.menuSectionTitle}>{t("goal_detail.menu_section_locked")}</Text>
                   {groupedMenuItems.locked.map((item) => (
                     <TouchableOpacity
                       key={item.id}
@@ -914,7 +916,7 @@ export default function GoalDetailsScreen() {
               {/* Settings */}
               {groupedMenuItems.settings && (
                 <View style={styles.menuSection}>
-                  <Text style={styles.menuSectionTitle}>NOTIFICATIONS</Text>
+                  <Text style={styles.menuSectionTitle}>{t("goal_detail.menu_section_notifications")}</Text>
                   {groupedMenuItems.settings.map((item) => (
                     <TouchableOpacity
                       key={item.id}
@@ -939,7 +941,7 @@ export default function GoalDetailsScreen() {
               {/* Advanced Options */}
               {groupedMenuItems.advanced && (
                 <View style={styles.menuSection}>
-                  <Text style={styles.menuSectionTitle}>MORE OPTIONS</Text>
+                  <Text style={styles.menuSectionTitle}>{t("goal_detail.menu_section_more")}</Text>
                   {groupedMenuItems.advanced.map((item) => (
                     <TouchableOpacity
                       key={item.id}
@@ -964,7 +966,7 @@ export default function GoalDetailsScreen() {
               {/* Danger Zone */}
               {groupedMenuItems.danger && (
                 <View style={styles.menuSection}>
-                  <Text style={[styles.menuSectionTitle, { color: "#DC2626" }]}>DANGER ZONE</Text>
+                  <Text style={[styles.menuSectionTitle, { color: "#DC2626" }]}>{t("goal_detail.menu_section_danger")}</Text>
                   {groupedMenuItems.danger.map((item) => (
                     <TouchableOpacity
                       key={item.id}
@@ -1002,14 +1004,14 @@ export default function GoalDetailsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Interest Calculator</Text>
+              <Text style={styles.modalTitle}>{t("goal_detail.modal_interest_calculator")}</Text>
               <TouchableOpacity onPress={() => setShowCalculatorModal(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
 
             <View style={styles.modalContent}>
-              <Text style={styles.calculatorLabel}>Monthly Deposit</Text>
+              <Text style={styles.calculatorLabel}>{t("goal_detail.calculator_monthly_deposit")}</Text>
               <View style={styles.calculatorInput}>
                 <Text style={styles.currencySymbol}>$</Text>
                 <TextInput
@@ -1034,20 +1036,20 @@ export default function GoalDetailsScreen() {
 
               <View style={styles.calculatorResults}>
                 <View style={styles.calculatorResultRow}>
-                  <Text style={styles.calculatorResultLabel}>Current Balance</Text>
+                  <Text style={styles.calculatorResultLabel}>{t("goal_detail.calculator_current_balance")}</Text>
                   <Text style={styles.calculatorResultValue}>
                     {formatCurrency(goal?.currentBalance || 0)}
                   </Text>
                 </View>
                 <View style={styles.calculatorResultRow}>
-                  <Text style={styles.calculatorResultLabel}>APY Rate</Text>
+                  <Text style={styles.calculatorResultLabel}>{t("goal_detail.calculator_apy_rate")}</Text>
                   <Text style={styles.calculatorResultValue}>
                     {((goal?.interestRate || 0) * 100).toFixed(1)}%
                   </Text>
                 </View>
                 <View style={styles.calculatorDivider} />
                 <View style={styles.calculatorResultRow}>
-                  <Text style={styles.calculatorResultLabel}>Projected Interest</Text>
+                  <Text style={styles.calculatorResultLabel}>{t("goal_detail.calculator_projected_interest")}</Text>
                   <Text style={[styles.calculatorResultValue, { color: "#10B981" }]}>
                     +{formatCurrency(calculateProjectedInterest().interest)}
                   </Text>
@@ -1067,7 +1069,7 @@ export default function GoalDetailsScreen() {
               style={styles.modalButton}
               onPress={() => setShowCalculatorModal(false)}
             >
-              <Text style={styles.modalButtonText}>Done</Text>
+              <Text style={styles.modalButtonText}>{t("goal_detail.done")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1083,7 +1085,7 @@ export default function GoalDetailsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Milestone Alerts</Text>
+              <Text style={styles.modalTitle}>{t("goal_detail.modal_milestone_alerts")}</Text>
               <TouchableOpacity onPress={() => setShowMilestoneModal(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
@@ -1106,7 +1108,7 @@ export default function GoalDetailsScreen() {
                   </View>
                   <View style={styles.milestoneAlertOptions}>
                     <View style={styles.milestoneAlertOption}>
-                      <Text style={styles.milestoneAlertLabel}>Notify me</Text>
+                      <Text style={styles.milestoneAlertLabel}>{t("goal_detail.milestone_notify_me")}</Text>
                       <Switch
                         value={alert.notify}
                         onValueChange={(value) => {
@@ -1119,7 +1121,7 @@ export default function GoalDetailsScreen() {
                       />
                     </View>
                     <View style={styles.milestoneAlertOption}>
-                      <Text style={styles.milestoneAlertLabel}>Celebrate</Text>
+                      <Text style={styles.milestoneAlertLabel}>{t("goal_detail.milestone_celebrate")}</Text>
                       <Switch
                         value={alert.celebrate}
                         onValueChange={(value) => {
@@ -1143,7 +1145,7 @@ export default function GoalDetailsScreen() {
                 Alert.alert("Saved", "Your milestone alerts have been updated.");
               }}
             >
-              <Text style={styles.modalButtonText}>Save Settings</Text>
+              <Text style={styles.modalButtonText}>{t("goal_detail.save_settings")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1159,7 +1161,7 @@ export default function GoalDetailsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Extend Lock Period</Text>
+              <Text style={styles.modalTitle}>{t("goal_detail.modal_extend_lock")}</Text>
               <TouchableOpacity onPress={() => setShowExtendLockModal(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
@@ -1173,7 +1175,7 @@ export default function GoalDetailsScreen() {
               <View style={styles.currentRateCard}>
                 <Ionicons name="lock-closed" size={20} color="#6366F1" />
                 <View style={{ marginLeft: 12, flex: 1 }}>
-                  <Text style={styles.currentRateLabel}>Current Rate</Text>
+                  <Text style={styles.currentRateLabel}>{t("goal_detail.current_rate_label")}</Text>
                   <Text style={styles.currentRateValue}>
                     {((goal?.interestRate || 0) * 100).toFixed(1)}% APY
                   </Text>
@@ -1204,7 +1206,7 @@ export default function GoalDetailsScreen() {
               <TouchableOpacity style={[styles.extendOption, styles.extendOptionBest]}>
                 <View style={styles.extendOptionInfo}>
                   <View style={styles.extendOptionBestBadge}>
-                    <Text style={styles.extendOptionBestText}>BEST VALUE</Text>
+                    <Text style={styles.extendOptionBestText}>{t("goal_detail.best_value")}</Text>
                   </View>
                   <Text style={styles.extendOptionRate}>8.5% APY</Text>
                   <Text style={styles.extendOptionDuration}>+36 months</Text>
@@ -1217,7 +1219,7 @@ export default function GoalDetailsScreen() {
               style={[styles.modalButton, { backgroundColor: "#6B7280" }]}
               onPress={() => setShowExtendLockModal(false)}
             >
-              <Text style={styles.modalButtonText}>Cancel</Text>
+              <Text style={styles.modalButtonText}>{t("goal_detail.cancel")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1233,7 +1235,7 @@ export default function GoalDetailsScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { maxHeight: "80%" }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Transaction History</Text>
+              <Text style={styles.modalTitle}>{t("goal_detail.modal_transaction_history")}</Text>
               <TouchableOpacity onPress={() => setShowTransactionHistoryModal(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
@@ -1243,7 +1245,7 @@ export default function GoalDetailsScreen() {
               {transactions.length === 0 ? (
                 <View style={styles.emptyTransactions}>
                   <Ionicons name="receipt-outline" size={48} color="#9CA3AF" />
-                  <Text style={styles.emptyText}>No transactions yet</Text>
+                  <Text style={styles.emptyText}>{t("goal_detail.empty_transactions")}</Text>
                 </View>
               ) : (
                 transactions.map((txn) => {
@@ -1284,7 +1286,7 @@ export default function GoalDetailsScreen() {
               style={styles.modalButton}
               onPress={() => setShowTransactionHistoryModal(false)}
             >
-              <Text style={styles.modalButtonText}>Close</Text>
+              <Text style={styles.modalButtonText}>{t("goal_detail.close")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1382,7 +1384,7 @@ export default function GoalDetailsScreen() {
               style={styles.modalButton}
               onPress={() => setShowGoalTermsModal(false)}
             >
-              <Text style={styles.modalButtonText}>Close</Text>
+              <Text style={styles.modalButtonText}>{t("goal_detail.close")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1464,7 +1466,7 @@ export default function GoalDetailsScreen() {
               style={[styles.modalButton, { backgroundColor: "#6B7280" }]}
               onPress={() => setShowAutoDepositModal(false)}
             >
-              <Text style={styles.modalButtonText}>Cancel</Text>
+              <Text style={styles.modalButtonText}>{t("goal_detail.cancel")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1503,7 +1505,7 @@ export default function GoalDetailsScreen() {
                 onPress={() => setShowCloseConfirmModal(false)}
                 disabled={isClosing}
               >
-                <Text style={[styles.modalButtonText, { color: "#6B7280" }]}>Cancel</Text>
+                <Text style={[styles.modalButtonText, { color: "#6B7280" }]}>{t("goal_detail.cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, {

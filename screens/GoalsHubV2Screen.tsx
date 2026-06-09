@@ -33,6 +33,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -145,10 +146,11 @@ const DEFAULT_STORIES: Story[] = [
   },
 ];
 
+// i18n: filter labels resolve per-render via t() at the call site.
 const FILTERS = [
-  { key: "all", label: "All Goals" },
-  { key: "on_track", label: "On Track" },
-  { key: "needs_attention", label: "Needs Attention" },
+  { key: "all", labelKey: "goals_hub_v2.filter_all" },
+  { key: "on_track", labelKey: "goals_hub_v2.filter_on_track" },
+  { key: "needs_attention", labelKey: "goals_hub_v2.filter_needs_attention" },
 ] as const;
 
 type FilterKey = (typeof FILTERS)[number]["key"];
@@ -156,6 +158,7 @@ type FilterKey = (typeof FILTERS)[number]["key"];
 export default function GoalsHubV2Screen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalsHubV2RouteProp>();
+  const { t } = useTranslation();
 
   const totalSaved = route.params?.totalSaved ?? 12450.0;
   const totalInterestEarned = route.params?.totalInterestEarned ?? 89.32;
@@ -188,8 +191,8 @@ export default function GoalsHubV2Screen() {
         >
           <View style={styles.headerTopRow}>
             <View>
-              <Text style={styles.headerKicker}>MY GOALS</Text>
-              <Text style={styles.headerTitle}>Achieve Your Dreams</Text>
+              <Text style={styles.headerKicker}>{t("goals_hub_v2.kicker")}</Text>
+              <Text style={styles.headerTitle}>{t("goals_hub_v2.title")}</Text>
             </View>
             <TouchableOpacity
               onPress={() => navigation.navigate(Routes.GoalCategorySelect)}
@@ -198,14 +201,14 @@ export default function GoalsHubV2Screen() {
               style={styles.newGoalButton}
             >
               <Ionicons name="add" size={18} color="#FFFFFF" />
-              <Text style={styles.newGoalText}>New Goal</Text>
+              <Text style={styles.newGoalText}>{t("goals_hub_v2.new_goal")}</Text>
             </TouchableOpacity>
           </View>
 
           {/* Total summary */}
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>TOTAL SAVED</Text>
+              <Text style={styles.summaryLabel}>{t("goals_hub_v2.total_saved")}</Text>
               <Text style={styles.summaryValue}>
                 $
                 {totalSaved.toLocaleString("en-US", {
@@ -215,7 +218,7 @@ export default function GoalsHubV2Screen() {
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>INTEREST EARNED</Text>
+              <Text style={styles.summaryLabel}>{t("goals_hub_v2.interest_earned")}</Text>
               <Text style={[styles.summaryValue, { color: TEAL }]}>
                 +${totalInterestEarned.toFixed(2)}
               </Text>
@@ -243,7 +246,7 @@ export default function GoalsHubV2Screen() {
                       isActive && styles.filterTextActive,
                     ]}
                   >
-                    {tab.label}
+                    {t(tab.labelKey)}
                   </Text>
                 </TouchableOpacity>
               );
@@ -274,7 +277,7 @@ export default function GoalsHubV2Screen() {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.goalName}>{goal.name}</Text>
                       <Text style={styles.goalMeta}>
-                        {goal.category} • Target: {goal.targetDate}
+                        {goal.category} • {t("goals_hub_v2.target_prefix")}: {goal.targetDate}
                       </Text>
                     </View>
                   </View>
@@ -292,7 +295,7 @@ export default function GoalsHubV2Screen() {
                         { color: goal.isOnTrack ? GREEN : AMBER },
                       ]}
                     >
-                      {goal.isOnTrack ? "On Track" : "Behind"}
+                      {goal.isOnTrack ? t("goals_hub_v2.status_on_track") : t("goals_hub_v2.status_behind")}
                     </Text>
                   </View>
                 </View>
@@ -304,7 +307,7 @@ export default function GoalsHubV2Screen() {
                       ${goal.balance.toLocaleString()}
                     </Text>
                     <Text style={styles.progressTarget}>
-                      of ${goal.target.toLocaleString()}
+                      {t("goals_hub_v2.of_target", { amount: goal.target.toLocaleString() })}
                     </Text>
                   </View>
                   <View style={styles.progressTrack}>
@@ -319,7 +322,7 @@ export default function GoalsHubV2Screen() {
                     />
                   </View>
                   <Text style={styles.progressPct}>
-                    {goal.progressPercent}% complete
+                    {t("goals_hub_v2.percent_complete", { percent: goal.progressPercent })}
                   </Text>
                 </View>
 
@@ -328,13 +331,13 @@ export default function GoalsHubV2Screen() {
                   <View style={styles.earnedRow}>
                     <Text style={styles.earnedEmoji}>📈</Text>
                     <Text style={styles.earnedText}>
-                      +${goal.interestEarned.toFixed(2)} earned
+                      {t("goals_hub_v2.earned_suffix", { amount: goal.interestEarned.toFixed(2) })}
                     </Text>
                   </View>
                   {goal.linkedCircle && (
                     <View style={styles.linkedTag}>
                       <Text style={styles.linkedTagEmoji}>🔗</Text>
-                      <Text style={styles.linkedTagText}>Linked</Text>
+                      <Text style={styles.linkedTagText}>{t("goals_hub_v2.linked_tag")}</Text>
                     </View>
                   )}
                 </View>
@@ -346,9 +349,9 @@ export default function GoalsHubV2Screen() {
           {filteredGoals.length === 0 && (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyEmoji}>🎯</Text>
-              <Text style={styles.emptyTitle}>No Goals Yet</Text>
+              <Text style={styles.emptyTitle}>{t("goals_hub_v2.empty_title")}</Text>
               <Text style={styles.emptyBody}>
-                Start your journey to achieving the life you came here to build.
+                {t("goals_hub_v2.empty_body")}
               </Text>
               <TouchableOpacity
                 onPress={() => navigation.navigate(Routes.GoalCategorySelect)}
@@ -356,7 +359,7 @@ export default function GoalsHubV2Screen() {
                 style={styles.emptyButton}
               >
                 <Text style={styles.emptyButtonText}>
-                  Create Your First Goal
+                  {t("goals_hub_v2.empty_cta")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -365,12 +368,12 @@ export default function GoalsHubV2Screen() {
           {/* Achievement stories */}
           <View style={styles.card}>
             <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardHeading}>🏆 Achievement Stories</Text>
+              <Text style={styles.cardHeading}>{t("goals_hub_v2.stories_title")}</Text>
               <TouchableOpacity
                 onPress={() => navigation.navigate(Routes.GoalStories)}
                 accessibilityRole="button"
               >
-                <Text style={styles.linkAction}>See All</Text>
+                <Text style={styles.linkAction}>{t("goals_hub_v2.see_all")}</Text>
               </TouchableOpacity>
             </View>
 
@@ -405,12 +408,8 @@ export default function GoalsHubV2Screen() {
           >
             <Text style={styles.tipEmoji}>💡</Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.tipTitle}>Pro Tip: Link a Circle</Text>
-              <Text style={styles.tipBody}>
-                When you link a Circle to a Goal, your Circle payouts
-                automatically flow into your Goal — accelerating your progress
-                with forced savings.
-              </Text>
+              <Text style={styles.tipTitle}>{t("goals_hub_v2.tip_title")}</Text>
+              <Text style={styles.tipBody}>{t("goals_hub_v2.tip_body")}</Text>
             </View>
           </LinearGradient>
         </View>
