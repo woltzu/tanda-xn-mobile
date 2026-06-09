@@ -127,7 +127,7 @@ export default function ExportDataScreen() {
 
   const handleExport = () => {
     if (selectedOptions.length === 0) {
-      Alert.alert("Select Data", "Please select at least one data type to export.");
+      Alert.alert(t("export_data_v2.alert_select_title"), t("export_data_v2.alert_select_body"));
       return;
     }
 
@@ -147,7 +147,7 @@ export default function ExportDataScreen() {
         <Ionicons name="checkmark-circle" size={80} color="#10B981" />
       </View>
 
-      <Text style={styles.completeTitle}>Export Complete</Text>
+      <Text style={styles.completeTitle}>{t("export_data_v2.complete_title")}</Text>
       <Text style={styles.completeSubtitle}>
         Your data has been exported successfully
       </Text>
@@ -179,7 +179,7 @@ export default function ExportDataScreen() {
       <View style={styles.deliveryCard}>
         <Ionicons name="mail-outline" size={24} color="#2563EB" />
         <View style={styles.deliveryContent}>
-          <Text style={styles.deliveryTitle}>Sent to your email</Text>
+          <Text style={styles.deliveryTitle}>{t("export_data_v2.delivery_title")}</Text>
           <Text style={styles.deliveryText}>
             The export file has been sent to your registered email address. Check
             your inbox (and spam folder) for the download link.
@@ -198,17 +198,17 @@ export default function ExportDataScreen() {
           }}
         >
           <Ionicons name="download-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.downloadButtonText}>Download File</Text>
+          <Text style={styles.downloadButtonText}>{t("export_data_v2.btn_download")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.shareButton}
           onPress={() => {
-            Alert.alert("Share", "Share options would appear here.");
+            Alert.alert(t("export_data_v2.alert_share_title"), t("export_data_v2.alert_share_body"));
           }}
         >
           <Ionicons name="share-outline" size={20} color="#2563EB" />
-          <Text style={styles.shareButtonText}>Share</Text>
+          <Text style={styles.shareButtonText}>{t("export_data_v2.btn_share")}</Text>
         </TouchableOpacity>
       </View>
 
@@ -219,7 +219,7 @@ export default function ExportDataScreen() {
           setExportedFile("");
         }}
       >
-        <Text style={styles.newExportButtonText}>Create Another Export</Text>
+        <Text style={styles.newExportButtonText}>{t("export_data_v2.btn_create_another")}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -272,7 +272,7 @@ export default function ExportDataScreen() {
         {/* Format Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Export Format</Text>
-          <Text style={styles.sectionSubtitle}>Choose your preferred file type</Text>
+          <Text style={styles.sectionSubtitle}>{t("export_data_v2.section_format_sub")}</Text>
 
           <View style={styles.formatGrid}>
             {formats.map((format) => (
@@ -313,7 +313,7 @@ export default function ExportDataScreen() {
         {/* Date Range Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Date Range</Text>
-          <Text style={styles.sectionSubtitle}>Select the time period</Text>
+          <Text style={styles.sectionSubtitle}>{t("export_data_v2.section_date_sub")}</Text>
 
           <View style={styles.rangeContainer}>
             {dateRanges.map((range) => (
@@ -396,26 +396,26 @@ export default function ExportDataScreen() {
 
         {/* Preview */}
         <View style={styles.previewSection}>
-          <Text style={styles.previewTitle}>Export Preview</Text>
+          <Text style={styles.previewTitle}>{t("export_data_v2.preview_title")}</Text>
           <View style={styles.previewCard}>
             <View style={styles.previewRow}>
-              <Text style={styles.previewLabel}>File Name</Text>
+              <Text style={styles.previewLabel}>{t("export_data_v2.preview_filename")}</Text>
               <Text style={styles.previewValue}>{generateFileName()}</Text>
             </View>
             <View style={styles.previewRow}>
-              <Text style={styles.previewLabel}>Format</Text>
+              <Text style={styles.previewLabel}>{t("export_data_v2.preview_format")}</Text>
               <Text style={styles.previewValue}>
                 {formats.find((f) => f.key === selectedFormat)?.label}
               </Text>
             </View>
             <View style={styles.previewRow}>
-              <Text style={styles.previewLabel}>Date Range</Text>
+              <Text style={styles.previewLabel}>{t("export_data_v2.preview_date_range")}</Text>
               <Text style={styles.previewValue}>
                 {dateRanges.find((r) => r.key === selectedRange)?.label}
               </Text>
             </View>
             <View style={styles.previewRow}>
-              <Text style={styles.previewLabel}>Data Sections</Text>
+              <Text style={styles.previewLabel}>{t("export_data_v2.preview_sections")}</Text>
               <Text style={styles.previewValue}>
                 {selectedOptions.length} selected
               </Text>
@@ -435,12 +435,12 @@ export default function ExportDataScreen() {
         >
           {isExporting ? (
             <>
-              <Text style={styles.exportButtonText}>Generating Export...</Text>
+              <Text style={styles.exportButtonText}>{t("export_data_v2.btn_generating")}</Text>
             </>
           ) : (
             <>
               <Ionicons name="download-outline" size={22} color="#FFFFFF" />
-              <Text style={styles.exportButtonText}>Generate Export</Text>
+              <Text style={styles.exportButtonText}>{t("export_data_v2.btn_generate")}</Text>
             </>
           )}
         </TouchableOpacity>

@@ -162,7 +162,7 @@ export default function ManageMembersScreen() {
 
   const handleAddMember = () => {
     if (!newMemberName.trim() || !newMemberEmail.trim()) {
-      Alert.alert("Error", "Please enter name and email");
+      Alert.alert(t("manage_members_v2.alert_error_title"), t("manage_members_v2.alert_name_email_required"));
       return;
     }
 
@@ -192,7 +192,7 @@ export default function ManageMembersScreen() {
 
   const handleRemoveMember = (member: Member) => {
     if (member.id === "1") {
-      Alert.alert("Cannot Remove", "You cannot remove yourself from the circle.");
+      Alert.alert(t("manage_members_v2.alert_cannot_remove_title"), t("manage_members_v2.alert_cannot_remove_body"));
       return;
     }
 
@@ -410,7 +410,7 @@ export default function ManageMembersScreen() {
           <Ionicons name="search" size={20} color="#9CA3AF" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search members..."
+            placeholder={t("manage_members_v2.search_placeholder")}
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -468,7 +468,7 @@ export default function ManageMembersScreen() {
         ) : (
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={48} color="#D1D5DB" />
-            <Text style={styles.emptyStateText}>No members found</Text>
+            <Text style={styles.emptyStateText}>{t("manage_members_v2.empty_no_members")}</Text>
           </View>
         )}
         <View style={styles.bottomPadding} />
@@ -495,7 +495,7 @@ export default function ManageMembersScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add New Member</Text>
+              <Text style={styles.modalTitle}>{t("manage_members_v2.modal_add_title")}</Text>
               <TouchableOpacity onPress={() => setShowAddModal(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
@@ -504,7 +504,7 @@ export default function ManageMembersScreen() {
             <Text style={styles.inputLabel}>Full Name *</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter member's name"
+              placeholder={t("manage_members_v2.placeholder_name")}
               placeholderTextColor="#9CA3AF"
               value={newMemberName}
               onChangeText={setNewMemberName}
@@ -513,7 +513,7 @@ export default function ManageMembersScreen() {
             <Text style={styles.inputLabel}>Email Address *</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter email address"
+              placeholder={t("manage_members_v2.placeholder_email")}
               placeholderTextColor="#9CA3AF"
               keyboardType="email-address"
               autoCapitalize="none"
@@ -524,7 +524,7 @@ export default function ManageMembersScreen() {
             <Text style={styles.inputLabel}>Phone Number (Optional)</Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter phone number"
+              placeholder={t("manage_members_v2.placeholder_phone")}
               placeholderTextColor="#9CA3AF"
               keyboardType="phone-pad"
               value={newMemberPhone}
@@ -544,7 +544,7 @@ export default function ManageMembersScreen() {
               onPress={handleAddMember}
             >
               <Ionicons name="send" size={20} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>Send Invitation</Text>
+              <Text style={styles.addButtonText}>{t("manage_members_v2.btn_send_invitation")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -562,7 +562,7 @@ export default function ManageMembersScreen() {
             {selectedMember && (
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Member Details</Text>
+                  <Text style={styles.modalTitle}>{t("manage_members_v2.modal_details_title")}</Text>
                   <TouchableOpacity onPress={() => setShowMemberModal(false)}>
                     <Ionicons name="close" size={24} color="#6B7280" />
                   </TouchableOpacity>
@@ -674,7 +674,7 @@ export default function ManageMembersScreen() {
                       onPress={() => handleRemoveMember(selectedMember)}
                     >
                       <Ionicons name="person-remove-outline" size={20} color="#DC2626" />
-                      <Text style={styles.actionButtonDangerText}>Remove</Text>
+                      <Text style={styles.actionButtonDangerText}>{t("manage_members_v2.btn_remove")}</Text>
                     </TouchableOpacity>
                   </View>
                 )}

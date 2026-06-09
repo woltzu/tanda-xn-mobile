@@ -216,7 +216,7 @@ export default function ElderTrainingHubScreen() {
                 onPress={() => handleStartCourse(course)}
               >
                 <Ionicons name="play" size={18} color="#FFFFFF" />
-                <Text style={styles.startCourseText}>Start Course</Text>
+                <Text style={styles.startCourseText}>{t("elder_training_v2.btn_start_course")}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -266,7 +266,7 @@ export default function ElderTrainingHubScreen() {
                 : "🌱"}
             </Text>
             <View>
-              <Text style={styles.tierLabel}>Current Tier</Text>
+              <Text style={styles.tierLabel}>{t("elder_training_v2.tier_label_current")}</Text>
               <Text style={styles.tierValue}>{elderProfile?.tier} Elder</Text>
             </View>
           </View>
@@ -276,17 +276,17 @@ export default function ElderTrainingHubScreen() {
               <Text style={styles.statBoxValue}>
                 {elderProfile?.trainingCredits || 0}
               </Text>
-              <Text style={styles.statBoxLabel}>Training Credits</Text>
+              <Text style={styles.statBoxLabel}>{t("elder_training_v2.stat_credits")}</Text>
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statBoxValue}>
                 {elderProfile?.totalCasesResolved || 0}
               </Text>
-              <Text style={styles.statBoxLabel}>Cases Resolved</Text>
+              <Text style={styles.statBoxLabel}>{t("elder_training_v2.stat_cases")}</Text>
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statBoxValue}>{earnedBadges.length}</Text>
-              <Text style={styles.statBoxLabel}>Badges Earned</Text>
+              <Text style={styles.statBoxLabel}>{t("elder_training_v2.stat_badges")}</Text>
             </View>
           </View>
         </View>
@@ -302,7 +302,7 @@ export default function ElderTrainingHubScreen() {
               <View style={styles.requirementHeader}>
                 <View style={styles.requirementLabel}>
                   <Ionicons name="school" size={16} color="#3B82F6" />
-                  <Text style={styles.requirementText}>Training Credits</Text>
+                  <Text style={styles.requirementText}>{t("elder_training_v2.req_credits")}</Text>
                 </View>
                 <Text style={styles.requirementProgress}>
                   {elderProfile?.trainingCredits || 0}/{tierProgress.creditsNeeded}
@@ -325,7 +325,7 @@ export default function ElderTrainingHubScreen() {
               <View style={styles.requirementHeader}>
                 <View style={styles.requirementLabel}>
                   <Ionicons name="shield-checkmark" size={16} color="#00C6AE" />
-                  <Text style={styles.requirementText}>Cases Resolved</Text>
+                  <Text style={styles.requirementText}>{t("elder_training_v2.req_cases")}</Text>
                 </View>
                 <Text style={styles.requirementProgress}>
                   {elderProfile?.totalCasesResolved || 0}/{tierProgress.casesNeeded}
@@ -349,7 +349,7 @@ export default function ElderTrainingHubScreen() {
                 <View style={styles.requirementHeader}>
                   <View style={styles.requirementLabel}>
                     <Ionicons name="trending-up" size={16} color="#D97706" />
-                    <Text style={styles.requirementText}>Success Rate</Text>
+                    <Text style={styles.requirementText}>{t("elder_training_v2.req_success")}</Text>
                   </View>
                   <Text style={styles.requirementProgress}>
                     {elderProfile.successRate}%/90%
@@ -373,7 +373,7 @@ export default function ElderTrainingHubScreen() {
 
         {/* Elder Tier Benefits */}
         <View style={styles.benefitsCard}>
-          <Text style={styles.benefitsTitle}>Elder Tier Benefits</Text>
+          <Text style={styles.benefitsTitle}>{t("elder_training_v2.benefits_title")}</Text>
 
           {[
             {
@@ -426,7 +426,7 @@ export default function ElderTrainingHubScreen() {
               </View>
               {elderProfile?.tier === tierInfo.tier && (
                 <View style={styles.currentTierBadge}>
-                  <Text style={styles.currentTierBadgeText}>Current</Text>
+                  <Text style={styles.currentTierBadgeText}>{t("elder_training_v2.tier_current")}</Text>
                 </View>
               )}
             </View>
@@ -445,7 +445,7 @@ export default function ElderTrainingHubScreen() {
             <View style={styles.creditsSummary}>
               <View style={styles.creditsInfo}>
                 <Text style={styles.creditsValue}>{completedCredits}</Text>
-                <Text style={styles.creditsLabel}>Credits Earned</Text>
+                <Text style={styles.creditsLabel}>{t("elder_training_v2.credits_label")}</Text>
               </View>
               <View style={styles.coursesCount}>
                 <Text style={styles.coursesCountText}>
@@ -472,7 +472,7 @@ export default function ElderTrainingHubScreen() {
               <Text style={styles.badgesCount}>
                 {earnedBadges.length}/{badges.length}
               </Text>
-              <Text style={styles.badgesLabel}>Badges Earned</Text>
+              <Text style={styles.badgesLabel}>{t("elder_training_v2.badges_label")}</Text>
             </View>
 
             <View style={styles.badgesGrid}>

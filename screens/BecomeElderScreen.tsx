@@ -100,17 +100,17 @@ export default function BecomeElderScreen() {
     try {
       const result = await applyToBecomeElder();
       if (result.success) {
-        Alert.alert("Application Submitted!", result.message, [
+        Alert.alert(t("become_elder_v2.alert_submitted_title"), result.message, [
           {
             text: "OK",
             onPress: () => navigation.goBack(),
           },
         ]);
       } else {
-        Alert.alert("Application Failed", result.message);
+        Alert.alert(t("become_elder_v2.alert_failed_title"), result.message);
       }
     } catch (error) {
-      Alert.alert("Error", "Something went wrong. Please try again.");
+      Alert.alert(t("become_elder_v2.alert_error_title"), t("become_elder_v2.alert_error_body"));
     } finally {
       setIsApplying(false);
     }
@@ -154,19 +154,19 @@ export default function BecomeElderScreen() {
                 <Text style={styles.elderStatValue}>
                   {elderProfile.totalCasesResolved}
                 </Text>
-                <Text style={styles.elderStatLabel}>Cases Resolved</Text>
+                <Text style={styles.elderStatLabel}>{t("become_elder_v2.elder_stat_cases")}</Text>
               </View>
               <View style={styles.elderStatItem}>
                 <Text style={styles.elderStatValue}>
                   {elderProfile.successRate}%
                 </Text>
-                <Text style={styles.elderStatLabel}>Success Rate</Text>
+                <Text style={styles.elderStatLabel}>{t("become_elder_v2.elder_stat_success")}</Text>
               </View>
               <View style={styles.elderStatItem}>
                 <Text style={styles.elderStatValue}>
                   {elderProfile.trainingCredits}
                 </Text>
-                <Text style={styles.elderStatLabel}>Training Credits</Text>
+                <Text style={styles.elderStatLabel}>{t("become_elder_v2.elder_stat_credits")}</Text>
               </View>
             </View>
           </View>
@@ -203,7 +203,7 @@ export default function BecomeElderScreen() {
                       </Text>
                       {isCurrentTier && (
                         <View style={styles.currentBadge}>
-                          <Text style={styles.currentBadgeText}>Current</Text>
+                          <Text style={styles.currentBadgeText}>{t("become_elder_v2.badge_current")}</Text>
                         </View>
                       )}
                       {isPastTier && (
@@ -219,11 +219,11 @@ export default function BecomeElderScreen() {
                 </View>
                 <View style={styles.tierStats}>
                   <View style={styles.tierStatItem}>
-                    <Text style={styles.tierStatLabel}>Vouch Strength</Text>
+                    <Text style={styles.tierStatLabel}>{t("become_elder_v2.tier_stat_vouch")}</Text>
                     <Text style={styles.tierStatValue}>{tier.vouchStrength}</Text>
                   </View>
                   <View style={styles.tierStatItem}>
-                    <Text style={styles.tierStatLabel}>Max Cases</Text>
+                    <Text style={styles.tierStatLabel}>{t("become_elder_v2.tier_stat_max_cases")}</Text>
                     <Text style={styles.tierStatValue}>{tier.maxCases}</Text>
                   </View>
                 </View>
@@ -254,7 +254,7 @@ export default function BecomeElderScreen() {
           <View style={styles.heroIcon}>
             <Ionicons name="shield" size={48} color="#00C6AE" />
           </View>
-          <Text style={styles.heroTitle}>Join Our Elder Council</Text>
+          <Text style={styles.heroTitle}>{t("become_elder_v2.hero_title")}</Text>
           <Text style={styles.heroSubtitle}>
             Become a trusted leader who helps resolve disputes and guides our
             community to success
@@ -365,7 +365,7 @@ export default function BecomeElderScreen() {
             disabled={!isEligible || isApplying}
           >
             {isApplying ? (
-              <Text style={styles.applyButtonText}>Submitting...</Text>
+              <Text style={styles.applyButtonText}>{t("become_elder_v2.btn_submitting")}</Text>
             ) : (
               <>
                 <Ionicons

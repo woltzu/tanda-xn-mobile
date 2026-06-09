@@ -110,7 +110,7 @@ export default function VouchMemberScreen() {
                 [{ text: "OK", onPress: () => navigation.goBack() }]
               );
             } else {
-              Alert.alert("Error", "Could not complete the vouch. Please try again.");
+              Alert.alert(t("vouch_member_v2.alert_error_title"), t("vouch_member_v2.alert_failed_vouch"));
             }
           },
         },
@@ -140,7 +140,7 @@ export default function VouchMemberScreen() {
               <Ionicons name="people" size={24} color="#8B5CF6" />
             </View>
             <View>
-              <Text style={styles.elderTitle}>Your Vouching Power</Text>
+              <Text style={styles.elderTitle}>{t("vouch_member_v2.elder_title")}</Text>
               <Text style={styles.elderSubtitle}>
                 {canVouch ? "Active Elder Status" : "Score 75+ required"}
               </Text>
@@ -156,19 +156,19 @@ export default function VouchMemberScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{honorStats.totalVouchesGiven}</Text>
-            <Text style={styles.statLabel}>Total Vouches</Text>
+            <Text style={styles.statLabel}>{t("vouch_member_v2.stat_total")}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{honorStats.successfulVouches}</Text>
-            <Text style={styles.statLabel}>Successful</Text>
+            <Text style={styles.statLabel}>{t("vouch_member_v2.stat_successful")}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: "#00C6AE" }]}>
               {honorStats.vouchSuccessRate}%
             </Text>
-            <Text style={styles.statLabel}>Success Rate</Text>
+            <Text style={styles.statLabel}>{t("vouch_member_v2.stat_success_rate")}</Text>
           </View>
         </View>
       </LinearGradient>
@@ -193,7 +193,7 @@ export default function VouchMemberScreen() {
           <Ionicons name="search" size={20} color="#9CA3AF" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search contacts..."
+            placeholder={t("vouch_member_v2.search_placeholder")}
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -221,7 +221,7 @@ export default function VouchMemberScreen() {
                 </View>
                 <View style={styles.activeVouchStatus}>
                   <Ionicons name="checkmark-circle" size={16} color="#00C6AE" />
-                  <Text style={styles.activeVouchStatusText}>Active</Text>
+                  <Text style={styles.activeVouchStatusText}>{t("vouch_member_v2.tag_active")}</Text>
                 </View>
               </View>
             ))}
@@ -248,7 +248,7 @@ export default function VouchMemberScreen() {
                       {user.isContact && (
                         <View style={styles.contactBadge}>
                           <Ionicons name="people" size={10} color="#3B82F6" />
-                          <Text style={styles.contactBadgeText}>Contact</Text>
+                          <Text style={styles.contactBadgeText}>{t("vouch_member_v2.badge_contact")}</Text>
                         </View>
                       )}
                     </View>
@@ -271,9 +271,9 @@ export default function VouchMemberScreen() {
 
                 <View style={styles.userFooter}>
                   <View style={styles.userStats}>
-                    <Text style={styles.userStatText}>New member</Text>
+                    <Text style={styles.userStatText}>{t("vouch_member_v2.user_stat_new")}</Text>
                     <Text style={styles.userStatDot}>•</Text>
-                    <Text style={styles.userStatText}>No history yet</Text>
+                    <Text style={styles.userStatText}>{t("vouch_member_v2.user_stat_no_history")}</Text>
                   </View>
 
                   <TouchableOpacity
@@ -304,7 +304,7 @@ export default function VouchMemberScreen() {
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="search-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>No Results</Text>
+              <Text style={styles.emptyTitle}>{t("vouch_member_v2.empty_no_results")}</Text>
               <Text style={styles.emptySubtitle}>
                 No users found matching your search
               </Text>
@@ -321,7 +321,7 @@ export default function VouchMemberScreen() {
                 <Text style={styles.howItWorksNumber}>1</Text>
               </View>
               <View style={styles.howItWorksContent}>
-                <Text style={styles.howItWorksTitle}>You Vouch</Text>
+                <Text style={styles.howItWorksTitle}>{t("vouch_member_v2.how_it_works_vouch")}</Text>
                 <Text style={styles.howItWorksText}>
                   Endorse a new member you trust
                 </Text>
@@ -333,7 +333,7 @@ export default function VouchMemberScreen() {
                 <Text style={styles.howItWorksNumber}>2</Text>
               </View>
               <View style={styles.howItWorksContent}>
-                <Text style={styles.howItWorksTitle}>They Join</Text>
+                <Text style={styles.howItWorksTitle}>{t("vouch_member_v2.how_it_works_join")}</Text>
                 <Text style={styles.howItWorksText}>
                   They can join circles with your backing
                 </Text>
@@ -345,7 +345,7 @@ export default function VouchMemberScreen() {
                 <Text style={styles.howItWorksNumber}>3</Text>
               </View>
               <View style={styles.howItWorksContent}>
-                <Text style={styles.howItWorksTitle}>Build Trust</Text>
+                <Text style={styles.howItWorksTitle}>{t("vouch_member_v2.how_it_works_trust")}</Text>
                 <Text style={styles.howItWorksText}>
                   They build their own score over time
                 </Text>

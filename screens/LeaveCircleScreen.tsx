@@ -198,7 +198,7 @@ export default function LeaveCircleScreen() {
         p_acknowledged_impact: true,
       });
       if (error) {
-        Alert.alert("Could not submit", error.message);
+        Alert.alert(t("leave_circle_v2.alert_could_not_submit"), error.message);
         return;
       }
       const result = data as {
@@ -212,7 +212,7 @@ export default function LeaveCircleScreen() {
         const detail = result.existing_request_id
           ? `${result.error}\n\nExisting request: ${result.existing_request_id}`
           : result.error ?? "Unknown error";
-        Alert.alert("Could not submit", detail);
+        Alert.alert(t("leave_circle_v2.alert_could_not_submit"), detail);
         return;
       }
       setSubmitted({
@@ -220,7 +220,7 @@ export default function LeaveCircleScreen() {
         evaluation: result.evaluation ?? (evaluation as ExitEvaluation),
       });
     } catch (err: any) {
-      Alert.alert("Could not submit", err?.message ?? "Unknown error");
+      Alert.alert(t("leave_circle_v2.alert_could_not_submit"), err?.message ?? t("leave_circle_v2.alert_unknown_error"));
     } finally {
       setSubmitting(false);
     }
@@ -231,11 +231,11 @@ export default function LeaveCircleScreen() {
     if (!evaluation) return null;
     return (
       <View style={styles.impactCard}>
-        <Text style={styles.cardTitle}>What happens if you leave</Text>
+        <Text style={styles.cardTitle}>{t("leave_circle_v2.card_what_happens")}</Text>
 
         <View style={styles.impactRow}>
           <Ionicons name="layers-outline" size={18} color="#2563EB" />
-          <Text style={styles.impactLabel}>Cycles completed</Text>
+          <Text style={styles.impactLabel}>{t("leave_circle_v2.impact_cycles")}</Text>
           <Text style={styles.impactValue}>
             {evaluation.cycles_completed} of {evaluation.total_cycles}
             {evaluation.total_cycles && evaluation.total_cycles > 0
@@ -250,7 +250,7 @@ export default function LeaveCircleScreen() {
             size={18}
             color={evaluation.payout_already_received ? "#10B981" : "#6B7280"}
           />
-          <Text style={styles.impactLabel}>Payout received</Text>
+          <Text style={styles.impactLabel}>{t("leave_circle_v2.impact_payout")}</Text>
           <Text style={styles.impactValue}>
             {evaluation.payout_already_received ? "Yes" : "Not yet"}
           </Text>
@@ -258,7 +258,7 @@ export default function LeaveCircleScreen() {
 
         <View style={styles.impactRow}>
           <Ionicons name="calendar-outline" size={18} color="#2563EB" />
-          <Text style={styles.impactLabel}>Notice period</Text>
+          <Text style={styles.impactLabel}>{t("leave_circle_v2.impact_notice")}</Text>
           <Text style={styles.impactValue}>{evaluation.notice_days} days</Text>
         </View>
 
@@ -275,7 +275,7 @@ export default function LeaveCircleScreen() {
                     : "#DC2626"
               }
             />
-            <Text style={styles.impactLabel}>XnScore</Text>
+            <Text style={styles.impactLabel}>{t("leave_circle_v2.impact_xnscore")}</Text>
             <Text
               style={[
                 styles.impactValue,
@@ -296,25 +296,25 @@ export default function LeaveCircleScreen() {
               Since your payout hasn't been delivered yet, it transfers when a substitute fills your seat:
             </Text>
             <View style={styles.splitRow}>
-              <Text style={styles.splitLabel}>Substitute receives</Text>
+              <Text style={styles.splitLabel}>{t("leave_circle_v2.split_substitute")}</Text>
               <Text style={styles.splitValue}>
                 {fmtCents(evaluation.substitute_share_cents ?? 0)}
               </Text>
             </View>
             <View style={styles.splitRow}>
-              <Text style={styles.splitLabel}>Insurance pool</Text>
+              <Text style={styles.splitLabel}>{t("leave_circle_v2.split_insurance")}</Text>
               <Text style={styles.splitValue}>
                 {fmtCents(evaluation.insurance_pool_share_cents ?? 0)}
               </Text>
             </View>
             <View style={styles.splitRow}>
-              <Text style={styles.splitLabel}>You settle for</Text>
+              <Text style={styles.splitLabel}>{t("leave_circle_v2.split_you_settle")}</Text>
               <Text style={[styles.splitValue, { color: "#10B981" }]}>
                 {fmtCents(evaluation.original_member_settlement_cents ?? 0)}
               </Text>
             </View>
             <View style={[styles.splitRow, styles.splitTotalRow]}>
-              <Text style={styles.splitLabelTotal}>Original payout</Text>
+              <Text style={styles.splitLabelTotal}>{t("leave_circle_v2.split_original")}</Text>
               <Text style={styles.splitValueTotal}>
                 {fmtCents(evaluation.original_payout_amount_cents ?? 0)}
               </Text>
@@ -411,7 +411,7 @@ export default function LeaveCircleScreen() {
           <ActivityIndicator color="#FFFFFF" />
         ) : (
           <>
-            <Text style={styles.submitButtonText}>Submit Request</Text>
+            <Text style={styles.submitButtonText}>{t("leave_circle_v2.btn_submit")}</Text>
             <Ionicons name="exit-outline" size={18} color="#FFFFFF" />
           </>
         )}
@@ -425,21 +425,21 @@ export default function LeaveCircleScreen() {
     return (
       <View style={styles.confirmContainer}>
         <Ionicons name="checkmark-circle" size={72} color="#10B981" />
-        <Text style={styles.confirmTitle}>Request submitted</Text>
+        <Text style={styles.confirmTitle}>{t("leave_circle_v2.confirm_title")}</Text>
         <Text style={styles.confirmSubtitle}>
           The system is now searching for a qualified substitute. You'll be
           notified as soon as a match is found.
         </Text>
 
         <View style={styles.requestCard}>
-          <Text style={styles.requestLabel}>Request ID</Text>
+          <Text style={styles.requestLabel}>{t("leave_circle_v2.request_label")}</Text>
           <Text style={styles.requestId} numberOfLines={1}>
             {submitted.requestId.slice(0, 8)}…{submitted.requestId.slice(-4)}
           </Text>
         </View>
 
         <View style={styles.stepsCard}>
-          <Text style={styles.stepsTitle}>What happens next</Text>
+          <Text style={styles.stepsTitle}>{t("leave_circle_v2.steps_title")}</Text>
           {[
             "The system automatically offered your seat to a top-ranked substitute.",
             "They have 48 hours to confirm. If they decline or time out, the system tries the next candidate.",
@@ -461,7 +461,7 @@ export default function LeaveCircleScreen() {
           style={styles.doneButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.doneButtonText}>Return to Circle</Text>
+          <Text style={styles.doneButtonText}>{t("leave_circle_v2.btn_done")}</Text>
         </TouchableOpacity>
       </View>
     );
