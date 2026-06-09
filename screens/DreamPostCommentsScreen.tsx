@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useFeed, FeedComment } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
 import FeedCommentItem from "../components/FeedCommentItem";
@@ -27,6 +28,7 @@ type CommentsRouteParams = {
 export default function DreamPostCommentsScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<CommentsRouteParams, "PostComments">>();
+  const { t } = useTranslation();
   const { postId } = route.params;
   const { user } = useAuth();
   const { getComments, addComment } = useFeed();
@@ -58,7 +60,7 @@ export default function DreamPostCommentsScreen() {
       showToast("Commitment posted!", "success");
     } catch (err) {
       showToast("Failed to post comment", "error");
-      Alert.alert("Error", "Failed to post comment.");
+      Alert.alert(t("post_comments.alert_error_title"), t("post_comments.alert_failed_post"));
     } finally {
       setIsSubmitting(false);
     }
@@ -75,7 +77,7 @@ export default function DreamPostCommentsScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Challenge Commitments</Text>
+          <Text style={styles.headerTitle}>{t("post_comments.header_title")}</Text>
           <View style={{ width: 24 }} />
         </View>
 
@@ -108,7 +110,7 @@ export default function DreamPostCommentsScreen() {
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
-            placeholder="Make your commitment..."
+            placeholder={t("post_comments.placeholder_commit")}
             placeholderTextColor={colors.textSecondary}
             value={commentText}
             onChangeText={setCommentText}

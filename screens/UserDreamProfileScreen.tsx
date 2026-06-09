@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useFeed, FeedPost } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
 import FeedPostCard from "../components/FeedPostCard";
@@ -53,6 +54,7 @@ const handleSupport = (_post: FeedPost) => {
 export default function UserDreamProfileScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<ProfileRouteParams, "UserDreamProfile">>();
+  const { t } = useTranslation();
   const { userId } = route.params;
   const { user } = useAuth();
   const { getUserPosts, likedPostIds, savedPostIds, toggleLike, toggleSave } = useFeed();
@@ -145,17 +147,17 @@ export default function UserDreamProfileScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{posts.length}</Text>
-            <Text style={styles.statLabel}>Posts</Text>
+            <Text style={styles.statLabel}>{t("user_dream_profile.stat_posts")}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{videoPosts.length}</Text>
-            <Text style={styles.statLabel}>Videos</Text>
+            <Text style={styles.statLabel}>{t("user_dream_profile.stat_videos")}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{totalLikes}</Text>
-            <Text style={styles.statLabel}>Saves</Text>
+            <Text style={styles.statLabel}>{t("user_dream_profile.stat_saves")}</Text>
           </View>
         </View>
       </View>
@@ -274,7 +276,7 @@ export default function UserDreamProfileScreen() {
   const renderVideoEmpty = () => (
     <View style={styles.emptyState}>
       <Ionicons name="videocam-outline" size={48} color={colors.textSecondary} />
-      <Text style={styles.emptyTitle}>No Videos Yet</Text>
+      <Text style={styles.emptyTitle}>{t("user_dream_profile.empty_no_videos_title")}</Text>
       <Text style={styles.emptyText}>
         {isOwnProfile
           ? "Record a video to share your dream journey. Videos are the most powerful way to inspire others!"
@@ -286,7 +288,7 @@ export default function UserDreamProfileScreen() {
           onPress={() => navigation.navigate("CreateDreamPost")}
         >
           <Ionicons name="videocam" size={18} color="#FFFFFF" />
-          <Text style={styles.emptyButtonText}>Record Your Dream</Text>
+          <Text style={styles.emptyButtonText}>{t("user_dream_profile.btn_record_dream")}</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -295,7 +297,7 @@ export default function UserDreamProfileScreen() {
   const renderAllEmpty = () => (
     <View style={styles.emptyState}>
       <Text style={styles.emptyEmoji}>{"\u{2728}"}</Text>
-      <Text style={styles.emptyTitle}>No Dreams Yet</Text>
+      <Text style={styles.emptyTitle}>{t("user_dream_profile.empty_no_dreams_title")}</Text>
       <Text style={styles.emptyText}>
         {isOwnProfile
           ? "Share your first dream! Tap the button below to get started."
@@ -306,7 +308,7 @@ export default function UserDreamProfileScreen() {
           style={styles.emptyButton}
           onPress={() => navigation.navigate("CreateDreamPost")}
         >
-          <Text style={styles.emptyButtonText}>Share Your Dream</Text>
+          <Text style={styles.emptyButtonText}>{t("user_dream_profile.btn_share_dream")}</Text>
         </TouchableOpacity>
       )}
     </View>

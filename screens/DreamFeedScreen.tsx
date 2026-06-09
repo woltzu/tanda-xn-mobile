@@ -14,6 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { useFeed, FeedPost } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
 import { useCircles } from "../context/CirclesContext";
@@ -24,14 +25,16 @@ import { colors, radius, typography, spacing } from "../theme/tokens";
 
 type DreamFeedNavigationProp = StackNavigationProp<any>;
 
-const FILTER_TABS: { key: FeedFilter; label: string; icon: string }[] = [
-  { key: "for_you", label: "For You", icon: "sparkles" },
-  { key: "following", label: "Following", icon: "people-outline" },
-  { key: "trending", label: "Trending", icon: "trending-up" },
+// i18n: labelKey resolved per-render via t() at call site.
+const FILTER_TABS: { key: FeedFilter; labelKey: string; icon: string }[] = [
+  { key: "for_you", labelKey: "dream_feed.tab_for_you", icon: "sparkles" },
+  { key: "following", labelKey: "dream_feed.tab_following", icon: "people-outline" },
+  { key: "trending", labelKey: "dream_feed.tab_trending", icon: "trending-up" },
 ];
 
 export default function DreamFeedScreen() {
   const navigation = useNavigation<DreamFeedNavigationProp>();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const {
     posts,
@@ -161,7 +164,7 @@ export default function DreamFeedScreen() {
     return (
       <View style={styles.loadingMore}>
         <ActivityIndicator size="small" color={colors.accentTeal} />
-        <Text style={styles.loadingMoreText}>Loading more dreams...</Text>
+        <Text style={styles.loadingMoreText}>{t("dream_feed.loading_more")}</Text>
       </View>
     );
   };
@@ -173,16 +176,16 @@ export default function DreamFeedScreen() {
       return (
         <View style={styles.emptyState}>
           <Text style={styles.emptyEmoji}>{"\u{1F465}"}</Text>
-          <Text style={styles.emptyTitle}>No Posts From Your Network</Text>
+          <Text style={styles.emptyTitle}>{t("dream_feed.empty_following_title")}</Text>
           <Text style={styles.emptySubtitle}>
-            Join a savings circle to see posts from your community members here.
+            {t("dream_feed.empty_following_body")}
           </Text>
           <TouchableOpacity
             style={styles.emptyButton}
             onPress={() => navigation.navigate("Circles" as any)}
           >
             <Ionicons name="people" size={18} color="#FFFFFF" />
-            <Text style={styles.emptyButtonText}>Browse Circles</Text>
+            <Text style={styles.emptyButtonText}>{t("dream_feed.empty_following_btn")}</Text>
           </TouchableOpacity>
         </View>
       );
@@ -192,9 +195,9 @@ export default function DreamFeedScreen() {
       return (
         <View style={styles.emptyState}>
           <Text style={styles.emptyEmoji}>{"\u{1F525}"}</Text>
-          <Text style={styles.emptyTitle}>No Trending Posts Yet</Text>
+          <Text style={styles.emptyTitle}>{t("dream_feed.empty_trending_title")}</Text>
           <Text style={styles.emptySubtitle}>
-            When posts get likes and comments, the most popular ones will appear here.
+            {t("dream_feed.empty_trending_body")}
           </Text>
         </View>
       );
@@ -203,16 +206,16 @@ export default function DreamFeedScreen() {
     return (
       <View style={styles.emptyState}>
         <Text style={styles.emptyEmoji}>{"\u{2728}"}</Text>
-        <Text style={styles.emptyTitle}>No Dreams Yet</Text>
+        <Text style={styles.emptyTitle}>{t("dream_feed.empty_for_you_title")}</Text>
         <Text style={styles.emptySubtitle}>
-          Be the first to share your dream! Tap the + button below to create your first post.
+          {t("dream_feed.empty_for_you_body")}
         </Text>
         <TouchableOpacity
           style={styles.emptyButton}
           onPress={() => navigation.navigate("CreateDreamPost")}
         >
           <Ionicons name="videocam" size={18} color="#FFFFFF" />
-          <Text style={styles.emptyButtonText}>Share Your Dream</Text>
+          <Text style={styles.emptyButtonText}>{t("dream_feed.empty_for_you_btn")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -223,8 +226,8 @@ export default function DreamFeedScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Dream Feed</Text>
-          <Text style={styles.headerSubtitle}>Dream. Save. Achieve.</Text>
+          <Text style={styles.headerTitle}>{t("dream_feed.header_title")}</Text>
+          <Text style={styles.headerSubtitle}>{t("dream_feed.header_subtitle")}</Text>
         </View>
         <View style={styles.headerActions}>
           {/* My Dreams button */}
@@ -269,7 +272,7 @@ export default function DreamFeedScreen() {
                 activeFilter === tab.key && styles.filterTabTextActive,
               ]}
             >
-              {tab.label}
+              {t(tab.labelKey)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -279,7 +282,7 @@ export default function DreamFeedScreen() {
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.accentTeal} />
-          <Text style={styles.loadingText}>Loading dreams...</Text>
+          <Text style={styles.loadingText}>{t("dream_feed.loading_text")}</Text>
         </View>
       ) : (
         <FlatList

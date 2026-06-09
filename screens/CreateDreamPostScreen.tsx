@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import * as ImagePicker from "expo-image-picker";
 import { useFeed, FeedVisibility } from "../context/FeedContext";
 import { useSavings, SavingsGoal } from "../context/SavingsContext";
@@ -52,6 +53,7 @@ const DREAM_CATEGORIES = [
 
 export default function CreateDreamPostScreen() {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { getActiveGoals } = useSavings();
   const { myCircles } = useCircles();
@@ -179,7 +181,7 @@ export default function CreateDreamPostScreen() {
       }
     } catch (err) {
       console.error("Media picker error:", err);
-      Alert.alert("Error", "Could not open media picker");
+      Alert.alert(t("create_dream_post.alert_error_title"), t("create_dream_post.alert_could_not_open_picker"));
     }
   };
 
@@ -403,7 +405,7 @@ export default function CreateDreamPostScreen() {
       relatedType = "circle";
     } else if (source === "new_dream") {
       if (!dreamTitle.trim()) {
-        Alert.alert("Missing Title", "Give your dream a name!");
+        Alert.alert(t("create_dream_post.alert_missing_title_title"), t("create_dream_post.alert_missing_title_body"));
         return;
       }
       if (!content) content = dreamTitle.trim();
@@ -416,7 +418,7 @@ export default function CreateDreamPostScreen() {
     }
 
     if (!content) {
-      Alert.alert("Missing Content", "Add a caption to your post!");
+      Alert.alert(t("create_dream_post.alert_missing_content_title"), t("create_dream_post.alert_missing_content_body"));
       return;
     }
 
@@ -482,7 +484,7 @@ export default function CreateDreamPostScreen() {
       showToast("Dream posted successfully! \u{2728}", "success");
       navigation.goBack();
     } catch (err) {
-      Alert.alert("Error", "Failed to create post. Please try again.");
+      Alert.alert(t("create_dream_post.alert_error_title"), t("create_dream_post.alert_failed_create"));
       console.error("Error creating post:", err);
     } finally {
       setIsSubmitting(false);
@@ -550,7 +552,7 @@ export default function CreateDreamPostScreen() {
         {/* ============================================ */}
         {step === "choose_source" && (
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            <Text style={styles.stepTitle}>What would you like to share?</Text>
+            <Text style={styles.stepTitle}>{t("create_dream_post.step_what_share")}</Text>
             <Text style={styles.stepSubtitle}>
               Connect your post to real financial activity
             </Text>
@@ -565,7 +567,7 @@ export default function CreateDreamPostScreen() {
                 <Text style={styles.sourceEmoji}>{"\u{1F3AF}"}</Text>
               </View>
               <View style={styles.sourceInfo}>
-                <Text style={styles.sourceTitle}>My Savings Goal</Text>
+                <Text style={styles.sourceTitle}>{t("create_dream_post.source_goal")}</Text>
                 <Text style={styles.sourceDescription}>
                   Share progress on a savings goal
                 </Text>
@@ -588,7 +590,7 @@ export default function CreateDreamPostScreen() {
                 <Text style={styles.sourceEmoji}>{"\u{1F91D}"}</Text>
               </View>
               <View style={styles.sourceInfo}>
-                <Text style={styles.sourceTitle}>My Circle</Text>
+                <Text style={styles.sourceTitle}>{t("create_dream_post.source_circle")}</Text>
                 <Text style={styles.sourceDescription}>
                   Share your circle savings journey
                 </Text>
@@ -611,7 +613,7 @@ export default function CreateDreamPostScreen() {
                 <Text style={styles.sourceEmoji}>{"\u{2728}"}</Text>
               </View>
               <View style={styles.sourceInfo}>
-                <Text style={styles.sourceTitle}>New Dream</Text>
+                <Text style={styles.sourceTitle}>{t("create_dream_post.source_new")}</Text>
                 <Text style={styles.sourceDescription}>
                   Share a new dream or aspiration
                 </Text>
@@ -626,11 +628,11 @@ export default function CreateDreamPostScreen() {
         {/* ============================================ */}
         {step === "select_item" && source === "goal" && (
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            <Text style={styles.stepTitle}>Select a Savings Goal</Text>
+            <Text style={styles.stepTitle}>{t("create_dream_post.step_select_goal")}</Text>
             {activeGoals.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyEmoji}>{"\u{1F3AF}"}</Text>
-                <Text style={styles.emptyTitle}>No Active Goals</Text>
+                <Text style={styles.emptyTitle}>{t("create_dream_post.empty_no_goals")}</Text>
                 <Text style={styles.emptyText}>
                   Create a savings goal first to share your progress!
                 </Text>
@@ -680,11 +682,11 @@ export default function CreateDreamPostScreen() {
         {/* ============================================ */}
         {step === "select_item" && source === "circle" && (
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            <Text style={styles.stepTitle}>Select a Circle</Text>
+            <Text style={styles.stepTitle}>{t("create_dream_post.step_select_circle")}</Text>
             {myCircles.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyEmoji}>{"\u{1F91D}"}</Text>
-                <Text style={styles.emptyTitle}>No Circles Yet</Text>
+                <Text style={styles.emptyTitle}>{t("create_dream_post.empty_no_circles")}</Text>
                 <Text style={styles.emptyText}>
                   Join or create a savings circle to share your journey!
                 </Text>
@@ -796,7 +798,7 @@ export default function CreateDreamPostScreen() {
               <>
                 <TextInput
                   style={styles.dreamTitleInput}
-                  placeholder="Name your dream..."
+                  placeholder={t("create_dream_post.placeholder_dream_name")}
                   placeholderTextColor={colors.textSecondary}
                   value={dreamTitle}
                   onChangeText={setDreamTitle}
@@ -819,7 +821,7 @@ export default function CreateDreamPostScreen() {
                   </View>
                 </View>
 
-                <Text style={styles.categoryLabel}>Category</Text>
+                <Text style={styles.categoryLabel}>{t("create_dream_post.category_label")}</Text>
                 <View style={styles.categoryGrid}>
                   {DREAM_CATEGORIES.map((cat) => (
                     <TouchableOpacity
@@ -861,7 +863,7 @@ export default function CreateDreamPostScreen() {
                       <Image source={{ uri: mediaUri }} style={styles.photoImage} />
                       <View style={styles.mediaBadge}>
                         <Ionicons name="image" size={12} color="#FFFFFF" />
-                        <Text style={styles.mediaBadgeText}>PHOTO</Text>
+                        <Text style={styles.mediaBadgeText}>{t("create_dream_post.badge_photo")}</Text>
                       </View>
                     </View>
                   )}
@@ -873,13 +875,13 @@ export default function CreateDreamPostScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.changeMediaBtn} onPress={pickMedia}>
                     <Ionicons name="swap-horizontal" size={16} color="#FFFFFF" />
-                    <Text style={styles.changeMediaText}>Change</Text>
+                    <Text style={styles.changeMediaText}>{t("create_dream_post.change_media")}</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
                 <View style={styles.photoPlaceholder}>
                   <Ionicons name="videocam-outline" size={24} color={colors.accentTeal} />
-                  <Text style={styles.photoText}>Add Photo or Video</Text>
+                  <Text style={styles.photoText}>{t("create_dream_post.add_photo_video")}</Text>
                 </View>
               )}
             </TouchableOpacity>
@@ -908,7 +910,7 @@ export default function CreateDreamPostScreen() {
               <View style={styles.tagSection}>
                 <View style={styles.tagLabelRow}>
                   <Ionicons name="people-outline" size={18} color={colors.textSecondary} />
-                  <Text style={styles.tagLabel}>Tag Communities</Text>
+                  <Text style={styles.tagLabel}>{t("create_dream_post.tag_label")}</Text>
                 </View>
                 <ScrollView
                   horizontal
@@ -949,7 +951,7 @@ export default function CreateDreamPostScreen() {
                 <Ionicons name="location-outline" size={18} color={colors.textSecondary} />
                 <TextInput
                   style={styles.tagInput}
-                  placeholder="Add location (e.g. Atlanta, GA)"
+                  placeholder={t("create_dream_post.placeholder_location")}
                   placeholderTextColor={colors.textSecondary}
                   value={location}
                   onChangeText={setLocation}
@@ -964,7 +966,7 @@ export default function CreateDreamPostScreen() {
                 <Text style={styles.hashIcon}>#</Text>
                 <TextInput
                   style={styles.tagInput}
-                  placeholder="Add hashtags (e.g. savings, dreams)"
+                  placeholder={t("create_dream_post.placeholder_hashtags")}
                   placeholderTextColor={colors.textSecondary}
                   value={hashtags}
                   onChangeText={setHashtags}
@@ -995,7 +997,7 @@ export default function CreateDreamPostScreen() {
               activeOpacity={0.7}
             >
               <Ionicons name="eye-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.previewPostBtnText}>Preview Post</Text>
+              <Text style={styles.previewPostBtnText}>{t("create_dream_post.btn_preview")}</Text>
             </TouchableOpacity>
 
             <View style={{ height: 40 }} />
@@ -1033,33 +1035,33 @@ export default function CreateDreamPostScreen() {
                       <View style={[styles.rvSideBtnCircle, { backgroundColor: "rgba(0, 198, 174, 0.3)" }]}>
                         <Ionicons name="wallet" size={22} color={colors.accentTeal} />
                       </View>
-                      <Text style={styles.rvSideBtnLabel}>I Saved</Text>
+                      <Text style={styles.rvSideBtnLabel}>{t("create_dream_post.side_i_saved")}</Text>
                     </View>
                     <View style={styles.rvSideBtn}>
                       <View style={styles.rvSideBtnCircle}>
                         <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
                       </View>
-                      <Text style={styles.rvSideBtnLabel}>Comment</Text>
+                      <Text style={styles.rvSideBtnLabel}>{t("create_dream_post.side_comment")}</Text>
                     </View>
                     <View style={styles.rvSideBtn}>
                       <View style={styles.rvSideBtnCircle}>
                         <Ionicons name="copy-outline" size={20} color="#FFFFFF" />
                       </View>
-                      <Text style={styles.rvSideBtnLabel}>Clone</Text>
+                      <Text style={styles.rvSideBtnLabel}>{t("create_dream_post.side_clone")}</Text>
                     </View>
                     {(source === "goal" || source === "circle") && (
                       <View style={styles.rvSideBtn}>
                         <View style={[styles.rvSideBtnCircle, { backgroundColor: colors.accentTeal }]}>
                           <Ionicons name="hand-left" size={18} color="#FFFFFF" />
                         </View>
-                        <Text style={styles.rvSideBtnLabel}>Support</Text>
+                        <Text style={styles.rvSideBtnLabel}>{t("create_dream_post.side_support")}</Text>
                       </View>
                     )}
                     <View style={styles.rvSideBtn}>
                       <View style={styles.rvSideBtnCircle}>
                         <Ionicons name="arrow-redo" size={20} color="#FFFFFF" />
                       </View>
-                      <Text style={styles.rvSideBtnLabel}>Share</Text>
+                      <Text style={styles.rvSideBtnLabel}>{t("create_dream_post.side_share")}</Text>
                     </View>
                   </View>
 
@@ -1171,14 +1173,14 @@ export default function CreateDreamPostScreen() {
               {/* Post Details Summary */}
               <View style={styles.rvSummary}>
                 <View style={styles.rvSummaryRow}>
-                  <Text style={styles.rvSummaryLabel}>Visibility</Text>
+                  <Text style={styles.rvSummaryLabel}>{t("create_dream_post.summary_visibility")}</Text>
                   <Text style={styles.rvSummaryValue}>
                     {visibility === "public" ? "\u{1F30D} Public" : visibility === "community" ? "\u{1F465} Community" : "\u{1F441}\u{FE0F}\u{200D}\u{1F5E8}\u{FE0F} Anonymous"}
                   </Text>
                 </View>
                 {mediaUri && (
                   <View style={styles.rvSummaryRow}>
-                    <Text style={styles.rvSummaryLabel}>Media</Text>
+                    <Text style={styles.rvSummaryLabel}>{t("create_dream_post.summary_media")}</Text>
                     <Text style={styles.rvSummaryValue}>
                       {mediaType === "video" ? "\u{1F3AC} Video" : "\u{1F4F7} Photo"}
                     </Text>
@@ -1186,7 +1188,7 @@ export default function CreateDreamPostScreen() {
                 )}
                 {parseHashtags(hashtags).length > 0 && (
                   <View style={[styles.rvSummaryRow, { borderBottomWidth: 0 }]}>
-                    <Text style={styles.rvSummaryLabel}>Hashtags</Text>
+                    <Text style={styles.rvSummaryLabel}>{t("create_dream_post.summary_hashtags")}</Text>
                     <Text style={[styles.rvSummaryValue, { color: colors.accentTeal }]}>
                       {parseHashtags(hashtags).join(" ")}
                     </Text>
@@ -1215,7 +1217,7 @@ export default function CreateDreamPostScreen() {
                 ) : (
                   <>
                     <Ionicons name="sparkles" size={18} color="#FFFFFF" />
-                    <Text style={styles.submitBtnText}>Post Dream</Text>
+                    <Text style={styles.submitBtnText}>{t("create_dream_post.btn_post_dream")}</Text>
                   </>
                 )}
               </TouchableOpacity>

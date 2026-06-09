@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useFeed, FeedPost, FeedComment } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
 import FeedPostCard from "../components/FeedPostCard";
@@ -53,6 +54,7 @@ const formatCreatedDate = (dateStr: string): string => {
 export default function PostDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<PostDetailRouteParams, "PostDetail">>();
+  const { t } = useTranslation();
   const { postId } = route.params;
   const { user } = useAuth();
   const {
@@ -216,7 +218,7 @@ export default function PostDetailScreen() {
       if (updatedPost) setPost(updatedPost);
     } catch (err) {
       showToast("Failed to add comment", "error");
-      Alert.alert("Error", "Failed to add comment.");
+      Alert.alert(t("post_detail.alert_error_title"), t("post_detail.alert_failed_add_comment"));
     } finally {
       setIsSubmitting(false);
     }
@@ -225,7 +227,7 @@ export default function PostDetailScreen() {
   const handleDelete = () => {
     if (!post || post.userId !== user?.id) return;
 
-    Alert.alert("Delete Post", "Are you sure you want to delete this post?", [
+    Alert.alert(t("post_detail.alert_delete_title"), t("post_detail.alert_delete_body"), [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
@@ -237,7 +239,7 @@ export default function PostDetailScreen() {
             navigation.goBack();
           } catch (err) {
             showToast("Failed to delete post", "error");
-            Alert.alert("Error", "Failed to delete post.");
+            Alert.alert(t("post_detail.alert_error_title"), t("post_detail.alert_failed_delete"));
           }
         },
       },
@@ -264,11 +266,11 @@ export default function PostDetailScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Dream Details</Text>
+          <Text style={styles.headerTitle}>{t("post_detail.header_dream_details")}</Text>
           <View style={{ width: 24 }} />
         </View>
         <View style={styles.loadingContainer}>
-          <Text style={styles.errorText}>Post not found</Text>
+          <Text style={styles.errorText}>{t("post_detail.error_not_found")}</Text>
         </View>
       </SafeAreaView>
     );
@@ -297,7 +299,7 @@ export default function PostDetailScreen() {
             <TouchableOpacity onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>My Dream Journal</Text>
+            <Text style={styles.headerTitle}>{t("post_detail.my_journal")}</Text>
             <TouchableOpacity onPress={handleDelete}>
               <Ionicons name="trash-outline" size={22} color={colors.errorText} />
             </TouchableOpacity>
@@ -456,7 +458,7 @@ export default function PostDetailScreen() {
                         )}
                         {isCurrentPost && (
                           <View style={styles.timelineCurrentBadge}>
-                            <Text style={styles.timelineCurrentBadgeText}>Current</Text>
+                            <Text style={styles.timelineCurrentBadgeText}>{t("post_detail.timeline_current")}</Text>
                           </View>
                         )}
                       </View>
@@ -486,7 +488,7 @@ export default function PostDetailScreen() {
                 onPress={() => navigation.navigate("CreateDreamPost")}
               >
                 <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
-                <Text style={styles.ownPrimaryCTAText}>Add New Update</Text>
+                <Text style={styles.ownPrimaryCTAText}>{t("post_detail.btn_add_update")}</Text>
               </TouchableOpacity>
               <View style={styles.ownSecondaryRow}>
                 <TouchableOpacity
@@ -494,14 +496,14 @@ export default function PostDetailScreen() {
                   onPress={() => handleAccountability(post)}
                 >
                   <Ionicons name="share-outline" size={16} color={colors.accentTeal} />
-                  <Text style={styles.ownSecondaryCTAText}>Share Goal</Text>
+                  <Text style={styles.ownSecondaryCTAText}>{t("post_detail.btn_share_goal")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.ownSecondaryCTA}
                   onPress={() => handleClonePlan(post)}
                 >
                   <Ionicons name="copy-outline" size={16} color={colors.accentTeal} />
-                  <Text style={styles.ownSecondaryCTAText}>Clone for Friend</Text>
+                  <Text style={styles.ownSecondaryCTAText}>{t("post_detail.btn_clone_friend")}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -535,7 +537,7 @@ export default function PostDetailScreen() {
           <View style={styles.commentInputContainer}>
             <TextInput
               style={styles.commentInput}
-              placeholder="Add a comment..."
+              placeholder={t("post_detail.placeholder_comment")}
               placeholderTextColor={colors.textSecondary}
               value={commentText}
               onChangeText={setCommentText}
@@ -575,7 +577,7 @@ export default function PostDetailScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Dream Details</Text>
+          <Text style={styles.headerTitle}>{t("post_detail.header_dream_details")}</Text>
           <View style={{ width: 24 }} />
         </View>
 
@@ -612,7 +614,7 @@ export default function PostDetailScreen() {
             const p = Math.round(((meta.currentBalance || 0) / meta.targetAmount) * 100);
             return (
               <View style={styles.dreamDetailCard}>
-                <Text style={styles.dreamDetailSectionLabel}>Dream Details</Text>
+                <Text style={styles.dreamDetailSectionLabel}>{t("post_detail.section_dream_details")}</Text>
                 <View style={styles.dreamDetailRow}>
                   <Text style={styles.dreamDetailEmoji}>{meta.goalEmoji || "\u{1F3AF}"}</Text>
                   <View style={{ flex: 1 }}>
@@ -640,11 +642,11 @@ export default function PostDetailScreen() {
                 <View style={styles.dreamDetailCTAs}>
                   <TouchableOpacity style={styles.dreamDetailPrimaryCTA} onPress={() => handleSupport(post)}>
                     <Ionicons name="hand-left" size={16} color="#FFFFFF" />
-                    <Text style={styles.dreamDetailPrimaryCTAText}>Support Dream</Text>
+                    <Text style={styles.dreamDetailPrimaryCTAText}>{t("post_detail.btn_support_dream")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.dreamDetailSecondaryCTA} onPress={() => handleClonePlan(post)}>
                     <Ionicons name="copy-outline" size={16} color={colors.accentTeal} />
-                    <Text style={styles.dreamDetailSecondaryCTAText}>Start Similar</Text>
+                    <Text style={styles.dreamDetailSecondaryCTAText}>{t("post_detail.btn_start_similar")}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -656,7 +658,7 @@ export default function PostDetailScreen() {
             const spotsLeft = (meta.memberCount || 0) - (meta.currentMembers || 0);
             return (
               <View style={styles.dreamDetailCard}>
-                <Text style={styles.dreamDetailSectionLabel}>Circle Details</Text>
+                <Text style={styles.dreamDetailSectionLabel}>{t("post_detail.section_circle_details")}</Text>
                 <View style={styles.dreamDetailRow}>
                   <Text style={styles.dreamDetailEmoji}>{meta.circleEmoji || "\u{1F91D}"}</Text>
                   <View style={{ flex: 1 }}>
@@ -684,11 +686,11 @@ export default function PostDetailScreen() {
                 <View style={styles.dreamDetailCTAs}>
                   <TouchableOpacity style={styles.dreamDetailPrimaryCTA} onPress={() => handleSupport(post)}>
                     <Ionicons name="people" size={16} color="#FFFFFF" />
-                    <Text style={styles.dreamDetailPrimaryCTAText}>Join Circle</Text>
+                    <Text style={styles.dreamDetailPrimaryCTAText}>{t("post_detail.btn_join_circle")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.dreamDetailSecondaryCTA} onPress={() => handleClonePlan(post)}>
                     <Ionicons name="copy-outline" size={16} color={colors.accentTeal} />
-                    <Text style={styles.dreamDetailSecondaryCTAText}>Start Similar</Text>
+                    <Text style={styles.dreamDetailSecondaryCTAText}>{t("post_detail.btn_start_similar")}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -724,7 +726,7 @@ export default function PostDetailScreen() {
         <View style={styles.commentInputContainer}>
           <TextInput
             style={styles.commentInput}
-            placeholder="Show your support..."
+            placeholder={t("post_detail.placeholder_support")}
             placeholderTextColor={colors.textSecondary}
             value={commentText}
             onChangeText={setCommentText}
