@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import {
   useScoreBreakdownWithHelpers,
@@ -65,6 +66,7 @@ const getPriorityStyle = (priority: string) => {
 
 export default function ScoreBreakdownScreen() {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const { user } = useAuth();
 
   const {
@@ -109,7 +111,7 @@ export default function ScoreBreakdownScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>XnScore Breakdown</Text>
+        <Text style={styles.headerTitle}>{t("score_breakdown.header_title")}</Text>
         <TouchableOpacity>
           <Ionicons name="help-circle-outline" size={24} color="#FFF" />
         </TouchableOpacity>
@@ -149,7 +151,7 @@ export default function ScoreBreakdownScreen() {
         </View>
 
         {/* Score Factors */}
-        <Text style={styles.sectionTitle}>Score Factors</Text>
+        <Text style={styles.sectionTitle}>{t("score_breakdown.section_factors")}</Text>
         {factorStatuses?.map((factor: any) => {
           const color = getScoreColor(factor.percentage);
           const iconName = FACTOR_ICONS[factor.key] ?? "analytics";
@@ -188,7 +190,7 @@ export default function ScoreBreakdownScreen() {
         {/* Recent Events */}
         {recentEvents.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Recent Score Events</Text>
+            <Text style={styles.sectionTitle}>{t("score_breakdown.section_recent")}</Text>
             {recentEvents.map((event: any, i: number) => {
               const positive = (event.impact ?? 0) > 0;
               return (
@@ -228,7 +230,7 @@ export default function ScoreBreakdownScreen() {
         {/* Tips */}
         {tips && tips.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>How to Improve</Text>
+            <Text style={styles.sectionTitle}>{t("score_breakdown.section_improve")}</Text>
             {tips.map((tip: any, i: number) => {
               const priority = getPriorityStyle(tip.priority ?? "low");
               const iconName = FACTOR_ICONS[tip.factor_key] ?? "bulb";

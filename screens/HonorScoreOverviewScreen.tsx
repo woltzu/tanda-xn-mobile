@@ -11,6 +11,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useTranslation } from "react-i18next";
 import { useElder } from "../context/ElderContext";
 
 type RootStackParamList = {
@@ -24,6 +25,7 @@ const { width } = Dimensions.get("window");
 
 export default function HonorScoreOverviewScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const { t } = useTranslation();
   const {
     elderProfile,
     honorScoreHistory,
@@ -154,7 +156,7 @@ export default function HonorScoreOverviewScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#1a1a2e" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Honor Score</Text>
+        <Text style={styles.headerTitle}>{t("honor_overview.header_title")}</Text>
         <TouchableOpacity style={styles.infoButton}>
           <Ionicons name="information-circle-outline" size={24} color="#6B7280" />
         </TouchableOpacity>
@@ -165,7 +167,7 @@ export default function HonorScoreOverviewScreen() {
         <View style={[styles.scoreCard, { backgroundColor: tierInfo.bg }]}>
           <View style={styles.scoreHeader}>
             <View>
-              <Text style={styles.scoreLabel}>Your Honor Score</Text>
+              <Text style={styles.scoreLabel}>{t("honor_overview.score_label")}</Text>
               <View style={styles.scoreRow}>
                 <Text style={[styles.scoreValue, { color: tierInfo.color }]}>
                   {honorScore}
@@ -181,7 +183,7 @@ export default function HonorScoreOverviewScreen() {
               </View>
             </View>
             <View style={styles.honorTierContainer}>
-              <Text style={styles.honorTierLabel}>Community Status</Text>
+              <Text style={styles.honorTierLabel}>{t("honor_overview.tier_label")}</Text>
               <Text style={[styles.honorTierValue, { color: tierInfo.color }]}>
                 {honorTier}
               </Text>
@@ -210,7 +212,7 @@ export default function HonorScoreOverviewScreen() {
         {/* Trend Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Score Trend</Text>
+            <Text style={styles.sectionTitle}>{t("honor_overview.section_trend")}</Text>
             <View style={styles.periodToggle}>
               {periods.map((period) => (
                 <TouchableOpacity
@@ -251,7 +253,7 @@ export default function HonorScoreOverviewScreen() {
 
         {/* Tier Breakdown */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Score Tiers</Text>
+          <Text style={styles.sectionTitle}>{t("honor_overview.section_tiers")}</Text>
           <View style={styles.tiersCard}>
             {scoreTiers.map((tier, index) => {
               const isCurrentTier = tierInfo.tier === tier.tier;
@@ -289,7 +291,7 @@ export default function HonorScoreOverviewScreen() {
 
         {/* Recent Activity */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
+          <Text style={styles.sectionTitle}>{t("honor_overview.section_recent")}</Text>
           <View style={styles.activityCard}>
             {honorScoreHistory.slice(0, 6).map((activity, index) => (
               <View
@@ -335,14 +337,14 @@ export default function HonorScoreOverviewScreen() {
 
         {/* How to Improve */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>How to Improve</Text>
+          <Text style={styles.sectionTitle}>{t("honor_overview.section_improve")}</Text>
           <View style={styles.tipsCard}>
             <View style={styles.tipItem}>
               <View style={[styles.tipIcon, { backgroundColor: "#F0FDFB" }]}>
                 <Ionicons name="shield-checkmark" size={20} color="#00C6AE" />
               </View>
               <View style={styles.tipContent}>
-                <Text style={styles.tipTitle}>Resolve Mediation Cases</Text>
+                <Text style={styles.tipTitle}>{t("honor_overview.tip_mediation")}</Text>
                 <Text style={styles.tipDescription}>
                   Earn 15-40 pts per successful case resolution
                 </Text>
@@ -353,7 +355,7 @@ export default function HonorScoreOverviewScreen() {
                 <Ionicons name="hand-right" size={20} color="#7C3AED" />
               </View>
               <View style={styles.tipContent}>
-                <Text style={styles.tipTitle}>Successful Vouches</Text>
+                <Text style={styles.tipTitle}>{t("honor_overview.tip_vouches")}</Text>
                 <Text style={styles.tipDescription}>
                   Earn 3-8 pts when vouched members complete circles
                 </Text>
@@ -364,7 +366,7 @@ export default function HonorScoreOverviewScreen() {
                 <Ionicons name="school" size={20} color="#3B82F6" />
               </View>
               <View style={styles.tipContent}>
-                <Text style={styles.tipTitle}>Complete Training</Text>
+                <Text style={styles.tipTitle}>{t("honor_overview.tip_training")}</Text>
                 <Text style={styles.tipDescription}>
                   Earn 5-10 pts per completed course
                 </Text>

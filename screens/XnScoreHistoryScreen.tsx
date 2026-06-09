@@ -10,6 +10,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useXnScore, ScoreEvent, ScoreEventType } from "../context/XnScoreContext";
 
@@ -28,6 +29,7 @@ const FILTERS: { id: FilterType; label: string }[] = [
 
 export default function XnScoreHistoryScreen() {
   const navigation = useNavigation<XnScoreHistoryNavigationProp>();
+  const { t } = useTranslation();
   const { score, history, tips } = useXnScore();
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
 
@@ -144,15 +146,15 @@ export default function XnScoreHistoryScreen() {
         {/* Summary Cards */}
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Current Score</Text>
+            <Text style={styles.summaryLabel}>{t("xnscore_history.label_current")}</Text>
             <Text style={styles.summaryValue}>{score}</Text>
           </View>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Total Gained</Text>
+            <Text style={styles.summaryLabel}>{t("xnscore_history.label_total_gained")}</Text>
             <Text style={[styles.summaryValue, { color: "#00C6AE" }]}>+{totalGains}</Text>
           </View>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Total Lost</Text>
+            <Text style={styles.summaryLabel}>{t("xnscore_history.label_total_lost")}</Text>
             <Text style={[styles.summaryValue, { color: "#DC2626" }]}>-{totalLosses}</Text>
           </View>
         </View>
@@ -195,7 +197,7 @@ export default function XnScoreHistoryScreen() {
         {/* Tips Section - Only show on "all" filter */}
         {activeFilter === "all" && incompleteTips.length > 0 && (
           <View style={styles.tipsSection}>
-            <Text style={styles.sectionTitle}>Tips to Earn More Points</Text>
+            <Text style={styles.sectionTitle}>{t("xnscore_history.section_tips")}</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -260,7 +262,7 @@ export default function XnScoreHistoryScreen() {
         ) : (
           <View style={styles.emptyState}>
             <Ionicons name="document-text-outline" size={48} color="#D1D5DB" />
-            <Text style={styles.emptyTitle}>No History</Text>
+            <Text style={styles.emptyTitle}>{t("xnscore_history.empty_title")}</Text>
             <Text style={styles.emptySubtitle}>
               {activeFilter === "all"
                 ? "Your score history will appear here as you use TandaXn"
@@ -276,7 +278,7 @@ export default function XnScoreHistoryScreen() {
             <View style={styles.legendRow}>
               <View style={styles.legendLeft}>
                 <View style={[styles.legendDot, { backgroundColor: "#00C6AE" }]} />
-                <Text style={styles.legendText}>Make a contribution</Text>
+                <Text style={styles.legendText}>{t("xnscore_history.legend_contribution")}</Text>
               </View>
               <Text style={styles.legendPoints}>+1.5</Text>
             </View>
@@ -290,28 +292,28 @@ export default function XnScoreHistoryScreen() {
             <View style={styles.legendRow}>
               <View style={styles.legendLeft}>
                 <View style={[styles.legendDot, { backgroundColor: "#059669" }]} />
-                <Text style={styles.legendText}>Early payment bonus</Text>
+                <Text style={styles.legendText}>{t("xnscore_history.legend_early")}</Text>
               </View>
               <Text style={styles.legendPoints}>+1.2</Text>
             </View>
             <View style={styles.legendRow}>
               <View style={styles.legendLeft}>
                 <View style={[styles.legendDot, { backgroundColor: "#1565C0" }]} />
-                <Text style={styles.legendText}>Join a circle</Text>
+                <Text style={styles.legendText}>{t("xnscore_history.legend_join")}</Text>
               </View>
               <Text style={styles.legendPoints}>+1.5</Text>
             </View>
             <View style={styles.legendRow}>
               <View style={styles.legendLeft}>
                 <View style={[styles.legendDot, { backgroundColor: "#F59E0B" }]} />
-                <Text style={styles.legendText}>Complete a circle</Text>
+                <Text style={styles.legendText}>{t("xnscore_history.legend_complete")}</Text>
               </View>
               <Text style={styles.legendPoints}>+5</Text>
             </View>
             <View style={styles.legendRow}>
               <View style={styles.legendLeft}>
                 <View style={[styles.legendDot, { backgroundColor: "#EC4899" }]} />
-                <Text style={styles.legendText}>Add funds to wallet</Text>
+                <Text style={styles.legendText}>{t("xnscore_history.legend_addfunds")}</Text>
               </View>
               <Text style={styles.legendPoints}>+0.3</Text>
             </View>
@@ -319,14 +321,14 @@ export default function XnScoreHistoryScreen() {
             <View style={styles.legendRow}>
               <View style={styles.legendLeft}>
                 <View style={[styles.legendDot, { backgroundColor: "#DC2626" }]} />
-                <Text style={styles.legendText}>Late payment penalty</Text>
+                <Text style={styles.legendText}>{t("xnscore_history.legend_late")}</Text>
               </View>
               <Text style={[styles.legendPoints, { color: "#DC2626" }]}>-2</Text>
             </View>
             <View style={styles.legendRow}>
               <View style={styles.legendLeft}>
                 <View style={[styles.legendDot, { backgroundColor: "#F59E0B" }]} />
-                <Text style={styles.legendText}>Withdrawal</Text>
+                <Text style={styles.legendText}>{t("xnscore_history.legend_withdrawal")}</Text>
               </View>
               <Text style={[styles.legendPoints, { color: "#F59E0B" }]}>-0.2</Text>
             </View>

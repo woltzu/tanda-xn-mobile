@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useXnScore, ScoreLevel } from "../context/XnScoreContext";
 import { useUserDefaults } from "../hooks/useDefaultCascade";
@@ -25,6 +26,7 @@ const SCORE_RING_SIZE = width * 0.55;
 
 export default function XnScoreDashboardScreen() {
   const navigation = useNavigation<XnScoreDashboardNavigationProp>();
+  const { t } = useTranslation();
   const {
     score,
     level,
@@ -220,7 +222,7 @@ export default function XnScoreDashboardScreen() {
 
           {/* Score Breakdown */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Score Breakdown</Text>
+            <Text style={styles.sectionTitle}>{t("xnscore_dashboard.section_breakdown")}</Text>
             <View style={styles.breakdownCard}>
               {scoreBreakdown.map((item, index) => (
                 <View key={item.category} style={styles.breakdownRow}>
@@ -271,7 +273,7 @@ export default function XnScoreDashboardScreen() {
           {/* Tips to Improve */}
           {incompleteTips.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Tips to Improve Your Score</Text>
+              <Text style={styles.sectionTitle}>{t("xnscore_dashboard.section_tips")}</Text>
               {incompleteTips.map((tip) => (
                 <View key={tip.id} style={styles.tipCard}>
                   <View style={styles.tipLeft}>
@@ -294,9 +296,9 @@ export default function XnScoreDashboardScreen() {
           {/* Recent Activity */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recent Score Activity</Text>
+              <Text style={styles.sectionTitle}>{t("xnscore_dashboard.section_recent")}</Text>
               <TouchableOpacity onPress={() => navigation.navigate("XnScoreHistory")}>
-                <Text style={styles.seeAllText}>See All</Text>
+                <Text style={styles.seeAllText}>{t("xnscore_dashboard.see_all")}</Text>
               </TouchableOpacity>
             </View>
             {recentHistory.length > 0 ? (
@@ -331,8 +333,8 @@ export default function XnScoreDashboardScreen() {
             ) : (
               <View style={styles.emptyActivity}>
                 <Ionicons name="star-outline" size={40} color="#D1D5DB" />
-                <Text style={styles.emptyText}>No activity yet</Text>
-                <Text style={styles.emptySubtext}>Start using TandaXn to build your score!</Text>
+                <Text style={styles.emptyText}>{t("xnscore_dashboard.empty_text")}</Text>
+                <Text style={styles.emptySubtext}>{t("xnscore_dashboard.empty_subtext")}</Text>
               </View>
             )}
           </View>

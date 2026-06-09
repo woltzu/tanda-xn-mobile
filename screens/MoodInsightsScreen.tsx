@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import {
   useMoodScore,
   useMoodIntervention,
@@ -66,6 +67,7 @@ function formatDate(iso: string): string {
 
 export default function MoodInsightsScreen() {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const {
     currentSnapshot,
     history,
@@ -121,7 +123,7 @@ export default function MoodInsightsScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={TEAL} />
-        <Text style={styles.loadingText}>Loading mood insights...</Text>
+        <Text style={styles.loadingText}>{t("mood_insights.loading")}</Text>
       </View>
     );
   }
@@ -138,7 +140,7 @@ export default function MoodInsightsScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mood Insights</Text>
+        <Text style={styles.headerTitle}>{t("mood_insights.header_title")}</Text>
         <TouchableOpacity style={styles.headerBtn}>
           <Ionicons name="shield-checkmark" size={24} color="#FFF" />
         </TouchableOpacity>
@@ -163,7 +165,7 @@ export default function MoodInsightsScreen() {
         <View style={styles.card}>
           <View style={styles.moodCardInner}>
             <Text style={styles.moodEmoji}>{config.emoji}</Text>
-            <Text style={styles.moodLabel}>Mood Drift Score</Text>
+            <Text style={styles.moodLabel}>{t("mood_insights.label_drift_score")}</Text>
             <View style={styles.scoreRow}>
               <Text style={[styles.scoreValue, { color: config.color }]}>
                 {Math.round(score)}
@@ -187,7 +189,7 @@ export default function MoodInsightsScreen() {
         {/* Signal Breakdown */}
         {signals && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>What We're Noticing</Text>
+            <Text style={styles.sectionTitle}>{t("mood_insights.section_noticing")}</Text>
             <Text style={styles.sectionSubtitle}>
               Based on your circle messages (anonymized analysis)
             </Text>
@@ -227,7 +229,7 @@ export default function MoodInsightsScreen() {
         {/* Recent Sentiment Timeline */}
         {history.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recent Sentiment</Text>
+            <Text style={styles.sectionTitle}>{t("mood_insights.section_recent_sentiment")}</Text>
             <View style={styles.card}>
               {history.slice(0, 6).map((snap, i) => {
                 const isLast = i === Math.min(history.length, 6) - 1;
@@ -296,7 +298,7 @@ export default function MoodInsightsScreen() {
         {/* Opt-Out Toggle */}
         <View style={[styles.card, styles.optOutCard]}>
           <View style={styles.optOutLeft}>
-            <Text style={styles.optOutTitle}>Mood Analysis</Text>
+            <Text style={styles.optOutTitle}>{t("mood_insights.opt_out_title")}</Text>
             <Text style={styles.optOutSub}>
               {optedOut
                 ? "Mood tracking is paused"

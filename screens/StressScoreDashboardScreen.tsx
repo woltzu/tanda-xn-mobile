@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useStressScore, useStressIntervention } from "../hooks/useFinancialStressPrediction";
 import { useStressActions } from "../hooks/useFinancialStressPrediction";
 import type { StressStatus, StressTrend, SignalBreakdown } from "../hooks/useFinancialStressPrediction";
@@ -68,6 +69,7 @@ function formatCents(cents: number): string {
 
 export default function StressScoreDashboardScreen() {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const {
     currentScore, history, stressLevel, isAtRisk, trend,
     loading: scoreLoading, refresh: refreshScore,
@@ -118,7 +120,7 @@ export default function StressScoreDashboardScreen() {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={TEAL} />
-        <Text style={styles.loadingText}>Loading your wellness data...</Text>
+        <Text style={styles.loadingText}>{t("stress_score.loading")}</Text>
       </View>
     );
   }
@@ -154,7 +156,7 @@ export default function StressScoreDashboardScreen() {
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={22} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Financial Wellness</Text>
+        <Text style={styles.headerTitle}>{t("stress_score.header_title")}</Text>
         <TouchableOpacity style={styles.headerBtn}>
           <Ionicons name="information-circle-outline" size={22} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
@@ -170,7 +172,7 @@ export default function StressScoreDashboardScreen() {
       >
         {/* ── Main Score Card ── */}
         <View style={styles.card}>
-          <Text style={styles.scoreLabel}>Your Stress Score</Text>
+          <Text style={styles.scoreLabel}>{t("stress_score.score_label")}</Text>
 
           <View style={styles.scoreRow}>
             <Text style={[styles.scoreValue, { color: cfg.color }]}>{score}</Text>
@@ -198,7 +200,7 @@ export default function StressScoreDashboardScreen() {
 
         {/* ── Signal Breakdown ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>What's Contributing</Text>
+          <Text style={styles.sectionTitle}>{t("stress_score.section_contributing")}</Text>
           <Text style={styles.sectionSubtitle}>
             4 signals weighted to calculate your score
           </Text>
@@ -248,7 +250,7 @@ export default function StressScoreDashboardScreen() {
         {/* ── Intervention Offer ── */}
         {hasActiveIntervention && activeIntervention && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Support Available</Text>
+            <Text style={styles.sectionTitle}>{t("stress_score.section_support")}</Text>
 
             <View style={[styles.card, styles.interventionCard]}>
               <View style={styles.interventionIconWrap}>
@@ -287,7 +289,7 @@ export default function StressScoreDashboardScreen() {
                   {responding ? (
                     <ActivityIndicator size="small" color="#FFF" />
                   ) : (
-                    <Text style={styles.acceptBtnText}>Accept Plan</Text>
+                    <Text style={styles.acceptBtnText}>{t("stress_score.btn_accept")}</Text>
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -295,7 +297,7 @@ export default function StressScoreDashboardScreen() {
                   onPress={handleDecline}
                   disabled={responding}
                 >
-                  <Text style={styles.declineBtnText}>Not Now</Text>
+                  <Text style={styles.declineBtnText}>{t("stress_score.btn_not_now")}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -304,7 +306,7 @@ export default function StressScoreDashboardScreen() {
 
         {/* ── Score History ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Score History</Text>
+          <Text style={styles.sectionTitle}>{t("stress_score.section_history")}</Text>
           <Text style={styles.sectionSubtitle}>Last 14 days</Text>
 
           <View style={styles.card}>
@@ -355,14 +357,14 @@ export default function StressScoreDashboardScreen() {
                 </View>
               </View>
             ) : (
-              <Text style={styles.emptyChart}>No history data yet</Text>
+              <Text style={styles.emptyChart}>{t("stress_score.empty_chart")}</Text>
             )}
           </View>
         </View>
 
         {/* ── Tips ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tips to Improve</Text>
+          <Text style={styles.sectionTitle}>{t("stress_score.section_tips")}</Text>
 
           {TIPS.map((tip, i) => (
             <View key={i} style={styles.card}>

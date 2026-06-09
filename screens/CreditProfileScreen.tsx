@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import {
   useLatestValidAssessment,
@@ -61,6 +62,7 @@ const formatCents = (c: number) => `$${(c / 100).toLocaleString()}`;
 
 export default function CreditProfileScreen() {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const { user } = useAuth();
 
   const {
@@ -114,7 +116,7 @@ export default function CreditProfileScreen() {
         <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Credit Profile</Text>
+        <Text style={styles.headerTitle}>{t("credit_profile.header_title")}</Text>
         <TouchableOpacity style={styles.headerBtn}>
           <Ionicons name="information-circle-outline" size={24} color="#FFF" />
         </TouchableOpacity>
@@ -131,23 +133,23 @@ export default function CreditProfileScreen() {
           <Text style={[styles.tierLabel, { color: tierColor }]}>
             {String(tier).toUpperCase()}
           </Text>
-          <Text style={styles.mutedText}>Creditworthiness Score</Text>
+          <Text style={styles.mutedText}>{t("credit_profile.muted_text")}</Text>
 
           {/* Limits Row */}
           <View style={styles.limitsRow}>
             <View style={styles.limitCol}>
               <Text style={styles.limitValue}>{formatCents(maxLoan)}</Text>
-              <Text style={styles.limitLabel}>Max Loan</Text>
+              <Text style={styles.limitLabel}>{t("credit_profile.limit_max_loan")}</Text>
             </View>
             <View style={styles.divider} />
             <View style={styles.limitCol}>
               <Text style={styles.limitValue}>{formatCents(maxAdvance)}</Text>
-              <Text style={styles.limitLabel}>Max Advance</Text>
+              <Text style={styles.limitLabel}>{t("credit_profile.limit_max_advance")}</Text>
             </View>
             <View style={styles.divider} />
             <View style={styles.limitCol}>
               <Text style={[styles.limitValue, { color: COLORS.green }]}>{approvalPct}%</Text>
-              <Text style={styles.limitLabel}>Approval</Text>
+              <Text style={styles.limitLabel}>{t("credit_profile.limit_approval")}</Text>
             </View>
           </View>
         </View>
@@ -167,7 +169,7 @@ export default function CreditProfileScreen() {
               <Ionicons name="warning" size={18} color={COLORS.red} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.recoveryRowTitle}>Default recovery</Text>
+              <Text style={styles.recoveryRowTitle}>{t("credit_profile.recovery_title")}</Text>
               <Text style={styles.recoveryRowSubtitle}>
                 {hasActiveDefaults
                   ? "Unresolved defaults need attention"
@@ -181,7 +183,7 @@ export default function CreditProfileScreen() {
         {/* Assessment Breakdown */}
         {dimensions.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Assessment Breakdown</Text>
+            <Text style={styles.sectionTitle}>{t("credit_profile.section_assessment")}</Text>
             {dimensions.map((dim: any, i: number) => {
               const dimScore = dim.score ?? 0;
               const color = getScoreColor(dimScore);
@@ -211,7 +213,7 @@ export default function CreditProfileScreen() {
         {/* Eligible Products */}
         {eligibleProducts && eligibleProducts.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Available Products</Text>
+            <Text style={styles.sectionTitle}>{t("credit_profile.section_products")}</Text>
             {eligibleProducts.map((product: any, i: number) => {
               const isEligible = product.is_eligible !== false;
               const iconName = PRODUCT_ICONS[product.code] ?? "cash";
@@ -249,16 +251,16 @@ export default function CreditProfileScreen() {
                               productId: product.id,
                             });
                           } else {
-                            Alert.alert("Cannot Apply", applyReason ?? "Not eligible at this time.");
+                            Alert.alert(t("credit_profile.alert_cannot_apply_title"), applyReason ?? t("credit_profile.alert_not_eligible"));
                           }
                         }}
                       >
-                        <Text style={styles.applyBtnText}>Apply</Text>
+                        <Text style={styles.applyBtnText}>{t("credit_profile.btn_apply")}</Text>
                       </TouchableOpacity>
                     ) : (
                       <View style={styles.lockedRow}>
                         <Ionicons name="lock-closed" size={12} color={COLORS.muted} />
-                        <Text style={styles.lockedText}>Locked</Text>
+                        <Text style={styles.lockedText}>{t("credit_profile.tag_locked")}</Text>
                       </View>
                     )}
                   </View>
@@ -271,7 +273,7 @@ export default function CreditProfileScreen() {
         {/* How to Improve */}
         {improvementActions.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>How to Improve</Text>
+            <Text style={styles.sectionTitle}>{t("credit_profile.section_improve")}</Text>
             {improvementActions.map((action: any, i: number) => {
               const actionText = typeof action === "string" ? action : action.description ?? "";
               return (

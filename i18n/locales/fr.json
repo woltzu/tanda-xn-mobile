@@ -2730,5 +2730,80 @@
     "more_history": "Historique des avances",
     "more_support": "Contacter le support",
     "score_title": "Votre XnScore"
+  },
+  "xnscore_dashboard": {
+    "section_breakdown": "Détail du score",
+    "section_tips": "Conseils pour améliorer votre score",
+    "section_recent": "Activité récente du score",
+    "see_all": "Voir tout",
+    "empty_text": "Aucune activité pour le moment",
+    "empty_subtext": "Commencez à utiliser TandaXn pour bâtir votre score !"
+  },
+  "stress_score": {
+    "loading": "Chargement de vos données de bien-être...",
+    "header_title": "Bien-être financier",
+    "score_label": "Votre score de stress",
+    "section_contributing": "Ce qui y contribue",
+    "section_support": "Soutien disponible",
+    "btn_accept": "Accepter le plan",
+    "btn_not_now": "Pas maintenant",
+    "section_history": "Historique du score",
+    "empty_chart": "Aucune donnée d'historique",
+    "section_tips": "Conseils pour améliorer"
+  },
+  "mood_insights": {
+    "loading": "Chargement des aperçus d'humeur...",
+    "header_title": "Aperçus d'humeur",
+    "label_drift_score": "Score de dérive d'humeur",
+    "section_noticing": "Ce que nous remarquons",
+    "section_recent_sentiment": "Sentiment récent",
+    "opt_out_title": "Analyse d'humeur"
+  },
+  "honor_overview": {
+    "header_title": "Score d'honneur",
+    "score_label": "Votre score d'honneur",
+    "tier_label": "Statut communautaire",
+    "section_trend": "Tendance du score",
+    "section_tiers": "Paliers du score",
+    "section_recent": "Activité récente",
+    "section_improve": "Comment s'améliorer",
+    "tip_mediation": "Résoudre des cas de médiation",
+    "tip_vouches": "Vouchings réussis",
+    "tip_training": "Compléter la formation"
+  },
+  "score_breakdown": {
+    "header_title": "Détail du XnScore",
+    "section_factors": "Facteurs du score",
+    "section_recent": "Événements récents du score",
+    "section_improve": "Comment s'améliorer"
+  },
+  "credit_profile": {
+    "header_title": "Profil de crédit",
+    "muted_text": "Score de solvabilité",
+    "limit_max_loan": "Prêt max",
+    "limit_max_advance": "Avance max",
+    "limit_approval": "Approbation",
+    "recovery_title": "Récupération de défaut",
+    "section_assessment": "Détail de l'évaluation",
+    "section_products": "Produits disponibles",
+    "alert_cannot_apply_title": "Impossible de postuler",
+    "alert_not_eligible": "Non éligible pour le moment.",
+    "btn_apply": "Postuler",
+    "tag_locked": "Verrouillé",
+    "section_improve": "Comment s'améliorer"
+  },
+  "xnscore_history": {
+    "label_current": "Score actuel",
+    "label_total_gained": "Total gagné",
+    "label_total_lost": "Total perdu",
+    "section_tips": "Conseils pour gagner plus de points",
+    "empty_title": "Aucun historique",
+    "legend_contribution": "Effectuer une contribution",
+    "legend_early": "Bonus de paiement anticipé",
+    "legend_join": "Rejoindre un cercle",
+    "legend_complete": "Compléter un cercle",
+    "legend_addfunds": "Ajouter des fonds au portefeuille",
+    "legend_late": "Pénalité de paiement tardif",
+    "legend_withdrawal": "Retrait"
   }
 }
