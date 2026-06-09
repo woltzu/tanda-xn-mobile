@@ -13,6 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import {
   useCommunity,
@@ -87,6 +88,7 @@ const iconOptions = [
 export default function CreateCommunityScreen() {
   const navigation = useNavigation<CreateCommunityNavigationProp>();
   const route = useRoute<CreateCommunityRouteProp>();
+  const { t } = useTranslation();
   const parentIdFromRoute = route.params?.parentId;
 
   const {
@@ -196,7 +198,7 @@ export default function CreateCommunityScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle}>Create Community</Text>
+              <Text style={styles.headerTitle}>{t("create_community.header_title")}</Text>
               <Text style={styles.headerSubtitle}>
                 Build your savings community
               </Text>
@@ -217,7 +219,7 @@ export default function CreateCommunityScreen() {
                 </View>
                 <View style={styles.toggleText}>
                   <Text style={styles.toggleTitle}>Create as sub-community</Text>
-                  <Text style={styles.toggleSubtitle}>Nest under an existing community</Text>
+                  <Text style={styles.toggleSubtitle}>{t("create_community.toggle_subtitle")}</Text>
                 </View>
               </View>
 
@@ -229,7 +231,7 @@ export default function CreateCommunityScreen() {
             {/* Parent Community Selection */}
             {isSubCommunity && (
               <View style={styles.parentSelection}>
-                <Text style={styles.parentLabel}>Select parent community</Text>
+                <Text style={styles.parentLabel}>{t("create_community.parent_label")}</Text>
                 <View style={styles.parentList}>
                   {parentCommunities.map((comm) => (
                     <TouchableOpacity
@@ -254,11 +256,11 @@ export default function CreateCommunityScreen() {
 
           {/* Community Details Card */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Community Details</Text>
+            <Text style={styles.cardTitle}>{t("create_community.card_details")}</Text>
 
             {/* Icon Selection */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Community Icon</Text>
+              <Text style={styles.inputLabel}>{t("create_community.label_icon")}</Text>
               <TouchableOpacity
                 style={[styles.iconButton, icon && styles.iconButtonSelected]}
                 onPress={() => setShowIconPicker(!showIconPicker)}
@@ -289,7 +291,7 @@ export default function CreateCommunityScreen() {
 
             {/* Name Input */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Community Name</Text>
+              <Text style={styles.inputLabel}>{t("create_community.label_name")}</Text>
               <TextInput
                 style={[styles.input, nameWarning && styles.inputWarning]}
                 placeholder={
@@ -316,7 +318,7 @@ export default function CreateCommunityScreen() {
               </Text>
               <TextInput
                 style={[styles.input, styles.inputMultiline]}
-                placeholder="What is this community about?"
+                placeholder={t("create_community.placeholder_description")}
                 placeholderTextColor="#9CA3AF"
                 value={description}
                 onChangeText={setDescription}
@@ -329,7 +331,7 @@ export default function CreateCommunityScreen() {
 
           {/* Community Type Card */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Community Type</Text>
+            <Text style={styles.cardTitle}>{t("create_community.card_type")}</Text>
 
             {communityTypes.map((type) => (
               <TouchableOpacity
@@ -354,7 +356,7 @@ export default function CreateCommunityScreen() {
 
           {/* Privacy Card */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Privacy</Text>
+            <Text style={styles.cardTitle}>{t("create_community.card_privacy")}</Text>
 
             <View style={styles.privacyOptions}>
               {[
@@ -420,7 +422,7 @@ export default function CreateCommunityScreen() {
               <View style={styles.modalIconContainer}>
                 <Ionicons name="information-circle" size={28} color="#D97706" />
               </View>
-              <Text style={styles.modalTitle}>Similar Community Found</Text>
+              <Text style={styles.modalTitle}>{t("create_community.modal_similar_title")}</Text>
               <Text style={styles.modalSubtitle}>
                 We found existing communities similar to "{communityName}". Consider joining one of these instead to strengthen the community.
               </Text>
@@ -455,7 +457,7 @@ export default function CreateCommunityScreen() {
                     style={styles.joinExistingButton}
                     onPress={() => handleJoinExisting(similar.id)}
                   >
-                    <Text style={styles.joinExistingText}>Join This Community</Text>
+                    <Text style={styles.joinExistingText}>{t("create_community.btn_join_existing")}</Text>
                   </TouchableOpacity>
                 </View>
               ))}
@@ -466,13 +468,13 @@ export default function CreateCommunityScreen() {
                 style={styles.createAnywayButton}
                 onPress={proceedWithCreation}
               >
-                <Text style={styles.createAnywayText}>Create New Anyway</Text>
+                <Text style={styles.createAnywayText}>{t("create_community.btn_create_anyway")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.cancelButton}
                 onPress={() => setShowSimilarModal(false)}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>{t("create_community.btn_cancel")}</Text>
               </TouchableOpacity>
             </View>
           </View>

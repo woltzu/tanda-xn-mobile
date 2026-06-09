@@ -6,6 +6,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useArrivals, CommunityArrival } from "../hooks/useCommunityFeatures";
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
 
 export default function NewArrivalsScreen({ communityId, communityName = "My Community" }: Props) {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const { arrivals, stats, loading, sendWelcome, refresh } = useArrivals(communityId);
   const [welcomingId, setWelcomingId] = useState<string | null>(null);
   const [welcomeMessage, setWelcomeMessage] = useState("");
@@ -36,7 +38,7 @@ export default function NewArrivalsScreen({ communityId, communityName = "My Com
       setWelcomingId(null);
       setWelcomeMessage("");
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "Could not send welcome");
+      Alert.alert(t("new_arrivals.alert_error_title"), err?.message ?? t("new_arrivals.alert_failed_welcome"));
     }
   }, [sendWelcome, welcomeMessage]);
 
@@ -53,7 +55,7 @@ export default function NewArrivalsScreen({ communityId, communityName = "My Com
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>New Arrivals</Text>
+          <Text style={styles.headerTitle}>{t("new_arrivals.header_title")}</Text>
           <View style={styles.placeholder} />
         </View>
         <Text style={styles.headerSubtitle}>{communityName}</Text>
@@ -62,17 +64,17 @@ export default function NewArrivalsScreen({ communityId, communityName = "My Com
         <View style={styles.statsBar}>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{stats.thisWeek}</Text>
-            <Text style={styles.statLabel}>This Week</Text>
+            <Text style={styles.statLabel}>{t("new_arrivals.stat_this_week")}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{stats.thisMonth}</Text>
-            <Text style={styles.statLabel}>This Month</Text>
+            <Text style={styles.statLabel}>{t("new_arrivals.stat_this_month")}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{stats.total}</Text>
-            <Text style={styles.statLabel}>Total</Text>
+            <Text style={styles.statLabel}>{t("new_arrivals.stat_total")}</Text>
           </View>
         </View>
       </LinearGradient>
@@ -85,8 +87,8 @@ export default function NewArrivalsScreen({ communityId, communityName = "My Com
         {arrivals.length === 0 && !loading && (
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={56} color="#D1D5DB" />
-            <Text style={styles.emptyTitle}>No new arrivals yet</Text>
-            <Text style={styles.emptySubtitle}>New members will appear here when they join</Text>
+            <Text style={styles.emptyTitle}>{t("new_arrivals.empty_title")}</Text>
+            <Text style={styles.emptySubtitle}>{t("new_arrivals.empty_subtitle")}</Text>
           </View>
         )}
 
@@ -151,7 +153,7 @@ export default function NewArrivalsScreen({ communityId, communityName = "My Com
                     onChangeText={setWelcomeMessage}
                     multiline
                     maxLength={300}
-                    placeholder="Write a welcome message..."
+                    placeholder={t("new_arrivals.placeholder_welcome")}
                     placeholderTextColor="#9CA3AF"
                   />
                   <View style={styles.welcomeActions}>
@@ -159,7 +161,7 @@ export default function NewArrivalsScreen({ communityId, communityName = "My Com
                       style={styles.welcomeCancel}
                       onPress={() => setWelcomingId(null)}
                     >
-                      <Text style={styles.welcomeCancelText}>Cancel</Text>
+                      <Text style={styles.welcomeCancelText}>{t("new_arrivals.btn_cancel")}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.welcomeSend}

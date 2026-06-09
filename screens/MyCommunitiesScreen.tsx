@@ -31,6 +31,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import {
   useCommunity,
   type Community,
@@ -132,6 +133,7 @@ const MUTED = "#6B7280";
 
 export default function MyCommunitiesScreen() {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { myCommunities, refreshCommunities } = useCommunity() as {
     myCommunities: Community[];
@@ -296,7 +298,7 @@ export default function MyCommunitiesScreen() {
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>My Communities</Text>
+          <Text style={styles.headerTitle}>{t("my_communities.header_title")}</Text>
           <Text style={styles.headerSubtitle}>
             {totalCommunities} {totalCommunities === 1 ? "community" : "communities"}
           </Text>
@@ -356,7 +358,7 @@ export default function MyCommunitiesScreen() {
                         accessibilityRole="button"
                         accessibilityLabel="Remind me later"
                       >
-                        <Text style={styles.suggestionRemindText}>Later</Text>
+                        <Text style={styles.suggestionRemindText}>{t("my_communities.btn_later")}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.suggestionBtn, styles.suggestionDeclineBtn]}
@@ -387,7 +389,7 @@ export default function MyCommunitiesScreen() {
                         accessibilityRole="button"
                         accessibilityLabel="Never suggest again"
                       >
-                        <Text style={styles.suggestionNeverText}>Never</Text>
+                        <Text style={styles.suggestionNeverText}>{t("my_communities.btn_never")}</Text>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -400,7 +402,7 @@ export default function MyCommunitiesScreen() {
         {totalCommunities === 0 ? (
           <View style={styles.emptyBox}>
             <Ionicons name="people-outline" size={36} color={MUTED} />
-            <Text style={styles.emptyTitle}>No communities yet</Text>
+            <Text style={styles.emptyTitle}>{t("my_communities.empty_title")}</Text>
             <Text style={styles.emptyBody}>
               When you join or are added to a community, it will appear here
               grouped by type.

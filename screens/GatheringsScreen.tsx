@@ -5,6 +5,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useGatherings, CommunityGathering } from "../hooks/useCommunityFeatures";
 
 interface Props {
@@ -21,6 +22,7 @@ const EVENT_TYPE_CONFIG: Record<string, { icon: string; color: string; label: st
 
 export default function GatheringsScreen({ communityId, communityName = "My Community" }: Props) {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const { gatherings, upcoming, elderSessions, loading, rsvp, refresh } = useGatherings(communityId, "upcoming");
   const [filter, setFilter] = useState<"all" | "community" | "circle" | "elder_session" | "service">("all");
 
@@ -70,7 +72,7 @@ export default function GatheringsScreen({ communityId, communityName = "My Comm
           {gathering.isVirtual && (
             <View style={styles.metaRow}>
               <Ionicons name="videocam-outline" size={14} color="#6B7280" />
-              <Text style={styles.metaText}>Virtual Event</Text>
+              <Text style={styles.metaText}>{t("gatherings.meta_virtual")}</Text>
             </View>
           )}
         </View>
@@ -92,7 +94,7 @@ export default function GatheringsScreen({ communityId, communityName = "My Comm
               style={styles.goingButton}
               onPress={() => rsvp(gathering.id, "You")}
             >
-              <Text style={styles.goingButtonText}>Going</Text>
+              <Text style={styles.goingButtonText}>{t("gatherings.btn_going")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -100,7 +102,7 @@ export default function GatheringsScreen({ communityId, communityName = "My Comm
         {gathering.isFamilyWelcome && (
           <View style={styles.familyBadge}>
             <Ionicons name="heart-outline" size={12} color="#8B5CF6" />
-            <Text style={styles.familyText}>Families welcome</Text>
+            <Text style={styles.familyText}>{t("gatherings.family_text")}</Text>
           </View>
         )}
       </TouchableOpacity>
@@ -114,7 +116,7 @@ export default function GatheringsScreen({ communityId, communityName = "My Comm
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Gatherings</Text>
+          <Text style={styles.headerTitle}>{t("gatherings.header_title")}</Text>
           <TouchableOpacity
             style={styles.createButton}
             onPress={() => navigation.navigate("CreateGathering" as any, { communityId })}
@@ -156,25 +158,25 @@ export default function GatheringsScreen({ communityId, communityName = "My Comm
         {/* Featured Elder Sessions */}
         {filter === "all" && elderSessions.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Elder Sessions</Text>
+            <Text style={styles.sectionTitle}>{t("gatherings.section_elder")}</Text>
             {elderSessions.slice(0, 2).map(renderGatheringCard)}
           </View>
         )}
 
         {/* All Events */}
         <View style={styles.section}>
-          {filter === "all" && <Text style={styles.sectionTitle}>Upcoming Events</Text>}
+          {filter === "all" && <Text style={styles.sectionTitle}>{t("gatherings.section_upcoming")}</Text>}
           {filtered.length === 0 && !loading ? (
             <View style={styles.emptyState}>
               <Ionicons name="calendar-outline" size={56} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>No gatherings yet</Text>
-              <Text style={styles.emptySubtitle}>Be the first to create one!</Text>
+              <Text style={styles.emptyTitle}>{t("gatherings.empty_title")}</Text>
+              <Text style={styles.emptySubtitle}>{t("gatherings.empty_subtitle")}</Text>
               <TouchableOpacity
                 style={styles.emptyButton}
                 onPress={() => navigation.navigate("CreateGathering" as any, { communityId })}
               >
                 <Ionicons name="add" size={16} color="#FFFFFF" />
-                <Text style={styles.emptyButtonText}>Create Gathering</Text>
+                <Text style={styles.emptyButtonText}>{t("gatherings.btn_create")}</Text>
               </TouchableOpacity>
             </View>
           ) : (

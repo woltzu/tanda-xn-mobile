@@ -2805,5 +2805,118 @@
     "legend_addfunds": "Add funds to wallet",
     "legend_late": "Late payment penalty",
     "legend_withdrawal": "Withdrawal"
+  },
+  "create_community": {
+    "header_title": "Create Community",
+    "toggle_subtitle": "Nest under an existing community",
+    "parent_label": "Select parent community",
+    "card_details": "Community Details",
+    "label_icon": "Community Icon",
+    "label_name": "Community Name",
+    "placeholder_description": "What is this community about?",
+    "card_type": "Community Type",
+    "card_privacy": "Privacy",
+    "modal_similar_title": "Similar Community Found",
+    "btn_join_existing": "Join This Community",
+    "btn_create_anyway": "Create New Anyway",
+    "btn_cancel": "Cancel"
+  },
+  "community_browser": {
+    "header_title": "Communities",
+    "search_placeholder": "Search communities...",
+    "badge_elder": "ELDER",
+    "badge_admin": "ADMIN",
+    "section_suggested": "Suggested for you",
+    "empty_title": "No communities found",
+    "btn_create": "Create Community",
+    "btn_join": "Join Community"
+  },
+  "community_hub": {
+    "error_not_found": "Community not found",
+    "stat_members": "Members",
+    "stat_circles": "Circles",
+    "stat_total_saved": "Total Saved",
+    "btn_create_circle": "Create New Circle",
+    "empty_no_circles": "No circles yet",
+    "members_label": "Community members"
+  },
+  "my_communities": {
+    "header_title": "My Communities",
+    "btn_later": "Later",
+    "btn_never": "Never",
+    "empty_title": "No communities yet"
+  },
+  "gatherings": {
+    "meta_virtual": "Virtual Event",
+    "btn_going": "Going",
+    "family_text": "Families welcome",
+    "header_title": "Gatherings",
+    "section_elder": "Elder Sessions",
+    "section_upcoming": "Upcoming Events",
+    "empty_title": "No gatherings yet",
+    "empty_subtitle": "Be the first to create one!",
+    "btn_create": "Create Gathering"
+  },
+  "create_gathering": {
+    "alert_required_title": "Required",
+    "alert_required_name": "Please enter an event name",
+    "alert_required_date": "Please enter a date",
+    "alert_created_title": "Created!",
+    "alert_created_body": "Your gathering has been posted to the community.",
+    "alert_error_title": "Error",
+    "alert_failed_create": "Could not create gathering",
+    "header_title": "Create Gathering",
+    "section_event_type": "Event Type",
+    "section_details": "Event Details",
+    "placeholder_name": "Event name",
+    "placeholder_description": "Description (optional)",
+    "placeholder_date": "Date (YYYY-MM-DD)",
+    "placeholder_time": "Time (HH:MM)",
+    "section_where": "Where",
+    "switch_virtual": "Virtual event",
+    "placeholder_meeting_link": "Meeting link (Zoom, Google Meet, etc.)",
+    "placeholder_location": "Location name"
+  },
+  "near_you": {
+    "alert_error_title": "Error",
+    "alert_failed_send": "Could not send message",
+    "header_title": "Near You",
+    "section_connections": "Connection Requests",
+    "btn_accept": "Accept",
+    "btn_ignore": "Ignore",
+    "section_people": "People Near You",
+    "empty_title": "No one nearby yet",
+    "btn_cancel": "Cancel",
+    "privacy_title": "Your Privacy",
+    "toggle_appear": "Appear in Near You"
+  },
+  "new_arrivals": {
+    "alert_error_title": "Error",
+    "alert_failed_welcome": "Could not send welcome",
+    "header_title": "New Arrivals",
+    "stat_this_week": "This Week",
+    "stat_this_month": "This Month",
+    "stat_total": "Total",
+    "empty_title": "No new arrivals yet",
+    "empty_subtitle": "New members will appear here when they join",
+    "placeholder_welcome": "Write a welcome message...",
+    "btn_cancel": "Cancel"
+  },
+  "community_memory": {
+    "header_title": "Community Memory",
+    "empty_title": "No memories yet",
+    "empty_subtitle": "Community moments will be recorded here as they happen"
+  },
+  "post_to_community": {
+    "alert_required_title": "Required",
+    "alert_required_body": "Please write something to share",
+    "alert_posted_title": "Posted!",
+    "alert_posted_body": "Your post is now visible to the community.",
+    "alert_error_title": "Error",
+    "alert_failed_post": "Could not create post",
+    "header_title": "Post to Community",
+    "section_sharing": "What are you sharing?",
+    "placeholder_title": "Title (optional)",
+    "placeholder_body": "Write your post..."
   }
 }

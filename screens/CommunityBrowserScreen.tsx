@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCommunity, Community, CommunityType } from "../context/CommunityContext";
 
@@ -26,6 +27,7 @@ const categories: { id: CommunityType | "all"; label: string; icon: string }[] =
 
 export default function CommunityBrowserScreen() {
   const navigation = useNavigation<CommunityBrowserNavigationProp>();
+  const { t } = useTranslation();
   const { myCommunities, discoverCommunities, suggestions, joinCommunity, isLoading } = useCommunity();
 
   const [activeTab, setActiveTab] = useState<"my" | "discover">("discover");
@@ -64,7 +66,7 @@ export default function CommunityBrowserScreen() {
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Communities</Text>
+            <Text style={styles.headerTitle}>{t("community_browser.header_title")}</Text>
             <Text style={styles.headerSubtitle}>
               Join communities, create circles
             </Text>
@@ -87,7 +89,7 @@ export default function CommunityBrowserScreen() {
           />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search communities..."
+            placeholder={t("community_browser.search_placeholder")}
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -157,12 +159,12 @@ export default function CommunityBrowserScreen() {
                       <Text style={styles.communityName}>{community.name}</Text>
                       {community.role === "elder" && (
                         <View style={styles.elderBadge}>
-                          <Text style={styles.elderBadgeText}>ELDER</Text>
+                          <Text style={styles.elderBadgeText}>{t("community_browser.badge_elder")}</Text>
                         </View>
                       )}
                       {community.role === "admin" && (
                         <View style={[styles.elderBadge, styles.adminBadge]}>
-                          <Text style={styles.elderBadgeText}>ADMIN</Text>
+                          <Text style={styles.elderBadgeText}>{t("community_browser.badge_admin")}</Text>
                         </View>
                       )}
                     </View>
@@ -236,7 +238,7 @@ export default function CommunityBrowserScreen() {
             {/* Suggestions Section */}
             {suggestions.length > 0 && selectedCategory === "all" && searchQuery === "" && (
               <>
-                <Text style={styles.sectionTitle}>Suggested for you</Text>
+                <Text style={styles.sectionTitle}>{t("community_browser.section_suggested")}</Text>
                 {suggestions.slice(0, 2).map((suggestion) => (
                   <View key={suggestion.community.id} style={styles.suggestionCard}>
                     <View style={styles.suggestionBadge}>
@@ -272,7 +274,7 @@ export default function CommunityBrowserScreen() {
             {filteredCommunities.length === 0 && (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyEmoji}>🔍</Text>
-                <Text style={styles.emptyTitle}>No communities found</Text>
+                <Text style={styles.emptyTitle}>{t("community_browser.empty_title")}</Text>
                 <Text style={styles.emptySubtitle}>
                   Try a different search or create your own community
                 </Text>
@@ -280,7 +282,7 @@ export default function CommunityBrowserScreen() {
                   style={styles.emptyButton}
                   onPress={() => navigation.navigate("CreateCommunity")}
                 >
-                  <Text style={styles.emptyButtonText}>Create Community</Text>
+                  <Text style={styles.emptyButtonText}>{t("community_browser.btn_create")}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -354,7 +356,7 @@ function CommunityDiscoverCard({
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.joinButton} onPress={onJoin}>
-        <Text style={styles.joinButtonText}>Join Community</Text>
+        <Text style={styles.joinButtonText}>{t("community_browser.btn_join")}</Text>
       </TouchableOpacity>
     </View>
   );

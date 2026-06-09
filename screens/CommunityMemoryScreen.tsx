@@ -5,6 +5,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useCommunityMemory, CommunityMemoryItem } from "../hooks/useCommunityFeatures";
 
 interface Props {
@@ -26,6 +27,7 @@ const MEMORY_TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
 
 export default function CommunityMemoryScreen({ communityId, communityName = "My Community" }: Props) {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const { memories, byYear, loading, refresh } = useCommunityMemory(communityId);
 
   const formatDate = (dateStr: string) => {
@@ -79,7 +81,7 @@ export default function CommunityMemoryScreen({ communityId, communityName = "My
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Community Memory</Text>
+          <Text style={styles.headerTitle}>{t("community_memory.header_title")}</Text>
           <View style={styles.placeholder} />
         </View>
         <Text style={styles.headerSubtitle}>{communityName}</Text>
@@ -97,8 +99,8 @@ export default function CommunityMemoryScreen({ communityId, communityName = "My
         {memories.length === 0 && !loading && (
           <View style={styles.emptyState}>
             <Ionicons name="book-outline" size={56} color="#D1D5DB" />
-            <Text style={styles.emptyTitle}>No memories yet</Text>
-            <Text style={styles.emptySubtitle}>Community moments will be recorded here as they happen</Text>
+            <Text style={styles.emptyTitle}>{t("community_memory.empty_title")}</Text>
+            <Text style={styles.emptySubtitle}>{t("community_memory.empty_subtitle")}</Text>
           </View>
         )}
 

@@ -6,6 +6,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { useGatherings, GatheringType } from "../hooks/useCommunityFeatures";
 
@@ -19,6 +20,7 @@ const EVENT_TYPES: { key: GatheringType; icon: string; color: string; label: str
 export default function CreateGatheringScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { t } = useTranslation();
   const communityId = (route.params as any)?.communityId ?? "";
   const { user } = useAuth();
   const { createGathering } = useGatherings(communityId);
@@ -36,8 +38,8 @@ export default function CreateGatheringScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const handleCreate = async () => {
-    if (!title.trim()) { Alert.alert("Required", "Please enter an event name"); return; }
-    if (!dateStr.trim()) { Alert.alert("Required", "Please enter a date"); return; }
+    if (!title.trim()) { Alert.alert(t("create_gathering.alert_required_title"), t("create_gathering.alert_required_name")); return; }
+    if (!dateStr.trim()) { Alert.alert(t("create_gathering.alert_required_title"), t("create_gathering.alert_required_date")); return; }
 
     setSubmitting(true);
     try {
@@ -56,11 +58,11 @@ export default function CreateGatheringScreen() {
         organizerFirstName: user?.user_metadata?.first_name ?? "Member",
         organizerOrigin: user?.user_metadata?.origin_country,
       });
-      Alert.alert("Created!", "Your gathering has been posted to the community.", [
+      Alert.alert(t("create_gathering.alert_created_title"), t("create_gathering.alert_created_body"), [
         { text: "OK", onPress: () => navigation.goBack() },
       ]);
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "Could not create gathering");
+      Alert.alert(t("create_gathering.alert_error_title"), err?.message ?? t("create_gathering.alert_failed_create"));
     } finally {
       setSubmitting(false);
     }
@@ -73,7 +75,7 @@ export default function CreateGatheringScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Create Gathering</Text>
+          <Text style={styles.headerTitle}>{t("create_gathering.header_title")}</Text>
           <View style={styles.placeholder} />
         </View>
       </LinearGradient>
@@ -84,7 +86,7 @@ export default function CreateGatheringScreen() {
       >
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {/* Event Type Selection */}
-          <Text style={styles.sectionLabel}>Event Type</Text>
+          <Text style={styles.sectionLabel}>{t("create_gathering.section_event_type")}</Text>
           <View style={styles.typeGrid}>
             {EVENT_TYPES.map((t) => (
               <TouchableOpacity
@@ -102,17 +104,17 @@ export default function CreateGatheringScreen() {
           </View>
 
           {/* Event Details */}
-          <Text style={styles.sectionLabel}>Event Details</Text>
+          <Text style={styles.sectionLabel}>{t("create_gathering.section_details")}</Text>
           <TextInput
             style={styles.input}
-            placeholder="Event name"
+            placeholder={t("create_gathering.placeholder_name")}
             placeholderTextColor="#9CA3AF"
             value={title}
             onChangeText={setTitle}
           />
           <TextInput
             style={[styles.input, styles.inputMultiline]}
-            placeholder="Description (optional)"
+            placeholder={t("create_gathering.placeholder_description")}
             placeholderTextColor="#9CA3AF"
             value={description}
             onChangeText={setDescription}
@@ -124,14 +126,14 @@ export default function CreateGatheringScreen() {
           <View style={styles.dateRow}>
             <TextInput
               style={[styles.input, { flex: 1 }]}
-              placeholder="Date (YYYY-MM-DD)"
+              placeholder={t("create_gathering.placeholder_date")}
               placeholderTextColor="#9CA3AF"
               value={dateStr}
               onChangeText={setDateStr}
             />
             <TextInput
               style={[styles.input, { flex: 1 }]}
-              placeholder="Time (HH:MM)"
+              placeholder={t("create_gathering.placeholder_time")}
               placeholderTextColor="#9CA3AF"
               value={timeStr}
               onChangeText={setTimeStr}
@@ -139,15 +141,15 @@ export default function CreateGatheringScreen() {
           </View>
 
           {/* Location */}
-          <Text style={styles.sectionLabel}>Where</Text>
+          <Text style={styles.sectionLabel}>{t("create_gathering.section_where")}</Text>
           <View style={styles.switchRow}>
-            <Text style={styles.switchLabel}>Virtual event</Text>
+            <Text style={styles.switchLabel}>{t("create_gathering.switch_virtual")}</Text>
             <Switch value={isVirtual} onValueChange={setIsVirtual} trackColor={{ true: "#00C6AE" }} />
           </View>
           {isVirtual ? (
             <TextInput
               style={styles.input}
-              placeholder="Meeting link (Zoom, Google Meet, etc.)"
+              placeholder={t("create_gathering.placeholder_meeting_link")}
               placeholderTextColor="#9CA3AF"
               value={virtualLink}
               onChangeText={setVirtualLink}
@@ -155,7 +157,7 @@ export default function CreateGatheringScreen() {
           ) : (
             <TextInput
               style={styles.input}
-              placeholder="Location name"
+              placeholder={t("create_gathering.placeholder_location")}
               placeholderTextColor="#9CA3AF"
               value={locationName}
               onChangeText={setLocationName}

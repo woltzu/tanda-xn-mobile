@@ -6,6 +6,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { useCommunityPosts, PostType } from "../hooks/useCommunityFeatures";
 
@@ -43,6 +44,7 @@ const POST_TYPES: { key: PostType; icon: string; color: string; label: string; p
 export default function PostToCommunityScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { t } = useTranslation();
   const communityId = (route.params as any)?.communityId ?? "";
   const { user } = useAuth();
   const { createPost } = useCommunityPosts(communityId);
@@ -56,7 +58,7 @@ export default function PostToCommunityScreen() {
 
   const handlePost = async () => {
     if (!body.trim()) {
-      Alert.alert("Required", "Please write something to share");
+      Alert.alert(t("post_to_community.alert_required_title"), t("post_to_community.alert_required_body"));
       return;
     }
 
@@ -70,11 +72,11 @@ export default function PostToCommunityScreen() {
         authorFirstName: user?.user_metadata?.first_name ?? "Member",
         authorOrigin: user?.user_metadata?.origin_country,
       });
-      Alert.alert("Posted!", "Your post is now visible to the community.", [
+      Alert.alert(t("post_to_community.alert_posted_title"), t("post_to_community.alert_posted_body"), [
         { text: "OK", onPress: () => navigation.goBack() },
       ]);
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "Could not create post");
+      Alert.alert(t("post_to_community.alert_error_title"), err?.message ?? t("post_to_community.alert_failed_post"));
     } finally {
       setSubmitting(false);
     }
@@ -87,7 +89,7 @@ export default function PostToCommunityScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="close" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Post to Community</Text>
+          <Text style={styles.headerTitle}>{t("post_to_community.header_title")}</Text>
           <TouchableOpacity
             style={[styles.postButton, (!body.trim() || submitting) && styles.postButtonDisabled]}
             onPress={handlePost}
@@ -104,7 +106,7 @@ export default function PostToCommunityScreen() {
       >
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {/* Post Type Selection */}
-          <Text style={styles.sectionLabel}>What are you sharing?</Text>
+          <Text style={styles.sectionLabel}>{t("post_to_community.section_sharing")}</Text>
           <View style={styles.typeGrid}>
             {POST_TYPES.map((t) => (
               <TouchableOpacity
@@ -134,7 +136,7 @@ export default function PostToCommunityScreen() {
           {/* Title (optional) */}
           <TextInput
             style={styles.titleInput}
-            placeholder="Title (optional)"
+            placeholder={t("post_to_community.placeholder_title")}
             placeholderTextColor="#9CA3AF"
             value={title}
             onChangeText={setTitle}
@@ -144,7 +146,7 @@ export default function PostToCommunityScreen() {
           {/* Body */}
           <TextInput
             style={styles.bodyInput}
-            placeholder="Write your post..."
+            placeholder={t("post_to_community.placeholder_body")}
             placeholderTextColor="#9CA3AF"
             value={body}
             onChangeText={setBody}

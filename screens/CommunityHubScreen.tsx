@@ -10,6 +10,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCommunity, CommunityCircle, SubCommunity } from "../context/CommunityContext";
 
@@ -21,6 +22,7 @@ type TabId = "circles" | "sub" | "members";
 export default function CommunityHubScreen() {
   const navigation = useNavigation<CommunityHubNavigationProp>();
   const route = useRoute<CommunityHubRouteProp>();
+  const { t } = useTranslation();
   const { communityId } = route.params;
 
   const { getCommunityById, getCommunityCircles, getSubCommunities } = useCommunity();
@@ -34,7 +36,7 @@ export default function CommunityHubScreen() {
   if (!community) {
     return (
       <View style={styles.container}>
-        <Text>Community not found</Text>
+        <Text>{t("community_hub.error_not_found")}</Text>
       </View>
     );
   }
@@ -128,17 +130,17 @@ export default function CommunityHubScreen() {
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
               <Text style={styles.statValue}>{community.members}</Text>
-              <Text style={styles.statLabel}>Members</Text>
+              <Text style={styles.statLabel}>{t("community_hub.stat_members")}</Text>
             </View>
             <View style={styles.statBox}>
               <Text style={styles.statValue}>{community.stats?.activeCircles || community.circles}</Text>
-              <Text style={styles.statLabel}>Circles</Text>
+              <Text style={styles.statLabel}>{t("community_hub.stat_circles")}</Text>
             </View>
             <View style={[styles.statBox, styles.statBoxHighlight]}>
               <Text style={[styles.statValue, styles.statValueHighlight]}>
                 ${((community.stats?.totalSaved || 0) / 1000).toFixed(0)}k
               </Text>
-              <Text style={styles.statLabel}>Total Saved</Text>
+              <Text style={styles.statLabel}>{t("community_hub.stat_total_saved")}</Text>
             </View>
           </View>
         </LinearGradient>
@@ -203,7 +205,7 @@ export default function CommunityHubScreen() {
                 onPress={() => navigation.navigate("CreateCircleStart")}
               >
                 <Ionicons name="add-circle-outline" size={20} color="#00C6AE" />
-                <Text style={styles.createCircleText}>Create New Circle</Text>
+                <Text style={styles.createCircleText}>{t("community_hub.btn_create_circle")}</Text>
               </TouchableOpacity>
 
               {/* Circles List */}
@@ -221,7 +223,7 @@ export default function CommunityHubScreen() {
               {circles.length === 0 && (
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyEmoji}>⭕</Text>
-                  <Text style={styles.emptyTitle}>No circles yet</Text>
+                  <Text style={styles.emptyTitle}>{t("community_hub.empty_no_circles")}</Text>
                   <Text style={styles.emptySubtitle}>
                     Be the first to create a circle in this community
                   </Text>
@@ -275,7 +277,7 @@ export default function CommunityHubScreen() {
                 <Text style={styles.membersEmoji}>👥</Text>
               </View>
               <Text style={styles.membersCount}>{community.members}</Text>
-              <Text style={styles.membersLabel}>Community members</Text>
+              <Text style={styles.membersLabel}>{t("community_hub.members_label")}</Text>
               <View style={styles.avgScoreCard}>
                 <Text style={styles.avgScoreText}>
                   Avg. XnScore: <Text style={styles.avgScoreValue}>{community.stats?.avgXnScore || 75}</Text>

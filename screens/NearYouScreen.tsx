@@ -6,6 +6,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useNearYou, NearYouProfile } from "../hooks/useCommunityFeatures";
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
 
 export default function NearYouScreen({ city }: Props) {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const { profiles, pendingConnections, loading, sayHello, respondToConnection, toggleDiscoverable, refresh } = useNearYou(city);
   const [radius, setRadius] = useState(10);
   const [helloTarget, setHelloTarget] = useState<string | null>(null);
@@ -30,7 +32,7 @@ export default function NearYouScreen({ city }: Props) {
       setHelloTarget(null);
       setHelloMessage("");
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "Could not send message");
+      Alert.alert(t("near_you.alert_error_title"), err?.message ?? t("near_you.alert_failed_send"));
     }
   }, [sayHello, helloMessage, city]);
 
@@ -53,7 +55,7 @@ export default function NearYouScreen({ city }: Props) {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Near You</Text>
+          <Text style={styles.headerTitle}>{t("near_you.header_title")}</Text>
           <View style={styles.placeholder} />
         </View>
         <Text style={styles.headerSubtitle}>{city}</Text>
@@ -89,7 +91,7 @@ export default function NearYouScreen({ city }: Props) {
         {/* Pending Connections */}
         {pendingConnections.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Connection Requests</Text>
+            <Text style={styles.sectionTitle}>{t("near_you.section_connections")}</Text>
             {pendingConnections.map((conn) => (
               <View key={conn.id} style={styles.connectionCard}>
                 <Text style={styles.connMessage}>{conn.message}</Text>
@@ -98,13 +100,13 @@ export default function NearYouScreen({ city }: Props) {
                     style={styles.acceptBtn}
                     onPress={() => respondToConnection(conn.id, "accepted")}
                   >
-                    <Text style={styles.acceptBtnText}>Accept</Text>
+                    <Text style={styles.acceptBtnText}>{t("near_you.btn_accept")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.ignoreBtn}
                     onPress={() => respondToConnection(conn.id, "ignored")}
                   >
-                    <Text style={styles.ignoreBtnText}>Ignore</Text>
+                    <Text style={styles.ignoreBtnText}>{t("near_you.btn_ignore")}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -114,11 +116,11 @@ export default function NearYouScreen({ city }: Props) {
 
         {/* People Near You */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>People Near You</Text>
+          <Text style={styles.sectionTitle}>{t("near_you.section_people")}</Text>
           {filteredProfiles.length === 0 && !loading && (
             <View style={styles.emptyState}>
               <Ionicons name="location-outline" size={56} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>No one nearby yet</Text>
+              <Text style={styles.emptyTitle}>{t("near_you.empty_title")}</Text>
               <Text style={styles.emptySubtitle}>Members in {city} will appear here</Text>
             </View>
           )}
@@ -173,7 +175,7 @@ export default function NearYouScreen({ city }: Props) {
                     />
                     <View style={styles.helloActions}>
                       <TouchableOpacity onPress={() => setHelloTarget(null)}>
-                        <Text style={styles.helloCancelText}>Cancel</Text>
+                        <Text style={styles.helloCancelText}>{t("near_you.btn_cancel")}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.helloSendBtn} onPress={() => handleSayHello(profile)}>
                         <Ionicons name="send" size={14} color="#FFFFFF" />
@@ -191,13 +193,13 @@ export default function NearYouScreen({ city }: Props) {
         <View style={styles.privacyCard}>
           <View style={styles.privacyHeader}>
             <Ionicons name="shield-checkmark-outline" size={18} color="#6B7280" />
-            <Text style={styles.privacyTitle}>Your Privacy</Text>
+            <Text style={styles.privacyTitle}>{t("near_you.privacy_title")}</Text>
           </View>
           <Text style={styles.privacyText}>
             Your neighborhood is set manually — we never track your GPS location. Only your first name and origin are shown.
           </Text>
           <View style={styles.privacyToggle}>
-            <Text style={styles.privacyToggleLabel}>Appear in Near You</Text>
+            <Text style={styles.privacyToggleLabel}>{t("near_you.toggle_appear")}</Text>
             <Switch value={isDiscoverable} onValueChange={handleToggleDiscoverable} trackColor={{ true: "#00C6AE" }} />
           </View>
         </View>

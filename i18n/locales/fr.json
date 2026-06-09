@@ -2805,5 +2805,118 @@
     "legend_addfunds": "Ajouter des fonds au portefeuille",
     "legend_late": "Pénalité de paiement tardif",
     "legend_withdrawal": "Retrait"
+  },
+  "create_community": {
+    "header_title": "Créer une communauté",
+    "toggle_subtitle": "Imbriquer dans une communauté existante",
+    "parent_label": "Sélectionner la communauté parente",
+    "card_details": "Détails de la communauté",
+    "label_icon": "Icône de la communauté",
+    "label_name": "Nom de la communauté",
+    "placeholder_description": "De quoi parle cette communauté ?",
+    "card_type": "Type de communauté",
+    "card_privacy": "Confidentialité",
+    "modal_similar_title": "Communauté similaire trouvée",
+    "btn_join_existing": "Rejoindre cette communauté",
+    "btn_create_anyway": "Créer une nouvelle quand même",
+    "btn_cancel": "Annuler"
+  },
+  "community_browser": {
+    "header_title": "Communautés",
+    "search_placeholder": "Rechercher des communautés...",
+    "badge_elder": "AÎNÉ",
+    "badge_admin": "ADMIN",
+    "section_suggested": "Suggéré pour vous",
+    "empty_title": "Aucune communauté trouvée",
+    "btn_create": "Créer une communauté",
+    "btn_join": "Rejoindre la communauté"
+  },
+  "community_hub": {
+    "error_not_found": "Communauté introuvable",
+    "stat_members": "Membres",
+    "stat_circles": "Cercles",
+    "stat_total_saved": "Total épargné",
+    "btn_create_circle": "Créer un nouveau cercle",
+    "empty_no_circles": "Aucun cercle pour le moment",
+    "members_label": "Membres de la communauté"
+  },
+  "my_communities": {
+    "header_title": "Mes communautés",
+    "btn_later": "Plus tard",
+    "btn_never": "Jamais",
+    "empty_title": "Aucune communauté pour le moment"
+  },
+  "gatherings": {
+    "meta_virtual": "Événement virtuel",
+    "btn_going": "J'y vais",
+    "family_text": "Familles bienvenues",
+    "header_title": "Rassemblements",
+    "section_elder": "Séances des Aînés",
+    "section_upcoming": "Événements à venir",
+    "empty_title": "Aucun rassemblement pour le moment",
+    "empty_subtitle": "Soyez le premier à en créer un !",
+    "btn_create": "Créer un rassemblement"
+  },
+  "create_gathering": {
+    "alert_required_title": "Requis",
+    "alert_required_name": "Veuillez saisir un nom d'événement",
+    "alert_required_date": "Veuillez saisir une date",
+    "alert_created_title": "Créé !",
+    "alert_created_body": "Votre rassemblement a été publié à la communauté.",
+    "alert_error_title": "Erreur",
+    "alert_failed_create": "Impossible de créer le rassemblement",
+    "header_title": "Créer un rassemblement",
+    "section_event_type": "Type d'événement",
+    "section_details": "Détails de l'événement",
+    "placeholder_name": "Nom de l'événement",
+    "placeholder_description": "Description (facultatif)",
+    "placeholder_date": "Date (AAAA-MM-JJ)",
+    "placeholder_time": "Heure (HH:MM)",
+    "section_where": "Où",
+    "switch_virtual": "Événement virtuel",
+    "placeholder_meeting_link": "Lien de réunion (Zoom, Google Meet, etc.)",
+    "placeholder_location": "Nom du lieu"
+  },
+  "near_you": {
+    "alert_error_title": "Erreur",
+    "alert_failed_send": "Impossible d'envoyer le message",
+    "header_title": "Près de vous",
+    "section_connections": "Demandes de connexion",
+    "btn_accept": "Accepter",
+    "btn_ignore": "Ignorer",
+    "section_people": "Personnes près de vous",
+    "empty_title": "Personne à proximité pour le moment",
+    "btn_cancel": "Annuler",
+    "privacy_title": "Votre confidentialité",
+    "toggle_appear": "Apparaître dans Près de vous"
+  },
+  "new_arrivals": {
+    "alert_error_title": "Erreur",
+    "alert_failed_welcome": "Impossible d'envoyer la bienvenue",
+    "header_title": "Nouveaux arrivants",
+    "stat_this_week": "Cette semaine",
+    "stat_this_month": "Ce mois",
+    "stat_total": "Total",
+    "empty_title": "Aucun nouvel arrivant pour le moment",
+    "empty_subtitle": "Les nouveaux membres apparaîtront ici lorsqu'ils rejoindront",
+    "placeholder_welcome": "Écrire un message de bienvenue...",
+    "btn_cancel": "Annuler"
+  },
+  "community_memory": {
+    "header_title": "Mémoire de la communauté",
+    "empty_title": "Aucun souvenir pour le moment",
+    "empty_subtitle": "Les moments de la communauté seront enregistrés ici à mesure qu'ils se produisent"
+  },
+  "post_to_community": {
+    "alert_required_title": "Requis",
+    "alert_required_body": "Veuillez écrire quelque chose à partager",
+    "alert_posted_title": "Publié !",
+    "alert_posted_body": "Votre publication est maintenant visible par la communauté.",
+    "alert_error_title": "Erreur",
+    "alert_failed_post": "Impossible de créer la publication",
+    "header_title": "Publier à la communauté",
+    "section_sharing": "Que partagez-vous ?",
+    "placeholder_title": "Titre (facultatif)",
+    "placeholder_body": "Écrivez votre publication..."
   }
 }
