@@ -13,6 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import {
   useNotifications,
@@ -83,6 +84,7 @@ const CATEGORIES: NotificationCategory[] = [
 
 export default function NotificationPrefsScreen() {
   const navigation = useNavigation<NotificationPrefsNavigationProp>();
+  const { t } = useTranslation();
   const { preferences, updatePreferences, isLoading } = useNotifications();
   const [isSaving, setIsSaving] = useState(false);
 
@@ -102,7 +104,7 @@ export default function NotificationPrefsScreen() {
         await updatePreferences({ [key]: value });
       } catch (error) {
         console.error("Failed to update preference:", error);
-        Alert.alert("Error", "Failed to save preference. Please try again.");
+        Alert.alert(t("notification_prefs.alert_error_title"), t("notification_prefs.alert_save_failed"));
       } finally {
         setIsSaving(false);
       }
@@ -123,14 +125,14 @@ export default function NotificationPrefsScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View>
-              <Text style={styles.headerTitle}>Notifications</Text>
-              <Text style={styles.headerSubtitle}>Loading...</Text>
+              <Text style={styles.headerTitle}>{t("notification_prefs.header")}</Text>
+              <Text style={styles.headerSubtitle}>{t("notification_prefs.loading_subtitle")}</Text>
             </View>
           </View>
         </LinearGradient>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#00C6AE" />
-          <Text style={styles.loadingText}>Loading preferences...</Text>
+          <Text style={styles.loadingText}>{t("notification_prefs.loading_text")}</Text>
         </View>
       </View>
     );
@@ -153,7 +155,7 @@ export default function NotificationPrefsScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Notifications</Text>
+              <Text style={styles.headerTitle}>{t("notification_prefs.header")}</Text>
               <Text style={styles.headerSubtitle}>
                 Control how we reach you
               </Text>
@@ -168,15 +170,15 @@ export default function NotificationPrefsScreen() {
         <View style={styles.content}>
           {/* Master Toggles */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Channels</Text>
+            <Text style={styles.sectionTitle}>{t("notification_prefs.section_channels")}</Text>
             <View style={styles.card}>
               <View style={[styles.toggleRow, styles.borderBottom]}>
                 <View style={[styles.toggleIcon, { backgroundColor: "#FEE2E2" }]}>
                   <Ionicons name="notifications" size={20} color="#DC2626" />
                 </View>
                 <View style={styles.toggleContent}>
-                  <Text style={styles.toggleTitle}>Push Notifications</Text>
-                  <Text style={styles.toggleSubtitle}>Instant alerts on your device</Text>
+                  <Text style={styles.toggleTitle}>{t("notification_prefs.toggle_push_title")}</Text>
+                  <Text style={styles.toggleSubtitle}>{t("notification_prefs.toggle_push_subtitle")}</Text>
                 </View>
                 <Switch
                   value={masterPush}
@@ -191,8 +193,8 @@ export default function NotificationPrefsScreen() {
                   <Ionicons name="mail" size={20} color="#3B82F6" />
                 </View>
                 <View style={styles.toggleContent}>
-                  <Text style={styles.toggleTitle}>Email Notifications</Text>
-                  <Text style={styles.toggleSubtitle}>Summaries and updates</Text>
+                  <Text style={styles.toggleTitle}>{t("notification_prefs.toggle_email_title")}</Text>
+                  <Text style={styles.toggleSubtitle}>{t("notification_prefs.toggle_email_subtitle")}</Text>
                 </View>
                 <Switch
                   value={masterEmail}
@@ -206,7 +208,7 @@ export default function NotificationPrefsScreen() {
 
           {/* Per-Category Settings */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Notification Preferences</Text>
+            <Text style={styles.sectionTitle}>{t("notification_prefs.section_prefs")}</Text>
             <View style={styles.card}>
               {CATEGORIES.map((category, index) => {
                 const pushValue = getValue(category.pushKey);
@@ -301,14 +303,14 @@ export default function NotificationPrefsScreen() {
 
           {/* Email Digest */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Email Digest</Text>
+            <Text style={styles.sectionTitle}>{t("notification_prefs.section_digest")}</Text>
             <View style={styles.card}>
               <View style={styles.toggleRow}>
                 <View style={[styles.toggleIcon, { backgroundColor: "#FEF3C7" }]}>
                   <Ionicons name="newspaper" size={20} color="#F59E0B" />
                 </View>
                 <View style={styles.toggleContent}>
-                  <Text style={styles.toggleTitle}>Weekly Summary</Text>
+                  <Text style={styles.toggleTitle}>{t("notification_prefs.toggle_weekly_title")}</Text>
                   <Text style={styles.toggleSubtitle}>
                     Get a weekly email with your activity
                   </Text>
@@ -326,14 +328,14 @@ export default function NotificationPrefsScreen() {
 
           {/* Quiet Hours */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Quiet Hours</Text>
+            <Text style={styles.sectionTitle}>{t("notification_prefs.section_quiet")}</Text>
             <View style={styles.card}>
               <View style={[styles.toggleRow, styles.borderBottom]}>
                 <View style={[styles.toggleIcon, { backgroundColor: "#F5F3FF" }]}>
                   <Ionicons name="moon" size={20} color="#8B5CF6" />
                 </View>
                 <View style={styles.toggleContent}>
-                  <Text style={styles.toggleTitle}>Do Not Disturb</Text>
+                  <Text style={styles.toggleTitle}>{t("notification_prefs.toggle_dnd_title")}</Text>
                   <Text style={styles.toggleSubtitle}>
                     Pause non-urgent notifications
                   </Text>
@@ -356,7 +358,7 @@ export default function NotificationPrefsScreen() {
                     </View>
                   </View>
                   <View style={styles.quietTimeRow}>
-                    <Text style={styles.quietTimeLabel}>Until</Text>
+                    <Text style={styles.quietTimeLabel}>{t("notification_prefs.quiet_until")}</Text>
                     <View style={styles.quietTimeValue}>
                       <Text style={styles.quietTimeText}>{preferences.quiet_hours_end}</Text>
                     </View>

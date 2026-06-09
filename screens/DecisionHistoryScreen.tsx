@@ -29,6 +29,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import {
   useDecisionHistory,
@@ -133,6 +134,7 @@ function fmtDate(iso: string): string {
 
 export default function DecisionHistoryScreen() {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [windowFilter, setWindowFilter] = useState<Window>("30d");
   const [typeFilter, setTypeFilter] = useState<DecisionType | "all">("all");
@@ -187,7 +189,7 @@ export default function DecisionHistoryScreen() {
         >
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Decision History</Text>
+        <Text style={styles.headerTitle}>{t("decision_history.header")}</Text>
         <View style={styles.headerBtn} />
       </View>
 
@@ -204,7 +206,7 @@ export default function DecisionHistoryScreen() {
       >
         {/* Window filter */}
         <View style={styles.filterRow}>
-          <Text style={styles.filterLabel}>Time window</Text>
+          <Text style={styles.filterLabel}>{t("decision_history.filter_label")}</Text>
           <View style={styles.segment}>
             {(["7d", "30d", "all"] as Window[]).map((w) => (
               <TouchableOpacity
@@ -288,7 +290,7 @@ export default function DecisionHistoryScreen() {
         ) : decisions.length === 0 ? (
           <View style={styles.emptyBox}>
             <Ionicons name="document-text-outline" size={36} color={COLORS.muted} />
-            <Text style={styles.emptyTitle}>No decisions yet</Text>
+            <Text style={styles.emptyTitle}>{t("decision_history.empty_title")}</Text>
             <Text style={styles.emptyBody}>
               When the system makes a decision about your account (liquidity
               advance, tier change, score adjustment), the explanation will

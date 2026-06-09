@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { usePayment } from "../context/PaymentContext";
 import {
@@ -85,6 +86,7 @@ function mapPaymentIntentToPayment(
 export default function PaymentHistoryScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { t } = useTranslation();
   const params = (route.params as PaymentHistoryParams) || {};
   const circleName = params.circleName || "Family Savings Circle";
 
@@ -219,13 +221,13 @@ export default function PaymentHistoryScreen() {
       try {
         const result = await presentPaymentSheet(payment.clientSecret);
         if (result.success) {
-          Alert.alert("Success", "Payment completed successfully!");
+          Alert.alert(t("payment_history.alert_success_title"), t("payment_history.alert_success_body"));
           await fetchPayments();
         } else if (result.error) {
-          Alert.alert("Payment failed", result.error);
+          Alert.alert(t("payment_history.alert_failed_title"), result.error);
         }
       } catch (err: any) {
-        Alert.alert("Error", err?.message ?? "Something went wrong.");
+        Alert.alert(t("payment_history.alert_error_title"), err?.message ?? t("payment_history.alert_error_default"));
       }
     },
     [presentPaymentSheet, fetchPayments]
@@ -276,12 +278,12 @@ export default function PaymentHistoryScreen() {
         {isExpanded && (
           <View style={styles.paymentDetails}>
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Due Date</Text>
+              <Text style={styles.detailLabel}>{t("payment_history.detail_due")}</Text>
               <Text style={styles.detailValue}>{formatDate(payment.dueDate)}</Text>
             </View>
             {payment.paidDate && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Paid Date</Text>
+                <Text style={styles.detailLabel}>{t("payment_history.detail_paid")}</Text>
                 <Text style={styles.detailValue}>
                   {formatDate(payment.paidDate)}
                 </Text>
@@ -289,13 +291,13 @@ export default function PaymentHistoryScreen() {
             )}
             {payment.method && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Payment Method</Text>
+                <Text style={styles.detailLabel}>{t("payment_history.detail_method")}</Text>
                 <Text style={styles.detailValue}>{payment.method}</Text>
               </View>
             )}
             {payment.transactionId && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Transaction ID</Text>
+                <Text style={styles.detailLabel}>{t("payment_history.detail_txid")}</Text>
                 <Text style={[styles.detailValue, styles.transactionId]}>
                   {payment.transactionId}
                 </Text>
@@ -307,7 +309,7 @@ export default function PaymentHistoryScreen() {
                 onPress={() => handlePayNow(payment)}
               >
                 <Ionicons name="card-outline" size={18} color="#FFFFFF" />
-                <Text style={styles.payNowText}>Pay Now</Text>
+                <Text style={styles.payNowText}>{t("payment_history.btn_pay_now")}</Text>
               </TouchableOpacity>
             )}
             {payment.status === "missed" && (
@@ -345,14 +347,14 @@ export default function PaymentHistoryScreen() {
             <Ionicons name="arrow-back" size={24} color="#1F2937" />
           </TouchableOpacity>
           <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>Payment History</Text>
+            <Text style={styles.headerTitle}>{t("payment_history.header")}</Text>
             <Text style={styles.headerSubtitle}>{circleName}</Text>
           </View>
           <View style={styles.downloadButton} />
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#2563EB" />
-          <Text style={styles.loadingText}>Loading payment history...</Text>
+          <Text style={styles.loadingText}>{t("payment_history.loading_text")}</Text>
         </View>
       </SafeAreaView>
     );
@@ -394,7 +396,7 @@ export default function PaymentHistoryScreen() {
         {/* Summary Cards */}
         <View style={styles.summaryContainer}>
           <View style={[styles.summaryCard, styles.summaryCardPrimary]}>
-            <Text style={styles.summaryLabel}>Total Contributed</Text>
+            <Text style={styles.summaryLabel}>{t("payment_history.summary_total")}</Text>
             <Text style={styles.summaryValueLarge}>
               ${summary.totalPaid.toFixed(2)}
             </Text>
@@ -408,21 +410,21 @@ export default function PaymentHistoryScreen() {
                 <Ionicons name="checkmark-circle" size={24} color="#10B981" />
               </View>
               <Text style={styles.summaryCount}>{summary.completed}</Text>
-              <Text style={styles.summaryLabelSmall}>Completed</Text>
+              <Text style={styles.summaryLabelSmall}>{t("payment_history.summary_completed")}</Text>
             </View>
             <View style={[styles.summaryCard, styles.summaryCardSmall]}>
               <View style={styles.summaryIconContainer}>
                 <Ionicons name="time" size={24} color="#F59E0B" />
               </View>
               <Text style={styles.summaryCount}>{summary.pending}</Text>
-              <Text style={styles.summaryLabelSmall}>Pending</Text>
+              <Text style={styles.summaryLabelSmall}>{t("payment_history.summary_pending")}</Text>
             </View>
             <View style={[styles.summaryCard, styles.summaryCardSmall]}>
               <View style={styles.summaryIconContainer}>
                 <Ionicons name="close-circle" size={24} color="#EF4444" />
               </View>
               <Text style={styles.summaryCount}>{summary.missed}</Text>
-              <Text style={styles.summaryLabelSmall}>Missed</Text>
+              <Text style={styles.summaryLabelSmall}>{t("payment_history.summary_missed")}</Text>
             </View>
           </View>
         </View>

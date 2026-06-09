@@ -12,12 +12,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 
 type AboutAppNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function AboutAppScreen() {
   const navigation = useNavigation<AboutAppNavigationProp>();
+  const { t } = useTranslation();
 
   const appInfo = {
     version: "2.5.0",
@@ -81,7 +83,7 @@ export default function AboutAppScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>About TandaXn</Text>
+            <Text style={styles.headerTitle}>{t("about_app.header")}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -90,8 +92,8 @@ export default function AboutAppScreen() {
             <View style={styles.logoContainer}>
               <Text style={styles.logoText}>Xn</Text>
             </View>
-            <Text style={styles.appName}>TandaXn</Text>
-            <Text style={styles.tagline}>Dream it! Save it! Achieve!</Text>
+            <Text style={styles.appName}>{t("about_app.app_name")}</Text>
+            <Text style={styles.tagline}>{t("about_app.tagline")}</Text>
           </View>
         </LinearGradient>
 
@@ -99,7 +101,7 @@ export default function AboutAppScreen() {
         <View style={styles.content}>
           {/* Version Card */}
           <View style={styles.versionCard}>
-            <Text style={styles.versionLabel}>Version</Text>
+            <Text style={styles.versionLabel}>{t("about_app.version_label")}</Text>
             <Text style={styles.versionNumber}>{appInfo.version}</Text>
             <Text style={styles.versionMeta}>
               Build {appInfo.build} • Updated {appInfo.lastUpdated}
@@ -113,7 +115,7 @@ export default function AboutAppScreen() {
                 <Ionicons name="star" size={22} color="#D97706" />
               </View>
               <View style={styles.actionContent}>
-                <Text style={styles.actionTitle}>Rate TandaXn</Text>
+                <Text style={styles.actionTitle}>{t("about_app.action_rate")}</Text>
                 <Text style={styles.actionSubtitle}>
                   Leave a review on the App Store
                 </Text>
@@ -128,7 +130,7 @@ export default function AboutAppScreen() {
                 <Ionicons name="share-social" size={22} color="#00C6AE" />
               </View>
               <View style={styles.actionContent}>
-                <Text style={styles.actionTitle}>Share TandaXn</Text>
+                <Text style={styles.actionTitle}>{t("about_app.action_share")}</Text>
                 <Text style={styles.actionSubtitle}>
                   Invite friends to save together
                 </Text>
@@ -139,13 +141,13 @@ export default function AboutAppScreen() {
 
           {/* Legal */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Legal</Text>
+            <Text style={styles.sectionTitle}>{t("about_app.section_legal")}</Text>
             <View style={styles.card}>
               <TouchableOpacity
                 style={styles.linkItem}
                 onPress={handleTermsOfService}
               >
-                <Text style={styles.linkText}>Terms of Service</Text>
+                <Text style={styles.linkText}>{t("about_app.link_terms")}</Text>
                 <Ionicons name="open-outline" size={16} color="#9CA3AF" />
               </TouchableOpacity>
 
@@ -155,14 +157,14 @@ export default function AboutAppScreen() {
                 style={styles.linkItem}
                 onPress={handlePrivacyPolicy}
               >
-                <Text style={styles.linkText}>Privacy Policy</Text>
+                <Text style={styles.linkText}>{t("about_app.link_privacy")}</Text>
                 <Ionicons name="open-outline" size={16} color="#9CA3AF" />
               </TouchableOpacity>
 
               <View style={styles.divider} />
 
               <TouchableOpacity style={styles.linkItem} onPress={handleLicenses}>
-                <Text style={styles.linkText}>Open Source Licenses</Text>
+                <Text style={styles.linkText}>{t("about_app.link_oss")}</Text>
                 <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
               </TouchableOpacity>
             </View>
@@ -170,14 +172,14 @@ export default function AboutAppScreen() {
 
           {/* Social Links */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Follow Us</Text>
+            <Text style={styles.sectionTitle}>{t("about_app.section_follow")}</Text>
             <View style={styles.socialButtons}>
               <TouchableOpacity
                 style={styles.socialButton}
                 onPress={handleWebsite}
               >
                 <Ionicons name="globe-outline" size={22} color="#0A2342" />
-                <Text style={styles.socialButtonText}>Website</Text>
+                <Text style={styles.socialButtonText}>{t("about_app.social_website")}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -185,7 +187,7 @@ export default function AboutAppScreen() {
                 onPress={handleTwitter}
               >
                 <Ionicons name="logo-twitter" size={22} color="#1DA1F2" />
-                <Text style={styles.socialButtonText}>Twitter</Text>
+                <Text style={styles.socialButtonText}>{t("about_app.social_twitter")}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -193,15 +195,15 @@ export default function AboutAppScreen() {
                 onPress={handleInstagram}
               >
                 <Ionicons name="logo-instagram" size={22} color="#E4405F" />
-                <Text style={styles.socialButtonText}>Instagram</Text>
+                <Text style={styles.socialButtonText}>{t("about_app.social_instagram")}</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           {/* Company Info */}
           <View style={styles.companyCard}>
-            <Text style={styles.companyName}>TandaXn, LLC</Text>
-            <Text style={styles.companyLocation}>Delaware, USA</Text>
+            <Text style={styles.companyName}>{t("about_app.company_name")}</Text>
+            <Text style={styles.companyLocation}>{t("about_app.company_location")}</Text>
             <Text style={styles.companyDisclaimer}>
               TandaXn is not a bank. Funds are safeguarded with licensed partners.
               Investment products carry risk. See Terms for details.

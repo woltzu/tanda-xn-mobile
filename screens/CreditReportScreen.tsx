@@ -32,6 +32,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { supabase } from "../lib/supabase";
@@ -41,6 +42,7 @@ type Months = 6 | 12 | 24;
 
 export default function CreditReportScreen() {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const { user } = useAuth();
 
   const [months, setMonths] = useState<Months>(12);
@@ -62,7 +64,7 @@ export default function CreditReportScreen() {
 
   const generatePDF = async () => {
     if (!user?.id) {
-      Alert.alert("Not signed in", "Please sign in before generating a report.");
+      Alert.alert(t("credit_report.alert_not_signed_title"), t("credit_report.alert_not_signed_body"));
       return;
     }
     setGenerating(true);
@@ -72,12 +74,12 @@ export default function CreditReportScreen() {
         { body: { months } },
       );
       if (error) {
-        Alert.alert("Could not generate report", error.message);
+        Alert.alert(t("credit_report.alert_failed_title"), error.message);
         return;
       }
       const html = (data as { html?: string })?.html;
       if (!html) {
-        Alert.alert("Could not generate report", "Empty response from server.");
+        Alert.alert(t("credit_report.alert_failed_title"), t("credit_report.alert_empty_body"));
         return;
       }
 
@@ -104,7 +106,7 @@ export default function CreditReportScreen() {
         );
       }
     } catch (e: any) {
-      Alert.alert("Could not generate report", e?.message ?? "Unknown error");
+      Alert.alert(t("credit_report.alert_failed_title"), e?.message ?? t("credit_report.alert_unknown"));
     } finally {
       setGenerating(false);
     }
@@ -119,7 +121,7 @@ export default function CreditReportScreen() {
         UTI: "com.adobe.pdf",
       });
     } catch (e: any) {
-      Alert.alert("Could not share", e?.message ?? "Unknown error");
+      Alert.alert(t("credit_report.alert_share_failed_title"), e?.message ?? t("credit_report.alert_unknown"));
     }
   };
 
@@ -132,7 +134,7 @@ export default function CreditReportScreen() {
         >
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Credit Report</Text>
+        <Text style={styles.headerTitle}>{t("credit_report.header")}</Text>
         <View style={styles.headerPlaceholder} />
       </View>
 
@@ -144,7 +146,7 @@ export default function CreditReportScreen() {
           <View style={styles.heroIcon}>
             <Ionicons name="document-text-outline" size={32} color="#0A2342" />
           </View>
-          <Text style={styles.heroTitle}>Financial Behavior Report</Text>
+          <Text style={styles.heroTitle}>{t("credit_report.hero_title")}</Text>
           <Text style={styles.heroSubtitle}>
             Generate a shareable PDF that summarises your contribution
             consistency, XnScore, and circle completions. Useful when proving
@@ -153,7 +155,7 @@ export default function CreditReportScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Time window</Text>
+          <Text style={styles.cardTitle}>{t("credit_report.card_window")}</Text>
           <View style={styles.segment}>
             {([6, 12, 24] as Months[]).map((m) => (
               <TouchableOpacity
@@ -177,7 +179,7 @@ export default function CreditReportScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>What this report contains</Text>
+          <Text style={styles.cardTitle}>{t("credit_report.card_contents")}</Text>
           {[
             {
               icon: "checkmark-circle-outline" as const,
@@ -220,7 +222,7 @@ export default function CreditReportScreen() {
           ) : (
             <>
               <Ionicons name="download-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.primaryButtonText}>Download Credit Report</Text>
+              <Text style={styles.primaryButtonText}>{t("credit_report.btn_download")}</Text>
             </>
           )}
         </TouchableOpacity>

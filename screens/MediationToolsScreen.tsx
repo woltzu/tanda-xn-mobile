@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 
 interface MediationToolsParams {
   circleName?: string;
@@ -37,6 +38,7 @@ interface Dispute {
 export default function MediationToolsScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { t } = useTranslation();
   const params = (route.params as MediationToolsParams) || {};
   const circleName = params.circleName || "Family Savings Circle";
 
@@ -180,7 +182,7 @@ export default function MediationToolsScreen() {
       notes: [...selectedDispute.notes, newNote],
     });
     setNewNote("");
-    Alert.alert("Note Added", "Your note has been added to the dispute.");
+    Alert.alert(t("mediation_tools.alert_note_added_title"), t("mediation_tools.alert_note_added_body"));
   };
 
   const handleUpdateStatus = (newStatus: Dispute["status"]) => {
@@ -194,12 +196,12 @@ export default function MediationToolsScreen() {
     setDisputes(updatedDisputes);
     setSelectedDispute({ ...selectedDispute, status: newStatus });
     setShowActionModal(false);
-    Alert.alert("Status Updated", `Dispute status changed to ${newStatus}.`);
+    Alert.alert(t("mediation_tools.alert_status_updated_title"), t("mediation_tools.alert_status_updated_body", { status: newStatus }));
   };
 
   const handleResolve = () => {
     if (!resolution.trim() || !selectedDispute) {
-      Alert.alert("Resolution Required", "Please provide a resolution summary.");
+      Alert.alert(t("mediation_tools.alert_resolution_required_title"), t("mediation_tools.alert_resolution_required_body"));
       return;
     }
 
@@ -221,7 +223,7 @@ export default function MediationToolsScreen() {
     });
     setResolution("");
     setShowActionModal(false);
-    Alert.alert("Dispute Resolved", "The dispute has been marked as resolved.");
+    Alert.alert(t("mediation_tools.alert_resolved_title"), t("mediation_tools.alert_resolved_body"));
   };
 
   const renderDisputeCard = (dispute: Dispute) => (
@@ -309,7 +311,7 @@ export default function MediationToolsScreen() {
           <Ionicons name="arrow-back" size={24} color="#1F2937" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Mediation Tools</Text>
+          <Text style={styles.headerTitle}>{t("mediation_tools.header")}</Text>
           <Text style={styles.headerSubtitle}>{circleName}</Text>
         </View>
         <View style={styles.headerPlaceholder} />
@@ -328,14 +330,14 @@ export default function MediationToolsScreen() {
           <Text style={styles.statNumber}>
             {disputes.filter((d) => d.status === "investigating").length}
           </Text>
-          <Text style={styles.statLabel}>Investigating</Text>
+          <Text style={styles.statLabel}>{t("mediation_tools.stat_investigating")}</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statNumber}>
             {disputes.filter((d) => d.status === "resolved").length}
           </Text>
-          <Text style={styles.statLabel}>Resolved</Text>
+          <Text style={styles.statLabel}>{t("mediation_tools.stat_resolved")}</Text>
         </View>
       </View>
 
@@ -376,7 +378,7 @@ export default function MediationToolsScreen() {
         ) : (
           <View style={styles.emptyState}>
             <Ionicons name="checkmark-circle-outline" size={64} color="#D1D5DB" />
-            <Text style={styles.emptyStateTitle}>No Disputes</Text>
+            <Text style={styles.emptyStateTitle}>{t("mediation_tools.empty_title")}</Text>
             <Text style={styles.emptyStateText}>
               No {filterStatus === "all" ? "" : filterStatus} disputes found.
             </Text>
@@ -397,7 +399,7 @@ export default function MediationToolsScreen() {
             {selectedDispute && (
               <ScrollView showsVerticalScrollIndicator={false}>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Dispute Details</Text>
+                  <Text style={styles.modalTitle}>{t("mediation_tools.modal_dispute_details")}</Text>
                   <TouchableOpacity
                     onPress={() => setShowDetailModal(false)}
                   >
@@ -442,12 +444,12 @@ export default function MediationToolsScreen() {
 
                 {/* Report Info */}
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailLabel}>Report ID</Text>
+                  <Text style={styles.detailLabel}>{t("mediation_tools.detail_report_id")}</Text>
                   <Text style={styles.detailValue}>{selectedDispute.reportId}</Text>
                 </View>
 
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailLabel}>Category</Text>
+                  <Text style={styles.detailLabel}>{t("mediation_tools.detail_category")}</Text>
                   <Text style={styles.detailValue}>
                     {selectedDispute.category.charAt(0).toUpperCase() +
                       selectedDispute.category.slice(1)}
@@ -455,12 +457,12 @@ export default function MediationToolsScreen() {
                 </View>
 
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailLabel}>Title</Text>
+                  <Text style={styles.detailLabel}>{t("mediation_tools.detail_title")}</Text>
                   <Text style={styles.detailValueBold}>{selectedDispute.title}</Text>
                 </View>
 
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailLabel}>Description</Text>
+                  <Text style={styles.detailLabel}>{t("mediation_tools.detail_description")}</Text>
                   <Text style={styles.detailDescription}>
                     {selectedDispute.description}
                   </Text>
@@ -468,12 +470,12 @@ export default function MediationToolsScreen() {
 
                 <View style={styles.detailRow}>
                   <View style={styles.detailHalf}>
-                    <Text style={styles.detailLabel}>Reported By</Text>
+                    <Text style={styles.detailLabel}>{t("mediation_tools.detail_reported_by")}</Text>
                     <Text style={styles.detailValue}>{selectedDispute.reporter}</Text>
                   </View>
                   {selectedDispute.against && (
                     <View style={styles.detailHalf}>
-                      <Text style={styles.detailLabel}>Against</Text>
+                      <Text style={styles.detailLabel}>{t("mediation_tools.detail_against")}</Text>
                       <Text style={styles.detailValue}>{selectedDispute.against}</Text>
                     </View>
                   )}
@@ -481,13 +483,13 @@ export default function MediationToolsScreen() {
 
                 <View style={styles.detailRow}>
                   <View style={styles.detailHalf}>
-                    <Text style={styles.detailLabel}>Created</Text>
+                    <Text style={styles.detailLabel}>{t("mediation_tools.detail_created")}</Text>
                     <Text style={styles.detailValueSmall}>
                       {formatDate(selectedDispute.createdAt)}
                     </Text>
                   </View>
                   <View style={styles.detailHalf}>
-                    <Text style={styles.detailLabel}>Last Updated</Text>
+                    <Text style={styles.detailLabel}>{t("mediation_tools.detail_updated")}</Text>
                     <Text style={styles.detailValueSmall}>
                       {formatDate(selectedDispute.updatedAt)}
                     </Text>
@@ -496,7 +498,7 @@ export default function MediationToolsScreen() {
 
                 {/* Notes Section */}
                 <View style={styles.notesSection}>
-                  <Text style={styles.notesTitle}>Case Notes</Text>
+                  <Text style={styles.notesTitle}>{t("mediation_tools.notes_title")}</Text>
                   {selectedDispute.notes.length > 0 ? (
                     selectedDispute.notes.map((note, index) => (
                       <View key={index} style={styles.noteItem}>
@@ -505,13 +507,13 @@ export default function MediationToolsScreen() {
                       </View>
                     ))
                   ) : (
-                    <Text style={styles.noNotesText}>No notes yet</Text>
+                    <Text style={styles.noNotesText}>{t("mediation_tools.no_notes")}</Text>
                   )}
 
                   <View style={styles.addNoteContainer}>
                     <TextInput
                       style={styles.noteInput}
-                      placeholder="Add a note..."
+                      placeholder={t("mediation_tools.placeholder_note")}
                       placeholderTextColor="#9CA3AF"
                       value={newNote}
                       onChangeText={setNewNote}
@@ -537,7 +539,7 @@ export default function MediationToolsScreen() {
                     onPress={() => setShowActionModal(true)}
                   >
                     <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
-                    <Text style={styles.actionButtonText}>Take Action</Text>
+                    <Text style={styles.actionButtonText}>{t("mediation_tools.btn_take_action")}</Text>
                   </TouchableOpacity>
                 )}
 
@@ -555,7 +557,7 @@ export default function MediationToolsScreen() {
                   }}
                 >
                   <Ionicons name="mail-outline" size={20} color="#2563EB" />
-                  <Text style={styles.contactButtonText}>Contact Reporter</Text>
+                  <Text style={styles.contactButtonText}>{t("mediation_tools.btn_contact_reporter")}</Text>
                 </TouchableOpacity>
               </ScrollView>
             )}
@@ -573,13 +575,13 @@ export default function MediationToolsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.actionModalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Take Action</Text>
+              <Text style={styles.modalTitle}>{t("mediation_tools.modal_take_action")}</Text>
               <TouchableOpacity onPress={() => setShowActionModal(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.actionSectionTitle}>Change Status</Text>
+            <Text style={styles.actionSectionTitle}>{t("mediation_tools.section_change_status")}</Text>
             <View style={styles.statusOptions}>
               {["open", "investigating", "escalated"].map((status) => (
                 <TouchableOpacity
@@ -603,10 +605,10 @@ export default function MediationToolsScreen() {
               ))}
             </View>
 
-            <Text style={styles.actionSectionTitle}>Resolve Dispute</Text>
+            <Text style={styles.actionSectionTitle}>{t("mediation_tools.section_resolve")}</Text>
             <TextInput
               style={styles.resolutionInput}
-              placeholder="Enter resolution summary..."
+              placeholder={t("mediation_tools.placeholder_resolution")}
               placeholderTextColor="#9CA3AF"
               value={resolution}
               onChangeText={setResolution}
@@ -624,7 +626,7 @@ export default function MediationToolsScreen() {
               disabled={!resolution.trim()}
             >
               <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
-              <Text style={styles.resolveButtonText}>Mark as Resolved</Text>
+              <Text style={styles.resolveButtonText}>{t("mediation_tools.btn_mark_resolved")}</Text>
             </TouchableOpacity>
           </View>
         </View>

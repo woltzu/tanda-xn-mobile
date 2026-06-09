@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 
 interface OversightDashboardParams {
   circleName?: string;
@@ -21,6 +22,7 @@ const screenWidth = Dimensions.get("window").width;
 export default function OversightDashboardScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { t } = useTranslation();
   const params = (route.params as OversightDashboardParams) || {};
   const circleName = params.circleName || "Family Savings Circle";
 
@@ -136,7 +138,7 @@ export default function OversightDashboardScreen() {
           <Ionicons name="arrow-back" size={24} color="#1F2937" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Oversight Dashboard</Text>
+          <Text style={styles.headerTitle}>{t("oversight_dashboard.header")}</Text>
           <Text style={styles.headerSubtitle}>{circleName}</Text>
         </View>
         <TouchableOpacity style={styles.refreshButton}>
@@ -175,7 +177,7 @@ export default function OversightDashboardScreen() {
         {/* Health Score Card */}
         <View style={styles.healthCard}>
           <View style={styles.healthHeader}>
-            <Text style={styles.healthTitle}>Circle Health Score</Text>
+            <Text style={styles.healthTitle}>{t("oversight_dashboard.health_title")}</Text>
             <View
               style={[
                 styles.healthBadge,
@@ -230,7 +232,7 @@ export default function OversightDashboardScreen() {
               <Ionicons name="people" size={22} color="#2563EB" />
             </View>
             <Text style={styles.statValue}>{stats.activeMembers}/{stats.totalMembers}</Text>
-            <Text style={styles.statLabel}>Active Members</Text>
+            <Text style={styles.statLabel}>{t("oversight_dashboard.stat_active_members")}</Text>
           </View>
 
           <View style={styles.statCard}>
@@ -246,7 +248,7 @@ export default function OversightDashboardScreen() {
               <Ionicons name="alert-circle" size={22} color="#F59E0B" />
             </View>
             <Text style={styles.statValue}>{stats.openDisputes}</Text>
-            <Text style={styles.statLabel}>Open Disputes</Text>
+            <Text style={styles.statLabel}>{t("oversight_dashboard.stat_open_disputes")}</Text>
           </View>
 
           <View style={styles.statCard}>
@@ -254,22 +256,22 @@ export default function OversightDashboardScreen() {
               <Ionicons name="sync-circle" size={22} color="#6B7280" />
             </View>
             <Text style={styles.statValue}>{stats.completedCycles}/{stats.totalCycles}</Text>
-            <Text style={styles.statLabel}>Cycles Done</Text>
+            <Text style={styles.statLabel}>{t("oversight_dashboard.stat_cycles_done")}</Text>
           </View>
         </View>
 
         {/* Financial Overview */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Financial Overview</Text>
+          <Text style={styles.sectionTitle}>{t("oversight_dashboard.section_financial")}</Text>
           <View style={styles.financialCard}>
             <View style={styles.financialRow}>
               <View style={styles.financialItem}>
-                <Text style={styles.financialLabel}>Total Contributed</Text>
+                <Text style={styles.financialLabel}>{t("oversight_dashboard.financial_contributed")}</Text>
                 <Text style={styles.financialValue}>${stats.totalContributed.toLocaleString()}</Text>
               </View>
               <View style={styles.financialDivider} />
               <View style={styles.financialItem}>
-                <Text style={styles.financialLabel}>Total Paid Out</Text>
+                <Text style={styles.financialLabel}>{t("oversight_dashboard.financial_paid_out")}</Text>
                 <Text style={styles.financialValue}>${stats.totalPaidOut.toLocaleString()}</Text>
               </View>
             </View>
@@ -290,11 +292,11 @@ export default function OversightDashboardScreen() {
             <View style={styles.financialLegend}>
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: "#2563EB" }]} />
-                <Text style={styles.legendText}>Contributed</Text>
+                <Text style={styles.legendText}>{t("oversight_dashboard.legend_contributed")}</Text>
               </View>
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: "#10B981" }]} />
-                <Text style={styles.legendText}>Paid Out</Text>
+                <Text style={styles.legendText}>{t("oversight_dashboard.legend_paid_out")}</Text>
               </View>
             </View>
           </View>
@@ -302,13 +304,13 @@ export default function OversightDashboardScreen() {
 
         {/* Payment Breakdown */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Breakdown</Text>
+          <Text style={styles.sectionTitle}>{t("oversight_dashboard.section_payment")}</Text>
           <View style={styles.paymentBreakdown}>
             <View style={styles.paymentItem}>
               <View style={[styles.paymentDot, { backgroundColor: "#10B981" }]} />
               <View style={styles.paymentInfo}>
                 <Text style={styles.paymentCount}>{stats.onTimePayments}</Text>
-                <Text style={styles.paymentType}>On Time</Text>
+                <Text style={styles.paymentType}>{t("oversight_dashboard.payment_on_time")}</Text>
               </View>
             </View>
             <View style={styles.paymentItem}>
@@ -322,7 +324,7 @@ export default function OversightDashboardScreen() {
               <View style={[styles.paymentDot, { backgroundColor: "#EF4444" }]} />
               <View style={styles.paymentInfo}>
                 <Text style={styles.paymentCount}>{stats.missedPayments}</Text>
-                <Text style={styles.paymentType}>Missed</Text>
+                <Text style={styles.paymentType}>{t("oversight_dashboard.payment_missed")}</Text>
               </View>
             </View>
           </View>
@@ -331,7 +333,7 @@ export default function OversightDashboardScreen() {
         {/* Members at Risk */}
         {membersAtRisk.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Members Needing Attention</Text>
+            <Text style={styles.sectionTitle}>{t("oversight_dashboard.section_members_attention")}</Text>
             {membersAtRisk.map((member) => (
               <View key={member.id} style={styles.riskCard}>
                 <View style={styles.riskAvatar}>
@@ -366,9 +368,9 @@ export default function OversightDashboardScreen() {
         {/* Recent Activity */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
+            <Text style={styles.sectionTitle}>{t("oversight_dashboard.section_recent")}</Text>
             <TouchableOpacity>
-              <Text style={styles.viewAllText}>View All</Text>
+              <Text style={styles.viewAllText}>{t("oversight_dashboard.view_all")}</Text>
             </TouchableOpacity>
           </View>
           {recentActivity.map((activity) => (
@@ -395,19 +397,19 @@ export default function OversightDashboardScreen() {
 
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <Text style={styles.sectionTitle}>{t("oversight_dashboard.section_quick")}</Text>
           <View style={styles.quickActions}>
             <TouchableOpacity style={styles.quickAction}>
               <Ionicons name="document-text-outline" size={24} color="#2563EB" />
-              <Text style={styles.quickActionText}>Generate Report</Text>
+              <Text style={styles.quickActionText}>{t("oversight_dashboard.quick_generate")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.quickAction}>
               <Ionicons name="people-outline" size={24} color="#2563EB" />
-              <Text style={styles.quickActionText}>Review Members</Text>
+              <Text style={styles.quickActionText}>{t("oversight_dashboard.quick_review")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.quickAction}>
               <Ionicons name="chatbubbles-outline" size={24} color="#2563EB" />
-              <Text style={styles.quickActionText}>Send Reminder</Text>
+              <Text style={styles.quickActionText}>{t("oversight_dashboard.quick_reminder")}</Text>
             </TouchableOpacity>
           </View>
         </View>

@@ -9,6 +9,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useXnScore } from "../context/XnScoreContext";
 import { useTrust, TrustTier } from "../context/TrustContext";
@@ -16,60 +17,62 @@ import { useTrust, TrustTier } from "../context/TrustContext";
 type AccessRestrictedNavigationProp = StackNavigationProp<RootStackParamList>;
 type AccessRestrictedRouteProp = RouteProp<RootStackParamList, "AccessRestricted">;
 
+// i18n: titleKey/descKey/tipKey resolved per-render via t() at call site.
 const ACCESS_MESSAGES = {
   contacts_only: {
-    title: "Contacts-Only Access",
-    description: "With your current XnScore™, you can only join circles with people from your contacts.",
+    titleKey: "access_restricted.type_contacts_title",
+    descKey: "access_restricted.type_contacts_desc",
     icon: "people",
     color: "#F59E0B",
     scoreNeeded: 25,
-    tip: "Build your score to 25+ to receive circle invitations",
+    tipKey: "access_restricted.type_contacts_tip",
   },
   needs_vouch: {
-    title: "Elder Vouch Required",
-    description: "As a new member, you need an elder (score 75+) to vouch for you before joining circles.",
+    titleKey: "access_restricted.type_vouch_title",
+    descKey: "access_restricted.type_vouch_desc",
     icon: "hand-right",
     color: "#8B5CF6",
     scoreNeeded: 25,
-    tip: "Ask a trusted elder in your network to vouch for you",
+    tipKey: "access_restricted.type_vouch_tip",
   },
   invitation_only: {
-    title: "Invitation Required",
-    description: "You need to be invited to join this circle. Build your score to browse public circles.",
+    titleKey: "access_restricted.type_invitation_title",
+    descKey: "access_restricted.type_invitation_desc",
     icon: "mail",
     color: "#3B82F6",
     scoreNeeded: 45,
-    tip: "Reach score 45+ to browse and join public circles",
+    tipKey: "access_restricted.type_invitation_tip",
   },
   score_too_low: {
-    title: "Score Too Low",
-    description: "Your XnScore™ doesn't meet the minimum requirement for this circle.",
+    titleKey: "access_restricted.type_low_title",
+    descKey: "access_restricted.type_low_desc",
     icon: "trending-down",
     color: "#DC2626",
     scoreNeeded: 0,
-    tip: "Keep making on-time payments to improve your score",
+    tipKey: "access_restricted.type_low_tip",
   },
   cannot_vouch: {
-    title: "Cannot Vouch Yet",
-    description: "You need an XnScore™ of 75 or higher to vouch for other members.",
+    titleKey: "access_restricted.type_cannot_vouch_title",
+    descKey: "access_restricted.type_cannot_vouch_desc",
     icon: "lock-closed",
     color: "#F59E0B",
     scoreNeeded: 75,
-    tip: "Continue building trust to unlock vouching ability",
+    tipKey: "access_restricted.type_cannot_vouch_tip",
   },
   payout_slot_restricted: {
-    title: "Payout Slot Restricted",
-    description: "Your current score only allows you to select from the last 3 payout slots.",
+    titleKey: "access_restricted.type_payout_title",
+    descKey: "access_restricted.type_payout_desc",
     icon: "list",
     color: "#F59E0B",
     scoreNeeded: 60,
-    tip: "Score 60+ unlocks slot 4+ positions, 75+ unlocks any slot",
+    tipKey: "access_restricted.type_payout_tip",
   },
 };
 
 export default function AccessRestrictedScreen() {
   const navigation = useNavigation<AccessRestrictedNavigationProp>();
   const route = useRoute<AccessRestrictedRouteProp>();
+  const { t } = useTranslation();
   const { score, level } = useXnScore();
   const { getTrustTier } = useTrust();
 
@@ -118,14 +121,14 @@ export default function AccessRestrictedScreen() {
           </View>
 
           {/* Title */}
-          <Text style={styles.title}>{restriction.title}</Text>
-          <Text style={styles.description}>{restriction.description}</Text>
+          <Text style={styles.title}>{t(restriction.titleKey)}</Text>
+          <Text style={styles.description}>{t(restriction.descKey)}</Text>
 
           {/* Score Card */}
           <View style={styles.scoreCard}>
             <View style={styles.scoreRow}>
               <View style={styles.scoreSection}>
-                <Text style={styles.scoreLabel}>Your Score</Text>
+                <Text style={styles.scoreLabel}>{t("access_restricted.your_score")}</Text>
                 <View style={styles.scoreValue}>
                   <Ionicons
                     name={level.icon as any}
@@ -140,9 +143,9 @@ export default function AccessRestrictedScreen() {
               <View style={styles.scoreDivider} />
 
               <View style={styles.scoreSection}>
-                <Text style={styles.scoreLabel}>Required</Text>
+                <Text style={styles.scoreLabel}>{t("access_restricted.required")}</Text>
                 <Text style={styles.scoreNumber}>{actualRequiredScore}</Text>
-                <Text style={styles.scoreTier}>Minimum</Text>
+                <Text style={styles.scoreTier}>{t("access_restricted.minimum")}</Text>
               </View>
             </View>
 
@@ -150,7 +153,7 @@ export default function AccessRestrictedScreen() {
               <View style={styles.pointsNeeded}>
                 <Ionicons name="arrow-up" size={16} color="#F59E0B" />
                 <Text style={styles.pointsNeededText}>
-                  You need <Text style={styles.bold}>{pointsNeeded} more points</Text>
+                  {t("access_restricted.you_need")}<Text style={styles.bold}>{t("access_restricted.more_points", { points: pointsNeeded })}</Text>
                 </Text>
               </View>
             )}
@@ -159,7 +162,7 @@ export default function AccessRestrictedScreen() {
           {/* Tip Card */}
           <View style={styles.tipCard}>
             <Ionicons name="bulb" size={20} color="#F59E0B" />
-            <Text style={styles.tipText}>{restriction.tip}</Text>
+            <Text style={styles.tipText}>{t(restriction.tipKey)}</Text>
           </View>
 
           {/* Actions */}
@@ -169,7 +172,7 @@ export default function AccessRestrictedScreen() {
               onPress={handleViewScore}
             >
               <Ionicons name="analytics" size={20} color="#FFFFFF" />
-              <Text style={styles.primaryButtonText}>View XnScore™ Dashboard</Text>
+              <Text style={styles.primaryButtonText}>{t("access_restricted.btn_view_score")}</Text>
             </TouchableOpacity>
 
             {(restrictionType === "needs_vouch" || restrictionType === "contacts_only") && (
@@ -178,7 +181,7 @@ export default function AccessRestrictedScreen() {
                 onPress={handleFindElder}
               >
                 <Ionicons name="people" size={20} color="#00C6AE" />
-                <Text style={styles.secondaryButtonText}>Find an Elder to Vouch</Text>
+                <Text style={styles.secondaryButtonText}>{t("access_restricted.btn_find_elder")}</Text>
               </TouchableOpacity>
             )}
 
@@ -186,20 +189,20 @@ export default function AccessRestrictedScreen() {
               style={styles.textButton}
               onPress={handleGoBack}
             >
-              <Text style={styles.textButtonText}>Go Back</Text>
+              <Text style={styles.textButtonText}>{t("access_restricted.btn_go_back")}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Trust Progression */}
         <View style={styles.trustProgression}>
-          <Text style={styles.progressionTitle}>Trust Progression Path</Text>
+          <Text style={styles.progressionTitle}>{t("access_restricted.progression_title")}</Text>
           <View style={styles.progressionSteps}>
             {[
-              { score: "0-24", label: "Contacts Only", active: score < 25 },
-              { score: "25-44", label: "Invitations", active: score >= 25 && score < 45 },
-              { score: "45+", label: "Public Circles", active: score >= 45 },
-              { score: "75+", label: "Can Vouch", active: score >= 75 },
+              { score: "0-24", label: t("access_restricted.progression_contacts"), active: score < 25 },
+              { score: "25-44", label: t("access_restricted.progression_invitations"), active: score >= 25 && score < 45 },
+              { score: "45+", label: t("access_restricted.progression_public"), active: score >= 45 },
+              { score: "75+", label: t("access_restricted.progression_vouch"), active: score >= 75 },
             ].map((step, index) => (
               <View key={index} style={styles.progressionStep}>
                 <View

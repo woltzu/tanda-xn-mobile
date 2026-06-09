@@ -40,6 +40,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 
 const NAVY = "#0A2342";
@@ -157,6 +158,7 @@ function statusColor(status: RegionStatus): string {
 export default function AdminDashboardScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<AdminDashboardRouteProp>();
+  const { t } = useTranslation();
 
   const health = route.params?.portfolioHealth ?? DEFAULT_HEALTH;
   const regions = route.params?.regionMetrics ?? DEFAULT_REGIONS;
@@ -197,7 +199,7 @@ export default function AdminDashboardScreen() {
                 <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
               </TouchableOpacity>
               <View>
-                <Text style={styles.headerTitle}>Admin Dashboard</Text>
+                <Text style={styles.headerTitle}>{t("admin_dashboard.header")}</Text>
                 <Text style={styles.headerSubtitle}>
                   Advance Portfolio Monitoring
                 </Text>
@@ -210,7 +212,7 @@ export default function AdminDashboardScreen() {
               accessibilityLabel="Export report"
             >
               <Ionicons name="download-outline" size={14} color="#FFFFFF" />
-              <Text style={styles.exportButtonText}>Export</Text>
+              <Text style={styles.exportButtonText}>{t("admin_dashboard.btn_export")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -238,7 +240,7 @@ export default function AdminDashboardScreen() {
             <View style={styles.sectionCard}>
               <View style={styles.sectionTitleRow}>
                 <Ionicons name="warning-outline" size={16} color={AMBER} />
-                <Text style={styles.sectionTitle}>Alerts</Text>
+                <Text style={styles.sectionTitle}>{t("admin_dashboard.section_alerts")}</Text>
               </View>
               <View style={styles.alertsList}>
                 {alerts.map((alert, idx) => (
@@ -312,14 +314,14 @@ export default function AdminDashboardScreen() {
           {/* Region metrics */}
           <View style={styles.sectionCard}>
             <View style={styles.regionHeader}>
-              <Text style={styles.sectionTitle}>By Region</Text>
+              <Text style={styles.sectionTitle}>{t("admin_dashboard.section_region")}</Text>
               <TouchableOpacity
                 style={styles.adjustButton}
                 onPress={() => adminStub("Adjust Risk")}
                 accessibilityRole="button"
                 accessibilityLabel="Adjust risk"
               >
-                <Text style={styles.adjustButtonText}>Adjust Risk</Text>
+                <Text style={styles.adjustButtonText}>{t("admin_dashboard.btn_adjust_risk")}</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.regionList}>
@@ -347,7 +349,7 @@ export default function AdminDashboardScreen() {
                   </View>
                   <View style={styles.regionRight}>
                     <View style={{ alignItems: "flex-end" }}>
-                      <Text style={styles.regionMicroLabel}>Default</Text>
+                      <Text style={styles.regionMicroLabel}>{t("admin_dashboard.region_default_label")}</Text>
                       <Text
                         style={[
                           styles.regionMetricValue,
@@ -393,7 +395,7 @@ export default function AdminDashboardScreen() {
 
           {/* Profitability — navy */}
           <View style={styles.profitCard}>
-            <Text style={styles.profitTitle}>Profitability</Text>
+            <Text style={styles.profitTitle}>{t("admin_dashboard.profitability_title")}</Text>
             <View style={styles.profitGrid}>
               <ProfitTile
                 label="Platform Return"

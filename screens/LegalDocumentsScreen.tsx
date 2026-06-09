@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import {
   useActiveDocuments,
   usePendingAcceptances,
@@ -38,6 +39,7 @@ const DATA_RIGHTS: {
 
 export default function LegalDocumentsScreen() {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const { user } = useAuth();
 
   const {
@@ -74,7 +76,7 @@ export default function LegalDocumentsScreen() {
     if (!user?.id) return;
     const result = await acceptDocument(user.id, docId);
     if (result) {
-      Alert.alert("Accepted", "You have accepted the updated terms.");
+      Alert.alert(t("legal_documents.alert_accepted_title"), t("legal_documents.alert_accepted_body"));
       refetchPending();
     }
   };
@@ -83,7 +85,7 @@ export default function LegalDocumentsScreen() {
     return (
       <View style={styles.loaderContainer}>
         <ActivityIndicator size="large" color={COLORS.teal} />
-        <Text style={styles.loaderText}>Loading documents...</Text>
+        <Text style={styles.loaderText}>{t("legal_documents.loading")}</Text>
       </View>
     );
   }
@@ -155,7 +157,7 @@ export default function LegalDocumentsScreen() {
                   <Ionicons name="checkmark-circle" size={20} color={COLORS.green} />
                 ) : (
                   <View style={styles.reviewBadge}>
-                    <Text style={styles.reviewBadgeText}>Review</Text>
+                    <Text style={styles.reviewBadgeText}>{t("legal_documents.review_badge")}</Text>
                   </View>
                 )}
 
@@ -187,7 +189,7 @@ export default function LegalDocumentsScreen() {
 
                   <TouchableOpacity style={styles.readButton}>
                     <Ionicons name="open-outline" size={16} color={COLORS.navy} />
-                    <Text style={styles.readButtonText}>Read Full Document</Text>
+                    <Text style={styles.readButtonText}>{t("legal_documents.btn_read_full")}</Text>
                   </TouchableOpacity>
 
                   {!accepted && (
@@ -199,7 +201,7 @@ export default function LegalDocumentsScreen() {
                       {accepting ? (
                         <ActivityIndicator size="small" color={COLORS.white} />
                       ) : (
-                        <Text style={styles.acceptButtonText}>Accept Updated Terms</Text>
+                        <Text style={styles.acceptButtonText}>{t("legal_documents.btn_accept_updated")}</Text>
                       )}
                     </TouchableOpacity>
                   )}
@@ -211,7 +213,7 @@ export default function LegalDocumentsScreen() {
 
         {/* Data Rights */}
         <View style={styles.card}>
-          <Text style={styles.rightsTitle}>Your Data Rights</Text>
+          <Text style={styles.rightsTitle}>{t("legal_documents.rights_title")}</Text>
           {DATA_RIGHTS.map((right, i) => (
             <TouchableOpacity
               key={i}

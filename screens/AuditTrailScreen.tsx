@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 
 interface AuditTrailParams {
   circleName?: string;
@@ -31,6 +32,7 @@ interface AuditEntry {
 export default function AuditTrailScreen() {
   const navigation = useNavigation();
   const route = useRoute();
+  const { t } = useTranslation();
   const params = (route.params as AuditTrailParams) || {};
   const circleName = params.circleName || "Family Savings Circle";
 
@@ -364,7 +366,7 @@ export default function AuditTrailScreen() {
           <Ionicons name="arrow-back" size={24} color="#1F2937" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Audit Trail</Text>
+          <Text style={styles.headerTitle}>{t("audit_trail.header")}</Text>
           <Text style={styles.headerSubtitle}>{circleName}</Text>
         </View>
         <TouchableOpacity style={styles.exportButton}>
@@ -378,7 +380,7 @@ export default function AuditTrailScreen() {
           <Ionicons name="search" size={20} color="#9CA3AF" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search actions, actors, details..."
+            placeholder={t("audit_trail.search_placeholder")}
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -443,7 +445,7 @@ export default function AuditTrailScreen() {
         ) : (
           <View style={styles.emptyState}>
             <Ionicons name="search-outline" size={64} color="#D1D5DB" />
-            <Text style={styles.emptyStateTitle}>No Results</Text>
+            <Text style={styles.emptyStateTitle}>{t("audit_trail.empty_title")}</Text>
             <Text style={styles.emptyStateText}>
               No audit entries match your search criteria.
             </Text>

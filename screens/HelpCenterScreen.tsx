@@ -12,6 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 
 type HelpCenterNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -31,6 +32,7 @@ interface Article {
 
 export default function HelpCenterScreen() {
   const navigation = useNavigation<HelpCenterNavigationProp>();
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState("");
 
   const faqCategories: FAQCategory[] = [
@@ -83,8 +85,8 @@ export default function HelpCenterScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View>
-              <Text style={styles.headerTitle}>Help Center</Text>
-              <Text style={styles.headerSubtitle}>How can we help you?</Text>
+              <Text style={styles.headerTitle}>{t("help_center.header")}</Text>
+              <Text style={styles.headerSubtitle}>{t("help_center.subtitle")}</Text>
             </View>
           </View>
 
@@ -98,7 +100,7 @@ export default function HelpCenterScreen() {
             />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search for help..."
+              placeholder={t("help_center.search_placeholder")}
               placeholderTextColor="rgba(255,255,255,0.5)"
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -117,8 +119,8 @@ export default function HelpCenterScreen() {
               <View style={styles.quickActionIconPrimary}>
                 <Ionicons name="chatbubbles" size={20} color="#FFFFFF" />
               </View>
-              <Text style={styles.quickActionTitle}>Chat with Us</Text>
-              <Text style={styles.quickActionSubtitle}>Get instant help</Text>
+              <Text style={styles.quickActionTitle}>{t("help_center.quick_chat_title")}</Text>
+              <Text style={styles.quickActionSubtitle}>{t("help_center.quick_chat_subtitle")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -128,7 +130,7 @@ export default function HelpCenterScreen() {
               <View style={styles.quickActionIconSecondary}>
                 <Ionicons name="mail" size={20} color="#0A2342" />
               </View>
-              <Text style={styles.quickActionTitle}>Email Us</Text>
+              <Text style={styles.quickActionTitle}>{t("help_center.quick_email_title")}</Text>
               <Text style={styles.quickActionSubtitle}>
                 support@tandaxn.com
               </Text>
@@ -137,7 +139,7 @@ export default function HelpCenterScreen() {
 
           {/* Popular Articles */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Popular Articles</Text>
+            <Text style={styles.sectionTitle}>{t("help_center.section_popular")}</Text>
             <View style={styles.card}>
               {popularArticles.map((article, index) => (
                 <TouchableOpacity
@@ -159,7 +161,7 @@ export default function HelpCenterScreen() {
 
           {/* Browse by Topic */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Browse by Topic</Text>
+            <Text style={styles.sectionTitle}>{t("help_center.section_topics")}</Text>
             <View style={styles.categoriesGrid}>
               {faqCategories.map((category) => (
                 <TouchableOpacity
@@ -185,7 +187,7 @@ export default function HelpCenterScreen() {
 
           {/* Contact Info */}
           <View style={styles.contactCard}>
-            <Text style={styles.contactTitle}>Still need help?</Text>
+            <Text style={styles.contactTitle}>{t("help_center.contact_title")}</Text>
             <Text style={styles.contactText}>
               Our support team is available 24/7 to help you with any questions.
             </Text>

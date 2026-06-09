@@ -10,6 +10,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useTranslation } from "react-i18next";
 import { useElder } from "../context/ElderContext";
 
 type RootStackParamList = {
@@ -25,6 +26,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function ElderDashboardScreen() {
   const navigation = useNavigation<NavigationProp>();
+  const { t } = useTranslation();
   const {
     isElder,
     elderProfile,
@@ -46,7 +48,7 @@ export default function ElderDashboardScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#1a1a2e" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Elder System</Text>
+          <Text style={styles.headerTitle}>{t("elder_dashboard.header_system")}</Text>
           <View style={styles.placeholder} />
         </View>
 
@@ -55,7 +57,7 @@ export default function ElderDashboardScreen() {
             <View style={styles.notElderIcon}>
               <Ionicons name="shield" size={64} color="#00C6AE" />
             </View>
-            <Text style={styles.notElderTitle}>Become an Elder</Text>
+            <Text style={styles.notElderTitle}>{t("elder_dashboard.not_elder_title")}</Text>
             <Text style={styles.notElderDescription}>
               Elders are trusted community members who help resolve disputes,
               vouch for new members, and maintain the integrity of our savings
@@ -64,15 +66,15 @@ export default function ElderDashboardScreen() {
             <View style={styles.benefitsList}>
               <View style={styles.benefitItem}>
                 <Ionicons name="checkmark-circle" size={20} color="#00C6AE" />
-                <Text style={styles.benefitText}>Mediate disputes and earn rewards</Text>
+                <Text style={styles.benefitText}>{t("elder_dashboard.benefit_mediate")}</Text>
               </View>
               <View style={styles.benefitItem}>
                 <Ionicons name="checkmark-circle" size={20} color="#00C6AE" />
-                <Text style={styles.benefitText}>Vouch for members to help them join circles</Text>
+                <Text style={styles.benefitText}>{t("elder_dashboard.benefit_vouch")}</Text>
               </View>
               <View style={styles.benefitItem}>
                 <Ionicons name="checkmark-circle" size={20} color="#00C6AE" />
-                <Text style={styles.benefitText}>Build your Honor Score and reputation</Text>
+                <Text style={styles.benefitText}>{t("elder_dashboard.benefit_honor")}</Text>
               </View>
               <View style={styles.benefitItem}>
                 <Ionicons name="checkmark-circle" size={20} color="#00C6AE" />
@@ -110,7 +112,7 @@ export default function ElderDashboardScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#1a1a2e" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Elder Dashboard</Text>
+        <Text style={styles.headerTitle}>{t("elder_dashboard.header_dashboard")}</Text>
         <TouchableOpacity
           style={styles.settingsButton}
           onPress={() => navigation.navigate("BecomeElder")}
@@ -138,7 +140,7 @@ export default function ElderDashboardScreen() {
               >
                 {elderProfile.honorScore}
               </Text>
-              <Text style={styles.honorLabel}>Honor Score</Text>
+              <Text style={styles.honorLabel}>{t("elder_dashboard.honor_label")}</Text>
             </View>
           </View>
 
@@ -147,21 +149,21 @@ export default function ElderDashboardScreen() {
               <Text style={styles.quickStatValue}>
                 {elderProfile.totalCasesResolved}
               </Text>
-              <Text style={styles.quickStatLabel}>Cases Resolved</Text>
+              <Text style={styles.quickStatLabel}>{t("elder_dashboard.stat_cases")}</Text>
             </View>
             <View style={styles.quickStatDivider} />
             <View style={styles.quickStatItem}>
               <Text style={styles.quickStatValue}>
                 {elderProfile.successRate}%
               </Text>
-              <Text style={styles.quickStatLabel}>Success Rate</Text>
+              <Text style={styles.quickStatLabel}>{t("elder_dashboard.stat_success")}</Text>
             </View>
             <View style={styles.quickStatDivider} />
             <View style={styles.quickStatItem}>
               <Text style={styles.quickStatValue}>
                 {elderStats?.successfulVouches || 0}
               </Text>
-              <Text style={styles.quickStatLabel}>Vouches</Text>
+              <Text style={styles.quickStatLabel}>{t("elder_dashboard.stat_vouches")}</Text>
             </View>
           </View>
         </View>
@@ -181,7 +183,7 @@ export default function ElderDashboardScreen() {
                   <Text style={styles.actionTitle}>
                     {pendingRequests} Vouch Request{pendingRequests > 1 ? "s" : ""}
                   </Text>
-                  <Text style={styles.actionSubtitle}>Waiting for your review</Text>
+                  <Text style={styles.actionSubtitle}>{t("elder_dashboard.action_waiting_review")}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#6B7280" />
               </TouchableOpacity>
@@ -198,7 +200,7 @@ export default function ElderDashboardScreen() {
                   <Text style={styles.actionTitle}>
                     {activeCases} Active Case{activeCases > 1 ? "s" : ""}
                   </Text>
-                  <Text style={styles.actionSubtitle}>Awaiting resolution</Text>
+                  <Text style={styles.actionSubtitle}>{t("elder_dashboard.action_awaiting")}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#6B7280" />
               </TouchableOpacity>
@@ -207,7 +209,7 @@ export default function ElderDashboardScreen() {
         )}
 
         {/* Quick Actions Grid */}
-        <Text style={styles.sectionTitle}>Elder Actions</Text>
+        <Text style={styles.sectionTitle}>{t("elder_dashboard.section_actions")}</Text>
         <View style={styles.actionsGrid}>
           <TouchableOpacity
             style={styles.actionCard}
@@ -216,7 +218,7 @@ export default function ElderDashboardScreen() {
             <View style={[styles.actionCardIcon, { backgroundColor: "#F0FDFB" }]}>
               <Ionicons name="trophy" size={28} color="#00C6AE" />
             </View>
-            <Text style={styles.actionCardTitle}>Honor Score</Text>
+            <Text style={styles.actionCardTitle}>{t("elder_dashboard.action_honor")}</Text>
             <Text style={styles.actionCardValue}>
               {elderProfile.honorScore} pts
             </Text>
@@ -229,7 +231,7 @@ export default function ElderDashboardScreen() {
             <View style={[styles.actionCardIcon, { backgroundColor: "#EDE9FE" }]}>
               <Ionicons name="hand-right" size={28} color="#7C3AED" />
             </View>
-            <Text style={styles.actionCardTitle}>Vouch System</Text>
+            <Text style={styles.actionCardTitle}>{t("elder_dashboard.action_vouch")}</Text>
             <Text style={styles.actionCardValue}>
               {elderStats?.vouchesAvailable || 0} available
             </Text>
@@ -242,7 +244,7 @@ export default function ElderDashboardScreen() {
             <View style={[styles.actionCardIcon, { backgroundColor: "#FEF3C7" }]}>
               <Ionicons name="shield-checkmark" size={28} color="#D97706" />
             </View>
-            <Text style={styles.actionCardTitle}>Mediation</Text>
+            <Text style={styles.actionCardTitle}>{t("elder_dashboard.action_mediation")}</Text>
             <Text style={styles.actionCardValue}>
               {elderProfile.activeCases}/{elderProfile.maxConcurrentCases} cases
             </Text>
@@ -255,7 +257,7 @@ export default function ElderDashboardScreen() {
             <View style={[styles.actionCardIcon, { backgroundColor: "#DBEAFE" }]}>
               <Ionicons name="school" size={28} color="#3B82F6" />
             </View>
-            <Text style={styles.actionCardTitle}>Training</Text>
+            <Text style={styles.actionCardTitle}>{t("elder_dashboard.action_training")}</Text>
             <Text style={styles.actionCardValue}>
               {elderProfile.trainingCredits} credits
             </Text>
@@ -265,9 +267,9 @@ export default function ElderDashboardScreen() {
         {/* Progress Section */}
         <View style={styles.progressSection}>
           <View style={styles.progressHeader}>
-            <Text style={styles.sectionTitle}>Tier Progress</Text>
+            <Text style={styles.sectionTitle}>{t("elder_dashboard.section_tier")}</Text>
             <TouchableOpacity onPress={() => navigation.navigate("ElderTrainingHub")}>
-              <Text style={styles.viewAllText}>View Details</Text>
+              <Text style={styles.viewAllText}>{t("elder_dashboard.view_details")}</Text>
             </TouchableOpacity>
           </View>
 

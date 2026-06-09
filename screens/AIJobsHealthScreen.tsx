@@ -41,6 +41,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import {
   useAIJobHealth,
   useAIJobLogs,
@@ -108,6 +109,7 @@ function fmtPct(n: number | null | undefined, digits = 1): string {
 
 export default function AIJobsHealthScreen() {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const { isAdmin, loading: adminLoading, error: adminError } = useIsAdmin();
 
   // Early-return BEFORE wiring the data hooks. This isn't just cosmetic:
@@ -145,7 +147,7 @@ function AccessGate({
         <TouchableOpacity style={styles.headerBtn} onPress={onBack}>
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>AI Job Fleet</Text>
+        <Text style={styles.headerTitle}>{t("ai_health.header")}</Text>
         <View style={styles.headerBtn} />
       </View>
 
@@ -153,7 +155,7 @@ function AccessGate({
         {loading ? (
           <>
             <ActivityIndicator color={COLORS.teal} />
-            <Text style={styles.deniedTitle}>Checking permissions</Text>
+            <Text style={styles.deniedTitle}>{t("ai_health.denied_checking")}</Text>
             <Text style={styles.deniedBody}>
               Confirming your admin role with the server.
             </Text>
@@ -165,7 +167,7 @@ function AccessGate({
               size={36}
               color={COLORS.red}
             />
-            <Text style={styles.deniedTitle}>Access denied</Text>
+            <Text style={styles.deniedTitle}>{t("ai_health.denied_title")}</Text>
             <Text style={styles.deniedBody}>
               This screen surfaces operational metrics restricted to active
               admins. Ask an admin to add you to the team if you need access.
@@ -174,7 +176,7 @@ function AccessGate({
               <Text style={styles.deniedError}>Reason: {error}</Text>
             ) : null}
             <TouchableOpacity style={styles.deniedBtn} onPress={onBack}>
-              <Text style={styles.deniedBtnText}>Go back</Text>
+              <Text style={styles.deniedBtnText}>{t("ai_health.btn_go_back")}</Text>
             </TouchableOpacity>
           </>
         )}
@@ -222,7 +224,7 @@ function AIJobsHealthScreenInner() {
         >
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>AI Job Fleet</Text>
+        <Text style={styles.headerTitle}>{t("ai_health.header")}</Text>
         <View style={styles.headerBtn} />
       </View>
 
@@ -235,7 +237,7 @@ function AIJobsHealthScreenInner() {
       >
         {/* Fleet overview */}
         <View style={styles.overviewCard}>
-          <Text style={styles.overviewLabel}>Fleet status</Text>
+          <Text style={styles.overviewLabel}>{t("ai_health.overview_label")}</Text>
           <View style={styles.overviewRow}>
             <View style={styles.overviewStat}>
               <Text style={styles.overviewValue}>{health.overallSuccessRate}%</Text>
@@ -277,7 +279,7 @@ function AIJobsHealthScreenInner() {
           </View>
         ) : summaries.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>No job history yet.</Text>
+            <Text style={styles.emptyText}>{t("ai_health.empty_history")}</Text>
           </View>
         ) : (
           summaries.map((s) => (
@@ -298,17 +300,17 @@ function AIJobsHealthScreenInner() {
               </View>
               <View style={styles.jobMetrics}>
                 <View style={styles.jobMetric}>
-                  <Text style={styles.metricLabel}>Last run</Text>
+                  <Text style={styles.metricLabel}>{t("ai_health.metric_last_run")}</Text>
                   <Text style={styles.metricValue}>{fmtTime(s.lastRunAt)}</Text>
                 </View>
                 <View style={styles.jobMetric}>
-                  <Text style={styles.metricLabel}>Success rate</Text>
+                  <Text style={styles.metricLabel}>{t("ai_health.metric_success_rate")}</Text>
                   <Text style={styles.metricValue}>
                     {Math.round(s.successRate * 100)}%
                   </Text>
                 </View>
                 <View style={styles.jobMetric}>
-                  <Text style={styles.metricLabel}>Avg runtime</Text>
+                  <Text style={styles.metricLabel}>{t("ai_health.metric_avg_runtime")}</Text>
                   <Text style={styles.metricValue}>
                     {fmtMs(s.avgExecutionTimeMs)}
                   </Text>
@@ -328,27 +330,27 @@ function AIJobsHealthScreenInner() {
         )}
 
         {/* Model performance */}
-        <Text style={styles.sectionTitle}>Default probability model</Text>
+        <Text style={styles.sectionTitle}>{t("ai_health.section_model")}</Text>
         <View style={styles.modelCard}>
           {perf.latestAccuracy === null ? (
-            <Text style={styles.muted}>No evaluations recorded yet.</Text>
+            <Text style={styles.muted}>{t("ai_health.empty_eval")}</Text>
           ) : (
             <>
               <View style={styles.modelGrid}>
                 <View style={styles.modelCell}>
-                  <Text style={styles.metricLabel}>Accuracy</Text>
+                  <Text style={styles.metricLabel}>{t("ai_health.metric_accuracy")}</Text>
                   <Text style={styles.modelBig}>
                     {fmtPct(perf.latestAccuracy)}
                   </Text>
                 </View>
                 <View style={styles.modelCell}>
-                  <Text style={styles.metricLabel}>Precision</Text>
+                  <Text style={styles.metricLabel}>{t("ai_health.metric_precision")}</Text>
                   <Text style={styles.modelBig}>
                     {fmtPct(perf.latestPrecision)}
                   </Text>
                 </View>
                 <View style={styles.modelCell}>
-                  <Text style={styles.metricLabel}>Recall</Text>
+                  <Text style={styles.metricLabel}>{t("ai_health.metric_recall")}</Text>
                   <Text style={styles.modelBig}>
                     {fmtPct(perf.latestRecall)}
                   </Text>
@@ -361,7 +363,7 @@ function AIJobsHealthScreenInner() {
                 </View>
               </View>
               <View style={styles.modelTrend}>
-                <Text style={styles.metricLabel}>Trend</Text>
+                <Text style={styles.metricLabel}>{t("ai_health.metric_trend")}</Text>
                 <Text
                   style={[
                     styles.trendValue,
@@ -420,28 +422,28 @@ function AIJobsHealthScreenInner() {
         </View>
 
         {/* Cohort analytics */}
-        <Text style={styles.sectionTitle}>Cohort analytics</Text>
+        <Text style={styles.sectionTitle}>{t("ai_health.section_cohort")}</Text>
         {cohorts.cohorts.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>No cohort metrics yet.</Text>
+            <Text style={styles.emptyText}>{t("ai_health.empty_cohort")}</Text>
           </View>
         ) : (
           <>
             <View style={styles.cohortSummary}>
               <View style={styles.cohortStat}>
-                <Text style={styles.metricLabel}>Avg retention</Text>
+                <Text style={styles.metricLabel}>{t("ai_health.metric_retention")}</Text>
                 <Text style={styles.cohortBig}>
                   {cohorts.avgRetentionRate}%
                 </Text>
               </View>
               <View style={styles.cohortStat}>
-                <Text style={styles.metricLabel}>Avg XnScore</Text>
+                <Text style={styles.metricLabel}>{t("ai_health.metric_avg_xnscore")}</Text>
                 <Text style={styles.cohortBig}>
                   {cohorts.avgXnScore.toFixed(1)}
                 </Text>
               </View>
               <View style={styles.cohortStat}>
-                <Text style={styles.metricLabel}>Members</Text>
+                <Text style={styles.metricLabel}>{t("ai_health.metric_members")}</Text>
                 <Text style={styles.cohortBig}>{cohorts.totalMembers}</Text>
               </View>
             </View>
@@ -464,10 +466,10 @@ function AIJobsHealthScreenInner() {
         )}
 
         {/* Recent logs (last 20 across all jobs) */}
-        <Text style={styles.sectionTitle}>Recent runs</Text>
+        <Text style={styles.sectionTitle}>{t("ai_health.section_runs")}</Text>
         {logs.logs.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Text style={styles.emptyText}>No runs logged yet.</Text>
+            <Text style={styles.emptyText}>{t("ai_health.empty_runs")}</Text>
           </View>
         ) : (
           logs.logs.map((l: CronJobLog) => (
