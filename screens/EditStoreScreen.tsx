@@ -165,11 +165,11 @@ export default function EditStoreScreen() {
 
   const handleSave = async () => {
     if (!businessName.trim()) {
-      Alert.alert("Business name required", "Please enter a name for your store.");
+      Alert.alert(t("edit_store_v2.alert_business_required_title"), t("edit_store_v2.alert_business_required_body"));
       return;
     }
     if (!storeId) {
-      Alert.alert("Error", "Missing store ID. Please go back and try again.");
+      Alert.alert(t("edit_store_v2.alert_error_title"), t("edit_store_v2.alert_missing_store"));
       return;
     }
 
@@ -184,12 +184,12 @@ export default function EditStoreScreen() {
       // Cancel intentionally does NOT clear — the user may want to
       // resume editing later from the same partial state.
       clearDraft();
-      Alert.alert("Store updated", "Your changes are live.", [
+      Alert.alert(t("edit_store_v2.alert_updated_title"), t("edit_store_v2.alert_updated_body"), [
         { text: "OK", onPress: () => navigation.goBack() },
       ]);
     } catch (err: any) {
       console.error("[EditStore] updateStore failed:", err);
-      Alert.alert("Could not save", err?.message ?? "Please try again.");
+      Alert.alert(t("edit_store_v2.alert_failed_save"), err?.message ?? t("edit_store_v2.alert_please_try_again"));
     } finally {
       setSaving(false);
     }

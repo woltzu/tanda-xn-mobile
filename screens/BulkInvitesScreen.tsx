@@ -57,7 +57,7 @@ export default function BulkInvitesScreen() {
 
   const handleParseCsv = useCallback(async () => {
     if (!csvText.trim()) {
-      Alert.alert("Required", "Please paste CSV data");
+      Alert.alert(t("bulk_invites_v2.alert_required_title"), t("bulk_invites_v2.alert_paste_csv"));
       return;
     }
 
@@ -65,7 +65,7 @@ export default function BulkInvitesScreen() {
     try {
       const lines = csvText.trim().split("\n");
       if (lines.length < 2) {
-        Alert.alert("Error", "CSV must have a header row and at least one data row");
+        Alert.alert(t("bulk_invites_v2.alert_error_title"), t("bulk_invites_v2.alert_csv_header_body"));
         return;
       }
 
@@ -76,7 +76,7 @@ export default function BulkInvitesScreen() {
       const cnIdx = headers.indexOf("circle_name");
 
       if (fnIdx === -1 || phIdx === -1) {
-        Alert.alert("Error", "CSV must have 'first_name' and 'phone' columns");
+        Alert.alert(t("bulk_invites_v2.alert_error_title"), t("bulk_invites_v2.alert_csv_cols_body"));
         return;
       }
 
@@ -101,7 +101,7 @@ export default function BulkInvitesScreen() {
       setCsvText("");
       setTab("members");
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "Failed to process CSV");
+      Alert.alert(t("bulk_invites_v2.alert_error_title"), err?.message ?? t("bulk_invites_v2.alert_failed_csv"));
     } finally {
       setCsvParsing(false);
     }
@@ -110,7 +110,7 @@ export default function BulkInvitesScreen() {
   const handleSendSms = async () => {
     const targets = sendTarget === "all" ? invites : pendingInvites;
     if (targets.length === 0) {
-      Alert.alert("No recipients", "No invites to send");
+      Alert.alert(t("bulk_invites_v2.alert_no_recipients_title"), t("bulk_invites_v2.alert_no_recipients_body"));
       return;
     }
 
@@ -127,9 +127,9 @@ export default function BulkInvitesScreen() {
               // Generate SMS texts and mark as sent (Twilio integration point)
               const ids = targets.map(i => i.id);
               await markSent(ids);
-              Alert.alert("Done!", `${targets.length} SMS invites queued for delivery.`);
+              Alert.alert(t("bulk_invites_v2.alert_done_title"), t("bulk_invites.alert_done_body", { count: targets.length }));
             } catch (err: any) {
-              Alert.alert("Error", err?.message ?? "Failed to send");
+              Alert.alert(t("bulk_invites_v2.alert_error_title"), err?.message ?? t("bulk_invites_v2.alert_failed_send"));
             } finally {
               setSending(false);
             }

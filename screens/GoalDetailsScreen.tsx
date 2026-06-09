@@ -302,11 +302,11 @@ export default function GoalDetailsScreen() {
         { text: "Cancel", style: "cancel" },
         {
           text: "CSV",
-          onPress: () => Alert.alert("Success", "CSV statement will be sent to your email."),
+          onPress: () => Alert.alert(t("goal_details_v2.alert_success"), t("goal_details_v2.alert_csv_body")),
         },
         {
           text: "PDF",
-          onPress: () => Alert.alert("Success", "PDF statement will be sent to your email."),
+          onPress: () => Alert.alert(t("goal_details_v2.alert_success"), t("goal_details_v2.alert_pdf_body")),
         },
       ]
     );
@@ -584,7 +584,7 @@ export default function GoalDetailsScreen() {
             </View>
             {daysUntilMaturity && daysUntilMaturity <= 0 && (
               <View style={styles.maturedBadge}>
-                <Text style={styles.maturedText}>Matured!</Text>
+                <Text style={styles.maturedText}>{t("goal_details_v2.tag_matured")}</Text>
               </View>
             )}
           </View>
@@ -695,7 +695,7 @@ export default function GoalDetailsScreen() {
 
         {/* Auto-Save Settings */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Auto-Save</Text>
+          <Text style={styles.sectionTitle}>{t("goal_details_v2.section_auto_save")}</Text>
           <TouchableOpacity
             style={styles.autoSaveCard}
             onPress={() => navigation.navigate("EditGoal", { goalId })}
@@ -716,7 +716,7 @@ export default function GoalDetailsScreen() {
                 </>
               ) : (
                 <>
-                  <Text style={styles.autoSaveTitle}>Auto-Save is off</Text>
+                  <Text style={styles.autoSaveTitle}>{t("goal_details_v2.label_auto_save_off")}</Text>
                   <Text style={styles.autoSaveSubtitle}>
                     Tap to enable automatic saving from payouts
                   </Text>
@@ -1019,7 +1019,7 @@ export default function GoalDetailsScreen() {
                   value={calcMonthlyDeposit}
                   onChangeText={setCalcMonthlyDeposit}
                   keyboardType="numeric"
-                  placeholder="100"
+                  placeholder={t("goal_details_v2.placeholder_100")}
                 />
               </View>
 
@@ -1030,7 +1030,7 @@ export default function GoalDetailsScreen() {
                   value={calcMonths}
                   onChangeText={setCalcMonths}
                   keyboardType="numeric"
-                  placeholder="12"
+                  placeholder={t("goal_details_v2.placeholder_12")}
                 />
               </View>
 
@@ -1142,7 +1142,7 @@ export default function GoalDetailsScreen() {
               style={styles.modalButton}
               onPress={() => {
                 setShowMilestoneModal(false);
-                Alert.alert("Saved", "Your milestone alerts have been updated.");
+                Alert.alert(t("goal_details_v2.alert_saved_title"), t("goal_details_v2.alert_alerts_updated"));
               }}
             >
               <Text style={styles.modalButtonText}>{t("goal_detail.save_settings")}</Text>
@@ -1310,17 +1310,17 @@ export default function GoalDetailsScreen() {
 
             <ScrollView style={styles.modalContent}>
               <View style={styles.termsSection}>
-                <Text style={styles.termsSectionTitle}>Goal Information</Text>
+                <Text style={styles.termsSectionTitle}>{t("goal_details_v2.terms_goal_info")}</Text>
                 <View style={styles.termsRow}>
-                  <Text style={styles.termsLabel}>Goal Name</Text>
+                  <Text style={styles.termsLabel}>{t("goal_details_v2.label_goal_name")}</Text>
                   <Text style={styles.termsValue}>{goal?.name}</Text>
                 </View>
                 <View style={styles.termsRow}>
-                  <Text style={styles.termsLabel}>Goal Type</Text>
+                  <Text style={styles.termsLabel}>{t("goal_details_v2.label_goal_type")}</Text>
                   <Text style={styles.termsValue}>{typeConfig.name}</Text>
                 </View>
                 <View style={styles.termsRow}>
-                  <Text style={styles.termsLabel}>Created</Text>
+                  <Text style={styles.termsLabel}>{t("goal_details_v2.label_created")}</Text>
                   <Text style={styles.termsValue}>
                     {goal?.createdAt ? formatDate(goal.createdAt) : "N/A"}
                   </Text>
@@ -1328,7 +1328,7 @@ export default function GoalDetailsScreen() {
               </View>
 
               <View style={styles.termsSection}>
-                <Text style={styles.termsSectionTitle}>Interest Terms</Text>
+                <Text style={styles.termsSectionTitle}>{t("goal_details_v2.terms_interest")}</Text>
                 <View style={styles.termsRow}>
                   <Text style={styles.termsLabel}>Annual Rate (APY)</Text>
                   <Text style={styles.termsValue}>
@@ -1336,11 +1336,11 @@ export default function GoalDetailsScreen() {
                   </Text>
                 </View>
                 <View style={styles.termsRow}>
-                  <Text style={styles.termsLabel}>Interest Compounding</Text>
-                  <Text style={styles.termsValue}>Monthly</Text>
+                  <Text style={styles.termsLabel}>{t("goal_details_v2.label_compounding")}</Text>
+                  <Text style={styles.termsValue}>{t("goal_details_v2.value_monthly")}</Text>
                 </View>
                 <View style={styles.termsRow}>
-                  <Text style={styles.termsLabel}>Interest Earned</Text>
+                  <Text style={styles.termsLabel}>{t("goal_details_v2.label_interest_earned")}</Text>
                   <Text style={[styles.termsValue, { color: "#10B981" }]}>
                     {formatCurrency(goal?.interestEarned || 0)}
                   </Text>
@@ -1349,26 +1349,26 @@ export default function GoalDetailsScreen() {
 
               {goal?.type === "locked" && (
                 <View style={styles.termsSection}>
-                  <Text style={styles.termsSectionTitle}>Lock Terms</Text>
+                  <Text style={styles.termsSectionTitle}>{t("goal_details_v2.terms_lock")}</Text>
                   <View style={styles.termsRow}>
-                    <Text style={styles.termsLabel}>Lock Period</Text>
+                    <Text style={styles.termsLabel}>{t("goal_details_v2.label_lock_period")}</Text>
                     <Text style={styles.termsValue}>
                       {goal.maturityDate ? `Until ${formatDate(goal.maturityDate)}` : "None"}
                     </Text>
                   </View>
                   <View style={styles.termsRow}>
-                    <Text style={styles.termsLabel}>Early Withdrawal Penalty</Text>
+                    <Text style={styles.termsLabel}>{t("goal_details_v2.label_early_penalty")}</Text>
                     <Text style={[styles.termsValue, { color: "#EF4444" }]}>10%</Text>
                   </View>
                   <View style={styles.termsRow}>
-                    <Text style={styles.termsLabel}>Cooling Off Period</Text>
+                    <Text style={styles.termsLabel}>{t("goal_details_v2.label_cooling_off")}</Text>
                     <Text style={styles.termsValue}>48 hours</Text>
                   </View>
                 </View>
               )}
 
               <View style={styles.termsSection}>
-                <Text style={styles.termsSectionTitle}>Withdrawal Rules</Text>
+                <Text style={styles.termsSectionTitle}>{t("goal_details_v2.terms_withdrawal")}</Text>
                 <Text style={styles.termsText}>
                   • Minimum withdrawal: $10.00{"\n"}
                   • Processing time: 1-3 business days{"\n"}
@@ -1400,7 +1400,7 @@ export default function GoalDetailsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Set Up Auto-Deposit</Text>
+              <Text style={styles.modalTitle}>{t("goal_details_v2.modal_set_auto")}</Text>
               <TouchableOpacity onPress={() => setShowAutoDepositModal(false)}>
                 <Ionicons name="close" size={24} color="#6B7280" />
               </TouchableOpacity>
@@ -1412,7 +1412,7 @@ export default function GoalDetailsScreen() {
                   <Ionicons name="repeat" size={24} color="#00C6AE" />
                 </View>
                 <View style={styles.autoDepositInfo}>
-                  <Text style={styles.autoDepositTitle}>Weekly Deposit</Text>
+                  <Text style={styles.autoDepositTitle}>{t("goal_details_v2.auto_weekly")}</Text>
                   <Text style={styles.autoDepositDesc}>
                     Automatically deposit a fixed amount every week
                   </Text>
@@ -1425,7 +1425,7 @@ export default function GoalDetailsScreen() {
                   <Ionicons name="calendar" size={24} color="#F59E0B" />
                 </View>
                 <View style={styles.autoDepositInfo}>
-                  <Text style={styles.autoDepositTitle}>Monthly Deposit</Text>
+                  <Text style={styles.autoDepositTitle}>{t("goal_details_v2.auto_monthly")}</Text>
                   <Text style={styles.autoDepositDesc}>
                     Deposit on a specific day each month
                   </Text>
@@ -1438,7 +1438,7 @@ export default function GoalDetailsScreen() {
                   <Ionicons name="cash" size={24} color="#6366F1" />
                 </View>
                 <View style={styles.autoDepositInfo}>
-                  <Text style={styles.autoDepositTitle}>From Circle Payouts</Text>
+                  <Text style={styles.autoDepositTitle}>{t("goal_details_v2.auto_circle")}</Text>
                   <Text style={styles.autoDepositDesc}>
                     Auto-save a percentage of your circle payouts
                   </Text>
@@ -1451,13 +1451,13 @@ export default function GoalDetailsScreen() {
                   <Ionicons name="trending-up" size={24} color="#EF4444" />
                 </View>
                 <View style={styles.autoDepositInfo}>
-                  <Text style={styles.autoDepositTitle}>Round-Up Savings</Text>
+                  <Text style={styles.autoDepositTitle}>{t("goal_details_v2.auto_roundup")}</Text>
                   <Text style={styles.autoDepositDesc}>
                     Round up transactions and save the difference
                   </Text>
                 </View>
                 <View style={styles.comingSoonBadge}>
-                  <Text style={styles.comingSoonText}>Coming Soon</Text>
+                  <Text style={styles.comingSoonText}>{t("goal_details_v2.tag_coming_soon")}</Text>
                 </View>
               </View>
             </View>
@@ -1488,7 +1488,7 @@ export default function GoalDetailsScreen() {
               }}>
                 <Ionicons name="warning" size={28} color="#DC2626" />
               </View>
-              <Text style={[styles.modalTitle, { textAlign: "center" }]}>Close Goal</Text>
+              <Text style={[styles.modalTitle, { textAlign: "center" }]}>{t("goal_details_v2.modal_close_goal")}</Text>
               <Text style={{
                 fontSize: 14, color: "#6B7280", textAlign: "center",
                 marginTop: 8, lineHeight: 20,
