@@ -27,6 +27,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 import AudienceMoodCard from "../components/AudienceMoodCard";
 import ActiveViewersList from "../components/ActiveViewersList";
@@ -68,6 +69,7 @@ type RouteParams = { roomId: string };
 export default function HostDashboardScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<{ HostDashboard: RouteParams }, "HostDashboard">>();
+  const { t } = useTranslation();
   const roomId = route.params.roomId;
 
   const [tab, setTab] = useState<"candles" | "mass">("candles");
@@ -374,7 +376,7 @@ export default function HostDashboardScreen() {
         >
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Host Dashboard</Text>
+        <Text style={styles.headerTitle}>{t("host_dashboard.header")}</Text>
         <TouchableOpacity
           style={styles.headerBtn}
           onPress={refresh}
@@ -392,7 +394,7 @@ export default function HostDashboardScreen() {
           onPress={() => setTab("candles")}
         >
           <Text style={[styles.tabText, tab === "candles" && styles.tabTextActive]}>
-            Candles · {candles.length}
+            {t("host_dashboard.tab_candles", { count: candles.length })}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -400,7 +402,7 @@ export default function HostDashboardScreen() {
           onPress={() => setTab("mass")}
         >
           <Text style={[styles.tabText, tab === "mass" && styles.tabTextActive]}>
-            Mass · {intentions.length}
+            {t("host_dashboard.tab_mass", { count: intentions.length })}
           </Text>
         </TouchableOpacity>
       </View>
@@ -420,12 +422,12 @@ export default function HostDashboardScreen() {
             per-room; the button below manually triggers it on-demand
             (e.g. to pre-queue a video while one's still playing). */}
         <View style={styles.scriptureCard}>
-          <Text style={styles.scriptureCardTitle}>Adaptive Queue</Text>
+          <Text style={styles.scriptureCardTitle}>{t("host_dashboard.card_adaptive_queue_title")}</Text>
           <Text style={styles.scriptureCardHint}>
-            When the queue empties, fetch a vibe-matched video automatically.
+            {t("host_dashboard.card_adaptive_queue_hint")}
           </Text>
           <View style={styles.r6ToggleRow}>
-            <Text style={styles.r6ToggleLabel}>Auto-suggest videos</Text>
+            <Text style={styles.r6ToggleLabel}>{t("host_dashboard.auto_suggest_toggle")}</Text>
             <Switch
               value={autoSuggestEnabled}
               onValueChange={handleToggleAutoSuggest}
@@ -449,7 +451,7 @@ export default function HostDashboardScreen() {
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
               <Text style={styles.scriptureSaveBtnText}>
-                Refresh suggestion
+                {t("host_dashboard.refresh_suggestion_btn")}
               </Text>
             )}
           </TouchableOpacity>
@@ -458,15 +460,15 @@ export default function HostDashboardScreen() {
         {/* Phase 6b — scripture overlay editor. Host-only via
             set_scripture_overlay RPC. Empty value clears the overlay. */}
         <View style={styles.scriptureCard}>
-          <Text style={styles.scriptureCardTitle}>Scripture Overlay</Text>
+          <Text style={styles.scriptureCardTitle}>{t("host_dashboard.card_scripture_title")}</Text>
           <Text style={styles.scriptureCardHint}>
-            Shown to viewers at the bottom of the player. Leave blank to clear.
+            {t("host_dashboard.card_scripture_hint")}
           </Text>
           <TextInput
             style={styles.scriptureInput}
             value={scriptureText}
-            onChangeText={(t) => setScriptureText(t.slice(0, 280))}
-            placeholder="e.g. Psalm 23 — The Lord is my shepherd…"
+            onChangeText={(s) => setScriptureText(s.slice(0, 280))}
+            placeholder={t("host_dashboard.scripture_placeholder")}
             placeholderTextColor={MUTED}
             multiline
             maxLength={280}
@@ -480,7 +482,7 @@ export default function HostDashboardScreen() {
               disabled={scriptureSaving}
               accessibilityRole="button"
             >
-              <Text style={styles.scriptureSecondaryBtnText}>Clear</Text>
+              <Text style={styles.scriptureSecondaryBtnText}>{t("host_dashboard.scripture_clear")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.scriptureBtn, styles.scriptureSaveBtn]}
@@ -491,7 +493,7 @@ export default function HostDashboardScreen() {
               {scriptureSaving ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.scriptureSaveBtnText}>Save</Text>
+                <Text style={styles.scriptureSaveBtnText}>{t("host_dashboard.scripture_save")}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -503,11 +505,11 @@ export default function HostDashboardScreen() {
             value is set. */}
         {isWorshipRoom && (
           <View style={styles.scriptureCard}>
-            <Text style={styles.scriptureCardTitle}>Worship Religion</Text>
+            <Text style={styles.scriptureCardTitle}>{t("host_dashboard.card_religion_title")}</Text>
             <Text style={styles.scriptureCardHint}>
-              Categorises this room. When set, joining viewers may receive a
-              suggestion to join a "{religion === "other" ? "—" : religion}"
-              community group. Leave as Other to skip the suggestion engine.
+              {t("host_dashboard.card_religion_hint", {
+                value: religion === "other" ? t("host_dashboard.religion_dash") : t(`host_dashboard.religion_${religion}`),
+              })}
             </Text>
             <View style={styles.religionChipsRow}>
               {([
@@ -539,7 +541,7 @@ export default function HostDashboardScreen() {
                         isActive && styles.religionChipTextActive,
                       ]}
                     >
-                      {value.charAt(0).toUpperCase() + value.slice(1)}
+                      {t(`host_dashboard.religion_${value}`)}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -562,13 +564,13 @@ export default function HostDashboardScreen() {
           </View>
         ) : tab === "candles" ? (
           candles.length === 0 ? (
-            <Text style={styles.empty}>No pending candle requests.</Text>
+            <Text style={styles.empty}>{t("host_dashboard.empty_candles")}</Text>
           ) : (
             candles.map((c) => (
               <View key={c.id} style={styles.card}>
                 <View style={styles.cardHead}>
                   <Text style={styles.cardName}>
-                    {c.full_name ?? "Someone"}
+                    {c.full_name ?? t("host_dashboard.card_default_name")}
                   </Text>
                   <Text style={styles.cardAmount}>{fmtDollars(c.donation_cents)}</Text>
                 </View>
@@ -579,24 +581,24 @@ export default function HostDashboardScreen() {
                   accessibilityRole="button"
                 >
                   <Ionicons name="flame" size={14} color="#FFFFFF" />
-                  <Text style={styles.resolveBtnText}>Mark as lit</Text>
+                  <Text style={styles.resolveBtnText}>{t("host_dashboard.mark_as_lit")}</Text>
                 </TouchableOpacity>
               </View>
             ))
           )
         ) : intentions.length === 0 ? (
-          <Text style={styles.empty}>No pending mass intentions.</Text>
+          <Text style={styles.empty}>{t("host_dashboard.empty_mass")}</Text>
         ) : (
           intentions.map((m) => (
             <View key={m.id} style={styles.card}>
               <View style={styles.cardHead}>
                 <Text style={styles.cardName}>
-                  {m.full_name ?? "Someone"}
+                  {m.full_name ?? t("host_dashboard.card_default_name")}
                 </Text>
                 <Text style={styles.cardAmount}>{fmtDollars(m.donation_cents)}</Text>
               </View>
               <Text style={styles.cardBody}>
-                For {m.name} ({m.is_deceased ? "+" : "living"}) · {m.preferred_date}
+                For {m.name} ({m.is_deceased ? "+" : t("host_dashboard.card_mass_living")}) · {m.preferred_date}
               </Text>
               <TouchableOpacity
                 style={styles.resolveBtn}
@@ -604,7 +606,7 @@ export default function HostDashboardScreen() {
                 accessibilityRole="button"
               >
                 <Ionicons name="checkmark-done" size={14} color="#FFFFFF" />
-                <Text style={styles.resolveBtnText}>Mark as celebrated</Text>
+                <Text style={styles.resolveBtnText}>{t("host_dashboard.mark_as_celebrated")}</Text>
               </TouchableOpacity>
             </View>
           ))
@@ -630,16 +632,16 @@ export default function HostDashboardScreen() {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>
-              {resolveKind === "candle" ? "Mark candle as lit" : "Mark mass as celebrated"}
+              {resolveKind === "candle" ? t("host_dashboard.modal_candle_title") : t("host_dashboard.modal_mass_title")}
             </Text>
-            <Text style={styles.modalLabel}>Message to the requester</Text>
+            <Text style={styles.modalLabel}>{t("host_dashboard.modal_label")}</Text>
             <TextInput
               style={styles.modalInput}
               value={resolveMsg}
               onChangeText={setResolveMsg}
               multiline
               maxLength={300}
-              placeholder="Type your response..."
+              placeholder={t("host_dashboard.modal_placeholder")}
               placeholderTextColor={MUTED}
               accessibilityLabel="Templated response"
             />
@@ -648,7 +650,7 @@ export default function HostDashboardScreen() {
                 style={styles.cancelBtn}
                 onPress={() => !resolving && setResolveOpen(false)}
               >
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{t("host_dashboard.modal_cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.sendBtn, resolving && { opacity: 0.6 }]}
@@ -656,7 +658,7 @@ export default function HostDashboardScreen() {
                 disabled={resolving}
               >
                 <Text style={styles.sendText}>
-                  {resolving ? "Sending..." : "Send & Mark"}
+                  {resolving ? t("host_dashboard.modal_sending") : t("host_dashboard.modal_send")}
                 </Text>
               </TouchableOpacity>
             </View>

@@ -37,6 +37,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -55,13 +56,15 @@ const MUTED = "#6B7280";
 // fallback in resolveVibe() below.
 type Vibe = "chill" | "chaos" | "learning" | "party" | "custom" | "reverent";
 
-const VIBES: { id: Vibe; label: string; emoji: string; color: string }[] = [
-  { id: "chill",    label: "Chill",    emoji: "🌊", color: "#3B82F6" },
-  { id: "chaos",    label: "Chaos",    emoji: "🎲", color: "#EF4444" },
-  { id: "learning", label: "Learning", emoji: "📚", color: "#8B5CF6" },
-  { id: "party",    label: "Party",    emoji: "🎉", color: "#F59E0B" },
-  { id: "reverent", label: "Reverent", emoji: "🕊️", color: "#D97706" },
-  { id: "custom",   label: "Custom",   emoji: "✨", color: "#10B981" },
+// i18n: labelKey resolved per-render via t() so language flips re-paint
+// without re-instantiating. Same pattern as DELIVERY_OPTIONS in B3a.
+const VIBES: { id: Vibe; labelKey: string; emoji: string; color: string }[] = [
+  { id: "chill",    labelKey: "sync_lobby.vibe_chill",    emoji: "🌊", color: "#3B82F6" },
+  { id: "chaos",    labelKey: "sync_lobby.vibe_chaos",    emoji: "🎲", color: "#EF4444" },
+  { id: "learning", labelKey: "sync_lobby.vibe_learning", emoji: "📚", color: "#8B5CF6" },
+  { id: "party",    labelKey: "sync_lobby.vibe_party",    emoji: "🎉", color: "#F59E0B" },
+  { id: "reverent", labelKey: "sync_lobby.vibe_reverent", emoji: "🕊️", color: "#D97706" },
+  { id: "custom",   labelKey: "sync_lobby.vibe_custom",   emoji: "✨", color: "#10B981" },
 ];
 
 // Phase R5 — Resolve the displayed vibe for a room. Order:
@@ -134,6 +137,7 @@ type MemberMini = { room_id: string; user_id: string; avatar_url: string | null;
 
 export default function SyncLobbyScreen() {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const { user } = useAuth();
 
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -259,11 +263,11 @@ export default function SyncLobbyScreen() {
 
   const handleCreate = async () => {
     if (!user?.id) {
-      Alert.alert("Sign in required", "We need a signed-in session to create a room.");
+      Alert.alert(t("sync_lobby.alert_signin_title"), t("sync_lobby.alert_signin_body"));
       return;
     }
     if (!newName.trim()) {
-      Alert.alert("Pick a name", "Give your room a short name first.");
+      Alert.alert(t("sync_lobby.alert_name_title"), t("sync_lobby.alert_name_body"));
       return;
     }
     setCreating(true);
@@ -288,7 +292,7 @@ export default function SyncLobbyScreen() {
         error?: string;
       };
       if (!result.success || !result.room_id) {
-        throw new Error(result.error || "Couldn't create the room");
+        throw new Error(result.error || t("sync_lobby.alert_create_failed_default"));
       }
       setCreateOpen(false);
       setNewName("");
@@ -303,7 +307,7 @@ export default function SyncLobbyScreen() {
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert("Couldn't create room", msg);
+      Alert.alert(t("sync_lobby.alert_create_failed_title"), msg);
     } finally {
       setCreating(false);
     }
@@ -350,7 +354,7 @@ export default function SyncLobbyScreen() {
           {isLive ? (
             <View style={styles.liveBadge}>
               <View style={styles.liveBadgeDot} />
-              <Text style={styles.liveBadgeText}>LIVE</Text>
+              <Text style={styles.liveBadgeText}>{t("sync_lobby.live_badge")}</Text>
             </View>
           ) : null}
           <View
@@ -360,7 +364,7 @@ export default function SyncLobbyScreen() {
             ]}
           >
             <Text style={styles.vibePillText}>
-              {vibe.emoji} {vibe.label}
+              {vibe.emoji} {t(vibe.labelKey)}
             </Text>
           </View>
         </View>
@@ -395,8 +399,8 @@ export default function SyncLobbyScreen() {
               ))}
               <Text style={styles.metaTextInline}>
                 {count > 0
-                  ? `${count} watching`
-                  : "be the first in"}
+                  ? t("sync_lobby.watching_count", { count })
+                  : t("sync_lobby.empty_seat")}
               </Text>
             </View>
 
@@ -406,7 +410,7 @@ export default function SyncLobbyScreen() {
               accessibilityRole="button"
               accessibilityLabel={`Join ${item.name}`}
             >
-              <Text style={styles.joinBtnText}>Join</Text>
+              <Text style={styles.joinBtnText}>{t("sync_lobby.join")}</Text>
               <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
@@ -419,7 +423,7 @@ export default function SyncLobbyScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={{ width: 40 }} />
-        <Text style={styles.headerTitle}>Sync</Text>
+        <Text style={styles.headerTitle}>{t("sync_lobby.header")}</Text>
         <TouchableOpacity
           style={styles.headerCta}
           onPress={() => setCreateOpen(true)}
@@ -442,16 +446,14 @@ export default function SyncLobbyScreen() {
           loading ? null : (
             <View style={styles.emptyBox}>
               <Ionicons name="play-circle-outline" size={42} color={MUTED} />
-              <Text style={styles.emptyTitle}>No active rooms</Text>
-              <Text style={styles.emptyBody}>
-                Be the first to create one and invite friends.
-              </Text>
+              <Text style={styles.emptyTitle}>{t("sync_lobby.empty_title")}</Text>
+              <Text style={styles.emptyBody}>{t("sync_lobby.empty_body")}</Text>
               <TouchableOpacity
                 style={styles.emptyCta}
                 onPress={() => setCreateOpen(true)}
                 accessibilityRole="button"
               >
-                <Text style={styles.emptyCtaText}>Create a room</Text>
+                <Text style={styles.emptyCtaText}>{t("sync_lobby.empty_cta")}</Text>
               </TouchableOpacity>
             </View>
           )
@@ -467,20 +469,20 @@ export default function SyncLobbyScreen() {
       >
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Create a Sync Room</Text>
+            <Text style={styles.modalTitle}>{t("sync_lobby.modal_title")}</Text>
 
-            <Text style={styles.modalLabel}>Room name</Text>
+            <Text style={styles.modalLabel}>{t("sync_lobby.label_room_name")}</Text>
             <TextInput
               style={styles.modalInput}
               value={newName}
               onChangeText={setNewName}
-              placeholder="e.g. Sunday Lo-Fi"
+              placeholder={t("sync_lobby.placeholder_room_name")}
               placeholderTextColor={MUTED}
               maxLength={40}
               accessibilityLabel="Room name"
             />
 
-            <Text style={styles.modalLabel}>Pick a vibe</Text>
+            <Text style={styles.modalLabel}>{t("sync_lobby.label_pick_vibe")}</Text>
             <View style={styles.vibeRow}>
               {VIBES.map((v) => (
                 <TouchableOpacity
@@ -499,13 +501,13 @@ export default function SyncLobbyScreen() {
                       newVibe === v.id && { color: "#FFFFFF" },
                     ]}
                   >
-                    {v.emoji} {v.label}
+                    {v.emoji} {t(v.labelKey)}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            <Text style={styles.modalLabel}>Room type</Text>
+            <Text style={styles.modalLabel}>{t("sync_lobby.label_room_type")}</Text>
             <View style={styles.roomTypeRow}>
               {(Object.entries(ROOM_TYPE_PRESETS) as Array<[RoomType, typeof ROOM_TYPE_PRESETS[RoomType]]>).map(
                 ([id, cfg]) => {
@@ -533,7 +535,7 @@ export default function SyncLobbyScreen() {
               {ROOM_TYPE_PRESETS[newRoomType].description}
             </Text>
 
-            <Text style={styles.modalLabel}>Visibility</Text>
+            <Text style={styles.modalLabel}>{t("sync_lobby.label_visibility")}</Text>
             <View style={styles.visibilityRow}>
               <TouchableOpacity
                 style={[styles.visBtn, newIsPublic && styles.visBtnActive]}
@@ -548,10 +550,10 @@ export default function SyncLobbyScreen() {
                 />
                 <View style={{ flex: 1, marginLeft: 8 }}>
                   <Text style={[styles.visBtnTitle, newIsPublic && { color: "#FFFFFF" }]}>
-                    Public
+                    {t("sync_lobby.visibility_public")}
                   </Text>
                   <Text style={[styles.visBtnHint, newIsPublic && { color: "rgba(255,255,255,0.8)" }]}>
-                    Anyone signed in can find it.
+                    {t("sync_lobby.visibility_public_hint")}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -568,10 +570,10 @@ export default function SyncLobbyScreen() {
                 />
                 <View style={{ flex: 1, marginLeft: 8 }}>
                   <Text style={[styles.visBtnTitle, !newIsPublic && { color: "#FFFFFF" }]}>
-                    Private
+                    {t("sync_lobby.visibility_private")}
                   </Text>
                   <Text style={[styles.visBtnHint, !newIsPublic && { color: "rgba(255,255,255,0.8)" }]}>
-                    Invite-link only.
+                    {t("sync_lobby.visibility_private_hint")}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -582,7 +584,7 @@ export default function SyncLobbyScreen() {
                 style={styles.modalCancel}
                 onPress={() => setCreateOpen(false)}
               >
-                <Text style={styles.modalCancelText}>Cancel</Text>
+                <Text style={styles.modalCancelText}>{t("sync_lobby.btn_cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalCreate, creating && { opacity: 0.6 }]}
@@ -590,7 +592,7 @@ export default function SyncLobbyScreen() {
                 disabled={creating}
               >
                 <Text style={styles.modalCreateText}>
-                  {creating ? "Creating..." : "Create"}
+                  {creating ? t("sync_lobby.btn_creating") : t("sync_lobby.btn_create")}
                 </Text>
               </TouchableOpacity>
             </View>

@@ -49,6 +49,7 @@ import * as ImagePicker from "expo-image-picker";
 import { Audio, Video, ResizeMode } from "expo-av";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import AudienceMoodCard from "../components/AudienceMoodCard";
@@ -190,6 +191,7 @@ type SyncRoomRouteParams = {
 export default function SyncRoomScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ SyncRoom: SyncRoomRouteParams }, "SyncRoom">>();
+  const { t } = useTranslation();
   const roomId = route.params.roomId;
   const inviteCode = route.params.inviteCode ?? null;
   const { user } = useAuth();
@@ -620,7 +622,7 @@ export default function SyncRoomScreen() {
       // Don't fetchRoom() here -- the realtime subscription on
       // sync_rooms UPDATE will pull the new queue automatically.
     } catch (err) {
-      Alert.alert("Couldn't add", err instanceof Error ? err.message : String(err));
+      Alert.alert(t("sync_room.alert_add_failed_title"), err instanceof Error ? err.message : String(err));
     } finally {
       setAdding(false);
     }
@@ -723,7 +725,7 @@ export default function SyncRoomScreen() {
       showFloatingReaction(emoji);
 
       if (donationResult.error === "insufficient_balance") {
-        Alert.alert("Top up to give", "Your wallet doesn't cover this donation.");
+        Alert.alert(t("sync_room.alert_top_up_title"), t("sync_room.alert_top_up_body"));
       }
     } catch {
       // Soft fail -- reactions are decorative.
@@ -886,7 +888,7 @@ export default function SyncRoomScreen() {
       recordingRef.current = null;
       if (!uri) {
         await teardownRecordingFlow();
-        Alert.alert("Recording failed", "No file was captured.");
+        Alert.alert(t("sync_room.alert_recording_failed_title"), t("sync_room.alert_recording_failed_body"));
         return;
       }
       setRecordedUri(uri);
@@ -1229,7 +1231,7 @@ export default function SyncRoomScreen() {
     if (submittingCandle) return;
     const intention = candleIntention.trim();
     if (!intention) {
-      Alert.alert("Add your intention", "What would you like the candle lit for?");
+      Alert.alert(t("sync_room.alert_intention_title"), t("sync_room.alert_intention_body"));
       return;
     }
     const cents = Math.max(0, Math.round(parseFloat(candleDonation || "0") * 100));
@@ -1264,7 +1266,7 @@ export default function SyncRoomScreen() {
         }),
       ]).start(() => setCandleSuccess(false));
     } catch (err) {
-      Alert.alert("Couldn't request", err instanceof Error ? err.message : String(err));
+      Alert.alert(t("sync_room.alert_request_failed_title"), err instanceof Error ? err.message : String(err));
     } finally {
       setSubmittingCandle(false);
     }
@@ -1274,7 +1276,7 @@ export default function SyncRoomScreen() {
     if (submittingMass) return;
     const name = massName.trim();
     if (!name) {
-      Alert.alert("Who is the mass for?", "Add the name of the person.");
+      Alert.alert(t("sync_room.alert_mass_name_title"), t("sync_room.alert_mass_name_body"));
       return;
     }
     const cents = Math.max(0, Math.round(parseFloat(massDonation || "0") * 100));
@@ -1298,9 +1300,9 @@ export default function SyncRoomScreen() {
       setMassOpen(false);
       setMassName("");
       setMassIsDeceased(false);
-      Alert.alert("Submitted", "Your mass intention has been added.");
+      Alert.alert(t("sync_room.alert_submitted_title"), t("sync_room.alert_submitted_body"));
     } catch (err) {
-      Alert.alert("Couldn't request", err instanceof Error ? err.message : String(err));
+      Alert.alert(t("sync_room.alert_request_failed_title"), err instanceof Error ? err.message : String(err));
     } finally {
       setSubmittingMass(false);
     }
@@ -1308,7 +1310,7 @@ export default function SyncRoomScreen() {
 
   const handleShareInvite = async () => {
     if (!room?.invite_code) {
-      Alert.alert("Couldn't share", "Invite code is still loading.");
+      Alert.alert(t("sync_room.alert_share_failed_title"), t("sync_room.alert_share_failed_invite_loading"));
       return;
     }
     const url =
@@ -1321,7 +1323,7 @@ export default function SyncRoomScreen() {
           `Tap the link to drop in: ${url}`,
       });
     } catch (err) {
-      Alert.alert("Couldn't share", err instanceof Error ? err.message : String(err));
+      Alert.alert(t("sync_room.alert_share_failed_title"), err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -1394,9 +1396,9 @@ export default function SyncRoomScreen() {
       const r = (queueData ?? {}) as { success?: boolean; error?: string };
       if (!r.success) throw new Error(r.error || "Couldn't queue uploaded video");
 
-      Alert.alert("Uploaded", "Your video is in the queue.");
+      Alert.alert(t("sync_room.alert_uploaded_title"), t("sync_room.alert_uploaded_body"));
     } catch (err) {
-      Alert.alert("Upload failed", err instanceof Error ? err.message : String(err));
+      Alert.alert(t("sync_room.alert_upload_failed_title"), err instanceof Error ? err.message : String(err));
     } finally {
       setUploading(false);
     }
@@ -1418,7 +1420,7 @@ export default function SyncRoomScreen() {
       const { error } = await supabase.rpc("advance_content", { p_room_id: roomId });
       if (error) throw new Error(error.message);
     } catch (err) {
-      Alert.alert("Couldn't advance", err instanceof Error ? err.message : String(err));
+      Alert.alert(t("sync_room.alert_advance_failed_title"), err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -1458,7 +1460,7 @@ export default function SyncRoomScreen() {
         }
         // Brief in-room banner. Cleared after AUTO_SKIP_NOTICE_MS so it
         // doesn't pile up if multiple advances happen rapidly.
-        setAutoSkipNotice("Moving on — no reactions for a moment.");
+        setAutoSkipNotice(t("sync_room.banner_auto_skip"));
         if (autoSkipNoticeTimer.current) {
           clearTimeout(autoSkipNoticeTimer.current);
         }
@@ -1527,7 +1529,7 @@ export default function SyncRoomScreen() {
     if (currentContentId || queueLen > 0) return;
     // Both queue and current empty -- ask for a suggestion.
     setAutoSuggesting(true);
-    setAutoSuggestNotice("No more videos — fetching a suggestion…");
+    setAutoSuggestNotice(t("sync_room.banner_auto_suggest"));
     if (autoSuggestNoticeTimer.current) {
       clearTimeout(autoSuggestNoticeTimer.current);
     }
@@ -1578,7 +1580,7 @@ export default function SyncRoomScreen() {
           <TouchableOpacity style={styles.headerBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Loading...</Text>
+          <Text style={styles.headerTitle}>{t("sync_room.loading_header")}</Text>
           <View style={styles.headerBtn} />
         </View>
       </SafeAreaView>
@@ -1599,8 +1601,8 @@ export default function SyncRoomScreen() {
         <View style={{ flex: 1, alignItems: "center" }}>
           <Text style={styles.headerTitle} numberOfLines={1}>{room.name}</Text>
           <Text style={styles.headerSub}>
-            {room.vibe} · {memberCount} watching
-            {room.is_public === false ? " · private" : ""}
+            {room.vibe} · {memberCount}{t("sync_room.meta_watching_suffix")}
+            {room.is_public === false ? t("sync_room.meta_private_suffix") : ""}
           </Text>
         </View>
         {isCreator ? (
@@ -1664,19 +1666,19 @@ export default function SyncRoomScreen() {
           ) : room.current_content_id ? (
             <View style={styles.playerFallback}>
               <Ionicons name="link" size={28} color="#FFFFFF" />
-              <Text style={styles.playerFallbackTitle}>Content URL</Text>
+              <Text style={styles.playerFallbackTitle}>{t("sync_room.player_content_url")}</Text>
               <Text style={styles.playerFallbackUrl} numberOfLines={2}>
                 {room.current_content_id}
               </Text>
               <Text style={styles.playerFallbackHint}>
-                YouTube embeds play inline; other sources need a tap-out for now.
+                {t("sync_room.player_fallback_hint")}
               </Text>
             </View>
           ) : (
             <View style={styles.playerEmpty}>
               <Ionicons name="play-skip-forward-outline" size={28} color="#FFFFFF" />
               <Text style={styles.playerEmptyText}>
-                Queue is empty. Add something below.
+                {t("sync_room.player_empty")}
               </Text>
             </View>
           )}
@@ -1733,7 +1735,7 @@ export default function SyncRoomScreen() {
             kept in state so we can derive active off it without re-fetching
             on every clock tick. */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>In the room</Text>
+          <Text style={styles.sectionLabel}>{t("sync_room.section_in_the_room")}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
             {members
               .filter((m) => {
@@ -1822,7 +1824,7 @@ export default function SyncRoomScreen() {
             also shows the user's per-emoji donation amount underneath
             if they've configured one (Profile -> Donation Preferences). */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>React</Text>
+          <Text style={styles.sectionLabel}>{t("sync_room.section_react")}</Text>
           <View style={styles.reactionRow}>
             {reactions.map((e) => {
               const cents = reactionPrefs[e] ?? 0;
@@ -1857,14 +1859,14 @@ export default function SyncRoomScreen() {
             accessibilityLabel="Open remix sticker picker"
           >
             <Text style={styles.remixOpenBtnEmoji}>🎨</Text>
-            <Text style={styles.remixOpenBtnText}>Remix</Text>
+            <Text style={styles.remixOpenBtnText}>{t("sync_room.remix_open_btn")}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Worship actions (visible on worship rooms only). */}
         {room.room_type === "worship" ? (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Worship actions</Text>
+            <Text style={styles.sectionLabel}>{t("sync_room.section_worship_actions")}</Text>
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={styles.actionBtn}
@@ -1873,7 +1875,7 @@ export default function SyncRoomScreen() {
                 accessibilityLabel="Light a candle"
               >
                 <Text style={styles.actionEmoji}>🕯️</Text>
-                <Text style={styles.actionLabel}>Light a candle</Text>
+                <Text style={styles.actionLabel}>{t("sync_room.action_light_candle")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionBtn}
@@ -1882,7 +1884,7 @@ export default function SyncRoomScreen() {
                 accessibilityLabel="Request a mass"
               >
                 <Text style={styles.actionEmoji}>✝️</Text>
-                <Text style={styles.actionLabel}>Request mass</Text>
+                <Text style={styles.actionLabel}>{t("sync_room.action_request_mass")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1896,7 +1898,7 @@ export default function SyncRoomScreen() {
             UPDATE that follows resets the timer naturally. */}
         {isCreator ? (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Host controls</Text>
+            <Text style={styles.sectionLabel}>{t("sync_room.section_host_controls")}</Text>
             <View style={styles.voteCard}>
               <View style={styles.creatorActions}>
                 <TouchableOpacity
@@ -1904,7 +1906,7 @@ export default function SyncRoomScreen() {
                   onPress={handleAdvance}
                   accessibilityLabel="Advance content"
                 >
-                  <Text style={styles.adminAdvanceText}>Advance now</Text>
+                  <Text style={styles.adminAdvanceText}>{t("sync_room.host_advance_now")}</Text>
                 </TouchableOpacity>
                 {!isEnded ? (
                   <TouchableOpacity
@@ -1913,16 +1915,15 @@ export default function SyncRoomScreen() {
                     accessibilityLabel="End the room"
                   >
                     <Ionicons name="stop-circle-outline" size={14} color="#FFFFFF" />
-                    <Text style={styles.endRoomText}>End room</Text>
+                    <Text style={styles.endRoomText}>{t("sync_room.host_end_room")}</Text>
                   </TouchableOpacity>
                 ) : (
-                  <Text style={styles.endedTag}>Ended</Text>
+                  <Text style={styles.endedTag}>{t("sync_room.host_ended_tag")}</Text>
                 )}
               </View>
               {autoSkipAllowed && !isEnded ? (
                 <Text style={styles.skipHint}>
-                  Auto-advance after{" "}
-                  {Math.round(autoSkipTimeoutMs / 1000)}s of silence.
+                  {t("sync_room.host_auto_advance_hint", { seconds: Math.round(autoSkipTimeoutMs / 1000) })}
                 </Text>
               ) : null}
             </View>
@@ -1931,7 +1932,7 @@ export default function SyncRoomScreen() {
 
         {/* Queue */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Up next</Text>
+          <Text style={styles.sectionLabel}>{t("sync_room.section_up_next")}</Text>
           {room.content_queue?.length ? (
             room.content_queue.map((q, i) => (
               <View key={`${q.url}-${i}`} style={styles.queueRow}>
@@ -1940,7 +1941,7 @@ export default function SyncRoomScreen() {
               </View>
             ))
           ) : (
-            <Text style={styles.queueEmpty}>Nothing queued yet.</Text>
+            <Text style={styles.queueEmpty}>{t("sync_room.queue_empty")}</Text>
           )}
 
           <View style={styles.queueInputRow}>
@@ -1948,7 +1949,7 @@ export default function SyncRoomScreen() {
               style={styles.queueInput}
               value={queueInput}
               onChangeText={setQueueInput}
-              placeholder="Paste a YouTube URL"
+              placeholder={t("sync_room.queue_placeholder")}
               placeholderTextColor={MUTED}
               autoCapitalize="none"
               autoCorrect={false}
@@ -1976,7 +1977,7 @@ export default function SyncRoomScreen() {
           >
             <Ionicons name="cloud-upload-outline" size={16} color={NAVY} />
             <Text style={styles.uploadBtnText}>
-              {uploading ? "Uploading..." : "Upload a video (up to 30s)"}
+              {uploading ? t("sync_room.queue_uploading") : t("sync_room.queue_upload_btn")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1991,18 +1992,18 @@ export default function SyncRoomScreen() {
       >
         <View style={styles.worshipBackdrop}>
           <View style={styles.worshipCard}>
-            <Text style={styles.worshipTitle}>🕯️ Light a candle</Text>
-            <Text style={styles.worshipLabel}>Intention</Text>
+            <Text style={styles.worshipTitle}>{t("sync_room.candle_title")}</Text>
+            <Text style={styles.worshipLabel}>{t("sync_room.candle_intention")}</Text>
             <TextInput
               style={styles.worshipInput}
               value={candleIntention}
               onChangeText={setCandleIntention}
-              placeholder="For peace, for my family…"
+              placeholder={t("sync_room.candle_intention_placeholder")}
               placeholderTextColor={MUTED}
               multiline
               maxLength={200}
             />
-            <Text style={styles.worshipLabel}>Donation (optional, in dollars)</Text>
+            <Text style={styles.worshipLabel}>{t("sync_room.candle_donation_label")}</Text>
             <TextInput
               style={styles.worshipInput}
               value={candleDonation}
@@ -2017,7 +2018,7 @@ export default function SyncRoomScreen() {
                 style={styles.worshipCancel}
                 onPress={() => !submittingCandle && setCandleOpen(false)}
               >
-                <Text style={styles.worshipCancelText}>Cancel</Text>
+                <Text style={styles.worshipCancelText}>{t("sync_room.modal_cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.worshipSubmit, submittingCandle && { opacity: 0.6 }]}
@@ -2025,7 +2026,7 @@ export default function SyncRoomScreen() {
                 disabled={submittingCandle}
               >
                 <Text style={styles.worshipSubmitText}>
-                  {submittingCandle ? "Sending…" : "Submit"}
+                  {submittingCandle ? t("sync_room.modal_sending") : t("sync_room.modal_submit")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -2042,13 +2043,13 @@ export default function SyncRoomScreen() {
       >
         <View style={styles.worshipBackdrop}>
           <View style={styles.worshipCard}>
-            <Text style={styles.worshipTitle}>✝️ Request a mass</Text>
-            <Text style={styles.worshipLabel}>For whom</Text>
+            <Text style={styles.worshipTitle}>{t("sync_room.mass_title")}</Text>
+            <Text style={styles.worshipLabel}>{t("sync_room.mass_for_whom")}</Text>
             <TextInput
               style={styles.worshipInput}
               value={massName}
               onChangeText={setMassName}
-              placeholder="Full name"
+              placeholder={t("sync_room.mass_full_name_placeholder")}
               placeholderTextColor={MUTED}
               maxLength={80}
             />
@@ -2058,7 +2059,7 @@ export default function SyncRoomScreen() {
                 onPress={() => setMassIsDeceased(false)}
               >
                 <Text style={[styles.worshipChipText, !massIsDeceased && { color: "#FFFFFF" }]}>
-                  Living
+                  {t("sync_room.mass_living")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -2066,11 +2067,11 @@ export default function SyncRoomScreen() {
                 onPress={() => setMassIsDeceased(true)}
               >
                 <Text style={[styles.worshipChipText, massIsDeceased && { color: "#FFFFFF" }]}>
-                  Deceased
+                  {t("sync_room.mass_deceased")}
                 </Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.worshipLabel}>Preferred date</Text>
+            <Text style={styles.worshipLabel}>{t("sync_room.mass_preferred_date")}</Text>
             <TouchableOpacity
               style={styles.worshipInput}
               onPress={() => setMassShowPicker(true)}
@@ -2089,7 +2090,7 @@ export default function SyncRoomScreen() {
                 }}
               />
             ) : null}
-            <Text style={styles.worshipLabel}>Donation (in dollars)</Text>
+            <Text style={styles.worshipLabel}>{t("sync_room.mass_donation_label")}</Text>
             <TextInput
               style={styles.worshipInput}
               value={massDonation}
@@ -2104,7 +2105,7 @@ export default function SyncRoomScreen() {
                 style={styles.worshipCancel}
                 onPress={() => !submittingMass && setMassOpen(false)}
               >
-                <Text style={styles.worshipCancelText}>Cancel</Text>
+                <Text style={styles.worshipCancelText}>{t("sync_room.modal_cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.worshipSubmit, submittingMass && { opacity: 0.6 }]}
@@ -2112,7 +2113,7 @@ export default function SyncRoomScreen() {
                 disabled={submittingMass}
               >
                 <Text style={styles.worshipSubmitText}>
-                  {submittingMass ? "Sending…" : "Submit"}
+                  {submittingMass ? t("sync_room.modal_sending") : t("sync_room.modal_submit")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -2168,11 +2169,11 @@ export default function SyncRoomScreen() {
               return (
                 <>
                   <Text style={styles.worshipTitle}>
-                    {emoji}  Donation amount
+                    {t("sync_room.reaction_editor_title", { emoji })}
                   </Text>
                   <Text style={styles.reactionEditAmount}>{label}</Text>
                   <Text style={styles.reactionEditHint}>
-                    Tap to adjust. Saves automatically.
+                    {t("sync_room.reaction_editor_hint")}
                   </Text>
 
                   <View style={styles.reactionStepperRow}>
@@ -2210,7 +2211,7 @@ export default function SyncRoomScreen() {
                       onPress={() => setEditingEmoji(null)}
                       disabled={editSaving}
                     >
-                      <Text style={styles.worshipSubmitText}>Done</Text>
+                      <Text style={styles.worshipSubmitText}>{t("sync_room.reaction_editor_done")}</Text>
                     </TouchableOpacity>
                   </View>
                 </>
@@ -2265,7 +2266,7 @@ export default function SyncRoomScreen() {
                     remixTab === "sticker" && styles.remixTabBtnTextActive,
                   ]}
                 >
-                  🎨 Stickers
+                  {t("sync_room.remix_tab_stickers")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -2285,7 +2286,7 @@ export default function SyncRoomScreen() {
                     remixTab === "voice" && styles.remixTabBtnTextActive,
                   ]}
                 >
-                  🎙️ Voice
+                  {t("sync_room.remix_tab_voice")}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -2307,14 +2308,14 @@ export default function SyncRoomScreen() {
                     remixTab === "video" && styles.remixTabBtnTextActive,
                   ]}
                 >
-                  📹 Video
+                  {t("sync_room.remix_tab_video")}
                 </Text>
               </TouchableOpacity>
             </View>
 
             {remixTab === "sticker" ? (
               <>
-                <Text style={styles.remixTitle}>Pick a sticker</Text>
+                <Text style={styles.remixTitle}>{t("sync_room.remix_sticker_title")}</Text>
                 <View style={styles.stickerGrid}>
                   {REMIX_STICKERS.map((s) => (
                     <TouchableOpacity
@@ -2335,10 +2336,9 @@ export default function SyncRoomScreen() {
               </>
             ) : remixTab === "voice" ? (
               <>
-                <Text style={styles.remixTitle}>Voice note</Text>
+                <Text style={styles.remixTitle}>{t("sync_room.remix_voice_title")}</Text>
                 <Text style={styles.voiceHint}>
-                  Up to {VOICE_NOTE_MAX_SECONDS}s. Only room members can
-                  play it.
+                  {t("sync_room.remix_voice_hint", { seconds: VOICE_NOTE_MAX_SECONDS })}
                 </Text>
 
                 {voiceRecState === "idle" ? (
@@ -2350,7 +2350,7 @@ export default function SyncRoomScreen() {
                   >
                     <Ionicons name="mic" size={26} color="#FFFFFF" />
                     <Text style={styles.voiceRecordBtnText}>
-                      Tap to record
+                      {t("sync_room.voice_tap_to_record")}
                     </Text>
                   </TouchableOpacity>
                 ) : null}
@@ -2372,7 +2372,7 @@ export default function SyncRoomScreen() {
                       />
                     </View>
                     <Text style={styles.voiceTimer}>
-                      {recordingElapsedSec}s / {VOICE_NOTE_MAX_SECONDS}s
+                      {t("sync_room.voice_timer_progress", { elapsed: recordingElapsedSec, max: VOICE_NOTE_MAX_SECONDS })}
                     </Text>
                     <TouchableOpacity
                       style={styles.voiceStopBtn}
@@ -2381,7 +2381,7 @@ export default function SyncRoomScreen() {
                       accessibilityLabel="Stop recording"
                     >
                       <Ionicons name="stop" size={20} color="#FFFFFF" />
-                      <Text style={styles.voiceStopBtnText}>Stop</Text>
+                      <Text style={styles.voiceStopBtnText}>{t("sync_room.voice_stop")}</Text>
                     </TouchableOpacity>
                   </View>
                 ) : null}
@@ -2389,7 +2389,7 @@ export default function SyncRoomScreen() {
                 {voiceRecState === "preview" ? (
                   <View style={styles.voicePreviewBox}>
                     <Text style={styles.voiceTimer}>
-                      Captured {recordedDurationSec}s
+                      {t("sync_room.voice_captured", { seconds: recordedDurationSec })}
                     </Text>
                     <View style={styles.voicePreviewActions}>
                       <TouchableOpacity
@@ -2405,7 +2405,7 @@ export default function SyncRoomScreen() {
                           color={NAVY}
                         />
                         <Text style={styles.voicePreviewBtnText}>
-                          {previewPlaying ? "Playing" : "Preview"}
+                          {previewPlaying ? t("sync_room.voice_preview_playing") : t("sync_room.voice_preview_ready")}
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -2415,7 +2415,7 @@ export default function SyncRoomScreen() {
                         accessibilityLabel="Retry recording"
                       >
                         <Ionicons name="refresh" size={18} color={NAVY} />
-                        <Text style={styles.voicePreviewBtnText}>Retry</Text>
+                        <Text style={styles.voicePreviewBtnText}>{t("sync_room.voice_retry")}</Text>
                       </TouchableOpacity>
                     </View>
                     <TouchableOpacity
@@ -2429,7 +2429,7 @@ export default function SyncRoomScreen() {
                         size={18}
                         color="#FFFFFF"
                       />
-                      <Text style={styles.voiceSendBtnText}>Send</Text>
+                      <Text style={styles.voiceSendBtnText}>{t("sync_room.voice_send")}</Text>
                     </TouchableOpacity>
                   </View>
                 ) : null}
@@ -2437,16 +2437,15 @@ export default function SyncRoomScreen() {
                 {voiceRecState === "uploading" ? (
                   <View style={styles.voiceUploadingBox}>
                     <ActivityIndicator color={TEAL} />
-                    <Text style={styles.voiceTimer}>Sending…</Text>
+                    <Text style={styles.voiceTimer}>{t("sync_room.voice_sending")}</Text>
                   </View>
                 ) : null}
               </>
             ) : (
               <>
-                <Text style={styles.remixTitle}>Video reply</Text>
+                <Text style={styles.remixTitle}>{t("sync_room.remix_video_title")}</Text>
                 <Text style={styles.voiceHint}>
-                  Up to {VIDEO_REPLY_MAX_SECONDS}s. Only room members can
-                  watch it.
+                  {t("sync_room.remix_video_hint", { seconds: VIDEO_REPLY_MAX_SECONDS })}
                 </Text>
 
                 {!videoUri && !videoSending ? (
@@ -2458,7 +2457,7 @@ export default function SyncRoomScreen() {
                   >
                     <Ionicons name="videocam" size={26} color="#FFFFFF" />
                     <Text style={styles.videoRecordBtnText}>
-                      Record video
+                      {t("sync_room.video_record")}
                     </Text>
                   </TouchableOpacity>
                 ) : null}
@@ -2474,7 +2473,7 @@ export default function SyncRoomScreen() {
                       isLooping={false}
                     />
                     <Text style={styles.voiceTimer}>
-                      Captured {videoDurationSec}s
+                      {t("sync_room.video_captured", { seconds: videoDurationSec })}
                     </Text>
                     <View style={styles.voicePreviewActions}>
                       <TouchableOpacity
@@ -2484,7 +2483,7 @@ export default function SyncRoomScreen() {
                         accessibilityLabel="Retry video"
                       >
                         <Ionicons name="refresh" size={18} color={NAVY} />
-                        <Text style={styles.voicePreviewBtnText}>Retry</Text>
+                        <Text style={styles.voicePreviewBtnText}>{t("sync_room.voice_retry")}</Text>
                       </TouchableOpacity>
                     </View>
                     <TouchableOpacity
@@ -2498,7 +2497,7 @@ export default function SyncRoomScreen() {
                         size={18}
                         color="#FFFFFF"
                       />
-                      <Text style={styles.voiceSendBtnText}>Send</Text>
+                      <Text style={styles.voiceSendBtnText}>{t("sync_room.voice_send")}</Text>
                     </TouchableOpacity>
                   </View>
                 ) : null}
@@ -2506,7 +2505,7 @@ export default function SyncRoomScreen() {
                 {videoSending ? (
                   <View style={styles.voiceUploadingBox}>
                     <ActivityIndicator color={TEAL} />
-                    <Text style={styles.voiceTimer}>Sending…</Text>
+                    <Text style={styles.voiceTimer}>{t("sync_room.voice_sending")}</Text>
                   </View>
                 ) : null}
               </>
@@ -2532,7 +2531,7 @@ export default function SyncRoomScreen() {
                 videoSending
               }
             >
-              <Text style={styles.remixCancelText}>Cancel</Text>
+              <Text style={styles.remixCancelText}>{t("sync_room.remix_cancel")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -2560,12 +2559,12 @@ export default function SyncRoomScreen() {
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={styles.voiceOverlayTitle} numberOfLines={1}>
-              Voice note
+              {t("sync_room.overlay_voice_title")}
             </Text>
             <Text style={styles.voiceOverlayMeta} numberOfLines={1}>
               {incomingVoice.durationSec
-                ? `${incomingVoice.durationSec}s`
-                : "tap to play"}
+                ? t("sync_room.overlay_voice_duration", { seconds: incomingVoice.durationSec })
+                : t("sync_room.overlay_voice_tap_to_play")}
             </Text>
           </View>
           <TouchableOpacity
@@ -2594,12 +2593,12 @@ export default function SyncRoomScreen() {
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={styles.voiceOverlayTitle} numberOfLines={1}>
-              Video reply
+              {t("sync_room.overlay_video_title")}
             </Text>
             <Text style={styles.voiceOverlayMeta} numberOfLines={1}>
               {incomingVideo.durationSec
-                ? `${incomingVideo.durationSec}s · tap to watch`
-                : "tap to watch"}
+                ? t("sync_room.overlay_video_duration_tap", { seconds: incomingVideo.durationSec })
+                : t("sync_room.overlay_video_tap_to_watch")}
             </Text>
           </View>
           <TouchableOpacity
