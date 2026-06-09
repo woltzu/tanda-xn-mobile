@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
 import { useFormDraft } from "../hooks/useFormDraft";
@@ -18,67 +19,87 @@ import { CircleDraft, CIRCLE_DRAFT_KEY } from "../lib/circleDraft";
 
 type CreateCircleStartNavigationProp = StackNavigationProp<RootStackParamList>;
 
+// i18n: nameKey/descKey/featureKeys resolved per-render via t() at call site.
 const circleTypes = [
   {
     id: "traditional",
-    name: "Rotating Pot",
+    nameKey: "create_circle_start.type_traditional_name",
     emoji: "🔄",
-    description:
-      "Classic ROSCA. Members contribute equally on a schedule. Each cycle, one member receives the full pot.",
-    features: ["Equal contribution", "Rotating payouts", "Fixed schedule"],
+    descKey: "create_circle_start.type_traditional_desc",
+    featureKeys: [
+      "create_circle_start.type_traditional_feat_1",
+      "create_circle_start.type_traditional_feat_2",
+      "create_circle_start.type_traditional_feat_3",
+    ],
     popular: true,
   },
   {
     id: "travel",
-    name: "Travel",
+    nameKey: "create_circle_start.type_travel_name",
     emoji: "✈️",
-    description:
-      "Plan a group trip with a full itinerary, collect payments, manage travelers, and share a public trip page.",
-    features: ["Trip organizer", "Payment plans", "Itinerary builder"],
+    descKey: "create_circle_start.type_travel_desc",
+    featureKeys: [
+      "create_circle_start.type_travel_feat_1",
+      "create_circle_start.type_travel_feat_2",
+      "create_circle_start.type_travel_feat_3",
+    ],
     popular: false,
     isNew: true,
     isTravel: true,
   },
   {
     id: "family-support",
-    name: "Single Beneficiary",
+    nameKey: "create_circle_start.type_family_name",
     emoji: "👨‍👩‍👧‍👦",
-    description:
-      "One person receives all contributions. Can be one-time or recurring. Perfect for trips, gifts, or family support.",
-    features: ["Pick beneficiary", "Flexible duration", "One-time or recurring"],
+    descKey: "create_circle_start.type_family_desc",
+    featureKeys: [
+      "create_circle_start.type_family_feat_1",
+      "create_circle_start.type_family_feat_2",
+      "create_circle_start.type_family_feat_3",
+    ],
     popular: false,
   },
   {
     id: "beneficiary",
-    name: "Flexible Fundraise",
+    nameKey: "create_circle_start.type_beneficiary_name",
     emoji: "🆘",
-    description:
-      "One-time campaign for a specific cause. Rally your community and anyone can contribute any amount.",
-    features: ["Community fundraising", "Any amount", "One-time campaign"],
+    descKey: "create_circle_start.type_beneficiary_desc",
+    featureKeys: [
+      "create_circle_start.type_beneficiary_feat_1",
+      "create_circle_start.type_beneficiary_feat_2",
+      "create_circle_start.type_beneficiary_feat_3",
+    ],
     popular: false,
   },
   {
     id: "goal",
-    name: "Shared Goal",
+    nameKey: "create_circle_start.type_goal_name",
     emoji: "🎯",
-    description:
-      "Everyone saves toward a common target. Funds are used together when the goal is reached.",
-    features: ["Shared target", "Flexible amounts", "One-time or recurring"],
+    descKey: "create_circle_start.type_goal_desc",
+    featureKeys: [
+      "create_circle_start.type_goal_feat_1",
+      "create_circle_start.type_goal_feat_2",
+      "create_circle_start.type_goal_feat_3",
+    ],
     popular: false,
   },
   {
     id: "emergency",
-    name: "Emergency Pool",
+    nameKey: "create_circle_start.type_emergency_name",
     emoji: "🛡️",
-    description:
-      "Members contribute to a communal fund. Anyone can request withdrawals when needed, with group approval.",
-    features: ["Safety net", "Request-based", "Community support"],
+    descKey: "create_circle_start.type_emergency_desc",
+    featureKeys: [
+      "create_circle_start.type_emergency_feat_1",
+      "create_circle_start.type_emergency_feat_2",
+      "create_circle_start.type_emergency_feat_3",
+    ],
     popular: false,
   },
 ];
 
 export default function CreateCircleStartScreen() {
   const navigation = useNavigation<CreateCircleStartNavigationProp>();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [selectedType, setSelectedType] = useState<string | null>(null);
 
@@ -144,9 +165,9 @@ export default function CreateCircleStartScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle}>Create a Circle</Text>
+              <Text style={styles.headerTitle}>{t("create_circle_start.header_title")}</Text>
               <Text style={styles.headerSubtitle}>
-                Save together with people you trust
+                {t("create_circle_start.header_subtitle")}
               </Text>
             </View>
           </View>
@@ -168,12 +189,12 @@ export default function CreateCircleStartScreen() {
             </View>
             <View style={styles.scoreTextContainer}>
               <Text style={styles.scoreTitle}>
-                {canCreate ? "You can create circles!" : "Score too low"}
+                {canCreate ? t("create_circle_start.score_can_create") : t("create_circle_start.score_too_low")}
               </Text>
               <Text style={styles.scoreSubtitle}>
                 {canCreate
-                  ? `Your XnScore (${userXnScore}) exceeds minimum (${minScoreRequired})`
-                  : `Need ${minScoreRequired}+ XnScore to create circles`}
+                  ? t("create_circle_start.score_exceeds", { score: userXnScore, min: minScoreRequired })
+                  : t("create_circle_start.score_need_min", { min: minScoreRequired })}
               </Text>
             </View>
           </View>
@@ -185,7 +206,7 @@ export default function CreateCircleStartScreen() {
           {hasDraft && !bannerDismissed && (
             <View style={styles.draftBanner}>
               <Text style={styles.draftBannerText}>
-                You have an unfinished circle. Restore it?
+                {t("create_circle_start.draft_banner")}
               </Text>
               <View style={styles.draftBannerActions}>
                 <TouchableOpacity
@@ -193,14 +214,14 @@ export default function CreateCircleStartScreen() {
                   onPress={handleRestoreDraft}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.draftBannerButtonText}>Restore</Text>
+                  <Text style={styles.draftBannerButtonText}>{t("create_circle_start.draft_restore")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.draftBannerButton}
                   onPress={handleDiscardDraft}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.draftBannerButtonText}>Discard</Text>
+                  <Text style={styles.draftBannerButtonText}>{t("create_circle_start.draft_discard")}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -208,8 +229,8 @@ export default function CreateCircleStartScreen() {
 
           {/* Circle Types */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>What kind of circle?</Text>
-            <Text style={styles.cardSubtitle}>Choose a purpose for your group</Text>
+            <Text style={styles.cardTitle}>{t("create_circle_start.card_title")}</Text>
+            <Text style={styles.cardSubtitle}>{t("create_circle_start.card_subtitle")}</Text>
 
             {circleTypes.map((type) => (
               <TouchableOpacity
@@ -225,12 +246,12 @@ export default function CreateCircleStartScreen() {
               >
                 {type.popular && (
                   <View style={styles.popularBadge}>
-                    <Text style={styles.popularBadgeText}>POPULAR</Text>
+                    <Text style={styles.popularBadgeText}>{t("create_circle_start.badge_popular")}</Text>
                   </View>
                 )}
                 {(type as any).isNew && (
                   <View style={[styles.popularBadge, { backgroundColor: "#E8A842" }]}>
-                    <Text style={styles.popularBadgeText}>NEW</Text>
+                    <Text style={styles.popularBadgeText}>{t("create_circle_start.badge_new")}</Text>
                   </View>
                 )}
 
@@ -246,11 +267,11 @@ export default function CreateCircleStartScreen() {
                   </View>
 
                   <View style={styles.typeTextContainer}>
-                    <Text style={styles.typeName}>{type.name}</Text>
-                    <Text style={styles.typeDescription}>{type.description}</Text>
+                    <Text style={styles.typeName}>{t(type.nameKey)}</Text>
+                    <Text style={styles.typeDescription}>{t(type.descKey)}</Text>
 
                     <View style={styles.featuresRow}>
-                      {type.features.map((feature, idx) => (
+                      {type.featureKeys.map((featureKey, idx) => (
                         <View
                           key={idx}
                           style={[
@@ -265,7 +286,7 @@ export default function CreateCircleStartScreen() {
                               selectedType === type.id && styles.featureTextSelected,
                             ]}
                           >
-                            {feature}
+                            {t(featureKey)}
                           </Text>
                         </View>
                       ))}
@@ -290,11 +311,10 @@ export default function CreateCircleStartScreen() {
             <View style={styles.travelBanner}>
               <View style={styles.travelBannerHeader}>
                 <Text style={styles.travelBannerIcon}>✈️</Text>
-                <Text style={styles.travelBannerTitle}>Trip Organizer Mode</Text>
+                <Text style={styles.travelBannerTitle}>{t("create_circle_start.travel_banner_title")}</Text>
               </View>
               <Text style={styles.travelBannerText}>
-                You're building a group trip. We'll help you set up the itinerary,
-                collect payments, and manage your travelers — all in one place.
+                {t("create_circle_start.travel_banner_text")}
               </Text>
             </View>
           )}
@@ -309,10 +329,10 @@ export default function CreateCircleStartScreen() {
             </View>
             <View style={styles.learnMoreText}>
               <Text style={styles.learnMoreTitle}>
-                How do savings circles work?
+                {t("create_circle_start.learn_more_title")}
               </Text>
               <Text style={styles.learnMoreSubtitle}>
-                Learn about tandas and rotating savings
+                {t("create_circle_start.learn_more_subtitle")}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
@@ -327,12 +347,10 @@ export default function CreateCircleStartScreen() {
               style={styles.trustIcon}
             />
             <Text style={styles.trustText}>
-              <Text style={styles.trustBold}>Protected by TandaXn:</Text>{" "}
-              Contributions are secured against individual member defaults.
+              <Text style={styles.trustBold}>{t("create_circle_start.trust_strong")}</Text>
+              {t("create_circle_start.trust_body")}
               <Text style={styles.trustWarning}>
-                {" "}
-                Note: Protection does not apply in cases of suspected collusion
-                or coordinated fraud.
+                {t("create_circle_start.trust_warning")}
               </Text>
             </Text>
           </View>
@@ -348,14 +366,14 @@ export default function CreateCircleStartScreen() {
               onPress={handleContinue}
               disabled={!canCreate}
             >
-              <Text style={styles.continueButtonText}>Set Up My Trip</Text>
+              <Text style={styles.continueButtonText}>{t("create_circle_start.btn_setup_trip")}</Text>
               <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 6 }} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.escapeHatchButton}
               onPress={handleBasicCircleFallback}
             >
-              <Text style={styles.escapeHatchText}>Just create a basic savings circle</Text>
+              <Text style={styles.escapeHatchText}>{t("create_circle_start.btn_basic_fallback")}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -373,7 +391,7 @@ export default function CreateCircleStartScreen() {
                 (!selectedType || !canCreate) && styles.continueButtonTextDisabled,
               ]}
             >
-              Continue
+              {t("create_circle_start.btn_continue")}
             </Text>
           </TouchableOpacity>
         )}

@@ -12,6 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useFormDraft } from "../hooks/useFormDraft";
@@ -54,6 +55,7 @@ const gracePeriodOptions = [
 export default function CreateCircleScheduleScreen() {
   const navigation = useNavigation<CreateCircleScheduleNavigationProp>();
   const route = useRoute<CreateCircleScheduleRouteProp>();
+  const { t } = useTranslation();
   const {
     circleType,
     name,
@@ -282,11 +284,11 @@ export default function CreateCircleScheduleScreen() {
             <View style={styles.recurringSummaryCard}>
               <View style={styles.recurringSummaryHeader}>
                 <Ionicons name="repeat" size={20} color="#00C6AE" />
-                <Text style={styles.recurringSummaryTitle}>Support Plan</Text>
+                <Text style={styles.recurringSummaryTitle}>{t("create_circle_schedule.recurring_summary_title")}</Text>
               </View>
               <View style={styles.recurringSummaryContent}>
                 <View style={styles.recurringSummaryRow}>
-                  <Text style={styles.recurringSummaryLabel}>Contributions</Text>
+                  <Text style={styles.recurringSummaryLabel}>{t("create_circle_schedule.recurring_summary_contributions")}</Text>
                   <Text style={styles.recurringSummaryValue}>{totalCycles}× ({getFrequencyLabel()})</Text>
                 </View>
                 <View style={styles.recurringSummaryRow}>
@@ -294,7 +296,7 @@ export default function CreateCircleScheduleScreen() {
                   <Text style={styles.recurringSummaryValue}>${monthlyPayout.toLocaleString()}</Text>
                 </View>
                 <View style={styles.recurringSummaryRow}>
-                  <Text style={styles.recurringSummaryLabel}>Your total contribution</Text>
+                  <Text style={styles.recurringSummaryLabel}>{t("create_circle_schedule.recurring_summary_total")}</Text>
                   <Text style={styles.recurringSummaryValue}>${(amount * totalCycles).toLocaleString()}</Text>
                 </View>
                 <View style={styles.recurringSummaryDivider} />
@@ -410,7 +412,7 @@ export default function CreateCircleScheduleScreen() {
 
           {/* Grace Period */}
           <View style={styles.card}>
-            <Text style={styles.label}>Grace Period for Late Contributions</Text>
+            <Text style={styles.label}>{t("create_circle_schedule.label_grace_period")}</Text>
             <Text style={styles.labelDesc}>
               Time after deadline before late fees apply
             </Text>
@@ -442,7 +444,7 @@ export default function CreateCircleScheduleScreen() {
           <View style={styles.warningCard}>
             <Text style={styles.warningEmoji}>⚠️</Text>
             <View style={styles.warningTextContainer}>
-              <Text style={styles.warningTitle}>Missing Contributions</Text>
+              <Text style={styles.warningTitle}>{t("create_circle_schedule.warning_title")}</Text>
               <Text style={styles.warningText}>
                 If not everyone has contributed by the deadline, the system will
                 automatically send a reminder showing who hasn't paid yet. After the grace
@@ -454,7 +456,7 @@ export default function CreateCircleScheduleScreen() {
           {/* Rotation Method - Only for recurring circles without a fixed beneficiary */}
           {!isOneTime && !hasBeneficiary && (
             <View style={styles.card}>
-              <Text style={styles.label}>Rotation Order Method</Text>
+              <Text style={styles.label}>{t("create_circle_schedule.label_rotation_method")}</Text>
               <Text style={styles.labelDesc}>
                 How do we decide who gets paid first?
               </Text>
@@ -470,7 +472,7 @@ export default function CreateCircleScheduleScreen() {
                 >
                   {method.recommended && (
                     <View style={styles.recommendedBadge}>
-                      <Text style={styles.recommendedBadgeText}>RECOMMENDED</Text>
+                      <Text style={styles.recommendedBadgeText}>{t("create_circle_schedule.badge_recommended")}</Text>
                     </View>
                   )}
 
@@ -498,7 +500,7 @@ export default function CreateCircleScheduleScreen() {
                 <Ionicons name="person-circle" size={32} color="#00C6AE" />
               </View>
               <View style={styles.beneficiaryInfo}>
-                <Text style={styles.beneficiaryLabel}>Beneficiary</Text>
+                <Text style={styles.beneficiaryLabel}>{t("create_circle_schedule.beneficiary_label")}</Text>
                 <Text style={styles.beneficiaryNameText}>{beneficiaryName}</Text>
                 {beneficiaryReason && (
                   <Text style={styles.beneficiaryReasonText}>{beneficiaryReason}</Text>
@@ -513,7 +515,7 @@ export default function CreateCircleScheduleScreen() {
           {/* Schedule Preview - For recurring circles */}
           {!isOneTime && startDate && contributionDeadlines.length > 0 && (
             <View style={styles.scheduleCard}>
-              <Text style={styles.scheduleTitle}>Contribution Schedule Preview</Text>
+              <Text style={styles.scheduleTitle}>{t("create_circle_schedule.schedule_title")}</Text>
               <Text style={styles.scheduleSubtitle}>
                 Payout releases automatically when all {memberCount} members contribute
               </Text>

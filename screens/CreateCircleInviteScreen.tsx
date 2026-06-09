@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import * as Contacts from "expo-contacts";
 import { useFormDraft } from "../hooks/useFormDraft";
@@ -49,6 +50,7 @@ const checkTandaXnUsers = (contacts: Contact[]): Contact[] => {
 export default function CreateCircleInviteScreen() {
   const navigation = useNavigation<CreateCircleInviteNavigationProp>();
   const route = useRoute<CreateCircleInviteRouteProp>();
+  const { t } = useTranslation();
   const {
     circleType,
     name,
@@ -129,7 +131,7 @@ export default function CreateCircleInviteScreen() {
       }
     } catch (error) {
       console.error("Error loading contacts:", error);
-      Alert.alert("Error", "Failed to load contacts");
+      Alert.alert(t("create_circle_invite.alert_error_title"), t("create_circle_invite.alert_failed_load_contacts"));
     } finally {
       setIsLoading(false);
     }
@@ -265,7 +267,7 @@ export default function CreateCircleInviteScreen() {
           </View>
           <Text style={styles.contactPhone}>{contact.phone}</Text>
           {contact.isOnTandaXn && (
-            <Text style={styles.onTandaXnText}>On TandaXn</Text>
+            <Text style={styles.onTandaXnText}>{t("create_circle_invite.section_on_tandaxn")}</Text>
           )}
         </View>
 
@@ -293,7 +295,7 @@ export default function CreateCircleInviteScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle}>Invite Members</Text>
+              <Text style={styles.headerTitle}>{t("create_circle_invite.header_title")}</Text>
               <Text style={styles.headerSubtitle}>Step 3 of 4</Text>
             </View>
           </View>
@@ -337,7 +339,7 @@ export default function CreateCircleInviteScreen() {
               <Ionicons name="share-social" size={22} color="#FFFFFF" />
             </View>
             <View style={styles.shareTextContainer}>
-              <Text style={styles.shareTitle}>Share Invite Link</Text>
+              <Text style={styles.shareTitle}>{t("create_circle_invite.share_title")}</Text>
               <Text style={styles.shareSubtitle}>
                 Anyone with the link can request to join
               </Text>
@@ -349,7 +351,7 @@ export default function CreateCircleInviteScreen() {
           {isLoading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#00C6AE" />
-              <Text style={styles.loadingText}>Loading contacts...</Text>
+              <Text style={styles.loadingText}>{t("create_circle_invite.loading_text")}</Text>
             </View>
           ) : hasPermission === false ? (
             // No permission - show request
@@ -357,7 +359,7 @@ export default function CreateCircleInviteScreen() {
               <View style={styles.permissionIcon}>
                 <Ionicons name="people" size={40} color="#00C6AE" />
               </View>
-              <Text style={styles.permissionTitle}>Access Your Contacts</Text>
+              <Text style={styles.permissionTitle}>{t("create_circle_invite.permission_title")}</Text>
               <Text style={styles.permissionDesc}>
                 Allow TandaXn to access your contacts to easily invite friends and
                 family to your circle. We never send messages without your permission.
@@ -366,7 +368,7 @@ export default function CreateCircleInviteScreen() {
                 style={styles.permissionButton}
                 onPress={handleRequestPermission}
               >
-                <Text style={styles.permissionButtonText}>Allow Access</Text>
+                <Text style={styles.permissionButtonText}>{t("create_circle_invite.btn_allow_access")}</Text>
               </TouchableOpacity>
               <Text style={styles.privacyNote}>
                 Your contacts are only used to find friends on TandaXn.
@@ -382,7 +384,7 @@ export default function CreateCircleInviteScreen() {
                   style={styles.searchInput}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  placeholder="Search contacts..."
+                  placeholder={t("create_circle_invite.search_placeholder")}
                   placeholderTextColor="#9CA3AF"
                 />
                 {searchQuery ? (
@@ -396,7 +398,7 @@ export default function CreateCircleInviteScreen() {
               {tandaXnContacts.length > 0 && (
                 <View style={styles.contactSection}>
                   <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>On TandaXn</Text>
+                    <Text style={styles.sectionTitle}>{t("create_circle_invite.section_on_tandaxn")}</Text>
                     <View style={styles.sectionBadge}>
                       <Text style={styles.sectionBadgeText}>
                         {tandaXnContacts.length}
@@ -410,7 +412,7 @@ export default function CreateCircleInviteScreen() {
               {/* Other Contacts Section */}
               {otherContacts.length > 0 && (
                 <View style={styles.contactSection}>
-                  <Text style={styles.sectionTitle}>Invite to TandaXn</Text>
+                  <Text style={styles.sectionTitle}>{t("create_circle_invite.section_invite")}</Text>
                   {otherContacts.slice(0, 20).map(renderContactItem)}
                   {otherContacts.length > 20 && (
                     <Text style={styles.moreContactsText}>
@@ -423,7 +425,7 @@ export default function CreateCircleInviteScreen() {
               {filteredContacts.length === 0 && (
                 <View style={styles.emptyState}>
                   <Ionicons name="search" size={40} color="#9CA3AF" />
-                  <Text style={styles.emptyStateText}>No contacts found</Text>
+                  <Text style={styles.emptyStateText}>{t("create_circle_invite.empty_no_contacts")}</Text>
                 </View>
               )}
             </View>

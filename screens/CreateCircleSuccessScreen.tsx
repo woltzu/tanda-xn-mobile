@@ -13,6 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
@@ -46,6 +47,7 @@ const getCircleEmoji = (type: string): string => {
 export default function CreateCircleSuccessScreen() {
   const navigation = useNavigation<CreateCircleSuccessNavigationProp>();
   const route = useRoute<CreateCircleSuccessRouteProp>();
+  const { t } = useTranslation();
   const { createCircle } = useCircles();
   const { user } = useAuth();
   const circleSavedRef = useRef(false);
@@ -418,10 +420,10 @@ export default function CreateCircleSuccessScreen() {
 
     // Adapt title/subtitle based on which engine(s) flagged.
     const modalTitle =
-      hasConflict && hasCompositionIssue ? "Friction & Composition Concerns" :
-      hasConflict ? "Potential Friction Detected" :
-      hasCompositionIssue ? "Group Composition Below Threshold" :
-      "Review Required";
+      hasConflict && hasCompositionIssue ? t("create_circle_success.modal_title_friction_composition") :
+      hasConflict ? t("create_circle_success.modal_title_friction") :
+      hasCompositionIssue ? t("create_circle_success.modal_title_composition") :
+      t("create_circle_success.modal_title_review");
 
     return (
       <Modal
@@ -549,8 +551,7 @@ export default function CreateCircleSuccessScreen() {
             </ScrollView>
 
             <Text style={styles.modalNote}>
-              You can still create the circle. Flagged pairs will be monitored
-              after formation; if scores escalate, you'll get an alert.
+              {t("create_circle_success.modal_note")}
             </Text>
 
             <View style={styles.modalActions}>
@@ -558,13 +559,13 @@ export default function CreateCircleSuccessScreen() {
                 style={styles.modalCancelBtn}
                 onPress={handleCancelFlags}
               >
-                <Text style={styles.modalCancelText}>Edit members</Text>
+                <Text style={styles.modalCancelText}>{t("create_circle_success.modal_edit_members")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalProceedBtn}
                 onPress={handleProceedDespiteFlags}
               >
-                <Text style={styles.modalProceedText}>Create anyway</Text>
+                <Text style={styles.modalProceedText}>{t("create_circle_success.modal_create_anyway")}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -584,8 +585,8 @@ export default function CreateCircleSuccessScreen() {
           <ActivityIndicator size="large" color="#00C6AE" />
           <Text style={styles.preflightText}>
             {preflightStatus === "evaluating"
-              ? "Checking circle compatibility…"
-              : "Creating your circle…"}
+              ? t("create_circle_success.preflight_evaluating")
+              : t("create_circle_success.preflight_creating")}
           </Text>
         </View>
       )}
@@ -601,13 +602,15 @@ export default function CreateCircleSuccessScreen() {
 
           <Text style={styles.successTitle}>
             {isDisasterRelief
-              ? "Fundraise Created! 🆘"
-              : `${name.length > 20 ? name.slice(0, 20) + "…" : name} Created! ${circleEmoji}`}
+              ? t("create_circle_success.fundraise_created")
+              : t("create_circle_success.circle_created", { name: name.length > 20 ? name.slice(0, 20) + "…" : name, emoji: circleEmoji })}
           </Text>
           <Text style={styles.successSubtitle}>
             {beneficiaryName
-              ? `Supporting ${beneficiaryName}${isRecurring && totalCycles ? ` — ${totalCycles} contributions` : ""}`
-              : `${name} is ready to go`}
+              ? isRecurring && totalCycles
+                ? t("create_circle_success.supporting_with_cycles", { name: beneficiaryName, count: totalCycles })
+                : t("create_circle_success.supporting", { name: beneficiaryName })
+              : t("create_circle_success.ready_to_go", { name })}
           </Text>
         </LinearGradient>
 
@@ -619,7 +622,7 @@ export default function CreateCircleSuccessScreen() {
               <Text style={styles.circleEmoji}>{circleEmoji}</Text>
             </View>
             <Text style={styles.circleName}>{name}</Text>
-            <Text style={styles.circleDate}>Starting {formatDate(startDate)}</Text>
+            <Text style={styles.circleDate}>{t("create_circle_success.starting", { date: formatDate(startDate) })}</Text>
 
             {/* Stats Row */}
             <View style={styles.statsRow}>
@@ -665,7 +668,7 @@ export default function CreateCircleSuccessScreen() {
 
             {/* Invite Code */}
             <View style={styles.inviteCodeContainer}>
-              <Text style={styles.inviteCodeLabel}>Circle Invite Code</Text>
+              <Text style={styles.inviteCodeLabel}>{t("create_circle_success.invite_code_label")}</Text>
               <Text style={styles.inviteCode}>{inviteCode}</Text>
             </View>
           </View>
@@ -784,14 +787,14 @@ export default function CreateCircleSuccessScreen() {
 
           {/* Next Steps */}
           <View style={styles.nextStepsCard}>
-            <Text style={styles.nextStepsTitle}>What's Next?</Text>
+            <Text style={styles.nextStepsTitle}>{t("create_circle_success.next_steps_title")}</Text>
 
             <View style={styles.stepItem}>
               <View style={styles.stepNumber}>
                 <Text style={styles.stepNumberText}>1</Text>
               </View>
               <View style={styles.stepText}>
-                <Text style={styles.stepTitle}>Wait for members to join</Text>
+                <Text style={styles.stepTitle}>{t("create_circle_success.step_wait_title")}</Text>
                 <Text style={styles.stepDesc}>
                   Circle activates when members are ready
                 </Text>
@@ -803,7 +806,7 @@ export default function CreateCircleSuccessScreen() {
                 <Text style={styles.stepNumberTextInactive}>2</Text>
               </View>
               <View style={styles.stepText}>
-                <Text style={styles.stepTitle}>Make your first contribution</Text>
+                <Text style={styles.stepTitle}>{t("create_circle_success.step_first_title")}</Text>
                 <Text style={styles.stepDesc}>Due on {formatDate(startDate)}</Text>
               </View>
             </View>
@@ -813,8 +816,8 @@ export default function CreateCircleSuccessScreen() {
                 <Text style={styles.stepNumberTextInactive}>3</Text>
               </View>
               <View style={styles.stepText}>
-                <Text style={styles.stepTitle}>Receive your payout</Text>
-                <Text style={styles.stepDesc}>Based on rotation order</Text>
+                <Text style={styles.stepTitle}>{t("create_circle_success.step_payout_title")}</Text>
+                <Text style={styles.stepDesc}>{t("create_circle_success.step_payout_desc")}</Text>
               </View>
             </View>
           </View>
@@ -832,7 +835,7 @@ export default function CreateCircleSuccessScreen() {
                   <Ionicons name="sparkles" size={20} color="#7C3AED" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.payoutOrderTitle}>Optimize payout order</Text>
+                  <Text style={styles.payoutOrderTitle}>{t("create_circle_success.payout_order_title")}</Text>
                   <Text style={styles.payoutOrderSubtitle}>
                     Let our AI suggest a stability-optimized sequence based on
                     member XnScore, need, risk, and preferences.
@@ -848,7 +851,7 @@ export default function CreateCircleSuccessScreen() {
                   accessibilityLabel="Compute AI-optimized payout order"
                 >
                   <Ionicons name="play" size={14} color="#FFFFFF" />
-                  <Text style={styles.payoutOrderButtonText}>Compute AI order</Text>
+                  <Text style={styles.payoutOrderButtonText}>{t("create_circle_success.payout_compute")}</Text>
                 </TouchableOpacity>
               )}
 
@@ -876,7 +879,7 @@ export default function CreateCircleSuccessScreen() {
                     accessibilityLabel="View computed payout order"
                   >
                     <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
-                    <Text style={styles.payoutOrderButtonText}>View payout order</Text>
+                    <Text style={styles.payoutOrderButtonText}>{t("create_circle_success.payout_view")}</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -896,7 +899,7 @@ export default function CreateCircleSuccessScreen() {
                     accessibilityLabel="Retry compute AI payout order"
                   >
                     <Ionicons name="refresh" size={14} color="#FFFFFF" />
-                    <Text style={styles.payoutOrderButtonText}>Retry</Text>
+                    <Text style={styles.payoutOrderButtonText}>{t("create_circle_success.payout_retry")}</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -908,12 +911,12 @@ export default function CreateCircleSuccessScreen() {
       {/* Action Buttons */}
       <View style={styles.footer}>
         <TouchableOpacity style={styles.viewButton} onPress={handleViewCircle}>
-          <Text style={styles.viewButtonText}>View Circle</Text>
+          <Text style={styles.viewButtonText}>{t("create_circle_success.btn_view_circle")}</Text>
         </TouchableOpacity>
 
         <View style={styles.secondaryButtons}>
           <TouchableOpacity style={styles.secondaryButton} onPress={handleInviteMore}>
-            <Text style={styles.secondaryButtonText}>Invite More</Text>
+            <Text style={styles.secondaryButtonText}>{t("create_circle_success.btn_invite_more")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryButton} onPress={handleDone}>
             <Text style={styles.secondaryButtonText}>Done</Text>

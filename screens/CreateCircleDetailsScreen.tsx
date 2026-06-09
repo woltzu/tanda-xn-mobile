@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import * as Contacts from "expo-contacts";
 import { useElder } from "../context/ElderContext";
@@ -82,6 +83,7 @@ const getFrequencyUnit = (freq: string): string => {
 export default function CreateCircleDetailsScreen() {
   const navigation = useNavigation<CreateCircleDetailsNavigationProp>();
   const route = useRoute<CreateCircleDetailsRouteProp>();
+  const { t } = useTranslation();
   const { circleType } = route.params;
 
   // Elder and Community contexts
@@ -131,7 +133,7 @@ export default function CreateCircleDetailsScreen() {
     try {
       const { status } = await Contacts.requestPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permission Denied", "We need contact access to select a beneficiary.");
+        Alert.alert(t("create_circle_details.alert_permission_denied_title"), t("create_circle_details.alert_permission_denied_body"));
         setShowContactPicker(false);
         return;
       }
@@ -152,7 +154,7 @@ export default function CreateCircleDetailsScreen() {
       setContacts(contactList);
     } catch (error) {
       console.error("Error loading contacts:", error);
-      Alert.alert("Error", "Failed to load contacts");
+      Alert.alert(t("create_circle_details.alert_error_title"), t("create_circle_details.alert_failed_load_contacts"));
     }
   };
 
@@ -260,7 +262,7 @@ export default function CreateCircleDetailsScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle}>Circle Details</Text>
+              <Text style={styles.headerTitle}>{t("create_circle_details.header_title")}</Text>
               <Text style={styles.headerSubtitle}>Step 1 of 4</Text>
             </View>
           </View>
@@ -283,7 +285,7 @@ export default function CreateCircleDetailsScreen() {
         <View style={styles.content}>
           {/* Circle Name */}
           <View style={styles.card}>
-            <Text style={styles.label}>Circle Name</Text>
+            <Text style={styles.label}>{t("create_circle_details.label_circle_name")}</Text>
             <TextInput
               style={styles.textInput}
               value={name}
@@ -300,7 +302,7 @@ export default function CreateCircleDetailsScreen() {
             <View style={styles.card}>
               <View style={styles.elderBadge}>
                 <Ionicons name="shield-checkmark" size={16} color="#F59E0B" />
-                <Text style={styles.elderBadgeText}>Elder Access</Text>
+                <Text style={styles.elderBadgeText}>{t("create_circle_details.elder_badge")}</Text>
               </View>
 
               <View style={styles.beneficiaryHeader}>
@@ -308,7 +310,7 @@ export default function CreateCircleDetailsScreen() {
                   <Ionicons name="people" size={28} color="#D97706" />
                 </View>
                 <View style={styles.beneficiaryHeaderText}>
-                  <Text style={styles.label}>Target Community</Text>
+                  <Text style={styles.label}>{t("create_circle_details.label_community")}</Text>
                   <Text style={styles.labelDesc}>
                     As an Elder, you can create fundraises for your communities
                   </Text>
@@ -471,7 +473,7 @@ export default function CreateCircleDetailsScreen() {
                   <Ionicons name="calendar" size={24} color="#00C6AE" />
                 </View>
                 <View style={styles.durationHeaderText}>
-                  <Text style={styles.label}>Number of Contributions</Text>
+                  <Text style={styles.label}>{t("create_circle_details.label_num_contributions")}</Text>
                   <Text style={styles.labelDesc}>
                     How many times will each member contribute to support {beneficiaryName || "this person"}?
                   </Text>
@@ -515,7 +517,7 @@ export default function CreateCircleDetailsScreen() {
                 onPress={() => setShowDurationPicker(true)}
               >
                 <Ionicons name="options-outline" size={18} color="#00C6AE" />
-                <Text style={styles.customDurationText}>Custom duration</Text>
+                <Text style={styles.customDurationText}>{t("create_circle_details.custom_duration")}</Text>
               </TouchableOpacity>
 
               {/* Recurring Info Notice */}
@@ -540,7 +542,7 @@ export default function CreateCircleDetailsScreen() {
               memberCount && !isValidMemberCount && styles.cardError,
             ]}
           >
-            <Text style={styles.label}>Number of Members</Text>
+            <Text style={styles.label}>{t("create_circle_details.label_num_members")}</Text>
             <Text style={styles.labelDesc}>
               How many people will be in this circle? (Including yourself)
             </Text>
@@ -551,7 +553,7 @@ export default function CreateCircleDetailsScreen() {
                 style={styles.memberInput}
                 value={memberCount}
                 onChangeText={setMemberCount}
-                placeholder="Enter number"
+                placeholder={t("create_circle_details.placeholder_num_members")}
                 placeholderTextColor="#9CA3AF"
                 keyboardType="number-pad"
               />
@@ -632,7 +634,7 @@ export default function CreateCircleDetailsScreen() {
 
           {/* Frequency - Available for all circle types */}
           <View style={styles.card}>
-            <Text style={styles.label}>Contribution Frequency</Text>
+            <Text style={styles.label}>{t("create_circle_details.label_frequency")}</Text>
             <Text style={styles.labelDesc}>
               {canSelectOneTime
                 ? "Choose one-time collection or recurring schedule"
@@ -676,7 +678,7 @@ export default function CreateCircleDetailsScreen() {
 
               {beneficiaryName && (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Beneficiary</Text>
+                  <Text style={styles.summaryLabel}>{t("create_circle_details.summary_beneficiary")}</Text>
                   <Text style={styles.summaryValueHighlight}>{beneficiaryName}</Text>
                 </View>
               )}
@@ -707,7 +709,7 @@ export default function CreateCircleDetailsScreen() {
               {isFamilySupport && (
                 <>
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Contributions</Text>
+                    <Text style={styles.summaryLabel}>{t("create_circle_details.summary_contributions")}</Text>
                     <Text style={styles.summaryValue}>
                       {totalCycles}× ({getTimespan(totalCycles, frequency)})
                     </Text>
@@ -715,14 +717,14 @@ export default function CreateCircleDetailsScreen() {
                   {totalCycles > 1 && (
                     <>
                       <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Your total contribution</Text>
+                        <Text style={styles.summaryLabel}>{t("create_circle_details.summary_your_total")}</Text>
                         <Text style={styles.summaryValue}>
                           ${totalContributionPerMember.toLocaleString()}
                         </Text>
                       </View>
                       <View style={styles.summaryDivider} />
                       <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Total to beneficiary</Text>
+                        <Text style={styles.summaryLabel}>{t("create_circle_details.summary_total_to_beneficiary")}</Text>
                         <Text style={[styles.summaryValueHighlight, styles.summaryValueLarge]}>
                           ${totalPayoutAllCycles.toLocaleString()}
                         </Text>
@@ -734,7 +736,7 @@ export default function CreateCircleDetailsScreen() {
 
               {!isOneTime && !(isFamilySupport && totalCycles > 1) && !isDisasterRelief && (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Full cycle duration</Text>
+                  <Text style={styles.summaryLabel}>{t("create_circle_details.summary_full_cycle")}</Text>
                   <Text style={styles.summaryValue}>{getCycleDuration()}</Text>
                 </View>
               )}
@@ -789,7 +791,7 @@ export default function CreateCircleDetailsScreen() {
         <View style={styles.durationModalOverlay}>
           <View style={styles.durationModalContent}>
             <View style={styles.durationModalHeader}>
-              <Text style={styles.durationModalTitle}>Custom Duration</Text>
+              <Text style={styles.durationModalTitle}>{t("create_circle_details.modal_custom_duration")}</Text>
               <TouchableOpacity
                 style={styles.durationModalClose}
                 onPress={() => setShowDurationPicker(false)}
@@ -855,7 +857,7 @@ export default function CreateCircleDetailsScreen() {
               style={styles.durationModalConfirm}
               onPress={() => setShowDurationPicker(false)}
             >
-              <Text style={styles.durationModalConfirmText}>Confirm</Text>
+              <Text style={styles.durationModalConfirmText}>{t("create_circle_details.modal_confirm")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -870,7 +872,7 @@ export default function CreateCircleDetailsScreen() {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Beneficiary</Text>
+            <Text style={styles.modalTitle}>{t("create_circle_details.modal_select_beneficiary")}</Text>
             <TouchableOpacity
               style={styles.modalCloseButton}
               onPress={() => {
@@ -888,7 +890,7 @@ export default function CreateCircleDetailsScreen() {
               style={styles.searchInput}
               value={contactSearch}
               onChangeText={setContactSearch}
-              placeholder="Search contacts..."
+              placeholder={t("create_circle_details.modal_search_contacts")}
               placeholderTextColor="#9CA3AF"
             />
             {contactSearch.length > 0 && (
@@ -945,7 +947,7 @@ export default function CreateCircleDetailsScreen() {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Select Community</Text>
+            <Text style={styles.modalTitle}>{t("create_circle_details.modal_select_community")}</Text>
             <TouchableOpacity
               style={styles.modalCloseButton}
               onPress={() => setShowCommunityPicker(false)}
@@ -986,7 +988,7 @@ export default function CreateCircleDetailsScreen() {
                   {item.role === "elder" && (
                     <View style={styles.elderRoleBadge}>
                       <Ionicons name="shield" size={12} color="#D97706" />
-                      <Text style={styles.elderRoleBadgeText}>Elder</Text>
+                      <Text style={styles.elderRoleBadgeText}>{t("create_circle_details.elder_role_badge")}</Text>
                     </View>
                   )}
                 </View>
