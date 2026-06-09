@@ -165,7 +165,7 @@ const TripPaymentScreen: React.FC = () => {
       await processPayment();
       setIsPaid(true);
     } catch {
-      Alert.alert("Payment Failed", "Please check your payment method and try again.");
+      Alert.alert(t("trip_payment.alert_failed_title"), t("trip_payment.alert_failed_body"));
     } finally {
       setIsProcessing(false);
     }
@@ -210,7 +210,7 @@ const TripPaymentScreen: React.FC = () => {
             <View style={styles.successIconCircle}>
               <Ionicons name="checkmark-circle" size={64} color={GREEN} />
             </View>
-            <Text style={styles.successTitle}>Payment Successful!</Text>
+            <Text style={styles.successTitle}>{t("trip_payment.success_title")}</Text>
             <Text style={styles.successAmount}>
               ${installment.totalCharged.toFixed(2)}
             </Text>
@@ -219,7 +219,7 @@ const TripPaymentScreen: React.FC = () => {
             </Text>
 
             <View style={styles.successProgressCard}>
-              <Text style={styles.successProgressLabel}>Updated Progress</Text>
+              <Text style={styles.successProgressLabel}>{t("trip_payment.label_updated_progress")}</Text>
               <View style={styles.progressBar}>
                 <View
                   style={[styles.progressBarFill, { width: `${afterPaymentPercent}%` }]}
@@ -236,7 +236,7 @@ const TripPaymentScreen: React.FC = () => {
               onPress={() => navigation.goBack()}
               activeOpacity={0.85}
             >
-              <Text style={styles.successBackButtonText}>Back to My Trip</Text>
+              <Text style={styles.successBackButtonText}>{t("trip_payment.btn_back_to_trip")}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -260,10 +260,10 @@ const TripPaymentScreen: React.FC = () => {
 
             {/* ── Payment Breakdown ───────────────────────────────────── */}
             <View style={styles.breakdownCard}>
-              <Text style={styles.breakdownTitle}>Payment Breakdown</Text>
+              <Text style={styles.breakdownTitle}>{t("trip_payment.breakdown_title")}</Text>
 
               <View style={styles.breakdownRow}>
-                <Text style={styles.breakdownLabel}>Installment amount</Text>
+                <Text style={styles.breakdownLabel}>{t("trip_payment.label_installment")}</Text>
                 <Text style={styles.breakdownValue}>
                   ${installment.amount.toFixed(2)}
                 </Text>
@@ -281,7 +281,7 @@ const TripPaymentScreen: React.FC = () => {
               <View style={styles.breakdownDivider} />
 
               <View style={styles.breakdownRow}>
-                <Text style={styles.breakdownTotalLabel}>Total charged</Text>
+                <Text style={styles.breakdownTotalLabel}>{t("trip_payment.label_total_charged")}</Text>
                 <Text style={styles.breakdownTotalValue}>
                   ${installment.totalCharged.toFixed(2)}
                 </Text>
@@ -290,7 +290,7 @@ const TripPaymentScreen: React.FC = () => {
 
             {/* ── Payment Progress ────────────────────────────────────── */}
             <View style={styles.progressCard}>
-              <Text style={styles.progressCardTitle}>Payment Progress</Text>
+              <Text style={styles.progressCardTitle}>{t("trip_payment.progress_title")}</Text>
               <View style={styles.progressBar}>
                 <View
                   style={[
@@ -329,7 +329,7 @@ const TripPaymentScreen: React.FC = () => {
 
             {/* ── Payment Method ──────────────────────────────────────── */}
             <View style={styles.paymentMethodCard}>
-              <Text style={styles.paymentMethodTitle}>Payment Method</Text>
+              <Text style={styles.paymentMethodTitle}>{t("trip_payment.method_title")}</Text>
               <View style={styles.paymentMethodRow}>
                 <View style={styles.cardIconBox}>
                   <Ionicons name={cardIcon} size={24} color={NAVY} />
@@ -341,7 +341,7 @@ const TripPaymentScreen: React.FC = () => {
                   <Text style={styles.cardExpiry}>Expires {paymentMethod.expiry}</Text>
                 </View>
                 <TouchableOpacity style={styles.changeBtn}>
-                  <Text style={styles.changeBtnText}>Change</Text>
+                  <Text style={styles.changeBtnText}>{t("trip_payment.btn_change")}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -355,22 +355,22 @@ const TripPaymentScreen: React.FC = () => {
                 totals headline shows zeros. ──────────────────────────── */}
             {installmentSchedule && (
               <View style={styles.scheduleWrap}>
-                <Text style={styles.scheduleTitle}>Full Payment Schedule</Text>
+                <Text style={styles.scheduleTitle}>{t("trip_payment.schedule_title")}</Text>
                 <View style={styles.totalsRow}>
                   <View style={styles.totalsCol}>
-                    <Text style={styles.totalsLabel}>Paid</Text>
+                    <Text style={styles.totalsLabel}>{t("trip_payment.label_paid")}</Text>
                     <Text style={styles.totalsValuePaid}>
                       {formatMoneyCents(totals.totalPaidCents)}
                     </Text>
                   </View>
                   <View style={styles.totalsCol}>
-                    <Text style={styles.totalsLabel}>Remaining</Text>
+                    <Text style={styles.totalsLabel}>{t("trip_payment.label_remaining")}</Text>
                     <Text style={styles.totalsValueRemaining}>
                       {formatMoneyCents(totals.totalRemainingCents)}
                     </Text>
                   </View>
                   <View style={styles.totalsCol}>
-                    <Text style={styles.totalsLabel}>Total</Text>
+                    <Text style={styles.totalsLabel}>{t("trip_payment.label_total")}</Text>
                     <Text style={styles.totalsValueTotal}>
                       {formatMoneyCents(totals.totalScheduledCents)}
                     </Text>

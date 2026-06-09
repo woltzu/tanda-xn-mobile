@@ -97,7 +97,7 @@ export default function AdminSettingsScreen() {
             // Simulate save
             setTimeout(() => {
               setHasChanges(false);
-              Alert.alert("Saved", "Settings have been updated successfully.");
+              Alert.alert(t("admin_settings_v2.alert_saved_title"), t("admin_settings_v2.alert_saved_body"));
             }, 500);
           },
         },
@@ -158,7 +158,7 @@ export default function AdminSettingsScreen() {
         </View>
         {hasChanges && (
           <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-            <Text style={styles.saveButtonText}>Save</Text>
+            <Text style={styles.saveButtonText}>{t("admin_settings_v2.btn_save")}</Text>
           </TouchableOpacity>
         )}
         {!hasChanges && <View style={styles.headerPlaceholder} />}
@@ -169,7 +169,7 @@ export default function AdminSettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="people-outline" size={22} color="#2563EB" />
-            <Text style={styles.sectionTitle}>Member Permissions</Text>
+            <Text style={styles.sectionTitle}>{t("admin_settings_v2.section_member_permissions")}</Text>
           </View>
 
           {renderToggleRow(
@@ -225,7 +225,7 @@ export default function AdminSettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="notifications-outline" size={22} color="#2563EB" />
-            <Text style={styles.sectionTitle}>Notifications</Text>
+            <Text style={styles.sectionTitle}>{t("admin_settings_v2.section_notifications")}</Text>
           </View>
 
           {renderToggleRow(
@@ -290,7 +290,7 @@ export default function AdminSettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="card-outline" size={22} color="#2563EB" />
-            <Text style={styles.sectionTitle}>Payment Rules</Text>
+            <Text style={styles.sectionTitle}>{t("admin_settings_v2.section_payment_rules")}</Text>
           </View>
 
           {renderToggleRow(
@@ -362,7 +362,7 @@ export default function AdminSettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Ionicons name="settings-outline" size={22} color="#2563EB" />
-            <Text style={styles.sectionTitle}>Circle Rules</Text>
+            <Text style={styles.sectionTitle}>{t("admin_settings_v2.section_circle_rules")}</Text>
           </View>
 
           <View style={styles.subSettingRow}>
@@ -420,18 +420,18 @@ export default function AdminSettingsScreen() {
 
           <TouchableOpacity
             style={styles.dangerButton}
-            onPress={() => Alert.alert("Reset", "This would reset all settings to default.")}
+            onPress={() => Alert.alert(t("admin_settings_v2.alert_reset_title"), t("admin_settings_v2.alert_reset_body"))}
           >
             <Ionicons name="refresh-outline" size={20} color="#DC2626" />
-            <Text style={styles.dangerButtonText}>Reset to Default Settings</Text>
+            <Text style={styles.dangerButtonText}>{t("admin_settings_v2.btn_reset_default")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.dangerButton}
-            onPress={() => Alert.alert("Transfer", "This would open the admin transfer flow.")}
+            onPress={() => Alert.alert(t("admin_settings_v2.alert_transfer_title"), t("admin_settings_v2.alert_transfer_body"))}
           >
             <Ionicons name="swap-horizontal-outline" size={20} color="#DC2626" />
-            <Text style={styles.dangerButtonText}>Transfer Admin Rights</Text>
+            <Text style={styles.dangerButtonText}>{t("admin_settings_v2.btn_transfer_admin")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -439,7 +439,7 @@ export default function AdminSettingsScreen() {
         {hasChanges && (
           <TouchableOpacity style={styles.saveButtonLarge} onPress={handleSave}>
             <Ionicons name="save-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.saveButtonLargeText}>Save All Changes</Text>
+            <Text style={styles.saveButtonLargeText}>{t("admin_settings_v2.btn_save_all")}</Text>
           </TouchableOpacity>
         )}
 

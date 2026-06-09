@@ -149,7 +149,7 @@ export default function AddRecipientScreen() {
           {/* Step 1: Country Selection */}
           {step === "country" && (
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Where does this person live?</Text>
+              <Text style={styles.cardTitle}>{t("add_recipient.card_where_lives")}</Text>
 
               {/* Search */}
               <View style={styles.searchContainer}>
@@ -158,7 +158,7 @@ export default function AddRecipientScreen() {
                   style={styles.searchInput}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
-                  placeholder="Search countries..."
+                  placeholder={t("add_recipient.placeholder_search_countries")}
                   placeholderTextColor="#9CA3AF"
                 />
                 {searchQuery.length > 0 && (
@@ -209,13 +209,13 @@ export default function AddRecipientScreen() {
                   style={styles.changeButton}
                   onPress={() => setStep("country")}
                 >
-                  <Text style={styles.changeButtonText}>Change</Text>
+                  <Text style={styles.changeButtonText}>{t("add_recipient.btn_change")}</Text>
                 </TouchableOpacity>
               </View>
 
               {/* Delivery Method */}
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Delivery Method</Text>
+                <Text style={styles.cardTitle}>{t("add_recipient.card_delivery_method")}</Text>
                 <View style={styles.deliveryMethodsRow}>
                   {deliveryMethods.map((method) => (
                     <TouchableOpacity
@@ -242,7 +242,7 @@ export default function AddRecipientScreen() {
 
               {/* Recipient Information */}
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Recipient Information</Text>
+                <Text style={styles.cardTitle}>{t("add_recipient.card_recipient_info")}</Text>
 
                 {/* Full Name */}
                 <View style={styles.inputGroup}>
@@ -251,7 +251,7 @@ export default function AddRecipientScreen() {
                     style={styles.textInput}
                     value={fullName}
                     onChangeText={setFullName}
-                    placeholder="Enter recipient's full name"
+                    placeholder={t("add_recipient.placeholder_full_name")}
                     placeholderTextColor="#9CA3AF"
                     autoCapitalize="words"
                   />
@@ -281,7 +281,7 @@ export default function AddRecipientScreen() {
                       style={[styles.textInput, styles.phoneInput]}
                       value={phone}
                       onChangeText={setPhone}
-                      placeholder="Phone number"
+                      placeholder={t("add_recipient.placeholder_phone")}
                       placeholderTextColor="#9CA3AF"
                       keyboardType="phone-pad"
                     />
@@ -295,7 +295,7 @@ export default function AddRecipientScreen() {
                     style={styles.textInput}
                     value={email}
                     onChangeText={setEmail}
-                    placeholder="For email notifications"
+                    placeholder={t("add_recipient.placeholder_email")}
                     placeholderTextColor="#9CA3AF"
                     keyboardType="email-address"
                     autoCapitalize="none"
@@ -317,8 +317,8 @@ export default function AddRecipientScreen() {
                   {markFavorite && <Text style={styles.favoriteCheckboxStar}>⭐</Text>}
                 </View>
                 <View style={styles.favoriteText}>
-                  <Text style={styles.favoriteTitle}>Add to Favorites</Text>
-                  <Text style={styles.favoriteSubtitle}>Quick access when sending money</Text>
+                  <Text style={styles.favoriteTitle}>{t("add_recipient.favorite_title")}</Text>
+                  <Text style={styles.favoriteSubtitle}>{t("add_recipient.favorite_subtitle")}</Text>
                 </View>
               </TouchableOpacity>
 

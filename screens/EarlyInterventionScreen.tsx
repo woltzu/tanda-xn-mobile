@@ -69,10 +69,10 @@ export default function EarlyInterventionScreen() {
     try {
       const result = await respondWithAction(action);
       if (result) {
-        Alert.alert("Response Recorded", `Your response "${action}" has been recorded.`);
+        Alert.alert(t("early_intervention_v2.alert_response_title"), t("early_intervention_v2.alert_response_body", { action }));
       }
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Failed to submit response.");
+      Alert.alert(t("early_intervention_v2.alert_error_title"), err.message || t("early_intervention_v2.alert_failed_submit"));
     } finally {
       setRespondingAction(null);
     }
@@ -84,7 +84,7 @@ export default function EarlyInterventionScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#00C6AE" />
-        <Text style={styles.loadingText}>Loading interventions...</Text>
+        <Text style={styles.loadingText}>{t("early_intervention_v2.loading_interventions")}</Text>
       </View>
     );
   }
@@ -105,17 +105,17 @@ export default function EarlyInterventionScreen() {
         <View style={styles.summaryRow}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>{totalInterventions}</Text>
-            <Text style={styles.summaryLabel}>Total</Text>
+            <Text style={styles.summaryLabel}>{t("early_intervention_v2.summary_total")}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Text style={[styles.summaryValue, { color: "#10B981" }]}>{defaultsPrevented}</Text>
-            <Text style={styles.summaryLabel}>Prevented</Text>
+            <Text style={styles.summaryLabel}>{t("early_intervention_v2.summary_prevented")}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Text style={[styles.summaryValue, { color: "#00C6AE" }]}>{preventionRate}%</Text>
-            <Text style={styles.summaryLabel}>Success Rate</Text>
+            <Text style={styles.summaryLabel}>{t("early_intervention_v2.summary_success_rate")}</Text>
           </View>
         </View>
       </LinearGradient>
@@ -161,7 +161,7 @@ export default function EarlyInterventionScreen() {
             {!hasIntervention ? (
               <View style={styles.emptyState}>
                 <Ionicons name="shield-checkmark" size={48} color="#10B981" />
-                <Text style={styles.emptyTitle}>All Clear</Text>
+                <Text style={styles.emptyTitle}>{t("early_intervention_v2.empty_all_clear")}</Text>
                 <Text style={styles.emptySubtitle}>
                   You have no active interventions. Keep up the good work!
                 </Text>
@@ -209,14 +209,14 @@ export default function EarlyInterventionScreen() {
                 {intervention!.status === "sent" && (
                   <TouchableOpacity style={styles.viewedBtn} onPress={markViewed}>
                     <Ionicons name="eye-outline" size={16} color="#3B82F6" />
-                    <Text style={styles.viewedBtnText}>Mark as Viewed</Text>
+                    <Text style={styles.viewedBtnText}>{t("early_intervention_v2.btn_mark_viewed")}</Text>
                   </TouchableOpacity>
                 )}
 
                 {/* Options */}
                 {hasOptions && intervention!.optionsOffered && (
                   <View style={styles.optionsSection}>
-                    <Text style={styles.optionsTitle}>Available Actions</Text>
+                    <Text style={styles.optionsTitle}>{t("early_intervention_v2.options_title")}</Text>
                     {intervention!.optionsOffered.map((option: any, index: number) => {
                       const optionKey = typeof option === "string" ? option : option.key || option.label;
                       const optionLabel = typeof option === "string" ? option : option.label || option.key;
@@ -256,7 +256,7 @@ export default function EarlyInterventionScreen() {
                       ) : (
                         <>
                           <Ionicons name="cash" size={16} color="#FFFFFF" />
-                          <Text style={styles.payNowText}>Pay Now</Text>
+                          <Text style={styles.payNowText}>{t("early_intervention_v2.btn_pay_now")}</Text>
                         </>
                       )}
                     </TouchableOpacity>
@@ -266,7 +266,7 @@ export default function EarlyInterventionScreen() {
                       disabled={respondingAction !== null}
                     >
                       <Ionicons name="calendar-outline" size={16} color="#00C6AE" />
-                      <Text style={styles.planBtnText}>Payment Plan</Text>
+                      <Text style={styles.planBtnText}>{t("early_intervention_v2.btn_payment_plan")}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -282,7 +282,7 @@ export default function EarlyInterventionScreen() {
               <View style={styles.emptyState}>
                 <Ionicons name="document-text-outline" size={48} color="#9CA3AF" />
                 <Text style={styles.emptyTitle}>No History</Text>
-                <Text style={styles.emptySubtitle}>Past interventions will appear here.</Text>
+                <Text style={styles.emptySubtitle}>{t("early_intervention_v2.empty_subtitle")}</Text>
               </View>
             ) : (
               historyItems.map((item) => {
@@ -317,7 +317,7 @@ export default function EarlyInterventionScreen() {
                     {item.defaultPrevented && (
                       <View style={styles.preventedBadge}>
                         <Ionicons name="shield-checkmark" size={12} color="#10B981" />
-                        <Text style={styles.preventedText}>Default Prevented</Text>
+                        <Text style={styles.preventedText}>{t("early_intervention_v2.tag_default_prevented")}</Text>
                       </View>
                     )}
 

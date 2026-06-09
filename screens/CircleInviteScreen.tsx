@@ -142,7 +142,7 @@ export default function CircleInviteScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle" size={64} color={colors.textSecondary} />
-          <Text style={styles.errorTitle}>Invalid Invite</Text>
+          <Text style={styles.errorTitle}>{t("circle_invite_v2.error_title")}</Text>
           <Text style={styles.errorMessage}>
             This invite link is invalid or has expired.
           </Text>
@@ -239,7 +239,7 @@ export default function CircleInviteScreen() {
             <View style={styles.detailIconBox}>
               <Ionicons name="calendar-outline" size={18} color={colors.accentTeal} />
             </View>
-            <Text style={styles.detailText}>Starts soon</Text>
+            <Text style={styles.detailText}>{t("circle_invite_v2.label_starts_soon")}</Text>
           </View>
 
           {position !== undefined && (
@@ -255,7 +255,7 @@ export default function CircleInviteScreen() {
         {/* ===== CONTRIBUTION SUMMARY ===== */}
         {contribution !== undefined && (
           <View style={styles.commitmentBox}>
-            <Text style={styles.commitmentTitle}>Your commitment</Text>
+            <Text style={styles.commitmentTitle}>{t("circle_invite_v2.commitment_title")}</Text>
             <Text style={styles.commitmentAmount}>
               ${contribution.toLocaleString()} per {frequencyLabel(freq)}
             </Text>
@@ -267,18 +267,18 @@ export default function CircleInviteScreen() {
 
         {/* ===== WHY JOIN (Trust + Benefits) ===== */}
         <View style={styles.benefitsCard}>
-          <Text style={styles.benefitsTitle}>Why join?</Text>
+          <Text style={styles.benefitsTitle}>{t("circle_invite_v2.benefits_title")}</Text>
           <View style={styles.benefitRow}>
             <Ionicons name="shield-checkmark" size={16} color={colors.successText} />
-            <Text style={styles.benefitText}>Save together with trusted members</Text>
+            <Text style={styles.benefitText}>{t("circle_invite_v2.benefit_save")}</Text>
           </View>
           <View style={styles.benefitRow}>
             <Ionicons name="trending-up" size={16} color={colors.successText} />
-            <Text style={styles.benefitText}>Build your Xn Score with on-time payments</Text>
+            <Text style={styles.benefitText}>{t("circle_invite_v2.benefit_score")}</Text>
           </View>
           <View style={styles.benefitRow}>
             <Ionicons name="flash" size={16} color={colors.successText} />
-            <Text style={styles.benefitText}>Access advances when you need them</Text>
+            <Text style={styles.benefitText}>{t("circle_invite_v2.benefit_advances")}</Text>
           </View>
         </View>
 
@@ -335,7 +335,7 @@ export default function CircleInviteScreen() {
                 ) : (
                   <>
                     <Ionicons name="checkmark-circle" size={20} color={colors.textWhite} />
-                    <Text style={styles.joinButtonText}>Join Circle</Text>
+                    <Text style={styles.joinButtonText}>{t("circle_invite_v2.btn_join")}</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -344,7 +344,7 @@ export default function CircleInviteScreen() {
                 style={styles.declineButton}
                 onPress={handleDecline}
               >
-                <Text style={styles.declineButtonText}>Decline</Text>
+                <Text style={styles.declineButtonText}>{t("circle_invite_v2.btn_decline")}</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -355,7 +355,7 @@ export default function CircleInviteScreen() {
                 activeOpacity={0.8}
               >
                 <Ionicons name="person-add" size={20} color={colors.textWhite} />
-                <Text style={styles.joinButtonText}>Sign Up to Join</Text>
+                <Text style={styles.joinButtonText}>{t("circle_invite_v2.btn_sign_up")}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -367,7 +367,7 @@ export default function CircleInviteScreen() {
               >
                 <Text style={styles.loginLinkText}>
                   Already have an account?{" "}
-                  <Text style={styles.loginLinkBold}>Log In</Text>
+                  <Text style={styles.loginLinkBold}>{t("circle_invite_v2.btn_log_in")}</Text>
                 </Text>
               </TouchableOpacity>
             </>

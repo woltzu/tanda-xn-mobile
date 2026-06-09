@@ -67,7 +67,7 @@ const CreateTripListingScreen = () => {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t("screen_headers.create_trip_listing")}</Text>
         <TouchableOpacity>
-          <Text style={styles.headerAction}>Preview</Text>
+          <Text style={styles.headerAction}>{t("create_trip_listing_v2.header_preview")}</Text>
         </TouchableOpacity>
       </View>
 
@@ -79,17 +79,17 @@ const CreateTripListingScreen = () => {
         {/* Cover Photo Upload */}
         <TouchableOpacity style={styles.coverUpload} activeOpacity={0.7}>
           <Text style={styles.coverIcon}>🖼️</Text>
-          <Text style={styles.coverLabel}>Add cover photo</Text>
+          <Text style={styles.coverLabel}>{t("create_trip_listing_v2.cover_label")}</Text>
         </TouchableOpacity>
 
         {/* Trip Name */}
         <View style={styles.fieldGroup}>
-          <Text style={styles.fieldLabel}>Trip name</Text>
+          <Text style={styles.fieldLabel}>{t("create_trip_listing_v2.field_trip_name")}</Text>
           <TextInput
             style={styles.textInput}
             value={tripName}
             onChangeText={setTripName}
-            placeholder="Enter trip name"
+            placeholder={t("create_trip_listing_v2.placeholder_trip_name")}
             placeholderTextColor={colors.textSecondary}
           />
         </View>
@@ -97,23 +97,23 @@ const CreateTripListingScreen = () => {
         {/* Dates Row */}
         <View style={styles.row}>
           <View style={[styles.fieldGroup, styles.halfField]}>
-            <Text style={styles.fieldLabel}>Departure date</Text>
+            <Text style={styles.fieldLabel}>{t("create_trip_listing_v2.field_departure")}</Text>
             <TextInput
               style={styles.textInput}
               value={departureDate}
               onChangeText={setDepartureDate}
-              placeholder="Select date"
+              placeholder={t("create_trip_listing_v2.placeholder_select_date")}
               placeholderTextColor={colors.textSecondary}
             />
           </View>
           <View style={{ width: spacing.md }} />
           <View style={[styles.fieldGroup, styles.halfField]}>
-            <Text style={styles.fieldLabel}>Return date</Text>
+            <Text style={styles.fieldLabel}>{t("create_trip_listing_v2.field_return")}</Text>
             <TextInput
               style={styles.textInput}
               value={returnDate}
               onChangeText={setReturnDate}
-              placeholder="Select date"
+              placeholder={t("create_trip_listing_v2.placeholder_select_date")}
               placeholderTextColor={colors.textSecondary}
             />
           </View>
@@ -122,7 +122,7 @@ const CreateTripListingScreen = () => {
         {/* Travelers Row */}
         <View style={styles.row}>
           <View style={[styles.fieldGroup, styles.halfField]}>
-            <Text style={styles.fieldLabel}>Min travelers</Text>
+            <Text style={styles.fieldLabel}>{t("create_trip_listing_v2.field_min_travelers")}</Text>
             <TextInput
               style={styles.textInput}
               value={minTravelers}
@@ -133,7 +133,7 @@ const CreateTripListingScreen = () => {
           </View>
           <View style={{ width: spacing.md }} />
           <View style={[styles.fieldGroup, styles.halfField]}>
-            <Text style={styles.fieldLabel}>Max travelers</Text>
+            <Text style={styles.fieldLabel}>{t("create_trip_listing_v2.field_max_travelers")}</Text>
             <TextInput
               style={styles.textInput}
               value={maxTravelers}
@@ -145,30 +145,30 @@ const CreateTripListingScreen = () => {
         </View>
 
         {/* Pricing Section */}
-        <Text style={styles.sectionHeader}>Pricing</Text>
+        <Text style={styles.sectionHeader}>{t("create_trip_listing_v2.section_pricing")}</Text>
         <View style={styles.card}>
           <View style={styles.pricingRow}>
-            <Text style={styles.pricingLabel}>Price per person</Text>
+            <Text style={styles.pricingLabel}>{t("create_trip_listing_v2.label_price_per_person")}</Text>
             <View style={styles.pricingRight}>
               <Text style={[styles.pricingValue, { color: AMBER_GOLD }]}>$1,800</Text>
               <TouchableOpacity>
-                <Text style={styles.editLink}>Edit</Text>
+                <Text style={styles.editLink}>{t("create_trip_listing_v2.btn_edit")}</Text>
               </TouchableOpacity>
             </View>
           </View>
           <View style={styles.divider} />
           <View style={styles.pricingRow}>
-            <Text style={styles.pricingLabel}>Deposit to hold spot</Text>
+            <Text style={styles.pricingLabel}>{t("create_trip_listing_v2.label_deposit")}</Text>
             <View style={styles.pricingRight}>
               <Text style={[styles.pricingValue, { color: colors.accentTeal }]}>$300</Text>
               <TouchableOpacity>
-                <Text style={styles.editLink}>Edit</Text>
+                <Text style={styles.editLink}>{t("create_trip_listing_v2.btn_edit")}</Text>
               </TouchableOpacity>
             </View>
           </View>
           <View style={styles.divider} />
           <View style={styles.pricingRow}>
-            <Text style={styles.pricingLabel}>Suggested circle contribution</Text>
+            <Text style={styles.pricingLabel}>{t("create_trip_listing_v2.label_circle_contribution")}</Text>
             <View style={styles.pricingRight}>
               <Text style={[styles.pricingValue, { color: colors.textSecondary }]}>
                 $180/mo × 10
@@ -179,7 +179,7 @@ const CreateTripListingScreen = () => {
         </View>
 
         {/* What's Included Section */}
-        <Text style={styles.sectionHeader}>What's included</Text>
+        <Text style={styles.sectionHeader}>{t("create_trip_listing_v2.section_whats_included")}</Text>
         <View style={styles.card}>
           {includes.map((item, index) => (
             <React.Fragment key={item.id}>

@@ -75,7 +75,7 @@ export default function GraduatedEntryScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#00C6AE" />
-        <Text style={styles.loadingText}>Loading tier status...</Text>
+        <Text style={styles.loadingText}>{t("graduated_entry.loading")}</Text>
       </View>
     );
   }
@@ -123,7 +123,7 @@ export default function GraduatedEntryScreen() {
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
             <Ionicons name="trending-up" size={18} color="#00C6AE" />
-            <Text style={styles.cardTitle}>Tier Progress</Text>
+            <Text style={styles.cardTitle}>{t("graduated_entry.card_progress")}</Text>
           </View>
 
           {/* Progress Bar */}
@@ -150,12 +150,12 @@ export default function GraduatedEntryScreen() {
             <View style={styles.statCard}>
               <Ionicons name="calendar" size={20} color="#3B82F6" />
               <Text style={styles.statValue}>{accountAge}d</Text>
-              <Text style={styles.statLabel}>Account Age</Text>
+              <Text style={styles.statLabel}>{t("graduated_entry.stat_account_age")}</Text>
             </View>
             <View style={styles.statCard}>
               <Ionicons name="checkmark-done-circle" size={20} color="#10B981" />
               <Text style={styles.statValue}>{circlesCompleted}</Text>
-              <Text style={styles.statLabel}>Completed</Text>
+              <Text style={styles.statLabel}>{t("graduated_entry.stat_completed")}</Text>
             </View>
           </View>
         </View>
@@ -164,7 +164,7 @@ export default function GraduatedEntryScreen() {
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
             <Ionicons name="lock-open-outline" size={18} color="#8B5CF6" />
-            <Text style={styles.cardTitle}>Your Tier Limits</Text>
+            <Text style={styles.cardTitle}>{t("graduated_entry.card_limits")}</Text>
           </View>
 
           <View style={styles.limitRow}>
@@ -172,7 +172,7 @@ export default function GraduatedEntryScreen() {
               <Ionicons name="people" size={18} color="#3B82F6" />
             </View>
             <View style={styles.limitInfo}>
-              <Text style={styles.limitLabel}>Max Circle Size</Text>
+              <Text style={styles.limitLabel}>{t("graduated_entry.label_max_circle_size")}</Text>
               <Text style={styles.limitValue}>{maxCircleSizeFormatted}</Text>
             </View>
           </View>
@@ -182,7 +182,7 @@ export default function GraduatedEntryScreen() {
               <Ionicons name="cash" size={18} color="#10B981" />
             </View>
             <View style={styles.limitInfo}>
-              <Text style={styles.limitLabel}>Max Contribution</Text>
+              <Text style={styles.limitLabel}>{t("graduated_entry.label_max_contribution")}</Text>
               <Text style={styles.limitValue}>{maxContributionFormatted}</Text>
             </View>
           </View>
@@ -192,7 +192,7 @@ export default function GraduatedEntryScreen() {
               <Ionicons name="swap-horizontal" size={18} color="#F59E0B" />
             </View>
             <View style={styles.limitInfo}>
-              <Text style={styles.limitLabel}>Position Access</Text>
+              <Text style={styles.limitLabel}>{t("graduated_entry.label_position_access")}</Text>
               <Text style={styles.limitValue}>
                 {positionAccess === "any"
                   ? "All positions"
@@ -203,7 +203,7 @@ export default function GraduatedEntryScreen() {
             </View>
             {positionRestrictions.middleOnly && (
               <View style={styles.restrictionBadge}>
-                <Text style={styles.restrictionText}>Limited</Text>
+                <Text style={styles.restrictionText}>{t("graduated_entry.tag_limited")}</Text>
               </View>
             )}
           </View>
@@ -241,7 +241,7 @@ export default function GraduatedEntryScreen() {
         <View style={styles.card}>
           <View style={styles.cardTitleRow}>
             <Ionicons name="layers-outline" size={18} color="#0A2342" />
-            <Text style={styles.cardTitle}>All Tiers</Text>
+            <Text style={styles.cardTitle}>{t("graduated_entry.card_all_tiers")}</Text>
           </View>
 
           {Object.entries(TIER_CONFIG)
@@ -258,7 +258,7 @@ export default function GraduatedEntryScreen() {
                   </Text>
                   {isCurrent && (
                     <View style={[styles.currentBadge, { backgroundColor: config.color + "15" }]}>
-                      <Text style={[styles.currentBadgeText, { color: config.color }]}>Current</Text>
+                      <Text style={[styles.currentBadgeText, { color: config.color }]}>{t("graduated_entry.badge_current")}</Text>
                     </View>
                   )}
                 </View>

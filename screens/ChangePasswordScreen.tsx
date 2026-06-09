@@ -76,7 +76,7 @@ export default function ChangePasswordScreen() {
         [{ text: "OK", onPress: () => navigation.goBack() }]
       );
     } catch (error) {
-      Alert.alert("Error", "Failed to change password. Please try again.");
+      Alert.alert(t("change_password_v2.alert_error_title"), t("change_password_v2.alert_failed_change"));
     } finally {
       setIsSaving(false);
     }
@@ -107,7 +107,7 @@ export default function ChangePasswordScreen() {
             </TouchableOpacity>
             <View>
               <Text style={styles.headerTitle}>{t("screen_headers.change_password")}</Text>
-              <Text style={styles.headerSubtitle}>Create a strong password</Text>
+              <Text style={styles.headerSubtitle}>{t("change_password_v2.header_subtitle")}</Text>
             </View>
           </View>
         </LinearGradient>
@@ -116,11 +116,11 @@ export default function ChangePasswordScreen() {
         <View style={styles.content}>
           {/* Current Password */}
           <View style={styles.inputCard}>
-            <Text style={styles.inputLabel}>Current Password</Text>
+            <Text style={styles.inputLabel}>{t("change_password_v2.label_current")}</Text>
             <View style={styles.inputWrapper}>
               <TextInput
                 style={styles.input}
-                placeholder="Enter current password"
+                placeholder={t("change_password_v2.placeholder_current")}
                 placeholderTextColor="#9CA3AF"
                 value={currentPassword}
                 onChangeText={setCurrentPassword}
@@ -138,17 +138,17 @@ export default function ChangePasswordScreen() {
               </TouchableOpacity>
             </View>
             <TouchableOpacity onPress={handleForgotPassword}>
-              <Text style={styles.forgotText}>Forgot password?</Text>
+              <Text style={styles.forgotText}>{t("change_password_v2.btn_forgot")}</Text>
             </TouchableOpacity>
           </View>
 
           {/* New Password */}
           <View style={styles.inputCard}>
-            <Text style={styles.inputLabel}>New Password</Text>
+            <Text style={styles.inputLabel}>{t("change_password_v2.label_new")}</Text>
             <View style={styles.inputWrapper}>
               <TextInput
                 style={styles.input}
-                placeholder="Enter new password"
+                placeholder={t("change_password_v2.placeholder_new")}
                 placeholderTextColor="#9CA3AF"
                 value={newPassword}
                 onChangeText={setNewPassword}
@@ -170,7 +170,7 @@ export default function ChangePasswordScreen() {
             {newPassword.length > 0 && (
               <View style={styles.strengthSection}>
                 <View style={styles.strengthHeader}>
-                  <Text style={styles.strengthLabel}>Password Strength</Text>
+                  <Text style={styles.strengthLabel}>{t("change_password_v2.strength_label")}</Text>
                   <Text style={[styles.strengthValue, { color: strength.color }]}>
                     {strength.label}
                   </Text>
@@ -218,7 +218,7 @@ export default function ChangePasswordScreen() {
 
           {/* Confirm Password */}
           <View style={styles.inputCard}>
-            <Text style={styles.inputLabel}>Confirm New Password</Text>
+            <Text style={styles.inputLabel}>{t("change_password_v2.label_confirm")}</Text>
             <View
               style={[
                 styles.inputWrapper,
@@ -230,7 +230,7 @@ export default function ChangePasswordScreen() {
             >
               <TextInput
                 style={styles.input}
-                placeholder="Confirm new password"
+                placeholder={t("change_password_v2.placeholder_confirm")}
                 placeholderTextColor="#9CA3AF"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
@@ -248,10 +248,10 @@ export default function ChangePasswordScreen() {
               </TouchableOpacity>
             </View>
             {confirmPassword.length > 0 && !passwordsMatch && (
-              <Text style={styles.mismatchText}>Passwords don't match</Text>
+              <Text style={styles.mismatchText}>{t("change_password_v2.msg_mismatch")}</Text>
             )}
             {passwordsMatch && (
-              <Text style={styles.matchText}>Passwords match</Text>
+              <Text style={styles.matchText}>{t("change_password_v2.msg_match")}</Text>
             )}
           </View>
         </View>

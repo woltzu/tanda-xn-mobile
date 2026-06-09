@@ -112,7 +112,7 @@ export default function QRCodeDisplayScreen() {
         </LinearGradient>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color="#9CA3AF" />
-          <Text style={styles.errorText}>This circle could not be found.</Text>
+          <Text style={styles.errorText}>{t("qr_code_display_v2.error_not_found")}</Text>
         </View>
       </View>
     );
@@ -129,7 +129,7 @@ export default function QRCodeDisplayScreen() {
     try {
       const Clipboard = require("react-native").Clipboard;
       await Clipboard.setString(inviteCode);
-      Alert.alert("Copied!", "Invite code copied to clipboard", [{ text: "OK" }]);
+      Alert.alert(t("qr_code_display_v2.alert_copied_title"), t("qr_code_display_v2.alert_copied_body"), [{ text: t("qr_code_display_v2.alert_ok") }]);
     } catch (error) {
       console.error("Error copying:", error);
     }
@@ -177,7 +177,7 @@ export default function QRCodeDisplayScreen() {
         <View style={styles.content}>
           {/* QR Code Card */}
           <View style={styles.qrCard}>
-            <Text style={styles.qrTitle}>Scan to Join</Text>
+            <Text style={styles.qrTitle}>{t("qr_code_display_v2.qr_title")}</Text>
             <Text style={styles.qrSubtitle}>
               Have friends scan this QR code with the TandaXn app
             </Text>
@@ -199,7 +199,7 @@ export default function QRCodeDisplayScreen() {
 
             {/* Invite Code Display */}
             <View style={styles.codeContainer}>
-              <Text style={styles.codeLabel}>Invite Code</Text>
+              <Text style={styles.codeLabel}>{t("qr_code_display_v2.code_label")}</Text>
               <View style={styles.codeBox}>
                 <Text style={styles.codeText}>{inviteCode}</Text>
                 <TouchableOpacity style={styles.copyButton} onPress={handleCopyCode}>
@@ -211,15 +211,15 @@ export default function QRCodeDisplayScreen() {
 
           {/* How to Join Instructions */}
           <View style={styles.instructionsCard}>
-            <Text style={styles.instructionsTitle}>How to Join</Text>
+            <Text style={styles.instructionsTitle}>{t("qr_code_display_v2.instructions_title")}</Text>
 
             <View style={styles.step}>
               <View style={styles.stepNumber}>
                 <Text style={styles.stepNumberText}>1</Text>
               </View>
               <View style={styles.stepContent}>
-                <Text style={styles.stepTitle}>Download TandaXn</Text>
-                <Text style={styles.stepText}>Get the app from App Store or Play Store</Text>
+                <Text style={styles.stepTitle}>{t("qr_code_display_v2.step_download_title")}</Text>
+                <Text style={styles.stepText}>{t("qr_code_display_v2.step_download_body")}</Text>
               </View>
             </View>
 
@@ -228,7 +228,7 @@ export default function QRCodeDisplayScreen() {
                 <Text style={styles.stepNumberText}>2</Text>
               </View>
               <View style={styles.stepContent}>
-                <Text style={styles.stepTitle}>Scan QR Code or Enter Code</Text>
+                <Text style={styles.stepTitle}>{t("qr_code_display_v2.step_scan_title")}</Text>
                 <Text style={styles.stepText}>
                   Open the app and tap "Join Circle" then scan or enter the code
                 </Text>
@@ -241,7 +241,7 @@ export default function QRCodeDisplayScreen() {
               </View>
               <View style={styles.stepContent}>
                 <Text style={styles.stepTitle}>Confirm & Join</Text>
-                <Text style={styles.stepText}>Review circle details and join the circle</Text>
+                <Text style={styles.stepText}>{t("qr_code_display_v2.step_review_body")}</Text>
               </View>
             </View>
           </View>
@@ -250,7 +250,7 @@ export default function QRCodeDisplayScreen() {
           <View style={styles.alternativeCard}>
             <Ionicons name="chatbubble-outline" size={24} color="#6366F1" />
             <View style={styles.alternativeContent}>
-              <Text style={styles.alternativeTitle}>Can't scan?</Text>
+              <Text style={styles.alternativeTitle}>{t("qr_code_display_v2.alternative_title")}</Text>
               <Text style={styles.alternativeText}>
                 Share the invite code "{inviteCode}" directly via message
               </Text>
@@ -263,7 +263,7 @@ export default function QRCodeDisplayScreen() {
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
           <Ionicons name="share-social-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.shareButtonText}>Share Invite</Text>
+          <Text style={styles.shareButtonText}>{t("qr_code_display_v2.btn_share_invite")}</Text>
         </TouchableOpacity>
       </View>
     </View>

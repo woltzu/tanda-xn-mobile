@@ -227,13 +227,13 @@ export default function HonorSystemScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>{honorStats.totalVouchesGiven}</Text>
-            <Text style={styles.statLabel}>Total Vouches</Text>
+            <Text style={styles.statLabel}>{t("honor_system_extended.stat_total_vouches")}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={[styles.statNumber, { color: "#00C6AE" }]}>
               {honorStats.successfulVouches}
             </Text>
-            <Text style={styles.statLabel}>Successful</Text>
+            <Text style={styles.statLabel}>{t("honor_system_extended.stat_successful")}</Text>
           </View>
           <View style={styles.statCard}>
             <Text
@@ -244,13 +244,13 @@ export default function HonorSystemScreen() {
             >
               {honorStats.defaultedVouches}
             </Text>
-            <Text style={styles.statLabel}>Defaulted</Text>
+            <Text style={styles.statLabel}>{t("honor_system_extended.stat_defaulted")}</Text>
           </View>
           <View style={styles.statCard}>
             <Text style={[styles.statNumber, { color: "#8B5CF6" }]}>
               {honorStats.vouchSuccessRate}%
             </Text>
-            <Text style={styles.statLabel}>Success Rate</Text>
+            <Text style={styles.statLabel}>{t("honor_system_extended.stat_success_rate")}</Text>
           </View>
         </View>
       </LinearGradient>
@@ -289,7 +289,7 @@ export default function HonorSystemScreen() {
                 <View style={styles.statusRow}>
                   <View style={styles.statusLeft}>
                     <Ionicons name="people" size={24} color="#8B5CF6" />
-                    <Text style={styles.statusText}>Active Vouches</Text>
+                    <Text style={styles.statusText}>{t("honor_system_extended.status_active_vouches")}</Text>
                   </View>
                   <Text style={styles.statusValue}>
                     {activeVouches.length} / {honorStats.vouchLimit}
@@ -306,7 +306,7 @@ export default function HonorSystemScreen() {
                   size={24}
                   color={hasSecurityDeposit ? "#059669" : "#9CA3AF"}
                 />
-                <Text style={styles.statusText}>Security Deposit</Text>
+                <Text style={styles.statusText}>{t("honor_system_extended.status_security_deposit")}</Text>
               </View>
               <Text
                 style={[
@@ -325,7 +325,7 @@ export default function HonorSystemScreen() {
               onPress={() => navigation.navigate("VouchMember")}
             >
               <Ionicons name="hand-right" size={20} color="#FFFFFF" />
-              <Text style={styles.vouchButtonText}>Vouch for Someone</Text>
+              <Text style={styles.vouchButtonText}>{t("honor_system_extended.btn_vouch_someone")}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -429,7 +429,7 @@ export default function HonorSystemScreen() {
                     </Text>
                     {isCurrentTier && (
                       <View style={[styles.currentBadge, { backgroundColor: tier.color }]}>
-                        <Text style={styles.currentBadgeText}>Current</Text>
+                        <Text style={styles.currentBadgeText}>{t("honor_system_extended.badge_current")}</Text>
                       </View>
                     )}
                   </View>
@@ -456,7 +456,7 @@ export default function HonorSystemScreen() {
                 <Ionicons name="ribbon" size={20} color="#6366F1" />
               </View>
               <View style={styles.infoContent}>
-                <Text style={styles.infoTitle}>Build Your Reputation</Text>
+                <Text style={styles.infoTitle}>{t("honor_system_extended.info_build_reputation")}</Text>
                 <Text style={styles.infoText}>
                   Vouch for trustworthy people to build your honor standing
                 </Text>
@@ -468,7 +468,7 @@ export default function HonorSystemScreen() {
                 <Ionicons name="warning" size={20} color="#F59E0B" />
               </View>
               <View style={styles.infoContent}>
-                <Text style={styles.infoTitle}>Choose Wisely</Text>
+                <Text style={styles.infoTitle}>{t("honor_system_extended.info_choose_wisely")}</Text>
                 <Text style={styles.infoText}>
                   Defaults by vouched members affect your XnScore™ (-4 pts)
                 </Text>
@@ -480,7 +480,7 @@ export default function HonorSystemScreen() {
                 <Ionicons name="trending-up" size={20} color="#059669" />
               </View>
               <View style={styles.infoContent}>
-                <Text style={styles.infoTitle}>Earn Rewards</Text>
+                <Text style={styles.infoTitle}>{t("honor_system_extended.info_earn_rewards")}</Text>
                 <Text style={styles.infoText}>
                   Higher tiers unlock badges and community recognition
                 </Text>

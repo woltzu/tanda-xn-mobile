@@ -208,7 +208,7 @@ export default function HowCirclesWorkScreen() {
         <View style={styles.content}>
           {/* What is a Savings Circle */}
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>What is a Savings Circle?</Text>
+            <Text style={styles.sectionTitle}>{t("how_circles_work_v2.section_what_is")}</Text>
             <Text style={styles.paragraph}>
               A savings circle is a group of trusted people who pool money
               together. Each member contributes a fixed amount regularly, and
@@ -223,7 +223,7 @@ export default function HowCirclesWorkScreen() {
 
           {/* Circle Types Tabs */}
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Types of Circles</Text>
+            <Text style={styles.sectionTitle}>{t("how_circles_work_v2.section_types")}</Text>
             <Text style={styles.sectionSubtitle}>
               Tap to learn about each type
             </Text>
@@ -371,7 +371,7 @@ export default function HowCirclesWorkScreen() {
                 <Ionicons name="shield-checkmark" size={28} color="#00C6AE" />
               </View>
               <View style={styles.protectionHeaderText}>
-                <Text style={styles.sectionTitle}>TandaXn Protection</Text>
+                <Text style={styles.sectionTitle}>{t("how_circles_work_v2.section_protection")}</Text>
                 <Text style={styles.sectionSubtitle}>
                   Your contributions are secured
                 </Text>
@@ -416,7 +416,7 @@ export default function HowCirclesWorkScreen() {
 
           {/* FAQ Section */}
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
+            <Text style={styles.sectionTitle}>{t("how_circles_work_v2.section_faq")}</Text>
 
             {faqItems.map((faq, index) => (
               <TouchableOpacity
@@ -456,7 +456,7 @@ export default function HowCirclesWorkScreen() {
               colors={["#00C6AE", "#00897B"]}
               style={styles.ctaGradient}
             >
-              <Text style={styles.ctaText}>Start Your First Circle</Text>
+              <Text style={styles.ctaText}>{t("how_circles_work_v2.btn_start_first")}</Text>
               <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
             </LinearGradient>
           </TouchableOpacity>

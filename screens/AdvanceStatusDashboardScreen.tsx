@@ -177,13 +177,13 @@ export default function AdvanceStatusDashboardScreen() {
           {/* Summary cards */}
           <View style={styles.summaryRow}>
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Total Advanced</Text>
+              <Text style={styles.summaryLabel}>{t("advance_status_dashboard.summary_total_advanced")}</Text>
               <Text style={styles.summaryValueWhite}>
                 ${totals.totalAdvanced}
               </Text>
             </View>
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryLabel}>Total to Repay</Text>
+              <Text style={styles.summaryLabel}>{t("advance_status_dashboard.summary_total_repay")}</Text>
               <Text style={styles.summaryValueTeal}>${totals.totalDue}</Text>
             </View>
           </View>
@@ -224,7 +224,7 @@ export default function AdvanceStatusDashboardScreen() {
           {/* Circle Eligibility Impact */}
           {hasActive && (
             <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Impact on Future Circles</Text>
+              <Text style={styles.sectionTitle}>{t("advance_status_dashboard.section_impact")}</Text>
               <View style={styles.impactList}>
                 <ImpactRow
                   color={TEAL}
@@ -250,7 +250,7 @@ export default function AdvanceStatusDashboardScreen() {
             accessibilityLabel="Request new advance"
           >
             <Ionicons name="add" size={20} color={TEAL} />
-            <Text style={styles.newAdvanceText}>Request New Advance</Text>
+            <Text style={styles.newAdvanceText}>{t("advance_status_dashboard.btn_request_new")}</Text>
           </TouchableOpacity>
 
           {/* XnScore reminder */}
@@ -259,7 +259,7 @@ export default function AdvanceStatusDashboardScreen() {
               <Text style={styles.scoreCircleText}>{xnScore}</Text>
             </View>
             <View>
-              <Text style={styles.scoreTitle}>Your XnScore</Text>
+              <Text style={styles.scoreTitle}>{t("advance_status_dashboard.score_title")}</Text>
               <Text style={styles.scoreBody}>
                 On-time repayment keeps your score healthy
               </Text>
@@ -330,7 +330,7 @@ function AdvanceCard({
             <Text style={styles.withholdAmount}>${advance.totalDue}</Text>
           </View>
           <View style={{ alignItems: "flex-end" }}>
-            <Text style={styles.withholdMicroLabel}>From payout of</Text>
+            <Text style={styles.withholdMicroLabel}>{t("advance_status_dashboard.label_from_payout")}</Text>
             <Text style={styles.withholdPayout}>${advance.payoutAmount}</Text>
           </View>
         </View>
@@ -369,7 +369,7 @@ function AdvanceCard({
           accessibilityRole="button"
           accessibilityLabel={`View details for ${advance.typeName}`}
         >
-          <Text style={styles.actionOutlineText}>View Details</Text>
+          <Text style={styles.actionOutlineText}>{t("advance_status_dashboard.btn_view_details")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionPrimary}
@@ -377,7 +377,7 @@ function AdvanceCard({
           accessibilityRole="button"
           accessibilityLabel={`Repay early for ${advance.typeName}`}
         >
-          <Text style={styles.actionPrimaryText}>Repay Early</Text>
+          <Text style={styles.actionPrimaryText}>{t("advance_status_dashboard.btn_repay_early")}</Text>
         </TouchableOpacity>
       </View>
 

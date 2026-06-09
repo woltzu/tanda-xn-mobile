@@ -131,14 +131,14 @@ export default function RepaymentConfirmScreen() {
           <View style={styles.successRing}>
             <Ionicons name="checkmark" size={50} color="#FFFFFF" />
           </View>
-          <Text style={styles.heroTitle}>Advance Paid Off!</Text>
-          <Text style={styles.heroSubtitle}>Your advance is now closed</Text>
+          <Text style={styles.heroTitle}>{t("repayment_confirm.hero_title")}</Text>
+          <Text style={styles.heroSubtitle}>{t("repayment_confirm.hero_subtitle")}</Text>
         </LinearGradient>
 
         <View style={styles.contentWrap}>
           {/* Amount card */}
           <View style={styles.amountCard}>
-            <Text style={styles.amountLabel}>Amount Paid</Text>
+            <Text style={styles.amountLabel}>{t("repayment_confirm.label_amount_paid")}</Text>
             <Text style={styles.amountValue}>${repayment.amountPaid}</Text>
             <Text style={styles.amountSub}>From {repayment.paidFrom}</Text>
           </View>
@@ -150,21 +150,21 @@ export default function RepaymentConfirmScreen() {
                 <Ionicons name="cash" size={20} color="#FFFFFF" />
               </View>
               <Text style={styles.tileSavingsValue}>${repayment.feeSaved}</Text>
-              <Text style={styles.tileSavingsLabel}>Fees Saved</Text>
+              <Text style={styles.tileSavingsLabel}>{t("repayment_confirm.tile_fees_saved")}</Text>
             </View>
             <View style={styles.tileBonus}>
               <View style={styles.tileBonusIcon}>
                 <Ionicons name="star" size={20} color={TEAL} />
               </View>
               <Text style={styles.tileBonusValue}>+{repayment.xnScoreBonus}</Text>
-              <Text style={styles.tileBonusLabel}>XnScore Bonus</Text>
+              <Text style={styles.tileBonusLabel}>{t("repayment_confirm.tile_xnscore_bonus")}</Text>
             </View>
           </View>
 
           {/* XnScore progress (navy) */}
           <View style={styles.scoreCard}>
             <View style={styles.scoreHeader}>
-              <Text style={styles.scoreHeaderLabel}>Your XnScore</Text>
+              <Text style={styles.scoreHeaderLabel}>{t("repayment_confirm.label_your_xnscore")}</Text>
               <Text style={styles.scoreHeaderValue}>
                 {repayment.previousXnScore} → {repayment.newXnScore}
               </Text>
@@ -194,18 +194,18 @@ export default function RepaymentConfirmScreen() {
 
           {/* Repayment details */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Repayment Details</Text>
+            <Text style={styles.sectionTitle}>{t("repayment_confirm.section_details")}</Text>
             <View style={styles.detailsList}>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Advance ID</Text>
+                <Text style={styles.detailLabel}>{t("repayment_confirm.detail_advance_id")}</Text>
                 <Text style={styles.detailValue}>{repayment.advanceId}</Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Paid at</Text>
+                <Text style={styles.detailLabel}>{t("repayment_confirm.detail_paid_at")}</Text>
                 <Text style={styles.detailValue}>{repayment.paidAt}</Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Status</Text>
+                <Text style={styles.detailLabel}>{t("repayment_confirm.detail_status")}</Text>
                 <View style={styles.statusBadge}>
                   <Text style={styles.statusBadgeText}>Closed ✓</Text>
                 </View>
@@ -234,7 +234,7 @@ export default function RepaymentConfirmScreen() {
               accessibilityRole="button"
               accessibilityLabel="View advance history"
             >
-              <Text style={styles.outlineButtonText}>View History</Text>
+              <Text style={styles.outlineButtonText}>{t("repayment_confirm.btn_view_history")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.navyButton}
@@ -242,7 +242,7 @@ export default function RepaymentConfirmScreen() {
               accessibilityRole="button"
               accessibilityLabel="Request new advance"
             >
-              <Text style={styles.navyButtonText}>New Advance</Text>
+              <Text style={styles.navyButtonText}>{t("repayment_confirm.btn_new_advance")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -256,7 +256,7 @@ export default function RepaymentConfirmScreen() {
           accessibilityRole="button"
           accessibilityLabel="Done"
         >
-          <Text style={styles.doneButtonText}>Done</Text>
+          <Text style={styles.doneButtonText}>{t("repayment_confirm.btn_done")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

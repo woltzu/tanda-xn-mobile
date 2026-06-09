@@ -106,7 +106,7 @@ export default function ConflictAlertScreen() {
 
   const handleReview = useCallback((flag: FormationFlag, uiOutcome: "approved" | "rejected" | "override") => {
     if (!user?.id) {
-      Alert.alert("Sign-in required", "Reviewers must be authenticated.");
+      Alert.alert(t("conflict_alert.alert_signin_required_title"), t("conflict_alert.alert_signin_required_body"));
       return;
     }
     Alert.alert(
@@ -127,7 +127,7 @@ export default function ConflictAlertScreen() {
               );
               formation.refresh();
             } catch (err: any) {
-              Alert.alert("Error", err?.message ?? "Failed to process review.");
+              Alert.alert(t("conflict_alert.alert_error_title"), err?.message ?? t("conflict_alert.alert_failed_review"));
             }
           },
         },
@@ -149,7 +149,7 @@ export default function ConflictAlertScreen() {
               await actions.resolveConflict(conflict.id, "manual", "Resolved from mobile");
               history.refresh();
             } catch {
-              Alert.alert("Error", "Failed to resolve conflict.");
+              Alert.alert(t("conflict_alert.alert_error_title"), t("conflict_alert.alert_failed_resolve"));
             }
           },
         },
@@ -191,7 +191,7 @@ export default function ConflictAlertScreen() {
             </Text>
           </View>
 
-          <Text style={styles.cardTitle}>Formation Review Required</Text>
+          <Text style={styles.cardTitle}>{t("conflict_alert.card_title")}</Text>
           <Text style={styles.cardNotes}>
             {flag.totalPairs} pair{flag.totalPairs === 1 ? "" : "s"} scored,{" "}
             {flag.flaggedPairs} flagged. Highest pair {Math.round(flag.highestScore)}/100.
@@ -229,7 +229,7 @@ export default function ConflictAlertScreen() {
               disabled={actions.submitting}
             >
               <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-              <Text style={styles.actionBtnText}>Approve</Text>
+              <Text style={styles.actionBtnText}>{t("conflict_alert.btn_approve")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, styles.overrideBtn]}
@@ -237,7 +237,7 @@ export default function ConflictAlertScreen() {
               disabled={actions.submitting}
             >
               <Ionicons name="swap-horizontal" size={16} color="#F59E0B" />
-              <Text style={[styles.actionBtnText, { color: "#F59E0B" }]}>Override</Text>
+              <Text style={[styles.actionBtnText, { color: "#F59E0B" }]}>{t("conflict_alert.btn_override")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.actionBtn, styles.rejectBtn]}
@@ -245,7 +245,7 @@ export default function ConflictAlertScreen() {
               disabled={actions.submitting}
             >
               <Ionicons name="close" size={16} color="#EF4444" />
-              <Text style={[styles.actionBtnText, { color: "#EF4444" }]}>Reject</Text>
+              <Text style={[styles.actionBtnText, { color: "#EF4444" }]}>{t("conflict_alert.btn_reject")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -284,11 +284,11 @@ export default function ConflictAlertScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{monitor.activeCount}</Text>
-            <Text style={styles.statLabel}>Active</Text>
+            <Text style={styles.statLabel}>{t("conflict_alert.stat_active")}</Text>
           </View>
           <View style={styles.statBox}>
             <Text style={[styles.statValue, { color: "#EF4444" }]}>{monitor.escalated.length}</Text>
-            <Text style={styles.statLabel}>Escalated</Text>
+            <Text style={styles.statLabel}>{t("conflict_alert.stat_escalated")}</Text>
           </View>
         </View>
 
@@ -373,15 +373,15 @@ export default function ConflictAlertScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
             <Text style={styles.statValue}>{history.conflicts.length}</Text>
-            <Text style={styles.statLabel}>Total</Text>
+            <Text style={styles.statLabel}>{t("conflict_alert.stat_total")}</Text>
           </View>
           <View style={styles.statBox}>
             <Text style={[styles.statValue, { color: "#F59E0B" }]}>{history.unresolvedCount}</Text>
-            <Text style={styles.statLabel}>Unresolved</Text>
+            <Text style={styles.statLabel}>{t("conflict_alert.stat_unresolved")}</Text>
           </View>
           <View style={styles.statBox}>
             <Text style={[styles.statValue, { color: "#EF4444" }]}>{history.highSeverityCount}</Text>
-            <Text style={styles.statLabel}>High Severity</Text>
+            <Text style={styles.statLabel}>{t("conflict_alert.stat_high_severity")}</Text>
           </View>
         </View>
 
@@ -423,7 +423,7 @@ export default function ConflictAlertScreen() {
                   disabled={actions.submitting}
                 >
                   <Ionicons name="checkmark-circle-outline" size={16} color="#FFFFFF" />
-                  <Text style={styles.actionBtnText}>Resolve</Text>
+                  <Text style={styles.actionBtnText}>{t("conflict_alert.btn_resolve")}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -502,7 +502,7 @@ function LoadingPlaceholder() {
   return (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color="#00C6AE" />
-      <Text style={styles.loadingText}>Loading...</Text>
+      <Text style={styles.loadingText}>{t("conflict_alert.loading")}</Text>
     </View>
   );
 }

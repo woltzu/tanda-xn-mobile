@@ -209,7 +209,7 @@ export default function GoalLinkCircleScreen() {
     setIsSaving(false);
 
     if (error) {
-      Alert.alert("Couldn't link circle", error.message ?? "Please try again.");
+      Alert.alert(t("goal_link_circle_v2.alert_failed_link"), error.message ?? t("goal_link_circle_v2.alert_please_try_again"));
       return;
     }
     navigation.goBack();
@@ -224,7 +224,7 @@ export default function GoalLinkCircleScreen() {
     setIsSaving(false);
 
     if (error) {
-      Alert.alert("Couldn't remove link", error.message ?? "Please try again.");
+      Alert.alert(t("goal_link_circle_v2.alert_failed_remove"), error.message ?? t("goal_link_circle_v2.alert_please_try_again"));
       return;
     }
     navigation.goBack();
@@ -279,7 +279,7 @@ export default function GoalLinkCircleScreen() {
           <View style={styles.explainCard}>
             <Text style={styles.explainEmoji}>💡</Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.explainTitle}>How this works</Text>
+              <Text style={styles.explainTitle}>{t("goal_link_circle_v2.explain_title")}</Text>
               <Text style={styles.explainBody}>
                 When you receive a Circle payout, we'll automatically transfer it
                 to this Goal. This creates{" "}
@@ -353,7 +353,7 @@ export default function GoalLinkCircleScreen() {
                     <Text style={styles.optionIconEmoji}>💯</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.optionTitle}>Transfer all</Text>
+                    <Text style={styles.optionTitle}>{t("goal_link_circle_v2.option_transfer_all")}</Text>
                     <Text style={styles.optionBody}>
                       100% of payout goes to this Goal
                     </Text>
@@ -380,7 +380,7 @@ export default function GoalLinkCircleScreen() {
                     <Text style={styles.optionIconEmoji}>📊</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.optionTitle}>Transfer a percentage</Text>
+                    <Text style={styles.optionTitle}>{t("goal_link_circle_v2.option_transfer_percent")}</Text>
                     <Text style={styles.optionBody}>
                       Split between Goal and Wallet
                     </Text>
@@ -454,7 +454,7 @@ export default function GoalLinkCircleScreen() {
                     <Text style={styles.optionIconEmoji}>❓</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.optionTitle}>Ask me each time</Text>
+                    <Text style={styles.optionTitle}>{t("goal_link_circle_v2.option_ask_each")}</Text>
                     <Text style={styles.optionBody}>
                       I'll decide when payout arrives
                     </Text>
@@ -473,7 +473,7 @@ export default function GoalLinkCircleScreen() {
               end={{ x: 1, y: 1 }}
               style={styles.previewCard}
             >
-              <Text style={styles.previewLabel}>WHAT HAPPENS NEXT</Text>
+              <Text style={styles.previewLabel}>{t("goal_link_circle_v2.preview_label")}</Text>
               <Text style={styles.previewBody}>
                 {transferOption === "all" && (
                   <>
@@ -545,7 +545,7 @@ export default function GoalLinkCircleScreen() {
             accessibilityRole="button"
             style={[styles.removeButton, isSaving && { opacity: 0.5 }]}
           >
-            <Text style={styles.removeText}>Remove Current Link</Text>
+            <Text style={styles.removeText}>{t("goal_link_circle_v2.btn_remove_link")}</Text>
           </TouchableOpacity>
         )}
       </View>

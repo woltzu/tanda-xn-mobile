@@ -140,11 +140,11 @@ export default function GoalSetupSuccessScreen() {
             {/* Stats */}
             <View style={styles.statsRow}>
               <View style={styles.statBox}>
-                <Text style={styles.statLabel}>MONTHLY</Text>
+                <Text style={styles.statLabel}>{t("goal_setup_success_v2.stat_monthly")}</Text>
                 <Text style={styles.statValue}>${goal.monthlyContribution}</Text>
               </View>
               <View style={styles.statBox}>
-                <Text style={styles.statLabel}>ESTIMATED</Text>
+                <Text style={styles.statLabel}>{t("goal_setup_success_v2.stat_estimated")}</Text>
                 <Text style={styles.statValue}>{goal.estimatedAchieveDate}</Text>
               </View>
             </View>
@@ -173,7 +173,7 @@ export default function GoalSetupSuccessScreen() {
 
           {/* Next steps */}
           <View style={styles.nextStepsCard}>
-            <Text style={styles.nextStepsLabel}>BOOST YOUR PROGRESS</Text>
+            <Text style={styles.nextStepsLabel}>{t("goal_setup_success_v2.next_steps_label")}</Text>
 
             {/* Make first deposit */}
             <TouchableOpacity
@@ -190,7 +190,7 @@ export default function GoalSetupSuccessScreen() {
                   <Text style={styles.stepIconEmoji}>💰</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.stepTitle}>Make First Deposit</Text>
+                  <Text style={styles.stepTitle}>{t("goal_setup_success_v2.step_first_deposit")}</Text>
                   <Text style={styles.stepBody}>
                     Start earning interest immediately
                   </Text>
@@ -214,7 +214,7 @@ export default function GoalSetupSuccessScreen() {
                   <Text style={styles.stepIconEmoji}>🔗</Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.stepTitle}>Link a Circle</Text>
+                  <Text style={styles.stepTitle}>{t("goal_setup_success_v2.step_link_circle")}</Text>
                   <Text style={styles.stepBody}>
                     Auto-transfer Circle payouts here
                   </Text>
@@ -237,8 +237,8 @@ export default function GoalSetupSuccessScreen() {
                     <Text style={styles.stepIconEmoji}>⚡</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.stepTitle}>Set Up Auto-Deposit</Text>
-                    <Text style={styles.stepBody}>Never miss a contribution</Text>
+                    <Text style={styles.stepTitle}>{t("goal_setup_success_v2.step_auto_deposit")}</Text>
+                    <Text style={styles.stepBody}>{t("goal_setup_success_v2.step_auto_deposit_body")}</Text>
                   </View>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
@@ -255,14 +255,14 @@ export default function GoalSetupSuccessScreen() {
 
           {/* Flow visualization */}
           <View style={styles.flowCard}>
-            <Text style={styles.flowLabel}>HOW YOUR MONEY GROWS</Text>
+            <Text style={styles.flowLabel}>{t("goal_setup_success_v2.flow_label")}</Text>
             <View style={styles.flowRow}>
               <View style={styles.flowItem}>
                 <View style={styles.flowCircleMuted}>
                   <Text style={styles.flowCircleEmoji}>🔄</Text>
                 </View>
-                <Text style={styles.flowName}>Circle</Text>
-                <Text style={styles.flowSub}>Payouts</Text>
+                <Text style={styles.flowName}>{t("goal_setup_success_v2.flow_circle")}</Text>
+                <Text style={styles.flowSub}>{t("goal_setup_success_v2.flow_payouts")}</Text>
               </View>
 
               <Ionicons
@@ -275,7 +275,7 @@ export default function GoalSetupSuccessScreen() {
                 <View style={[styles.flowCircle, { backgroundColor: TEAL }]}>
                   <Text style={styles.flowCircleEmoji}>🎯</Text>
                 </View>
-                <Text style={styles.flowName}>Goal</Text>
+                <Text style={styles.flowName}>{t("goal_setup_success_v2.flow_goal")}</Text>
                 <Text style={[styles.flowSub, { color: TEAL }]}>+4% APY</Text>
               </View>
 
@@ -289,8 +289,8 @@ export default function GoalSetupSuccessScreen() {
                 <View style={styles.flowCircleMuted}>
                   <Text style={styles.flowCircleEmoji}>🏆</Text>
                 </View>
-                <Text style={styles.flowName}>Achieve</Text>
-                <Text style={styles.flowSub}>Dream</Text>
+                <Text style={styles.flowName}>{t("goal_setup_success_v2.flow_achieve")}</Text>
+                <Text style={styles.flowSub}>{t("goal_setup_success_v2.flow_dream")}</Text>
               </View>
             </View>
           </View>

@@ -59,11 +59,11 @@ export default function StoreDetailScreen() {
     if (!inquiryText.trim() || !storeId) return;
     try {
       await sendInquiry(storeId, inquiryText.trim());
-      Alert.alert("Sent!", "Your message has been sent to the store owner.");
+      Alert.alert(t("store_detail_v2.alert_sent_title"), t("store_detail_v2.alert_sent_body"));
       setInquiryText("");
       setShowInquiry(false);
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "Could not send message");
+      Alert.alert(t("store_detail_v2.alert_error_title"), err?.message ?? t("store_detail_v2.alert_failed_send"));
     }
   };
 
@@ -73,7 +73,7 @@ export default function StoreDetailScreen() {
   if (!store && !loading) {
     return (
       <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
-        <Text style={{ color: "#6B7280" }}>Store not found</Text>
+        <Text style={{ color: "#6B7280" }}>{t("store_detail_v2.error_not_found")}</Text>
       </View>
     );
   }
@@ -124,17 +124,17 @@ export default function StoreDetailScreen() {
               <View style={styles.statsRow}>
                 <View style={styles.statBlock}>
                   <Text style={styles.statValue}>{store.avgRating > 0 ? store.avgRating.toFixed(1) : "—"}</Text>
-                  <Text style={styles.statLabel}>Rating</Text>
+                  <Text style={styles.statLabel}>{t("store_detail_v2.stat_rating")}</Text>
                 </View>
                 <View style={styles.statDivider} />
                 <View style={styles.statBlock}>
                   <Text style={styles.statValue}>{store.totalReviews}</Text>
-                  <Text style={styles.statLabel}>Reviews</Text>
+                  <Text style={styles.statLabel}>{t("store_detail_v2.stat_reviews")}</Text>
                 </View>
                 <View style={styles.statDivider} />
                 <View style={styles.statBlock}>
                   <Text style={styles.statValue}>{store.totalBookings}</Text>
-                  <Text style={styles.statLabel}>Bookings</Text>
+                  <Text style={styles.statLabel}>{t("store_detail_v2.stat_bookings")}</Text>
                 </View>
               </View>
 
@@ -174,7 +174,7 @@ export default function StoreDetailScreen() {
             {/* Popular Services */}
             {popularServices.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Popular</Text>
+                <Text style={styles.sectionTitle}>{t("store_detail_v2.section_popular")}</Text>
                 {popularServices.map(s => {
                   const pricing = calculateDiscount(s.priceCents, store.memberDiscountPct);
                   return (
@@ -187,7 +187,7 @@ export default function StoreDetailScreen() {
                           <Text style={styles.serviceName}>{s.name}</Text>
                           {s.isPopular && (
                             <View style={styles.popularBadge}>
-                              <Text style={styles.popularText}>Popular</Text>
+                              <Text style={styles.popularText}>{t("store_detail_v2.tag_popular")}</Text>
                             </View>
                           )}
                         </View>
@@ -225,7 +225,7 @@ export default function StoreDetailScreen() {
                       <Text style={styles.serviceName}>{s.name}</Text>
                       {s.description && <Text style={styles.serviceDesc} numberOfLines={1}>{s.description}</Text>}
                       {s.stockStatus === "limited" && (
-                        <Text style={styles.stockWarning}>Limited availability</Text>
+                        <Text style={styles.stockWarning}>{t("store_detail_v2.stock_warning")}</Text>
                       )}
                     </View>
                     <View style={styles.serviceRight}>
@@ -263,7 +263,7 @@ export default function StoreDetailScreen() {
                       {r.isVerifiedPurchase && (
                         <View style={styles.verifiedPurchase}>
                           <Ionicons name="checkmark-circle" size={12} color="#10B981" />
-                          <Text style={styles.verifiedText}>Verified</Text>
+                          <Text style={styles.verifiedText}>{t("store_detail_v2.tag_verified")}</Text>
                         </View>
                       )}
                     </View>
@@ -280,7 +280,7 @@ export default function StoreDetailScreen() {
                 onPress={() => setShowInquiry(!showInquiry)}
               >
                 <Ionicons name="chatbubble-outline" size={18} color="#0A2342" />
-                <Text style={styles.contactButtonText}>Message Store Owner</Text>
+                <Text style={styles.contactButtonText}>{t("store_detail_v2.btn_message_owner")}</Text>
               </TouchableOpacity>
 
               {showInquiry && (
@@ -295,14 +295,14 @@ export default function StoreDetailScreen() {
                   </View>
                   <View style={styles.inquiryActions}>
                     <TouchableOpacity onPress={() => setShowInquiry(false)}>
-                      <Text style={styles.inquiryCancelText}>Cancel</Text>
+                      <Text style={styles.inquiryCancelText}>{t("store_detail_v2.btn_cancel")}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.inquirySendBtn, (!inquiryText.trim() || submitting) && { opacity: 0.4 }]}
                       onPress={handleSendInquiry}
                       disabled={!inquiryText.trim() || submitting}
                     >
-                      <Text style={styles.inquirySendText}>Send</Text>
+                      <Text style={styles.inquirySendText}>{t("store_detail_v2.btn_send")}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

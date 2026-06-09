@@ -69,12 +69,12 @@ export default function MarketInsightScreen() {
           <Text style={styles.headerTitle}>{t("screen_headers.market_insight")}</Text>
           <View style={{ width: 40 }} />
         </View>
-        <Text style={styles.headerSubtitle}>See the demand for your services</Text>
+        <Text style={styles.headerSubtitle}>{t("market_insight_extended.header_subtitle")}</Text>
       </LinearGradient>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* City Selector */}
-        <Text style={styles.fieldLabel}>Your City</Text>
+        <Text style={styles.fieldLabel}>{t("market_insight_extended.field_city")}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
           <View style={styles.pillRow}>
             {CITIES.map(c => (
@@ -90,7 +90,7 @@ export default function MarketInsightScreen() {
         </ScrollView>
 
         {/* Category Selector */}
-        <Text style={styles.fieldLabel}>Your Category</Text>
+        <Text style={styles.fieldLabel}>{t("market_insight_extended.field_category")}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillScroll}>
           <View style={styles.pillRow}>
             {CATEGORIES.map(c => (
@@ -113,7 +113,7 @@ export default function MarketInsightScreen() {
               <View style={[styles.statCard, { backgroundColor: "#FEF3C7" }]}>
                 <View style={styles.statCardHeader}>
                   <Ionicons name="people" size={18} color="#D97706" />
-                  <View style={styles.hotBadge}><Text style={styles.hotBadgeText}>HOT</Text></View>
+                  <View style={styles.hotBadge}><Text style={styles.hotBadgeText}>{t("market_insight_extended.badge_hot")}</Text></View>
                 </View>
                 <Text style={styles.statCardValue}>{insight.diasporaPopulation.toLocaleString()}</Text>
                 <Text style={styles.statCardLabel}>Diaspora households in {cityLabel}</Text>
@@ -122,7 +122,7 @@ export default function MarketInsightScreen() {
               <View style={[styles.statCard, { backgroundColor: "#D1FAE5" }]}>
                 <View style={styles.statCardHeader}>
                   <Ionicons name="cash" size={18} color="#059669" />
-                  <View style={[styles.hotBadge, { backgroundColor: "#059669" }]}><Text style={styles.hotBadgeText}>EST.</Text></View>
+                  <View style={[styles.hotBadge, { backgroundColor: "#059669" }]}><Text style={styles.hotBadgeText}>{t("market_insight_extended.badge_est")}</Text></View>
                 </View>
                 <Text style={styles.statCardValue}>${insight.annualSpendMillions}M</Text>
                 <Text style={styles.statCardLabel}>Annual {catConfig?.label} spending</Text>
@@ -131,19 +131,19 @@ export default function MarketInsightScreen() {
               <View style={[styles.statCard, { backgroundColor: "#DBEAFE" }]}>
                 <View style={styles.statCardHeader}>
                   <Ionicons name="phone-portrait" size={18} color="#2563EB" />
-                  <View style={[styles.hotBadge, { backgroundColor: "#2563EB" }]}><Text style={styles.hotBadgeText}>LIVE</Text></View>
+                  <View style={[styles.hotBadge, { backgroundColor: "#2563EB" }]}><Text style={styles.hotBadgeText}>{t("market_insight_extended.badge_live")}</Text></View>
                 </View>
                 <Text style={styles.statCardValue}>{insight.activeMembers.toLocaleString()}</Text>
-                <Text style={styles.statCardLabel}>TandaXn members active</Text>
+                <Text style={styles.statCardLabel}>{t("market_insight_extended.stat_active")}</Text>
               </View>
             </View>
 
             {/* Demand vs Supply */}
             <View style={styles.gapCard}>
-              <Text style={styles.gapTitle}>Demand vs Supply Gap</Text>
+              <Text style={styles.gapTitle}>{t("market_insight_extended.gap_title")}</Text>
 
               <View style={styles.gapBarRow}>
-                <Text style={styles.gapBarLabel}>Customer Demand</Text>
+                <Text style={styles.gapBarLabel}>{t("market_insight_extended.bar_demand")}</Text>
                 <View style={styles.gapBarBg}>
                   <View style={[styles.gapBarFill, { width: "85%", backgroundColor: "#00C6AE" }]} />
                 </View>
@@ -151,7 +151,7 @@ export default function MarketInsightScreen() {
               </View>
 
               <View style={styles.gapBarRow}>
-                <Text style={styles.gapBarLabel}>Providers Listed</Text>
+                <Text style={styles.gapBarLabel}>{t("market_insight_extended.bar_providers")}</Text>
                 <View style={styles.gapBarBg}>
                   <View style={[styles.gapBarFill, { width: `${insight.supplyPct}%`, backgroundColor: "#EF4444" }]} />
                 </View>
@@ -168,7 +168,7 @@ export default function MarketInsightScreen() {
 
             {/* Revenue Estimator */}
             <View style={styles.revenueCard}>
-              <Text style={styles.revenueTitle}>Revenue Estimator</Text>
+              <Text style={styles.revenueTitle}>{t("market_insight_extended.revenue_title")}</Text>
 
               <View style={styles.sliderRow}>
                 <Text style={styles.sliderLabel}>Customers/month</Text>
@@ -184,7 +184,7 @@ export default function MarketInsightScreen() {
               </View>
 
               <View style={styles.sliderRow}>
-                <Text style={styles.sliderLabel}>Repeat visits</Text>
+                <Text style={styles.sliderLabel}>{t("market_insight_extended.slider_repeat")}</Text>
                 <View style={styles.sliderBtns}>
                   <TouchableOpacity style={styles.sliderBtn} onPress={() => setRepeatRate(Math.max(1, repeatRate - 0.5))}>
                     <Ionicons name="remove" size={16} color="#0A2342" />
@@ -199,15 +199,15 @@ export default function MarketInsightScreen() {
               {estimate && (
                 <View style={styles.revenueResult}>
                   <View style={styles.revenueResultItem}>
-                    <Text style={styles.revenueResultLabel}>Monthly Revenue</Text>
+                    <Text style={styles.revenueResultLabel}>{t("market_insight_extended.result_monthly")}</Text>
                     <Text style={styles.revenueResultValue}>{formatMoney(estimate.monthlyRevenueCents)}</Text>
                   </View>
                   <View style={styles.revenueResultItem}>
-                    <Text style={styles.revenueResultLabel}>Annual Revenue</Text>
+                    <Text style={styles.revenueResultLabel}>{t("market_insight_extended.result_annual")}</Text>
                     <Text style={[styles.revenueResultValue, { color: "#00C6AE" }]}>{formatMoney(estimate.annualRevenueCents)}</Text>
                   </View>
                   <View style={styles.revenueResultItem}>
-                    <Text style={styles.revenueResultLabel}>Monthly Orders</Text>
+                    <Text style={styles.revenueResultLabel}>{t("market_insight_extended.result_orders")}</Text>
                     <Text style={styles.revenueResultValue}>{estimate.monthlyOrders}</Text>
                   </View>
                 </View>
@@ -217,7 +217,7 @@ export default function MarketInsightScreen() {
             {/* Community Breakdown */}
             {insight.communityBreakdown?.length > 0 && (
               <View style={styles.communityCard}>
-                <Text style={styles.communityTitle}>Community Breakdown</Text>
+                <Text style={styles.communityTitle}>{t("market_insight_extended.community_title")}</Text>
                 {insight.communityBreakdown.map((c: any, i: number) => (
                   <View key={i} style={styles.communityRow}>
                     <Text style={styles.communityName}>{c.name}</Text>
@@ -242,7 +242,7 @@ export default function MarketInsightScreen() {
           onPress={() => navigation.navigate("StoreApplication")}
         >
           <Ionicons name="storefront" size={20} color="#FFFFFF" />
-          <Text style={styles.ctaBtnText}>Create My Free Page Now</Text>
+          <Text style={styles.ctaBtnText}>{t("market_insight_extended.btn_create_page")}</Text>
         </TouchableOpacity>
 
         <View style={styles.trustRow}>

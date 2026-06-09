@@ -248,7 +248,7 @@ export default function AdvanceHistoryScreen() {
             accessibilityLabel="Request new advance"
           >
             <Ionicons name="add" size={20} color={TEAL} />
-            <Text style={styles.newAdvanceText}>Request New Advance</Text>
+            <Text style={styles.newAdvanceText}>{t("advance_history_v2.btn_request_new")}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
