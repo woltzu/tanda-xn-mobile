@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { useMyTripStatus } from "../hooks/useTripOrganizer";
@@ -115,6 +116,7 @@ const MyTripStatusScreen: React.FC = () => {
   const tripId = route.params?.tripId ?? MOCK_STATUS.id;
 
   const hookResult = useMyTripStatus(tripId, "me");
+  const { t } = useTranslation();
   const data: TripStatusData = (hookResult as any)?.data ?? MOCK_STATUS;
   const isLoading = (hookResult as any)?.isLoading ?? false;
 
@@ -142,7 +144,7 @@ const MyTripStatusScreen: React.FC = () => {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
             <Ionicons name="arrow-back" size={24} color={NAVY} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>My Trip</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.my_trip_status")}</Text>
           <View style={styles.headerBtn} />
         </View>
 

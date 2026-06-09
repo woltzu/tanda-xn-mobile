@@ -6,6 +6,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import {
   useFormationReview,
   usePostFormationMonitor,
@@ -62,6 +63,8 @@ const TIER_CONFIG: Record<string, { label: string; color: string; bg: string }> 
 };
 
 export default function ConflictAlertScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
   const route = useRoute();
   const circleId = (route.params as any)?.circleId as string;
@@ -438,7 +441,7 @@ export default function ConflictAlertScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Conflict Alerts</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.conflict_alert")}</Text>
           <View style={{ width: 40 }} />
         </View>
 

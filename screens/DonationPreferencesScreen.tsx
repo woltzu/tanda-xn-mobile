@@ -22,6 +22,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 
 const NAVY = "#0A2342";
@@ -39,6 +40,7 @@ const STEPS = [1, 5, 10, 25, 100]; // cents per tap; bigger taps for bigger deno
 
 export default function DonationPreferencesScreen() {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const [prefs, setPrefs] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -98,7 +100,7 @@ export default function DonationPreferencesScreen() {
         >
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Donation Preferences</Text>
+        <Text style={styles.headerTitle}>{t("screen_headers.donation_preferences")}</Text>
         <View style={styles.headerBtn} />
       </View>
 

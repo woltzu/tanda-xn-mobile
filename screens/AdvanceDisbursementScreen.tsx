@@ -38,6 +38,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -111,6 +112,7 @@ const OPTIONS: Option[] = [
 
 export default function AdvanceDisbursementScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<AdvanceDisbursementRouteProp>();
   const advanceAmount = route.params?.advanceAmount ?? 300;
   const userBankAccounts = route.params?.userBankAccounts ?? DEFAULT_BANKS;
@@ -160,7 +162,7 @@ export default function AdvanceDisbursementScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Where to Send Funds</Text>
+              <Text style={styles.headerTitle}>{t("screen_headers.advance_disbursement")}</Text>
               <Text style={styles.headerSubtitle}>
                 Choose your disbursement method
               </Text>

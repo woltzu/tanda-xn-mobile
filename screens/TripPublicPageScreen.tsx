@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { usePublicTrip } from "../hooks/useTripOrganizer";
@@ -128,6 +129,7 @@ const TripPublicPageScreen: React.FC = () => {
 
   // Hook fetches by slug (published) or falls back to tripId (draft preview)
   const hookResult = usePublicTrip(slug, tripId);
+  const { t } = useTranslation();
   const rawTrip = hookResult?.trip;
 
   // Calculate duration in days from start/end dates

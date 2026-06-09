@@ -34,6 +34,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTypedNavigation } from '../hooks/useTypedNavigation';
 import { Routes } from '../lib/routes';
 
+import { useTranslation } from "react-i18next";
 const NAVY = '#0A2342';
 const TEAL = '#00C6AE';
 const BORDER = '#E5E7EB';
@@ -41,6 +42,7 @@ const MUTED = '#6B7280';
 
 export default function RequestProviderScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
 
   const [businessName, setBusinessName] = useState('');
   const [description, setDescription] = useState('');
@@ -92,7 +94,7 @@ export default function RequestProviderScreen() {
         >
           <Ionicons name="chevron-back" size={24} color={NAVY} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Request a Provider</Text>
+        <Text style={styles.headerTitle}>{t("request_provider.header_title")}</Text>
         <View style={styles.headerSpacer} />
       </View>
 

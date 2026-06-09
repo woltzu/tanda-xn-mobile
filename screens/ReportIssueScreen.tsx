@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
@@ -63,6 +64,8 @@ const DISPUTE_TYPES: { id: DisputeType; label: string; icon: string; description
 ];
 
 export default function ReportIssueScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<ReportIssueNavigationProp>();
   const route = useRoute<ReportIssueRouteProp>();
   const { circleId, circleName } = route.params || {};
@@ -135,7 +138,7 @@ export default function ReportIssueScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Report an issue</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.report_issue")}</Text>
           <View style={{ width: 40 }} />
         </View>
         {circleName && (

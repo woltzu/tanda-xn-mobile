@@ -35,6 +35,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -74,6 +75,7 @@ const DEFAULT_GOAL: SuccessGoal = {
 
 export default function GoalSetupSuccessScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<GoalSetupSuccessRouteProp>();
 
   const goal = route.params?.goal ?? DEFAULT_GOAL;

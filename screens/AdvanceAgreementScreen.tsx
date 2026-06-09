@@ -41,6 +41,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 
 const NAVY = "#0A2342";
@@ -131,6 +132,7 @@ function buildSections(advance: Advance) {
 
 export default function AdvanceAgreementScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<AdvanceAgreementRouteProp>();
 
   const advance = route.params?.advance ?? DEFAULT_ADVANCE;
@@ -162,7 +164,7 @@ export default function AdvanceAgreementScreen() {
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View>
-            <Text style={styles.headerTitle}>Advance Payout Agreement</Text>
+            <Text style={styles.headerTitle}>{t("screen_headers.advance_agreement")}</Text>
             <Text style={styles.headerSubtitle}>{advanceId}</Text>
           </View>
         </View>

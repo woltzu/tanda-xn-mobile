@@ -32,6 +32,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useMarketplaceActions } from "../hooks/useMarketplace";
@@ -50,6 +51,7 @@ type ManageServicesRouteProp = RouteProp<
 
 export default function ManageServicesScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<ManageServicesRouteProp>();
   const storeId = route.params?.storeId ?? "";
 
@@ -207,7 +209,7 @@ export default function ManageServicesScreen() {
         >
           <Ionicons name="chevron-back" size={24} color={NAVY} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Manage Services</Text>
+        <Text style={styles.headerTitle}>{t("manage_services.header_title")}</Text>
         <TouchableOpacity
           style={styles.addButton}
           onPress={handleAdd}

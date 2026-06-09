@@ -29,6 +29,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 
 const NAVY = "#0A2342";
@@ -82,6 +83,7 @@ const activityIconBg = (type: Activity["type"]) =>
 
 export default function GoalActivityScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<GoalActivityRouteProp>();
 
   const goal = route.params?.goal;
@@ -141,7 +143,7 @@ export default function GoalActivityScreen() {
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Activity History</Text>
+            <Text style={styles.headerTitle}>{t("screen_headers.goal_activity")}</Text>
             {goal?.name && (
               <Text style={styles.headerSubtitle} numberOfLines={1}>
                 {goal.emoji ? `${goal.emoji} ` : ""}

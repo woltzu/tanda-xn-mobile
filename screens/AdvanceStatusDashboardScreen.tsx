@@ -37,6 +37,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -118,6 +119,7 @@ function withholdBg(status: AdvanceStatus) {
 
 export default function AdvanceStatusDashboardScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<AdvanceStatusDashboardRouteProp>();
   const xnScore = route.params?.user?.xnScore ?? 78;
   const activeAdvances = route.params?.activeAdvances ?? DEFAULT_ADVANCES;
@@ -168,7 +170,7 @@ export default function AdvanceStatusDashboardScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>My Advances</Text>
+            <Text style={styles.headerTitle}>{t("screen_headers.advance_status")}</Text>
             <View style={{ width: 40 }} />
           </View>
 

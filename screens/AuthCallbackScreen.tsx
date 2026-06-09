@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
 import { RootStackParamList } from "../App";
@@ -26,6 +27,8 @@ type AuthCallbackNavigationProp = StackNavigationProp<RootStackParamList>;
  * navigates to the appropriate screen.
  */
 export default function AuthCallbackScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<AuthCallbackNavigationProp>();
   const [status, setStatus] = useState<"verifying" | "success" | "error">("verifying");
   const [errorMessage, setErrorMessage] = useState("");

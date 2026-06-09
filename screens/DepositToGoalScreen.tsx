@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useSavings, GOAL_TYPES } from "../context/SavingsContext";
@@ -24,6 +25,8 @@ type DepositRouteProp = RouteProp<RootStackParamList, "DepositToGoal">;
 const QUICK_AMOUNTS = [25, 50, 100, 250, 500, 1000];
 
 export default function DepositToGoalScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<DepositRouteProp>();
   const { goalId } = route.params;
@@ -125,7 +128,7 @@ export default function DepositToGoalScreen() {
           >
             <Ionicons name="close" size={24} color="#0A2342" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Add to Goal</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.deposit_to_goal")}</Text>
           <View style={styles.placeholder} />
         </View>
 

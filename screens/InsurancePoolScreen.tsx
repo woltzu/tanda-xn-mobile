@@ -11,6 +11,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import {
   useInsurancePool,
   usePoolTransactions,
@@ -46,6 +47,8 @@ const formatCents = (cents: number) =>
   `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 
 const getHealthColor = (health: string) => {
+  const { t } = useTranslation();
+
   switch (health) {
     case "healthy":
       return COLORS.green;
@@ -190,7 +193,7 @@ export default function InsurancePoolScreen() {
           >
             <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Insurance Pool</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.insurance_pool")}</Text>
           <TouchableOpacity style={styles.headerButton}>
             <Ionicons name="information-circle-outline" size={22} color="#FFFFFF" />
           </TouchableOpacity>

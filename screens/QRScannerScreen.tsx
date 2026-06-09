@@ -12,6 +12,7 @@ import {
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
@@ -22,6 +23,8 @@ const { width, height } = Dimensions.get("window");
 const SCAN_AREA_SIZE = width * 0.7;
 
 export default function QRScannerScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<QRScannerNavigationProp>();
   const { findCircleByInviteCode, circles, browseCircles } = useCircles();
 
@@ -190,7 +193,7 @@ export default function QRScannerScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Scan QR Code</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.qr_scanner")}</Text>
           <TouchableOpacity style={styles.flashButton} onPress={() => setFlashOn(!flashOn)}>
             <Ionicons
               name={flashOn ? "flash" : "flash-outline"}

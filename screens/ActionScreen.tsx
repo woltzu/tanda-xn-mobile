@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { useCircles } from "../context/CirclesContext";
 import { useElder } from "../context/ElderContext";
@@ -69,6 +70,8 @@ interface ActionItem {
 // ============ COMPONENT ============
 
 const ActionScreen: React.FC = () => {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
   const { user, session } = useAuth();
   const { myCircles } = useCircles();

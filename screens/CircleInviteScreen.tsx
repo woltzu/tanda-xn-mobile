@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
@@ -24,6 +25,8 @@ type CircleInviteRouteProp = RouteProp<RootStackParamList, "CircleInvite">;
 
 // Helper to format a date string for display
 const formatDate = (dateStr?: string): string => {
+  const { t } = useTranslation();
+
   if (!dateStr) return "TBD";
   try {
     const d = new Date(dateStr);
@@ -175,7 +178,7 @@ export default function CircleInviteScreen() {
           >
             <Ionicons name="arrow-back" size={22} color={colors.textWhite} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Circle Invitation</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.circle_invite")}</Text>
           <View style={{ width: 40 }} />
         </View>
       </LinearGradient>

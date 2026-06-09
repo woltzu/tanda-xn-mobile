@@ -39,6 +39,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
@@ -134,6 +135,7 @@ function fmtCountdown(hours: number): string {
 
 export default function SubstitutePoolScreen() {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const userId = user?.id;
 
@@ -860,7 +862,7 @@ export default function SubstitutePoolScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#1F2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Substitute Pool</Text>
+        <Text style={styles.headerTitle}>{t("screen_headers.substitute_pool")}</Text>
         <View style={styles.headerPlaceholder} />
       </View>
 

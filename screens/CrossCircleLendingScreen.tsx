@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import {
   useLiquidityPool,
   useLiquidityAdvance,
@@ -29,6 +30,8 @@ const formatCents = (c: number) =>
 type TabKey = "overview" | "transfers" | "opportunities";
 
 export default function CrossCircleLendingScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
   const [tab, setTab] = useState<TabKey>("overview");
 
@@ -75,7 +78,7 @@ export default function CrossCircleLendingScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={22} color={COLORS.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Cross-Circle Lending</Text>
+        <Text style={styles.headerTitle}>{t("screen_headers.cross_circle_lending")}</Text>
         <TouchableOpacity style={styles.headerBtn}>
           <Ionicons name="information-circle-outline" size={22} color={COLORS.white} />
         </TouchableOpacity>

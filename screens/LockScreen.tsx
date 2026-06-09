@@ -15,7 +15,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { colors, radius, typography } from "../theme/tokens";
 
+import { useTranslation } from "react-i18next";
 export default function LockScreen() {
+  const { t } = useTranslation();
+
   const {
     user,
     biometricsEnabled,

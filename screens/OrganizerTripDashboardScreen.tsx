@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useTripDashboard } from '../hooks/useTripOrganizer';
 import InstallmentScheduleView from '../components/InstallmentScheduleView';
@@ -65,6 +66,8 @@ const ProgressBar: React.FC<{
   color: string;
   prefix?: string;
 }> = ({ label, current, total, color, prefix }) => {
+  const { t } = useTranslation();
+
   const pct = total > 0 ? Math.min((current / total) * 100, 100) : 0;
   return (
     <View style={styles.progressSection}>

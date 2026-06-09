@@ -27,6 +27,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -260,6 +261,7 @@ const GOAL_TYPES_BY_CATEGORY: Record<string, GoalTypeOption[]> = {
 
 export default function GoalTypeSelectScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<GoalTypeSelectRouteProp>();
 
   const category = route.params?.category ?? DEFAULT_CATEGORY;
@@ -313,7 +315,7 @@ export default function GoalTypeSelectScreen() {
               <Text style={styles.headerKicker}>
                 {category.name.toUpperCase()}
               </Text>
-              <Text style={styles.headerTitle}>Choose Your Goal</Text>
+              <Text style={styles.headerTitle}>{t("screen_headers.goal_type_select")}</Text>
             </View>
           </View>
 

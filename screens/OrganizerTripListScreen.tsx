@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useOrganizerTrips, type Trip } from '../hooks/useTripOrganizer';
 
@@ -55,6 +56,8 @@ const STATUS_COLORS: Record<TripStatus, { bg: string; text: string }> = {
 };
 
 const formatDateRange = (start: string, end: string): string => {
+  const { t } = useTranslation();
+
   try {
     const s = new Date(start);
     const e = new Date(end);
@@ -156,7 +159,7 @@ const OrganizerTripListScreen: React.FC = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Trips</Text>
+        <Text style={styles.headerTitle}>{t("screen_headers.organizer_trip_list")}</Text>
         <TouchableOpacity onPress={navigateToCreate} style={styles.headerBtn}>
           <Ionicons name="add-circle" size={28} color={TEAL} />
         </TouchableOpacity>

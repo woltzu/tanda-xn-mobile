@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { useTripDashboard, useTripPayment } from "../hooks/useTripOrganizer";
 import InstallmentScheduleView from "../components/InstallmentScheduleView";
@@ -95,6 +96,7 @@ const TripPaymentScreen: React.FC = () => {
   const participantId = route.params?.participantId ?? "me";
 
   const hookResult = useTripPayment(participantId);
+  const { t } = useTranslation();
   const data: PaymentData = (hookResult as any)?.data ?? MOCK_PAYMENT;
   const processPayment = (hookResult as any)?.pay ?? (async () => {});
   const isLoading = (hookResult as any)?.isLoading ?? false;
@@ -193,7 +195,7 @@ const TripPaymentScreen: React.FC = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Make Payment</Text>
+        <Text style={styles.headerTitle}>{t("screen_headers.trip_payment")}</Text>
         <View style={styles.headerBtn} />
       </View>
 

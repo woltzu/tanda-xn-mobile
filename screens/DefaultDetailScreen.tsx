@@ -38,6 +38,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useDefaultDetails } from "../hooks/useDefaultCascade";
@@ -60,6 +61,7 @@ type DefaultDetailRouteProp = RouteProp<
 
 export default function DefaultDetailScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<DefaultDetailRouteProp>();
   const defaultId = route.params?.defaultId ?? "";
 

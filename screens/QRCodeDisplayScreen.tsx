@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
@@ -32,6 +33,8 @@ const QR_SIZE = width * 0.6;
 
 // Simple fallback QR placeholder component
 const QRPlaceholder = ({ code, size }: { code: string; size: number }) => {
+  const { t } = useTranslation();
+
   // Create a simple visual pattern based on the code
   const gridSize = 11;
   const cellSize = size / gridSize;
@@ -104,7 +107,7 @@ export default function QRCodeDisplayScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Circle Not Found</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.qr_code_display")}</Text>
           <View style={{ width: 40 }} />
         </LinearGradient>
         <View style={styles.errorContainer}>
@@ -153,7 +156,7 @@ export default function QRCodeDisplayScreen() {
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Invite to Circle</Text>
+            <Text style={styles.headerTitle}>{t("screen_headers.qr_code_display")}</Text>
             <View style={{ width: 40 }} />
           </View>
 

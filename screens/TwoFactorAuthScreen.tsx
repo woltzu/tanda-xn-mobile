@@ -11,6 +11,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 
@@ -25,6 +26,8 @@ interface TwoFAMethod {
 }
 
 export default function TwoFactorAuthScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<TwoFactorAuthNavigationProp>();
 
   const [enabled, setEnabled] = useState(true);
@@ -110,7 +113,7 @@ export default function TwoFactorAuthScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View>
-              <Text style={styles.headerTitle}>Two-Factor Authentication</Text>
+              <Text style={styles.headerTitle}>{t("screen_headers.two_factor_auth")}</Text>
               <Text style={styles.headerSubtitle}>Extra security for your account</Text>
             </View>
           </View>

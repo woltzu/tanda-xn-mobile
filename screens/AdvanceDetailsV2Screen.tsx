@@ -39,6 +39,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -125,6 +126,7 @@ function statusBadgeStyle(status: AdvanceStatus) {
 
 export default function AdvanceDetailsV2Screen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<AdvanceDetailsV2RouteProp>();
   const advance = route.params?.advance ?? DEFAULT_ADVANCE;
   const advanceId = route.params?.advanceId ?? advance.id;
@@ -156,7 +158,7 @@ export default function AdvanceDetailsV2Screen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Advance Details</Text>
+              <Text style={styles.headerTitle}>{t("screen_headers.advance_details")}</Text>
               <Text style={styles.headerId}>{advanceId}</Text>
             </View>
             <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>

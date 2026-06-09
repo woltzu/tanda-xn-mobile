@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 
@@ -99,6 +100,8 @@ const FAQS = [
 ];
 
 export default function AdvanceExplanationScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<NavigationProp>();
   const [activeSlide, setActiveSlide] = useState(0);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
@@ -120,7 +123,7 @@ export default function AdvanceExplanationScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>How It Works</Text>
+        <Text style={styles.headerTitle}>{t("screen_headers.advance_explanation")}</Text>
         <View style={{ width: 40 }} />
       </View>
 

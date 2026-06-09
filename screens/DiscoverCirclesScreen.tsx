@@ -35,6 +35,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useCircleMatching } from "../hooks/useCircleMatching";
 import type { CircleMatch } from "../services/CircleMatchingService";
 import { CircleRecommendationCard } from "../components/CircleRecommendationCard";
@@ -56,6 +57,8 @@ type LoggedAction =
   | "shared";
 
 export default function DiscoverCirclesScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const {
@@ -305,7 +308,7 @@ function Header({ navigation }: { navigation: any }) {
       >
         <Ionicons name="arrow-back" size={22} color="#FFF" />
       </TouchableOpacity>
-      <Text style={styles.headerTitle}>Discover Circles</Text>
+      <Text style={styles.headerTitle}>{t("screen_headers.discover_circles")}</Text>
       <View style={styles.headerBtn} />
     </LinearGradient>
   );

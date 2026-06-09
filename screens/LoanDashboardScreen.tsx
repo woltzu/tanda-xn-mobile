@@ -43,6 +43,7 @@ import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useLoan, type LoanRequest, type LoanStatus } from "../context/AdvanceContext";
 
+import { useTranslation } from "react-i18next";
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
 const BORDER = "#E5E7EB";
@@ -54,6 +55,7 @@ const RED = "#DC2626";
 
 export default function LoanDashboardScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const { activeLoans, getTotalOutstanding, getProductById, isLoading } = useLoan();
 
   const [refreshing, setRefreshing] = useState(false);
@@ -167,7 +169,7 @@ export default function LoanDashboardScreen() {
           >
             <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>My Loans</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.loan_dashboard")}</Text>
           <View style={styles.headerSpacer} />
         </View>
 

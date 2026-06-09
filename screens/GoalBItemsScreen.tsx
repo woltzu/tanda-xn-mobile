@@ -30,6 +30,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 
 const NAVY = "#0A2342";
@@ -95,6 +96,7 @@ const TOTAL_DISCOUNT = "Up to $800";
 
 export default function GoalBItemsScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<GoalBItemsRouteProp>();
 
   const goal = route.params?.goal ?? DEFAULT_GOAL;
@@ -153,7 +155,7 @@ export default function GoalBItemsScreen() {
               <Text style={styles.headerKicker} numberOfLines={1}>
                 {goal.emoji} {goal.name}
               </Text>
-              <Text style={styles.headerTitle}>What You'll Need</Text>
+              <Text style={styles.headerTitle}>{t("screen_headers.goal_b_items")}</Text>
             </View>
           </View>
 

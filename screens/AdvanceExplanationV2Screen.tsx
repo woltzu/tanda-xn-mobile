@@ -40,6 +40,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -107,6 +108,7 @@ type AdvanceExplanationV2RouteProp = RouteProp<
 
 export default function AdvanceExplanationV2Screen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   useRoute<AdvanceExplanationV2RouteProp>(); // reserve for future param reads
 
   const [currentStep, setCurrentStep] = useState(0);
@@ -137,7 +139,7 @@ export default function AdvanceExplanationV2Screen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>How Advance Payouts Work</Text>
+            <Text style={styles.headerTitle}>{t("screen_headers.advance_explanation_v2")}</Text>
             <View style={{ width: 40 }} />
           </View>
 

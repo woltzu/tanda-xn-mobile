@@ -34,6 +34,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 
 const NAVY = "#0A2342";
@@ -184,6 +185,7 @@ const DEFAULT_GOAL_TYPES: GoalTypeFilter[] = [
 
 export default function GoalStoriesScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<GoalStoriesRouteProp>();
 
   const stories = route.params?.stories ?? DEFAULT_STORIES;

@@ -42,6 +42,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useFormDraft } from "../hooks/useFormDraft";
 import { Routes } from "../lib/routes";
@@ -72,6 +73,7 @@ const CATEGORY_OPTIONS: { value: StoreCategory; label: string; emoji: string }[]
 
 export default function EditStoreScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<EditStoreRouteProp>();
   const storeId = route.params?.storeId ?? "";
 
@@ -218,7 +220,7 @@ export default function EditStoreScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="chevron-back" size={24} color={NAVY} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit Store</Text>
+          <Text style={styles.headerTitle}>{t("edit_store.header_title")}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.center}>
@@ -238,7 +240,7 @@ export default function EditStoreScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="chevron-back" size={24} color={NAVY} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Edit Store</Text>
+          <Text style={styles.headerTitle}>{t("edit_store.header_title")}</Text>
           <View style={styles.headerSpacer} />
         </View>
         <View style={styles.center}>
@@ -268,7 +270,7 @@ export default function EditStoreScreen() {
         >
           <Ionicons name="chevron-back" size={24} color={NAVY} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit Store</Text>
+        <Text style={styles.headerTitle}>{t("edit_store.header_title")}</Text>
         <View style={styles.headerSpacer} />
       </View>
 

@@ -35,6 +35,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -123,6 +124,7 @@ function statusStyle(status: PastAdvanceStatus) {
 
 export default function AdvanceHistoryScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<AdvanceHistoryRouteProp>();
 
   const pastAdvances = route.params?.pastAdvances ?? DEFAULT_PAST;
@@ -175,7 +177,7 @@ export default function AdvanceHistoryScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Advance History</Text>
+            <Text style={styles.headerTitle}>{t("screen_headers.advance_history")}</Text>
             <View style={{ width: 40 }} />
           </View>
 

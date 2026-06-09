@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { usePayment, SavedPaymentMethod } from "../context/PaymentContext";
@@ -19,6 +20,8 @@ import { usePayment, SavedPaymentMethod } from "../context/PaymentContext";
 type LinkedAccountsNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function LinkedAccountsScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<LinkedAccountsNavigationProp>();
   const {
     paymentMethods,
@@ -106,7 +109,7 @@ export default function LinkedAccountsScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View>
-              <Text style={styles.headerTitle}>Linked Accounts</Text>
+              <Text style={styles.headerTitle}>{t("screen_headers.linked_accounts")}</Text>
               <Text style={styles.headerSubtitle}>
                 Manage your payment methods
               </Text>

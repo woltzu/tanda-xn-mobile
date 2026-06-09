@@ -10,9 +10,12 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 
 export default function FeedSettingsScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation();
 
   const [autoPostGoals, setAutoPostGoals] = useState(true);

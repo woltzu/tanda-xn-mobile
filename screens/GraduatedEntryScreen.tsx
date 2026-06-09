@@ -6,6 +6,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { useMemberTier, useTierProgress, useTierLimits } from "../hooks/useGraduatedEntry";
 
@@ -19,6 +20,8 @@ const TIER_CONFIG: Record<string, { label: string; color: string; icon: string; 
 };
 
 export default function GraduatedEntryScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
   const { user } = useAuth();
 
@@ -85,7 +88,7 @@ export default function GraduatedEntryScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>My Tier Status</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.graduated_entry")}</Text>
           <View style={{ width: 40 }} />
         </View>
 

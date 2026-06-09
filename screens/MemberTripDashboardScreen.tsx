@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 
@@ -58,6 +59,8 @@ const MY_TRIP = {
 };
 
 const MemberTripDashboardScreen = () => {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const tripId = route.params?.tripId ?? MY_TRIP.id;
@@ -77,7 +80,7 @@ const MemberTripDashboardScreen = () => {
           >
             <Ionicons name="arrow-back" size={24} color={colors.primaryNavy} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>My Trip Circle</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.member_trip_dashboard")}</Text>
           <TouchableOpacity style={styles.headerBtn}>
             <Text style={styles.inviteText}>Invite</Text>
           </TouchableOpacity>

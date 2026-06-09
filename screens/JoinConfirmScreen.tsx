@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
@@ -50,6 +51,8 @@ function readPendingId(): string | null {
 }
 
 export default function JoinConfirmScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<NavProp>();
   const [status, setStatus] = useState<Status>("loading");
   const [message, setMessage] = useState<string>("");

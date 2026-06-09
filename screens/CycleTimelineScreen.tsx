@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import {
@@ -37,6 +38,8 @@ type RouteParams = { circleId: string };
 const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
 
 export default function CycleTimelineScreen() {
+  const { t } = useTranslation();
+
   const navigation = useTypedNavigation();
   const route = useRoute<RouteProp<{ params: RouteParams }, "params">>();
   const { circleId } = route.params;
@@ -95,7 +98,7 @@ export default function CycleTimelineScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Circle Timeline</Text>
+        <Text style={styles.headerTitle}>{t("screen_headers.cycle_timeline")}</Text>
         <View style={{ width: 24 }} />
       </View>
 

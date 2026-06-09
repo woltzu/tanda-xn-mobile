@@ -37,6 +37,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -90,6 +91,7 @@ const DEFAULT_ADVANCE: ApprovedAdvance = {
 
 export default function AdvanceApprovalScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<AdvanceApprovalRouteProp>();
 
   // Merge: explicit `advance` wins; otherwise build from forwarded

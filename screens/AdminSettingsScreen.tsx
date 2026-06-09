@@ -13,6 +13,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 
+import { useTranslation } from "react-i18next";
 interface AdminSettingsParams {
   circleName?: string;
   circleId?: string;
@@ -20,6 +21,7 @@ interface AdminSettingsParams {
 
 export default function AdminSettingsScreen() {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const route = useRoute();
   const params = (route.params as AdminSettingsParams) || {};
   const circleName = params.circleName || "Family Savings Circle";
@@ -151,7 +153,7 @@ export default function AdminSettingsScreen() {
           <Ionicons name="arrow-back" size={24} color="#1F2937" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Admin Settings</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.admin_settings")}</Text>
           <Text style={styles.headerSubtitle}>{circleName}</Text>
         </View>
         {hasChanges && (

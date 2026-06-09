@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from '../theme/tokens';
 
 const NAVY = '#0A2342';
@@ -19,6 +20,8 @@ const GOLD = '#E8A842';
 const BG = '#F5F7FA';
 
 const TripPublishSuccessScreen: React.FC = () => {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
 

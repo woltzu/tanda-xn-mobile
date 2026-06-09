@@ -39,6 +39,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -91,6 +92,7 @@ const WHATS_NEXT = [
 
 export default function RepaymentConfirmScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<RepaymentConfirmRouteProp>();
 
   // Merge: explicit repayment wins; otherwise build from forwarded

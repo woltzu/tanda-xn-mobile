@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 
 const ORANGE_PRIMARY = "#F97316";
@@ -26,6 +27,8 @@ interface IncludeItem {
 }
 
 const CreateTripListingScreen = () => {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
 
   const [tripName, setTripName] = useState("Summer Return — Abidjan 2026");
@@ -62,7 +65,7 @@ const CreateTripListingScreen = () => {
         >
           <Ionicons name="arrow-back" size={24} color={colors.primaryNavy} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New Trip</Text>
+        <Text style={styles.headerTitle}>{t("screen_headers.create_trip_listing")}</Text>
         <TouchableOpacity>
           <Text style={styles.headerAction}>Preview</Text>
         </TouchableOpacity>

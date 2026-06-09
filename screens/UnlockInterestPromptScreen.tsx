@@ -41,6 +41,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -80,6 +81,7 @@ function formatMoney(n: number): string {
 
 export default function UnlockInterestPromptScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<UnlockInterestPromptRouteProp>();
   const totalInterest = route.params?.totalInterest ?? 0;
   const goalBreakdown = route.params?.goalBreakdown ?? [];

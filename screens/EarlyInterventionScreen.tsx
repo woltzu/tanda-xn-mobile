@@ -6,6 +6,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { useActiveIntervention, useInterventionHistory } from "../hooks/useEarlyIntervention";
 
@@ -27,6 +28,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string
 };
 
 export default function EarlyInterventionScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"active" | "history">("active");
@@ -94,7 +97,7 @@ export default function EarlyInterventionScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Early Intervention</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.early_intervention")}</Text>
           <View style={{ width: 40 }} />
         </View>
 

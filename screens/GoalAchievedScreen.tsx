@@ -34,6 +34,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 
 const NAVY = "#0A2342";
@@ -89,6 +90,7 @@ const CONFETTI = Array.from({ length: 24 }, (_, i) => ({
 
 export default function GoalAchievedScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<GoalAchievedRouteProp>();
 
   const goal = route.params?.goal ?? DEFAULT_GOAL;

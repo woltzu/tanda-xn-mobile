@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 
@@ -38,6 +39,8 @@ function formatMoney(amount?: number) {
 }
 
 export default function QuickJoinPendingConfirmationScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteParams>();
   const { email, circleName, amount, inviteCode } = route.params;

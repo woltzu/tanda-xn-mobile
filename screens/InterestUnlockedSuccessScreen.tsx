@@ -43,6 +43,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { kycDraft } from "../lib/kycDraft";
@@ -110,6 +111,7 @@ function buildChanges(isFullAccess: boolean): ChangeRow[] {
 
 export default function InterestUnlockedSuccessScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<InterestUnlockedSuccessRouteProp>();
   const unlockedAmount = route.params?.unlockedAmount ?? 0;
   const isFullAccess = route.params?.isFullAccess ?? false;

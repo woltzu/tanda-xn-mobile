@@ -28,6 +28,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
+import { useTranslation } from "react-i18next";
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
 const MUTED = "#6B7280";
@@ -83,6 +84,7 @@ const CATEGORIES: Category[] = [
 
 export default function GoalCategorySelectScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
 
   return (
     <SafeAreaView style={styles.safeArea}>

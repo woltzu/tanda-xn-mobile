@@ -43,6 +43,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useParticipantDetail } from "../hooks/useTripOrganizer";
@@ -73,6 +74,7 @@ type ParticipantDetailRouteProp = RouteProp<
 
 export default function ParticipantDetailScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<ParticipantDetailRouteProp>();
   const { tripId, participantId } = route.params ?? { tripId: "", participantId: "" };
 

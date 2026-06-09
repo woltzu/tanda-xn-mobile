@@ -6,6 +6,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useStoreDetail, useMarketplaceActions, usePayoutCountdown } from "../hooks/useMarketplace";
 import type { StoreService } from "../hooks/useMarketplace";
 
@@ -16,6 +17,8 @@ const BADGE_CONFIG: Record<string, { label: string; color: string; icon: string 
 };
 
 export default function StoreDetailScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
   const route = useRoute();
   const storeId = (route.params as any)?.storeId ?? "";

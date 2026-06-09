@@ -11,6 +11,7 @@ import { useAuth } from "../context/AuthContext";
 import { useUserDefaults } from "../hooks/useDefaultCascade";
 import { useLateContributions } from "../hooks/useLateContributions";
 
+import { useTranslation } from "react-i18next";
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
   unresolved: { label: "Unresolved", color: "#EF4444", icon: "alert-circle" },
   in_recovery: { label: "In Recovery", color: "#F59E0B", icon: "time" },
@@ -19,6 +20,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string
 };
 
 export default function DefaultRecoveryScreen() {
+  const { t } = useTranslation();
+
   const navigation = useTypedNavigation();
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"defaults" | "late">("defaults");
@@ -67,7 +70,7 @@ export default function DefaultRecoveryScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Default Recovery</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.default_recovery")}</Text>
           <View style={{ width: 40 }} />
         </View>
 

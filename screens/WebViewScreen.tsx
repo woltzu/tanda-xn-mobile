@@ -34,6 +34,7 @@ import {
 } from 'react-native';
 import { WebView, WebViewMessageEvent } from 'react-native-webview';
 import { useRoute, RouteProp } from '@react-navigation/native';
+import { useTranslation } from "react-i18next";
 import { Ionicons } from '@expo/vector-icons';
 import { useTypedNavigation } from '../hooks/useTypedNavigation';
 
@@ -50,6 +51,7 @@ const TEAL = '#00C6AE';
 
 export default function WebViewScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<WebViewRouteProp>();
   const { url, title = 'Web View', onComplete } = route.params ?? {};
 

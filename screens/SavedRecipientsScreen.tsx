@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 
@@ -83,6 +84,8 @@ const mockRecipients: Recipient[] = [
 ];
 
 export default function SavedRecipientsScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<SavedRecipientsNavigationProp>();
   const [recipients, setRecipients] = useState<Recipient[]>(mockRecipients);
   const [selectedRecipient, setSelectedRecipient] = useState<Recipient | null>(null);
@@ -199,7 +202,7 @@ export default function SavedRecipientsScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle}>Saved Recipients</Text>
+              <Text style={styles.headerTitle}>{t("screen_headers.saved_recipients")}</Text>
               <Text style={styles.headerSubtitle}>
                 {recipients.length} recipient{recipients.length !== 1 ? "s" : ""}
               </Text>

@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
@@ -15,6 +16,8 @@ import { useAuth } from "../context/AuthContext";
 type SplashScreenNavigationProp = StackNavigationProp<RootStackParamList, "Splash">;
 
 export default function SplashScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<SplashScreenNavigationProp>();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [isLoading, setIsLoading] = useState(true);

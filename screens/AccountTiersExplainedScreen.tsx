@@ -34,6 +34,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -111,6 +112,7 @@ type AccountTiersRouteProp = RouteProp<
 
 export default function AccountTiersExplainedScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<AccountTiersRouteProp>();
   const currentTier = route.params?.tier ?? 1;
   const currentTierData = TIERS[currentTier - 1];
@@ -152,7 +154,7 @@ export default function AccountTiersExplainedScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Account Levels</Text>
+            <Text style={styles.headerTitle}>{t("screen_headers.account_tiers")}</Text>
             <View style={{ width: 40 }} />
           </View>
           <Text style={styles.headerSubtitle}>

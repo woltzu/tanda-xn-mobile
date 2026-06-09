@@ -6,9 +6,12 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useBookings } from "../hooks/useMarketplace";
 
 export default function BookServiceScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
   const route = useRoute();
   const {
@@ -74,7 +77,7 @@ export default function BookServiceScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Confirm Booking</Text>
+          <Text style={styles.headerTitle}>{t("book_service.header_title")}</Text>
           <View style={{ width: 40 }} />
         </View>
       </LinearGradient>

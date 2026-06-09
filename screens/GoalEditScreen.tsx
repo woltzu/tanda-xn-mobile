@@ -35,6 +35,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useGoalActions } from "../hooks/useGoalActions";
 
@@ -75,6 +76,7 @@ const SUGGESTED_AMOUNTS = [5000, 10000, 25000, 50000];
 
 export default function GoalEditScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<GoalEditRouteProp>();
   const { updateGoal } = useGoalActions();
 
@@ -156,7 +158,7 @@ export default function GoalEditScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Edit Goal</Text>
+            <Text style={styles.headerTitle}>{t("screen_headers.goal_edit")}</Text>
           </View>
 
           {/* Goal preview */}

@@ -36,6 +36,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
+import { useTranslation } from "react-i18next";
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
 const BORDER = "#E5E7EB";
@@ -84,6 +85,7 @@ const OPTIONS: Option[] = [
 
 export default function VerificationOptionsScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const [selectedOption, setSelectedOption] = useState<OptionId | null>(null);
 
   const handleContinue = () => {
@@ -127,7 +129,7 @@ export default function VerificationOptionsScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Verify Your Identity</Text>
+            <Text style={styles.headerTitle}>{t("screen_headers.verification_options")}</Text>
             <View style={{ width: 40 }} />
           </View>
 

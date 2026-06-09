@@ -6,12 +6,15 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useMemberInvites, type MemberInvite, type CsvRow, type SmsLanguage } from "../hooks/useMarketplace";
 import { MarketplaceEngine } from "../services/MarketplaceEngine";
 
 type Tab = "members" | "send" | "upload";
 
 export default function BulkInvitesScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
   const route = useRoute();
   const storeId = (route.params as any)?.storeId ?? "";
@@ -174,7 +177,7 @@ export default function BulkInvitesScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Member Invites</Text>
+          <Text style={styles.headerTitle}>{t("bulk_invites.header_title")}</Text>
           <View style={{ width: 40 }} />
         </View>
 

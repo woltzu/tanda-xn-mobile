@@ -10,6 +10,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 
@@ -26,6 +27,8 @@ interface Session {
 }
 
 export default function ActiveSessionsScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<ActiveSessionsNavigationProp>();
 
   const [sessions] = useState<Session[]>([
@@ -117,7 +120,7 @@ export default function ActiveSessionsScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View>
-              <Text style={styles.headerTitle}>Active Sessions</Text>
+              <Text style={styles.headerTitle}>{t("screen_headers.active_sessions")}</Text>
               <Text style={styles.headerSubtitle}>
                 {sessions.length} device{sessions.length !== 1 ? "s" : ""} logged in
               </Text>

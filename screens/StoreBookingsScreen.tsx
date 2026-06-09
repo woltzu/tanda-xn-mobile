@@ -52,6 +52,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useStoreBookings } from "../hooks/useMarketplace";
 import type { Booking, BookingStatus } from "../services/MarketplaceEngine";
@@ -84,6 +85,7 @@ const CANCELLED_STATUSES: BookingStatus[] = ["cancelled", "refunded"];
 
 export default function StoreBookingsScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<StoreBookingsRouteProp>();
   const storeId = route.params?.storeId ?? "";
 
@@ -344,7 +346,7 @@ export default function StoreBookingsScreen() {
         >
           <Ionicons name="chevron-back" size={24} color={NAVY} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Bookings</Text>
+        <Text style={styles.headerTitle}>{t("store_bookings.header_title")}</Text>
         <View style={styles.headerSpacer} />
       </View>
 

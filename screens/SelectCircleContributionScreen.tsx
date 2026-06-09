@@ -9,6 +9,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
@@ -16,6 +17,8 @@ import { useCircles } from "../context/CirclesContext";
 type SelectCircleContributionNavigationProp = StackNavigationProp<RootStackParamList>;
 
 const getFrequencyLabel = (frequency: string): string => {
+  const { t } = useTranslation();
+
   switch (frequency) {
     case "daily":
       return "daily";
@@ -56,7 +59,7 @@ export default function SelectCircleContributionScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Pay Circle</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.select_circle_contribution")}</Text>
           <View style={styles.placeholder} />
         </View>
         <Text style={styles.headerSubtitle}>

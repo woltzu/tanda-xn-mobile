@@ -36,6 +36,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useGoalActions } from "../hooks/useGoalActions";
 import { useCircles } from "../context/CirclesContext";
@@ -137,6 +138,7 @@ function Radio({ selected, size = 22 }: { selected: boolean; size?: number }) {
 
 export default function GoalLinkCircleScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<GoalLinkCircleRouteProp>();
   const { linkCircle, unlinkCircle } = useGoalActions();
   const { myCircles } = useCircles();
@@ -253,7 +255,7 @@ export default function GoalLinkCircleScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Link Circle to Goal</Text>
+            <Text style={styles.headerTitle}>{t("screen_headers.goal_link_circle")}</Text>
           </View>
 
           {/* Goal preview */}

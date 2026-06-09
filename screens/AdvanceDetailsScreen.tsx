@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useAdvance, AdvanceRequest, AdvanceStatus } from "../context/AdvanceContext";
@@ -30,6 +31,8 @@ const STATUS_CONFIG: Record<AdvanceStatus, { color: string; bgColor: string; ico
 };
 
 export default function AdvanceDetailsScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<AdvanceDetailsRouteProp>();
   const { advanceId } = route.params;
@@ -125,7 +128,7 @@ export default function AdvanceDetailsScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Advance Details</Text>
+        <Text style={styles.headerTitle}>{t("screen_headers.advance_details")}</Text>
         <View style={styles.placeholder} />
       </View>
 

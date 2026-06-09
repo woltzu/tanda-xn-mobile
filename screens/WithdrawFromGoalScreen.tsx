@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useSavings, GOAL_TYPES } from "../context/SavingsContext";
@@ -22,6 +23,8 @@ type NavigationProp = StackNavigationProp<RootStackParamList>;
 type WithdrawRouteProp = RouteProp<RootStackParamList, "WithdrawFromGoal">;
 
 export default function WithdrawFromGoalScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<WithdrawRouteProp>();
   const { goalId } = route.params;
@@ -154,7 +157,7 @@ export default function WithdrawFromGoalScreen() {
           >
             <Ionicons name="close" size={24} color="#0A2342" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Withdraw</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.withdraw_from_goal")}</Text>
           <View style={styles.placeholder} />
         </View>
 

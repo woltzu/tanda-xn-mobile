@@ -42,6 +42,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 
 const NAVY = "#0A2342";
@@ -87,6 +88,7 @@ export default function QuickCircleScreen() {
 
   const startDate = useMemo(() => {
     const opt = START_OPTIONS.find((o) => o.id === startId)!;
+  const { t } = useTranslation();
     return dateInDays(opt.addDays);
   }, [startId]);
 
@@ -144,7 +146,7 @@ export default function QuickCircleScreen() {
         >
           <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Quick Circle</Text>
+        <Text style={styles.headerTitle}>{t("screen_headers.quick_circle")}</Text>
         <View style={styles.headerBtn} />
       </View>
 

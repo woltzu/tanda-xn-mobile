@@ -13,6 +13,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useAdvance, ADVANCE_TIERS, RepaymentMethod, FuturePayout, AdvanceTierKey } from "../context/AdvanceContext";
@@ -24,6 +25,8 @@ type RequestAdvanceRouteProp = RouteProp<RootStackParamList, "RequestAdvance">;
 
 // Helper to get advance tier config with fee and percent
 const getAdvanceTierConfig = (tier: AdvanceTierKey) => {
+  const { t } = useTranslation();
+
   const tierConfig: Record<AdvanceTierKey, { maxAdvancePercent: number; advanceFee: number }> = {
     locked: { maxAdvancePercent: 0, advanceFee: 0 },
     preview: { maxAdvancePercent: 0, advanceFee: 0 },
@@ -160,7 +163,7 @@ export default function RequestAdvanceScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Payout Not Found</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.request_advance")}</Text>
           <View style={{ width: 40 }} />
         </LinearGradient>
         <View style={styles.emptyState}>
@@ -182,7 +185,7 @@ export default function RequestAdvanceScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Already Advanced</Text>
+          <Text style={styles.headerTitle}>{t("screen_headers.request_advance")}</Text>
           <View style={{ width: 40 }} />
         </LinearGradient>
         <View style={styles.emptyState}>
@@ -209,7 +212,7 @@ export default function RequestAdvanceScreen() {
               <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
                 <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
               </TouchableOpacity>
-              <Text style={styles.headerTitle}>Request Advance</Text>
+              <Text style={styles.headerTitle}>{t("screen_headers.request_advance")}</Text>
               <View style={{ width: 40 }} />
             </View>
 

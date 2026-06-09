@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 
 const ORANGE = "#F97316";
@@ -27,6 +28,8 @@ interface DocRow {
 }
 
 export default function ProviderVerificationScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
   const [elderEndorsement, setElderEndorsement] = useState(false);
   const [docs, setDocs] = useState<DocRow[]>([
@@ -76,7 +79,7 @@ export default function ProviderVerificationScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={colors.primaryNavy} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Verification</Text>
+        <Text style={styles.headerTitle}>{t("provider_verification.header_title")}</Text>
         <View style={styles.stepBadge}>
           <Text style={styles.stepBadgeText}>2/3</Text>
         </View>

@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import Svg, { Circle, Ellipse, Line, Polygon, G, SvgText } from "react-native-svg";
 import { useCircles, type CircleMember } from "../context/CirclesContext";
 
@@ -43,6 +44,8 @@ function getInitials(name: string) {
 }
 
 export default function CircleVisualizerScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RouteParams, "CircleVisualizer">>();
   const { circleId } = route.params;

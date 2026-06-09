@@ -30,6 +30,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useGoalActions } from "../hooks/useGoalActions";
 import type { GoalMilestone as RealMilestone } from "../types/goals";
@@ -178,6 +179,7 @@ const UUID_RE =
 
 export default function GoalMilestonesScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const route = useRoute<GoalMilestonesRouteProp>();
   const { fetchGoal } = useGoalActions();
 
@@ -267,7 +269,7 @@ export default function GoalMilestonesScreen() {
               <Text style={styles.headerKicker} numberOfLines={1}>
                 {goal.emoji} {goal.name}
               </Text>
-              <Text style={styles.headerTitle}>Milestones</Text>
+              <Text style={styles.headerTitle}>{t("screen_headers.goal_milestones")}</Text>
             </View>
           </View>
 

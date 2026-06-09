@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 
@@ -53,6 +54,8 @@ const deliveryMethods: DeliveryMethod[] = [
 ];
 
 export default function AddRecipientScreen() {
+  const { t } = useTranslation();
+
   const navigation = useNavigation<AddRecipientNavigationProp>();
   const route = useRoute<AddRecipientRouteProp>();
   const { returnTo } = route.params || {};
@@ -131,7 +134,7 @@ export default function AddRecipientScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.headerTextContainer}>
-              <Text style={styles.headerTitle}>Add Recipient</Text>
+              <Text style={styles.headerTitle}>{t("screen_headers.add_recipient")}</Text>
               <Text style={styles.headerSubtitle}>
                 {step === "country"
                   ? "Select destination country"
