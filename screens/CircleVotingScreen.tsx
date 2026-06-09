@@ -51,7 +51,7 @@ export default function CircleVotingScreen() {
 
   const handleCreateProposal = async () => {
     if (!newTitle.trim()) {
-      Alert.alert("Error", "Please enter a proposal title.");
+      Alert.alert(t("circle_voting.alert_error_title"), t("circle_voting.alert_title_required"));
       return;
     }
     const result = await createAndOpen(circleId, "general", newTitle.trim(), newDescription.trim());
@@ -78,7 +78,7 @@ export default function CircleVotingScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#00C6AE" />
-        <Text style={styles.loadingText}>Loading proposals...</Text>
+        <Text style={styles.loadingText}>{t("circle_voting.loading_proposals")}</Text>
       </View>
     );
   }
@@ -235,7 +235,7 @@ export default function CircleVotingScreen() {
                       <View style={styles.voteActions}>
                         <TextInput
                           style={styles.reasonInput}
-                          placeholder="Reason (optional)"
+                          placeholder={t("circle_voting.placeholder_reason")}
                           placeholderTextColor="#9CA3AF"
                           value={voteReasoning}
                           onChangeText={setVoteReasoning}
@@ -259,7 +259,7 @@ export default function CircleVotingScreen() {
                           })}
                         </View>
                         <TouchableOpacity onPress={() => { setVotingProposalId(null); setVoteReasoning(""); }}>
-                          <Text style={styles.cancelText}>Cancel</Text>
+                          <Text style={styles.cancelText}>{t("circle_voting.btn_cancel")}</Text>
                         </TouchableOpacity>
                       </View>
                     ) : (
@@ -268,7 +268,7 @@ export default function CircleVotingScreen() {
                         onPress={() => setVotingProposalId(proposal.id)}
                       >
                         <Ionicons name="hand-left-outline" size={16} color="#00C6AE" />
-                        <Text style={styles.castVoteText}>Cast Your Vote</Text>
+                        <Text style={styles.castVoteText}>{t("circle_voting.btn_cast_vote")}</Text>
                       </TouchableOpacity>
                     )}
                   </>
@@ -286,25 +286,25 @@ export default function CircleVotingScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>New Proposal</Text>
+              <Text style={styles.modalTitle}>{t("circle_voting.modal_new_proposal")}</Text>
               <TouchableOpacity onPress={() => setShowCreateModal(false)}>
                 <Ionicons name="close" size={24} color="#0A2342" />
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.inputLabel}>Title</Text>
+            <Text style={styles.inputLabel}>{t("circle_voting.label_title")}</Text>
             <TextInput
               style={styles.modalInput}
-              placeholder="What are you proposing?"
+              placeholder={t("circle_voting.placeholder_title")}
               placeholderTextColor="#9CA3AF"
               value={newTitle}
               onChangeText={setNewTitle}
             />
 
-            <Text style={styles.inputLabel}>Description</Text>
+            <Text style={styles.inputLabel}>{t("circle_voting.label_description")}</Text>
             <TextInput
               style={[styles.modalInput, styles.modalTextArea]}
-              placeholder="Provide details about your proposal..."
+              placeholder={t("circle_voting.placeholder_description")}
               placeholderTextColor="#9CA3AF"
               value={newDescription}
               onChangeText={setNewDescription}
@@ -323,7 +323,7 @@ export default function CircleVotingScreen() {
               ) : (
                 <>
                   <Ionicons name="send" size={16} color="#FFFFFF" />
-                  <Text style={styles.submitBtnText}>Submit Proposal</Text>
+                  <Text style={styles.submitBtnText}>{t("circle_voting.btn_submit")}</Text>
                 </>
               )}
             </TouchableOpacity>

@@ -92,12 +92,12 @@ export default function PauseCircleScreen() {
 
   const handlePauseCircle = () => {
     if (!selectedDuration || !selectedReason) {
-      Alert.alert("Missing Information", "Please select both duration and reason.");
+      Alert.alert(t("pause_circle.alert_missing_title"), t("pause_circle.alert_missing_body"));
       return;
     }
 
     if (selectedDuration === "custom" && (!customWeeks || parseInt(customWeeks) < 1)) {
-      Alert.alert("Invalid Duration", "Please enter a valid number of weeks.");
+      Alert.alert(t("pause_circle.alert_invalid_title"), t("pause_circle.alert_invalid_body"));
       return;
     }
 
@@ -127,37 +127,37 @@ export default function PauseCircleScreen() {
         <Ionicons name="pause-circle" size={80} color="#F59E0B" />
       </View>
 
-      <Text style={styles.confirmationTitle}>Circle Paused</Text>
+      <Text style={styles.confirmationTitle}>{t("pause_circle.confirmation_title")}</Text>
       <Text style={styles.confirmationSubtitle}>
         {circleName} has been temporarily paused
       </Text>
 
       <View style={styles.summaryCard}>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Status</Text>
+          <Text style={styles.summaryLabel}>{t("pause_circle.summary_status")}</Text>
           <View style={styles.pausedBadge}>
             <Ionicons name="pause" size={14} color="#F59E0B" />
-            <Text style={styles.pausedBadgeText}>On Hold</Text>
+            <Text style={styles.pausedBadgeText}>{t("pause_circle.tag_on_hold")}</Text>
           </View>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Resume Date</Text>
+          <Text style={styles.summaryLabel}>{t("pause_circle.summary_resume_date")}</Text>
           <Text style={styles.summaryValue}>{calculateResumeDate()}</Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Paused At Cycle</Text>
+          <Text style={styles.summaryLabel}>{t("pause_circle.summary_paused_cycle")}</Text>
           <Text style={styles.summaryValue}>
             {currentCycle} of {totalCycles}
           </Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Members Notified</Text>
+          <Text style={styles.summaryLabel}>{t("pause_circle.summary_members_notified")}</Text>
           <Text style={styles.summaryValue}>{memberCount} members</Text>
         </View>
       </View>
 
       <View style={styles.whatHappensCard}>
-        <Text style={styles.whatHappensTitle}>What Happens Now</Text>
+        <Text style={styles.whatHappensTitle}>{t("pause_circle.what_happens_title")}</Text>
         <View style={styles.whatHappensItem}>
           <Ionicons name="notifications-off-outline" size={20} color="#6B7280" />
           <Text style={styles.whatHappensText}>
@@ -195,7 +195,7 @@ export default function PauseCircleScreen() {
         style={styles.doneButton}
         onPress={() => navigation.goBack()}
       >
-        <Text style={styles.doneButtonText}>Return to Circle</Text>
+        <Text style={styles.doneButtonText}>{t("pause_circle.btn_return")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -239,7 +239,7 @@ export default function PauseCircleScreen() {
         <View style={styles.warningBanner}>
           <Ionicons name="pause-circle" size={24} color="#F59E0B" />
           <View style={styles.warningContent}>
-            <Text style={styles.warningTitle}>Temporarily Hold Circle</Text>
+            <Text style={styles.warningTitle}>{t("pause_circle.warning_title")}</Text>
             <Text style={styles.warningText}>
               Pausing will stop all contributions and postpone payouts until
               resumed. All members will be notified.
@@ -249,26 +249,26 @@ export default function PauseCircleScreen() {
 
         {/* Current Status */}
         <View style={styles.statusCard}>
-          <Text style={styles.sectionTitle}>Current Status</Text>
+          <Text style={styles.sectionTitle}>{t("pause_circle.section_current_status")}</Text>
           <View style={styles.statusRow}>
-            <Text style={styles.statusLabel}>Circle</Text>
+            <Text style={styles.statusLabel}>{t("pause_circle.status_circle")}</Text>
             <Text style={styles.statusValue}>{circleName}</Text>
           </View>
           <View style={styles.statusRow}>
-            <Text style={styles.statusLabel}>Current Cycle</Text>
+            <Text style={styles.statusLabel}>{t("pause_circle.status_cycle")}</Text>
             <Text style={styles.statusValue}>
               {currentCycle} of {totalCycles}
             </Text>
           </View>
           <View style={styles.statusRow}>
-            <Text style={styles.statusLabel}>Members</Text>
+            <Text style={styles.statusLabel}>{t("pause_circle.status_members")}</Text>
             <Text style={styles.statusValue}>{memberCount} active</Text>
           </View>
         </View>
 
         {/* Duration Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Pause Duration</Text>
+          <Text style={styles.sectionTitle}>{t("pause_circle.section_duration")}</Text>
           <Text style={styles.sectionSubtitle}>
             How long should the circle be paused?
           </Text>
@@ -311,7 +311,7 @@ export default function PauseCircleScreen() {
               <Text style={styles.customLabel}>Number of weeks:</Text>
               <TextInput
                 style={styles.customInput}
-                placeholder="e.g., 3"
+                placeholder={t("pause_circle.placeholder_weeks")}
                 placeholderTextColor="#9CA3AF"
                 keyboardType="number-pad"
                 value={customWeeks}
@@ -332,7 +332,7 @@ export default function PauseCircleScreen() {
 
         {/* Reason Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Reason for Pausing</Text>
+          <Text style={styles.sectionTitle}>{t("pause_circle.section_reason")}</Text>
           <Text style={styles.sectionSubtitle}>
             This will be shared with members
           </Text>
@@ -370,7 +370,7 @@ export default function PauseCircleScreen() {
           <Text style={styles.sectionTitle}>Additional Notes (Optional)</Text>
           <TextInput
             style={styles.notesInput}
-            placeholder="Add any message to members about the pause..."
+            placeholder={t("pause_circle.placeholder_message")}
             placeholderTextColor="#9CA3AF"
             multiline
             numberOfLines={4}
@@ -385,7 +385,7 @@ export default function PauseCircleScreen() {
           <View style={styles.toggleContent}>
             <Ionicons name="notifications-outline" size={24} color="#6B7280" />
             <View style={styles.toggleText}>
-              <Text style={styles.toggleLabel}>Notify All Members</Text>
+              <Text style={styles.toggleLabel}>{t("pause_circle.toggle_notify")}</Text>
               <Text style={styles.toggleDescription}>
                 Send email notification to all circle members
               </Text>
@@ -414,11 +414,11 @@ export default function PauseCircleScreen() {
           disabled={!selectedDuration || !selectedReason || isSubmitting}
         >
           {isSubmitting ? (
-            <Text style={styles.pauseButtonText}>Processing...</Text>
+            <Text style={styles.pauseButtonText}>{t("pause_circle.btn_processing")}</Text>
           ) : (
             <>
               <Ionicons name="pause-circle" size={22} color="#FFFFFF" />
-              <Text style={styles.pauseButtonText}>Pause Circle</Text>
+              <Text style={styles.pauseButtonText}>{t("pause_circle.btn_pause")}</Text>
             </>
           )}
         </TouchableOpacity>

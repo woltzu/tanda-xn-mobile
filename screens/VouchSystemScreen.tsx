@@ -128,7 +128,7 @@ export default function VouchSystemScreen() {
             </Text>
           </View>
           <View style={styles.vouchStrength}>
-            <Text style={styles.vouchStrengthLabel}>Vouch Strength</Text>
+            <Text style={styles.vouchStrengthLabel}>{t("vouch_system.label_strength")}</Text>
             <Text style={styles.vouchStrengthValue}>
               {tierInfo.vouchStrength} pts
             </Text>
@@ -138,29 +138,29 @@ export default function VouchSystemScreen() {
         <View style={styles.statsGrid}>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{elderStats.vouchesAvailable}</Text>
-            <Text style={styles.statLabel}>Available</Text>
+            <Text style={styles.statLabel}>{t("vouch_system.stat_available")}</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{elderStats.activeVouches}</Text>
-            <Text style={styles.statLabel}>Active</Text>
+            <Text style={styles.statLabel}>{t("vouch_system.stat_active")}</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: "#00C6AE" }]}>
               {elderStats.successfulVouches}
             </Text>
-            <Text style={styles.statLabel}>Successful</Text>
+            <Text style={styles.statLabel}>{t("vouch_system.stat_successful")}</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: "#DC2626" }]}>
               {elderStats.defaultedVouches}
             </Text>
-            <Text style={styles.statLabel}>Defaulted</Text>
+            <Text style={styles.statLabel}>{t("vouch_system.stat_defaulted")}</Text>
           </View>
         </View>
 
         <View style={styles.vouchCapacity}>
           <View style={styles.capacityHeader}>
-            <Text style={styles.capacityLabel}>Monthly Vouch Capacity</Text>
+            <Text style={styles.capacityLabel}>{t("vouch_system.label_monthly_capacity")}</Text>
             <Text style={styles.capacityValue}>
               {elderStats.vouchesUsedThisMonth}/{elderStats.maxVouches} used
             </Text>
@@ -216,15 +216,15 @@ export default function VouchSystemScreen() {
 
         <View style={styles.requestScores}>
           <View style={styles.scoreItem}>
-            <Text style={styles.scoreLabel}>XnScore</Text>
+            <Text style={styles.scoreLabel}>{t("vouch_system.label_xnscore")}</Text>
             <Text style={styles.scoreValue}>{request.requesterXnScore}</Text>
           </View>
           <View style={styles.scoreItem}>
-            <Text style={styles.scoreLabel}>Honor Score</Text>
+            <Text style={styles.scoreLabel}>{t("vouch_system.label_honor")}</Text>
             <Text style={styles.scoreValue}>{request.requesterHonorScore}</Text>
           </View>
           <View style={styles.scoreItem}>
-            <Text style={styles.scoreLabel}>Requested</Text>
+            <Text style={styles.scoreLabel}>{t("vouch_system.label_requested")}</Text>
             <Text style={[styles.scoreValue, { color: "#00C6AE" }]}>
               {request.requestedPoints} pts
             </Text>
@@ -267,14 +267,14 @@ export default function VouchSystemScreen() {
             style={styles.declineButton}
             onPress={() => handleDeclineVouch(request)}
           >
-            <Text style={styles.declineButtonText}>Decline</Text>
+            <Text style={styles.declineButtonText}>{t("vouch_system.btn_decline")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.approveButton}
             onPress={() => handleApproveVouch(request)}
           >
             <Ionicons name="checkmark" size={18} color="#FFFFFF" />
-            <Text style={styles.approveButtonText}>Approve Vouch</Text>
+            <Text style={styles.approveButtonText}>{t("vouch_system.btn_approve")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -317,15 +317,15 @@ export default function VouchSystemScreen() {
 
         <View style={styles.vouchDetails}>
           <View style={styles.vouchDetailItem}>
-            <Text style={styles.vouchDetailLabel}>Vouch Points</Text>
+            <Text style={styles.vouchDetailLabel}>{t("vouch_system.vouch_points")}</Text>
             <Text style={styles.vouchDetailValue}>{vouch.vouchPoints} pts</Text>
           </View>
           <View style={styles.vouchDetailItem}>
-            <Text style={styles.vouchDetailLabel}>Days Remaining</Text>
+            <Text style={styles.vouchDetailLabel}>{t("vouch_system.days_remaining")}</Text>
             <Text style={styles.vouchDetailValue}>{vouch.daysRemaining}</Text>
           </View>
           <View style={styles.vouchDetailItem}>
-            <Text style={styles.vouchDetailLabel}>Risk to Honor</Text>
+            <Text style={styles.vouchDetailLabel}>{t("vouch_system.risk_to_honor")}</Text>
             <Text style={[styles.vouchDetailValue, { color: "#DC2626" }]}>
               -{vouch.riskToHonorScore} pts
             </Text>
@@ -398,11 +398,11 @@ export default function VouchSystemScreen() {
 
         <View style={styles.historyDetails}>
           <View style={styles.historyDetailItem}>
-            <Text style={styles.historyDetailLabel}>Vouch Points</Text>
+            <Text style={styles.historyDetailLabel}>{t("vouch_system.history_points")}</Text>
             <Text style={styles.historyDetailValue}>{history.vouchPoints}</Text>
           </View>
           <View style={styles.historyDetailItem}>
-            <Text style={styles.historyDetailLabel}>Honor Impact</Text>
+            <Text style={styles.historyDetailLabel}>{t("vouch_system.honor_impact")}</Text>
             <Text
               style={[
                 styles.historyDetailValue,
@@ -425,7 +425,7 @@ export default function VouchSystemScreen() {
           return (
             <View style={styles.emptyState}>
               <Ionicons name="hand-right-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyStateTitle}>No Pending Requests</Text>
+              <Text style={styles.emptyStateTitle}>{t("vouch_system.empty_pending")}</Text>
               <Text style={styles.emptyStateText}>
                 When members request your vouch, they'll appear here
               </Text>
@@ -439,7 +439,7 @@ export default function VouchSystemScreen() {
           return (
             <View style={styles.emptyState}>
               <Ionicons name="shield-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyStateTitle}>No Active Vouches</Text>
+              <Text style={styles.emptyStateTitle}>{t("vouch_system.empty_active")}</Text>
               <Text style={styles.emptyStateText}>
                 Approved vouches will appear here
               </Text>
@@ -453,7 +453,7 @@ export default function VouchSystemScreen() {
           return (
             <View style={styles.emptyState}>
               <Ionicons name="time-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyStateTitle}>No Vouch History</Text>
+              <Text style={styles.emptyStateTitle}>{t("vouch_system.empty_history")}</Text>
               <Text style={styles.emptyStateText}>
                 Completed vouches will appear here
               </Text>

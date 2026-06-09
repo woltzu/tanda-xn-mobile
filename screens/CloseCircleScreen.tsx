@@ -121,7 +121,7 @@ export default function CloseCircleScreen() {
 
   const handleClose = () => {
     if (confirmText !== "CLOSE") {
-      Alert.alert("Confirmation Required", "Please type CLOSE to confirm.");
+      Alert.alert(t("close_circle.alert_confirmation_title"), t("close_circle.alert_confirmation_body"));
       return;
     }
 
@@ -151,7 +151,7 @@ export default function CloseCircleScreen() {
       <View style={styles.dangerBanner}>
         <Ionicons name="warning" size={24} color="#DC2626" />
         <View style={styles.dangerContent}>
-          <Text style={styles.dangerTitle}>Permanent Action</Text>
+          <Text style={styles.dangerTitle}>{t("close_circle.danger_title")}</Text>
           <Text style={styles.dangerText}>
             Closing a circle is irreversible. All data will be archived and the
             circle cannot be reopened.
@@ -161,32 +161,32 @@ export default function CloseCircleScreen() {
 
       {/* Circle Summary */}
       <View style={styles.summaryCard}>
-        <Text style={styles.cardTitle}>Circle Summary</Text>
+        <Text style={styles.cardTitle}>{t("close_circle.card_summary")}</Text>
         <View style={styles.summaryGrid}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>{memberCount}</Text>
-            <Text style={styles.summaryLabel}>Members</Text>
+            <Text style={styles.summaryLabel}>{t("close_circle.summary_members")}</Text>
           </View>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>
               {currentCycle}/{totalCycles}
             </Text>
-            <Text style={styles.summaryLabel}>Cycles</Text>
+            <Text style={styles.summaryLabel}>{t("close_circle.summary_cycles")}</Text>
           </View>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>${totalContributed}</Text>
-            <Text style={styles.summaryLabel}>Contributed</Text>
+            <Text style={styles.summaryLabel}>{t("close_circle.summary_contributed")}</Text>
           </View>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>{outstandingPayouts}</Text>
-            <Text style={styles.summaryLabel}>Pending Payouts</Text>
+            <Text style={styles.summaryLabel}>{t("close_circle.summary_pending")}</Text>
           </View>
         </View>
       </View>
 
       {/* Reason Selection */}
-      <Text style={styles.sectionTitle}>Reason for Closing</Text>
-      <Text style={styles.sectionSubtitle}>This will be recorded in the audit log</Text>
+      <Text style={styles.sectionTitle}>{t("close_circle.section_reason")}</Text>
+      <Text style={styles.sectionSubtitle}>{t("close_circle.section_reason_sub")}</Text>
 
       {reasons.map((reason) => (
         <TouchableOpacity
@@ -234,7 +234,7 @@ export default function CloseCircleScreen() {
       {selectedReason === "other" && (
         <TextInput
           style={styles.otherInput}
-          placeholder="Please explain the reason..."
+          placeholder={t("close_circle.placeholder_reason")}
           placeholderTextColor="#9CA3AF"
           multiline
           numberOfLines={3}
@@ -252,7 +252,7 @@ export default function CloseCircleScreen() {
         onPress={() => setStep(2)}
         disabled={!selectedReason}
       >
-        <Text style={styles.continueButtonText}>Continue</Text>
+        <Text style={styles.continueButtonText}>{t("close_circle.btn_continue")}</Text>
         <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
       </TouchableOpacity>
     </View>
@@ -260,7 +260,7 @@ export default function CloseCircleScreen() {
 
   const renderStep2 = () => (
     <View style={styles.stepContainer}>
-      <Text style={styles.sectionTitle}>Closure Method</Text>
+      <Text style={styles.sectionTitle}>{t("close_circle.section_method")}</Text>
       <Text style={styles.sectionSubtitle}>
         How would you like to close this circle?
       </Text>
@@ -328,7 +328,7 @@ export default function CloseCircleScreen() {
           <View style={styles.optionContent}>
             <Ionicons name="notifications-outline" size={22} color="#6B7280" />
             <View style={styles.optionText}>
-              <Text style={styles.optionLabel}>Notify All Members</Text>
+              <Text style={styles.optionLabel}>{t("close_circle.option_notify")}</Text>
               <Text style={styles.optionDescription}>
                 Send email notification about closure
               </Text>
@@ -348,7 +348,7 @@ export default function CloseCircleScreen() {
           <View style={styles.optionContent}>
             <Ionicons name="download-outline" size={22} color="#6B7280" />
             <View style={styles.optionText}>
-              <Text style={styles.optionLabel}>Export Circle Data</Text>
+              <Text style={styles.optionLabel}>{t("close_circle.option_export")}</Text>
               <Text style={styles.optionDescription}>
                 Download complete transaction history
               </Text>
@@ -377,7 +377,7 @@ export default function CloseCircleScreen() {
           onPress={() => setStep(3)}
           disabled={!selectedMethod}
         >
-          <Text style={styles.continueButtonText}>Continue</Text>
+          <Text style={styles.continueButtonText}>{t("close_circle.btn_continue")}</Text>
           <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
@@ -388,7 +388,7 @@ export default function CloseCircleScreen() {
     <View style={styles.stepContainer}>
       <View style={styles.finalWarning}>
         <Ionicons name="skull-outline" size={48} color="#DC2626" />
-        <Text style={styles.finalWarningTitle}>Point of No Return</Text>
+        <Text style={styles.finalWarningTitle}>{t("close_circle.warning_no_return")}</Text>
         <Text style={styles.finalWarningText}>
           You are about to permanently close "{circleName}". This action cannot
           be undone.
@@ -397,29 +397,29 @@ export default function CloseCircleScreen() {
 
       {/* Final Summary */}
       <View style={styles.finalSummary}>
-        <Text style={styles.finalSummaryTitle}>Closure Summary</Text>
+        <Text style={styles.finalSummaryTitle}>{t("close_circle.summary_title")}</Text>
         <View style={styles.finalRow}>
-          <Text style={styles.finalLabel}>Circle</Text>
+          <Text style={styles.finalLabel}>{t("close_circle.label_circle")}</Text>
           <Text style={styles.finalValue}>{circleName}</Text>
         </View>
         <View style={styles.finalRow}>
-          <Text style={styles.finalLabel}>Reason</Text>
+          <Text style={styles.finalLabel}>{t("close_circle.label_reason")}</Text>
           <Text style={styles.finalValue}>
             {reasons.find((r) => r.key === selectedReason)?.label}
           </Text>
         </View>
         <View style={styles.finalRow}>
-          <Text style={styles.finalLabel}>Method</Text>
+          <Text style={styles.finalLabel}>{t("close_circle.label_method")}</Text>
           <Text style={styles.finalValue}>
             {closeMethods.find((m) => m.key === selectedMethod)?.label}
           </Text>
         </View>
         <View style={styles.finalRow}>
-          <Text style={styles.finalLabel}>Notify Members</Text>
+          <Text style={styles.finalLabel}>{t("close_circle.label_notify")}</Text>
           <Text style={styles.finalValue}>{notifyMembers ? "Yes" : "No"}</Text>
         </View>
         <View style={styles.finalRow}>
-          <Text style={styles.finalLabel}>Export Data</Text>
+          <Text style={styles.finalLabel}>{t("close_circle.label_export")}</Text>
           <Text style={styles.finalValue}>{exportData ? "Yes" : "No"}</Text>
         </View>
       </View>
@@ -427,11 +427,11 @@ export default function CloseCircleScreen() {
       {/* Confirmation Input */}
       <View style={styles.confirmSection}>
         <Text style={styles.confirmLabel}>
-          Type <Text style={styles.confirmHighlight}>CLOSE</Text> to confirm
+          {t("close_circle.type_close_prefix")}<Text style={styles.confirmHighlight}>{t("close_circle.type_close_word")}</Text>{t("close_circle.type_close_suffix")}
         </Text>
         <TextInput
           style={styles.confirmInput}
-          placeholder="Type CLOSE here"
+          placeholder={t("close_circle.placeholder_type_close")}
           placeholderTextColor="#9CA3AF"
           value={confirmText}
           onChangeText={setConfirmText}
@@ -454,11 +454,11 @@ export default function CloseCircleScreen() {
           disabled={confirmText !== "CLOSE" || isSubmitting}
         >
           {isSubmitting ? (
-            <Text style={styles.closeButtonText}>Closing...</Text>
+            <Text style={styles.closeButtonText}>{t("close_circle.btn_closing")}</Text>
           ) : (
             <>
               <Ionicons name="close-circle" size={20} color="#FFFFFF" />
-              <Text style={styles.closeButtonText}>Close Circle</Text>
+              <Text style={styles.closeButtonText}>{t("close_circle.btn_close")}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -472,13 +472,13 @@ export default function CloseCircleScreen() {
         <Ionicons name="checkmark-circle" size={80} color="#10B981" />
       </View>
 
-      <Text style={styles.confirmationTitle}>Circle Closed</Text>
+      <Text style={styles.confirmationTitle}>{t("close_circle.confirmation_title")}</Text>
       <Text style={styles.confirmationSubtitle}>
         {circleName} has been permanently closed
       </Text>
 
       <View style={styles.closureCard}>
-        <Text style={styles.closureLabel}>Closure Reference</Text>
+        <Text style={styles.closureLabel}>{t("close_circle.closure_reference")}</Text>
         <Text style={styles.closureId}>
           CLO-{Date.now().toString().substring(5)}
         </Text>
@@ -496,10 +496,10 @@ export default function CloseCircleScreen() {
       </View>
 
       <View style={styles.actionsCard}>
-        <Text style={styles.actionsTitle}>Actions Completed</Text>
+        <Text style={styles.actionsTitle}>{t("close_circle.actions_title")}</Text>
         <View style={styles.actionItem}>
           <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-          <Text style={styles.actionText}>Circle archived</Text>
+          <Text style={styles.actionText}>{t("close_circle.action_archived")}</Text>
         </View>
         {notifyMembers && (
           <View style={styles.actionItem}>
@@ -519,7 +519,7 @@ export default function CloseCircleScreen() {
         )}
         <View style={styles.actionItem}>
           <Ionicons name="checkmark-circle" size={20} color="#10B981" />
-          <Text style={styles.actionText}>Audit trail recorded</Text>
+          <Text style={styles.actionText}>{t("close_circle.action_audit")}</Text>
         </View>
       </View>
 
@@ -530,7 +530,7 @@ export default function CloseCircleScreen() {
           navigation.goBack();
         }}
       >
-        <Text style={styles.doneButtonText}>Return to Home</Text>
+        <Text style={styles.doneButtonText}>{t("close_circle.btn_return_home")}</Text>
       </TouchableOpacity>
     </View>
   );

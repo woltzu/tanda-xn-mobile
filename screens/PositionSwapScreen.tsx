@@ -95,10 +95,10 @@ export default function PositionSwapScreen() {
           onPress: async () => {
             const result = await createSwapRequest(circleId, targetUserId);
             if (result) {
-              Alert.alert("Success", "Swap request sent!");
+              Alert.alert(t("position_swap.alert_success_title"), t("position_swap.alert_swap_sent"));
               refetchMyRequests();
             } else if (actionError) {
-              Alert.alert("Error", actionError);
+              Alert.alert(t("position_swap.alert_error_title"), actionError);
             }
           },
         },
@@ -109,7 +109,7 @@ export default function PositionSwapScreen() {
   const handleRespondToSwap = async (requestId: string, accept: boolean) => {
     const success = await respondToSwapRequest(requestId, accept);
     if (success) {
-      Alert.alert("Success", accept ? "Swap accepted!" : "Swap declined.");
+      Alert.alert(t("position_swap.alert_success_title"), accept ? t("position_swap.alert_swap_accepted") : t("position_swap.alert_swap_declined"));
       refetchPending();
       refetchMembers();
     }
@@ -147,7 +147,7 @@ export default function PositionSwapScreen() {
         {/* My Position Card */}
         <View style={styles.card}>
           <View style={styles.positionCardContent}>
-            <Text style={styles.mutedText}>Your Position</Text>
+            <Text style={styles.mutedText}>{t("position_swap.label_your_position")}</Text>
             <Text style={styles.positionNumber}>#{currentPosition ?? "?"}</Text>
             <Text style={styles.positionSubtext}>of {totalPositions}</Text>
             {/* Payout-date block removed in PositionSwap D2 — the
@@ -180,8 +180,8 @@ export default function PositionSwapScreen() {
         {/* POSITIONS TAB */}
         {activeTab === "positions" && (
           <>
-            <Text style={styles.sectionTitle}>Circle Positions</Text>
-            <Text style={[styles.mutedText, { marginBottom: 12 }]}>Tap a member to request a swap</Text>
+            <Text style={styles.sectionTitle}>{t("position_swap.section_positions")}</Text>
+            <Text style={[styles.mutedText, { marginBottom: 12 }]}>{t("position_swap.tap_to_swap")}</Text>
 
             {members.map((member: any) => {
               const isMe = member.is_current_user;
@@ -224,7 +224,7 @@ export default function PositionSwapScreen() {
                   </View>
 
                   <View style={styles.scoreColumn}>
-                    <Text style={styles.scoreLabel}>XnScore</Text>
+                    <Text style={styles.scoreLabel}>{t("position_swap.label_xnscore")}</Text>
                     <Text style={styles.scoreValue}>{member.xn_score ?? "--"}</Text>
                   </View>
 
@@ -243,12 +243,12 @@ export default function PositionSwapScreen() {
         {/* REQUESTS TAB */}
         {activeTab === "requests" && (
           <>
-            <Text style={styles.sectionTitle}>Swap Requests</Text>
+            <Text style={styles.sectionTitle}>{t("position_swap.section_requests")}</Text>
 
             {pendingRequests.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="swap-horizontal" size={48} color="#D1D5DB" />
-                <Text style={styles.emptyText}>No Pending Requests</Text>
+                <Text style={styles.emptyText}>{t("position_swap.empty_pending")}</Text>
               </View>
             ) : (
               pendingRequests.map((req: any) => (
@@ -274,7 +274,7 @@ export default function PositionSwapScreen() {
                       {actionLoading ? (
                         <ActivityIndicator color="#FFF" size="small" />
                       ) : (
-                        <Text style={styles.acceptBtnText}>Accept Swap</Text>
+                        <Text style={styles.acceptBtnText}>{t("position_swap.btn_accept")}</Text>
                       )}
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -282,7 +282,7 @@ export default function PositionSwapScreen() {
                       onPress={() => handleRespondToSwap(req.id, false)}
                       disabled={actionLoading}
                     >
-                      <Text style={styles.declineBtnText}>Decline</Text>
+                      <Text style={styles.declineBtnText}>{t("position_swap.btn_decline")}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -294,12 +294,12 @@ export default function PositionSwapScreen() {
         {/* HISTORY TAB */}
         {activeTab === "history" && (
           <>
-            <Text style={styles.sectionTitle}>Swap History</Text>
+            <Text style={styles.sectionTitle}>{t("position_swap.section_history")}</Text>
 
             {history.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="time-outline" size={48} color="#D1D5DB" />
-                <Text style={styles.emptyText}>No Swap History</Text>
+                <Text style={styles.emptyText}>{t("position_swap.empty_history")}</Text>
               </View>
             ) : (
               history.map((item: any, i: number) => (
