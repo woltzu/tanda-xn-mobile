@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useItineraryBuilder } from '../hooks/useTripOrganizer';
 import { TripOrganizerEngine } from '../services/TripOrganizerEngine';
@@ -139,6 +140,7 @@ const DayCard: React.FC<{
   onEditActivity: (activity: TripActivity) => void;
   onDeleteDay: () => void;
 }> = ({ day, onSaveTitle, onAddActivity, onEditActivity, onDeleteDay }) => {
+  const { t } = useTranslation();
   const [localTitle, setLocalTitle] = useState(day.title ?? '');
 
   return (
@@ -155,7 +157,7 @@ const DayCard: React.FC<{
         value={localTitle}
         onChangeText={setLocalTitle}
         onBlur={() => { if (localTitle !== (day.title ?? '')) onSaveTitle(localTitle); }}
-        placeholder="Day title (e.g. Arrival Day)"
+        placeholder={t("itinerary_builder.placeholder_day_title")}
         placeholderTextColor="#9CA3AF"
       />
       {day.activities.map((act) => (
@@ -163,7 +165,7 @@ const DayCard: React.FC<{
       ))}
       <TouchableOpacity style={styles.addActivityBtn} onPress={onAddActivity} activeOpacity={0.7}>
         <Ionicons name="add-circle-outline" size={20} color={TEAL} />
-        <Text style={styles.addActivityText}>Add Activity</Text>
+        <Text style={styles.addActivityText}>{t("itinerary_builder.btn_add_activity")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -179,6 +181,7 @@ const ActivityModal: React.FC<{
   onDelete: () => void;
   onClose: () => void;
 }> = ({ visible, form, saving, onUpdate, onSave, onDelete, onClose }) => {
+  const { t } = useTranslation();
   if (!form) return null;
 
   const isEditing = !!form.activityId;
@@ -212,12 +215,12 @@ const ActivityModal: React.FC<{
           <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {/* Activity Name */}
             <View style={styles.modalInputGroup}>
-              <Text style={styles.modalInputLabel}>Activity Name</Text>
+              <Text style={styles.modalInputLabel}>{t("itinerary_builder.modal_label_activity_name")}</Text>
               <TextInput
                 style={styles.modalInput}
                 value={form.name}
                 onChangeText={(v) => onUpdate({ name: v })}
-                placeholder="e.g. Eagle Beach — Golden Hour"
+                placeholder={t("itinerary_builder.modal_placeholder_activity_name")}
                 placeholderTextColor="#9CA3AF"
                 autoFocus={!isEditing}
               />
@@ -226,22 +229,22 @@ const ActivityModal: React.FC<{
             {/* Time row */}
             <View style={styles.modalTimeRow}>
               <View style={[styles.modalInputGroup, { flex: 1, marginRight: 8 }]}>
-                <Text style={styles.modalInputLabel}>Start Time</Text>
+                <Text style={styles.modalInputLabel}>{t("itinerary_builder.modal_label_start_time")}</Text>
                 <TextInput
                   style={styles.modalInput}
                   value={form.startTime}
                   onChangeText={(v) => onUpdate({ startTime: v })}
-                  placeholder="4:30 PM"
+                  placeholder={t("itinerary_builder.modal_placeholder_start_time")}
                   placeholderTextColor="#9CA3AF"
                 />
               </View>
               <View style={[styles.modalInputGroup, { flex: 1, marginLeft: 8 }]}>
-                <Text style={styles.modalInputLabel}>End Time</Text>
+                <Text style={styles.modalInputLabel}>{t("itinerary_builder.modal_label_end_time")}</Text>
                 <TextInput
                   style={styles.modalInput}
                   value={form.endTime}
                   onChangeText={(v) => onUpdate({ endTime: v })}
-                  placeholder="6:00 PM"
+                  placeholder={t("itinerary_builder.modal_placeholder_end_time")}
                   placeholderTextColor="#9CA3AF"
                 />
               </View>
@@ -249,7 +252,7 @@ const ActivityModal: React.FC<{
 
             {/* Category chips */}
             <View style={styles.modalInputGroup}>
-              <Text style={styles.modalInputLabel}>Category</Text>
+              <Text style={styles.modalInputLabel}>{t("itinerary_builder.modal_label_category")}</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -286,7 +289,7 @@ const ActivityModal: React.FC<{
                 style={[styles.modalInput, { minHeight: 60, textAlignVertical: 'top' }]}
                 value={form.description}
                 onChangeText={(v) => onUpdate({ description: v })}
-                placeholder="Brief description..."
+                placeholder={t("itinerary_builder.modal_placeholder_description")}
                 placeholderTextColor="#9CA3AF"
                 multiline
               />
@@ -299,7 +302,7 @@ const ActivityModal: React.FC<{
                 style={styles.modalInput}
                 value={form.location}
                 onChangeText={(v) => onUpdate({ location: v })}
-                placeholder="e.g. Eagle Beach, Aruba"
+                placeholder={t("itinerary_builder.modal_placeholder_location")}
                 placeholderTextColor="#9CA3AF"
               />
             </View>
@@ -331,6 +334,7 @@ const ActivityModal: React.FC<{
 const ItineraryBuilderScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const { t } = useTranslation();
   const tripId: string = route.params?.tripId ?? '';
 
   const builder = useItineraryBuilder(tripId);
@@ -489,13 +493,13 @@ const ItineraryBuilderScreen: React.FC = () => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Itinerary Builder</Text>
+        <Text style={styles.headerTitle}>{t("itinerary_builder.header_title")}</Text>
         <TouchableOpacity
           style={styles.previewBtn}
           activeOpacity={0.7}
           onPress={() => navigation.navigate('TripPublicPage' as any, { tripId })}
         >
-          <Text style={styles.previewBtnText}>Preview</Text>
+          <Text style={styles.previewBtnText}>{t("itinerary_builder.btn_preview")}</Text>
         </TouchableOpacity>
       </View>
 
@@ -513,7 +517,7 @@ const ItineraryBuilderScreen: React.FC = () => {
           {builder.days.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="calendar-outline" size={56} color="#CBD5E1" />
-              <Text style={styles.emptyTitle}>No days added yet</Text>
+              <Text style={styles.emptyTitle}>{t("itinerary_builder.empty_title")}</Text>
               <Text style={styles.emptySubtitle}>
                 Add your first day to start building the itinerary
               </Text>
@@ -534,7 +538,7 @@ const ItineraryBuilderScreen: React.FC = () => {
           {/* Add Day */}
           <TouchableOpacity style={styles.addDayBtn} activeOpacity={0.7} onPress={handleAddDay}>
             <Ionicons name="add" size={22} color={TEAL} />
-            <Text style={styles.addDayBtnText}>Add Day</Text>
+            <Text style={styles.addDayBtnText}>{t("itinerary_builder.btn_add_day")}</Text>
           </TouchableOpacity>
 
           <View style={{ height: 40 }} />

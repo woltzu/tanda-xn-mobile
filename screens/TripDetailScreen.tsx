@@ -10,6 +10,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
+import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import InstallmentScheduleView from "../components/InstallmentScheduleView";
 
@@ -52,6 +53,7 @@ const TRIP = {
 const TripDetailScreen = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const { t } = useTranslation();
   const tripId = route.params?.tripId ?? TRIP.id;
 
   return (
@@ -69,9 +71,9 @@ const TripDetailScreen = () => {
           >
             <Ionicons name="arrow-back" size={24} color={colors.primaryNavy} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Trip Details</Text>
+          <Text style={styles.headerTitle}>{t("trip_detail.header_title")}</Text>
           <TouchableOpacity style={styles.headerBtn}>
-            <Text style={styles.shareText}>Share</Text>
+            <Text style={styles.shareText}>{t("trip_detail.btn_share")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -105,20 +107,20 @@ const TripDetailScreen = () => {
             <Text style={styles.priceSubtitle}>per person · all-inclusive</Text>
           </View>
           <View style={styles.priceCenter}>
-            <Text style={styles.savingsLabel}>Save as a circle</Text>
+            <Text style={styles.savingsLabel}>{t("trip_detail.savings_label")}</Text>
             <Text style={styles.savingsDetail}>
               ${TRIP.monthlyContribution}/month × {TRIP.months} months
             </Text>
           </View>
           <TouchableOpacity style={styles.joinBtnSmall}>
-            <Text style={styles.joinBtnSmallText}>Join Trip</Text>
+            <Text style={styles.joinBtnSmallText}>{t("trip_detail.btn_join_small")}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Group Savings Progress Card */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardLabel}>Group savings progress</Text>
+            <Text style={styles.cardLabel}>{t("trip_detail.card_progress_label")}</Text>
             <Text style={styles.progressPercent}>
               {TRIP.progressPercent}%
             </Text>
@@ -151,7 +153,7 @@ const TripDetailScreen = () => {
 
         {/* Who's Going Section */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Who's going</Text>
+          <Text style={styles.sectionTitle}>{t("trip_detail.section_who_going")}</Text>
           <TouchableOpacity>
             <Text style={styles.sectionLink}>
               {TRIP.travelerCount} travelers
@@ -198,7 +200,7 @@ const TripDetailScreen = () => {
         {(TRIP as any).installmentSchedule && (
           <>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Payment Schedule</Text>
+              <Text style={styles.sectionTitle}>{t("trip_detail.section_payment_schedule")}</Text>
             </View>
             <View style={styles.scheduleWrap}>
               <InstallmentScheduleView
@@ -214,21 +216,18 @@ const TripDetailScreen = () => {
           <View style={styles.policyHeader}>
             <Ionicons name="warning" size={20} color="#D97706" />
             <Text style={styles.policyTitle}>
-              Cancellation & refund policy
+              {t("trip_detail.policy_title")}
             </Text>
           </View>
           <Text style={styles.policyBody}>
-            If the trip doesn't reach the minimum number of travelers, you'll
-            receive a full refund. If you cancel, the organizer's cancellation
-            policy applies. If the organizer cancels the trip, you're guaranteed
-            a 100% refund.
+            {t("trip_detail.policy_body")}
           </Text>
         </View>
 
         {/* Bottom CTA */}
         <TouchableOpacity style={styles.ctaButton}>
           <Text style={styles.ctaButtonText}>
-            Join Trip — Pay $300 Deposit
+            {t("trip_detail.btn_join_with_deposit", { amount: 300 })}
           </Text>
         </TouchableOpacity>
 

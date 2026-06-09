@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { useTypedNavigation } from '../hooks/useTypedNavigation';
 import { Routes } from '../lib/routes';
 import { colors, radius, typography, spacing } from '../theme/tokens';
@@ -35,31 +36,32 @@ interface Participant {
   doc_status: string;
 }
 
-const STATUS_CONFIG: Record<ParticipantStatus, { color: string; bg: string; label: string; avatarBg: string }> = {
+// i18n: labelKey resolved per-render via t() at call site.
+const STATUS_CONFIG: Record<ParticipantStatus, { color: string; bg: string; labelKey: string; avatarBg: string }> = {
   confirmed: {
     color: '#047857',
     bg: '#ECFDF5',
-    label: 'Confirmed',
+    labelKey: 'participant_manager.status_confirmed',
     avatarBg: '#D1FAE5',
   },
   pending: {
     color: '#92400E',
     bg: '#FFF7ED',
-    label: 'Pending',
+    labelKey: 'participant_manager.status_pending',
     avatarBg: '#FEF3C7',
   },
   waitlist: {
     color: TEAL,
     bg: 'rgba(0,198,174,0.1)',
-    label: 'Waitlist',
+    labelKey: 'participant_manager.status_waitlist',
     avatarBg: 'rgba(0,198,174,0.15)',
   },
 };
 
-const FILTER_TABS: { key: FilterTab; label: string; color: string }[] = [
-  { key: 'confirmed', label: 'Confirmed', color: '#047857' },
-  { key: 'pending', label: 'Pending', color: GOLD },
-  { key: 'waitlist', label: 'Waitlist', color: TEAL },
+const FILTER_TABS: { key: FilterTab; labelKey: string; color: string }[] = [
+  { key: 'confirmed', labelKey: 'participant_manager.status_confirmed', color: '#047857' },
+  { key: 'pending', labelKey: 'participant_manager.status_pending', color: GOLD },
+  { key: 'waitlist', labelKey: 'participant_manager.status_waitlist', color: TEAL },
 ];
 
 // --- Helpers ---
@@ -84,10 +86,11 @@ const AvatarCircle: React.FC<{ first: string; last: string; status: ParticipantS
 };
 
 const StatusBadge: React.FC<{ status: ParticipantStatus }> = ({ status }) => {
+  const { t } = useTranslation();
   const config = STATUS_CONFIG[status];
   return (
     <View style={[styles.statusBadge, { backgroundColor: config.bg }]}>
-      <Text style={[styles.statusBadgeText, { color: config.color }]}>{config.label}</Text>
+      <Text style={[styles.statusBadgeText, { color: config.color }]}>{t(config.labelKey)}</Text>
     </View>
   );
 };
@@ -114,27 +117,31 @@ const ParticipantRow: React.FC<{
   </TouchableOpacity>
 );
 
-const EmptyFilterState: React.FC<{ filter: FilterTab }> = ({ filter }) => (
+const EmptyFilterState: React.FC<{ filter: FilterTab }> = ({ filter }) => {
+  const { t } = useTranslation();
+  return (
   <View style={styles.emptyState}>
     <Ionicons name="people-outline" size={48} color="#CBD5E1" />
     <Text style={styles.emptyTitle}>
-      No {STATUS_CONFIG[filter].label.toLowerCase()} participants
+      {t("participant_manager.empty_title", { label: t(STATUS_CONFIG[filter].labelKey).toLowerCase() })}
     </Text>
     <Text style={styles.emptySubtitle}>
       {filter === 'confirmed'
-        ? 'Participants will appear here once they confirm and pay.'
+        ? t("participant_manager.empty_confirmed")
         : filter === 'pending'
-        ? 'No one is pending approval right now.'
-        : 'The waitlist is empty.'}
+        ? t("participant_manager.empty_pending")
+        : t("participant_manager.empty_waitlist")}
     </Text>
   </View>
-);
+  );
+};
 
 // --- Screen ---
 
 const ParticipantManagerScreen: React.FC = () => {
   const navigation = useTypedNavigation();
   const route = useRoute<any>();
+  const { t } = useTranslation();
   const tripId: string = route.params?.tripId ?? '';
   const { participants, loading } = useParticipantManager(tripId);
   const [activeFilter, setActiveFilter] = useState<FilterTab>('confirmed');
@@ -168,7 +175,7 @@ const ParticipantManagerScreen: React.FC = () => {
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Participants</Text>
+          <Text style={styles.headerTitle}>{t("participant_manager.header_title")}</Text>
           <View style={styles.countBadge}>
             <Text style={styles.countBadgeText}>{allParticipants.length}</Text>
           </View>
@@ -193,7 +200,7 @@ const ParticipantManagerScreen: React.FC = () => {
                   isActive && { color: tab.color, fontWeight: typography.semibold },
                 ]}
               >
-                {tab.label}
+                {t(tab.labelKey)}
               </Text>
               <View
                 style={[

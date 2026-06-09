@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import * as ImagePicker from "expo-image-picker";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { useDocumentSubmission } from "../hooks/useTripOrganizer";
@@ -62,6 +63,7 @@ const DOC_REQUIREMENTS: Record<string, DocRequirement> = {
 const DocumentSubmissionScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const { t } = useTranslation();
   const tripId = route.params?.tripId ?? "trip-001";
   const participantId = route.params?.participantId ?? "me";
   const fieldKey = route.params?.fieldKey ?? "passport";
@@ -99,7 +101,7 @@ const DocumentSubmissionScreen: React.FC = () => {
         setUploadState("selected");
       }
     } catch {
-      Alert.alert("Error", "Could not access your photo library. Please check permissions.");
+      Alert.alert(t("document_submission.alert_error_title"), t("document_submission.alert_library_perm_body"));
     }
   };
 
@@ -107,7 +109,7 @@ const DocumentSubmissionScreen: React.FC = () => {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("Permission Required", "Camera access is needed to take a photo.");
+        Alert.alert(t("document_submission.alert_camera_perm_title"), t("document_submission.alert_camera_perm_body"));
         return;
       }
 
@@ -132,7 +134,7 @@ const DocumentSubmissionScreen: React.FC = () => {
         setUploadState("selected");
       }
     } catch {
-      Alert.alert("Error", "Could not access the camera. Please check permissions.");
+      Alert.alert(t("document_submission.alert_error_title"), t("document_submission.alert_camera_error_body"));
     }
   };
 
@@ -160,7 +162,7 @@ const DocumentSubmissionScreen: React.FC = () => {
     } catch {
       clearInterval(interval);
       setUploadState("selected");
-      Alert.alert("Upload Failed", "Please check your connection and try again.");
+      Alert.alert(t("document_submission.alert_upload_failed_title"), t("document_submission.alert_upload_failed_body"));
     }
   };
 
@@ -188,7 +190,7 @@ const DocumentSubmissionScreen: React.FC = () => {
         <View style={styles.requirementsCard}>
           <View style={styles.requirementsHeader}>
             <Ionicons name="document-text-outline" size={20} color={NAVY} />
-            <Text style={styles.requirementsTitle}>Requirements</Text>
+            <Text style={styles.requirementsTitle}>{t("document_submission.section_requirements")}</Text>
           </View>
           <Text style={styles.requirementsDescription}>{docReq.description}</Text>
           <View style={styles.formatRow}>
@@ -199,12 +201,12 @@ const DocumentSubmissionScreen: React.FC = () => {
 
         {/* ── Upload Box ──────────────────────────────────────────────── */}
         <View style={styles.uploadSection}>
-          <Text style={styles.uploadSectionTitle}>Upload Document</Text>
+          <Text style={styles.uploadSectionTitle}>{t("document_submission.section_upload")}</Text>
 
           {uploadState === "empty" && (
             <TouchableOpacity style={styles.uploadBox} onPress={pickDocument} activeOpacity={0.7}>
               <Ionicons name="document-outline" size={40} color={TEAL} />
-              <Text style={styles.uploadBoxTitle}>Tap to select a file</Text>
+              <Text style={styles.uploadBoxTitle}>{t("document_submission.upload_box_title")}</Text>
               <Text style={styles.uploadBoxSubtitle}>
                 Choose from your photo library
               </Text>
@@ -239,7 +241,7 @@ const DocumentSubmissionScreen: React.FC = () => {
           {uploadState === "uploading" && (
             <View style={styles.uploadingBox}>
               <ActivityIndicator size="small" color={TEAL} />
-              <Text style={styles.uploadingText}>Uploading...</Text>
+              <Text style={styles.uploadingText}>{t("document_submission.uploading")}</Text>
               <View style={styles.uploadProgressBar}>
                 <View
                   style={[
@@ -259,7 +261,7 @@ const DocumentSubmissionScreen: React.FC = () => {
               <View style={styles.submittedIcon}>
                 <Ionicons name="checkmark-circle" size={48} color={TEAL} />
               </View>
-              <Text style={styles.submittedTitle}>Document Submitted</Text>
+              <Text style={styles.submittedTitle}>{t("document_submission.submitted_title")}</Text>
               <Text style={styles.submittedSubtitle}>
                 Your {docReq.title.toLowerCase()} has been received and is being reviewed.
               </Text>
@@ -272,12 +274,12 @@ const DocumentSubmissionScreen: React.FC = () => {
           <View style={styles.orSection}>
             <View style={styles.orDivider}>
               <View style={styles.orLine} />
-              <Text style={styles.orText}>OR TAKE A PHOTO</Text>
+              <Text style={styles.orText}>{t("document_submission.or_camera")}</Text>
               <View style={styles.orLine} />
             </View>
             <TouchableOpacity style={styles.cameraButton} onPress={takePhoto} activeOpacity={0.7}>
               <Ionicons name="camera-outline" size={22} color={NAVY} />
-              <Text style={styles.cameraButtonText}>Open Camera</Text>
+              <Text style={styles.cameraButtonText}>{t("document_submission.btn_open_camera")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -305,7 +307,7 @@ const DocumentSubmissionScreen: React.FC = () => {
             ) : (
               <>
                 <Ionicons name="cloud-upload-outline" size={20} color="#FFF" />
-                <Text style={styles.submitButtonText}>Submit Document</Text>
+                <Text style={styles.submitButtonText}>{t("document_submission.btn_submit")}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -320,7 +322,7 @@ const DocumentSubmissionScreen: React.FC = () => {
             activeOpacity={0.85}
           >
             <Ionicons name="arrow-back" size={20} color="#FFF" />
-            <Text style={styles.submitButtonText}>Back to My Trip</Text>
+            <Text style={styles.submitButtonText}>{t("document_submission.btn_back")}</Text>
           </TouchableOpacity>
         </View>
       )}

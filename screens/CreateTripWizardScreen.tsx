@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, radius, typography, spacing } from '../theme/tokens';
@@ -39,11 +40,12 @@ const BG = '#F5F7FA';
 
 const TOTAL_STEPS = 4;
 
-const STEP_NAMES = [
-  'Basics',
-  'Payment',
-  'Requirements',
-  'Review',
+// i18n: step name keys resolved per-render via t() at call site.
+const STEP_NAME_KEYS = [
+  'create_trip_wizard.step_basics',
+  'create_trip_wizard.step_payment',
+  'create_trip_wizard.step_requirements',
+  'create_trip_wizard.step_review',
 ];
 
 // --- Types ---
@@ -211,6 +213,7 @@ const DatePickerField: React.FC<{
   value: string;
   onChange: (dateStr: string) => void;
 }> = ({ label, value, onChange }) => {
+  const { t } = useTranslation();
   // Web: the native <input type="date"> emits YYYY-MM-DD verbatim, matching
   // toISODate() on iOS/Android. @react-native-community/datetimepicker has
   // no working web render path in this codebase, so the tap below would do
@@ -286,10 +289,10 @@ const DatePickerField: React.FC<{
           <View style={styles.datePickerModalSheet}>
             <View style={styles.datePickerHeader}>
               <TouchableOpacity onPress={() => setShowPicker(false)}>
-                <Text style={styles.datePickerCancel}>Cancel</Text>
+                <Text style={styles.datePickerCancel}>{t("create_trip_wizard.datepicker_cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={confirmIOSDate}>
-                <Text style={styles.datePickerDone}>Done</Text>
+                <Text style={styles.datePickerDone}>{t("create_trip_wizard.datepicker_done")}</Text>
               </TouchableOpacity>
             </View>
             <DateTimePicker
@@ -359,6 +362,7 @@ const CoverPhotoField: React.FC<{
   onPickNative: () => void;
   onWebFile: (file: File) => void;
 }> = ({ url, uploading, onPickNative, onWebFile }) => {
+  const { t } = useTranslation();
   const handleNativeTap = () => {
     console.log('[CoverPhotoField native] tap — opening picker', { hasImage: !!url, uploading });
     onPickNative();
@@ -376,7 +380,7 @@ const CoverPhotoField: React.FC<{
 
   return (
     <View style={styles.coverFieldContainer}>
-      <Text style={styles.inputLabel}>Cover Photo</Text>
+      <Text style={styles.inputLabel}>{t("create_trip_wizard.label_cover")}</Text>
       <View style={styles.coverFieldButton}>
         {/* Visual content — never intercepts clicks */}
         {url ? (
@@ -390,14 +394,14 @@ const CoverPhotoField: React.FC<{
         ) : (
           <View style={styles.coverFieldPlaceholder} pointerEvents="none">
             <Ionicons name="camera-outline" size={32} color={TEAL} />
-            <Text style={styles.coverFieldPlaceholderText}>Add Cover Photo</Text>
-            <Text style={styles.coverFieldHint}>Tap to pick from your photos</Text>
+            <Text style={styles.coverFieldPlaceholderText}>{t("create_trip_wizard.cover_add")}</Text>
+            <Text style={styles.coverFieldHint}>{t("create_trip_wizard.cover_hint")}</Text>
           </View>
         )}
         {url && (
           <View style={styles.coverFieldOverlay} pointerEvents="none">
             <Ionicons name="camera" size={18} color="#FFFFFF" />
-            <Text style={styles.coverFieldOverlayText}>Change</Text>
+            <Text style={styles.coverFieldOverlayText}>{t("create_trip_wizard.cover_change")}</Text>
           </View>
         )}
         {uploading && (
@@ -432,7 +436,9 @@ const StepBasics: React.FC<{
   uploadingCover: boolean;
   onPickCoverNative: () => void;
   onWebCoverFile: (file: File) => void;
-}> = ({ data, update, uploadingCover, onPickCoverNative, onWebCoverFile }) => (
+}> = ({ data, update, uploadingCover, onPickCoverNative, onWebCoverFile }) => {
+  const { t } = useTranslation();
+  return (
   <View>
     <CoverPhotoField
       url={data.cover_photo_url}
@@ -441,8 +447,8 @@ const StepBasics: React.FC<{
       onWebFile={onWebCoverFile}
     />
     <SectionLabel label="Trip Details" />
-    <FormInput label="Trip Name" value={data.trip_name} onChangeText={(v) => update({ trip_name: v })} placeholder="e.g. Summer Return — Abidjan 2026" />
-    <FormInput label="Destination" value={data.destination} onChangeText={(v) => update({ destination: v })} placeholder="e.g. Abidjan, Ivory Coast" />
+    <FormInput label={t("create_trip_wizard.label_trip_name")} value={data.trip_name} onChangeText={(v) => update({ trip_name: v })} placeholder={t("create_trip_wizard.placeholder_trip_name")} />
+    <FormInput label={t("create_trip_wizard.label_destination")} value={data.destination} onChangeText={(v) => update({ destination: v })} placeholder={t("create_trip_wizard.placeholder_destination")} />
     <View style={styles.row}>
       <View style={{ flex: 1, marginRight: spacing.sm }}>
         <DatePickerField label="Start Date" value={data.start_date} onChange={(v) => update({ start_date: v })} />
@@ -451,13 +457,14 @@ const StepBasics: React.FC<{
         <DatePickerField label="End Date" value={data.end_date} onChange={(v) => update({ end_date: v })} />
       </View>
     </View>
-    <FormInput label="Max Participants" value={data.max_participants} onChangeText={(v) => update({ max_participants: v })} placeholder="25" keyboardType="numeric" />
-    <FormInput label="Tagline" value={data.tagline} onChangeText={(v) => update({ tagline: v })} placeholder="A short catchy tagline" />
-    <FormInput label="Description" value={data.description} onChangeText={(v) => update({ description: v })} placeholder="Tell people about this trip..." multiline />
-    <FormInput label="What's Included" value={data.whats_included} onChangeText={(v) => update({ whats_included: v })} placeholder="Flights, hotels, meals..." multiline />
-    <FormInput label="What's Excluded" value={data.whats_excluded} onChangeText={(v) => update({ whats_excluded: v })} placeholder="Visa fees, personal expenses..." multiline />
+    <FormInput label={t("create_trip_wizard.label_max_participants")} value={data.max_participants} onChangeText={(v) => update({ max_participants: v })} placeholder={t("create_trip_wizard.placeholder_max_participants")} keyboardType="numeric" />
+    <FormInput label={t("create_trip_wizard.label_tagline")} value={data.tagline} onChangeText={(v) => update({ tagline: v })} placeholder={t("create_trip_wizard.placeholder_tagline")} />
+    <FormInput label={t("create_trip_wizard.label_description")} value={data.description} onChangeText={(v) => update({ description: v })} placeholder={t("create_trip_wizard.placeholder_description")} multiline />
+    <FormInput label={t("create_trip_wizard.label_whats_included")} value={data.whats_included} onChangeText={(v) => update({ whats_included: v })} placeholder={t("create_trip_wizard.placeholder_whats_included")} multiline />
+    <FormInput label={t("create_trip_wizard.label_whats_excluded")} value={data.whats_excluded} onChangeText={(v) => update({ whats_excluded: v })} placeholder={t("create_trip_wizard.placeholder_whats_excluded")} multiline />
   </View>
-);
+  );
+};
 
 /**
  * Generate the JSONB installment_schedule envelope from cadence + count +
@@ -663,6 +670,7 @@ const StepRequirements: React.FC<{
   data: TripFormData;
   update: (partial: Partial<TripFormData>) => void;
 }> = ({ data, update }) => {
+  const { t } = useTranslation();
   const [newField, setNewField] = useState('');
 
   const toggleRequirement = (id: string) => {
@@ -711,7 +719,7 @@ const StepRequirements: React.FC<{
           style={styles.addCustomInput}
           value={newField}
           onChangeText={setNewField}
-          placeholder="Add custom field..."
+          placeholder={t("create_trip_wizard.placeholder_custom_field")}
           placeholderTextColor="#9CA3AF"
         />
         <TouchableOpacity style={styles.addCustomBtn} onPress={addCustom}>
@@ -728,7 +736,7 @@ const StepItinerary: React.FC<{ tripId?: string }> = ({ tripId }) => {
   return (
     <View style={styles.centeredStep}>
       <Ionicons name="map-outline" size={64} color={TEAL} />
-      <Text style={styles.centeredTitle}>Build Your Itinerary</Text>
+      <Text style={styles.centeredTitle}>{t("create_trip_wizard.centered_title")}</Text>
       <Text style={styles.centeredSubtitle}>
         Create a day-by-day plan with activities, locations, and times for your participants.
       </Text>
@@ -738,7 +746,7 @@ const StepItinerary: React.FC<{ tripId?: string }> = ({ tripId }) => {
         onPress={() => navigation.navigate('ItineraryBuilder', { tripId: tripId ?? 'new' })}
       >
         <Ionicons name="construct-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-        <Text style={styles.itineraryBtnText}>Continue to Itinerary Builder</Text>
+        <Text style={styles.itineraryBtnText}>{t("create_trip_wizard.btn_continue_itinerary")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -758,15 +766,15 @@ const StepCommunication: React.FC<{
     <SectionLabel label="Notifications" />
     <TouchableOpacity style={styles.checkRow} onPress={() => update({ notify_payment: !data.notify_payment })}>
       <Ionicons name={data.notify_payment ? 'checkbox' : 'square-outline'} size={24} color={data.notify_payment ? TEAL : '#D1D5DB'} />
-      <Text style={styles.checkLabel}>Payment received</Text>
+      <Text style={styles.checkLabel}>{t("create_trip_wizard.check_payment_received")}</Text>
     </TouchableOpacity>
     <TouchableOpacity style={styles.checkRow} onPress={() => update({ notify_docs: !data.notify_docs })}>
       <Ionicons name={data.notify_docs ? 'checkbox' : 'square-outline'} size={24} color={data.notify_docs ? TEAL : '#D1D5DB'} />
-      <Text style={styles.checkLabel}>Document uploaded</Text>
+      <Text style={styles.checkLabel}>{t("create_trip_wizard.check_document_uploaded")}</Text>
     </TouchableOpacity>
     <TouchableOpacity style={styles.checkRow} onPress={() => update({ notify_itinerary: !data.notify_itinerary })}>
       <Ionicons name={data.notify_itinerary ? 'checkbox' : 'square-outline'} size={24} color={data.notify_itinerary ? TEAL : '#D1D5DB'} />
-      <Text style={styles.checkLabel}>Itinerary changes</Text>
+      <Text style={styles.checkLabel}>{t("create_trip_wizard.check_itinerary_changes")}</Text>
     </TouchableOpacity>
   </View>
 );
@@ -777,6 +785,7 @@ const StepReview: React.FC<{
   onSaveDraft: () => void;
   isEditMode?: boolean;
 }> = ({ data, onPublish, onSaveDraft, isEditMode }) => {
+  const { t } = useTranslation();
   const ReviewRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
     <View style={styles.reviewRow}>
       <Text style={styles.reviewLabel}>{label}</Text>
@@ -791,7 +800,7 @@ const StepReview: React.FC<{
 
   return (
     <View>
-      <Text style={styles.reviewHeading}>Ready to publish?</Text>
+      <Text style={styles.reviewHeading}>{t("create_trip_wizard.review_heading")}</Text>
       <Text style={styles.reviewSubheading}>Step 4 of 4 — Review before going live</Text>
 
       {/* Summary card */}
@@ -799,7 +808,7 @@ const StepReview: React.FC<{
         <View style={styles.reviewCardHeader}>
           <Text style={styles.reviewTripName}>✈️ {data.trip_name || 'Untitled Trip'}</Text>
           <View style={styles.reviewDraftPill}>
-            <Text style={styles.reviewDraftPillText}>Draft</Text>
+            <Text style={styles.reviewDraftPillText}>{t("create_trip_wizard.review_draft_pill")}</Text>
           </View>
         </View>
         <Text style={styles.reviewTripMeta}>
@@ -807,7 +816,7 @@ const StepReview: React.FC<{
         </Text>
         <View style={styles.reviewMetaRow}>
           {data.deposit_required && <Text style={styles.reviewMetaItem}>Deposit: ${data.deposit_amount}</Text>}
-          {data.payment_type === 'installments' && <Text style={styles.reviewMetaItem}>Installments</Text>}
+          {data.payment_type === 'installments' && <Text style={styles.reviewMetaItem}>{t("create_trip_wizard.review_installments")}</Text>}
           <Text style={styles.reviewMetaItem}>{enabledReqs.length + data.custom_requirements.length} requirements</Text>
         </View>
       </View>
@@ -816,7 +825,7 @@ const StepReview: React.FC<{
       <View style={styles.itineraryAlert}>
         <Ionicons name="alert-circle" size={18} color={GOLD} style={{ marginRight: 8 }} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.itineraryAlertTitle}>Itinerary not built yet</Text>
+          <Text style={styles.itineraryAlertTitle}>{t("create_trip_wizard.itinerary_alert_title")}</Text>
           <Text style={styles.itineraryAlertText}>
             You can publish now and build the itinerary after. Your trip page will show "Itinerary coming soon."
           </Text>
@@ -827,15 +836,15 @@ const StepReview: React.FC<{
       <View style={styles.reviewChecklist}>
         <View style={styles.reviewCheckRow}>
           <Ionicons name={basicsComplete ? 'checkbox' : 'square-outline'} size={20} color={basicsComplete ? '#10B981' : '#D1D5DB'} />
-          <Text style={[styles.reviewCheckLabel, basicsComplete && styles.reviewCheckDone]}>Trip basics complete</Text>
+          <Text style={[styles.reviewCheckLabel, basicsComplete && styles.reviewCheckDone]}>{t("create_trip_wizard.review_check_basics")}</Text>
         </View>
         <View style={styles.reviewCheckRow}>
           <Ionicons name={paymentComplete ? 'checkbox' : 'square-outline'} size={20} color={paymentComplete ? '#10B981' : '#D1D5DB'} />
-          <Text style={[styles.reviewCheckLabel, paymentComplete && styles.reviewCheckDone]}>Payment setup complete</Text>
+          <Text style={[styles.reviewCheckLabel, paymentComplete && styles.reviewCheckDone]}>{t("create_trip_wizard.review_check_payment")}</Text>
         </View>
         <View style={styles.reviewCheckRow}>
           <Ionicons name={requirementsComplete ? 'checkbox' : 'square-outline'} size={20} color={requirementsComplete ? '#10B981' : '#D1D5DB'} />
-          <Text style={[styles.reviewCheckLabel, requirementsComplete && styles.reviewCheckDone]}>Requirements selected</Text>
+          <Text style={[styles.reviewCheckLabel, requirementsComplete && styles.reviewCheckDone]}>{t("create_trip_wizard.review_check_requirements")}</Text>
         </View>
         <View style={styles.reviewCheckRow}>
           <Ionicons name="square-outline" size={20} color="#D1D5DB" />
@@ -854,7 +863,7 @@ const StepReview: React.FC<{
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.saveDraftReviewBtn} activeOpacity={0.7} onPress={onSaveDraft}>
-        <Text style={styles.saveDraftReviewText}>Save as Draft</Text>
+        <Text style={styles.saveDraftReviewText}>{t("create_trip_wizard.btn_save_draft_review")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -865,6 +874,7 @@ const StepReview: React.FC<{
 const CreateTripWizardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const { t } = useTranslation();
   const wizard = useCreateTripWizard();
   const scrollRef = useRef<ScrollView>(null);
   const [currentStep, setCurrentStep] = useState(0);
@@ -990,7 +1000,7 @@ const CreateTripWizardScreen: React.FC = () => {
       setUploadingCover(false);
       if (!res.success || !res.url) {
         console.error('[CreateTripWizard] cover upload failed', res.error);
-        Alert.alert('Upload failed', res.error ?? 'Could not upload cover photo. Please try again.');
+        Alert.alert(t('create_trip_wizard.alert_upload_failed_title'), res.error ?? t('create_trip_wizard.alert_upload_failed_default'));
         return;
       }
       // The upload path is deterministic ({userId}/{tripId}-cover.jpg with
@@ -1006,7 +1016,7 @@ const CreateTripWizardScreen: React.FC = () => {
     } catch (err: any) {
       setUploadingCover(false);
       console.error('[CreateTripWizard] upload error', err);
-      Alert.alert('Could not upload photo', err?.message ?? 'An unknown error occurred.');
+      Alert.alert(t('create_trip_wizard.alert_could_not_upload_title'), err?.message ?? t('create_trip_wizard.alert_unknown_error'));
     }
   };
 
@@ -1033,8 +1043,8 @@ const CreateTripWizardScreen: React.FC = () => {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
         Alert.alert(
-          'Permission needed',
-          'TandaXn needs photo library access to set a trip cover. Please grant permission in your device settings.'
+          t('create_trip_wizard.alert_permission_title'),
+          t('create_trip_wizard.alert_permission_body')
         );
         return;
       }
@@ -1054,7 +1064,7 @@ const CreateTripWizardScreen: React.FC = () => {
     } catch (err: any) {
       setUploadingCover(false);
       console.error('[CreateTripWizard] pickCoverPhotoNative error', err);
-      Alert.alert('Could not pick photo', err?.message ?? 'An unknown error occurred.');
+      Alert.alert(t('create_trip_wizard.alert_could_not_pick_title'), err?.message ?? t('create_trip_wizard.alert_unknown_error'));
     }
   };
 
@@ -1113,7 +1123,7 @@ const CreateTripWizardScreen: React.FC = () => {
         wizard?.initEditMode?.(editTripId, trip);
       } catch (err: any) {
         console.warn('[CreateTripWizard] Hydrate edit-mode error:', err);
-        Alert.alert('Could not load trip', err?.message ?? 'Please try again.');
+        Alert.alert(t('create_trip_wizard.alert_could_not_load_title'), err?.message ?? t('create_trip_wizard.alert_please_try_again'));
       } finally {
         if (!cancelled) setHydrating(false);
       }
@@ -1320,7 +1330,7 @@ const CreateTripWizardScreen: React.FC = () => {
       <View style={styles.stepSection} onLayout={measureChrome('stepSection')}>
         <StepIndicator currentStep={currentStep} />
         <Text style={styles.stepCounter}>
-          Step {currentStep + 1} of {TOTAL_STEPS} — {STEP_NAMES[currentStep]}
+          Step {currentStep + 1} of {TOTAL_STEPS} — {t(STEP_NAME_KEYS[currentStep])}
         </Text>
       </View>
 
@@ -1362,14 +1372,14 @@ const CreateTripWizardScreen: React.FC = () => {
                   onPress={handleRestoreDraft}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.draftBannerButtonText}>Restore</Text>
+                  <Text style={styles.draftBannerButtonText}>{t("create_trip_wizard.draft_restore")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.draftBannerButton}
                   onPress={handleDiscardDraft}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.draftBannerButtonText}>Discard</Text>
+                  <Text style={styles.draftBannerButtonText}>{t("create_trip_wizard.draft_discard")}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1385,7 +1395,7 @@ const CreateTripWizardScreen: React.FC = () => {
           <Text style={styles.footerBackBtnText}>{currentStep === 0 ? 'Cancel' : 'Back'}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.saveDraftBtn} onPress={saveDraft}>
-          <Text style={styles.saveDraftBtnText}>Save Draft</Text>
+          <Text style={styles.saveDraftBtnText}>{t("create_trip_wizard.btn_save_draft")}</Text>
         </TouchableOpacity>
         {currentStep < TOTAL_STEPS - 1 && (
           <TouchableOpacity style={styles.nextBtn} activeOpacity={0.7} onPress={goNext}>
