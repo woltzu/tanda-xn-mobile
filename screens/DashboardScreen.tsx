@@ -1,4 +1,5 @@
 import React, { useMemo, useEffect, useRef, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 import {
   View,
@@ -89,11 +90,13 @@ const NEAR_YOU_SERVICES = [
   { id: "4", emoji: "\uD83D\uDCE6", name: "Ship to Africa", provider: "Koffi Express", distance: "2.1 mi", bg: "#ECFDF5", trusted: true, elderEndorsed: true },
 ];
 
-function getGreeting(): string {
+// i18n: getGreeting takes the t() function so the greeting is localized.
+// Kept as a regular function (not a hook) so it can stay a pure utility.
+function getGreeting(t: (k: string) => string): string {
   const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 17) return "Good afternoon";
-  return "Good evening";
+  if (hour < 12) return t("dashboard.greeting_morning");
+  if (hour < 17) return t("dashboard.greeting_afternoon");
+  return t("dashboard.greeting_evening");
 }
 
 // ─── Tier helpers (Phase D3 of feat(tier)) ────────────────────────────────
@@ -135,6 +138,7 @@ function getTierEmoji(tierKey: string): string {
 
 export default function DashboardScreen() {
   const navigation = useNavigation<DashboardScreenNavigationProp>();
+  const { t } = useTranslation();
   const { user } = useAuth();
 
   // Active early-intervention banner. The hook handles its own auth
@@ -293,11 +297,19 @@ export default function DashboardScreen() {
     if (circleWithDueSoon) {
       const dueDate = new Date(circleWithDueSoon.nextContributionDate!);
       const diffDays = Math.ceil((dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-      const dayText = diffDays === 0 ? "today" : diffDays === 1 ? "tomorrow" : `in ${diffDays} days`;
+      const text =
+        diffDays === 0
+          ? t("dashboard.pulse_due_today", { circle: circleWithDueSoon.name })
+          : diffDays === 1
+            ? t("dashboard.pulse_due_tomorrow", { circle: circleWithDueSoon.name })
+            : t("dashboard.pulse_due_in_days", {
+                circle: circleWithDueSoon.name,
+                count: diffDays,
+              });
       return {
         icon: "\uD83D\uDD14",
-        text: `${circleWithDueSoon.name} circle contributes ${dayText}. You're all set.`,
-        cta: "View",
+        text,
+        cta: t("dashboard.pulse_view_cta"),
         action: () => navigation.navigate("CircleDetail", { circleId: circleWithDueSoon.id }),
       };
     }
@@ -305,8 +317,8 @@ export default function DashboardScreen() {
     if (pendingInvite) {
       return {
         icon: "\uD83D\uDCEC",
-        text: "You have a circle invite pending. Check it out!",
-        cta: "View",
+        text: t("dashboard.pulse_invite_pending"),
+        cta: t("dashboard.pulse_view_cta"),
         action: () => navigation.getParent()?.navigate("Circles"),
       };
     }
@@ -314,8 +326,8 @@ export default function DashboardScreen() {
     if (myCircles.length === 0) {
       return {
         icon: "\uD83C\uDFE0",
-        text: "Welcome home! Start by joining or creating a circle.",
-        cta: "Start",
+        text: t("dashboard.pulse_welcome_home"),
+        cta: t("dashboard.pulse_start_cta"),
         action: () => navigation.navigate("CreateCircleStart"),
       };
     }
@@ -323,8 +335,11 @@ export default function DashboardScreen() {
     if (isElder && elderProfile?.status === "approved") {
       return {
         icon: "\uD83D\uDEE1\uFE0F",
-        text: `Elder ${user?.name || ""}  your community looks up to you. ${elderStats?.activeVouches || 0} active vouches.`,
-        cta: "View",
+        text: t("dashboard.pulse_elder", {
+          name: user?.name || "",
+          count: elderStats?.activeVouches || 0,
+        }),
+        cta: t("dashboard.pulse_view_cta"),
         action: () => navigation.navigate("ElderDashboard" as any),
       };
     }
@@ -332,17 +347,17 @@ export default function DashboardScreen() {
     // Default community message
     return {
       icon: "\uD83C\uDF1F",
-      text: "Your community is growing. Stay connected and keep building together.",
-      cta: "View",
+      text: t("dashboard.pulse_default"),
+      cta: t("dashboard.pulse_view_cta"),
       action: () => navigation.getParent()?.navigate("Community"),
     };
-  }, [myCircles, pendingInvite, isElder, elderProfile, elderStats, user]);
+  }, [myCircles, pendingInvite, isElder, elderProfile, elderStats, user, t]);
 
   // Status badge for circle cards
   const getCircleStatus = (circle: typeof displayCircles[0]) => {
-    if (circle.progress >= 80) return { label: "On Track", color: SUCCESS };
-    if (circle.progress >= 50) return { label: "Due Soon", color: WARNING };
-    return { label: "Building", color: TEAL };
+    if (circle.progress >= 80) return { label: t("dashboard.circle_status_on_track"), color: SUCCESS };
+    if (circle.progress >= 50) return { label: t("dashboard.circle_status_due_soon"), color: WARNING };
+    return { label: t("dashboard.circle_status_building"), color: TEAL };
   };
 
   return (
@@ -356,8 +371,8 @@ export default function DashboardScreen() {
           <View style={styles.topBar}>
             {/* Left: Greeting + Brand */}
             <View>
-              <Text style={styles.greeting}>{getGreeting()}</Text>
-              <Text style={styles.brandName}>TandaXn</Text>
+              <Text style={styles.greeting}>{getGreeting(t)}</Text>
+              <Text style={styles.brandName}>{t("dashboard.brand_name")}</Text>
             </View>
 
             {/* Right: Bell + Avatar + Elder badge */}
@@ -842,7 +857,7 @@ export default function DashboardScreen() {
                   accessibilityRole="button"
                   accessibilityLabel="Acknowledge intervention"
                 >
-                  <Text style={styles.interventionPrimaryBtnText}>Got it</Text>
+                  <Text style={styles.interventionPrimaryBtnText}>{t("dashboard.intervention_got_it")}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -914,7 +929,7 @@ export default function DashboardScreen() {
                     ? { color: "#991B1B" }
                     : { color: "#9A3412" },
                 ]}>
-                  View details
+                  {t("dashboard.intervention_view_details")}
                 </Text>
                 <Ionicons
                   name="chevron-forward"
@@ -992,7 +1007,7 @@ export default function DashboardScreen() {
                   moodIntervention.tierAtTrigger === "disengaging" ? { color: "#9A3412" } :
                   { color: "#92400E" },
                 ]}>
-                  View details
+                  {t("dashboard.intervention_view_details")}
                 </Text>
                 <Ionicons
                   name="chevron-forward"
@@ -1020,7 +1035,7 @@ export default function DashboardScreen() {
             <Ionicons name="wallet-outline" size={22} color={TEAL} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.walletCardLabel}>My Wallet</Text>
+            <Text style={styles.walletCardLabel}>{t("dashboard.wallet_label")}</Text>
             <Text style={styles.walletCardBalance}>${walletBalance.toFixed(2)}</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color={TEXT_SECONDARY} />
@@ -1042,9 +1057,9 @@ export default function DashboardScreen() {
               <Ionicons name="warning" size={22} color="#FFFFFF" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.recoveryBannerTitle}>Overdue contributions</Text>
+              <Text style={styles.recoveryBannerTitle}>{t("dashboard.recovery_title")}</Text>
               <Text style={styles.recoveryBannerSubtitle} numberOfLines={2}>
-                You have pending defaults or late payments. Resolve now.
+                {t("dashboard.recovery_subtitle")}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.85)" />
@@ -1063,7 +1078,7 @@ export default function DashboardScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.interestCardLabelGreen}>
-                  Interest earned
+                  {t("dashboard.interest_earned")}
                 </Text>
                 <Text style={styles.interestCardAmount}>
                   ${totalAccruedInterest.toFixed(2)}
@@ -1087,13 +1102,13 @@ export default function DashboardScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.interestCardLabelOrange}>
-                  Interest accruing
+                  {t("dashboard.interest_accruing")}
                 </Text>
                 <Text style={styles.interestCardAmount}>
                   ${totalAccruedInterest.toFixed(2)}
                 </Text>
               </View>
-              <Text style={styles.interestCardCta}>Unlock now →</Text>
+              <Text style={styles.interestCardCta}>{t("dashboard.interest_unlock")}</Text>
             </TouchableOpacity>
           )
         )}
@@ -1118,13 +1133,13 @@ export default function DashboardScreen() {
         {/* ========== 3. YOUR CIRCLES (Horizontal scroll) ========== */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Your Circles</Text>
+            <Text style={styles.sectionTitle}>{t("dashboard.section_your_circles")}</Text>
             <TouchableOpacity
               onPress={() => navigation.getParent()?.navigate("Circles")}
               accessibilityLabel="Manage circles"
               accessibilityRole="button"
             >
-              <Text style={styles.sectionLink}>Manage</Text>
+              <Text style={styles.sectionLink}>{t("dashboard.section_manage")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -1147,7 +1162,9 @@ export default function DashboardScreen() {
                     <Text style={styles.circleEmoji}>{circle.emoji}</Text>
                   </View>
                   <Text style={styles.circleName} numberOfLines={1}>{circle.name}</Text>
-                  <Text style={styles.circleMembers}>{circle.members} members</Text>
+                  <Text style={styles.circleMembers}>
+                    {t("dashboard.circle_members_count", { count: circle.members })}
+                  </Text>
                   <View style={styles.circleProgressTrack}>
                     <View
                       style={[
@@ -1178,7 +1195,7 @@ export default function DashboardScreen() {
               accessibilityRole="button"
             >
               <Ionicons name="add" size={28} color={TEAL} />
-              <Text style={styles.newCircleText}>Start a{"\n"}new circle</Text>
+              <Text style={styles.newCircleText}>{t("dashboard.circle_start_new")}</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -1213,23 +1230,24 @@ export default function DashboardScreen() {
               </View>
             </View>
             <Text style={styles.arrivalText}>
-              <Text style={styles.arrivalBold}>3 new neighbors</Text> arrived this week
+              <Text style={styles.arrivalBold}>{t("dashboard.arrival_strip_count_bold")}</Text>
+              {t("dashboard.arrival_strip_suffix")}
             </Text>
           </View>
-          <Text style={styles.arrivalCta}>Welcome {"\u2192"}</Text>
+          <Text style={styles.arrivalCta}>{t("dashboard.arrival_strip_cta")}</Text>
         </TouchableOpacity>
 
         {/* ========== 5b. MY TRIPS \u2014 real preview when trips exist, static tile as empty state ========== */}
         {organizerTrips.length > 0 ? (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>My Trips</Text>
+              <Text style={styles.sectionTitle}>{t("dashboard.section_my_trips")}</Text>
               <TouchableOpacity
                 onPress={() => navigation.navigate("OrganizerTripList" as any)}
                 accessibilityLabel="See all my trips"
                 accessibilityRole="button"
               >
-                <Text style={styles.sectionLink}>See all</Text>
+                <Text style={styles.sectionLink}>{t("dashboard.section_see_all")}</Text>
               </TouchableOpacity>
             </View>
 
@@ -1269,7 +1287,10 @@ export default function DashboardScreen() {
                         style={[styles.tripStatusPill, { backgroundColor: statusColor.bg }]}
                       >
                         <Text style={[styles.tripStatusPillText, { color: statusColor.text }]}>
-                          {statusKey.charAt(0).toUpperCase() + statusKey.slice(1)}
+                          {t(`dashboard.trip_status_${statusKey}`, {
+                            defaultValue:
+                              statusKey.charAt(0).toUpperCase() + statusKey.slice(1),
+                          })}
                         </Text>
                       </View>
                     </View>
@@ -1285,7 +1306,7 @@ export default function DashboardScreen() {
                 accessibilityRole="button"
               >
                 <Ionicons name="arrow-forward" size={24} color={TEAL} />
-                <Text style={styles.tripSeeMoreText}>See all{"\n"}trips</Text>
+                <Text style={styles.tripSeeMoreText}>{t("dashboard.trip_see_all_card")}</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -1302,14 +1323,12 @@ export default function DashboardScreen() {
                 <Text style={{ fontSize: 26 }}>{"\u2708\uFE0F"}</Text>
               </View>
               <View style={styles.tripOrganizerText}>
-                <Text style={styles.tripOrganizerTitle}>My Trips</Text>
-                <Text style={styles.tripOrganizerDesc}>
-                  Organize, manage & track all your group trips
-                </Text>
+                <Text style={styles.tripOrganizerTitle}>{t("dashboard.trips_empty_title")}</Text>
+                <Text style={styles.tripOrganizerDesc}>{t("dashboard.trips_empty_desc")}</Text>
               </View>
             </View>
             <View style={styles.tripOrganizerCta}>
-              <Text style={styles.tripOrganizerCtaText}>Open {"\u2192"}</Text>
+              <Text style={styles.tripOrganizerCtaText}>{t("dashboard.trips_empty_cta")}</Text>
             </View>
           </TouchableOpacity>
         )}
@@ -1317,13 +1336,13 @@ export default function DashboardScreen() {
         {/* ========== 6. COMMUNITY FEED ========== */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Community</Text>
+            <Text style={styles.sectionTitle}>{t("dashboard.section_community")}</Text>
             <TouchableOpacity
               onPress={() => navigation.getParent()?.navigate("Community")}
               accessibilityLabel="Explore community"
               accessibilityRole="button"
             >
-              <Text style={styles.sectionLink}>Explore</Text>
+              <Text style={styles.sectionLink}>{t("dashboard.section_explore")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -1340,13 +1359,13 @@ export default function DashboardScreen() {
         {/* ========== 7. NEAR YOU SERVICES (Horizontal scroll) ========== */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Near You</Text>
+            <Text style={styles.sectionTitle}>{t("dashboard.section_near_you")}</Text>
             <TouchableOpacity
               onPress={() => navigation.getParent()?.navigate("Market")}
               accessibilityLabel="See all services"
               accessibilityRole="button"
             >
-              <Text style={styles.sectionLink}>See All</Text>
+              <Text style={styles.sectionLink}>{t("dashboard.section_see_all_caps")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -1372,7 +1391,9 @@ export default function DashboardScreen() {
                 <View style={styles.trustRow}>
                   <View style={[styles.trustDot, { backgroundColor: service.elderEndorsed ? GOLD : SUCCESS }]} />
                   <Text style={styles.trustLabel}>
-                    {service.elderEndorsed ? "Elder Endorsed" : "Trusted"}
+                    {service.elderEndorsed
+                      ? t("dashboard.service_elder_endorsed")
+                      : t("dashboard.service_trusted")}
                   </Text>
                 </View>
               </TouchableOpacity>

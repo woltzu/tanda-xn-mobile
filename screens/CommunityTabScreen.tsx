@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useCommunity } from '../context/CommunityContext';
 import { useElder } from '../context/ElderContext';
@@ -130,6 +131,7 @@ const getMemoryIcon = (memoryType?: string): { icon: string; color: string } => 
 
 const CommunityTabScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { myCommunities, isLoading: communitiesLoading } = useCommunity();
   const { elderProfile } = useElder();
@@ -330,7 +332,7 @@ const CommunityTabScreen: React.FC = () => {
           activeOpacity={0.7}
         >
           <Ionicons name="add" size={16} color={COLORS.teal} />
-          <Text style={styles.pillJoinText}>Join more</Text>
+          <Text style={styles.pillJoinText}>{t('community_tab.pill_join_more')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -345,13 +347,13 @@ const CommunityTabScreen: React.FC = () => {
 
     return (
       <View style={styles.section}>
-        {renderSectionHeader('New Arrivals', 'See All', () =>
+        {renderSectionHeader(t('community_tab.section_new_arrivals'), t('community_tab.see_all'), () =>
           navigation.navigate('NewArrivals', { communityId: selectedCommunityId })
         )}
 
         {!hasArrivals && !arrivalsLoading && renderEmptyState(
           'people-outline',
-          'No new arrivals yet \u2014 the village is growing'
+          t('community_tab.empty_arrivals')
         )}
 
         {hasArrivals && (
@@ -363,10 +365,14 @@ const CommunityTabScreen: React.FC = () => {
               </Text>
               <View style={styles.arrivalBannerInfo}>
                 <Text style={styles.arrivalBannerTitle}>
-                  From {selectedCommunity?.countryOfOrigin || 'around the world'}
+                  {t('community_tab.arrival_from', {
+                    country:
+                      selectedCommunity?.countryOfOrigin ||
+                      t('community_tab.arrival_from_unknown'),
+                  })}
                 </Text>
                 <Text style={styles.arrivalBannerSub}>
-                  In {userCity} this week
+                  {t('community_tab.arrival_in_city', { city: userCity })}
                 </Text>
               </View>
               <View style={styles.arrivalCountBadge}>
@@ -381,7 +387,7 @@ const CommunityTabScreen: React.FC = () => {
                 <View style={styles.arrivalInfo}>
                   <Text style={styles.arrivalName}>{arrival.firstName}</Text>
                   <Text style={styles.arrivalDetail} numberOfLines={1}>
-                    {arrival.originCity || 'Unknown'} {'\u2192'} {arrival.currentNeighborhood || arrival.currentCity || userCity}
+                    {arrival.originCity || t('community_tab.arrival_origin_unknown')} {'\u2192'} {arrival.currentNeighborhood || arrival.currentCity || userCity}
                   </Text>
                 </View>
                 <Text style={styles.arrivalTime}>{timeAgo(arrival.createdAt)}</Text>
@@ -400,7 +406,7 @@ const CommunityTabScreen: React.FC = () => {
                       welcomeSent[arrival.id] && styles.welcomeBtnTextSent,
                     ]}
                   >
-                    {welcomeSent[arrival.id] ? 'Sent \u2713' : 'Welcome'}
+                    {welcomeSent[arrival.id] ? t('community_tab.sent_btn') : t('community_tab.welcome_btn')}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -421,13 +427,13 @@ const CommunityTabScreen: React.FC = () => {
 
     return (
       <View style={styles.section}>
-        {renderSectionHeader('Gatherings', 'All Events', () =>
+        {renderSectionHeader(t('community_tab.section_gatherings'), t('community_tab.all_events'), () =>
           navigation.navigate('Gatherings', { communityId: selectedCommunityId })
         )}
 
         {!hasGatherings && !gatheringsLoading && renderEmptyState(
           'calendar-outline',
-          'No gatherings yet \u2014 be the one who brings everyone together'
+          t('community_tab.empty_gatherings')
         )}
 
         <ScrollView
@@ -462,7 +468,7 @@ const CommunityTabScreen: React.FC = () => {
                   {gathering.title}
                 </Text>
                 <Text style={styles.gatheringHost} numberOfLines={1}>
-                  {gathering.organizerFirstName || 'Community'}
+                  {gathering.organizerFirstName || t('community_tab.gathering_host_default')}
                 </Text>
 
                 {/* Going count with face stack */}
@@ -483,7 +489,7 @@ const CommunityTabScreen: React.FC = () => {
                     ))}
                   </View>
                   <Text style={styles.goingCount}>
-                    {gathering.rsvpCount || 0} going
+                    {t('community_tab.going_count', { count: gathering.rsvpCount || 0 })}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -497,7 +503,7 @@ const CommunityTabScreen: React.FC = () => {
             activeOpacity={0.7}
           >
             <Ionicons name="add-circle-outline" size={32} color={COLORS.teal} />
-            <Text style={styles.hostCardText}>Host a{'\n'}Gathering</Text>
+            <Text style={styles.hostCardText}>{t('community_tab.host_gathering')}</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -513,13 +519,13 @@ const CommunityTabScreen: React.FC = () => {
 
     return (
       <View style={styles.section}>
-        {renderSectionHeader('Your Elders', 'Full Council', () =>
+        {renderSectionHeader(t('community_tab.section_elders'), t('community_tab.full_council'), () =>
           navigation.navigate('ElderDashboard')
         )}
 
         {!hasElders && renderEmptyState(
           'shield-outline',
-          'No elders yet \u2014 every village needs its wise ones'
+          t('community_tab.empty_elders')
         )}
 
         {hasElders && (
@@ -574,14 +580,16 @@ const CommunityTabScreen: React.FC = () => {
     return (
       <View style={styles.section}>
         {renderSectionHeader(
-          'Near You',
-          hasProfiles ? `${nearYouProfiles.length} nearby` : 'Explore',
+          t('community_tab.section_near_you'),
+          hasProfiles
+            ? t('community_tab.nearby_count', { count: nearYouProfiles.length })
+            : t('community_tab.explore'),
           () => navigation.navigate('NearYou', { city: userCity })
         )}
 
         {!hasProfiles && !nearYouLoading && renderEmptyState(
           'location-outline',
-          'No one nearby yet \u2014 your neighbors are on their way home'
+          t('community_tab.empty_near_you')
         )}
 
         {hasProfiles && (
@@ -615,7 +623,7 @@ const CommunityTabScreen: React.FC = () => {
                   {hasShared && (
                     <View style={styles.sharedBadge}>
                       <Ionicons name="link" size={10} color={COLORS.teal} />
-                      <Text style={styles.sharedBadgeText}>Same circle</Text>
+                      <Text style={styles.sharedBadgeText}>{t('community_tab.shared_badge')}</Text>
                     </View>
                   )}
 
@@ -635,7 +643,7 @@ const CommunityTabScreen: React.FC = () => {
                         helloSent[profile.userId] && styles.helloBtnTextSent,
                       ]}
                     >
-                      {helloSent[profile.userId] ? 'Sent \u2713' : 'Say hello'}
+                      {helloSent[profile.userId] ? t('community_tab.sent_btn') : t('community_tab.say_hello')}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -656,13 +664,13 @@ const CommunityTabScreen: React.FC = () => {
 
     return (
       <View style={styles.section}>
-        {renderSectionHeader('Community Memory', 'Full Archive', () =>
+        {renderSectionHeader(t('community_tab.section_memory'), t('community_tab.full_archive'), () =>
           navigation.navigate('CommunityMemory', { communityId: selectedCommunityId })
         )}
 
         {!hasMemories && !memoriesLoading && renderEmptyState(
           'time-outline',
-          'No memories yet \u2014 every milestone will be remembered here'
+          t('community_tab.empty_memory')
         )}
 
         {hasMemories && (
@@ -670,10 +678,10 @@ const CommunityTabScreen: React.FC = () => {
             {/* Memory header */}
             <View style={styles.memoryHeader}>
               <Text style={styles.memoryTitle}>
-                {selectedCommunity?.name || 'Community'} \u2014 {new Date().getFullYear()}
+                {selectedCommunity?.name || t('community_tab.memory_default_name')} \u2014 {new Date().getFullYear()}
               </Text>
               <Text style={styles.memorySub}>
-                Every milestone lives here forever
+                {t('community_tab.memory_subtitle')}
               </Text>
             </View>
 
@@ -732,8 +740,8 @@ const CommunityTabScreen: React.FC = () => {
       {/* Top Bar */}
       <View style={styles.topBar}>
         <View>
-          <Text style={styles.topBarTitle}>Community</Text>
-          <Text style={styles.topBarSubtitle}>Your village, your people</Text>
+          <Text style={styles.topBarTitle}>{t('community_tab.header')}</Text>
+          <Text style={styles.topBarSubtitle}>{t('community_tab.subtitle')}</Text>
         </View>
         <View style={styles.topBarRight}>
           <TouchableOpacity

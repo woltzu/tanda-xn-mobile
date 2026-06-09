@@ -5,30 +5,35 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useMarketplaceStores, type StoreCategory, type MarketplaceStore } from "../hooks/useMarketplace";
 
-const CATEGORIES: { key: StoreCategory | "all"; icon: string; label: string; color: string }[] = [
-  { key: "all", icon: "grid", label: "All", color: "#0A2342" },
-  { key: "food", icon: "restaurant", label: "Food", color: "#F59E0B" },
-  { key: "beauty", icon: "cut", label: "Beauty", color: "#EC4899" },
-  { key: "travel", icon: "airplane", label: "Travel", color: "#3B82F6" },
-  { key: "shipping", icon: "cube", label: "Shipping", color: "#8B5CF6" },
-  { key: "finance", icon: "cash", label: "Finance", color: "#10B981" },
-  { key: "events", icon: "calendar", label: "Events", color: "#F97316" },
-  { key: "realestate", icon: "home", label: "Homes", color: "#6366F1" },
-  { key: "health", icon: "heart", label: "Health", color: "#EF4444" },
+// i18n: CATEGORIES + BADGE_CONFIG hold visual config (icon, color) only.
+// Their human-readable labels are resolved per-render via t() so language
+// flips re-paint without re-instantiating these maps.
+const CATEGORIES: { key: StoreCategory | "all"; icon: string; labelKey: string; color: string }[] = [
+  { key: "all", icon: "grid", labelKey: "marketplace.category_all", color: "#0A2342" },
+  { key: "food", icon: "restaurant", labelKey: "marketplace.category_food", color: "#F59E0B" },
+  { key: "beauty", icon: "cut", labelKey: "marketplace.category_beauty", color: "#EC4899" },
+  { key: "travel", icon: "airplane", labelKey: "marketplace.category_travel", color: "#3B82F6" },
+  { key: "shipping", icon: "cube", labelKey: "marketplace.category_shipping", color: "#8B5CF6" },
+  { key: "finance", icon: "cash", labelKey: "marketplace.category_finance", color: "#10B981" },
+  { key: "events", icon: "calendar", labelKey: "marketplace.category_events", color: "#F97316" },
+  { key: "realestate", icon: "home", labelKey: "marketplace.category_realestate", color: "#6366F1" },
+  { key: "health", icon: "heart", labelKey: "marketplace.category_health", color: "#EF4444" },
 ];
 
-const BADGE_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
-  claimed: { label: "Claimed", color: "#6B7280", icon: "checkmark-circle-outline" },
-  trusted: { label: "Trusted", color: "#00C6AE", icon: "shield-checkmark" },
-  verified: { label: "Verified", color: "#3B82F6", icon: "checkmark-done-circle" },
+const BADGE_CONFIG: Record<string, { labelKey: string; color: string; icon: string }> = {
+  claimed: { labelKey: "marketplace.badge_claimed", color: "#6B7280", icon: "checkmark-circle-outline" },
+  trusted: { labelKey: "marketplace.badge_trusted", color: "#00C6AE", icon: "shield-checkmark" },
+  verified: { labelKey: "marketplace.badge_verified", color: "#3B82F6", icon: "checkmark-done-circle" },
 };
 
 export default function MarketplaceScreen() {
   const navigation = useTypedNavigation();
+  const { t } = useTranslation();
   const [selectedCategory, setSelectedCategory] = useState<StoreCategory | "all">("all");
   const [searchText, setSearchText] = useState("");
 
@@ -50,7 +55,7 @@ export default function MarketplaceScreen() {
         {store.isFeatured && (
           <View style={styles.featuredBadge}>
             <Ionicons name="star" size={10} color="#F59E0B" />
-            <Text style={styles.featuredText}>Featured</Text>
+            <Text style={styles.featuredText}>{t("marketplace.featured_chip")}</Text>
           </View>
         )}
 
@@ -66,14 +71,16 @@ export default function MarketplaceScreen() {
             </View>
             <View style={styles.storeMetaRow}>
               <Ionicons name={catConfig?.icon as any ?? "storefront"} size={12} color={catConfig?.color ?? "#6B7280"} />
-              <Text style={[styles.storeMeta, { color: catConfig?.color }]}>{catConfig?.label ?? store.category}</Text>
+              <Text style={[styles.storeMeta, { color: catConfig?.color }]}>
+                {catConfig ? t(catConfig.labelKey) : store.category}
+              </Text>
             </View>
           </View>
           <View style={styles.storeRight}>
             {badge && (
               <View style={[styles.badgePill, { backgroundColor: badge.color + "15" }]}>
                 <Ionicons name={badge.icon as any} size={12} color={badge.color} />
-                <Text style={[styles.badgeText, { color: badge.color }]}>{badge.label}</Text>
+                <Text style={[styles.badgeText, { color: badge.color }]}>{t(badge.labelKey)}</Text>
               </View>
             )}
           </View>
@@ -87,7 +94,9 @@ export default function MarketplaceScreen() {
           {store.memberDiscountPct > 0 && (
             <View style={styles.discountPill}>
               <Ionicons name="pricetag" size={12} color="#00C6AE" />
-              <Text style={styles.discountText}>{store.memberDiscountPct}% member discount</Text>
+              <Text style={styles.discountText}>
+                {t("marketplace.member_discount", { percent: store.memberDiscountPct })}
+              </Text>
             </View>
           )}
           <View style={styles.storeStats}>
@@ -114,8 +123,8 @@ export default function MarketplaceScreen() {
       <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.headerTitle}>Marketplace</Text>
-            <Text style={styles.headerSubtitle}>Diaspora businesses, member prices</Text>
+            <Text style={styles.headerTitle}>{t("marketplace.header")}</Text>
+            <Text style={styles.headerSubtitle}>{t("marketplace.subtitle")}</Text>
           </View>
           <TouchableOpacity
             style={styles.addButton}
@@ -130,7 +139,7 @@ export default function MarketplaceScreen() {
           <Ionicons name="search" size={18} color="#9CA3AF" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search stores..."
+            placeholder={t("marketplace.search_placeholder")}
             placeholderTextColor="#9CA3AF"
             value={searchText}
             onChangeText={setSearchText}
@@ -175,7 +184,7 @@ export default function MarketplaceScreen() {
                   selectedCategory === cat.key && { color: "#FFFFFF" },
                 ]}
               >
-                {cat.label}
+                {t(cat.labelKey)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -184,7 +193,7 @@ export default function MarketplaceScreen() {
         {/* Featured */}
         {featured.length > 0 && selectedCategory === "all" && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Featured Providers</Text>
+            <Text style={styles.sectionTitle}>{t("marketplace.section_featured")}</Text>
             {featured.map(renderStoreCard)}
           </View>
         )}
@@ -192,22 +201,25 @@ export default function MarketplaceScreen() {
         {/* All Stores */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            {selectedCategory === "all" ? "All Providers" : CATEGORIES.find(c => c.key === selectedCategory)?.label}
+            {selectedCategory === "all"
+              ? t("marketplace.section_all")
+              : (() => {
+                  const cat = CATEGORIES.find(c => c.key === selectedCategory);
+                  return cat ? t(cat.labelKey) : selectedCategory;
+                })()}
             {" "}({stores.length})
           </Text>
 
           {stores.length === 0 && !loading && (
             <View style={styles.emptyState}>
               <Ionicons name="storefront-outline" size={56} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>No providers here yet</Text>
-              <Text style={styles.emptySubtitle}>
-                Be the first to serve your community
-              </Text>
+              <Text style={styles.emptyTitle}>{t("marketplace.empty_title")}</Text>
+              <Text style={styles.emptySubtitle}>{t("marketplace.empty_subtitle")}</Text>
               <TouchableOpacity
                 style={styles.emptyAction}
                 onPress={() => navigation.navigate(Routes.StoreApplication)}
               >
-                <Text style={styles.emptyActionText}>List My Business</Text>
+                <Text style={styles.emptyActionText}>{t("marketplace.empty_cta")}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -224,8 +236,8 @@ export default function MarketplaceScreen() {
         >
           <Ionicons name="hand-right-outline" size={24} color="#00C6AE" />
           <View style={{ flex: 1 }}>
-            <Text style={styles.requestTitle}>Can't find what you need?</Text>
-            <Text style={styles.requestSubtitle}>Request a provider \u2014 when 5 people ask, we go find them</Text>
+            <Text style={styles.requestTitle}>{t("marketplace.request_title")}</Text>
+            <Text style={styles.requestSubtitle}>{t("marketplace.request_subtitle")}</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
         </TouchableOpacity>

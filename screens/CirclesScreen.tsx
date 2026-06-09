@@ -11,6 +11,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
@@ -21,6 +22,7 @@ type CirclesScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function CirclesScreen() {
   const navigation = useNavigation<CirclesScreenNavigationProp>();
+  const { t } = useTranslation();
   const { myCircles, browseCircles } = useCircles();
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
@@ -71,19 +73,20 @@ export default function CirclesScreen() {
     featured: circle.verified || false,
     verified: circle.verified || false,
     description: circle.description || "",
-    location: circle.location || "Nationwide",
-    nextPayout: "Coming soon",
+    location: circle.location || t("circles.default_location"),
+    nextPayout: t("circles.default_next_payout"),
     emoji: circle.emoji,
   }));
 
   const userXnScore = user?.xnScore || 0;
 
+  // i18n: labels resolved per-render so language flips re-paint chips.
   const categories = [
-    { id: "all", label: "All", icon: "sparkles" },
-    { id: "family", label: "Family", icon: "people" },
-    { id: "work", label: "Work", icon: "trending-up" },
-    { id: "community", label: "Community", icon: "location" },
-    { id: "friends", label: "Friends", icon: "star" },
+    { id: "all", label: t("circles.category_all"), icon: "sparkles" },
+    { id: "family", label: t("circles.category_family"), icon: "people" },
+    { id: "work", label: t("circles.category_work"), icon: "trending-up" },
+    { id: "community", label: t("circles.category_community"), icon: "location" },
+    { id: "friends", label: t("circles.category_friends"), icon: "star" },
   ];
 
   const getTypeColor = (type: string) => {
@@ -127,13 +130,16 @@ export default function CirclesScreen() {
         {circle.verified ? (
           <View style={styles.verifiedBadge}>
             <Ionicons name="star" size={10} color="#00897B" />
-            <Text style={styles.verifiedText}>Verified</Text>
+            <Text style={styles.verifiedText}>{t("circles.verified")}</Text>
           </View>
         ) : null}
 
         {/* Type Badge */}
         <View style={[styles.typeBadge, { backgroundColor: typeColor.bg }]}>
-          <Text style={[styles.typeBadgeText, { color: typeColor.text }]}>{circle.type}</Text>
+          <Text style={[styles.typeBadgeText, { color: typeColor.text }]}>
+            {/* circle.type maps to a category translation when known. */}
+            {t(`circles.category_${circle.type}`, { defaultValue: circle.type })}
+          </Text>
         </View>
 
         {/* Circle Name */}
@@ -163,14 +169,18 @@ export default function CirclesScreen() {
         {/* Contribution & Pool */}
         <View style={styles.contributionBox}>
           <View style={styles.contributionRow}>
-            <Text style={styles.contributionLabel}>Contribution</Text>
+            <Text style={styles.contributionLabel}>{t("circles.contribution_label")}</Text>
             <Text style={styles.contributionValue}>
               ${circle.contribution}/
-              {circle.frequency === "monthly" ? "mo" : circle.frequency === "biweekly" ? "2wk" : "wk"}
+              {circle.frequency === "monthly"
+                ? t("circles.freq_monthly")
+                : circle.frequency === "biweekly"
+                  ? t("circles.freq_biweekly")
+                  : t("circles.freq_weekly")}
             </Text>
           </View>
           <View style={styles.contributionRow}>
-            <Text style={styles.contributionLabel}>Pool Size</Text>
+            <Text style={styles.contributionLabel}>{t("circles.pool_size_label")}</Text>
             <Text style={styles.poolValue}>${circle.totalPool.toLocaleString()}</Text>
           </View>
         </View>
@@ -180,17 +190,21 @@ export default function CirclesScreen() {
           <View>
             {spotsLeft > 0 ? (
               <Text style={[styles.spotsText, { color: spotsLeft <= 2 ? "#DC2626" : "#00897B" }]}>
-                {spotsLeft} spot{spotsLeft !== 1 ? "s" : ""} left
+                {spotsLeft === 1
+                  ? t("circles.spots_left_one")
+                  : t("circles.spots_left_other", { count: spotsLeft })}
               </Text>
             ) : (
-              <Text style={[styles.spotsText, { color: "#DC2626" }]}>Full</Text>
+              <Text style={[styles.spotsText, { color: "#DC2626" }]}>{t("circles.full")}</Text>
             )}
           </View>
 
           {!canJoin ? (
             <View style={styles.lockedRow}>
               <Ionicons name="lock-closed-outline" size={12} color="#F59E0B" />
-              <Text style={styles.lockedText}>Min Score: {circle.minScore}</Text>
+              <Text style={styles.lockedText}>
+                {t("circles.min_score", { score: circle.minScore })}
+              </Text>
             </View>
           ) : null}
 
@@ -208,7 +222,7 @@ export default function CirclesScreen() {
         {/* Header */}
         <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
           <View style={styles.headerTop}>
-            <Text style={styles.headerTitle}>Circles</Text>
+            <Text style={styles.headerTitle}>{t("circles.header")}</Text>
             <View style={styles.headerButtons}>
               <TouchableOpacity
                 style={styles.joinCodeButton}
@@ -229,7 +243,7 @@ export default function CirclesScreen() {
               onPress={() => setActiveTab("browse")}
             >
               <Text style={[styles.tabText, activeTab === "browse" && styles.tabTextActive]}>
-                Browse
+                {t("circles.tab_browse")}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -237,7 +251,7 @@ export default function CirclesScreen() {
               onPress={() => setActiveTab("my")}
             >
               <Text style={[styles.tabText, activeTab === "my" && styles.tabTextActive]}>
-                My Circles
+                {t("circles.tab_my")}
               </Text>
               {myCircles.length > 0 && (
                 <View style={styles.tabBadge}>
@@ -254,7 +268,7 @@ export default function CirclesScreen() {
                 <Ionicons name="search" size={18} color="#6B7280" style={styles.searchIcon} />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search circles..."
+                  placeholder={t("circles.search_placeholder")}
                   placeholderTextColor="#6B7280"
                   value={searchQuery}
                   onChangeText={setSearchQuery}
@@ -300,7 +314,7 @@ export default function CirclesScreen() {
               {featuredCircles.length > 0 ? (
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>✨ Featured</Text>
+                    <Text style={styles.sectionTitle}>{t("circles.section_featured")}</Text>
                   </View>
 
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.featuredScroll}>
@@ -315,16 +329,24 @@ export default function CirclesScreen() {
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>
                   {activeCategory === "all"
-                    ? "All Circles"
-                    : `${activeCategory.charAt(0).toUpperCase() + activeCategory.slice(1)} Circles`}
-                  <Text style={styles.circleCount}> ({regularCircles.length})</Text>
+                    ? t("circles.section_all_circles")
+                    : t("circles.section_category_circles", {
+                        category: t(`circles.category_${activeCategory}`, {
+                          defaultValue:
+                            activeCategory.charAt(0).toUpperCase() +
+                            activeCategory.slice(1),
+                        }),
+                      })}
+                  <Text style={styles.circleCount}>
+                    {t("circles.circle_count_suffix", { count: regularCircles.length })}
+                  </Text>
                 </Text>
 
                 {regularCircles.length === 0 ? (
                   <View style={styles.emptyState}>
                     <Ionicons name="people-outline" size={40} color="#999" />
-                    <Text style={styles.emptyTitle}>No circles found</Text>
-                    <Text style={styles.emptySubtitle}>Try adjusting your search or filters</Text>
+                    <Text style={styles.emptyTitle}>{t("circles.empty_browse_title")}</Text>
+                    <Text style={styles.emptySubtitle}>{t("circles.empty_browse_subtitle")}</Text>
                   </View>
                 ) : (
                   regularCircles.map((circle) => <CircleCard key={circle.id} circle={circle} />)
@@ -335,8 +357,10 @@ export default function CirclesScreen() {
             /* My Circles Tab */
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>
-                My Circles
-                <Text style={styles.circleCount}> ({myCircles.length})</Text>
+                {t("circles.section_my_circles")}
+                <Text style={styles.circleCount}>
+                  {t("circles.circle_count_suffix", { count: myCircles.length })}
+                </Text>
               </Text>
 
               {myCircles.length === 0 ? (
@@ -344,16 +368,14 @@ export default function CirclesScreen() {
                   <View style={styles.emptyIconContainer}>
                     <Ionicons name="add-circle-outline" size={50} color="#00C6AE" />
                   </View>
-                  <Text style={styles.emptyTitle}>No circles yet</Text>
-                  <Text style={styles.emptySubtitle}>
-                    Create your first circle or join one from the Browse tab
-                  </Text>
+                  <Text style={styles.emptyTitle}>{t("circles.empty_my_title")}</Text>
+                  <Text style={styles.emptySubtitle}>{t("circles.empty_my_subtitle")}</Text>
                   <TouchableOpacity
                     style={styles.createButton}
                     onPress={() => navigation.navigate("CreateCircleStart")}
                   >
                     <Ionicons name="add" size={18} color="#FFFFFF" />
-                    <Text style={styles.createButtonText}>Create Circle</Text>
+                    <Text style={styles.createButtonText}>{t("circles.create_circle")}</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
@@ -379,7 +401,7 @@ export default function CirclesScreen() {
                             styles.statusText,
                             circle.status === "active" ? styles.statusTextActive : styles.statusTextPending
                           ]}>
-                            {circle.status === "active" ? "Active" : "Pending"}
+                            {circle.status === "active" ? t("circles.status_active") : t("circles.status_pending")}
                           </Text>
                         </View>
                       </View>
@@ -393,7 +415,7 @@ export default function CirclesScreen() {
                     {circle.myPosition && (
                       <View style={styles.myCirclePosition}>
                         <Text style={styles.positionNumber}>#{circle.myPosition}</Text>
-                        <Text style={styles.positionLabel}>Your turn</Text>
+                        <Text style={styles.positionLabel}>{t("circles.your_turn")}</Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -410,7 +432,7 @@ export default function CirclesScreen() {
         onPress={() => navigation.navigate("HelpCenter" as any)}
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
-        <Text style={styles.floatingHelpText}>Help</Text>
+        <Text style={styles.floatingHelpText}>{t("common.help")}</Text>
       </TouchableOpacity>
 
       {/* Quick Circle FAB -- one-tap shortcut to the simplified flow.
@@ -441,7 +463,7 @@ export default function CirclesScreen() {
       >
         <Ionicons name="flash" size={16} color="#00C6AE" />
         <Text style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 13 }}>
-          Quick Circle
+          {t("circles.quick_circle")}
         </Text>
       </TouchableOpacity>
 
