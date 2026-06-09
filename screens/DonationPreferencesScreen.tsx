@@ -54,7 +54,7 @@ export default function DonationPreferencesScreen() {
       if (!r.success) throw new Error("Couldn't load preferences");
       setPrefs(r.preferences || {});
     } catch (err) {
-      Alert.alert("Couldn't load", err instanceof Error ? err.message : String(err));
+      Alert.alert(t("final_polish.donationpreferences_alert_couldn_t_load"), err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -80,7 +80,7 @@ export default function DonationPreferencesScreen() {
     } catch (err) {
       // Roll back on failure.
       setPrefs((p) => ({ ...p, [emoji]: current }));
-      Alert.alert("Couldn't save", err instanceof Error ? err.message : String(err));
+      Alert.alert(t("final_polish.donationpreferences_alert_couldn_t_save"), err instanceof Error ? err.message : String(err));
     } finally {
       setUpdating(null);
     }

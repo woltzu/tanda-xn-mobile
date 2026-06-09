@@ -87,7 +87,7 @@ export default function QuickJoinPaymentSuccessScreen() {
             <Ionicons name="checkmark" size={48} color="#00C6AE" />
           </View>
           <Text style={styles.title}>Welcome to {circleName}!</Text>
-          <Text style={styles.amountLabel}>First contribution confirmed</Text>
+          <Text style={styles.amountLabel}>{t("final_polish.quickjoinpaymentsuccess_first_contribution_confirmed")}</Text>
           <Text style={styles.amount}>{formatted}</Text>
           {typeof memberCount === "number" && memberCount > 0 ? (
             <Text style={styles.memberCount}>

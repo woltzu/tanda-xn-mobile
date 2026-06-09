@@ -78,19 +78,19 @@ export default function DefaultRecoveryScreen() {
         <View style={styles.summaryCard}>
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Total Owed</Text>
+              <Text style={styles.summaryLabel}>{t("final_polish.defaultrecovery_total_owed")}</Text>
               <Text style={styles.summaryValue}>{formatCurrency(totalOwed)}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Active Defaults</Text>
+              <Text style={styles.summaryLabel}>{t("final_polish.defaultrecovery_active_defaults")}</Text>
               <Text style={[styles.summaryValue, { color: hasActiveDefaults ? "#EF4444" : "#10B981" }]}>
                 {unresolvedDefaults.length}
               </Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Late Payments</Text>
+              <Text style={styles.summaryLabel}>{t("final_polish.defaultrecovery_late_payments")}</Text>
               <Text style={[styles.summaryValue, { color: lateContributions.length > 0 ? "#F59E0B" : "#10B981" }]}>
                 {lateContributions.length}
               </Text>

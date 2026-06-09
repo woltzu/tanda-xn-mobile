@@ -65,7 +65,7 @@ export default function QuickJoinPendingConfirmationScreen() {
           <View style={styles.iconWrap}>
             <Ionicons name="mail-outline" size={56} color={TEAL} />
           </View>
-          <Text style={styles.title}>Check your email</Text>
+          <Text style={styles.title}>{t("final_polish.quickjoinpendingconfirmation_check_your_email")}</Text>
           <Text style={styles.subtitle}>
             We sent a confirmation link to{" "}
             <Text style={styles.email}>{email}</Text>
@@ -84,7 +84,7 @@ export default function QuickJoinPendingConfirmationScreen() {
 
           <TouchableOpacity style={styles.primary} activeOpacity={0.85} onPress={openMail}>
             <Ionicons name="open-outline" size={18} color={NAVY} />
-            <Text style={styles.primaryText}>Open email</Text>
+            <Text style={styles.primaryText}>{t("final_polish.quickjoinpendingconfirmation_open_email")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -92,7 +92,7 @@ export default function QuickJoinPendingConfirmationScreen() {
             activeOpacity={0.7}
             onPress={() => navigation.navigate("QuickJoin", { inviteCode })}
           >
-            <Text style={styles.secondaryText}>Use a different email</Text>
+            <Text style={styles.secondaryText}>{t("final_polish.quickjoinpendingconfirmation_use_a_different_email")}</Text>
           </TouchableOpacity>
 
           <Text style={styles.footnote}>

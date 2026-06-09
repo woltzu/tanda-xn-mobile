@@ -350,7 +350,7 @@ function CircleCard({
 
         {circle.status !== "full" && (
           <TouchableOpacity style={styles.joinCircleButton} onPress={onJoin}>
-            <Text style={styles.joinCircleButtonText}>Join</Text>
+            <Text style={styles.joinCircleButtonText}>{t("final_polish.communityhub_join")}</Text>
           </TouchableOpacity>
         )}
       </View>

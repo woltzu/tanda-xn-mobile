@@ -327,7 +327,7 @@ export default function ManageMembersScreen() {
             {member.hasReceivedPayout && (
               <View style={styles.payoutTag}>
                 <Ionicons name="checkmark-circle" size={12} color="#10B981" />
-                <Text style={styles.payoutTagText}>Paid</Text>
+                <Text style={styles.payoutTagText}>{t("final_polish.managemembers_paid")}</Text>
               </View>
             )}
           </View>

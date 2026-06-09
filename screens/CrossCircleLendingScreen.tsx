@@ -111,7 +111,7 @@ export default function CrossCircleLendingScreen() {
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{activeCount}</Text>
-              <Text style={styles.summaryLabel}>Active</Text>
+              <Text style={styles.summaryLabel}>{t("final_polish.crosscirclelending_active")}</Text>
             </View>
           </View>
         </View>
@@ -161,11 +161,11 @@ export default function CrossCircleLendingScreen() {
                 </View>
                 <View style={styles.circleStats}>
                   <View>
-                    <Text style={styles.statLabel}>Amount</Text>
+                    <Text style={styles.statLabel}>{t("final_polish.crosscirclelending_amount")}</Text>
                     <Text style={styles.statValue}>{formatCents(adv.amountCents)}</Text>
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
-                    <Text style={styles.statLabel}>Status</Text>
+                    <Text style={styles.statLabel}>{t("final_polish.crosscirclelending_status")}</Text>
                     <Text style={[styles.statValue, { color: COLORS.teal }]}>{adv.status}</Text>
                   </View>
                 </View>
@@ -186,7 +186,7 @@ export default function CrossCircleLendingScreen() {
                 </View>
                 <View style={styles.transferStats}>
                   <View style={styles.transferStat}>
-                    <Text style={styles.statLabel}>Amount</Text>
+                    <Text style={styles.statLabel}>{t("final_polish.crosscirclelending_amount")}</Text>
                     <Text style={styles.statValue}>{formatCents(activeAdvance.amountCents)}</Text>
                   </View>
                   <View style={styles.transferStat}>
@@ -243,7 +243,7 @@ export default function CrossCircleLendingScreen() {
                   {requesting ? (
                     <ActivityIndicator size="small" color={COLORS.white} />
                   ) : (
-                    <Text style={styles.fundButtonText}>Request Advance</Text>
+                    <Text style={styles.fundButtonText}>{t("final_polish.crosscirclelending_request_advance")}</Text>
                   )}
                 </TouchableOpacity>
               </View>

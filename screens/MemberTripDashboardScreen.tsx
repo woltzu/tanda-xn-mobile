@@ -82,7 +82,7 @@ const MemberTripDashboardScreen = () => {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("screen_headers.member_trip_dashboard")}</Text>
           <TouchableOpacity style={styles.headerBtn}>
-            <Text style={styles.inviteText}>Invite</Text>
+            <Text style={styles.inviteText}>{t("final_polish.membertripdashboard_invite")}</Text>
           </TouchableOpacity>
         </View>
 

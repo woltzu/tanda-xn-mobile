@@ -190,7 +190,7 @@ export default function AddFundsScreen() {
         .join("\n\n");
       Alert.alert(result.ok ? "Test charge OK" : "Test charge FAILED", body);
     } catch (err: any) {
-      Alert.alert("Test charge crashed", err?.message ?? String(err));
+      Alert.alert(t("final_polish.addfunds_alert_test_charge_crashed"), err?.message ?? String(err));
     } finally {
       setIsTestCharging(false);
     }

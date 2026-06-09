@@ -214,7 +214,7 @@ export default function ParticipantDetailScreen() {
             onPress={() => refresh()}
             accessibilityRole="button"
           >
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t("final_polish.participantdetail_retry")}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -502,11 +502,11 @@ function SubmissionRow({
         {submission.verified ? (
           <View style={[styles.miniBadge, { backgroundColor: "#D1FAE5" }]}>
             <Ionicons name="checkmark" size={12} color={GREEN} />
-            <Text style={[styles.miniBadgeText, { color: GREEN }]}>Verified</Text>
+            <Text style={[styles.miniBadgeText, { color: GREEN }]}>{t("final_polish.participantdetail_verified")}</Text>
           </View>
         ) : (
           <View style={[styles.miniBadge, { backgroundColor: "#FEF3C7" }]}>
-            <Text style={[styles.miniBadgeText, { color: AMBER }]}>Pending</Text>
+            <Text style={[styles.miniBadgeText, { color: AMBER }]}>{t("final_polish.participantdetail_pending")}</Text>
           </View>
         )}
         <Ionicons name="chevron-forward" size={16} color={MUTED} />

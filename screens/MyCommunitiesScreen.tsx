@@ -350,7 +350,7 @@ export default function MyCommunitiesScreen() {
                         accessibilityRole="button"
                         accessibilityLabel="Accept suggestion"
                       >
-                        <Text style={styles.suggestionAcceptText}>Join</Text>
+                        <Text style={styles.suggestionAcceptText}>{t("final_polish.mycommunities_join")}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.suggestionBtn, styles.suggestionRemindBtn]}

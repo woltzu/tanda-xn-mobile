@@ -214,7 +214,7 @@ export default function AdvanceAgreementScreen() {
             style={{ marginTop: 2 }}
           />
           <View style={{ flex: 1 }}>
-            <Text style={styles.keyTermsTitle}>Key Terms Summary</Text>
+            <Text style={styles.keyTermsTitle}>{t("final_polish.advanceagreement_key_terms_summary")}</Text>
             <View style={styles.keyTermsList}>
               <Text style={styles.keyTermsItem}>
                 • ${advance.total} will be auto-withheld from your $
@@ -255,7 +255,7 @@ export default function AdvanceAgreementScreen() {
             color={TEAL}
             style={{ marginBottom: 8 }}
           />
-          <Text style={styles.acceptanceTitle}>Agreement Accepted</Text>
+          <Text style={styles.acceptanceTitle}>{t("final_polish.advanceagreement_agreement_accepted")}</Text>
           <Text style={styles.acceptanceSub}>
             {userName} • {agreementDate}
           </Text>

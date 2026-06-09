@@ -199,7 +199,7 @@ export default function WalletTransactionSuccessScreen() {
             <Text style={styles.detailsTitle}>Transaction Details</Text>
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Amount</Text>
+              <Text style={styles.detailLabel}>{t("final_polish.wallettransactionsuccess_amount")}</Text>
               <Text style={styles.detailValue}>${amount.toFixed(2)}</Text>
             </View>
 
@@ -210,7 +210,7 @@ export default function WalletTransactionSuccessScreen() {
 
             {recipientName && (
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Recipient</Text>
+                <Text style={styles.detailLabel}>{t("final_polish.wallettransactionsuccess_recipient")}</Text>
                 <Text style={styles.detailValue}>{recipientName}</Text>
               </View>
             )}
@@ -226,7 +226,7 @@ export default function WalletTransactionSuccessScreen() {
             </View>
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Status</Text>
+              <Text style={styles.detailLabel}>{t("final_polish.wallettransactionsuccess_status")}</Text>
               <View style={styles.statusBadge}>
                 <View style={styles.statusDot} />
                 <Text style={styles.statusText}>

@@ -214,7 +214,7 @@ export default function AdvanceStatusDashboardScreen() {
               <View style={styles.emptyIconBox}>
                 <Text style={styles.emptyIcon}>✨</Text>
               </View>
-              <Text style={styles.emptyTitle}>No Active Advances</Text>
+              <Text style={styles.emptyTitle}>{t("final_polish.advancestatusdashboard_no_active_advances")}</Text>
               <Text style={styles.emptyBody}>
                 Need funds before your next payout? Get an advance.
               </Text>

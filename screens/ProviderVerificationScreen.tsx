@@ -91,7 +91,7 @@ export default function ProviderVerificationScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Title */}
-        <Text style={styles.title}>Verify your business</Text>
+        <Text style={styles.title}>{t("final_polish.providerverification_verify_your_business")}</Text>
         <Text style={styles.subtitle}>
           TandaXn reviews documents within 24 hours. Verified providers get a
           trust badge and higher search placement.

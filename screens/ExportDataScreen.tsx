@@ -226,7 +226,7 @@ export default function ExportDataScreen() {
         style={styles.doneButton}
         onPress={() => navigation.goBack()}
       >
-        <Text style={styles.doneButtonText}>Done</Text>
+        <Text style={styles.doneButtonText}>{t("final_polish.exportdata_done")}</Text>
       </TouchableOpacity>
     </View>
   );

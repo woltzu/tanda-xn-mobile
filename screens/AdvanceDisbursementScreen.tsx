@@ -170,7 +170,7 @@ export default function AdvanceDisbursementScreen() {
           </View>
 
           <View style={styles.amountCard}>
-            <Text style={styles.amountLabel}>Advance Amount</Text>
+            <Text style={styles.amountLabel}>{t("final_polish.advancedisbursement_advance_amount")}</Text>
             <Text style={styles.amountValue}>${advanceAmount}</Text>
           </View>
         </LinearGradient>
@@ -178,7 +178,7 @@ export default function AdvanceDisbursementScreen() {
         <View style={styles.contentWrap}>
           {/* Method picker */}
           <View style={styles.sectionCard}>
-            <Text style={styles.fieldLabel}>Select Disbursement Method</Text>
+            <Text style={styles.fieldLabel}>{t("final_polish.advancedisbursement_select_disbursement_method")}</Text>
             <View style={styles.optionsList}>
               {OPTIONS.map((option) => (
                 <MethodOption
@@ -194,7 +194,7 @@ export default function AdvanceDisbursementScreen() {
           {/* Bank picker (only when bank method selected) */}
           {isBankMethod && (
             <View style={styles.sectionCard}>
-              <Text style={styles.fieldLabel}>Select Bank Account</Text>
+              <Text style={styles.fieldLabel}>{t("final_polish.advancedisbursement_select_bank_account")}</Text>
               {userBankAccounts.length > 0 ? (
                 <View style={styles.bankList}>
                   {userBankAccounts.map((bank) => (
@@ -231,15 +231,15 @@ export default function AdvanceDisbursementScreen() {
 
           {/* Summary */}
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Disbursement Summary</Text>
+            <Text style={styles.summaryTitle}>{t("final_polish.advancedisbursement_disbursement_summary")}</Text>
             <View style={styles.summaryList}>
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Advance amount</Text>
+                <Text style={styles.summaryLabel}>{t("final_polish.advancedisbursement_advance_amount")}</Text>
                 <Text style={styles.summaryValue}>${advanceAmount}</Text>
               </View>
               {fee > 0 && (
                 <View style={styles.summaryRow}>
-                  <Text style={styles.summaryLabel}>Instant transfer fee</Text>
+                  <Text style={styles.summaryLabel}>{t("final_polish.advancedisbursement_instant_transfer_fee")}</Text>
                   <Text style={styles.summaryFee}>-${fee.toFixed(2)}</Text>
                 </View>
               )}

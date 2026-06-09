@@ -70,8 +70,7 @@ export default function ChangePasswordScreen() {
       // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      Alert.alert(
-        "Success",
+      Alert.alert(t("final_polish.changepassword_alert_success"),
         "Your password has been changed successfully.",
         [{ text: "OK", onPress: () => navigation.goBack() }]
       );

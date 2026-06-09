@@ -347,7 +347,7 @@ export default function XnScoreDashboardScreen() {
         onPress={() => navigation.navigate("HelpCenter" as any)}
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
-        <Text style={styles.floatingHelpText}>Help</Text>
+        <Text style={styles.floatingHelpText}>{t("final_polish.xnscoredashboard_help")}</Text>
       </TouchableOpacity>
     </View>
   );

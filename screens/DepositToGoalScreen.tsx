@@ -72,12 +72,12 @@ export default function DepositToGoalScreen() {
           "usd"
         );
         if (depositError) {
-          Alert.alert("Error", depositError.message || "Failed to create payment");
+          Alert.alert(t("final_polish.deposittogoal_alert_error"), depositError.message || "Failed to create payment");
           return;
         }
         const { error: sheetError } = await presentPaymentSheet();
         if (sheetError) {
-          Alert.alert("Payment Cancelled", sheetError.message || "Payment was not completed");
+          Alert.alert(t("final_polish.deposittogoal_alert_payment_cancelled"), sheetError.message || "Payment was not completed");
           return;
         }
       }
@@ -98,7 +98,7 @@ export default function DepositToGoalScreen() {
         ]
       );
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to make deposit");
+      Alert.alert(t("final_polish.deposittogoal_alert_error"), error.message || "Failed to make deposit");
     } finally {
       setIsProcessing(false);
     }
@@ -108,7 +108,7 @@ export default function DepositToGoalScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Goal not found</Text>
+          <Text style={styles.errorText}>{t("final_polish.deposittogoal_goal_not_found")}</Text>
         </View>
       </SafeAreaView>
     );
@@ -279,7 +279,7 @@ export default function DepositToGoalScreen() {
                 </View>
                 <View style={styles.payFromDetails}>
                   <Text style={styles.payFromLabel}>TandaXn Wallet</Text>
-                  <Text style={styles.payFromSub}>Instant</Text>
+                  <Text style={styles.payFromSub}>{t("final_polish.deposittogoal_instant")}</Text>
                 </View>
               </TouchableOpacity>
 

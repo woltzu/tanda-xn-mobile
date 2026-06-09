@@ -171,7 +171,7 @@ export default function BecomeElderScreen() {
             </View>
           </View>
 
-          <Text style={styles.sectionTitle}>Your Elder Journey</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.becomeelder_your_elder_journey")}</Text>
 
           {elderTiers.map((tier, index) => {
             const isCurrentTier = tier.tier.includes(elderProfile.tier);
@@ -264,7 +264,7 @@ export default function BecomeElderScreen() {
         {/* Requirements Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Requirements</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.becomeelder_requirements")}</Text>
             <View style={styles.progressBadge}>
               <Text style={styles.progressText}>
                 {metCount}/{requirements.length} met
@@ -305,7 +305,7 @@ export default function BecomeElderScreen() {
 
         {/* Benefits Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Elder Benefits</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.becomeelder_elder_benefits")}</Text>
 
           <View style={styles.benefitsGrid}>
             {benefits.map((benefit, index) => (
@@ -328,7 +328,7 @@ export default function BecomeElderScreen() {
 
         {/* Elder Tiers Preview */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Elder Tiers</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.becomeelder_elder_tiers")}</Text>
           <Text style={styles.sectionSubtitle}>
             Progress through tiers to unlock more privileges
           </Text>

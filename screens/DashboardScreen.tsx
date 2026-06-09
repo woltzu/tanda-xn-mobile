@@ -806,7 +806,7 @@ export default function DashboardScreen() {
                     {tierStatus.progressPct}% to {tierStatus.nextTier.charAt(0).toUpperCase() + tierStatus.nextTier.slice(1)}
                   </Text>
                 ) : (
-                  <Text style={styles.tierProgress}>Maxed out</Text>
+                  <Text style={styles.tierProgress}>{t("final_polish.dashboard_maxed_out")}</Text>
                 )}
               </View>
               <View style={styles.tierProgressTrack}>

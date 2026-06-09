@@ -101,11 +101,11 @@ export default function QuickCircleScreen() {
 
   const handleCreate = () => {
     if (!user?.id) {
-      Alert.alert("Sign in required", "We need a signed-in session before creating a circle.");
+      Alert.alert(t("final_polish.quickcircle_alert_sign_in_required"), "We need a signed-in session before creating a circle.");
       return;
     }
     if (!name.trim()) {
-      Alert.alert("Pick a name", "Give your circle a short name first.");
+      Alert.alert(t("final_polish.quickcircle_alert_pick_a_name"), "Give your circle a short name first.");
       return;
     }
 
@@ -171,7 +171,7 @@ export default function QuickCircleScreen() {
             style={styles.input}
             value={name}
             onChangeText={setName}
-            placeholder="My Quick Circle"
+            placeholder={t("final_polish.quickcircle_ph_my_quick_circle")}
             placeholderTextColor={MUTED}
             maxLength={50}
             accessibilityLabel="Circle name"
@@ -200,7 +200,7 @@ export default function QuickCircleScreen() {
         </View>
 
         {/* Members stepper */}
-        <Text style={styles.sectionLabel}>Members</Text>
+        <Text style={styles.sectionLabel}>{t("final_polish.quickcircle_members")}</Text>
         <View style={styles.stepperRow}>
           <TouchableOpacity
             style={[styles.stepBtn, memberCount <= MIN_MEMBERS && styles.stepBtnDisabled]}
@@ -235,7 +235,7 @@ export default function QuickCircleScreen() {
         </View>
 
         {/* Frequency */}
-        <Text style={styles.sectionLabel}>Frequency</Text>
+        <Text style={styles.sectionLabel}>{t("final_polish.quickcircle_frequency")}</Text>
         <View style={styles.segment}>
           {FREQ_OPTIONS.map((opt) => {
             const active = frequency === opt.id;
@@ -300,7 +300,7 @@ export default function QuickCircleScreen() {
           accessibilityRole="button"
           accessibilityLabel="Create circle"
         >
-          <Text style={styles.ctaBtnText}>Create Circle</Text>
+          <Text style={styles.ctaBtnText}>{t("final_polish.quickcircle_create_circle")}</Text>
           <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
         </TouchableOpacity>
       </View>

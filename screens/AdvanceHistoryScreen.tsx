@@ -233,7 +233,7 @@ export default function AdvanceHistoryScreen() {
               <View style={styles.emptyIconBox}>
                 <Text style={styles.emptyIcon}>📊</Text>
               </View>
-              <Text style={styles.emptyTitle}>No Advance History Yet</Text>
+              <Text style={styles.emptyTitle}>{t("final_polish.advancehistory_no_advance_history_yet")}</Text>
               <Text style={styles.emptyBody}>
                 Your completed advances will appear here
               </Text>

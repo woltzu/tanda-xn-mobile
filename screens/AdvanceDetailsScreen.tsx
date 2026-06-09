@@ -277,7 +277,7 @@ export default function AdvanceDetailsScreen() {
                 <Text style={styles.trustValue}>{advance.xnScoreAtRequest}</Text>
               </View>
               <View style={styles.trustItem}>
-                <Text style={styles.trustLabel}>Tier</Text>
+                <Text style={styles.trustLabel}>{t("final_polish.advancedetails_tier")}</Text>
                 <Text style={[styles.trustValue, styles.tierValue]}>
                   {advance.tierAtRequest.charAt(0).toUpperCase() + advance.tierAtRequest.slice(1)}
                 </Text>

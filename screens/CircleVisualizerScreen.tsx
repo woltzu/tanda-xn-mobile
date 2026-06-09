@@ -338,7 +338,7 @@ export default function CircleVisualizerScreen() {
           <View style={styles.infoCard}>
             <Text style={styles.infoTitle}>{circle.name}</Text>
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Members</Text>
+              <Text style={styles.infoLabel}>{t("final_polish.circlevisualizer_members")}</Text>
               <Text style={styles.infoValue}>{circle.currentMembers}/{circle.memberCount}</Text>
             </View>
             <View style={styles.infoRow}>
@@ -346,11 +346,11 @@ export default function CircleVisualizerScreen() {
               <Text style={styles.infoValue}>${(circle.amount / 100).toFixed(2)}</Text>
             </View>
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Frequency</Text>
+              <Text style={styles.infoLabel}>{t("final_polish.circlevisualizer_frequency")}</Text>
               <Text style={styles.infoValue}>{circle.frequency}</Text>
             </View>
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Status</Text>
+              <Text style={styles.infoLabel}>{t("final_polish.circlevisualizer_status")}</Text>
               <Text style={[styles.infoValue, { color: COLORS.teal }]}>{circle.status}</Text>
             </View>
           </View>

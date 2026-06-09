@@ -63,7 +63,7 @@ export default function SecuritySettingsScreen() {
             </TouchableOpacity>
             <View>
               <Text style={styles.headerTitle}>{t("screen_headers.security_settings")}</Text>
-              <Text style={styles.headerSubtitle}>Protect your account</Text>
+              <Text style={styles.headerSubtitle}>{t("final_polish.securitysettings_protect_your_account")}</Text>
             </View>
             <View style={{ width: 40 }} />
           </View>
@@ -77,7 +77,7 @@ export default function SecuritySettingsScreen() {
               <Text style={styles.scoreMax}>/100</Text>
             </View>
             <View style={styles.scoreInfo}>
-              <Text style={styles.scoreLabel}>Security Score</Text>
+              <Text style={styles.scoreLabel}>{t("final_polish.securitysettings_security_score")}</Text>
               <Text style={[styles.scoreStatus, { color: getScoreColor(securityScore) }]}>
                 {getScoreLabel(securityScore)}
               </Text>
@@ -89,7 +89,7 @@ export default function SecuritySettingsScreen() {
         <View style={styles.content}>
           {/* Password Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Password</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.securitysettings_password")}</Text>
             <View style={styles.card}>
               <TouchableOpacity
                 style={styles.menuItem}
@@ -223,7 +223,7 @@ export default function SecuritySettingsScreen() {
           <View style={styles.tipCard}>
             <Ionicons name="bulb-outline" size={20} color="#00897B" />
             <View style={styles.tipContent}>
-              <Text style={styles.tipTitle}>Security Tips</Text>
+              <Text style={styles.tipTitle}>{t("final_polish.securitysettings_security_tips")}</Text>
               <Text style={styles.tipText}>
                 Enable all security features and use a strong, unique password to keep your account safe.
               </Text>

@@ -45,7 +45,7 @@ export default function WithdrawFromGoalScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>Goal not found</Text>
+          <Text style={styles.errorText}>{t("final_polish.withdrawfromgoal_goal_not_found")}</Text>
         </View>
       </SafeAreaView>
     );
@@ -137,7 +137,7 @@ export default function WithdrawFromGoalScreen() {
         ]
       );
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to process withdrawal");
+      Alert.alert(t("final_polish.withdrawfromgoal_alert_error"), error.message || "Failed to process withdrawal");
     } finally {
       setIsProcessing(false);
     }
@@ -176,7 +176,7 @@ export default function WithdrawFromGoalScreen() {
               <Text style={styles.goalType}>{typeConfig.name}</Text>
             </View>
             <View style={styles.balanceInfo}>
-              <Text style={styles.balanceLabel}>Available</Text>
+              <Text style={styles.balanceLabel}>{t("final_polish.withdrawfromgoal_available")}</Text>
               <Text style={styles.balanceValue}>{formatCurrency(availableBalance)}</Text>
             </View>
           </View>
@@ -200,7 +200,7 @@ export default function WithdrawFromGoalScreen() {
             <View style={styles.infoCard}>
               <Ionicons name="time-outline" size={20} color="#F59E0B" />
               <View style={styles.infoContent}>
-                <Text style={styles.infoTitle}>Processing Time</Text>
+                <Text style={styles.infoTitle}>{t("final_polish.withdrawfromgoal_processing_time")}</Text>
                 <Text style={styles.infoText}>
                   Emergency fund withdrawals are processed within 24-48 hours
                   to ensure you have time to consider the withdrawal.
@@ -254,7 +254,7 @@ export default function WithdrawFromGoalScreen() {
               style={styles.reasonInput}
               value={reason}
               onChangeText={setReason}
-              placeholder="Why are you withdrawing?"
+              placeholder={t("final_polish.withdrawfromgoal_ph_why_are_you_withdrawing")}
               placeholderTextColor="#9CA3AF"
               multiline
             />
@@ -277,7 +277,7 @@ export default function WithdrawFromGoalScreen() {
                 </View>
                 <View style={styles.withdrawToDetails}>
                   <Text style={styles.withdrawToLabel}>TandaXn Wallet</Text>
-                  <Text style={styles.withdrawToSub}>Instant</Text>
+                  <Text style={styles.withdrawToSub}>{t("final_polish.withdrawfromgoal_instant")}</Text>
                 </View>
               </TouchableOpacity>
 
@@ -336,7 +336,7 @@ export default function WithdrawFromGoalScreen() {
               </View>
 
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Processing Time</Text>
+                <Text style={styles.summaryLabel}>{t("final_polish.withdrawfromgoal_processing_time")}</Text>
                 <Text style={styles.summaryValue}>{withdrawalDelay}</Text>
               </View>
 

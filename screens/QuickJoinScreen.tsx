@@ -754,7 +754,7 @@ export default function QuickJoinScreen() {
               onPress={() => showError("Coming soon", "Apple Pay will be available at launch.")}
             >
               <Ionicons name="logo-apple" size={18} color={WHITE} />
-              <Text style={styles.quickPayText}>Pay</Text>
+              <Text style={styles.quickPayText}>{t("final_polish.quickjoin_pay")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.quickPayButton, { backgroundColor: "#00D632" }]}

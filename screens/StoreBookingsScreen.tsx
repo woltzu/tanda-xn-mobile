@@ -262,7 +262,7 @@ export default function StoreBookingsScreen() {
                 {isBusy ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.btnPrimaryText}>Confirm</Text>
+                  <Text style={styles.btnPrimaryText}>{t("final_polish.storebookings_confirm")}</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity
@@ -271,7 +271,7 @@ export default function StoreBookingsScreen() {
                 disabled={isBusy}
                 accessibilityRole="button"
               >
-                <Text style={styles.btnDangerText}>Cancel</Text>
+                <Text style={styles.btnDangerText}>{t("final_polish.storebookings_cancel")}</Text>
               </TouchableOpacity>
             </>
           )}

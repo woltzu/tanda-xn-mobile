@@ -126,7 +126,7 @@ const ActivityEditorScreen: React.FC = () => {
         <Text style={styles.headerTitle}>{isEditing ? 'Edit Activity' : 'New Activity'}</Text>
         {isEditing ? (
           <TouchableOpacity onPress={handleDelete} style={styles.headerBtn}>
-            <Text style={styles.deleteText}>Delete</Text>
+            <Text style={styles.deleteText}>{t("final_polish.activityeditor_delete")}</Text>
           </TouchableOpacity>
         ) : (
           <View style={styles.headerBtn} />
@@ -146,7 +146,7 @@ const ActivityEditorScreen: React.FC = () => {
         >
           {/* Activity Name */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Activity Name</Text>
+            <Text style={styles.inputLabel}>{t("final_polish.activityeditor_activity_name")}</Text>
             <TextInput
               style={styles.textInput}
               value={name}
@@ -159,7 +159,7 @@ const ActivityEditorScreen: React.FC = () => {
           {/* Time row */}
           <View style={styles.row}>
             <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-              <Text style={styles.inputLabel}>Start</Text>
+              <Text style={styles.inputLabel}>{t("final_polish.activityeditor_start")}</Text>
               <TextInput
                 style={styles.textInput}
                 value={startTime}
@@ -169,7 +169,7 @@ const ActivityEditorScreen: React.FC = () => {
               />
             </View>
             <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-              <Text style={styles.inputLabel}>End</Text>
+              <Text style={styles.inputLabel}>{t("final_polish.activityeditor_end")}</Text>
               <TextInput
                 style={styles.textInput}
                 value={endTime}
@@ -182,7 +182,7 @@ const ActivityEditorScreen: React.FC = () => {
 
           {/* Category picker */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Category</Text>
+            <Text style={styles.inputLabel}>{t("final_polish.activityeditor_category")}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
               {CATEGORIES.map((cat) => (
                 <TouchableOpacity
@@ -206,14 +206,14 @@ const ActivityEditorScreen: React.FC = () => {
           {/* Description */}
           <View style={styles.inputGroup}>
             <View style={styles.labelRow}>
-              <Text style={styles.inputLabel}>Description</Text>
+              <Text style={styles.inputLabel}>{t("final_polish.activityeditor_description")}</Text>
               <Text style={styles.labelHint}>sell it</Text>
             </View>
             <TextInput
               style={[styles.textInput, styles.textInputMultiline]}
               value={description}
               onChangeText={setDescription}
-              placeholder="White sand, turquoise water, and the sun painting everything gold..."
+              placeholder={t("final_polish.activityeditor_ph_white_sand_turquoise_water_and_the_sun_painting_ev")}
               placeholderTextColor="#9CA3AF"
               multiline
             />
@@ -238,7 +238,7 @@ const ActivityEditorScreen: React.FC = () => {
               <Text style={styles.mapPin}>{'\uD83D\uDCCD'}</Text>
               <Text style={styles.mapLabel}>{location}</Text>
               <View style={styles.mapBtn}>
-                <Text style={styles.mapBtnText}>View on Maps</Text>
+                <Text style={styles.mapBtnText}>{t("final_polish.activityeditor_view_on_maps")}</Text>
                 <Ionicons name="arrow-forward" size={12} color={TEAL} />
               </View>
             </TouchableOpacity>
@@ -247,7 +247,7 @@ const ActivityEditorScreen: React.FC = () => {
           {/* Organizer Note */}
           <View style={styles.inputGroup}>
             <View style={styles.labelRow}>
-              <Text style={styles.inputLabel}>Organizer Note</Text>
+              <Text style={styles.inputLabel}>{t("final_polish.activityeditor_organizer_note")}</Text>
               <Text style={styles.labelHint}>optional</Text>
             </View>
             <TextInput
@@ -265,7 +265,7 @@ const ActivityEditorScreen: React.FC = () => {
       <View style={styles.footer}>
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.7}>
           <Ionicons name="checkmark" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-          <Text style={styles.saveBtnText}>Save Activity</Text>
+          <Text style={styles.saveBtnText}>{t("final_polish.activityeditor_save_activity")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

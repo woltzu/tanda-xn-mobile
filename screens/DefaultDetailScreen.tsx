@@ -140,7 +140,7 @@ export default function DefaultDetailScreen() {
             onPress={() => refresh()}
             accessibilityRole="button"
           >
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t("final_polish.defaultdetail_retry")}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>

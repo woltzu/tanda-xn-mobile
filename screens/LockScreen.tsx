@@ -154,7 +154,7 @@ export default function LockScreen() {
                     setPassword(text);
                     setError(null);
                   }}
-                  placeholder="Password"
+                  placeholder={t("final_polish.lock_ph_password")}
                   placeholderTextColor={colors.textSecondary}
                   secureTextEntry
                   autoCapitalize="none"

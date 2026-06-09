@@ -205,7 +205,7 @@ export default function VerificationOptionsScreen() {
               style={{ marginTop: 2 }}
             />
             <View style={{ flex: 1 }}>
-              <Text style={styles.privacyTitle}>Your privacy is protected</Text>
+              <Text style={styles.privacyTitle}>{t("final_polish.verificationoptions_your_privacy_is_protected")}</Text>
               <Text style={styles.privacyBody}>
                 We only use your information for tax reporting as required by
                 law. We never share data with immigration authorities.

@@ -115,7 +115,7 @@ export default function WithdrawScreen() {
     try {
       await setupConnectedAccount();
     } catch (error: any) {
-      Alert.alert("Setup Failed", error?.message || "Could not set up your payout account.");
+      Alert.alert(t("final_polish.withdraw_alert_setup_failed"), error?.message || "Could not set up your payout account.");
     } finally {
       setIsSettingUpAccount(false);
     }

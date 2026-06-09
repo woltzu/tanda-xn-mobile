@@ -1204,7 +1204,7 @@ export default function CreateDreamPostScreen() {
                 onPress={() => setStep("compose")}
               >
                 <Ionicons name="create-outline" size={18} color={colors.accentTeal} />
-                <Text style={styles.editBtnText}>Edit</Text>
+                <Text style={styles.editBtnText}>{t("final_polish.createdreampost_edit")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.submitBtn, isSubmitting && { opacity: 0.6 }]}

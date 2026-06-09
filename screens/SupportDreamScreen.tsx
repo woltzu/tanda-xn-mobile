@@ -83,7 +83,7 @@ export default function SupportDreamScreen() {
 
   const handleConfirmPayment = async () => {
     if (amount <= 0) {
-      Alert.alert("Invalid Amount", "Please enter an amount greater than $0.");
+      Alert.alert(t("final_polish.supportdream_alert_invalid_amount"), "Please enter an amount greater than $0.");
       return;
     }
 
@@ -321,7 +321,7 @@ export default function SupportDreamScreen() {
               <Text style={styles.sectionTitle}>Summary</Text>
 
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Recipient</Text>
+                <Text style={styles.summaryLabel}>{t("final_polish.supportdream_recipient")}</Text>
                 <Text style={styles.summaryValue}>{authorName}</Text>
               </View>
 
@@ -342,7 +342,7 @@ export default function SupportDreamScreen() {
               <View style={styles.summaryDivider} />
 
               <View style={styles.summaryRow}>
-                <Text style={styles.totalLabel}>Total</Text>
+                <Text style={styles.totalLabel}>{t("final_polish.supportdream_total")}</Text>
                 <Text style={styles.totalValue}>${amount.toFixed(2)}</Text>
               </View>
             </View>

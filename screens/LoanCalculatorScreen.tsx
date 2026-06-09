@@ -302,7 +302,7 @@ export default function LoanCalculatorScreen() {
                   </Text>
                 </View>
                 <View style={styles.breakdownRow}>
-                  <Text style={styles.breakdownLabel}>Term</Text>
+                  <Text style={styles.breakdownLabel}>{t("final_polish.loancalculator_term")}</Text>
                   <Text style={styles.breakdownValue}>{termMonths} months</Text>
                 </View>
               </View>
@@ -438,7 +438,7 @@ export default function LoanCalculatorScreen() {
         onPress={() => navigation.navigate("HelpCenter" as any)}
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
-        <Text style={styles.floatingHelpText}>Help</Text>
+        <Text style={styles.floatingHelpText}>{t("final_polish.loancalculator_help")}</Text>
       </TouchableOpacity>
 
       {/* Apply Button */}

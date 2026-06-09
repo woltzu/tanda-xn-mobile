@@ -128,7 +128,7 @@ export default function HostDashboardScreen() {
       setCandles(r.candles || []);
       setIntentions(r.mass_intentions || []);
     } catch (err) {
-      Alert.alert("Couldn't load", err instanceof Error ? err.message : String(err));
+      Alert.alert(t("final_polish.hostdashboard_alert_couldn_t_load"), err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -356,7 +356,7 @@ export default function HostDashboardScreen() {
       if (!r.success) throw new Error(r.error || "Couldn't resolve");
       setResolveOpen(false);
     } catch (err) {
-      Alert.alert("Couldn't send", err instanceof Error ? err.message : String(err));
+      Alert.alert(t("final_polish.hostdashboard_alert_couldn_t_send"), err instanceof Error ? err.message : String(err));
     } finally {
       setResolving(false);
     }

@@ -209,7 +209,7 @@ export default function SavedRecipientsScreen() {
             </View>
             <TouchableOpacity style={styles.addButton} onPress={handleAddRecipient}>
               <Ionicons name="add" size={16} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>Add</Text>
+              <Text style={styles.addButtonText}>{t("final_polish.savedrecipients_add")}</Text>
             </TouchableOpacity>
           </View>
 
@@ -220,7 +220,7 @@ export default function SavedRecipientsScreen() {
               style={styles.searchInput}
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholder="Search by name or country..."
+              placeholder={t("final_polish.savedrecipients_ph_search_by_name_or_country")}
               placeholderTextColor="rgba(255,255,255,0.5)"
             />
             {searchQuery.length > 0 && (

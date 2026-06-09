@@ -502,7 +502,7 @@ export default function EditGoalScreen() {
               </View>
               <Ionicons name="arrow-forward" size={20} color="#6B7280" />
               <View style={styles.comparisonItem}>
-                <Text style={styles.comparisonLabel}>New</Text>
+                <Text style={styles.comparisonLabel}>{t("final_polish.editgoal_new")}</Text>
                 <Text style={[styles.comparisonValue, { color: "#10B981" }]}>
                   {(GOAL_TYPES[selectedUpgrade].interestRate * 100).toFixed(1)}%
                 </Text>

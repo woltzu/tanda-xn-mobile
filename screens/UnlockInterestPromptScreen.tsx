@@ -185,7 +185,7 @@ export default function UnlockInterestPromptScreen() {
               style={{ marginTop: 2 }}
             />
             <View style={{ flex: 1 }}>
-              <Text style={styles.privacyTitle}>Your privacy is protected</Text>
+              <Text style={styles.privacyTitle}>{t("final_polish.unlockinterestprompt_your_privacy_is_protected")}</Text>
               <Text style={styles.privacyBody}>
                 Your tax ID is encrypted and only used for IRS reporting. The
                 IRS is legally prohibited from sharing it with immigration

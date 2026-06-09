@@ -123,7 +123,7 @@ export default function GoalEditScreen() {
     setIsSaving(false);
 
     if (error) {
-      Alert.alert("Couldn't save", error.message ?? "Please try again.");
+      Alert.alert(t("final_polish.goaledit_alert_couldn_t_save"), error.message ?? "Please try again.");
       return;
     }
 
@@ -319,7 +319,7 @@ export default function GoalEditScreen() {
           accessibilityRole="button"
           style={[styles.cancelButton, isSaving && { opacity: 0.5 }]}
         >
-          <Text style={styles.cancelText}>Cancel</Text>
+          <Text style={styles.cancelText}>{t("final_polish.goaledit_cancel")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

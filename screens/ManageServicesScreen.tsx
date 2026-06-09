@@ -234,7 +234,7 @@ export default function ManageServicesScreen() {
             style={styles.retryButton}
             onPress={() => fetchServices(false)}
           >
-            <Text style={styles.retryButtonText}>Retry</Text>
+            <Text style={styles.retryButtonText}>{t("final_polish.manageservices_retry")}</Text>
           </TouchableOpacity>
         </View>
       ) : services.length === 0 ? (

@@ -182,13 +182,13 @@ export default function LoanDetailsScreen() {
             ${formatCurrency(item.amount, "USD")}
           </Text>
           {item.status === "paid" && (
-            <Text style={styles.paidLabel}>Paid</Text>
+            <Text style={styles.paidLabel}>{t("final_polish.loandetails_paid")}</Text>
           )}
           {item.status === "scheduled" && (
             <Text style={styles.scheduledLabel}>{t("loan_details.scheduled_label")}</Text>
           )}
           {isNext && (
-            <Text style={styles.nextLabel}>Next</Text>
+            <Text style={styles.nextLabel}>{t("final_polish.loandetails_next")}</Text>
           )}
         </View>
       </View>
@@ -255,7 +255,7 @@ export default function LoanDetailsScreen() {
               </Text>
             </View>
             <View style={styles.statCard}>
-              <Text style={styles.statLabel}>Term</Text>
+              <Text style={styles.statLabel}>{t("final_polish.loandetails_term")}</Text>
               <Text style={styles.statValue}>{loan.termMonths} months</Text>
             </View>
             <View style={styles.statCard}>
@@ -389,7 +389,7 @@ export default function LoanDetailsScreen() {
               <Text style={styles.riskValue}>{loan.xnScoreAtRequest}</Text>
             </View>
             <View style={styles.riskRow}>
-              <Text style={styles.riskLabel}>Tier</Text>
+              <Text style={styles.riskLabel}>{t("final_polish.loandetails_tier")}</Text>
               <Text style={styles.riskValue}>
                 {loan.tierAtRequest.charAt(0).toUpperCase() + loan.tierAtRequest.slice(1)}
               </Text>

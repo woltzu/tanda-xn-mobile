@@ -566,7 +566,7 @@ export default function LoanApplicationScreen() {
               </View>
               <Text style={styles.termsText}>
                 I have read and agree to the{" "}
-                <Text style={styles.termsLink}>Loan Agreement</Text> and{" "}
+                <Text style={styles.termsLink}>{t("final_polish.loanapplication_loan_agreement")}</Text> and{" "}
                 <Text style={styles.termsLink}>Terms & Conditions</Text>
               </Text>
             </TouchableOpacity>
@@ -580,7 +580,7 @@ export default function LoanApplicationScreen() {
         onPress={() => navigation.navigate("HelpCenter" as any)}
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
-        <Text style={styles.floatingHelpText}>Help</Text>
+        <Text style={styles.floatingHelpText}>{t("final_polish.loanapplication_help")}</Text>
       </TouchableOpacity>
 
       {/* Submit Button */}

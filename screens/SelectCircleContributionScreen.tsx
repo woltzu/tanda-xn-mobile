@@ -77,7 +77,7 @@ export default function SelectCircleContributionScreen() {
             <View style={styles.emptyIconContainer}>
               <Ionicons name="people-outline" size={48} color="#9CA3AF" />
             </View>
-            <Text style={styles.emptyTitle}>No Active Circles</Text>
+            <Text style={styles.emptyTitle}>{t("final_polish.selectcirclecontribution_no_active_circles")}</Text>
             <Text style={styles.emptyText}>
               You haven't joined any circles yet. Join or create a circle to start making contributions.
             </Text>
@@ -86,14 +86,14 @@ export default function SelectCircleContributionScreen() {
               onPress={() => navigation.navigate("CreateCircleStart")}
             >
               <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.emptyButtonText}>Create Circle</Text>
+              <Text style={styles.emptyButtonText}>{t("final_polish.selectcirclecontribution_create_circle")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.emptyButtonSecondary}
               onPress={() => navigation.navigate("JoinCircleByCode")}
             >
               <Ionicons name="search-outline" size={20} color="#00C6AE" />
-              <Text style={styles.emptyButtonSecondaryText}>Find a Circle</Text>
+              <Text style={styles.emptyButtonSecondaryText}>{t("final_polish.selectcirclecontribution_find_a_circle")}</Text>
             </TouchableOpacity>
           </View>
         ) : (

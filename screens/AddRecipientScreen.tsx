@@ -189,7 +189,7 @@ export default function AddRecipientScreen() {
               {filteredCountries.length === 0 && (
                 <View style={styles.emptyState}>
                   <Ionicons name="search" size={40} color="#9CA3AF" />
-                  <Text style={styles.emptyStateText}>No countries found</Text>
+                  <Text style={styles.emptyStateText}>{t("final_polish.addrecipient_no_countries_found")}</Text>
                 </View>
               )}
             </View>

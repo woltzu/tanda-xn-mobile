@@ -275,7 +275,7 @@ export default function DiscoverCirclesScreen() {
                 accessibilityLabel={`Save ${match.circle.name}`}
               >
                 <Ionicons name="bookmark-outline" size={14} color={NAVY} />
-                <Text style={styles.actionBtnSecondaryText}>Save</Text>
+                <Text style={styles.actionBtnSecondaryText}>{t("final_polish.discovercircles_save")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionBtnSecondary}

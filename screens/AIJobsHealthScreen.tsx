@@ -272,7 +272,7 @@ function AIJobsHealthScreenInner() {
         </View>
 
         {/* Per-job summaries */}
-        <Text style={styles.sectionTitle}>Jobs</Text>
+        <Text style={styles.sectionTitle}>{t("final_polish.aijobshealth_jobs")}</Text>
         {loading && summaries.length === 0 ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator color={COLORS.teal} />

@@ -235,7 +235,7 @@ export default function SyncLobbyScreen() {
       setMemberAvatars(avatars);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert("Couldn't load rooms", msg);
+      Alert.alert(t("final_polish.synclobby_alert_couldn_t_load_rooms"), msg);
     } finally {
       setLoading(false);
     }

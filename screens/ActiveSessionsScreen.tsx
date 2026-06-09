@@ -133,7 +133,7 @@ export default function ActiveSessionsScreen() {
           {/* Current Session */}
           {currentSession && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>This Device</Text>
+              <Text style={styles.sectionTitle}>{t("final_polish.activesessions_this_device")}</Text>
               <View style={styles.currentSessionCard}>
                 <View style={styles.sessionRow}>
                   <View style={styles.currentDeviceIcon}>
@@ -166,7 +166,7 @@ export default function ActiveSessionsScreen() {
                           {currentSession.location}
                         </Text>
                       </View>
-                      <Text style={styles.activeNow}>Active now</Text>
+                      <Text style={styles.activeNow}>{t("final_polish.activesessions_active_now")}</Text>
                     </View>
                   </View>
                 </View>
@@ -177,7 +177,7 @@ export default function ActiveSessionsScreen() {
           {/* Other Sessions */}
           {otherSessions.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Other Sessions</Text>
+              <Text style={styles.sectionTitle}>{t("final_polish.activesessions_other_sessions")}</Text>
               <View style={styles.card}>
                 {otherSessions.map((session, index) => (
                   <View
@@ -216,7 +216,7 @@ export default function ActiveSessionsScreen() {
                       style={styles.logoutButton}
                       onPress={() => handleLogoutSession(session)}
                     >
-                      <Text style={styles.logoutButtonText}>Log Out</Text>
+                      <Text style={styles.logoutButtonText}>{t("final_polish.activesessions_log_out")}</Text>
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -235,7 +235,7 @@ export default function ActiveSessionsScreen() {
 
           {/* Security Tips */}
           <View style={styles.tipsCard}>
-            <Text style={styles.tipsTitle}>Security Tips</Text>
+            <Text style={styles.tipsTitle}>{t("final_polish.activesessions_security_tips")}</Text>
             <View style={styles.tipItem}>
               <Ionicons name="checkmark-circle" size={16} color="#00C6AE" />
               <Text style={styles.tipText}>
@@ -266,7 +266,7 @@ export default function ActiveSessionsScreen() {
             onPress={handleLogoutAll}
           >
             <Ionicons name="log-out-outline" size={20} color="#DC2626" />
-            <Text style={styles.logoutAllText}>Log Out All Other Sessions</Text>
+            <Text style={styles.logoutAllText}>{t("final_polish.activesessions_log_out_all_other_sessions")}</Text>
           </TouchableOpacity>
         </View>
       )}

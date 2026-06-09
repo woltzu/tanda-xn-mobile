@@ -125,7 +125,7 @@ export default function FAQScreen() {
             style={styles.searchInput}
             value={query}
             onChangeText={setQuery}
-            placeholder="Search FAQ..."
+            placeholder={t("final_polish.faq_ph_search_faq")}
             placeholderTextColor={MUTED}
             returnKeyType="search"
             autoCorrect={false}

@@ -171,11 +171,11 @@ export default function AdvanceDetailsV2Screen() {
           {/* Amount pair */}
           <View style={styles.amountRow}>
             <View>
-              <Text style={styles.amountLabel}>Advanced</Text>
+              <Text style={styles.amountLabel}>{t("final_polish.advancedetailsv2_advanced")}</Text>
               <Text style={styles.amountBig}>${advance.advancedAmount}</Text>
             </View>
             <View style={{ alignItems: "flex-end" }}>
-              <Text style={styles.amountLabel}>To Repay</Text>
+              <Text style={styles.amountLabel}>{t("final_polish.advancedetailsv2_to_repay")}</Text>
               <Text style={styles.amountTeal}>${advance.totalDue}</Text>
             </View>
           </View>
@@ -199,7 +199,7 @@ export default function AdvanceDetailsV2Screen() {
 
           {/* Info grid */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Advance Information</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.advancedetailsv2_advance_information")}</Text>
             <View style={styles.infoList}>
               <InfoRow
                 label="Advance amount"
@@ -266,7 +266,7 @@ export default function AdvanceDetailsV2Screen() {
 
           {/* Timeline */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Timeline</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.advancedetailsv2_timeline")}</Text>
             <View>
               {advance.timeline.map((item, idx) => {
                 const isLast = idx === advance.timeline.length - 1;
@@ -306,7 +306,7 @@ export default function AdvanceDetailsV2Screen() {
           {/* Actions (active only) */}
           {advance.status === "active" && (
             <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Actions</Text>
+              <Text style={styles.sectionTitle}>{t("final_polish.advancedetailsv2_actions")}</Text>
               <View style={styles.actionsList}>
                 <TouchableOpacity
                   style={styles.repayButton}

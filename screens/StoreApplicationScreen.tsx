@@ -301,7 +301,7 @@ export default function StoreApplicationScreen() {
                 />
                 <TextInput
                   style={[styles.input, { flex: 1 }]}
-                  placeholder="State"
+                  placeholder={t("final_polish.storeapplication_ph_state")}
                   placeholderTextColor="#9CA3AF"
                   value={state}
                   onChangeText={setState}
@@ -311,7 +311,7 @@ export default function StoreApplicationScreen() {
               </View>
               <TextInput
                 style={[styles.input, styles.textArea]}
-                placeholder="Describe your business (optional)"
+                placeholder={t("final_polish.storeapplication_ph_describe_your_business_optional")}
                 placeholderTextColor="#9CA3AF"
                 value={description}
                 onChangeText={setDescription}
@@ -355,7 +355,7 @@ export default function StoreApplicationScreen() {
 
               <TextInput
                 style={[styles.input, styles.textArea]}
-                placeholder="Exclusive offer or message (optional)"
+                placeholder={t("final_polish.storeapplication_ph_exclusive_offer_or_message_optional")}
                 placeholderTextColor="#9CA3AF"
                 value={exclusiveOffer}
                 onChangeText={setExclusiveOffer}
@@ -365,7 +365,7 @@ export default function StoreApplicationScreen() {
 
               {/* Preview Card */}
               <View style={styles.previewCard}>
-                <Text style={styles.previewTitle}>Preview</Text>
+                <Text style={styles.previewTitle}>{t("final_polish.storeapplication_preview")}</Text>
                 <View style={styles.previewStore}>
                   <View style={styles.previewAvatar}>
                     <Ionicons name={selectedCat?.icon as any ?? "storefront"} size={24} color={selectedCat?.color ?? "#6B7280"} />
@@ -403,7 +403,7 @@ export default function StoreApplicationScreen() {
       <View style={styles.bottomBar}>
         {step < 2 ? (
           <TouchableOpacity style={styles.nextBtn} onPress={handleNext}>
-            <Text style={styles.nextBtnText}>Continue</Text>
+            <Text style={styles.nextBtnText}>{t("final_polish.storeapplication_continue")}</Text>
             <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
           </TouchableOpacity>
         ) : (

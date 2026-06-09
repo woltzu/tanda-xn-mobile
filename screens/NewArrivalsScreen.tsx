@@ -168,7 +168,7 @@ export default function NewArrivalsScreen({ communityId, communityName = "My Com
                       onPress={() => handleSendWelcome(arrival)}
                     >
                       <Ionicons name="send" size={14} color="#FFFFFF" />
-                      <Text style={styles.welcomeSendText}>Send</Text>
+                      <Text style={styles.welcomeSendText}>{t("final_polish.newarrivals_send")}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

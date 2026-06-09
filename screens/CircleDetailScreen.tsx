@@ -1151,7 +1151,7 @@ export default function CircleDetailScreen() {
         onPress={() => navigation.navigate("HelpCenter" as any)}
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
-        <Text style={styles.floatingHelpText}>Help</Text>
+        <Text style={styles.floatingHelpText}>{t("final_polish.circledetail_help")}</Text>
       </TouchableOpacity>
 
       {/* Menu Modal */}

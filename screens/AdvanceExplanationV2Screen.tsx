@@ -244,7 +244,7 @@ export default function AdvanceExplanationV2Screen() {
 
           {/* Key Differences */}
           <View style={styles.diffCard}>
-            <Text style={styles.diffTitle}>Why This Is Different</Text>
+            <Text style={styles.diffTitle}>{t("final_polish.advanceexplanationv2_why_this_is_different")}</Text>
             <View style={styles.diffList}>
               {KEY_DIFFERENCES.map((item, idx) => (
                 <View key={idx} style={styles.diffRow}>
@@ -312,7 +312,7 @@ function StepVisual({ kind }: { kind: VisualKind }) {
       return (
         <View style={visualStyles.row}>
           <View style={visualStyles.tealChip}>
-            <Text style={visualStyles.chipLabel}>Family Circle</Text>
+            <Text style={visualStyles.chipLabel}>{t("final_polish.advanceexplanationv2_family_circle")}</Text>
             <Text style={visualStyles.chipBigTeal}>$500</Text>
             <Text style={visualStyles.chipSubLabel}>Feb 15, 2025</Text>
           </View>
@@ -323,7 +323,7 @@ function StepVisual({ kind }: { kind: VisualKind }) {
         <View style={visualStyles.row}>
           <View style={visualStyles.greyChip}>
             <Text style={visualStyles.chipBigNavy}>$500</Text>
-            <Text style={visualStyles.chipMicroLabel}>Your Payout</Text>
+            <Text style={visualStyles.chipMicroLabel}>{t("final_polish.advanceexplanationv2_your_payout")}</Text>
           </View>
           <Ionicons name="arrow-forward" size={20} color={TEAL} />
           <View style={visualStyles.tealOutlineChip}>
@@ -337,7 +337,7 @@ function StepVisual({ kind }: { kind: VisualKind }) {
         <View style={visualStyles.row}>
           <View style={visualStyles.tealLightChip}>
             <Text style={visualStyles.chipMidTeal}>$500</Text>
-            <Text style={visualStyles.chipMicroLabel}>Payout Arrives</Text>
+            <Text style={visualStyles.chipMicroLabel}>{t("final_polish.advanceexplanationv2_payout_arrives")}</Text>
           </View>
           <Ionicons name="arrow-forward" size={20} color={AMBER} />
           <View style={visualStyles.amberChip}>

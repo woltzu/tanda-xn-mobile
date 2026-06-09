@@ -157,7 +157,7 @@ export default function BulkInvitesScreen() {
         {invite.joinedAt ? (
           <View style={[styles.statusPill, { backgroundColor: "#D1FAE5" }]}>
             <Ionicons name="checkmark-circle" size={12} color="#059669" />
-            <Text style={[styles.statusText, { color: "#059669" }]}>Joined</Text>
+            <Text style={[styles.statusText, { color: "#059669" }]}>{t("final_polish.bulkinvites_joined")}</Text>
           </View>
         ) : (
           <View style={[styles.statusPill, { backgroundColor: getStatusColor(invite.smsStatus) + "20" }]}>
@@ -186,19 +186,19 @@ export default function BulkInvitesScreen() {
           <View style={styles.statsBar}>
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{stats.total}</Text>
-              <Text style={styles.statLabel}>Total</Text>
+              <Text style={styles.statLabel}>{t("final_polish.bulkinvites_total")}</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: "#F59E0B" }]}>{stats.pending}</Text>
-              <Text style={styles.statLabel}>Pending</Text>
+              <Text style={styles.statLabel}>{t("final_polish.bulkinvites_pending")}</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: "#3B82F6" }]}>{stats.sent + stats.delivered}</Text>
-              <Text style={styles.statLabel}>Sent</Text>
+              <Text style={styles.statLabel}>{t("final_polish.bulkinvites_sent")}</Text>
             </View>
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: "#10B981" }]}>{stats.joined}</Text>
-              <Text style={styles.statLabel}>Joined</Text>
+              <Text style={styles.statLabel}>{t("final_polish.bulkinvites_joined")}</Text>
             </View>
           </View>
         )}
@@ -233,7 +233,7 @@ export default function BulkInvitesScreen() {
               <Ionicons name="search" size={16} color="#9CA3AF" />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search by name, phone, circle..."
+                placeholder={t("final_polish.bulkinvites_ph_search_by_name_phone_circle")}
                 placeholderTextColor="#9CA3AF"
                 value={searchText}
                 onChangeText={setSearchText}
@@ -243,7 +243,7 @@ export default function BulkInvitesScreen() {
             {filteredInvites.length === 0 && !loading && (
               <View style={styles.emptyState}>
                 <Ionicons name="people-outline" size={56} color="#D1D5DB" />
-                <Text style={styles.emptyTitle}>No members yet</Text>
+                <Text style={styles.emptyTitle}>{t("final_polish.bulkinvites_no_members_yet")}</Text>
                 <Text style={styles.emptySubtitle}>Upload a CSV or add members manually</Text>
               </View>
             )}
@@ -271,7 +271,7 @@ export default function BulkInvitesScreen() {
             </View>
 
             {/* Send Target */}
-            <Text style={styles.fieldLabel}>Send to</Text>
+            <Text style={styles.fieldLabel}>{t("final_polish.bulkinvites_send_to")}</Text>
             <View style={styles.radioGroup}>
               <TouchableOpacity
                 style={[styles.radioOption, sendTarget === "pending" && styles.radioOptionActive]}
@@ -294,7 +294,7 @@ export default function BulkInvitesScreen() {
             </View>
 
             {/* Language */}
-            <Text style={styles.fieldLabel}>Language</Text>
+            <Text style={styles.fieldLabel}>{t("final_polish.bulkinvites_language")}</Text>
             <View style={styles.langRow}>
               {([
                 { key: "fr" as SmsLanguage, label: "Français" },
@@ -350,10 +350,10 @@ export default function BulkInvitesScreen() {
               </Text>
             </View>
 
-            <Text style={styles.fieldLabel}>Paste CSV data</Text>
+            <Text style={styles.fieldLabel}>{t("final_polish.bulkinvites_paste_csv_data")}</Text>
             <TextInput
               style={styles.csvInput}
-              placeholder="Paste your CSV data here..."
+              placeholder={t("final_polish.bulkinvites_ph_paste_your_csv_data_here")}
               placeholderTextColor="#9CA3AF"
               value={csvText}
               onChangeText={setCsvText}
@@ -375,7 +375,7 @@ export default function BulkInvitesScreen() {
             {/* Upload History */}
             {uploads.length > 0 && (
               <View style={styles.uploadHistory}>
-                <Text style={styles.fieldLabel}>Upload History</Text>
+                <Text style={styles.fieldLabel}>{t("final_polish.bulkinvites_upload_history")}</Text>
                 {uploads.map(u => (
                   <View key={u.id} style={styles.uploadRow}>
                     <Ionicons name="document-outline" size={16} color="#6B7280" />

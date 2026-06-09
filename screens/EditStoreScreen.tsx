@@ -298,12 +298,12 @@ export default function EditStoreScreen() {
 
           {/* Description */}
           <View style={styles.field}>
-            <Text style={styles.label}>Description</Text>
+            <Text style={styles.label}>{t("final_polish.editstore_description")}</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={description}
               onChangeText={setDescription}
-              placeholder="Tell customers what you offer…"
+              placeholder={t("final_polish.editstore_ph_tell_customers_what_you_offer")}
               placeholderTextColor="#9CA3AF"
               multiline
               numberOfLines={4}
@@ -314,7 +314,7 @@ export default function EditStoreScreen() {
 
           {/* Category — chip picker (DB enum, friendly labels) */}
           <View style={styles.field}>
-            <Text style={styles.label}>Category</Text>
+            <Text style={styles.label}>{t("final_polish.editstore_category")}</Text>
             <View style={styles.chipGrid}>
               {CATEGORY_OPTIONS.map((opt) => {
                 const selected = category === opt.value;
@@ -354,7 +354,7 @@ export default function EditStoreScreen() {
               disabled={saving}
               accessibilityRole="button"
             >
-              <Text style={styles.outlineButtonText}>Cancel</Text>
+              <Text style={styles.outlineButtonText}>{t("final_polish.editstore_cancel")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[

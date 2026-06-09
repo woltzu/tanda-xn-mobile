@@ -230,7 +230,7 @@ export default function DynamicPayoutScreen() {
           <View style={styles.statCard}>
             <Ionicons name="people-outline" size={20} color={COLORS.teal} />
             <Text style={styles.statCardValue}>{members.length}</Text>
-            <Text style={styles.statCardLabel}>Members</Text>
+            <Text style={styles.statCardLabel}>{t("final_polish.dynamicpayout_members")}</Text>
           </View>
         </View>
       </ScrollView>

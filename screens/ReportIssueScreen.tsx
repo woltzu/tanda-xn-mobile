@@ -80,7 +80,7 @@ export default function ReportIssueScreen() {
 
   const handleSubmit = async () => {
     if (!disputeType) {
-      Alert.alert("Pick a dispute type", "Please choose what kind of issue you're reporting.");
+      Alert.alert(t("final_polish.reportissue_alert_pick_a_dispute_type"), "Please choose what kind of issue you're reporting.");
       return;
     }
     if (!description.trim()) {
@@ -88,11 +88,11 @@ export default function ReportIssueScreen() {
       return;
     }
     if (!circleId) {
-      Alert.alert("Missing circle", "We couldn't determine which circle this issue is about. Go back and try again.");
+      Alert.alert(t("final_polish.reportissue_alert_missing_circle"), "We couldn't determine which circle this issue is about. Go back and try again.");
       return;
     }
     if (!user?.id) {
-      Alert.alert("Not signed in", "You need to be signed in to file a dispute.");
+      Alert.alert(t("final_polish.reportissue_alert_not_signed_in"), "You need to be signed in to file a dispute.");
       return;
     }
 
@@ -114,7 +114,7 @@ export default function ReportIssueScreen() {
 
       if (error) {
         console.error("[ReportIssueScreen] insert failed:", error);
-        Alert.alert("Couldn't submit", error.message);
+        Alert.alert(t("final_polish.reportissue_alert_couldn_t_submit"), error.message);
         return;
       }
 
@@ -125,7 +125,7 @@ export default function ReportIssueScreen() {
       );
     } catch (e: any) {
       console.error("[ReportIssueScreen] unexpected error:", e);
-      Alert.alert("Couldn't submit", e?.message ?? "Something went wrong. Please try again.");
+      Alert.alert(t("final_polish.reportissue_alert_couldn_t_submit"), e?.message ?? "Something went wrong. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -184,13 +184,13 @@ export default function ReportIssueScreen() {
         })}
 
         {/* Description */}
-        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Description</Text>
+        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>{t("final_polish.reportissue_description")}</Text>
         <Text style={styles.sectionSubtitle}>
           Describe what happened — when, who's involved, and any context an elder needs to resolve it.
         </Text>
         <TextInput
           style={styles.descriptionInput}
-          placeholder="The contribution due on May 15 was never received…"
+          placeholder={t("final_polish.reportissue_ph_the_contribution_due_on_may_15_was_never_received")}
           placeholderTextColor="#9CA3AF"
           value={description}
           onChangeText={setDescription}

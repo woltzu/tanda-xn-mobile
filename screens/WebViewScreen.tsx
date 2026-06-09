@@ -103,7 +103,7 @@ export default function WebViewScreen() {
           accessibilityLabel="Close"
         >
           <Ionicons name="chevron-back" size={24} color={NAVY} />
-          <Text style={styles.backText}>Back</Text>
+          <Text style={styles.backText}>{t("final_polish.webview_back")}</Text>
         </TouchableOpacity>
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
         <View style={styles.headerSpacer} />

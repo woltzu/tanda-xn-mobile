@@ -393,7 +393,7 @@ export default function InsurancePoolScreen() {
                     {formatCents(Math.abs(claim.amountCents))}
                   </Text>
                   <View style={styles.claimStatusPill}>
-                    <Text style={styles.claimStatusText}>Paid</Text>
+                    <Text style={styles.claimStatusText}>{t("final_polish.insurancepool_paid")}</Text>
                   </View>
                 </View>
               </View>

@@ -128,7 +128,7 @@ export default function RequestProviderScreen() {
             style={[styles.input, styles.textArea]}
             value={description}
             onChangeText={setDescription}
-            placeholder="A short note about what you're looking for…"
+            placeholder={t("final_polish.requestprovider_ph_a_short_note_about_what_you_re_looking_for")}
             placeholderTextColor="#9CA3AF"
             multiline
             numberOfLines={4}

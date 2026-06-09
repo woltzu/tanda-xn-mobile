@@ -140,7 +140,7 @@ export default function AdvanceApprovalScreen() {
         <View style={styles.contentWrap}>
           {/* Amount Card */}
           <View style={styles.amountCard}>
-            <Text style={styles.amountLabel}>Amount Disbursed</Text>
+            <Text style={styles.amountLabel}>{t("final_polish.advanceapproval_amount_disbursed")}</Text>
             <Text style={styles.amountValue}>${advance.amount}</Text>
             <Text style={styles.amountSub}>
               Sent to {advance.disbursedTo}
@@ -225,7 +225,7 @@ export default function AdvanceApprovalScreen() {
             accessibilityLabel="View advance details"
           >
             <Ionicons name="document-text-outline" size={18} color={NAVY} />
-            <Text style={styles.viewDetailsText}>View Advance Details</Text>
+            <Text style={styles.viewDetailsText}>{t("final_polish.advanceapproval_view_advance_details")}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -238,7 +238,7 @@ export default function AdvanceApprovalScreen() {
           accessibilityRole="button"
           accessibilityLabel="Done"
         >
-          <Text style={styles.doneButtonText}>Done</Text>
+          <Text style={styles.doneButtonText}>{t("final_polish.advanceapproval_done")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

@@ -88,7 +88,7 @@ const ProviderTripDashboardScreen = () => {
             <Text style={styles.tripEmoji}>🌍</Text>
             <View style={styles.liveBadge}>
               <View style={styles.liveDot} />
-              <Text style={styles.liveBadgeText}>Live</Text>
+              <Text style={styles.liveBadgeText}>{t("final_polish.providertripdashboard_live")}</Text>
             </View>
           </View>
 

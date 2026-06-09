@@ -365,7 +365,7 @@ export default function CloseCircleScreen() {
       <View style={styles.buttonRow}>
         <TouchableOpacity style={styles.backButton} onPress={() => setStep(1)}>
           <Ionicons name="arrow-back" size={20} color="#6B7280" />
-          <Text style={styles.backButtonText}>Back</Text>
+          <Text style={styles.backButtonText}>{t("final_polish.closecircle_back")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -442,7 +442,7 @@ export default function CloseCircleScreen() {
       <View style={styles.buttonRow}>
         <TouchableOpacity style={styles.backButton} onPress={() => setStep(2)}>
           <Ionicons name="arrow-back" size={20} color="#6B7280" />
-          <Text style={styles.backButtonText}>Back</Text>
+          <Text style={styles.backButtonText}>{t("final_polish.closecircle_back")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

@@ -179,7 +179,7 @@ export default function NearYouScreen({ city }: Props) {
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.helloSendBtn} onPress={() => handleSayHello(profile)}>
                         <Ionicons name="send" size={14} color="#FFFFFF" />
-                        <Text style={styles.helloSendText}>Send</Text>
+                        <Text style={styles.helloSendText}>{t("final_polish.nearyou_send")}</Text>
                       </TouchableOpacity>
                     </View>
                   </View>

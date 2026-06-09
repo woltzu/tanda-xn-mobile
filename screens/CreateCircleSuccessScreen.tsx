@@ -919,7 +919,7 @@ export default function CreateCircleSuccessScreen() {
             <Text style={styles.secondaryButtonText}>{t("create_circle_success.btn_invite_more")}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryButton} onPress={handleDone}>
-            <Text style={styles.secondaryButtonText}>Done</Text>
+            <Text style={styles.secondaryButtonText}>{t("final_polish.createcirclesuccess_done")}</Text>
           </TouchableOpacity>
         </View>
       </View>

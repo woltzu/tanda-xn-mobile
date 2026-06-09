@@ -133,7 +133,7 @@ export default function AdvanceExplanationScreen() {
           <View style={styles.heroIconContainer}>
             <Ionicons name="flash" size={40} color="#FFFFFF" />
           </View>
-          <Text style={styles.heroTitle}>Advance on Future Payout</Text>
+          <Text style={styles.heroTitle}>{t("final_polish.advanceexplanation_advance_on_future_payout")}</Text>
           <Text style={styles.heroSubtitle}>
             Access your circle payout early - it's your money, just sooner
           </Text>
@@ -145,7 +145,7 @@ export default function AdvanceExplanationScreen() {
             <Ionicons name="alert-circle" size={24} color="#10B981" />
           </View>
           <View style={styles.keyDifferenceText}>
-            <Text style={styles.keyDifferenceTitle}>This is NOT a loan</Text>
+            <Text style={styles.keyDifferenceTitle}>{t("final_polish.advanceexplanation_this_is_not_a_loan")}</Text>
             <Text style={styles.keyDifferenceDesc}>
               You're accessing YOUR OWN future circle payout early. No credit check, no debt.
             </Text>
@@ -198,14 +198,14 @@ export default function AdvanceExplanationScreen() {
 
         {/* How It Works Steps */}
         <View style={styles.stepsSection}>
-          <Text style={styles.sectionTitle}>Step by Step</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.advanceexplanation_step_by_step")}</Text>
 
           <View style={styles.stepItem}>
             <View style={styles.stepNumber}>
               <Text style={styles.stepNumberText}>1</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Choose a Future Payout</Text>
+              <Text style={styles.stepTitle}>{t("final_polish.advanceexplanation_choose_a_future_payout")}</Text>
               <Text style={styles.stepDesc}>
                 Select from your upcoming circle payouts. You'll see the expected amount and date.
               </Text>
@@ -219,7 +219,7 @@ export default function AdvanceExplanationScreen() {
               <Text style={styles.stepNumberText}>2</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Request Your Advance</Text>
+              <Text style={styles.stepTitle}>{t("final_polish.advanceexplanation_request_your_advance")}</Text>
               <Text style={styles.stepDesc}>
                 Choose how much to advance (up to your tier limit). See the fee and total repayment upfront.
               </Text>
@@ -233,7 +233,7 @@ export default function AdvanceExplanationScreen() {
               <Text style={styles.stepNumberText}>3</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Receive Funds</Text>
+              <Text style={styles.stepTitle}>{t("final_polish.advanceexplanation_receive_funds")}</Text>
               <Text style={styles.stepDesc}>
                 Funds are sent to your TandaXn wallet within minutes of approval.
               </Text>
@@ -261,7 +261,7 @@ export default function AdvanceExplanationScreen() {
             <View style={styles.flowIcon}>
               <Ionicons name="calendar" size={24} color="#0A2342" />
             </View>
-            <Text style={styles.flowLabel}>Your Payout</Text>
+            <Text style={styles.flowLabel}>{t("final_polish.advanceexplanation_your_payout")}</Text>
             <Text style={styles.flowValue}>$2,000</Text>
             <Text style={styles.flowDate}>Feb 15</Text>
           </View>
@@ -274,7 +274,7 @@ export default function AdvanceExplanationScreen() {
             </View>
             <Text style={styles.flowLabel}>Advance</Text>
             <Text style={[styles.flowValue, { color: "#10B981" }]}>$1,000</Text>
-            <Text style={styles.flowDate}>Today</Text>
+            <Text style={styles.flowDate}>{t("final_polish.advanceexplanation_today")}</Text>
           </View>
 
           <Ionicons name="arrow-forward" size={24} color="#00C6AE" />
@@ -283,7 +283,7 @@ export default function AdvanceExplanationScreen() {
             <View style={[styles.flowIcon, { backgroundColor: "#FEF3C7" }]}>
               <Ionicons name="wallet" size={24} color="#F59E0B" />
             </View>
-            <Text style={styles.flowLabel}>You Receive</Text>
+            <Text style={styles.flowLabel}>{t("final_polish.advanceexplanation_you_receive")}</Text>
             <Text style={styles.flowValue}>$950</Text>
             <Text style={styles.flowDate}>On Feb 15</Text>
           </View>
@@ -291,7 +291,7 @@ export default function AdvanceExplanationScreen() {
 
         {/* FAQs */}
         <View style={styles.faqSection}>
-          <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.advanceexplanation_frequently_asked_questions")}</Text>
 
           {FAQS.map((faq, index) => (
             <TouchableOpacity
@@ -318,7 +318,7 @@ export default function AdvanceExplanationScreen() {
         <View style={styles.warningBox}>
           <Ionicons name="warning" size={24} color="#DC2626" />
           <View style={styles.warningContent}>
-            <Text style={styles.warningTitle}>Important to Know</Text>
+            <Text style={styles.warningTitle}>{t("final_polish.advanceexplanation_important_to_know")}</Text>
             <Text style={styles.warningText}>
               If you miss a withholding (default), your XnScore drops by 20 points and you may be restricted from future circles. Always ensure your circle payout will cover your advance.
             </Text>
@@ -334,7 +334,7 @@ export default function AdvanceExplanationScreen() {
           style={styles.ctaButton}
           onPress={() => navigation.navigate("AdvanceHub")}
         >
-          <Text style={styles.ctaButtonText}>View My Advance Options</Text>
+          <Text style={styles.ctaButtonText}>{t("final_polish.advanceexplanation_view_my_advance_options")}</Text>
           <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
         </TouchableOpacity>
       </View>

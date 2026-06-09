@@ -83,7 +83,7 @@ export default function FeedSettingsScreen() {
         </View>
 
         {/* Privacy Settings */}
-        <Text style={styles.sectionTitle}>Privacy</Text>
+        <Text style={styles.sectionTitle}>{t("final_polish.feedsettings_privacy")}</Text>
 
         <View style={styles.card}>
           <SettingRow

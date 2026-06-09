@@ -565,13 +565,13 @@ const StepPayment: React.FC<{
           style={[styles.toggleButton, data.payment_type === 'lump_sum' && styles.toggleButtonActive]}
           onPress={() => update({ payment_type: 'lump_sum' })}
         >
-          <Text style={[styles.toggleButtonText, data.payment_type === 'lump_sum' && styles.toggleButtonTextActive]}>Lump Sum</Text>
+          <Text style={[styles.toggleButtonText, data.payment_type === 'lump_sum' && styles.toggleButtonTextActive]}>{t("final_polish.createtripwizard_lump_sum")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.toggleButton, data.payment_type === 'installments' && styles.toggleButtonActive]}
           onPress={() => update({ payment_type: 'installments' })}
         >
-          <Text style={[styles.toggleButtonText, data.payment_type === 'installments' && styles.toggleButtonTextActive]}>Installments</Text>
+          <Text style={[styles.toggleButtonText, data.payment_type === 'installments' && styles.toggleButtonTextActive]}>{t("final_polish.createtripwizard_installments")}</Text>
         </TouchableOpacity>
       </View>
 
@@ -1399,7 +1399,7 @@ const CreateTripWizardScreen: React.FC = () => {
         </TouchableOpacity>
         {currentStep < TOTAL_STEPS - 1 && (
           <TouchableOpacity style={styles.nextBtn} activeOpacity={0.7} onPress={goNext}>
-            <Text style={styles.nextBtnText}>Next</Text>
+            <Text style={styles.nextBtnText}>{t("final_polish.createtripwizard_next")}</Text>
             <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
           </TouchableOpacity>
         )}

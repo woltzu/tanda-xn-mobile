@@ -412,7 +412,7 @@ export default function AdvanceHubScreen() {
         testID="tab_advance_hub"
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
-        <Text style={styles.floatingHelpText}>Help</Text>
+        <Text style={styles.floatingHelpText}>{t("final_polish.advancehub_help")}</Text>
       </TouchableOpacity>
 
       <WalkthroughOverlay
@@ -482,25 +482,25 @@ function PayoutCard({
         {isLocked && (
           <View style={styles.stateBadgeLocked}>
             <Ionicons name="lock-closed" size={12} color="#6B7280" />
-            <Text style={styles.stateBadgeText}>Locked</Text>
+            <Text style={styles.stateBadgeText}>{t("final_polish.advancehub_locked")}</Text>
           </View>
         )}
         {isPreview && (
           <View style={styles.stateBadgePreview}>
             <Ionicons name="eye" size={12} color="#F59E0B" />
-            <Text style={[styles.stateBadgeText, { color: "#F59E0B" }]}>Preview</Text>
+            <Text style={[styles.stateBadgeText, { color: "#F59E0B" }]}>{t("final_polish.advancehub_preview")}</Text>
           </View>
         )}
         {isActive && (
           <View style={styles.stateBadgeActive}>
             <Ionicons name="checkmark-circle" size={12} color="#10B981" />
-            <Text style={[styles.stateBadgeText, { color: "#10B981" }]}>Available</Text>
+            <Text style={[styles.stateBadgeText, { color: "#10B981" }]}>{t("final_polish.advancehub_available")}</Text>
           </View>
         )}
         {hasAdvance && (
           <View style={styles.stateBadgeUsed}>
             <Ionicons name="checkmark-done" size={12} color="#3B82F6" />
-            <Text style={[styles.stateBadgeText, { color: "#3B82F6" }]}>Advanced</Text>
+            <Text style={[styles.stateBadgeText, { color: "#3B82F6" }]}>{t("final_polish.advancehub_advanced")}</Text>
           </View>
         )}
       </View>
@@ -508,13 +508,13 @@ function PayoutCard({
       {/* Payout Details */}
       <View style={styles.payoutDetails}>
         <View style={styles.payoutDetailItem}>
-          <Text style={styles.payoutDetailLabel}>Expected Payout</Text>
+          <Text style={styles.payoutDetailLabel}>{t("final_polish.advancehub_expected_payout")}</Text>
           <Text style={[styles.payoutDetailValue, isLocked && styles.payoutValueLocked]}>
             ${expectedAmount.toLocaleString()}
           </Text>
         </View>
         <View style={styles.payoutDetailItem}>
-          <Text style={styles.payoutDetailLabel}>Payout Date</Text>
+          <Text style={styles.payoutDetailLabel}>{t("final_polish.advancehub_payout_date")}</Text>
           <Text style={[styles.payoutDetailValue, isLocked && styles.payoutValueLocked]}>
             {formatDate(payout.expectedDate)}
           </Text>
@@ -525,13 +525,13 @@ function PayoutCard({
       {!isLocked && (
         <View style={styles.advanceInfoRow}>
           <View style={styles.advanceInfoItem}>
-            <Text style={styles.advanceInfoLabel}>Max Advance</Text>
+            <Text style={styles.advanceInfoLabel}>{t("final_polish.advancehub_max_advance")}</Text>
             <Text style={styles.advanceInfoValue}>
               ${maxAdvance.toLocaleString()} ({maxAdvancePercent}%)
             </Text>
           </View>
           <View style={styles.advanceInfoItem}>
-            <Text style={styles.advanceInfoLabel}>Fee</Text>
+            <Text style={styles.advanceInfoLabel}>{t("final_polish.advancehub_fee")}</Text>
             <Text style={styles.advanceInfoValue}>{advanceFee}%</Text>
           </View>
         </View>
@@ -540,7 +540,7 @@ function PayoutCard({
       {/* Action Area */}
       {isActive && (
         <View style={styles.payoutAction}>
-          <Text style={styles.payoutActionText}>Request Advance</Text>
+          <Text style={styles.payoutActionText}>{t("final_polish.advancehub_request_advance")}</Text>
           <Ionicons name="arrow-forward" size={16} color="#00C6AE" />
         </View>
       )}
