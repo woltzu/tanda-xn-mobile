@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 
 const ORANGE = "#F97316";
@@ -29,6 +30,7 @@ const earnings = [
 
 export default function ProviderDiscoveryScreen() {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -37,7 +39,7 @@ export default function ProviderDiscoveryScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={colors.primaryNavy} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Become a Provider</Text>
+        <Text style={styles.headerTitle}>{t("provider_discovery.header_title")}</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -66,7 +68,7 @@ export default function ProviderDiscoveryScreen() {
 
         {/* Onboarding Steps */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Onboarding steps</Text>
+          <Text style={styles.sectionTitle}>{t("provider_discovery.section_onboarding")}</Text>
           {steps.map((step, i) => (
             <View key={step.num} style={styles.stepRow}>
               <View
@@ -112,7 +114,7 @@ export default function ProviderDiscoveryScreen() {
 
         {/* What You Earn */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>What you earn</Text>
+          <Text style={styles.sectionTitle}>{t("provider_discovery.section_earn")}</Text>
           {earnings.map((item, i) => (
             <View
               key={i}
@@ -141,7 +143,7 @@ export default function ProviderDiscoveryScreen() {
           activeOpacity={0.85}
           onPress={() => navigation.navigate("ProviderProfileSetup")}
         >
-          <Text style={styles.ctaText}>Start My Provider Application</Text>
+          <Text style={styles.ctaText}>{t("provider_discovery.btn_start_app")}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />

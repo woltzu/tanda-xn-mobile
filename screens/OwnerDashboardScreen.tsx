@@ -6,12 +6,14 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useOwnerDashboard } from "../hooks/useMarketplace";
 import { Routes } from "../lib/routes";
 
 export default function OwnerDashboardScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute();
+  const { t } = useTranslation();
   const storeId = (route.params as any)?.storeId ?? "";
   const { dashboard, loading, refresh } = useOwnerDashboard(storeId);
 
@@ -20,7 +22,7 @@ export default function OwnerDashboardScreen() {
   if (!dashboard && !loading) {
     return (
       <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
-        <Text style={{ color: "#6B7280" }}>Store not found</Text>
+        <Text style={{ color: "#6B7280" }}>{t("owner_dashboard.error_not_found")}</Text>
       </View>
     );
   }
@@ -35,7 +37,7 @@ export default function OwnerDashboardScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Dashboard</Text>
+          <Text style={styles.headerTitle}>{t("owner_dashboard.header_title")}</Text>
           <TouchableOpacity
             style={styles.editButton}
             onPress={() => navigation.navigate(Routes.EditStore, { storeId })}
@@ -63,7 +65,7 @@ export default function OwnerDashboardScreen() {
               <View style={[styles.metricCard, { backgroundColor: "#F0FDFB" }]}>
                 <Ionicons name="people" size={20} color="#00C6AE" />
                 <Text style={styles.metricValue}>{stats?.joined ?? 0}/{stats?.total ?? 0}</Text>
-                <Text style={styles.metricLabel}>Members Joined</Text>
+                <Text style={styles.metricLabel}>{t("owner_dashboard.label_members_joined")}</Text>
               </View>
               <View style={[styles.metricCard, { backgroundColor: "#EFF6FF" }]}>
                 <Ionicons name="calendar" size={20} color="#3B82F6" />
@@ -80,7 +82,7 @@ export default function OwnerDashboardScreen() {
                 <Text style={styles.metricValue}>
                   {store?.avgRating ? store.avgRating.toFixed(1) : "—"}
                 </Text>
-                <Text style={styles.metricLabel}>Avg Rating</Text>
+                <Text style={styles.metricLabel}>{t("owner_dashboard.label_avg_rating")}</Text>
               </View>
             </View>
 
@@ -88,7 +90,7 @@ export default function OwnerDashboardScreen() {
             {stats && stats.total > 0 && (
               <View style={styles.inviteProgress}>
                 <View style={styles.inviteHeader}>
-                  <Text style={styles.inviteSectionTitle}>Invite Progress</Text>
+                  <Text style={styles.inviteSectionTitle}>{t("owner_dashboard.section_invite_progress")}</Text>
                   <Text style={styles.inviteCount}>{stats.joined}/{stats.total} joined</Text>
                 </View>
                 <View style={styles.progressBarBg}>
@@ -124,7 +126,7 @@ export default function OwnerDashboardScreen() {
             )}
 
             {/* Quick Actions */}
-            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            <Text style={styles.sectionTitle}>{t("owner_dashboard.section_quick_actions")}</Text>
             <View style={styles.actionsGrid}>
               <TouchableOpacity
                 style={styles.actionCard}
@@ -133,7 +135,7 @@ export default function OwnerDashboardScreen() {
                 <View style={[styles.actionIcon, { backgroundColor: "#EFF6FF" }]}>
                   <Ionicons name="people-outline" size={22} color="#3B82F6" />
                 </View>
-                <Text style={styles.actionLabel}>Invite Members</Text>
+                <Text style={styles.actionLabel}>{t("owner_dashboard.action_invite")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionCard}
@@ -142,7 +144,7 @@ export default function OwnerDashboardScreen() {
                 <View style={[styles.actionIcon, { backgroundColor: "#F0FDFB" }]}>
                   <Ionicons name="storefront-outline" size={22} color="#00C6AE" />
                 </View>
-                <Text style={styles.actionLabel}>Edit Store</Text>
+                <Text style={styles.actionLabel}>{t("owner_dashboard.action_edit_store")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionCard}
@@ -151,7 +153,7 @@ export default function OwnerDashboardScreen() {
                 <View style={[styles.actionIcon, { backgroundColor: "#FEF3C7" }]}>
                   <Ionicons name="list-outline" size={22} color="#F59E0B" />
                 </View>
-                <Text style={styles.actionLabel}>Services</Text>
+                <Text style={styles.actionLabel}>{t("owner_dashboard.action_services")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.actionCard}
@@ -160,7 +162,7 @@ export default function OwnerDashboardScreen() {
                 <View style={[styles.actionIcon, { backgroundColor: "#FCE7F3" }]}>
                   <Ionicons name="calendar-outline" size={22} color="#EC4899" />
                 </View>
-                <Text style={styles.actionLabel}>Bookings</Text>
+                <Text style={styles.actionLabel}>{t("owner_dashboard.action_bookings")}</Text>
               </TouchableOpacity>
             </View>
 
@@ -168,9 +170,9 @@ export default function OwnerDashboardScreen() {
             {dashboard.recentBookings.length > 0 && (
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Recent Bookings</Text>
+                  <Text style={styles.sectionTitle}>{t("owner_dashboard.section_recent_bookings")}</Text>
                   <TouchableOpacity onPress={() => navigation.navigate(Routes.StoreBookings, { storeId })}>
-                    <Text style={styles.seeAll}>See All</Text>
+                    <Text style={styles.seeAll}>{t("owner_dashboard.btn_see_all")}</Text>
                   </TouchableOpacity>
                 </View>
                 {dashboard.recentBookings.slice(0, 5).map(b => (
@@ -203,7 +205,7 @@ export default function OwnerDashboardScreen() {
             {/* Recent Reviews */}
             {dashboard.recentReviews.length > 0 && (
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Recent Reviews</Text>
+                <Text style={styles.sectionTitle}>{t("owner_dashboard.section_recent_reviews")}</Text>
                 {dashboard.recentReviews.slice(0, 3).map(r => (
                   <View key={r.id} style={styles.reviewRow}>
                     <View style={styles.starsRow}>
@@ -222,7 +224,7 @@ export default function OwnerDashboardScreen() {
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Your Services ({dashboard.services.length})</Text>
                 <TouchableOpacity onPress={() => navigation.navigate(Routes.ManageServices, { storeId })}>
-                  <Text style={styles.seeAll}>Manage</Text>
+                  <Text style={styles.seeAll}>{t("owner_dashboard.btn_manage")}</Text>
                 </TouchableOpacity>
               </View>
               {dashboard.services.slice(0, 4).map(s => (
@@ -238,7 +240,7 @@ export default function OwnerDashboardScreen() {
                   onPress={() => navigation.navigate(Routes.ManageServices, { storeId })}
                 >
                   <Ionicons name="add-circle-outline" size={20} color="#00C6AE" />
-                  <Text style={styles.addServiceText}>Add your first service</Text>
+                  <Text style={styles.addServiceText}>{t("owner_dashboard.btn_add_service")}</Text>
                 </TouchableOpacity>
               )}
             </View>

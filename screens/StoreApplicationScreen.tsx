@@ -6,6 +6,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useMarketplaceActions, type StoreCategory } from "../hooks/useMarketplace";
 import { useFormDraft } from "../hooks/useFormDraft";
 
@@ -39,6 +40,7 @@ const CATEGORIES: { key: StoreCategory; icon: string; color: string; label: stri
 
 export default function StoreApplicationScreen() {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const { createStore, creating } = useMarketplaceActions();
 
   const [step, setStep] = useState(0);
@@ -138,14 +140,14 @@ export default function StoreApplicationScreen() {
 
   const handleNext = () => {
     if (step === 0 && !category) {
-      Alert.alert("Required", "Please select a category");
+      Alert.alert(t("store_application.alert_required"), t("store_application.alert_category_required"));
       return;
     }
     if (step === 1) {
-      if (!businessName.trim()) { Alert.alert("Required", "Business name is required"); return; }
-      if (!ownerName.trim()) { Alert.alert("Required", "Your name is required"); return; }
-      if (!phone.trim()) { Alert.alert("Required", "Phone number is required"); return; }
-      if (!city.trim()) { Alert.alert("Required", "City is required"); return; }
+      if (!businessName.trim()) { Alert.alert(t("store_application.alert_required"), t("store_application.alert_name_required")); return; }
+      if (!ownerName.trim()) { Alert.alert(t("store_application.alert_required"), t("store_application.alert_yourname_required")); return; }
+      if (!phone.trim()) { Alert.alert(t("store_application.alert_required"), t("store_application.alert_phone_required")); return; }
+      if (!city.trim()) { Alert.alert(t("store_application.alert_required"), t("store_application.alert_city_required")); return; }
     }
     setStep(step + 1);
   };
@@ -171,7 +173,7 @@ export default function StoreApplicationScreen() {
         [{ text: "Set Up Services", onPress: () => navigation.replace("OwnerDashboard", { storeId: store.id }) }]
       );
     } catch (err: any) {
-      Alert.alert("Error", err?.message ?? "Could not create store");
+      Alert.alert(t("store_application.alert_error"), err?.message ?? t("store_application.alert_failed_create"));
     }
   };
 
@@ -184,7 +186,7 @@ export default function StoreApplicationScreen() {
           <TouchableOpacity style={styles.backButton} onPress={() => step > 0 ? setStep(step - 1) : navigation.goBack()}>
             <Ionicons name={step > 0 ? "arrow-back" : "close"} size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>List Your Business</Text>
+          <Text style={styles.headerTitle}>{t("store_application.header_title")}</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -214,14 +216,14 @@ export default function StoreApplicationScreen() {
                   onPress={handleRestoreDraft}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.draftBannerButtonText}>Restore</Text>
+                  <Text style={styles.draftBannerButtonText}>{t("store_application.btn_restore")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.draftBannerButton}
                   onPress={handleDiscardDraft}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.draftBannerButtonText}>Discard</Text>
+                  <Text style={styles.draftBannerButtonText}>{t("store_application.btn_discard")}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -230,7 +232,7 @@ export default function StoreApplicationScreen() {
           {/* Step 0: Category Selection */}
           {step === 0 && (
             <>
-              <Text style={styles.sectionLabel}>Select your category</Text>
+              <Text style={styles.sectionLabel}>{t("store_application.section_category")}</Text>
               <View style={styles.categoryGrid}>
                 {CATEGORIES.map(cat => (
                   <TouchableOpacity
@@ -266,24 +268,24 @@ export default function StoreApplicationScreen() {
           {/* Step 1: Business Details */}
           {step === 1 && (
             <>
-              <Text style={styles.sectionLabel}>Tell us about your business</Text>
+              <Text style={styles.sectionLabel}>{t("store_application.section_about")}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="Business name"
+                placeholder={t("store_application.placeholder_business")}
                 placeholderTextColor="#9CA3AF"
                 value={businessName}
                 onChangeText={setBusinessName}
               />
               <TextInput
                 style={styles.input}
-                placeholder="Your name"
+                placeholder={t("store_application.placeholder_yourname")}
                 placeholderTextColor="#9CA3AF"
                 value={ownerName}
                 onChangeText={setOwnerName}
               />
               <TextInput
                 style={styles.input}
-                placeholder="Phone number"
+                placeholder={t("store_application.placeholder_phone")}
                 placeholderTextColor="#9CA3AF"
                 value={phone}
                 onChangeText={setPhone}
@@ -292,7 +294,7 @@ export default function StoreApplicationScreen() {
               <View style={styles.rowInputs}>
                 <TextInput
                   style={[styles.input, { flex: 2 }]}
-                  placeholder="City"
+                  placeholder={t("store_application.placeholder_city")}
                   placeholderTextColor="#9CA3AF"
                   value={city}
                   onChangeText={setCity}

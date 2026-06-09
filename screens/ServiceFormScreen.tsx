@@ -38,6 +38,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useMarketplaceActions } from "../hooks/useMarketplace";
 import type { StoreService } from "../services/MarketplaceEngine";
@@ -60,6 +61,7 @@ type ServiceFormRouteProp = RouteProp<
 export default function ServiceFormScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<ServiceFormRouteProp>();
+  const { t } = useTranslation();
   const { storeId, service } = route.params ?? { storeId: "" };
 
   const isEditing = !!service;
@@ -80,12 +82,12 @@ export default function ServiceFormScreen() {
   const handleSave = async () => {
     // Validate required fields
     if (!name.trim()) {
-      Alert.alert("Name required", "Please enter a name for this service.");
+      Alert.alert(t("service_form.alert_name_required_title"), t("service_form.alert_name_required_body"));
       return;
     }
     const priceNum = parseFloat(price);
     if (!price || isNaN(priceNum) || priceNum < 0) {
-      Alert.alert("Valid price required", "Enter a price like 25 or 25.50.");
+      Alert.alert(t("service_form.alert_price_required_title"), t("service_form.alert_price_required_body"));
       return;
     }
     const priceCents = Math.round(priceNum * 100);
@@ -105,7 +107,7 @@ export default function ServiceFormScreen() {
     }
 
     if (!storeId) {
-      Alert.alert("Error", "Missing store ID. Please go back and try again.");
+      Alert.alert(t("service_form.alert_error"), t("service_form.alert_missing_store"));
       return;
     }
 
@@ -178,7 +180,7 @@ export default function ServiceFormScreen() {
               style={styles.input}
               value={name}
               onChangeText={setName}
-              placeholder="e.g. 30-min consultation"
+              placeholder={t("service_form.placeholder_consultation")}
               placeholderTextColor="#9CA3AF"
               maxLength={120}
             />
@@ -193,7 +195,7 @@ export default function ServiceFormScreen() {
                 style={[styles.input, styles.priceInput]}
                 value={price}
                 onChangeText={setPrice}
-                placeholder="25.00"
+                placeholder={t("service_form.placeholder_price")}
                 placeholderTextColor="#9CA3AF"
                 keyboardType="decimal-pad"
                 maxLength={10}
@@ -211,7 +213,7 @@ export default function ServiceFormScreen() {
               style={styles.input}
               value={duration}
               onChangeText={setDuration}
-              placeholder="e.g. 30 — optional"
+              placeholder={t("service_form.placeholder_duration")}
               placeholderTextColor="#9CA3AF"
               keyboardType="number-pad"
               maxLength={5}
@@ -223,12 +225,12 @@ export default function ServiceFormScreen() {
 
           {/* Description (optional) */}
           <View style={styles.field}>
-            <Text style={styles.label}>Description</Text>
+            <Text style={styles.label}>{t("service_form.label_description")}</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
               value={description}
               onChangeText={setDescription}
-              placeholder="What's included?"
+              placeholder={t("service_form.placeholder_description")}
               placeholderTextColor="#9CA3AF"
               multiline
               numberOfLines={4}
@@ -245,7 +247,7 @@ export default function ServiceFormScreen() {
               disabled={saving}
               accessibilityRole="button"
             >
-              <Text style={styles.outlineButtonText}>Cancel</Text>
+              <Text style={styles.outlineButtonText}>{t("service_form.btn_cancel")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.saveButton, saving && styles.saveButtonDisabled]}

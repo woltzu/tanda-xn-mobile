@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 
 const ORANGE = "#F97316";
@@ -26,6 +27,7 @@ const providerTypes: { key: ProviderType; emoji: string; title: string; desc: st
 
 export default function ProviderProfileSetupScreen() {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
   const [selectedType, setSelectedType] = useState<ProviderType>("organizer");
   const [businessName, setBusinessName] = useState("");
   const [bio, setBio] = useState("");
@@ -39,7 +41,7 @@ export default function ProviderProfileSetupScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color={colors.primaryNavy} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Your Profile</Text>
+        <Text style={styles.headerTitle}>{t("provider_profile_setup.header_title")}</Text>
         <View style={styles.stepBadge}>
           <Text style={styles.stepBadgeText}>1/3</Text>
         </View>
@@ -51,7 +53,7 @@ export default function ProviderProfileSetupScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Provider Type */}
-        <Text style={styles.sectionLabel}>What best describes your business?</Text>
+        <Text style={styles.sectionLabel}>{t("provider_profile_setup.section_describes")}</Text>
 
         <View style={styles.typeGrid}>
           {providerTypes.map((t) => {
@@ -81,16 +83,16 @@ export default function ProviderProfileSetupScreen() {
           <Text style={styles.inputLabel}>Business / organizer name</Text>
           <TextInput
             style={styles.input}
-            placeholder="Your business name"
+            placeholder={t("provider_profile_setup.placeholder_business_name")}
             placeholderTextColor={colors.textSecondary}
             value={businessName}
             onChangeText={setBusinessName}
           />
 
-          <Text style={[styles.inputLabel, { marginTop: spacing.lg }]}>Short bio</Text>
+          <Text style={[styles.inputLabel, { marginTop: spacing.lg }]}>{t("provider_profile_setup.label_short_bio")}</Text>
           <TextInput
             style={[styles.input, styles.inputMultiline]}
-            placeholder="Tell the community about your trips..."
+            placeholder={t("provider_profile_setup.placeholder_bio")}
             placeholderTextColor={colors.textSecondary}
             multiline
             numberOfLines={4}
@@ -101,10 +103,10 @@ export default function ProviderProfileSetupScreen() {
 
           <View style={styles.rowFields}>
             <View style={styles.halfField}>
-              <Text style={styles.inputLabel}>Years operating</Text>
+              <Text style={styles.inputLabel}>{t("provider_profile_setup.label_years")}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. 5"
+                placeholder={t("provider_profile_setup.placeholder_years")}
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="numeric"
                 value={yearsOperating}
@@ -112,10 +114,10 @@ export default function ProviderProfileSetupScreen() {
               />
             </View>
             <View style={styles.halfField}>
-              <Text style={styles.inputLabel}>Avg group size</Text>
+              <Text style={styles.inputLabel}>{t("provider_profile_setup.label_avg_group")}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. 20"
+                placeholder={t("provider_profile_setup.placeholder_avg_group")}
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="numeric"
                 value={avgGroupSize}

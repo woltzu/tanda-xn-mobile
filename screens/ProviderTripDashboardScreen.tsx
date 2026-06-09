@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 
 const ORANGE_PRIMARY = "#F97316";
@@ -49,6 +50,7 @@ const TRAVELERS = [
 
 const ProviderTripDashboardScreen = () => {
   const navigation = useNavigation<any>();
+  const { t } = useTranslation();
 
   const progressPercent = 43;
   const collected = 5400;
@@ -66,7 +68,7 @@ const ProviderTripDashboardScreen = () => {
         >
           <Ionicons name="arrow-back" size={24} color={colors.primaryNavy} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Trips</Text>
+        <Text style={styles.headerTitle}>{t("provider_trip_dashboard.header_title")}</Text>
         <TouchableOpacity
           onPress={() => navigation.navigate("CreateTripListing")}
         >
@@ -115,11 +117,11 @@ const ProviderTripDashboardScreen = () => {
         </View>
 
         {/* Payout Timeline Section */}
-        <Text style={styles.sectionHeader}>Payout timeline</Text>
+        <Text style={styles.sectionHeader}>{t("provider_trip_dashboard.section_payout")}</Text>
         <View style={styles.card}>
           <View style={styles.payoutRow}>
             <Text style={styles.payoutEmoji}>💳</Text>
-            <Text style={styles.payoutLabel}>Deposits collected so far</Text>
+            <Text style={styles.payoutLabel}>{t("provider_trip_dashboard.label_deposits")}</Text>
             <Text style={[styles.payoutValue, { color: colors.accentTeal }]}>
               $3,000
             </Text>
@@ -137,7 +139,7 @@ const ProviderTripDashboardScreen = () => {
           <View style={styles.divider} />
           <View style={styles.payoutRow}>
             <Text style={styles.payoutEmoji}>📅</Text>
-            <Text style={styles.payoutLabel}>Estimated booking date</Text>
+            <Text style={styles.payoutLabel}>{t("provider_trip_dashboard.label_estimated")}</Text>
             <Text
               style={[styles.payoutValue, { color: colors.textSecondary }]}
             >
@@ -148,7 +150,7 @@ const ProviderTripDashboardScreen = () => {
 
         {/* Travelers Section */}
         <View style={styles.sectionRow}>
-          <Text style={styles.sectionHeader}>Travelers</Text>
+          <Text style={styles.sectionHeader}>{t("provider_trip_dashboard.section_travelers")}</Text>
           <TouchableOpacity>
             <Text style={styles.sectionLink}>All 10</Text>
           </TouchableOpacity>
