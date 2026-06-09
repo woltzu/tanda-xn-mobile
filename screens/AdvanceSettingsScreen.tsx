@@ -38,6 +38,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -111,6 +112,7 @@ function Toggle({
 export default function AdvanceSettingsScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<AdvanceSettingsRouteProp>();
+  const { t } = useTranslation();
 
   const xnScore = route.params?.user?.xnScore ?? 78;
   const activeAdvance =
@@ -193,8 +195,8 @@ export default function AdvanceSettingsScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Advance Settings</Text>
-              <Text style={styles.headerSubtitle}>Manage your advance</Text>
+              <Text style={styles.headerTitle}>{t("advance_settings.header_title")}</Text>
+              <Text style={styles.headerSubtitle}>{t("advance_settings.header_subtitle")}</Text>
             </View>
           </View>
         </LinearGradient>
@@ -204,14 +206,14 @@ export default function AdvanceSettingsScreen() {
           {activeAdvance && (
             <View style={styles.sectionCard}>
               <View style={styles.activeHeader}>
-                <Text style={styles.sectionTitle}>Active Advance</Text>
+                <Text style={styles.sectionTitle}>{t("advance_settings.section_active")}</Text>
                 <View style={styles.statusBadge}>
                   <Text style={styles.statusBadgeText}>On Track ✓</Text>
                 </View>
               </View>
               <View style={styles.activeRow}>
                 <View>
-                  <Text style={styles.activeLabel}>Amount Due</Text>
+                  <Text style={styles.activeLabel}>{t("advance_settings.label_amount_due")}</Text>
                   <Text style={styles.activeAmount}>
                     ${activeAdvance.totalDue}
                   </Text>
@@ -231,7 +233,7 @@ export default function AdvanceSettingsScreen() {
 
           {/* Quick actions grid */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Quick Actions</Text>
+            <Text style={styles.sectionTitle}>{t("advance_settings.section_quick")}</Text>
             <View style={styles.actionsGrid}>
               {quickActions.map((action) => (
                 <TouchableOpacity
@@ -287,7 +289,7 @@ export default function AdvanceSettingsScreen() {
             </Text>
             <View style={styles.toggleRow}>
               <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={styles.toggleLabel}>Push Notifications</Text>
+                <Text style={styles.toggleLabel}>{t("advance_settings.toggle_push")}</Text>
                 <Text style={styles.toggleHint}>
                   Withholding reminders & updates
                 </Text>
@@ -301,7 +303,7 @@ export default function AdvanceSettingsScreen() {
             <View style={styles.notifDivider} />
             <View style={styles.toggleRow}>
               <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={styles.toggleLabel}>Email Receipts</Text>
+                <Text style={styles.toggleLabel}>{t("advance_settings.toggle_email")}</Text>
                 <Text style={styles.toggleHint}>
                   Confirmation emails for payments
                 </Text>
@@ -324,7 +326,7 @@ export default function AdvanceSettingsScreen() {
             >
               <View style={styles.moreLeft}>
                 <Ionicons name="time-outline" size={20} color={MUTED} />
-                <Text style={styles.moreText}>Advance History</Text>
+                <Text style={styles.moreText}>{t("advance_settings.more_history")}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={MUTED} />
             </TouchableOpacity>
@@ -337,7 +339,7 @@ export default function AdvanceSettingsScreen() {
             >
               <View style={styles.moreLeft}>
                 <Ionicons name="chatbubble-outline" size={20} color={MUTED} />
-                <Text style={styles.moreText}>Contact Support</Text>
+                <Text style={styles.moreText}>{t("advance_settings.more_support")}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={MUTED} />
             </TouchableOpacity>
@@ -349,7 +351,7 @@ export default function AdvanceSettingsScreen() {
               <Text style={styles.scoreCircleText}>{xnScore}</Text>
             </View>
             <View>
-              <Text style={styles.scoreTitle}>Your XnScore</Text>
+              <Text style={styles.scoreTitle}>{t("advance_settings.score_title")}</Text>
               <Text style={styles.scoreBody}>
                 On-time repayment keeps your score healthy
               </Text>

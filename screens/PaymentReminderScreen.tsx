@@ -43,6 +43,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -119,6 +120,7 @@ function urgencyTheme(urgency: Urgency) {
 export default function PaymentReminderScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<PaymentReminderRouteProp>();
+  const { t } = useTranslation();
 
   const reminder = route.params?.reminder ?? DEFAULT_REMINDER;
   const walletBalance = route.params?.walletBalance ?? 450;
@@ -217,7 +219,7 @@ export default function PaymentReminderScreen() {
                 />
               </View>
               <View>
-                <Text style={styles.sufficiencyLabel}>Your Payout</Text>
+                <Text style={styles.sufficiencyLabel}>{t("payment_reminder.label_your_payout")}</Text>
                 <Text style={styles.sufficiencyAmount}>
                   ${reminder.payoutAmount}
                 </Text>
@@ -257,7 +259,7 @@ export default function PaymentReminderScreen() {
               </View>
               <View style={styles.breakdownDivider} />
               <View style={styles.breakdownRow}>
-                <Text style={styles.breakdownLabelStrong}>You'll receive</Text>
+                <Text style={styles.breakdownLabelStrong}>{t("payment_reminder.label_youll_receive")}</Text>
                 <Text style={styles.breakdownTotal}>
                   ${reminder.remainingAfter}
                 </Text>
@@ -275,7 +277,7 @@ export default function PaymentReminderScreen() {
                 style={{ marginTop: 2 }}
               />
               <View style={{ flex: 1 }}>
-                <Text style={styles.warningTitle}>XnScore at Risk</Text>
+                <Text style={styles.warningTitle}>{t("payment_reminder.warning_title")}</Text>
                 <Text style={styles.warningBody}>
                   If this withholding fails, your XnScore will drop 20 points
                   and you may be restricted from future advances and circles.
@@ -286,7 +288,7 @@ export default function PaymentReminderScreen() {
 
           {/* Actions */}
           <View style={styles.sectionCard}>
-            <Text style={styles.actionsTitle}>Want to pay early?</Text>
+            <Text style={styles.actionsTitle}>{t("payment_reminder.actions_title")}</Text>
             <Text style={styles.actionsBody}>
               Paying early saves you fees and earns bonus XnScore points. Your
               full payout will then be available on {reminder.withholdingDate}.
@@ -305,7 +307,7 @@ export default function PaymentReminderScreen() {
               accessibilityRole="button"
               accessibilityLabel="View advance details"
             >
-              <Text style={styles.viewDetailsText}>View Advance Details</Text>
+              <Text style={styles.viewDetailsText}>{t("payment_reminder.btn_view_details")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -320,7 +322,7 @@ export default function PaymentReminderScreen() {
             accessibilityRole="button"
             accessibilityLabel="Remind me later"
           >
-            <Text style={styles.bottomOutlineText}>Remind Me Later</Text>
+            <Text style={styles.bottomOutlineText}>{t("payment_reminder.btn_remind_later")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.bottomNavyButton}
@@ -328,7 +330,7 @@ export default function PaymentReminderScreen() {
             accessibilityRole="button"
             accessibilityLabel="Got it"
           >
-            <Text style={styles.bottomNavyText}>Got It</Text>
+            <Text style={styles.bottomNavyText}>{t("payment_reminder.btn_got_it")}</Text>
           </TouchableOpacity>
         </View>
       </View>

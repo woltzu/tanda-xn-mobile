@@ -48,6 +48,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useExplanation } from "../hooks/useExplainableAI";
@@ -149,6 +150,7 @@ function rejectionMessage(rejection: Rejection) {
 export default function AdvanceRejectedScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<AdvanceRejectedRouteProp>();
+  const { t } = useTranslation();
 
   const rejection = route.params?.rejection ?? DEFAULT_REJECTION;
   const improvements = route.params?.improvements ?? DEFAULT_IMPROVEMENTS;
@@ -204,7 +206,7 @@ export default function AdvanceRejectedScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Advance Request</Text>
+            <Text style={styles.headerTitle}>{t("advance_rejected.header_title")}</Text>
             <View style={{ width: 40 }} />
           </View>
 
@@ -227,7 +229,7 @@ export default function AdvanceRejectedScreen() {
                 <View style={styles.explanationIconBox}>
                   <Ionicons name="information-circle" size={18} color="#FFFFFF" />
                 </View>
-                <Text style={styles.explanationTitle}>Why this decision</Text>
+                <Text style={styles.explanationTitle}>{t("advance_rejected.explanation_title")}</Text>
               </View>
               <Text style={styles.explanationBody}>{explanationText}</Text>
             </View>
@@ -238,13 +240,13 @@ export default function AdvanceRejectedScreen() {
             <View style={styles.scoreCard}>
               <View style={styles.scoreHeader}>
                 <View>
-                  <Text style={styles.scoreLabel}>Your XnScore</Text>
+                  <Text style={styles.scoreLabel}>{t("advance_rejected.label_your_xnscore")}</Text>
                   <Text style={styles.scoreCurrent}>
                     {rejection.currentXnScore}
                   </Text>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
-                  <Text style={styles.scoreLabel}>Required</Text>
+                  <Text style={styles.scoreLabel}>{t("advance_rejected.label_required")}</Text>
                   <Text style={styles.scoreRequired}>
                     {rejection.requiredXnScore}
                   </Text>
@@ -320,7 +322,7 @@ export default function AdvanceRejectedScreen() {
                   <Ionicons name="checkmark" size={24} color="#FFFFFF" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.alternativeEyebrow}>YOU QUALIFY FOR</Text>
+                  <Text style={styles.alternativeEyebrow}>{t("advance_rejected.alternative_eyebrow")}</Text>
                   <Text style={styles.alternativeName}>
                     {rejection.alternativeProduct.name}
                   </Text>
@@ -365,7 +367,7 @@ export default function AdvanceRejectedScreen() {
           accessibilityRole="button"
           accessibilityLabel="Back to home"
         >
-          <Text style={styles.homeButtonText}>Back to Home</Text>
+          <Text style={styles.homeButtonText}>{t("advance_rejected.btn_back_home")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

@@ -35,6 +35,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -110,6 +111,7 @@ type ComponentType = "base" | "add" | "discount";
 export default function RateBreakdownScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<RateBreakdownRouteProp>();
+  const { t } = useTranslation();
 
   const user = route.params?.user ?? DEFAULT_USER;
   const calc = route.params?.rateCalculation ?? DEFAULT_CALC;
@@ -201,7 +203,7 @@ export default function RateBreakdownScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Why This Rate?</Text>
+              <Text style={styles.headerTitle}>{t("rate_breakdown.header_title")}</Text>
               <Text style={styles.headerSubtitle}>
                 Your personalized rate breakdown
               </Text>
@@ -209,7 +211,7 @@ export default function RateBreakdownScreen() {
           </View>
 
           <View style={styles.rateBlock}>
-            <Text style={styles.rateLabel}>Your Rate</Text>
+            <Text style={styles.rateLabel}>{t("rate_breakdown.label_your_rate")}</Text>
             <Text style={styles.rateValue}>{calc.finalRate}%</Text>
             <Text style={styles.rateSub}>
               Based on XnScore {user.xnScore} • {user.tier} Member
@@ -220,7 +222,7 @@ export default function RateBreakdownScreen() {
         <View style={styles.contentWrap}>
           {/* Rate calculation */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>How your rate is calculated</Text>
+            <Text style={styles.sectionTitle}>{t("rate_breakdown.section_calculated")}</Text>
             <View style={styles.componentsList}>
               {rateComponents.map((component, idx) => (
                 <View
@@ -257,14 +259,14 @@ export default function RateBreakdownScreen() {
             </View>
 
             <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Your Final Rate</Text>
+              <Text style={styles.totalLabel}>{t("rate_breakdown.label_final_rate")}</Text>
               <Text style={styles.totalValue}>{calc.finalRate}%</Text>
             </View>
           </View>
 
           {/* Comparison */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Compare with alternatives</Text>
+            <Text style={styles.sectionTitle}>{t("rate_breakdown.section_compare")}</Text>
             <View style={styles.comparisonList}>
               <ComparisonRow
                 label="Payday lender"
@@ -362,7 +364,7 @@ export default function RateBreakdownScreen() {
 
           {/* XnScore rate tiers — navy */}
           <View style={styles.tiersCard}>
-            <Text style={styles.tiersTitle}>XnScore Rate Tiers</Text>
+            <Text style={styles.tiersTitle}>{t("rate_breakdown.tiers_title")}</Text>
             <View style={styles.tiersList}>
               {tiers.map((tier, idx) => (
                 <View

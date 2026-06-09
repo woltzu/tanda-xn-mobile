@@ -37,6 +37,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 
 const NAVY = "#0A2342";
@@ -119,6 +120,7 @@ function Toggle({
 export default function AutopaySetupScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<AutopaySetupRouteProp>();
+  const { t } = useTranslation();
 
   const activeAdvance = route.params?.activeAdvance ?? DEFAULT_ADVANCE;
   const paymentMethods = route.params?.paymentMethods ?? DEFAULT_METHODS;
@@ -165,7 +167,7 @@ export default function AutopaySetupScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Repayment Settings</Text>
+              <Text style={styles.headerTitle}>{t("autopay_setup.header_title")}</Text>
               <Text style={styles.headerSubtitle}>
                 Manage your advance repayment
               </Text>
@@ -183,7 +185,7 @@ export default function AutopaySetupScreen() {
               style={{ marginTop: 2 }}
             />
             <View style={{ flex: 1 }}>
-              <Text style={styles.infoTitle}>How repayment works</Text>
+              <Text style={styles.infoTitle}>{t("autopay_setup.info_title")}</Text>
               <Text style={styles.infoBody}>
                 By default, your advance is{" "}
                 <Text style={styles.infoStrong}>
@@ -200,10 +202,10 @@ export default function AutopaySetupScreen() {
 
           {/* Current advance */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Current Advance</Text>
+            <Text style={styles.sectionTitle}>{t("autopay_setup.section_current")}</Text>
             <View style={styles.advanceRow}>
               <View>
-                <Text style={styles.advanceLabel}>Amount due</Text>
+                <Text style={styles.advanceLabel}>{t("autopay_setup.label_amount_due")}</Text>
                 <Text style={styles.advanceAmount}>
                   ${activeAdvance.totalDue}
                 </Text>
@@ -240,7 +242,7 @@ export default function AutopaySetupScreen() {
 
             {autopayEnabled && (
               <View style={{ marginTop: 16 }}>
-                <Text style={styles.fieldLabelSmall}>Pay from</Text>
+                <Text style={styles.fieldLabelSmall}>{t("autopay_setup.field_pay_from")}</Text>
                 <View style={styles.methodsList}>
                   {paymentMethods.map((method) => {
                     const selected = selectedMethod === method.id;
@@ -298,7 +300,7 @@ export default function AutopaySetupScreen() {
 
           {/* Reminder days */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Reminder Before Withholding</Text>
+            <Text style={styles.sectionTitle}>{t("autopay_setup.section_reminder")}</Text>
             <Text style={styles.reminderHint}>
               Get notified before your payout withholding date
             </Text>
@@ -352,7 +354,7 @@ export default function AutopaySetupScreen() {
           accessibilityRole="button"
           accessibilityLabel="Save settings"
         >
-          <Text style={styles.primaryButtonText}>Save Settings</Text>
+          <Text style={styles.primaryButtonText}>{t("autopay_setup.btn_save")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

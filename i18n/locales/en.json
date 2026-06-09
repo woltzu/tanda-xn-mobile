@@ -2667,5 +2667,68 @@
     "compare_label": "Compare Your Options",
     "compare_eyebrow": "WAIT FOR PAYOUT",
     "field_pay_from": "Pay From"
+  },
+  "payment_failed": {
+    "section_details": "Payment Details",
+    "section_how_fix": "How to Fix This",
+    "btn_retry": "Retry Payment",
+    "help_title": "Need help?",
+    "btn_hardship": "Request Hardship",
+    "btn_contact_support": "Contact Support"
+  },
+  "payment_reminder": {
+    "label_your_payout": "Your Payout",
+    "label_youll_receive": "You'll receive",
+    "warning_title": "XnScore at Risk",
+    "actions_title": "Want to pay early?",
+    "btn_view_details": "View Advance Details",
+    "btn_remind_later": "Remind Me Later",
+    "btn_got_it": "Got It"
+  },
+  "hardship_request": {
+    "header_title": "Hardship Assistance",
+    "header_subtitle": "We're here to help",
+    "section_current": "Current Advance",
+    "label_amount_due": "Amount Due",
+    "label_due_date": "Due Date",
+    "placeholder_context": "Share any additional context that might help us understand your situation...",
+    "next_title": "What happens next"
+  },
+  "advance_rejected": {
+    "header_title": "Advance Request",
+    "explanation_title": "Why this decision",
+    "label_your_xnscore": "Your XnScore",
+    "label_required": "Required",
+    "alternative_eyebrow": "YOU QUALIFY FOR",
+    "btn_back_home": "Back to Home"
+  },
+  "autopay_setup": {
+    "header_title": "Repayment Settings",
+    "info_title": "How repayment works",
+    "section_current": "Current Advance",
+    "label_amount_due": "Amount due",
+    "field_pay_from": "Pay from",
+    "section_reminder": "Reminder Before Withholding",
+    "btn_save": "Save Settings"
+  },
+  "rate_breakdown": {
+    "header_title": "Why This Rate?",
+    "label_your_rate": "Your Rate",
+    "section_calculated": "How your rate is calculated",
+    "label_final_rate": "Your Final Rate",
+    "section_compare": "Compare with alternatives",
+    "tiers_title": "XnScore Rate Tiers"
+  },
+  "advance_settings": {
+    "header_title": "Advance Settings",
+    "header_subtitle": "Manage your advance",
+    "section_active": "Active Advance",
+    "label_amount_due": "Amount Due",
+    "section_quick": "Quick Actions",
+    "toggle_push": "Push Notifications",
+    "toggle_email": "Email Receipts",
+    "more_history": "Advance History",
+    "more_support": "Contact Support",
+    "score_title": "Your XnScore"
   }
 }

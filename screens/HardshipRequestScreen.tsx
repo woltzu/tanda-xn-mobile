@@ -43,6 +43,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 
 const NAVY = "#0A2342";
@@ -138,6 +139,7 @@ const WHAT_NEXT = [
 export default function HardshipRequestScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<HardshipRequestRouteProp>();
+  const { t } = useTranslation();
 
   const advance = route.params?.advance ?? {
     ...DEFAULT_ADVANCE,
@@ -195,8 +197,8 @@ export default function HardshipRequestScreen() {
                 <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
               </TouchableOpacity>
               <View style={{ flex: 1 }}>
-                <Text style={styles.headerTitle}>Hardship Assistance</Text>
-                <Text style={styles.headerSubtitle}>We're here to help</Text>
+                <Text style={styles.headerTitle}>{t("hardship_request.header_title")}</Text>
+                <Text style={styles.headerSubtitle}>{t("hardship_request.header_subtitle")}</Text>
               </View>
             </View>
           </LinearGradient>
@@ -219,14 +221,14 @@ export default function HardshipRequestScreen() {
 
             {/* Current advance */}
             <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Current Advance</Text>
+              <Text style={styles.sectionTitle}>{t("hardship_request.section_current")}</Text>
               <View style={styles.advanceRow}>
                 <View>
-                  <Text style={styles.advanceLabel}>Amount Due</Text>
+                  <Text style={styles.advanceLabel}>{t("hardship_request.label_amount_due")}</Text>
                   <Text style={styles.advanceAmount}>${advance.amountDue}</Text>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
-                  <Text style={styles.advanceLabel}>Due Date</Text>
+                  <Text style={styles.advanceLabel}>{t("hardship_request.label_due_date")}</Text>
                   <Text style={styles.advanceDate}>
                     {advance.withholdingDate}
                   </Text>
@@ -288,7 +290,7 @@ export default function HardshipRequestScreen() {
                 style={styles.textarea}
                 value={additionalInfo}
                 onChangeText={setAdditionalInfo}
-                placeholder="Share any additional context that might help us understand your situation..."
+                placeholder={t("hardship_request.placeholder_context")}
                 placeholderTextColor="#9CA3AF"
                 multiline
                 numberOfLines={4}
@@ -298,7 +300,7 @@ export default function HardshipRequestScreen() {
 
             {/* What happens next */}
             <View style={styles.nextCard}>
-              <Text style={styles.nextTitle}>What happens next</Text>
+              <Text style={styles.nextTitle}>{t("hardship_request.next_title")}</Text>
               <View style={styles.nextList}>
                 {WHAT_NEXT.map((item, idx) => (
                   <View key={idx} style={styles.nextRow}>

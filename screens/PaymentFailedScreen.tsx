@@ -40,6 +40,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 
@@ -129,6 +130,7 @@ function failureMessage(failure: FailureDetails) {
 export default function PaymentFailedScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<PaymentFailedRouteProp>();
+  const { t } = useTranslation();
   const failure = route.params?.failureDetails ?? DEFAULT_FAILURE;
   const grace = route.params?.gracePeriod ?? DEFAULT_GRACE;
   const message = failureMessage(failure);
@@ -201,7 +203,7 @@ export default function PaymentFailedScreen() {
 
           {/* Payment details */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Payment Details</Text>
+            <Text style={styles.sectionTitle}>{t("payment_failed.section_details")}</Text>
             <View style={styles.detailsList}>
               <DetailRow label="Advance ID" value={failure.advanceId} />
               <DetailRow
@@ -231,7 +233,7 @@ export default function PaymentFailedScreen() {
 
           {/* Recovery options */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>How to Fix This</Text>
+            <Text style={styles.sectionTitle}>{t("payment_failed.section_how_fix")}</Text>
             <View style={styles.optionsList}>
               {isInsufficient && (
                 <TouchableOpacity
@@ -264,14 +266,14 @@ export default function PaymentFailedScreen() {
                 accessibilityLabel="Retry payment"
               >
                 <Ionicons name="refresh" size={18} color={NAVY} />
-                <Text style={styles.outlineRowText}>Retry Payment</Text>
+                <Text style={styles.outlineRowText}>{t("payment_failed.btn_retry")}</Text>
               </TouchableOpacity>
             </View>
           </View>
 
           {/* Help row */}
           <View style={styles.helpCard}>
-            <Text style={styles.helpTitle}>Need help?</Text>
+            <Text style={styles.helpTitle}>{t("payment_failed.help_title")}</Text>
             <View style={styles.helpRow}>
               <TouchableOpacity
                 style={styles.helpButton}
@@ -279,7 +281,7 @@ export default function PaymentFailedScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Request hardship"
               >
-                <Text style={styles.helpButtonText}>Request Hardship</Text>
+                <Text style={styles.helpButtonText}>{t("payment_failed.btn_hardship")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.helpButton}
@@ -287,7 +289,7 @@ export default function PaymentFailedScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Contact support"
               >
-                <Text style={styles.helpButtonText}>Contact Support</Text>
+                <Text style={styles.helpButtonText}>{t("payment_failed.btn_contact_support")}</Text>
               </TouchableOpacity>
             </View>
           </View>

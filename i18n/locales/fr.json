@@ -2667,5 +2667,68 @@
     "compare_label": "Comparez vos options",
     "compare_eyebrow": "ATTENDRE LE PAIEMENT",
     "field_pay_from": "Payer depuis"
+  },
+  "payment_failed": {
+    "section_details": "Détails du paiement",
+    "section_how_fix": "Comment corriger cela",
+    "btn_retry": "Réessayer le paiement",
+    "help_title": "Besoin d'aide ?",
+    "btn_hardship": "Demander une assistance",
+    "btn_contact_support": "Contacter le support"
+  },
+  "payment_reminder": {
+    "label_your_payout": "Votre paiement",
+    "label_youll_receive": "Vous recevrez",
+    "warning_title": "XnScore en risque",
+    "actions_title": "Vous voulez payer en avance ?",
+    "btn_view_details": "Voir les détails de l'avance",
+    "btn_remind_later": "Me rappeler plus tard",
+    "btn_got_it": "Compris"
+  },
+  "hardship_request": {
+    "header_title": "Assistance en cas de difficulté",
+    "header_subtitle": "Nous sommes là pour aider",
+    "section_current": "Avance actuelle",
+    "label_amount_due": "Montant dû",
+    "label_due_date": "Date d'échéance",
+    "placeholder_context": "Partagez tout contexte supplémentaire qui pourrait nous aider à comprendre votre situation...",
+    "next_title": "Et après"
+  },
+  "advance_rejected": {
+    "header_title": "Demande d'avance",
+    "explanation_title": "Pourquoi cette décision",
+    "label_your_xnscore": "Votre XnScore",
+    "label_required": "Requis",
+    "alternative_eyebrow": "VOUS QUALIFIEZ POUR",
+    "btn_back_home": "Retour à l'accueil"
+  },
+  "autopay_setup": {
+    "header_title": "Paramètres de remboursement",
+    "info_title": "Comment fonctionne le remboursement",
+    "section_current": "Avance actuelle",
+    "label_amount_due": "Montant dû",
+    "field_pay_from": "Payer depuis",
+    "section_reminder": "Rappel avant retenue",
+    "btn_save": "Enregistrer les paramètres"
+  },
+  "rate_breakdown": {
+    "header_title": "Pourquoi ce taux ?",
+    "label_your_rate": "Votre taux",
+    "section_calculated": "Comment votre taux est calculé",
+    "label_final_rate": "Votre taux final",
+    "section_compare": "Comparer avec les alternatives",
+    "tiers_title": "Paliers de taux XnScore"
+  },
+  "advance_settings": {
+    "header_title": "Paramètres d'avance",
+    "header_subtitle": "Gérez votre avance",
+    "section_active": "Avance active",
+    "label_amount_due": "Montant dû",
+    "section_quick": "Actions rapides",
+    "toggle_push": "Notifications push",
+    "toggle_email": "Reçus par e-mail",
+    "more_history": "Historique des avances",
+    "more_support": "Contacter le support",
+    "score_title": "Votre XnScore"
   }
 }
