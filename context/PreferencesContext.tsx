@@ -6,6 +6,10 @@ import React, {
   ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+// i18n integration -- setLanguage mirrors the selected code into the
+// i18n module's separate AsyncStorage key + calls changeLanguage so
+// every useTranslation() consumer re-renders without an app restart.
+import { setAppLanguage } from "../i18n";
 
 // Available languages
 export const LANGUAGES = [
@@ -446,6 +450,15 @@ export const PreferencesProvider = ({ children }: { children: ReactNode }) => {
   const setLanguage = async (language: Language) => {
     const newPrefs = { ...preferences, language };
     await savePreferences(newPrefs);
+    // i18n mirror: persist the bare code into the i18n-owned key and
+    // flip the live i18next instance so React re-renders pick up the
+    // new translations immediately. Soft-fail -- a storage hiccup in
+    // i18n shouldn't block the preference write.
+    try {
+      await setAppLanguage(language.code);
+    } catch {
+      // ignore
+    }
   };
 
   const addOriginCountry = async (country: OriginCountry) => {

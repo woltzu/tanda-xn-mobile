@@ -1,4 +1,9 @@
 import "react-native-gesture-handler";
+// i18n must be imported before any consumer of useTranslation so the
+// resources + sync default ('en') are registered with i18next by the
+// time the first <I18nextProvider>-implicit render walks the tree.
+import "./i18n";
+import { useTranslation } from "react-i18next";
 import React, { useState, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
@@ -1320,6 +1325,10 @@ function AppContent() {
 }
 
 function MainTabs() {
+  // i18n: localized tab labels. useTranslation triggers a re-render
+  // when i18n.changeLanguage fires, so swapping the user's language
+  // updates the tab bar without an app restart.
+  const { t } = useTranslation();
   const { isEmailVerified, user } = useAuth();
   const navigation = useNavigation<any>();
 
@@ -1410,8 +1419,16 @@ function MainTabs() {
         },
       })}
     >
-      <Tab.Screen name="Home" component={HomeStackScreen} />
-      <Tab.Screen name="Circles" component={CirclesStackScreen} />
+      <Tab.Screen
+        name="Home"
+        component={HomeStackScreen}
+        options={{ tabBarLabel: t("tabs.home") }}
+      />
+      <Tab.Screen
+        name="Circles"
+        component={CirclesStackScreen}
+        options={{ tabBarLabel: t("tabs.circles") }}
+      />
       {/* Action tab key is preserved -- the center-button visual is keyed
           off route.name === "Action" in the tabBarIcon switch above --
           but the component now points at the SyncStack (feat(syncstream)
@@ -1424,8 +1441,16 @@ function MainTabs() {
           tabBarLabel: "",
         }}
       />
-      <Tab.Screen name="Market" component={MarketStackScreen} />
-      <Tab.Screen name="Community" component={CommunityStackScreen} />
+      <Tab.Screen
+        name="Market"
+        component={MarketStackScreen}
+        options={{ tabBarLabel: t("tabs.market") }}
+      />
+      <Tab.Screen
+        name="Community"
+        component={CommunityStackScreen}
+        options={{ tabBarLabel: t("tabs.community") }}
+      />
     </Tab.Navigator>
   );
 }

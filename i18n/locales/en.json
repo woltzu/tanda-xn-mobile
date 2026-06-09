@@ -1,0 +1,60 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "ok": "OK",
+    "done": "Done",
+    "back": "Back",
+    "close": "Close",
+    "yes": "Yes",
+    "no": "No",
+    "loading": "Loading…",
+    "error": "Error",
+    "retry": "Retry",
+    "delete": "Delete",
+    "edit": "Edit",
+    "next": "Next",
+    "skip": "Skip",
+    "continue": "Continue",
+    "search": "Search",
+    "select": "Select"
+  },
+  "tabs": {
+    "home": "Home",
+    "circles": "Circles",
+    "action": "Action",
+    "market": "Market",
+    "community": "Community"
+  },
+  "settings": {
+    "title": "Settings",
+    "language_region": "Language & Region",
+    "personal_info": "Personal information",
+    "privacy": "Privacy",
+    "notifications": "Notifications",
+    "security": "Security",
+    "help": "Help",
+    "logout": "Log out"
+  },
+  "language_region": {
+    "header": "Language & Communities",
+    "app_language": "APP LANGUAGE",
+    "where_im_from": "WHERE I'M FROM",
+    "where_im_from_desc": "Select your country/countries of origin",
+    "add_origin_country": "Add Origin Country",
+    "my_communities": "MY COMMUNITIES",
+    "selected_count": "{{count}} selected",
+    "join_communities": "JOIN COMMUNITIES",
+    "join_communities_desc": "Connect with people who share your interests and values",
+    "info_text": "Your communities help us show you relevant circles and connect you with like-minded members. You can select multiple communities and update them anytime.",
+    "select_language": "Select Language",
+    "select_region": "Select Region",
+    "select_countries": "Select Countries",
+    "select_communities": "Select Communities",
+    "select_all_apply": "Select all that apply to you",
+    "select_all_countries_apply": "Select all countries that apply",
+    "countries_count": "{{count}} countries",
+    "language_changed_title": "Language updated",
+    "language_changed_body": "Most of the app is in {{language}} now. A few labels may need an app restart to refresh."
+  }
+}

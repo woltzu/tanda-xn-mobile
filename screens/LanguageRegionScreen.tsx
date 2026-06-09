@@ -7,10 +7,12 @@ import {
   TouchableOpacity,
   Modal,
   FlatList,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTranslation } from "react-i18next";
 import {
   usePreferences,
   LANGUAGES,
@@ -21,6 +23,7 @@ import {
 
 export default function LanguageRegionScreen() {
   const navigation = useNavigation();
+  const { t } = useTranslation();
   const {
     preferences,
     setLanguage,
@@ -41,6 +44,15 @@ export default function LanguageRegionScreen() {
   const handleLanguageSelect = async (language: (typeof LANGUAGES)[0]) => {
     await setLanguage(language);
     setShowLanguageModal(false);
+    // i18n already flipped inside setLanguage (PreferencesContext.setLanguage
+    // mirrors to setAppLanguage which calls i18n.changeLanguage). Surface a
+    // brief toast so the user knows some labels may need a restart -- React
+    // Navigation tab labels update reactively but stack header titles set
+    // by individual screens may not until the screen re-mounts.
+    Alert.alert(
+      t("language_region.language_changed_title"),
+      t("language_region.language_changed_body", { language: language.name }),
+    );
   };
 
   const handleRegionSelect = (region: (typeof ORIGIN_REGIONS)[0]) => {
@@ -88,7 +100,7 @@ export default function LanguageRegionScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Language & Communities</Text>
+          <Text style={styles.headerTitle}>{t("language_region.header")}</Text>
           <View style={styles.placeholder} />
         </View>
       </LinearGradient>
@@ -100,7 +112,7 @@ export default function LanguageRegionScreen() {
       >
         {/* Language Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>APP LANGUAGE</Text>
+          <Text style={styles.sectionTitle}>{t("language_region.app_language")}</Text>
           <TouchableOpacity
             style={styles.optionCard}
             onPress={() => setShowLanguageModal(true)}
@@ -122,8 +134,10 @@ export default function LanguageRegionScreen() {
         {totalSelections > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>MY COMMUNITIES</Text>
-              <Text style={styles.selectionCount}>{totalSelections} selected</Text>
+              <Text style={styles.sectionTitle}>{t("language_region.my_communities")}</Text>
+              <Text style={styles.selectionCount}>
+                {t("language_region.selected_count", { count: totalSelections })}
+              </Text>
             </View>
             <View style={styles.selectedChips}>
               {preferences.originCountries.map((country) => (
@@ -154,25 +168,27 @@ export default function LanguageRegionScreen() {
 
         {/* Origin Country Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>WHERE I'M FROM</Text>
+          <Text style={styles.sectionTitle}>{t("language_region.where_im_from")}</Text>
           <Text style={styles.sectionDesc}>
-            Select your country/countries of origin
+            {t("language_region.where_im_from_desc")}
           </Text>
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => setShowOriginModal(true)}
           >
             <Ionicons name="earth" size={24} color="#00C6AE" />
-            <Text style={styles.addButtonText}>Add Origin Country</Text>
+            <Text style={styles.addButtonText}>
+              {t("language_region.add_origin_country")}
+            </Text>
             <Ionicons name="add-circle" size={24} color="#00C6AE" />
           </TouchableOpacity>
         </View>
 
         {/* Community Categories */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>JOIN COMMUNITIES</Text>
+          <Text style={styles.sectionTitle}>{t("language_region.join_communities")}</Text>
           <Text style={styles.sectionDesc}>
-            Connect with people who share your interests and values
+            {t("language_region.join_communities_desc")}
           </Text>
 
           {COMMUNITY_CATEGORIES.map((category) => {
@@ -211,11 +227,7 @@ export default function LanguageRegionScreen() {
         {/* Info Card */}
         <View style={styles.infoCard}>
           <Ionicons name="information-circle" size={24} color="#00C6AE" />
-          <Text style={styles.infoText}>
-            Your communities help us show you relevant circles and connect you
-            with like-minded members. You can select multiple communities and
-            update them anytime.
-          </Text>
+          <Text style={styles.infoText}>{t("language_region.info_text")}</Text>
         </View>
       </ScrollView>
 
@@ -229,7 +241,7 @@ export default function LanguageRegionScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Language</Text>
+              <Text style={styles.modalTitle}>{t("language_region.select_language")}</Text>
               <TouchableOpacity onPress={() => setShowLanguageModal(false)}>
                 <Ionicons name="close" size={24} color="#0A2342" />
               </TouchableOpacity>
@@ -272,7 +284,7 @@ export default function LanguageRegionScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Region</Text>
+              <Text style={styles.modalTitle}>{t("language_region.select_region")}</Text>
               <TouchableOpacity onPress={() => setShowOriginModal(false)}>
                 <Ionicons name="close" size={24} color="#0A2342" />
               </TouchableOpacity>
@@ -289,7 +301,9 @@ export default function LanguageRegionScreen() {
                   <View style={styles.modalItemText}>
                     <Text style={styles.modalItemLabel}>{item.name}</Text>
                     <Text style={styles.modalItemSubLabel}>
-                      {item.countries.length} countries
+                      {t("language_region.countries_count", {
+                        count: item.countries.length,
+                      })}
                     </Text>
                   </View>
                   <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
@@ -323,7 +337,7 @@ export default function LanguageRegionScreen() {
                 <Ionicons name="arrow-back" size={24} color="#0A2342" />
               </TouchableOpacity>
               <Text style={styles.modalTitle}>
-                {selectedRegion?.name || "Select Countries"}
+                {selectedRegion?.name || t("language_region.select_countries")}
               </Text>
               <TouchableOpacity
                 onPress={() => {
@@ -335,7 +349,7 @@ export default function LanguageRegionScreen() {
               </TouchableOpacity>
             </View>
             <Text style={styles.modalSubtitle}>
-              Select all countries that apply
+              {t("language_region.select_all_countries_apply")}
             </Text>
             <FlatList
               data={selectedRegion?.countries || []}
@@ -373,7 +387,7 @@ export default function LanguageRegionScreen() {
                 setSelectedRegion(null);
               }}
             >
-              <Text style={styles.doneButtonText}>Done</Text>
+              <Text style={styles.doneButtonText}>{t("common.done")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -401,7 +415,7 @@ export default function LanguageRegionScreen() {
                 <Ionicons name="arrow-back" size={24} color="#0A2342" />
               </TouchableOpacity>
               <Text style={styles.modalTitle}>
-                {selectedCategory?.name || "Select Communities"}
+                {selectedCategory?.name || t("language_region.select_communities")}
               </Text>
               <TouchableOpacity
                 onPress={() => {
@@ -413,7 +427,7 @@ export default function LanguageRegionScreen() {
               </TouchableOpacity>
             </View>
             <Text style={styles.modalSubtitle}>
-              Select all that apply to you
+              {t("language_region.select_all_apply")}
             </Text>
             <FlatList
               data={selectedCategory?.communities || []}
@@ -451,7 +465,7 @@ export default function LanguageRegionScreen() {
                 setSelectedCategory(null);
               }}
             >
-              <Text style={styles.doneButtonText}>Done</Text>
+              <Text style={styles.doneButtonText}>{t("common.done")}</Text>
             </TouchableOpacity>
           </View>
         </View>

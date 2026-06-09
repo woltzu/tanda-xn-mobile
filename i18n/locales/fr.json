@@ -1,0 +1,60 @@
+{
+  "common": {
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "ok": "OK",
+    "done": "Terminé",
+    "back": "Retour",
+    "close": "Fermer",
+    "yes": "Oui",
+    "no": "Non",
+    "loading": "Chargement…",
+    "error": "Erreur",
+    "retry": "Réessayer",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "next": "Suivant",
+    "skip": "Passer",
+    "continue": "Continuer",
+    "search": "Rechercher",
+    "select": "Sélectionner"
+  },
+  "tabs": {
+    "home": "Accueil",
+    "circles": "Cercles",
+    "action": "Action",
+    "market": "Marché",
+    "community": "Communauté"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "language_region": "Langue et région",
+    "personal_info": "Informations personnelles",
+    "privacy": "Confidentialité",
+    "notifications": "Notifications",
+    "security": "Sécurité",
+    "help": "Aide",
+    "logout": "Se déconnecter"
+  },
+  "language_region": {
+    "header": "Langue et communautés",
+    "app_language": "LANGUE DE L'APPLICATION",
+    "where_im_from": "JE VIENS DE",
+    "where_im_from_desc": "Sélectionnez votre/vos pays d'origine",
+    "add_origin_country": "Ajouter un pays d'origine",
+    "my_communities": "MES COMMUNAUTÉS",
+    "selected_count": "{{count}} sélectionnée(s)",
+    "join_communities": "REJOINDRE DES COMMUNAUTÉS",
+    "join_communities_desc": "Connectez-vous avec des personnes qui partagent vos intérêts et valeurs",
+    "info_text": "Vos communautés nous aident à vous proposer des cercles pertinents et à vous mettre en relation avec des membres partageant les mêmes idées. Vous pouvez sélectionner plusieurs communautés et les mettre à jour à tout moment.",
+    "select_language": "Choisir la langue",
+    "select_region": "Choisir la région",
+    "select_countries": "Choisir les pays",
+    "select_communities": "Choisir les communautés",
+    "select_all_apply": "Sélectionnez tout ce qui vous correspond",
+    "select_all_countries_apply": "Sélectionnez tous les pays concernés",
+    "countries_count": "{{count}} pays",
+    "language_changed_title": "Langue mise à jour",
+    "language_changed_body": "La majeure partie de l'application est maintenant en {{language}}. Certains libellés peuvent nécessiter un redémarrage pour s'actualiser."
+  }
+}
