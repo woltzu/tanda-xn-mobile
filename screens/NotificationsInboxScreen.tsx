@@ -233,7 +233,7 @@ export default function NotificationsInboxScreen() {
                     </Text>
                     {notification.action_url && (
                       <TouchableOpacity style={styles.actionButton}>
-                        <Text style={styles.actionButtonText}>View</Text>
+                        <Text style={styles.actionButtonText}>{t("final_polish.notificationsinbox_view")}</Text>
                         <Ionicons name="chevron-forward" size={14} color="#00C6AE" />
                       </TouchableOpacity>
                     )}

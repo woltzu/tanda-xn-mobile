@@ -323,7 +323,7 @@ export default function MediationToolsScreen() {
           <Text style={styles.statNumber}>
             {disputes.filter((d) => d.status === "open").length}
           </Text>
-          <Text style={styles.statLabel}>Open</Text>
+          <Text style={styles.statLabel}>{t("final_polish.mediationtools_open")}</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>

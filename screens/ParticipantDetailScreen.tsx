@@ -207,7 +207,7 @@ export default function ParticipantDetailScreen() {
         <HeaderBar onBack={() => navigation.goBack()} title="Participant" />
         <View style={styles.centerFill}>
           <Ionicons name="alert-circle-outline" size={48} color={MUTED} />
-          <Text style={styles.errorTitle}>Could not load</Text>
+          <Text style={styles.errorTitle}>{t("final_polish.participantdetail_could_not_load")}</Text>
           <Text style={styles.errorBody}>{error}</Text>
           <TouchableOpacity
             style={styles.retryButton}
@@ -227,7 +227,7 @@ export default function ParticipantDetailScreen() {
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
         <HeaderBar onBack={() => navigation.goBack()} title="Participant" />
         <View style={styles.centerFill}>
-          <Text style={styles.errorTitle}>Participant not found</Text>
+          <Text style={styles.errorTitle}>{t("final_polish.participantdetail_participant_not_found")}</Text>
         </View>
       </SafeAreaView>
     );
@@ -276,7 +276,7 @@ export default function ParticipantDetailScreen() {
         <View style={styles.summaryCard}>
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Total paid</Text>
+              <Text style={styles.summaryLabel}>{t("final_polish.participantdetail_total_paid")}</Text>
               <Text style={styles.summaryValue}>
                 {formatMoney(participant.totalPaidCents)}
               </Text>
@@ -286,7 +286,7 @@ export default function ParticipantDetailScreen() {
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>Documents</Text>
+              <Text style={styles.summaryLabel}>{t("final_polish.participantdetail_documents")}</Text>
               <Text style={styles.summaryValue}>
                 {verifiedCount}/{totalSubmissions}
               </Text>
@@ -306,7 +306,7 @@ export default function ParticipantDetailScreen() {
         {totalSubmissions === 0 ? (
           <View style={styles.emptySection}>
             <Ionicons name="document-outline" size={32} color={MUTED} />
-            <Text style={styles.emptyText}>No documents submitted yet</Text>
+            <Text style={styles.emptyText}>{t("final_polish.participantdetail_no_documents_submitted_yet")}</Text>
           </View>
         ) : (
           <View style={styles.listCard}>
@@ -326,7 +326,7 @@ export default function ParticipantDetailScreen() {
         {payments.length === 0 ? (
           <View style={styles.emptySection}>
             <Ionicons name="cash-outline" size={32} color={MUTED} />
-            <Text style={styles.emptyText}>No payments yet</Text>
+            <Text style={styles.emptyText}>{t("final_polish.participantdetail_no_payments_yet")}</Text>
           </View>
         ) : (
           <View style={styles.listCard}>
@@ -358,7 +358,7 @@ export default function ParticipantDetailScreen() {
                 ) : (
                   <>
                     <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
-                    <Text style={styles.btnPrimaryText}>Confirm participant</Text>
+                    <Text style={styles.btnPrimaryText}>{t("final_polish.participantdetail_confirm_participant")}</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -374,7 +374,7 @@ export default function ParticipantDetailScreen() {
               ) : (
                 <>
                   <Ionicons name="close-circle-outline" size={18} color={RED} />
-                  <Text style={styles.btnDangerText}>Cancel participant</Text>
+                  <Text style={styles.btnDangerText}>{t("final_polish.participantdetail_cancel_participant")}</Text>
                 </>
               )}
             </TouchableOpacity>

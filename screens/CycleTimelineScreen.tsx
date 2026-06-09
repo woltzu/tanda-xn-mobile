@@ -120,7 +120,7 @@ export default function CycleTimelineScreen() {
           {/* Contribution Progress */}
           <View style={styles.progressSection}>
             <View style={styles.progressRow}>
-              <Text style={styles.progressLabel}>Contributions</Text>
+              <Text style={styles.progressLabel}>{t("final_polish.cycletimeline_contributions")}</Text>
               <Text style={[styles.progressLabel, { color: COLORS.teal }]}>
                 {paidCount}/{totalMembers} paid
               </Text>
@@ -135,7 +135,7 @@ export default function CycleTimelineScreen() {
             <View style={styles.infoBox}>
               <Ionicons name="time-outline" size={20} color={COLORS.orange} />
               <View style={{ marginLeft: 10 }}>
-                <Text style={styles.infoLabel}>Deadline</Text>
+                <Text style={styles.infoLabel}>{t("final_polish.cycletimeline_deadline")}</Text>
                 <Text style={styles.infoValue}>
                   {currentCycle?.contribution_deadline
                     ? new Date(currentCycle.contribution_deadline).toLocaleDateString()
@@ -146,7 +146,7 @@ export default function CycleTimelineScreen() {
             <View style={styles.infoBox}>
               <Ionicons name="card-outline" size={20} color={COLORS.green} />
               <View style={{ marginLeft: 10 }}>
-                <Text style={styles.infoLabel}>Payout</Text>
+                <Text style={styles.infoLabel}>{t("final_polish.cycletimeline_payout")}</Text>
                 <Text style={styles.infoValue}>
                   {currentCycle?.payout_date
                     ? new Date(currentCycle.payout_date).toLocaleDateString()
@@ -161,7 +161,7 @@ export default function CycleTimelineScreen() {
         </View>
 
         {/* Member Contribution Status */}
-        <Text style={styles.sectionTitle}>Member Status</Text>
+        <Text style={styles.sectionTitle}>{t("final_polish.cycletimeline_member_status")}</Text>
         {contributions?.map((member: any, i: number) => (
           <View key={i} style={styles.card}>
             <View style={styles.memberRow}>
@@ -198,7 +198,7 @@ export default function CycleTimelineScreen() {
         ))}
 
         {/* Full Timeline */}
-        <Text style={[styles.sectionTitle, { marginTop: 8 }]}>Full Timeline</Text>
+        <Text style={[styles.sectionTitle, { marginTop: 8 }]}>{t("final_polish.cycletimeline_full_timeline")}</Text>
         <View style={styles.timeline}>
           {allCycles?.map((cycle: any, i: number) => {
             const isActive = cycle.id === currentCycle?.id;
@@ -258,7 +258,7 @@ export default function CycleTimelineScreen() {
                   </Text>
                   {isActive && (
                     <View style={styles.currentCycleBadge}>
-                      <Text style={styles.currentCycleBadgeText}>Current Cycle</Text>
+                      <Text style={styles.currentCycleBadgeText}>{t("final_polish.cycletimeline_current_cycle")}</Text>
                     </View>
                   )}
                 </View>

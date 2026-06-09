@@ -245,7 +245,7 @@ export default function SavedRecipientsScreen() {
               {filteredRecipients.length === 0 && (
                 <View style={styles.emptyState}>
                   <Ionicons name="search" size={40} color="#9CA3AF" />
-                  <Text style={styles.emptyStateText}>No recipients found</Text>
+                  <Text style={styles.emptyStateText}>{t("final_polish.savedrecipients_no_recipients_found")}</Text>
                 </View>
               )}
             </View>
@@ -264,7 +264,7 @@ export default function SavedRecipientsScreen() {
               {/* Others */}
               {others.length > 0 && (
                 <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>All Recipients</Text>
+                  <Text style={styles.sectionTitle}>{t("final_polish.savedrecipients_all_recipients")}</Text>
                   {others.map((r) => (
                     <RecipientCard key={r.id} recipient={r} />
                   ))}
@@ -277,7 +277,7 @@ export default function SavedRecipientsScreen() {
                   <View style={styles.emptyStateIcon}>
                     <Ionicons name="people" size={40} color="#00C6AE" />
                   </View>
-                  <Text style={styles.emptyStateTitle}>No Recipients Yet</Text>
+                  <Text style={styles.emptyStateTitle}>{t("final_polish.savedrecipients_no_recipients_yet")}</Text>
                   <Text style={styles.emptyStateDesc}>
                     Add your family and friends to send money quickly
                   </Text>
@@ -285,7 +285,7 @@ export default function SavedRecipientsScreen() {
                     style={styles.emptyStateButton}
                     onPress={handleAddRecipient}
                   >
-                    <Text style={styles.emptyStateButtonText}>Add Your First Recipient</Text>
+                    <Text style={styles.emptyStateButtonText}>{t("final_polish.savedrecipients_add_your_first_recipient")}</Text>
                   </TouchableOpacity>
                 </View>
               )}

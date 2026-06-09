@@ -160,14 +160,14 @@ export default function InterestUnlockedSuccessScreen() {
             </View>
           </View>
 
-          <Text style={styles.heroTitle}>Interest Unlocked!</Text>
+          <Text style={styles.heroTitle}>{t("final_polish.interestunlockedsuccess_interest_unlocked")}</Text>
           <Text style={styles.heroSubtitle}>
             Your verification is complete
           </Text>
 
           {/* Amount card */}
           <View style={styles.amountCard}>
-            <Text style={styles.amountLabel}>Now claimable</Text>
+            <Text style={styles.amountLabel}>{t("final_polish.interestunlockedsuccess_now_claimable")}</Text>
             <Text style={styles.amountValue}>{amountLabel}</Text>
           </View>
 
@@ -185,7 +185,7 @@ export default function InterestUnlockedSuccessScreen() {
         <View style={styles.contentWrap}>
           {/* What's changed */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>What's changed</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.interestunlockedsuccess_what_s_changed")}</Text>
             <View style={styles.changesList}>
               {/* Column header row */}
               <View style={styles.changesHeader}>
@@ -235,7 +235,7 @@ export default function InterestUnlockedSuccessScreen() {
             <View style={styles.upgradeHint}>
               <Text style={styles.upgradeEmoji}>💡</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.upgradeTitle}>Want even more?</Text>
+                <Text style={styles.upgradeTitle}>{t("final_polish.interestunlockedsuccess_want_even_more")}</Text>
                 <Text style={styles.upgradeBody}>
                   Add your tax ID (SSN or ITIN) to unlock unlimited payouts
                   and international transfers.
@@ -255,7 +255,7 @@ export default function InterestUnlockedSuccessScreen() {
           accessibilityLabel="Transfer to my bank"
         >
           <Ionicons name="arrow-down" size={18} color="#FFFFFF" />
-          <Text style={styles.primaryButtonText}>Transfer to my bank</Text>
+          <Text style={styles.primaryButtonText}>{t("final_polish.interestunlockedsuccess_transfer_to_my_bank")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.outlineButton}
@@ -263,7 +263,7 @@ export default function InterestUnlockedSuccessScreen() {
           accessibilityRole="button"
           accessibilityLabel="Keep it growing"
         >
-          <Text style={styles.outlineButtonText}>Keep it growing</Text>
+          <Text style={styles.outlineButtonText}>{t("final_polish.interestunlockedsuccess_keep_it_growing")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.textButton}
@@ -271,7 +271,7 @@ export default function InterestUnlockedSuccessScreen() {
           accessibilityRole="button"
           accessibilityLabel="Go to dashboard"
         >
-          <Text style={styles.textButtonText}>Go to Dashboard</Text>
+          <Text style={styles.textButtonText}>{t("final_polish.interestunlockedsuccess_go_to_dashboard")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

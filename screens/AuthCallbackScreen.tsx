@@ -172,7 +172,7 @@ export default function AuthCallbackScreen() {
           {status === "verifying" && (
             <>
               <ActivityIndicator size="large" color="#00C6AE" />
-              <Text style={styles.title}>Verifying your email...</Text>
+              <Text style={styles.title}>{t("final_polish.authcallback_verifying_your_email")}</Text>
               <Text style={styles.subtitle}>{t("final_polish.authcallback_please_wait_a_moment")}</Text>
             </>
           )}
@@ -182,8 +182,8 @@ export default function AuthCallbackScreen() {
               <View style={styles.iconContainer}>
                 <Ionicons name="checkmark-circle" size={80} color="#00C6AE" />
               </View>
-              <Text style={styles.title}>Email Verified!</Text>
-              <Text style={styles.subtitle}>Redirecting to the app...</Text>
+              <Text style={styles.title}>{t("final_polish.authcallback_email_verified")}</Text>
+              <Text style={styles.subtitle}>{t("final_polish.authcallback_redirecting_to_the_app")}</Text>
             </>
           )}
 
@@ -194,7 +194,7 @@ export default function AuthCallbackScreen() {
               </View>
               <Text style={styles.title}>{t("final_polish.authcallback_verification_failed")}</Text>
               <Text style={styles.subtitle}>{errorMessage}</Text>
-              <Text style={styles.redirectText}>Redirecting to login...</Text>
+              <Text style={styles.redirectText}>{t("final_polish.authcallback_redirecting_to_login")}</Text>
             </>
           )}
         </View>

@@ -212,7 +212,7 @@ const OrganizerTripDashboardScreen: React.FC = () => {
           })}
         >
           <Ionicons name="eye-outline" size={18} color={TEAL} />
-          <Text style={styles.viewPublicText}>View Public Page</Text>
+          <Text style={styles.viewPublicText}>{t("final_polish.organizertripdashboard_view_public_page")}</Text>
           <Ionicons name="arrow-forward" size={16} color={TEAL} style={{ marginLeft: 'auto' }} />
         </TouchableOpacity>
 
@@ -236,7 +236,7 @@ const OrganizerTripDashboardScreen: React.FC = () => {
 
         {/* Payment Schedule (organizer view: no per-row status badges) */}
         <View style={styles.scheduleWrap}>
-          <Text style={styles.sectionTitle}>Payment Schedule</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.organizertripdashboard_payment_schedule")}</Text>
           <InstallmentScheduleView
             schedule={dashboard?.trip?.installmentSchedule}
             showStatus={false}
@@ -263,7 +263,7 @@ const OrganizerTripDashboardScreen: React.FC = () => {
         )}
 
         {/* Quick Actions */}
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        <Text style={styles.sectionTitle}>{t("final_polish.organizertripdashboard_quick_actions")}</Text>
         <View style={styles.quickActionsGrid}>
           {quickActions.map((action) => (
             <QuickActionCard

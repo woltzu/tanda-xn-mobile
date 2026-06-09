@@ -115,13 +115,13 @@ export default function GoalCategorySelectScreen() {
               onPress={() => navigation.navigate(Routes.Dashboard)}
               accessibilityRole="button"
             >
-              <Text style={styles.skipText}>Skip for now</Text>
+              <Text style={styles.skipText}>{t("final_polish.goalcategoryselect_skip_for_now")}</Text>
             </TouchableOpacity>
           </View>
 
           <View style={{ alignItems: "center" }}>
             <Text style={styles.titleEmoji}>🎯</Text>
-            <Text style={styles.title}>What Are You Achieving?</Text>
+            <Text style={styles.title}>{t("final_polish.goalcategoryselect_what_are_you_achieving")}</Text>
             <Text style={styles.subtitle}>
               Choose the life milestone that matters most to you right now
             </Text>
@@ -208,7 +208,7 @@ export default function GoalCategorySelectScreen() {
             style={styles.customButton}
           >
             <Text style={styles.customEmoji}>✨</Text>
-            <Text style={styles.customText}>Create a Custom Goal</Text>
+            <Text style={styles.customText}>{t("final_polish.goalcategoryselect_create_a_custom_goal")}</Text>
           </TouchableOpacity>
 
           {/* Inspiration quote */}

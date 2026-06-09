@@ -352,7 +352,7 @@ export default function NotificationPrefsScreen() {
               {quietHoursEnabled && (
                 <View style={styles.quietHoursInfo}>
                   <View style={styles.quietTimeRow}>
-                    <Text style={styles.quietTimeLabel}>From</Text>
+                    <Text style={styles.quietTimeLabel}>{t("final_polish.notificationprefs_from")}</Text>
                     <View style={styles.quietTimeValue}>
                       <Text style={styles.quietTimeText}>{preferences.quiet_hours_start}</Text>
                     </View>

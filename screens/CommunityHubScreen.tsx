@@ -255,7 +255,7 @@ export default function CommunityHubScreen() {
               ) : (
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyEmoji}>🏘️</Text>
-                  <Text style={styles.emptyTitle}>No sub-communities yet</Text>
+                  <Text style={styles.emptyTitle}>{t("final_polish.communityhub_no_sub_communities_yet")}</Text>
                   <Text style={styles.emptySubtitle}>
                     Create a sub-community to organize members by location or interest
                   </Text>
@@ -263,7 +263,7 @@ export default function CommunityHubScreen() {
                     style={styles.emptyButton}
                     onPress={() => navigation.navigate("CreateCommunity", { parentId: communityId })}
                   >
-                    <Text style={styles.emptyButtonText}>Create Sub-community</Text>
+                    <Text style={styles.emptyButtonText}>{t("final_polish.communityhub_create_sub_community")}</Text>
                   </TouchableOpacity>
                 </View>
               )}

@@ -145,7 +145,7 @@ export default function GraduatedEntryScreen() {
             <View style={styles.statCard}>
               <Ionicons name="star" size={20} color="#F59E0B" />
               <Text style={styles.statValue}>{xnScore}</Text>
-              <Text style={styles.statLabel}>XN Score</Text>
+              <Text style={styles.statLabel}>{t("final_polish.graduatedentry_xn_score")}</Text>
             </View>
             <View style={styles.statCard}>
               <Ionicons name="calendar" size={20} color="#3B82F6" />
@@ -214,7 +214,7 @@ export default function GraduatedEntryScreen() {
           <View style={styles.card}>
             <View style={styles.cardTitleRow}>
               <Ionicons name="list-circle" size={18} color="#F59E0B" />
-              <Text style={styles.cardTitle}>To Advance</Text>
+              <Text style={styles.cardTitle}>{t("final_polish.graduatedentry_to_advance")}</Text>
             </View>
 
             {actionItems.map((item: any, index: number) => (

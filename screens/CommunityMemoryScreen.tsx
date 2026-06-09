@@ -64,7 +64,7 @@ export default function CommunityMemoryScreen({ communityId, communityName = "My
           {memory.isSystemGenerated && (
             <View style={styles.systemBadge}>
               <Ionicons name="flash-outline" size={10} color="#6B7280" />
-              <Text style={styles.systemBadgeText}>Auto-recorded</Text>
+              <Text style={styles.systemBadgeText}>{t("final_polish.communitymemory_auto_recorded")}</Text>
             </View>
           )}
         </View>

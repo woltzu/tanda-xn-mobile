@@ -285,7 +285,7 @@ export default function XnScoreHistoryScreen() {
             <View style={styles.legendRow}>
               <View style={styles.legendLeft}>
                 <View style={[styles.legendDot, { backgroundColor: "#10B981" }]} />
-                <Text style={styles.legendText}>On-time payment bonus</Text>
+                <Text style={styles.legendText}>{t("final_polish.xnscorehistory_on_time_payment_bonus")}</Text>
               </View>
               <Text style={styles.legendPoints}>+0.8</Text>
             </View>

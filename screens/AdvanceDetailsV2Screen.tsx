@@ -255,7 +255,7 @@ export default function AdvanceDetailsV2Screen() {
                 />
                 <View style={styles.withholdInnerDivider} />
                 <View style={styles.withholdReceiveRow}>
-                  <Text style={styles.withholdReceiveLabel}>You'll receive</Text>
+                  <Text style={styles.withholdReceiveLabel}>{t("final_polish.advancedetailsv2_you_ll_receive")}</Text>
                   <Text style={styles.withholdReceiveValue}>
                     ${advance.remainingAfterRepay}
                   </Text>

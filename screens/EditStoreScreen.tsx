@@ -245,12 +245,12 @@ export default function EditStoreScreen() {
         </View>
         <View style={styles.center}>
           <Ionicons name="alert-circle-outline" size={48} color={MUTED} />
-          <Text style={styles.errorTitle}>Store not found</Text>
+          <Text style={styles.errorTitle}>{t("final_polish.editstore_store_not_found")}</Text>
           <Text style={styles.errorBody}>
             We couldn't load your store. Pull back and try again.
           </Text>
           <TouchableOpacity style={styles.outlineButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.outlineButtonText}>Go back</Text>
+            <Text style={styles.outlineButtonText}>{t("final_polish.editstore_go_back")}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -285,7 +285,7 @@ export default function EditStoreScreen() {
         >
           {/* Business name */}
           <View style={styles.field}>
-            <Text style={styles.label}>Store name</Text>
+            <Text style={styles.label}>{t("final_polish.editstore_store_name")}</Text>
             <TextInput
               style={styles.input}
               value={businessName}
@@ -339,10 +339,10 @@ export default function EditStoreScreen() {
 
           {/* Cover photo — deferred per spec */}
           <View style={styles.field}>
-            <Text style={styles.label}>Cover photo</Text>
+            <Text style={styles.label}>{t("final_polish.editstore_cover_photo")}</Text>
             <View style={styles.placeholderBox}>
               <Ionicons name="image-outline" size={24} color={MUTED} />
-              <Text style={styles.placeholderText}>Coming soon</Text>
+              <Text style={styles.placeholderText}>{t("final_polish.editstore_coming_soon")}</Text>
             </View>
           </View>
 
@@ -369,7 +369,7 @@ export default function EditStoreScreen() {
               {saving ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.saveButtonText}>Save changes</Text>
+                <Text style={styles.saveButtonText}>{t("final_polish.editstore_save_changes")}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -378,7 +378,7 @@ export default function EditStoreScreen() {
               name are set on store creation and aren't part of this screen's
               v1 scope — surfaced here so the owner sees what's stable. */}
           <View style={styles.metaCard}>
-            <Text style={styles.metaTitle}>Other store details</Text>
+            <Text style={styles.metaTitle}>{t("final_polish.editstore_other_store_details")}</Text>
             <Text style={styles.metaRow}>Owner: {store.ownerName || "—"}</Text>
             <Text style={styles.metaRow}>Phone: {store.phone || "—"}</Text>
             <Text style={styles.metaRow}>City: {store.city || "—"}</Text>

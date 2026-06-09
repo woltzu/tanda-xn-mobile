@@ -438,7 +438,7 @@ export default function RequestAdvanceScreen() {
                     </View>
 
                     <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>Auto-withheld on</Text>
+                      <Text style={styles.summaryLabel}>{t("final_polish.requestadvance_auto_withheld_on")}</Text>
                       <Text style={styles.summaryValue}>
                         {dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </Text>

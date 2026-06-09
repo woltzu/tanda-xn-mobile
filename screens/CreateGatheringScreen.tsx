@@ -122,7 +122,7 @@ export default function CreateGatheringScreen() {
           />
 
           {/* Date & Time */}
-          <Text style={styles.sectionLabel}>When</Text>
+          <Text style={styles.sectionLabel}>{t("final_polish.creategathering_when")}</Text>
           <View style={styles.dateRow}>
             <TextInput
               style={[styles.input, { flex: 1 }]}
@@ -165,18 +165,18 @@ export default function CreateGatheringScreen() {
           )}
 
           {/* Options */}
-          <Text style={styles.sectionLabel}>Options</Text>
+          <Text style={styles.sectionLabel}>{t("final_polish.creategathering_options")}</Text>
           <View style={styles.switchRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.switchLabel}>Families welcome</Text>
-              <Text style={styles.switchHint}>Let members know they can bring family</Text>
+              <Text style={styles.switchLabel}>{t("final_polish.creategathering_families_welcome")}</Text>
+              <Text style={styles.switchHint}>{t("final_polish.creategathering_let_members_know_they_can_bring_family")}</Text>
             </View>
             <Switch value={isFamilyWelcome} onValueChange={setIsFamilyWelcome} trackColor={{ true: "#00C6AE" }} />
           </View>
           <View style={styles.switchRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.switchLabel}>Add to Community Memory</Text>
-              <Text style={styles.switchHint}>Archive this event after it happens</Text>
+              <Text style={styles.switchLabel}>{t("final_polish.creategathering_add_to_community_memory")}</Text>
+              <Text style={styles.switchHint}>{t("final_polish.creategathering_archive_this_event_after_it_happens")}</Text>
             </View>
             <Switch value={addToMemory} onValueChange={setAddToMemory} trackColor={{ true: "#00C6AE" }} />
           </View>

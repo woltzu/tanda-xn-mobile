@@ -141,7 +141,7 @@ export default function QRScannerScreen() {
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
           <Ionicons name="camera-outline" size={64} color="#00C6AE" />
-          <Text style={styles.loadingText}>Loading camera...</Text>
+          <Text style={styles.loadingText}>{t("final_polish.qrscanner_loading_camera")}</Text>
         </View>
       </View>
     );
@@ -155,19 +155,19 @@ export default function QRScannerScreen() {
           <View style={styles.permissionIcon}>
             <Ionicons name="camera-outline" size={64} color="#00C6AE" />
           </View>
-          <Text style={styles.permissionTitle}>Camera Access Required</Text>
+          <Text style={styles.permissionTitle}>{t("final_polish.qrscanner_camera_access_required")}</Text>
           <Text style={styles.permissionText}>
             To scan QR codes, TandaXn needs access to your camera. Your camera is only used for scanning invite codes.
           </Text>
           <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
             <Ionicons name="camera" size={20} color="#FFFFFF" />
-            <Text style={styles.permissionButtonText}>Enable Camera</Text>
+            <Text style={styles.permissionButtonText}>{t("final_polish.qrscanner_enable_camera")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.manualButton}
             onPress={() => navigation.replace("JoinCircleByCode" as any)}
           >
-            <Text style={styles.manualButtonText}>Enter Code Manually Instead</Text>
+            <Text style={styles.manualButtonText}>{t("final_polish.qrscanner_enter_code_manually_instead")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -219,7 +219,7 @@ export default function QRScannerScreen() {
 
         {/* Instructions */}
         <View style={styles.instructionsContainer}>
-          <Text style={styles.instructionsTitle}>Position QR code within the frame</Text>
+          <Text style={styles.instructionsTitle}>{t("final_polish.qrscanner_position_qr_code_within_the_frame")}</Text>
           <Text style={styles.instructionsText}>
             Scan a TandaXn circle invite QR code to join instantly
           </Text>
@@ -230,7 +230,7 @@ export default function QRScannerScreen() {
             onPress={() => navigation.replace("JoinCircleByCode" as any)}
           >
             <Ionicons name="keypad-outline" size={20} color="#00C6AE" />
-            <Text style={styles.manualEntryText}>Enter code manually</Text>
+            <Text style={styles.manualEntryText}>{t("final_polish.qrscanner_enter_code_manually")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -238,7 +238,7 @@ export default function QRScannerScreen() {
         {scanned && (
           <TouchableOpacity style={styles.rescanButton} onPress={() => setScanned(false)}>
             <Ionicons name="refresh" size={20} color="#FFFFFF" />
-            <Text style={styles.rescanButtonText}>Scan Again</Text>
+            <Text style={styles.rescanButtonText}>{t("final_polish.qrscanner_scan_again")}</Text>
           </TouchableOpacity>
         )}
       </View>

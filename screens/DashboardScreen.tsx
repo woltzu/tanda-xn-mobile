@@ -822,8 +822,8 @@ export default function DashboardScreen() {
               </View>
               <Text style={styles.tierFooter} numberOfLines={1}>
                 {tierStatus.maxCircleSize === null || tierStatus.maxCircleSize === 0
-                  ? (tierStatus.maxCircleSize === 0 ? "Cannot join circles yet" : "Unlimited access")
-                  : `Up to ${tierStatus.maxCircleSize}-member circles · $${Math.round((tierStatus.maxContributionCents ?? 0) / 100)}/mo cap`}
+                  ? (tierStatus.maxCircleSize === 0 ? t("dashboard_v3.tier_cannot_join") : t("dashboard_v3.tier_unlimited"))
+                  : t("dashboard_v3.tier_capped", { size: tierStatus.maxCircleSize, cap: Math.round((tierStatus.maxContributionCents ?? 0) / 100) })}
               </Text>
             </View>
             <Ionicons

@@ -105,21 +105,21 @@ const MemberTripDashboardScreen = () => {
               <Text style={[styles.statValue, { color: "#F97316" }]}>
                 {MY_TRIP.daysLeft}
               </Text>
-              <Text style={styles.statLabel}>Days left</Text>
+              <Text style={styles.statLabel}>{t("final_polish.membertripdashboard_days_left")}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: colors.accentTeal }]}>
                 {MY_TRIP.travelerCount}
               </Text>
-              <Text style={styles.statLabel}>Travelers</Text>
+              <Text style={styles.statLabel}>{t("final_polish.membertripdashboard_travelers")}</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: "#D97706" }]}>
                 ${MY_TRIP.myPaid}
               </Text>
-              <Text style={styles.statLabel}>My paid</Text>
+              <Text style={styles.statLabel}>{t("final_polish.membertripdashboard_my_paid")}</Text>
             </View>
           </View>
         </View>
@@ -127,7 +127,7 @@ const MemberTripDashboardScreen = () => {
         {/* My Savings Progress Card */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardLabel}>My savings toward this trip</Text>
+            <Text style={styles.cardLabel}>{t("final_polish.membertripdashboard_my_savings_toward_this_trip")}</Text>
             <Text style={styles.progressPercentAmber}>
               {MY_TRIP.myProgressPercent}%
             </Text>
@@ -162,7 +162,7 @@ const MemberTripDashboardScreen = () => {
         {/* Group Total Card */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardLabel}>Group total</Text>
+            <Text style={styles.cardLabel}>{t("final_polish.membertripdashboard_group_total")}</Text>
             <Text style={styles.progressPercentGreen}>
               {MY_TRIP.groupProgressPercent}%
             </Text>
@@ -191,7 +191,7 @@ const MemberTripDashboardScreen = () => {
 
         {/* My Schedule Section */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>My schedule</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.membertripdashboard_my_schedule")}</Text>
           <TouchableOpacity>
             <Text style={styles.sectionLink}>
               {MY_TRIP.remaining} remaining
@@ -228,7 +228,7 @@ const MemberTripDashboardScreen = () => {
                 </Text>
                 {item.isNext && (
                   <TouchableOpacity style={styles.payNowBtn}>
-                    <Text style={styles.payNowText}>Pay now</Text>
+                    <Text style={styles.payNowText}>{t("final_polish.membertripdashboard_pay_now")}</Text>
                   </TouchableOpacity>
                 )}
               </View>

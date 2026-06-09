@@ -120,7 +120,7 @@ export default function SelectCircleContributionScreen() {
                   </Text>
                   {circle.status === "pending" && (
                     <View style={styles.pendingBadge}>
-                      <Text style={styles.pendingText}>Pending Start</Text>
+                      <Text style={styles.pendingText}>{t("final_polish.selectcirclecontribution_pending_start")}</Text>
                     </View>
                   )}
                 </View>
@@ -135,7 +135,7 @@ export default function SelectCircleContributionScreen() {
             <View style={styles.tipsCard}>
               <View style={styles.tipsHeader}>
                 <Ionicons name="bulb-outline" size={20} color="#F59E0B" />
-                <Text style={styles.tipsTitle}>Quick Tips</Text>
+                <Text style={styles.tipsTitle}>{t("final_polish.selectcirclecontribution_quick_tips")}</Text>
               </View>
               <Text style={styles.tipsText}>
                 • Pay on time to maintain your XnScore{"\n"}

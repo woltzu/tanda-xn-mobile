@@ -175,7 +175,7 @@ export default function AdvanceAgreementScreen() {
           accessibilityLabel="Download agreement PDF"
         >
           <Ionicons name="download-outline" size={14} color="#FFFFFF" />
-          <Text style={styles.pdfButtonText}>PDF</Text>
+          <Text style={styles.pdfButtonText}>{t("final_polish.advanceagreement_pdf")}</Text>
         </TouchableOpacity>
       </View>
 
@@ -187,7 +187,7 @@ export default function AdvanceAgreementScreen() {
         {/* Header info card */}
         <View style={styles.sectionCard}>
           <View style={{ alignItems: "center", marginBottom: 16 }}>
-            <Text style={styles.documentTitle}>ADVANCE PAYOUT AGREEMENT</Text>
+            <Text style={styles.documentTitle}>{t("final_polish.advanceagreement_advance_payout_agreement")}</Text>
             <Text style={styles.documentSubtitle}>
               TandaXn Inc. • Effective Date: {agreementDate}
             </Text>

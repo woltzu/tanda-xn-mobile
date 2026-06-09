@@ -268,7 +268,7 @@ export default function GoalStoriesScreen() {
       end={{ x: 1, y: 1 }}
       style={styles.shareCard}
     >
-      <Text style={styles.shareTitle}>Achieved a Goal?</Text>
+      <Text style={styles.shareTitle}>{t("final_polish.goalstories_achieved_a_goal")}</Text>
       <Text style={styles.shareBody}>
         Share your story and inspire others on their journey
       </Text>
@@ -367,7 +367,7 @@ export default function GoalStoriesScreen() {
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={styles.statValue}>{item.circlesUsed}</Text>
-            <Text style={styles.statLabel}>Circles</Text>
+            <Text style={styles.statLabel}>{t("final_polish.goalstories_circles")}</Text>
           </View>
         </View>
 

@@ -604,7 +604,7 @@ export default function QuickJoinScreen() {
           {/* Brand */}
           <View style={styles.brandRow}>
             <View style={styles.brandDot} />
-            <Text style={styles.brand}>TandaXn</Text>
+            <Text style={styles.brand}>{t("final_polish.quickjoin_tandaxn")}</Text>
           </View>
 
           {/* Welcome header */}
@@ -709,7 +709,7 @@ export default function QuickJoinScreen() {
           {/* ── Brand ────────────────────────────────────────────────────── */}
           <View style={styles.brandRow}>
             <View style={styles.brandDot} />
-            <Text style={styles.brand}>TandaXn</Text>
+            <Text style={styles.brand}>{t("final_polish.quickjoin_tandaxn")}</Text>
           </View>
 
           {/* ── Circle Preview ───────────────────────────────────────────── */}

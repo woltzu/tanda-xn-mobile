@@ -345,7 +345,7 @@ export default function LinkedAccountsScreen() {
               <Ionicons name="lock-closed" size={20} color="#00897B" />
             </View>
             <View style={styles.securityContent}>
-              <Text style={styles.securityTitle}>Bank-Level Security</Text>
+              <Text style={styles.securityTitle}>{t("final_polish.linkedaccounts_bank_level_security")}</Text>
               <Text style={styles.securityText}>
                 Your financial data is encrypted and securely stored. We never
                 store your bank login credentials.

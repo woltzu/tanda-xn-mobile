@@ -186,7 +186,7 @@ export default function WithdrawFromGoalScreen() {
             <View style={styles.warningCard}>
               <Ionicons name="warning" size={20} color="#EF4444" />
               <View style={styles.warningContent}>
-                <Text style={styles.warningTitle}>Early Withdrawal Penalty</Text>
+                <Text style={styles.warningTitle}>{t("final_polish.withdrawfromgoal_early_withdrawal_penalty")}</Text>
                 <Text style={styles.warningText}>
                   This goal matures in {getDaysUntilMaturity()} days. Withdrawing early
                   will incur a {(penaltyRate * 100).toFixed(0)}% penalty.
@@ -211,7 +211,7 @@ export default function WithdrawFromGoalScreen() {
 
           {/* Amount Input */}
           <View style={styles.amountSection}>
-            <Text style={styles.sectionLabel}>WITHDRAWAL AMOUNT</Text>
+            <Text style={styles.sectionLabel}>{t("final_polish.withdrawfromgoal_withdrawal_amount")}</Text>
             <View style={styles.amountInputContainer}>
               <Text style={styles.currencySymbol}>$</Text>
               <TextInput
@@ -262,7 +262,7 @@ export default function WithdrawFromGoalScreen() {
 
           {/* Withdraw To */}
           <View style={styles.withdrawToSection}>
-            <Text style={styles.sectionLabel}>WITHDRAW TO</Text>
+            <Text style={styles.sectionLabel}>{t("final_polish.withdrawfromgoal_withdraw_to")}</Text>
             <View style={styles.withdrawToCard}>
               {/* Wallet Option */}
               <TouchableOpacity
@@ -276,7 +276,7 @@ export default function WithdrawFromGoalScreen() {
                   <Ionicons name="wallet-outline" size={20} color="#00C6AE" />
                 </View>
                 <View style={styles.withdrawToDetails}>
-                  <Text style={styles.withdrawToLabel}>TandaXn Wallet</Text>
+                  <Text style={styles.withdrawToLabel}>{t("final_polish.withdrawfromgoal_tandaxn_wallet")}</Text>
                   <Text style={styles.withdrawToSub}>{t("final_polish.withdrawfromgoal_instant")}</Text>
                 </View>
               </TouchableOpacity>
@@ -310,10 +310,10 @@ export default function WithdrawFromGoalScreen() {
           {/* Summary */}
           {withdrawAmount > 0 && (
             <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Withdrawal Summary</Text>
+              <Text style={styles.summaryTitle}>{t("final_polish.withdrawfromgoal_withdrawal_summary")}</Text>
 
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Withdrawal Amount</Text>
+                <Text style={styles.summaryLabel}>{t("final_polish.withdrawfromgoal_withdrawal_amount")}</Text>
                 <Text style={styles.summaryValue}>{formatCurrency(withdrawAmount)}</Text>
               </View>
 
@@ -331,7 +331,7 @@ export default function WithdrawFromGoalScreen() {
               <View style={styles.summaryDivider} />
 
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryTotalLabel}>You'll Receive</Text>
+                <Text style={styles.summaryTotalLabel}>{t("final_polish.withdrawfromgoal_you_ll_receive")}</Text>
                 <Text style={styles.summaryTotalValue}>{formatCurrency(netAmount)}</Text>
               </View>
 
@@ -341,7 +341,7 @@ export default function WithdrawFromGoalScreen() {
               </View>
 
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Remaining Balance</Text>
+                <Text style={styles.summaryLabel}>{t("final_polish.withdrawfromgoal_remaining_balance")}</Text>
                 <Text style={styles.summaryValue}>
                   {formatCurrency(availableBalance - withdrawAmount)}
                 </Text>

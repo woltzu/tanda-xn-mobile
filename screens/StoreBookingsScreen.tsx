@@ -246,7 +246,7 @@ export default function StoreBookingsScreen() {
         {item.paymentType === "payout_day" && (
           <View style={styles.payoutPill}>
             <Ionicons name="calendar-outline" size={12} color={BLUE} />
-            <Text style={styles.payoutPillText}>Payout day</Text>
+            <Text style={styles.payoutPillText}>{t("final_polish.storebookings_payout_day")}</Text>
           </View>
         )}
 
@@ -285,7 +285,7 @@ export default function StoreBookingsScreen() {
               {isBusy ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.btnPrimaryText}>Mark Completed</Text>
+                <Text style={styles.btnPrimaryText}>{t("final_polish.storebookings_mark_completed")}</Text>
               )}
             </TouchableOpacity>
           )}
@@ -295,7 +295,7 @@ export default function StoreBookingsScreen() {
               onPress={() => handleView(item)}
               accessibilityRole="button"
             >
-              <Text style={styles.btnOutlineText}>View Details</Text>
+              <Text style={styles.btnOutlineText}>{t("final_polish.storebookings_view_details")}</Text>
             </TouchableOpacity>
           )}
         </View>

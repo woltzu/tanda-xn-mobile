@@ -271,7 +271,7 @@ export default function ExportDataScreen() {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Format Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Export Format</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.exportdata_export_format")}</Text>
           <Text style={styles.sectionSubtitle}>{t("export_data_v2.section_format_sub")}</Text>
 
           <View style={styles.formatGrid}>
@@ -312,7 +312,7 @@ export default function ExportDataScreen() {
 
         {/* Date Range Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Date Range</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.exportdata_date_range")}</Text>
           <Text style={styles.sectionSubtitle}>{t("export_data_v2.section_date_sub")}</Text>
 
           <View style={styles.rangeContainer}>
@@ -340,7 +340,7 @@ export default function ExportDataScreen() {
 
         {/* Data Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Include Data</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.exportdata_include_data")}</Text>
           <Text style={styles.sectionSubtitle}>
             Select what to include in your export
           </Text>

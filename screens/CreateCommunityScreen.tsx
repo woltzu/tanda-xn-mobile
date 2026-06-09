@@ -218,7 +218,7 @@ export default function CreateCommunityScreen() {
                   <Text style={styles.toggleEmoji}>🔗</Text>
                 </View>
                 <View style={styles.toggleText}>
-                  <Text style={styles.toggleTitle}>Create as sub-community</Text>
+                  <Text style={styles.toggleTitle}>{t("final_polish.createcommunity_create_as_sub_community")}</Text>
                   <Text style={styles.toggleSubtitle}>{t("create_community.toggle_subtitle")}</Text>
                 </View>
               </View>

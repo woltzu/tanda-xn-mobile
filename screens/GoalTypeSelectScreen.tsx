@@ -364,14 +364,14 @@ export default function GoalTypeSelectScreen() {
                     {/* Meta */}
                     <View style={styles.metaRow}>
                       <View>
-                        <Text style={styles.metaLabel}>TYPICAL COST</Text>
+                        <Text style={styles.metaLabel}>{t("final_polish.goaltypeselect_typical_cost")}</Text>
                         <Text style={styles.metaValue}>
                           {goalType.typicalCost}
                         </Text>
                       </View>
                       <View style={styles.metaDivider} />
                       <View>
-                        <Text style={styles.metaLabel}>TIMELINE</Text>
+                        <Text style={styles.metaLabel}>{t("final_polish.goaltypeselect_timeline")}</Text>
                         <Text style={styles.metaValue}>{goalType.timeline}</Text>
                       </View>
                     </View>

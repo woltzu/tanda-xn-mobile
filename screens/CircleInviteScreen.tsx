@@ -150,7 +150,7 @@ export default function CircleInviteScreen() {
             style={styles.errorBackButton}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.errorBackButtonText}>Go Back</Text>
+            <Text style={styles.errorBackButtonText}>{t("final_polish.circleinvite_go_back")}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>

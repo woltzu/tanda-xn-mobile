@@ -60,7 +60,7 @@ export default function CrossCircleLendingScreen() {
     return (
       <View style={styles.loaderContainer}>
         <ActivityIndicator size="large" color={COLORS.teal} />
-        <Text style={styles.loaderText}>Loading liquidity data...</Text>
+        <Text style={styles.loaderText}>{t("final_polish.crosscirclelending_loading_liquidity_data")}</Text>
       </View>
     );
   }
@@ -99,14 +99,14 @@ export default function CrossCircleLendingScreen() {
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{formatCents(totalLent)}</Text>
-              <Text style={styles.summaryLabel}>Currently Lent</Text>
+              <Text style={styles.summaryLabel}>{t("final_polish.crosscirclelending_currently_lent")}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryValue, { color: COLORS.green }]}>
                 {formatCents(interestEarned)}
               </Text>
-              <Text style={styles.summaryLabel}>Interest Earned</Text>
+              <Text style={styles.summaryLabel}>{t("final_polish.crosscirclelending_interest_earned")}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
@@ -134,11 +134,11 @@ export default function CrossCircleLendingScreen() {
         {/* Tab Content */}
         {tab === "overview" && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Advances</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.crosscirclelending_your_advances")}</Text>
             {advances.length === 0 && (
               <View style={styles.emptyCard}>
                 <Ionicons name="wallet-outline" size={32} color={COLORS.muted} />
-                <Text style={styles.emptyText}>No advances yet</Text>
+                <Text style={styles.emptyText}>{t("final_polish.crosscirclelending_no_advances_yet")}</Text>
               </View>
             )}
             {advances.map((adv) => (
@@ -176,11 +176,11 @@ export default function CrossCircleLendingScreen() {
 
         {tab === "transfers" && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Active Transfers</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.crosscirclelending_active_transfers")}</Text>
             {activeAdvance ? (
               <View style={styles.card}>
                 <View style={styles.transferRow}>
-                  <Text style={styles.transferFrom}>Active Advance</Text>
+                  <Text style={styles.transferFrom}>{t("final_polish.crosscirclelending_active_advance")}</Text>
                   <Ionicons name="arrow-forward" size={16} color={COLORS.teal} />
                   <Text style={styles.transferTo}>{activeAdvance.status}</Text>
                 </View>
@@ -190,11 +190,11 @@ export default function CrossCircleLendingScreen() {
                     <Text style={styles.statValue}>{formatCents(activeAdvance.amountCents)}</Text>
                   </View>
                   <View style={styles.transferStat}>
-                    <Text style={styles.statLabel}>Fee Tier</Text>
+                    <Text style={styles.statLabel}>{t("final_polish.crosscirclelending_fee_tier")}</Text>
                     <Text style={styles.statValue}>{activeAdvance.feeTier}</Text>
                   </View>
                   <View style={styles.transferStat}>
-                    <Text style={styles.statLabel}>Repaid</Text>
+                    <Text style={styles.statLabel}>{t("final_polish.crosscirclelending_repaid")}</Text>
                     <Text style={styles.statValue}>
                       {formatCents(activeAdvance.repaidCents ?? 0)}
                     </Text>
@@ -204,7 +204,7 @@ export default function CrossCircleLendingScreen() {
             ) : (
               <View style={styles.emptyCard}>
                 <Ionicons name="swap-horizontal-outline" size={32} color={COLORS.muted} />
-                <Text style={styles.emptyText}>No active transfers</Text>
+                <Text style={styles.emptyText}>{t("final_polish.crosscirclelending_no_active_transfers")}</Text>
               </View>
             )}
           </View>
@@ -212,7 +212,7 @@ export default function CrossCircleLendingScreen() {
 
         {tab === "opportunities" && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Lending Opportunities</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.crosscirclelending_lending_opportunities")}</Text>
             <Text style={styles.sectionSubtitle}>
               Circles that need liquidity support
             </Text>
@@ -220,9 +220,9 @@ export default function CrossCircleLendingScreen() {
             {dashboard && dashboard.utilizationRate < 0.8 ? (
               <View style={styles.card}>
                 <View style={styles.oppHeader}>
-                  <Text style={styles.circleName}>Pool Available</Text>
+                  <Text style={styles.circleName}>{t("final_polish.crosscirclelending_pool_available")}</Text>
                   <View style={[styles.urgencyBadge, { backgroundColor: `${COLORS.green}20` }]}>
-                    <Text style={[styles.urgencyText, { color: COLORS.green }]}>HEALTHY</Text>
+                    <Text style={[styles.urgencyText, { color: COLORS.green }]}>{t("final_polish.crosscirclelending_healthy")}</Text>
                   </View>
                 </View>
                 <View style={styles.oppDetails}>
@@ -250,7 +250,7 @@ export default function CrossCircleLendingScreen() {
             ) : (
               <View style={styles.emptyCard}>
                 <Ionicons name="trending-up-outline" size={32} color={COLORS.muted} />
-                <Text style={styles.emptyText}>No opportunities available right now</Text>
+                <Text style={styles.emptyText}>{t("final_polish.crosscirclelending_no_opportunities_available_right_now")}</Text>
               </View>
             )}
           </View>

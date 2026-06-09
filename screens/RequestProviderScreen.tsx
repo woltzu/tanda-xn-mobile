@@ -110,7 +110,7 @@ export default function RequestProviderScreen() {
 
         {/* Business name */}
         <View style={styles.field}>
-          <Text style={styles.label}>Business type</Text>
+          <Text style={styles.label}>{t("final_polish.requestprovider_business_type")}</Text>
           <TextInput
             style={styles.input}
             value={businessName}
@@ -123,7 +123,7 @@ export default function RequestProviderScreen() {
 
         {/* Description */}
         <View style={styles.field}>
-          <Text style={styles.label}>Why do you need it?</Text>
+          <Text style={styles.label}>{t("final_polish.requestprovider_why_do_you_need_it")}</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
             value={description}
@@ -158,7 +158,7 @@ export default function RequestProviderScreen() {
           activeOpacity={0.85}
           accessibilityRole="button"
         >
-          <Text style={styles.submitText}>Send Request</Text>
+          <Text style={styles.submitText}>{t("final_polish.requestprovider_send_request")}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

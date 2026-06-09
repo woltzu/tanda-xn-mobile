@@ -89,7 +89,7 @@ const TripPublishSuccessScreen: React.FC = () => {
         {/* Celebration Hero */}
         <View style={styles.hero}>
           <Text style={styles.heroEmoji}>🎉</Text>
-          <Text style={styles.heroTitle}>Trip is Live!</Text>
+          <Text style={styles.heroTitle}>{t("final_polish.trippublishsuccess_trip_is_live")}</Text>
           <Text style={styles.heroSubtitle}>
             Share the link and start collecting registrations.
           </Text>
@@ -97,19 +97,19 @@ const TripPublishSuccessScreen: React.FC = () => {
 
         {/* Trip Link Card */}
         <View style={styles.linkCard}>
-          <Text style={styles.linkLabel}>YOUR TRIP LINK</Text>
+          <Text style={styles.linkLabel}>{t("final_polish.trippublishsuccess_your_trip_link")}</Text>
           <Text style={styles.linkUrl}>{tripLink}</Text>
         </View>
 
         {/* Primary CTAs */}
         <TouchableOpacity style={styles.shareBtn} onPress={handleShareLink} activeOpacity={0.7}>
           <Ionicons name="share-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-          <Text style={styles.shareBtnText}>Share Trip Link</Text>
+          <Text style={styles.shareBtnText}>{t("final_polish.trippublishsuccess_share_trip_link")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.previewBtn} onPress={handlePreviewPage} activeOpacity={0.7}>
           <Ionicons name="eye-outline" size={20} color={NAVY} style={{ marginRight: 8 }} />
-          <Text style={styles.previewBtnText}>Preview Trip Page</Text>
+          <Text style={styles.previewBtnText}>{t("final_polish.trippublishsuccess_preview_trip_page")}</Text>
         </TouchableOpacity>
 
         {/* Itinerary nudge */}
@@ -119,12 +119,12 @@ const TripPublishSuccessScreen: React.FC = () => {
 
         <TouchableOpacity style={styles.itineraryBtn} onPress={handleBuildItinerary} activeOpacity={0.7}>
           <Ionicons name="create-outline" size={18} color={GOLD} style={{ marginRight: 8 }} />
-          <Text style={styles.itineraryBtnText}>Build Itinerary Now</Text>
+          <Text style={styles.itineraryBtnText}>{t("final_polish.trippublishsuccess_build_itinerary_now")}</Text>
         </TouchableOpacity>
 
         {/* Skip to dashboard */}
         <TouchableOpacity style={styles.skipBtn} onPress={handleGoToDashboard} activeOpacity={0.7}>
-          <Text style={styles.skipBtnText}>Go to Trip Dashboard</Text>
+          <Text style={styles.skipBtnText}>{t("final_polish.trippublishsuccess_go_to_trip_dashboard")}</Text>
           <Ionicons name="arrow-forward" size={16} color={TEAL} style={{ marginLeft: 4 }} />
         </TouchableOpacity>
       </View>

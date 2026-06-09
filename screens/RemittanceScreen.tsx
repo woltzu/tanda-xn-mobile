@@ -370,7 +370,7 @@ export default function RemittanceScreen() {
               <View style={[s.amountRow, lastEditedField === "send" && s.amountRowActive]}>
                 <View style={s.currencyBadge}>
                   <Text style={s.currencyFlag}>{"\u{1F1FA}\u{1F1F8}"}</Text>
-                  <Text style={s.currencyCode}>USD</Text>
+                  <Text style={s.currencyCode}>{t("final_polish.remittance_usd")}</Text>
                 </View>
                 <TextInput style={s.amountInput} value={sendAmount} onChangeText={handleSendAmountChange} placeholder="0.00" placeholderTextColor="#9CA3AF" keyboardType="decimal-pad" />
               </View>

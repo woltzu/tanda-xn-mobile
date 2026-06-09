@@ -102,7 +102,7 @@ export default function LockScreen() {
           </View>
 
           {/* Title */}
-          <Text style={styles.title}>Welcome Back</Text>
+          <Text style={styles.title}>{t("final_polish.lock_welcome_back")}</Text>
           <Text style={styles.subtitle}>
             {user?.name ? `Hi, ${user.name}` : "Your session has timed out"}
           </Text>
@@ -139,7 +139,7 @@ export default function LockScreen() {
           {/* Password Input */}
           {(showPasswordInput || !biometricsEnabled || !biometricsAvailable) && (
             <View style={styles.passwordSection}>
-              <Text style={styles.passwordLabel}>Enter your password</Text>
+              <Text style={styles.passwordLabel}>{t("final_polish.lock_enter_your_password")}</Text>
               <View style={styles.inputContainer}>
                 <Ionicons
                   name="lock-closed-outline"
@@ -184,7 +184,7 @@ export default function LockScreen() {
                 {isLoading ? (
                   <ActivityIndicator size="small" color={colors.textWhite} />
                 ) : (
-                  <Text style={styles.unlockButtonText}>Unlock</Text>
+                  <Text style={styles.unlockButtonText}>{t("final_polish.lock_unlock")}</Text>
                 )}
               </TouchableOpacity>
 
@@ -219,7 +219,7 @@ export default function LockScreen() {
             accessibilityLabel="Sign out"
             accessibilityRole="button"
           >
-            <Text style={styles.signOutText}>Sign out and use different account</Text>
+            <Text style={styles.signOutText}>{t("final_polish.lock_sign_out_and_use_different_account")}</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>

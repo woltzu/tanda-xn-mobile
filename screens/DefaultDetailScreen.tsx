@@ -193,7 +193,7 @@ export default function DefaultDetailScreen() {
               {statusInfo.label}
             </Text>
           </View>
-          <Text style={styles.outstandingLabel}>Outstanding balance</Text>
+          <Text style={styles.outstandingLabel}>{t("final_polish.defaultdetail_outstanding_balance")}</Text>
           <Text style={styles.outstandingAmount}>{formatMoney(outstanding)}</Text>
           {(defaultRecord.amount_recovered ?? 0) > 0 && (
             <View style={styles.recoveryProgressBlock}>
@@ -263,7 +263,7 @@ export default function DefaultDetailScreen() {
               {defaultRecord.is_repeat_offender && (
                 <View style={[styles.flagChip, { backgroundColor: RED + "15" }]}>
                   <Ionicons name="repeat" size={12} color={RED} />
-                  <Text style={[styles.flagText, { color: RED }]}>Repeat default</Text>
+                  <Text style={[styles.flagText, { color: RED }]}>{t("final_polish.defaultdetail_repeat_default")}</Text>
                 </View>
               )}
               {defaultRecord.triggered_suspension_review && (

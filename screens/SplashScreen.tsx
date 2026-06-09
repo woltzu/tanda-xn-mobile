@@ -95,8 +95,8 @@ export default function SplashScreen() {
           </LinearGradient>
         </Animated.View>
 
-        <Text style={styles.title}>TandaXn</Text>
-        <Text style={styles.subtitle}>Save Together. Grow Together.</Text>
+        <Text style={styles.title}>{t("final_polish.splash_tandaxn")}</Text>
+        <Text style={styles.subtitle}>{t("final_polish.splash_save_together_grow_together")}</Text>
       </View>
 
       {/* Loading Dots */}
@@ -129,7 +129,7 @@ export default function SplashScreen() {
               colors={["#00C6AE", "#00A896"]}
               style={styles.primaryButtonGradient}
             >
-              <Text style={styles.primaryButtonText}>Get Started</Text>
+              <Text style={styles.primaryButtonText}>{t("final_polish.splash_get_started")}</Text>
             </LinearGradient>
           </TouchableOpacity>
 

@@ -147,7 +147,7 @@ export default function VerificationOptionsScreen() {
           {/* Welcoming message card */}
           <View style={styles.welcomeCard}>
             <Text style={styles.welcomeText}>
-              <Text style={styles.welcomeStrong}>We welcome everyone.</Text>{" "}
+              <Text style={styles.welcomeStrong}>{t("final_polish.verificationoptions_we_welcome_everyone")}</Text>{" "}
               Choose the option that fits your situation — we accept many forms
               of identification.
             </Text>
@@ -239,7 +239,7 @@ export default function VerificationOptionsScreen() {
         </TouchableOpacity>
         <Text style={styles.helpText}>
           Need help?{" "}
-          <Text style={styles.helpLink}>Chat with us</Text>
+          <Text style={styles.helpLink}>{t("final_polish.verificationoptions_chat_with_us")}</Text>
         </Text>
       </View>
     </SafeAreaView>

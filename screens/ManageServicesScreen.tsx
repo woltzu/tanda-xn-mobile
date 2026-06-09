@@ -162,7 +162,7 @@ export default function ManageServicesScreen() {
                 {item.isPopular && (
                   <>
                     <Text style={styles.metaDot}>·</Text>
-                    <Text style={[styles.serviceMeta, { color: TEAL }]}>Popular</Text>
+                    <Text style={[styles.serviceMeta, { color: TEAL }]}>{t("final_polish.manageservices_popular")}</Text>
                   </>
                 )}
               </View>
@@ -228,7 +228,7 @@ export default function ManageServicesScreen() {
       ) : error ? (
         <View style={styles.center}>
           <Ionicons name="alert-circle-outline" size={48} color={MUTED} />
-          <Text style={styles.errorTitle}>Could not load</Text>
+          <Text style={styles.errorTitle}>{t("final_polish.manageservices_could_not_load")}</Text>
           <Text style={styles.errorBody}>{error}</Text>
           <TouchableOpacity
             style={styles.retryButton}
@@ -240,13 +240,13 @@ export default function ManageServicesScreen() {
       ) : services.length === 0 ? (
         <View style={styles.center}>
           <Ionicons name="cube-outline" size={48} color={MUTED} />
-          <Text style={styles.emptyTitle}>No services yet</Text>
+          <Text style={styles.emptyTitle}>{t("final_polish.manageservices_no_services_yet")}</Text>
           <Text style={styles.emptyBody}>
             Add your first service so customers can book or buy.
           </Text>
           <TouchableOpacity style={styles.primaryButton} onPress={handleAdd}>
             <Ionicons name="add" size={18} color="#FFFFFF" />
-            <Text style={styles.primaryButtonText}>Add Service</Text>
+            <Text style={styles.primaryButtonText}>{t("final_polish.manageservices_add_service")}</Text>
           </TouchableOpacity>
         </View>
       ) : (

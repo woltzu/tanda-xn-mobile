@@ -143,7 +143,7 @@ export default function ReportIssueScreen() {
         </View>
         {circleName && (
           <View style={styles.circleInfo}>
-            <Text style={styles.circleLabel}>Circle</Text>
+            <Text style={styles.circleLabel}>{t("final_polish.reportissue_circle")}</Text>
             <Text style={styles.circleName} numberOfLines={1}>
               {circleName}
             </Text>
@@ -153,8 +153,8 @@ export default function ReportIssueScreen() {
 
       <ScrollView style={styles.content} keyboardShouldPersistTaps="handled">
         {/* Dispute type selector */}
-        <Text style={styles.sectionTitle}>What's the issue?</Text>
-        <Text style={styles.sectionSubtitle}>Pick the type that best describes it.</Text>
+        <Text style={styles.sectionTitle}>{t("final_polish.reportissue_what_s_the_issue")}</Text>
+        <Text style={styles.sectionSubtitle}>{t("final_polish.reportissue_pick_the_type_that_best_describes_it")}</Text>
         {DISPUTE_TYPES.map((t) => {
           const selected = disputeType === t.id;
           return (
@@ -219,7 +219,7 @@ export default function ReportIssueScreen() {
           ) : (
             <>
               <Ionicons name="send-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.submitButtonText}>Submit dispute</Text>
+              <Text style={styles.submitButtonText}>{t("final_polish.reportissue_submit_dispute")}</Text>
             </>
           )}
         </TouchableOpacity>

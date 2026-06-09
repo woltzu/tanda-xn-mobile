@@ -118,10 +118,10 @@ const TripCard: React.FC<{ trip: Trip; onPress: () => void }> = ({ trip, onPress
 const EmptyState: React.FC<{ onCreatePress: () => void }> = ({ onCreatePress }) => (
   <View style={styles.emptyState}>
     <Ionicons name="airplane-outline" size={64} color="#CBD5E1" />
-    <Text style={styles.emptyTitle}>No trips yet</Text>
-    <Text style={styles.emptySubtitle}>Create your first trip and start organizing</Text>
+    <Text style={styles.emptyTitle}>{t("final_polish.organizertriplist_no_trips_yet")}</Text>
+    <Text style={styles.emptySubtitle}>{t("final_polish.organizertriplist_create_your_first_trip_and_start_organizing")}</Text>
     <TouchableOpacity style={styles.emptyCta} activeOpacity={0.7} onPress={onCreatePress}>
-      <Text style={styles.emptyCtaText}>Create a Trip</Text>
+      <Text style={styles.emptyCtaText}>{t("final_polish.organizertriplist_create_a_trip")}</Text>
     </TouchableOpacity>
   </View>
 );

@@ -162,11 +162,11 @@ export default function GoalBItemsScreen() {
           {/* Summary */}
           <View style={styles.summaryCard}>
             <View>
-              <Text style={styles.summaryLabel}>EST. ADDITIONAL COSTS</Text>
+              <Text style={styles.summaryLabel}>{t("final_polish.goalbitems_est_additional_costs")}</Text>
               <Text style={styles.summaryValue}>{TOTAL_ESTIMATED_COST}</Text>
             </View>
             <View style={{ alignItems: "flex-end" }}>
-              <Text style={styles.summaryLabel}>TANDA SAVINGS</Text>
+              <Text style={styles.summaryLabel}>{t("final_polish.goalbitems_tanda_savings")}</Text>
               <Text style={[styles.summaryValue, { color: TEAL }]}>
                 {TOTAL_DISCOUNT}
               </Text>
@@ -249,11 +249,11 @@ export default function GoalBItemsScreen() {
                   {/* Cost & discount */}
                   <View style={styles.costRow}>
                     <View>
-                      <Text style={styles.costLabel}>ESTIMATED COST</Text>
+                      <Text style={styles.costLabel}>{t("final_polish.goalbitems_estimated_cost")}</Text>
                       <Text style={styles.costValue}>{item.estimatedCost}</Text>
                     </View>
                     <View style={{ alignItems: "flex-end" }}>
-                      <Text style={styles.costLabel}>TANDA DISCOUNT</Text>
+                      <Text style={styles.costLabel}>{t("final_polish.goalbitems_tanda_discount")}</Text>
                       <Text style={[styles.costValue, { color: GREEN }]}>
                         {item.tandaDiscount}
                       </Text>
@@ -273,7 +273,7 @@ export default function GoalBItemsScreen() {
                       </Text>
                     </View>
                     <View style={styles.verifiedTag}>
-                      <Text style={styles.verifiedText}>VERIFIED</Text>
+                      <Text style={styles.verifiedText}>{t("final_polish.goalbitems_verified")}</Text>
                     </View>
                   </View>
 
@@ -284,7 +284,7 @@ export default function GoalBItemsScreen() {
                       accessibilityRole="button"
                       style={styles.dealButton}
                     >
-                      <Text style={styles.dealButtonText}>Get This Deal</Text>
+                      <Text style={styles.dealButtonText}>{t("final_polish.goalbitems_get_this_deal")}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => toggleSave(item.id)}
@@ -308,7 +308,7 @@ export default function GoalBItemsScreen() {
           <View style={styles.infoCard}>
             <Text style={styles.infoEmoji}>💡</Text>
             <View style={{ flex: 1 }}>
-              <Text style={styles.infoTitle}>Why Partner Discounts?</Text>
+              <Text style={styles.infoTitle}>{t("final_polish.goalbitems_why_partner_discounts")}</Text>
               <Text style={styles.infoBody}>
                 TandaXn negotiates exclusive rates with vetted providers. When
                 you achieve your goal with us, you deserve to save on the next

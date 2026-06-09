@@ -257,7 +257,7 @@ export default function LoanApplicationScreen() {
                   value={amount}
                   onChangeText={setAmount}
                 />
-                <Text style={styles.currencyCode}>USD</Text>
+                <Text style={styles.currencyCode}>{t("final_polish.loanapplication_usd")}</Text>
               </View>
               {requestedAmount > 0 && !isValidAmount && (
                 <Text style={styles.errorText}>

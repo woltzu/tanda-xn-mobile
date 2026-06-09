@@ -393,7 +393,7 @@ export default function GoalLinkCircleScreen() {
               {transferOption === "percent" && (
                 <View style={styles.percentBox}>
                   <View style={styles.percentHeaderRow}>
-                    <Text style={styles.percentHeaderLabel}>To Goal</Text>
+                    <Text style={styles.percentHeaderLabel}>{t("final_polish.goallinkcircle_to_goal")}</Text>
                     <Text style={styles.percentHeaderValue}>
                       {transferPercent}%
                     </Text>

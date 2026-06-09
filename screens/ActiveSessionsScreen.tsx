@@ -149,7 +149,7 @@ export default function ActiveSessionsScreen() {
                         {currentSession.device}
                       </Text>
                       <View style={styles.currentBadge}>
-                        <Text style={styles.currentBadgeText}>THIS DEVICE</Text>
+                        <Text style={styles.currentBadgeText}>{t("final_polish.activesessions_this_device")}</Text>
                       </View>
                     </View>
                     <Text style={styles.sessionBrowser}>

@@ -219,7 +219,7 @@ export default function AdvanceSettingsScreen() {
                   </Text>
                 </View>
                 <View style={{ alignItems: "flex-end" }}>
-                  <Text style={styles.activeLabel}>Auto-Withhold</Text>
+                  <Text style={styles.activeLabel}>{t("final_polish.advancesettings_auto_withhold")}</Text>
                   <Text style={styles.activeDate}>
                     {activeAdvance.withholdingDate}
                   </Text>

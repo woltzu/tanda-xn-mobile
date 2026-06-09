@@ -184,7 +184,7 @@ const MyTripStatusScreen: React.FC = () => {
         {/* ── Payment Progress ────────────────────────────────────────── */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardTitle}>Payment Progress</Text>
+            <Text style={styles.cardTitle}>{t("final_polish.mytripstatus_payment_progress")}</Text>
             <Text style={styles.paymentPercent}>{paymentPercent}%</Text>
           </View>
           <View style={styles.progressBar}>
@@ -210,7 +210,7 @@ const MyTripStatusScreen: React.FC = () => {
 
         {/* ── Personal Checklist ──────────────────────────────────────── */}
         <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Personal Checklist</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.mytripstatus_personal_checklist")}</Text>
           <View style={styles.checklistCard}>
             {data.checklist.map((item, index) => (
               <TouchableOpacity

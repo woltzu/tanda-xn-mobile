@@ -385,7 +385,7 @@ export default function CreateGoalScreen() {
         <View style={styles.autoSaveHeader}>
           <View style={styles.autoSaveInfo}>
             <Ionicons name="sync" size={20} color="#F59E0B" />
-            <Text style={styles.autoSaveTitle}>Auto-Save from Payouts</Text>
+            <Text style={styles.autoSaveTitle}>{t("final_polish.creategoal_auto_save_from_payouts")}</Text>
           </View>
           <TouchableOpacity
             style={[styles.toggle, autoSaveEnabled && styles.toggleEnabled]}

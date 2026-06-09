@@ -307,7 +307,7 @@ export default function GoalSetupSuccessScreen() {
             accessibilityRole="button"
             style={styles.primaryButton}
           >
-            <Text style={styles.primaryButtonText}>Go to My Goal</Text>
+            <Text style={styles.primaryButtonText}>{t("final_polish.goalsetupsuccess_go_to_my_goal")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => navigation.goBack()}

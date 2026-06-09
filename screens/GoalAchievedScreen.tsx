@@ -166,7 +166,7 @@ export default function GoalAchievedScreen() {
               <Text style={styles.trophyEmoji}>🏆</Text>
             </LinearGradient>
 
-            <Text style={styles.headline}>YOU DID IT!</Text>
+            <Text style={styles.headline}>{t("final_polish.goalachieved_you_did_it")}</Text>
             <Text style={styles.subhead}>Goal Achieved: {goal.achievement}</Text>
 
             {/* Goal card */}
@@ -181,7 +181,7 @@ export default function GoalAchievedScreen() {
 
               {/* Final balance */}
               <View style={styles.finalBox}>
-                <Text style={styles.finalLabel}>FINAL BALANCE</Text>
+                <Text style={styles.finalLabel}>{t("final_polish.goalachieved_final_balance")}</Text>
                 <Text style={styles.finalValue}>
                   $
                   {goal.finalBalance.toLocaleString("en-US", {
@@ -203,7 +203,7 @@ export default function GoalAchievedScreen() {
                   <Text style={styles.statValue}>
                     {goal.circlePayoutsReceived}
                   </Text>
-                  <Text style={styles.statLabel}>Circle payouts received</Text>
+                  <Text style={styles.statLabel}>{t("final_polish.goalachieved_circle_payouts_received")}</Text>
                 </View>
               </View>
             </View>
@@ -233,7 +233,7 @@ export default function GoalAchievedScreen() {
                 accessibilityRole="button"
                 style={styles.shareButton}
               >
-                <Text style={styles.shareButtonText}>Share My Story</Text>
+                <Text style={styles.shareButtonText}>{t("final_polish.goalachieved_share_my_story")}</Text>
               </TouchableOpacity>
             </LinearGradient>
 
@@ -258,7 +258,7 @@ export default function GoalAchievedScreen() {
             accessibilityRole="button"
             style={styles.withdrawButton}
           >
-            <Text style={styles.withdrawText}>Withdraw Funds</Text>
+            <Text style={styles.withdrawText}>{t("final_polish.goalachieved_withdraw_funds")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => navigation.goBack()}

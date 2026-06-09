@@ -340,7 +340,7 @@ export default function LeaveCircleScreen() {
 
       {renderImpact()}
 
-      <Text style={styles.sectionTitle}>Why are you leaving?</Text>
+      <Text style={styles.sectionTitle}>{t("final_polish.leavecircle_why_are_you_leaving")}</Text>
       {REASON_OPTIONS.map((opt) => (
         <TouchableOpacity
           key={opt.key}

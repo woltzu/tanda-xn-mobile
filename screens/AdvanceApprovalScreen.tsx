@@ -133,8 +133,8 @@ export default function AdvanceApprovalScreen() {
           <View style={styles.successRing}>
             <Ionicons name="checkmark" size={50} color="#FFFFFF" />
           </View>
-          <Text style={styles.heroTitle}>Advance Approved!</Text>
-          <Text style={styles.heroSubtitle}>Your funds are on the way</Text>
+          <Text style={styles.heroTitle}>{t("final_polish.advanceapproval_advance_approved")}</Text>
+          <Text style={styles.heroSubtitle}>{t("final_polish.advanceapproval_your_funds_are_on_the_way")}</Text>
         </LinearGradient>
 
         <View style={styles.contentWrap}>
@@ -196,7 +196,7 @@ export default function AdvanceApprovalScreen() {
               />
               <View style={styles.withholdInnerDivider} />
               <View style={styles.withholdReceiveRow}>
-                <Text style={styles.withholdReceiveLabel}>You'll receive</Text>
+                <Text style={styles.withholdReceiveLabel}>{t("final_polish.advanceapproval_you_ll_receive")}</Text>
                 <Text style={styles.withholdReceiveValue}>
                   ${advance.remainingAfter}
                 </Text>

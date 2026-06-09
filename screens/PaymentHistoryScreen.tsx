@@ -373,7 +373,7 @@ export default function PaymentHistoryScreen() {
           <Ionicons name="arrow-back" size={24} color="#1F2937" />
         </TouchableOpacity>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Payment History</Text>
+          <Text style={styles.headerTitle}>{t("final_polish.paymenthistory_payment_history")}</Text>
           <Text style={styles.headerSubtitle}>{circleName}</Text>
         </View>
         <TouchableOpacity style={styles.downloadButton}>

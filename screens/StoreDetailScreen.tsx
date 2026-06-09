@@ -239,7 +239,7 @@ export default function StoreDetailScreen() {
               })}
 
               {services.length === 0 && (
-                <Text style={styles.emptyText}>No services listed yet</Text>
+                <Text style={styles.emptyText}>{t("final_polish.storedetail_no_services_listed_yet")}</Text>
               )}
             </View>
 

@@ -114,7 +114,7 @@ export default function TwoFactorAuthScreen() {
             </TouchableOpacity>
             <View>
               <Text style={styles.headerTitle}>{t("screen_headers.two_factor_auth")}</Text>
-              <Text style={styles.headerSubtitle}>Extra security for your account</Text>
+              <Text style={styles.headerSubtitle}>{t("final_polish.twofactorauth_extra_security_for_your_account")}</Text>
             </View>
           </View>
         </LinearGradient>
@@ -137,7 +137,7 @@ export default function TwoFactorAuthScreen() {
                 />
               </View>
               <View style={styles.toggleContent}>
-                <Text style={styles.toggleTitle}>Two-Factor Authentication</Text>
+                <Text style={styles.toggleTitle}>{t("final_polish.twofactorauth_two_factor_authentication")}</Text>
                 <Text style={styles.toggleSubtitle}>
                   {enabled ? "Your account is protected" : "Add extra security"}
                 </Text>
@@ -155,7 +155,7 @@ export default function TwoFactorAuthScreen() {
             <>
               {/* Method Selection */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Verification Method</Text>
+                <Text style={styles.sectionTitle}>{t("final_polish.twofactorauth_verification_method")}</Text>
                 <View style={styles.card}>
                   {methods.map((method, index) => (
                     <TouchableOpacity
@@ -191,7 +191,7 @@ export default function TwoFactorAuthScreen() {
                           <Text style={styles.methodTitle}>{method.title}</Text>
                           {method.recommended && (
                             <View style={styles.recommendedBadge}>
-                              <Text style={styles.recommendedText}>RECOMMENDED</Text>
+                              <Text style={styles.recommendedText}>{t("final_polish.twofactorauth_recommended")}</Text>
                             </View>
                           )}
                         </View>
@@ -216,10 +216,10 @@ export default function TwoFactorAuthScreen() {
 
               {/* Backup Codes */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Backup Codes</Text>
+                <Text style={styles.sectionTitle}>{t("final_polish.twofactorauth_backup_codes")}</Text>
                 <View style={styles.card}>
                   <View style={styles.backupHeader}>
-                    <Text style={styles.backupTitle}>Recovery Codes</Text>
+                    <Text style={styles.backupTitle}>{t("final_polish.twofactorauth_recovery_codes")}</Text>
                     <View
                       style={[
                         styles.backupBadge,
@@ -251,13 +251,13 @@ export default function TwoFactorAuthScreen() {
                       style={styles.backupButton}
                       onPress={handleViewBackupCodes}
                     >
-                      <Text style={styles.backupButtonText}>View Codes</Text>
+                      <Text style={styles.backupButtonText}>{t("final_polish.twofactorauth_view_codes")}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.backupButtonOutline}
                       onPress={handleRegenerateBackupCodes}
                     >
-                      <Text style={styles.backupButtonOutlineText}>Regenerate</Text>
+                      <Text style={styles.backupButtonOutlineText}>{t("final_polish.twofactorauth_regenerate")}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>

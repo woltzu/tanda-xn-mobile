@@ -281,7 +281,7 @@ export default function EarlyInterventionScreen() {
             {historyItems.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="document-text-outline" size={48} color="#9CA3AF" />
-                <Text style={styles.emptyTitle}>No History</Text>
+                <Text style={styles.emptyTitle}>{t("final_polish.earlyintervention_no_history")}</Text>
                 <Text style={styles.emptySubtitle}>{t("early_intervention_v2.empty_subtitle")}</Text>
               </View>
             ) : (

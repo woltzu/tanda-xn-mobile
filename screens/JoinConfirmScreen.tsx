@@ -238,7 +238,7 @@ export default function JoinConfirmScreen() {
               <View style={[styles.iconWrap, { backgroundColor: "rgba(0,198,174,0.12)" }]}>
                 <ActivityIndicator size="large" color={TEAL} />
               </View>
-              <Text style={styles.title}>Almost there</Text>
+              <Text style={styles.title}>{t("final_polish.joinconfirm_almost_there")}</Text>
               <Text style={styles.subtitle}>{subMessage}</Text>
             </>
           )}
@@ -261,7 +261,7 @@ export default function JoinConfirmScreen() {
               <View style={[styles.iconWrap, { backgroundColor: "rgba(239,68,68,0.15)" }]}>
                 <Ionicons name="alert-circle" size={56} color={DANGER} />
               </View>
-              <Text style={styles.title}>Could not complete join</Text>
+              <Text style={styles.title}>{t("final_polish.joinconfirm_could_not_complete_join")}</Text>
               <Text style={styles.subtitle}>{message}</Text>
               <TouchableOpacity
                 style={styles.primary}
@@ -274,7 +274,7 @@ export default function JoinConfirmScreen() {
                   }
                 }}
               >
-                <Text style={styles.primaryText}>Return home</Text>
+                <Text style={styles.primaryText}>{t("final_polish.joinconfirm_return_home")}</Text>
               </TouchableOpacity>
             </>
           )}

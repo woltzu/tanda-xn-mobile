@@ -243,7 +243,7 @@ export default function EditGoalScreen() {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Icon</Text>
+            <Text style={styles.inputLabel}>{t("final_polish.editgoal_icon")}</Text>
             <View style={styles.emojiGrid}>
               {EMOJIS.map((emoji) => (
                 <TouchableOpacity
@@ -263,13 +263,13 @@ export default function EditGoalScreen() {
 
         {/* Auto-Save Settings */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Auto-Save Settings</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.editgoal_auto_save_settings")}</Text>
 
           <View style={styles.autoSaveCard}>
             <View style={styles.autoSaveHeader}>
               <View style={styles.autoSaveInfo}>
                 <Ionicons name="sync" size={20} color="#F59E0B" />
-                <Text style={styles.autoSaveTitle}>Auto-Save from Payouts</Text>
+                <Text style={styles.autoSaveTitle}>{t("final_polish.editgoal_auto_save_from_payouts")}</Text>
               </View>
               <TouchableOpacity
                 style={[styles.toggle, autoSaveEnabled && styles.toggleEnabled]}

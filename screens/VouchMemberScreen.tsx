@@ -230,7 +230,7 @@ export default function VouchMemberScreen() {
 
         {/* Users Needing Vouch */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>People Who Need Vouching</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.vouchmember_people_who_need_vouching")}</Text>
           <Text style={styles.sectionSubtitle}>
             These new members need an elder to vouch for them before joining circles
           </Text>
@@ -314,7 +314,7 @@ export default function VouchMemberScreen() {
 
         {/* How Vouching Works */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>How Vouching Works</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.vouchmember_how_vouching_works")}</Text>
           <View style={styles.howItWorksCard}>
             <View style={styles.howItWorksItem}>
               <View style={[styles.howItWorksIcon, { backgroundColor: "#EEF2FF" }]}>

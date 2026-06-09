@@ -264,7 +264,7 @@ export default function AdvanceExplanationV2Screen() {
               style={{ marginTop: 2 }}
             />
             <View style={{ flex: 1 }}>
-              <Text style={styles.disclaimerTitle}>What if I default?</Text>
+              <Text style={styles.disclaimerTitle}>{t("final_polish.advanceexplanationv2_what_if_i_default")}</Text>
               <Text style={styles.disclaimerBody}>
                 If your payout doesn't cover your advance, your XnScore drops
                 20 points and you may be restricted from future circles until
@@ -328,7 +328,7 @@ function StepVisual({ kind }: { kind: VisualKind }) {
           <Ionicons name="arrow-forward" size={20} color={TEAL} />
           <View style={visualStyles.tealOutlineChip}>
             <Text style={visualStyles.chipBigTeal}>$400</Text>
-            <Text style={visualStyles.chipMicroTeal}>Get Now!</Text>
+            <Text style={visualStyles.chipMicroTeal}>{t("final_polish.advanceexplanationv2_get_now")}</Text>
           </View>
         </View>
       );
@@ -342,7 +342,7 @@ function StepVisual({ kind }: { kind: VisualKind }) {
           <Ionicons name="arrow-forward" size={20} color={AMBER} />
           <View style={visualStyles.amberChip}>
             <Text style={visualStyles.chipMidAmber}>-$420</Text>
-            <Text style={visualStyles.chipMicroAmber}>Auto-Withheld</Text>
+            <Text style={visualStyles.chipMicroAmber}>{t("final_polish.advanceexplanationv2_auto_withheld")}</Text>
           </View>
         </View>
       );

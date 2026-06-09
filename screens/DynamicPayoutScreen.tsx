@@ -74,7 +74,7 @@ export default function DynamicPayoutScreen() {
     return (
       <View style={styles.loaderContainer}>
         <ActivityIndicator size="large" color={COLORS.teal} />
-        <Text style={styles.loaderText}>Loading payout schedule...</Text>
+        <Text style={styles.loaderText}>{t("final_polish.dynamicpayout_loading_payout_schedule")}</Text>
       </View>
     );
   }
@@ -103,7 +103,7 @@ export default function DynamicPayoutScreen() {
       >
         {/* Next Payout / Position Card */}
         <View style={styles.card}>
-          <Text style={styles.cardSubtitle}>Your Position</Text>
+          <Text style={styles.cardSubtitle}>{t("final_polish.dynamicpayout_your_position")}</Text>
           <Text style={styles.bigNumber}>
             {positionText?.position ?? "--"}
           </Text>
@@ -176,7 +176,7 @@ export default function DynamicPayoutScreen() {
           ) : (
             <View style={styles.emptyCard}>
               <Ionicons name="people-outline" size={28} color={COLORS.muted} />
-              <Text style={styles.emptyText}>Order not yet determined</Text>
+              <Text style={styles.emptyText}>{t("final_polish.dynamicpayout_order_not_yet_determined")}</Text>
             </View>
           )}
         </View>
@@ -218,14 +218,14 @@ export default function DynamicPayoutScreen() {
             <Text style={styles.statCardValue}>
               {run?.stabilityBreakdown?.overall?.toFixed(0) ?? "--"}
             </Text>
-            <Text style={styles.statCardLabel}>Stability</Text>
+            <Text style={styles.statCardLabel}>{t("final_polish.dynamicpayout_stability")}</Text>
           </View>
           <View style={styles.statCard}>
             <Ionicons name="cash-outline" size={20} color={COLORS.teal} />
             <Text style={styles.statCardValue}>
               {breakdown?.collapseRisk ?? "--"}
             </Text>
-            <Text style={styles.statCardLabel}>Collapse Risk</Text>
+            <Text style={styles.statCardLabel}>{t("final_polish.dynamicpayout_collapse_risk")}</Text>
           </View>
           <View style={styles.statCard}>
             <Ionicons name="people-outline" size={20} color={COLORS.teal} />

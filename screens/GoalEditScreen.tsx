@@ -170,7 +170,7 @@ export default function GoalEditScreen() {
               <Text style={styles.goalName} numberOfLines={1}>
                 {goalName || "Your goal"}
               </Text>
-              <Text style={styles.goalSub}>Editing goal details</Text>
+              <Text style={styles.goalSub}>{t("final_polish.goaledit_editing_goal_details")}</Text>
             </View>
           </View>
         </LinearGradient>
@@ -179,7 +179,7 @@ export default function GoalEditScreen() {
         <View style={styles.contentWrap}>
           {/* Goal name */}
           <View style={styles.card}>
-            <Text style={styles.fieldLabel}>GOAL NAME</Text>
+            <Text style={styles.fieldLabel}>{t("final_polish.goaledit_goal_name")}</Text>
             <TextInput
               value={goalName}
               onChangeText={setGoalName}
@@ -191,7 +191,7 @@ export default function GoalEditScreen() {
 
           {/* Target amount */}
           <View style={styles.card}>
-            <Text style={styles.fieldLabel}>TARGET AMOUNT</Text>
+            <Text style={styles.fieldLabel}>{t("final_polish.goaledit_target_amount")}</Text>
             <View style={styles.amountInputWrap}>
               <Text style={styles.amountCurrency}>$</Text>
               <TextInput
@@ -230,7 +230,7 @@ export default function GoalEditScreen() {
 
           {/* Monthly contribution */}
           <View style={styles.card}>
-            <Text style={styles.fieldLabel}>MONTHLY CONTRIBUTION</Text>
+            <Text style={styles.fieldLabel}>{t("final_polish.goaledit_monthly_contribution")}</Text>
             <View style={styles.monthlyRow}>
               <TouchableOpacity
                 onPress={() =>
@@ -265,7 +265,7 @@ export default function GoalEditScreen() {
               <View style={styles.toggleLeft}>
                 <Text style={styles.toggleEmoji}>⚡</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.toggleTitle}>Auto-Deposit</Text>
+                  <Text style={styles.toggleTitle}>{t("final_polish.goaledit_auto_deposit")}</Text>
                   <Text style={styles.toggleBody}>
                     Save ${monthlyContribution} automatically each month
                   </Text>

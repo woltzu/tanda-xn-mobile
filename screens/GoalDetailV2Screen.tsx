@@ -898,7 +898,7 @@ export default function GoalDetailV2Screen() {
                   </Text>
                 </View>
                 <View style={styles.autoTransferTag}>
-                  <Text style={styles.autoTransferText}>Auto-transfer ON</Text>
+                  <Text style={styles.autoTransferText}>{t("final_polish.goaldetailv2_auto_transfer_on")}</Text>
                 </View>
               </View>
             </View>

@@ -277,19 +277,19 @@ export default function GoalMilestonesScreen() {
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{achievedCount}</Text>
-              <Text style={styles.summaryLabel}>Milestones Hit</Text>
+              <Text style={styles.summaryLabel}>{t("final_polish.goalmilestones_milestones_hit")}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{goal.progressPercent}%</Text>
-              <Text style={styles.summaryLabel}>Progress</Text>
+              <Text style={styles.summaryLabel}>{t("final_polish.goalmilestones_progress")}</Text>
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
               <Text style={[styles.summaryValue, { color: TEAL }]}>
                 {milestones.length - achievedCount}
               </Text>
-              <Text style={styles.summaryLabel}>To Go</Text>
+              <Text style={styles.summaryLabel}>{t("final_polish.goalmilestones_to_go")}</Text>
             </View>
           </View>
         </LinearGradient>
@@ -306,7 +306,7 @@ export default function GoalMilestonesScreen() {
             >
               <View style={styles.nextTopRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.nextKicker}>NEXT MILESTONE</Text>
+                  <Text style={styles.nextKicker}>{t("final_polish.goalmilestones_next_milestone")}</Text>
                   <View style={styles.nextTitleRow}>
                     <Text style={styles.nextEmoji}>{nextMilestone.emoji}</Text>
                     <View style={{ flex: 1 }}>
@@ -322,7 +322,7 @@ export default function GoalMilestonesScreen() {
                   accessibilityRole="button"
                   style={styles.nextAddButton}
                 >
-                  <Text style={styles.nextAddText}>Add Money</Text>
+                  <Text style={styles.nextAddText}>{t("final_polish.goalmilestones_add_money")}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -337,7 +337,7 @@ export default function GoalMilestonesScreen() {
 
           {/* Timeline */}
           <View style={styles.card}>
-            <Text style={styles.cardHeading}>Your Journey</Text>
+            <Text style={styles.cardHeading}>{t("final_polish.goalmilestones_your_journey")}</Text>
 
             <View style={styles.timeline}>
               {/* Connector line behind the dots */}

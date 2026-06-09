@@ -273,7 +273,7 @@ const TripPublicPageScreen: React.FC = () => {
         <View style={styles.priceCard}>
           <View style={styles.priceRow}>
             <View>
-              <Text style={styles.priceLabel}>Per Person</Text>
+              <Text style={styles.priceLabel}>{t("final_polish.trippublicpage_per_person")}</Text>
               <View style={styles.priceAmountRow}>
                 <Text style={styles.priceDollar}>$</Text>
                 <Text style={styles.priceAmount}>
@@ -305,7 +305,7 @@ const TripPublicPageScreen: React.FC = () => {
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Ionicons name="map-outline" size={20} color={NAVY} />
-            <Text style={styles.sectionTitle}>Itinerary Preview</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.trippublicpage_itinerary_preview")}</Text>
           </View>
 
           {trip.itinerary.map((dayBlock) => {
@@ -371,7 +371,7 @@ const TripPublicPageScreen: React.FC = () => {
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Ionicons name="checkmark-circle" size={20} color={colors.successText} />
-            <Text style={styles.sectionTitle}>What's Included</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.trippublicpage_what_s_included")}</Text>
           </View>
           <View style={styles.listCard}>
             {trip.included.map((item, i) => (
@@ -387,7 +387,7 @@ const TripPublicPageScreen: React.FC = () => {
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
-            <Text style={styles.sectionTitle}>Not Included</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.trippublicpage_not_included")}</Text>
           </View>
           <View style={styles.listCard}>
             {trip.excluded.map((item, i) => (
@@ -403,7 +403,7 @@ const TripPublicPageScreen: React.FC = () => {
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Ionicons name="location" size={20} color={NAVY} />
-            <Text style={styles.sectionTitle}>Destination</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.trippublicpage_destination")}</Text>
           </View>
           <View style={styles.mapPlaceholder}>
             <LinearGradient
@@ -412,7 +412,7 @@ const TripPublicPageScreen: React.FC = () => {
             >
               <Text style={styles.mapPin}>{"📍"}</Text>
               <Text style={styles.mapLabel}>{trip.destination || 'Destination TBD'}</Text>
-              <Text style={styles.mapSublabel}>Interactive map coming soon</Text>
+              <Text style={styles.mapSublabel}>{t("final_polish.trippublicpage_interactive_map_coming_soon")}</Text>
             </LinearGradient>
           </View>
         </View>
@@ -437,7 +437,7 @@ const TripPublicPageScreen: React.FC = () => {
               navigation.navigate("MyTripStatus", { tripId: trip.id })
             }
           >
-            <Text style={styles.joinButtonText}>Join This Trip</Text>
+            <Text style={styles.joinButtonText}>{t("final_polish.trippublicpage_join_this_trip")}</Text>
             <Ionicons name="arrow-forward" size={18} color="#FFF" />
           </TouchableOpacity>
         </View>

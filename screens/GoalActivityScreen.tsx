@@ -172,7 +172,7 @@ export default function GoalActivityScreen() {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyEmoji}>🗒️</Text>
-            <Text style={styles.emptyText}>No activity yet</Text>
+            <Text style={styles.emptyText}>{t("final_polish.goalactivity_no_activity_yet")}</Text>
           </View>
         }
       />

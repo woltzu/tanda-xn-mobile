@@ -153,7 +153,7 @@ export default function ProviderVerificationScreen() {
           <View style={styles.elderHeader}>
             <Text style={styles.elderIcon}>{"\u{1F451}"}</Text>
             <View style={styles.elderTextWrap}>
-              <Text style={styles.elderTitle}>Request Elder Endorsement</Text>
+              <Text style={styles.elderTitle}>{t("final_polish.providerverification_request_elder_endorsement")}</Text>
             </View>
             <Switch
               value={elderEndorsement}
@@ -170,7 +170,7 @@ export default function ProviderVerificationScreen() {
 
         {/* What Happens Next */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>What happens next</Text>
+          <Text style={styles.sectionTitle}>{t("final_polish.providerverification_what_happens_next")}</Text>
           {timeline.map((item, i) => (
             <View key={i} style={styles.timelineRow}>
               <View style={styles.timelineBadge}>
@@ -190,7 +190,7 @@ export default function ProviderVerificationScreen() {
             navigation.navigate("ProviderDiscovery");
           }}
         >
-          <Text style={styles.ctaText}>Submit for Review</Text>
+          <Text style={styles.ctaText}>{t("final_polish.providerverification_submit_for_review")}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />

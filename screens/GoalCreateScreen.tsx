@@ -484,7 +484,7 @@ export default function GoalCreateScreen() {
                         >
                           {type.apy}%
                         </Text>
-                        <Text style={styles.typeApyLabel}>APY</Text>
+                        <Text style={styles.typeApyLabel}>{t("final_polish.goalcreate_apy")}</Text>
                       </View>
                     </View>
 
@@ -683,7 +683,7 @@ export default function GoalCreateScreen() {
               <View style={styles.toggleLeft}>
                 <Text style={styles.toggleEmoji}>⚡</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.toggleTitle}>Auto-Deposit</Text>
+                  <Text style={styles.toggleTitle}>{t("final_polish.goalcreate_auto_deposit")}</Text>
                   <Text style={styles.toggleBody}>
                     Save ${monthlyContribution} automatically each month
                   </Text>

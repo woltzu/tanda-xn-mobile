@@ -211,7 +211,7 @@ export default function AutopaySetupScreen() {
                 </Text>
               </View>
               <View style={{ alignItems: "flex-end" }}>
-                <Text style={styles.advanceLabel}>Auto-withhold on</Text>
+                <Text style={styles.advanceLabel}>{t("final_polish.autopaysetup_auto_withhold_on")}</Text>
                 <Text style={styles.advanceDate}>
                   {activeAdvance.withholdingDate}
                 </Text>

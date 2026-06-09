@@ -107,7 +107,7 @@ export default function DonationPreferencesScreen() {
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
         <View style={styles.hero}>
           <Ionicons name="heart" size={20} color={TEAL} />
-          <Text style={styles.heroTitle}>Set per-reaction giving</Text>
+          <Text style={styles.heroTitle}>{t("final_polish.donationpreferences_set_per_reaction_giving")}</Text>
           <Text style={styles.heroBody}>
             Tapping a reaction in a SyncStream room will deduct the amount
             below from your wallet. Set any to zero to react without giving.

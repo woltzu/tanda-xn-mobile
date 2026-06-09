@@ -106,7 +106,7 @@ export default function LoanDashboardScreen() {
 
         <View style={styles.cardBody}>
           <View style={styles.cardCol}>
-            <Text style={styles.fieldLabel}>Remaining</Text>
+            <Text style={styles.fieldLabel}>{t("final_polish.loandashboard_remaining")}</Text>
             <Text style={styles.fieldValueStrong}>{formatMoney(item.amountRemaining)}</Text>
             {item.totalToRepay > 0 && (
               <Text style={styles.fieldHint}>
@@ -115,7 +115,7 @@ export default function LoanDashboardScreen() {
             )}
           </View>
           <View style={styles.cardCol}>
-            <Text style={styles.fieldLabel}>Next payment</Text>
+            <Text style={styles.fieldLabel}>{t("final_polish.loandashboard_next_payment")}</Text>
             {nextPayment ? (
               <>
                 <Text style={styles.fieldValue}>{nextPayment}</Text>
@@ -148,7 +148,7 @@ export default function LoanDashboardScreen() {
         )}
 
         <View style={styles.cardFooter}>
-          <Text style={styles.viewDetails}>View details</Text>
+          <Text style={styles.viewDetails}>{t("final_polish.loandashboard_view_details")}</Text>
           <Ionicons name="chevron-forward" size={16} color={MUTED} />
         </View>
       </TouchableOpacity>
@@ -175,14 +175,14 @@ export default function LoanDashboardScreen() {
 
         <View style={styles.summary}>
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Total outstanding</Text>
+            <Text style={styles.summaryLabel}>{t("final_polish.loandashboard_total_outstanding")}</Text>
             <Text style={styles.summaryValue}>
               ${totalOutstanding.toLocaleString("en-US", { minimumFractionDigits: 0 })}
             </Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
-            <Text style={styles.summaryLabel}>Active loans</Text>
+            <Text style={styles.summaryLabel}>{t("final_polish.loandashboard_active_loans")}</Text>
             <Text style={styles.summaryValue}>{activeLoans.length}</Text>
           </View>
         </View>
@@ -205,7 +205,7 @@ export default function LoanDashboardScreen() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="document-text-outline" size={48} color={MUTED} />
-              <Text style={styles.emptyTitle}>No active loans</Text>
+              <Text style={styles.emptyTitle}>{t("final_polish.loandashboard_no_active_loans")}</Text>
               <Text style={styles.emptyBody}>
                 You don't have any active loans right now. Browse the marketplace
                 to see what's available.
@@ -215,7 +215,7 @@ export default function LoanDashboardScreen() {
                 onPress={() => navigation.navigate(Routes.LoanMarketplace)}
                 accessibilityRole="button"
               >
-                <Text style={styles.emptyButtonText}>Browse Loan Marketplace</Text>
+                <Text style={styles.emptyButtonText}>{t("final_polish.loandashboard_browse_loan_marketplace")}</Text>
               </TouchableOpacity>
             </View>
           }

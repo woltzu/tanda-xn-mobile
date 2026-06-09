@@ -244,7 +244,7 @@ export default function BulkInvitesScreen() {
               <View style={styles.emptyState}>
                 <Ionicons name="people-outline" size={56} color="#D1D5DB" />
                 <Text style={styles.emptyTitle}>{t("final_polish.bulkinvites_no_members_yet")}</Text>
-                <Text style={styles.emptySubtitle}>Upload a CSV or add members manually</Text>
+                <Text style={styles.emptySubtitle}>{t("final_polish.bulkinvites_upload_a_csv_or_add_members_manually")}</Text>
               </View>
             )}
 
@@ -257,7 +257,7 @@ export default function BulkInvitesScreen() {
           <>
             {/* SMS Preview */}
             <View style={styles.smsPreview}>
-              <Text style={styles.smsPreviewLabel}>SMS Preview</Text>
+              <Text style={styles.smsPreviewLabel}>{t("final_polish.bulkinvites_sms_preview")}</Text>
               <View style={styles.smsBubble}>
                 <Text style={styles.smsBubbleText}>
                   {smsLanguage === "en"
@@ -333,7 +333,7 @@ export default function BulkInvitesScreen() {
             <View style={styles.uploadInfo}>
               <Ionicons name="document-text-outline" size={24} color="#3B82F6" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.uploadInfoTitle}>CSV Format</Text>
+                <Text style={styles.uploadInfoTitle}>{t("final_polish.bulkinvites_csv_format")}</Text>
                 <Text style={styles.uploadInfoText}>
                   Required columns: first_name, phone{"\n"}
                   Optional: last_name, circle_name

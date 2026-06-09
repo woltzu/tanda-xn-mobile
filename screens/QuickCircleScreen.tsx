@@ -157,7 +157,7 @@ export default function QuickCircleScreen() {
       >
         <View style={styles.heroCard}>
           <Ionicons name="flash" size={20} color={TEAL} />
-          <Text style={styles.heroTitle}>One-tap setup</Text>
+          <Text style={styles.heroTitle}>{t("final_polish.quickcircle_one_tap_setup")}</Text>
           <Text style={styles.heroBody}>
             We've pre-filled the most common circle. Tweak amount,
             members, frequency, or start date — or just tap Create.
@@ -165,7 +165,7 @@ export default function QuickCircleScreen() {
         </View>
 
         {/* Name */}
-        <Text style={styles.sectionLabel}>Circle name</Text>
+        <Text style={styles.sectionLabel}>{t("final_polish.quickcircle_circle_name")}</Text>
         <View style={styles.inputWrap}>
           <TextInput
             style={styles.input}
@@ -179,7 +179,7 @@ export default function QuickCircleScreen() {
         </View>
 
         {/* Amount */}
-        <Text style={styles.sectionLabel}>Contribution per cycle</Text>
+        <Text style={styles.sectionLabel}>{t("final_polish.quickcircle_contribution_per_cycle")}</Text>
         <View style={styles.chipRow}>
           {AMOUNT_CHIPS.map((value) => {
             const active = amount === value;
@@ -256,7 +256,7 @@ export default function QuickCircleScreen() {
         </View>
 
         {/* Start date */}
-        <Text style={styles.sectionLabel}>Start date</Text>
+        <Text style={styles.sectionLabel}>{t("final_polish.quickcircle_start_date")}</Text>
         <View style={styles.startRow}>
           {START_OPTIONS.map((opt) => {
             const active = startId === opt.id;
@@ -278,7 +278,7 @@ export default function QuickCircleScreen() {
 
         {/* Preview */}
         <View style={styles.previewCard}>
-          <Text style={styles.previewLabel}>Each cycle</Text>
+          <Text style={styles.previewLabel}>{t("final_polish.quickcircle_each_cycle")}</Text>
           <Text style={styles.previewBig}>
             ${amount} × {memberCount} = ${totalPayout}
           </Text>

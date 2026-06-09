@@ -166,7 +166,7 @@ export default function SupportDreamScreen() {
           {targetAmount > 0 && (
             <View style={styles.progressCard}>
               <View style={styles.progressHeader}>
-                <Text style={styles.progressLabel}>Dream Progress</Text>
+                <Text style={styles.progressLabel}>{t("final_polish.supportdream_dream_progress")}</Text>
                 <Text style={styles.progressPercent}>
                   {Math.round(progress * 100)}%
                 </Text>
@@ -194,7 +194,7 @@ export default function SupportDreamScreen() {
 
           {/* Amount Input */}
           <View style={styles.amountCard}>
-            <Text style={styles.amountLabel}>How much would you like to send?</Text>
+            <Text style={styles.amountLabel}>{t("final_polish.supportdream_how_much_would_you_like_to_send")}</Text>
             <View style={styles.amountInputRow}>
               <Text style={styles.amountDollar}>$</Text>
               <TextInput
@@ -246,7 +246,7 @@ export default function SupportDreamScreen() {
 
           {/* Payment Methods */}
           <View style={styles.paymentSection}>
-            <Text style={styles.sectionTitle}>Payment Method</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.supportdream_payment_method")}</Text>
 
             {paymentMethods.map((method) => {
               const isSelected = selectedMethod === method.id;
@@ -318,7 +318,7 @@ export default function SupportDreamScreen() {
           {/* Summary */}
           {amount > 0 && (
             <View style={styles.summaryCard}>
-              <Text style={styles.sectionTitle}>Summary</Text>
+              <Text style={styles.sectionTitle}>{t("final_polish.supportdream_summary")}</Text>
 
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>{t("final_polish.supportdream_recipient")}</Text>
@@ -326,14 +326,14 @@ export default function SupportDreamScreen() {
               </View>
 
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Dream</Text>
+                <Text style={styles.summaryLabel}>{t("final_polish.supportdream_dream")}</Text>
                 <Text style={styles.summaryValue}>
                   {goalEmoji} {goalName}
                 </Text>
               </View>
 
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Processing Fee</Text>
+                <Text style={styles.summaryLabel}>{t("final_polish.supportdream_processing_fee")}</Text>
                 <Text style={[styles.summaryValue, { color: "#00C6AE" }]}>
                   $0.00
                 </Text>
@@ -362,7 +362,7 @@ export default function SupportDreamScreen() {
       {/* Bottom Action Bar */}
       <View style={styles.bottomBar}>
         <View style={styles.bottomSummary}>
-          <Text style={styles.bottomLabel}>You'll Send</Text>
+          <Text style={styles.bottomLabel}>{t("final_polish.supportdream_you_ll_send")}</Text>
           <Text style={styles.bottomAmount}>
             ${amount > 0 ? amount.toFixed(2) : "0.00"}
           </Text>

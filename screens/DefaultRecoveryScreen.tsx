@@ -57,7 +57,7 @@ export default function DefaultRecoveryScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#00C6AE" />
-        <Text style={styles.loadingText}>Loading recovery data...</Text>
+        <Text style={styles.loadingText}>{t("final_polish.defaultrecovery_loading_recovery_data")}</Text>
       </View>
     );
   }
@@ -139,8 +139,8 @@ export default function DefaultRecoveryScreen() {
             {defaults.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="shield-checkmark" size={48} color="#00C6AE" />
-                <Text style={styles.emptyTitle}>No Defaults</Text>
-                <Text style={styles.emptySubtitle}>Your account is in good standing</Text>
+                <Text style={styles.emptyTitle}>{t("final_polish.defaultrecovery_no_defaults")}</Text>
+                <Text style={styles.emptySubtitle}>{t("final_polish.defaultrecovery_your_account_is_in_good_standing")}</Text>
               </View>
             ) : (
               defaults.map((d) => {
@@ -169,7 +169,7 @@ export default function DefaultRecoveryScreen() {
                     {d.cascade_id && (
                       <View style={styles.cascadeBadge}>
                         <Ionicons name="git-branch-outline" size={12} color="#8B5CF6" />
-                        <Text style={styles.cascadeText}>Cascade active</Text>
+                        <Text style={styles.cascadeText}>{t("final_polish.defaultrecovery_cascade_active")}</Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -185,8 +185,8 @@ export default function DefaultRecoveryScreen() {
             {lateContributions.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="checkmark-done-circle" size={48} color="#00C6AE" />
-                <Text style={styles.emptyTitle}>No Late Payments</Text>
-                <Text style={styles.emptySubtitle}>All contributions are up to date</Text>
+                <Text style={styles.emptyTitle}>{t("final_polish.defaultrecovery_no_late_payments")}</Text>
+                <Text style={styles.emptySubtitle}>{t("final_polish.defaultrecovery_all_contributions_are_up_to_date")}</Text>
               </View>
             ) : (
               lateContributions.map((lc) => (

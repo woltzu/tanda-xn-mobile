@@ -247,7 +247,7 @@ export default function AdvanceExplanationScreen() {
               <Text style={styles.stepNumberText}>4</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Auto-Repayment</Text>
+              <Text style={styles.stepTitle}>{t("final_polish.advanceexplanation_auto_repayment")}</Text>
               <Text style={styles.stepDesc}>
                 On your payout date, the advance + fee is automatically withheld. Done!
               </Text>
@@ -272,7 +272,7 @@ export default function AdvanceExplanationScreen() {
             <View style={[styles.flowIcon, { backgroundColor: "#D1FAE5" }]}>
               <Ionicons name="flash" size={24} color="#10B981" />
             </View>
-            <Text style={styles.flowLabel}>Advance</Text>
+            <Text style={styles.flowLabel}>{t("final_polish.advanceexplanation_advance")}</Text>
             <Text style={[styles.flowValue, { color: "#10B981" }]}>$1,000</Text>
             <Text style={styles.flowDate}>{t("final_polish.advanceexplanation_today")}</Text>
           </View>

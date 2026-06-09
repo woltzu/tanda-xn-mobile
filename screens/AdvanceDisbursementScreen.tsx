@@ -245,7 +245,7 @@ export default function AdvanceDisbursementScreen() {
               )}
               <View style={styles.summaryDivider} />
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryStrong}>You'll receive</Text>
+                <Text style={styles.summaryStrong}>{t("final_polish.advancedisbursement_you_ll_receive")}</Text>
                 <Text style={styles.summaryTotal}>
                   ${totalReceived.toFixed(2)}
                 </Text>
@@ -303,7 +303,7 @@ function MethodOption({
     >
       {option.recommended && (
         <View style={styles.recommendedBadge}>
-          <Text style={styles.recommendedBadgeText}>RECOMMENDED</Text>
+          <Text style={styles.recommendedBadgeText}>{t("final_polish.advancedisbursement_recommended")}</Text>
         </View>
       )}
       <View style={styles.optionLeft}>

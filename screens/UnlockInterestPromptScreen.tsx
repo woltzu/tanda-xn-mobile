@@ -116,7 +116,7 @@ export default function UnlockInterestPromptScreen() {
             <Text style={styles.heroIcon}>🎉</Text>
           </View>
 
-          <Text style={styles.heroEyebrow}>You've earned</Text>
+          <Text style={styles.heroEyebrow}>{t("final_polish.unlockinterestprompt_you_ve_earned")}</Text>
           <Text style={styles.heroAmount}>{amountLabel}</Text>
           <Text style={styles.heroSubtitle}>
             Interest earned on your savings
@@ -127,7 +127,7 @@ export default function UnlockInterestPromptScreen() {
           {/* Optional breakdown by goal */}
           {goalBreakdown.length > 0 && (
             <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>Breakdown by goal</Text>
+              <Text style={styles.sectionTitle}>{t("final_polish.unlockinterestprompt_breakdown_by_goal")}</Text>
               <View style={styles.breakdownList}>
                 {goalBreakdown.map((line, idx) => (
                   <View
@@ -154,7 +154,7 @@ export default function UnlockInterestPromptScreen() {
               <Ionicons name="shield-checkmark" size={22} color={TEAL} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.stepTitle}>One simple step</Text>
+              <Text style={styles.stepTitle}>{t("final_polish.unlockinterestprompt_one_simple_step")}</Text>
               <Text style={styles.stepBody}>
                 Tax law requires us to verify your identity before sending
                 interest. It takes about 2 minutes — and we accept SSN, ITIN,
@@ -165,7 +165,7 @@ export default function UnlockInterestPromptScreen() {
 
           {/* Benefits */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>What you'll unlock</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.unlockinterestprompt_what_you_ll_unlock")}</Text>
             <View style={styles.benefitsList}>
               {BENEFITS.map((b, idx) => (
                 <View key={idx} style={styles.benefitRow}>
@@ -212,7 +212,7 @@ export default function UnlockInterestPromptScreen() {
           accessibilityRole="button"
           accessibilityLabel="Maybe later"
         >
-          <Text style={styles.secondaryButtonText}>Maybe later</Text>
+          <Text style={styles.secondaryButtonText}>{t("final_polish.unlockinterestprompt_maybe_later")}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

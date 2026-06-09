@@ -140,7 +140,7 @@ export default function DepositToGoalScreen() {
           {/* Goal Selector */}
           {activeGoals.length > 1 && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>SELECT GOAL</Text>
+              <Text style={styles.sectionLabel}>{t("final_polish.deposittogoal_select_goal")}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {activeGoals.map((g) => {
                   const config = GOAL_TYPES[g.type];
@@ -203,7 +203,7 @@ export default function DepositToGoalScreen() {
 
           {/* Amount Input */}
           <View style={styles.amountSection}>
-            <Text style={styles.sectionLabel}>AMOUNT</Text>
+            <Text style={styles.sectionLabel}>{t("final_polish.deposittogoal_amount")}</Text>
             <View style={styles.amountInputContainer}>
               <Text style={styles.currencySymbol}>$</Text>
               <TextInput
@@ -264,7 +264,7 @@ export default function DepositToGoalScreen() {
 
           {/* Pay From */}
           <View style={styles.payFromSection}>
-            <Text style={styles.sectionLabel}>PAY FROM</Text>
+            <Text style={styles.sectionLabel}>{t("final_polish.deposittogoal_pay_from")}</Text>
             <View style={styles.payFromCard}>
               {/* Wallet Option */}
               <TouchableOpacity
@@ -278,7 +278,7 @@ export default function DepositToGoalScreen() {
                   <Ionicons name="wallet-outline" size={20} color="#00C6AE" />
                 </View>
                 <View style={styles.payFromDetails}>
-                  <Text style={styles.payFromLabel}>TandaXn Wallet</Text>
+                  <Text style={styles.payFromLabel}>{t("final_polish.deposittogoal_tandaxn_wallet")}</Text>
                   <Text style={styles.payFromSub}>{t("final_polish.deposittogoal_instant")}</Text>
                 </View>
               </TouchableOpacity>
@@ -312,7 +312,7 @@ export default function DepositToGoalScreen() {
                   <View style={styles.payFromDetails}>
                     <Text style={styles.payFromLabel}>{method.label}</Text>
                     {method.isDefault && (
-                      <Text style={styles.payFromSub}>Default</Text>
+                      <Text style={styles.payFromSub}>{t("final_polish.deposittogoal_default")}</Text>
                     )}
                   </View>
                 </TouchableOpacity>

@@ -112,7 +112,7 @@ export default function CircleVisualizerScreen() {
     return (
       <View style={styles.loaderContainer}>
         <ActivityIndicator size="large" color={COLORS.teal} />
-        <Text style={styles.loaderText}>Loading circle...</Text>
+        <Text style={styles.loaderText}>{t("final_polish.circlevisualizer_loading_circle")}</Text>
       </View>
     );
   }
@@ -313,22 +313,22 @@ export default function CircleVisualizerScreen() {
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: COLORS.gray }]} />
-            <Text style={styles.legendText}>Empty seat</Text>
+            <Text style={styles.legendText}>{t("final_polish.circlevisualizer_empty_seat")}</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: COLORS.greenLight }]} />
-            <Text style={styles.legendText}>Member joined</Text>
+            <Text style={styles.legendText}>{t("final_polish.circlevisualizer_member_joined")}</Text>
           </View>
           {(activePhase === 3 || activePhase === 4) && (
             <View style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: COLORS.gold }]} />
-              <Text style={styles.legendText}>Contribution</Text>
+              <Text style={styles.legendText}>{t("final_polish.circlevisualizer_contribution")}</Text>
             </View>
           )}
           {activePhase === 4 && (
             <View style={styles.legendItem}>
               <View style={[styles.legendDotOutline, { borderColor: COLORS.red }]} />
-              <Text style={styles.legendText}>Payout recipient</Text>
+              <Text style={styles.legendText}>{t("final_polish.circlevisualizer_payout_recipient")}</Text>
             </View>
           )}
         </View>
@@ -342,7 +342,7 @@ export default function CircleVisualizerScreen() {
               <Text style={styles.infoValue}>{circle.currentMembers}/{circle.memberCount}</Text>
             </View>
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Contribution</Text>
+              <Text style={styles.infoLabel}>{t("final_polish.circlevisualizer_contribution")}</Text>
               <Text style={styles.infoValue}>${(circle.amount / 100).toFixed(2)}</Text>
             </View>
             <View style={styles.infoRow}>

@@ -32,13 +32,13 @@ export default function FeedSettingsScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Feed Settings</Text>
+        <Text style={styles.headerTitle}>{t("final_polish.feedsettings_feed_settings")}</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Auto-Post Settings */}
-        <Text style={styles.sectionTitle}>Auto-Post Settings</Text>
+        <Text style={styles.sectionTitle}>{t("final_polish.feedsettings_auto_post_settings")}</Text>
         <Text style={styles.sectionDescription}>
           Choose which activities automatically create posts in the Dream Feed.
         </Text>

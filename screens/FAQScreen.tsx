@@ -169,7 +169,7 @@ export default function FAQScreen() {
         {filtered.length === 0 ? (
           <View style={styles.emptyBox}>
             <Ionicons name="search-outline" size={32} color={MUTED} />
-            <Text style={styles.emptyTitle}>No results</Text>
+            <Text style={styles.emptyTitle}>{t("final_polish.faq_no_results")}</Text>
             <Text style={styles.emptyBody}>
               Try a different search term, or clear the filters to see
               every article.
@@ -208,7 +208,7 @@ export default function FAQScreen() {
 
                     {row.related && row.related.length > 0 ? (
                       <View style={styles.relatedWrap}>
-                        <Text style={styles.relatedLabel}>Related</Text>
+                        <Text style={styles.relatedLabel}>{t("final_polish.faq_related")}</Text>
                         {row.related.map((rid) => {
                           const related = findById(rid);
                           if (!related) return null;
@@ -246,7 +246,7 @@ export default function FAQScreen() {
         {/* Contact Support */}
         <View style={styles.contactCard}>
           <Ionicons name="chatbubbles-outline" size={22} color={NAVY} />
-          <Text style={styles.contactTitle}>Still stuck?</Text>
+          <Text style={styles.contactTitle}>{t("final_polish.faq_still_stuck")}</Text>
           <Text style={styles.contactBody}>
             Send us a note and a human will get back to you within one
             business day.
@@ -258,7 +258,7 @@ export default function FAQScreen() {
             accessibilityLabel="Email TandaXn support"
           >
             <Ionicons name="mail-outline" size={14} color="#FFFFFF" />
-            <Text style={styles.contactBtnText}>Contact support</Text>
+            <Text style={styles.contactBtnText}>{t("final_polish.faq_contact_support")}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

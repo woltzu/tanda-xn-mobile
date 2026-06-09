@@ -240,7 +240,7 @@ export default function OversightDashboardScreen() {
               <Ionicons name="checkmark-circle" size={22} color="#10B981" />
             </View>
             <Text style={styles.statValue}>{paymentRate.toFixed(0)}%</Text>
-            <Text style={styles.statLabel}>On-Time Rate</Text>
+            <Text style={styles.statLabel}>{t("final_polish.oversightdashboard_on_time_rate")}</Text>
           </View>
 
           <View style={styles.statCard}>
@@ -317,7 +317,7 @@ export default function OversightDashboardScreen() {
               <View style={[styles.paymentDot, { backgroundColor: "#F59E0B" }]} />
               <View style={styles.paymentInfo}>
                 <Text style={styles.paymentCount}>{stats.latePayments}</Text>
-                <Text style={styles.paymentType}>Late</Text>
+                <Text style={styles.paymentType}>{t("final_polish.oversightdashboard_late")}</Text>
               </View>
             </View>
             <View style={styles.paymentItem}>

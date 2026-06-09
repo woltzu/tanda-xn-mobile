@@ -456,11 +456,11 @@ export default function ElderTrainingHubScreen() {
             </View>
 
             {/* Required Courses */}
-            <Text style={styles.sectionTitle}>Required Courses</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.eldertraininghub_required_courses")}</Text>
             {requiredCourses.map(renderCourseCard)}
 
             {/* Elective Courses */}
-            <Text style={styles.sectionTitle}>Elective Courses</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.eldertraininghub_elective_courses")}</Text>
             {electiveCourses.map(renderCourseCard)}
           </View>
         );

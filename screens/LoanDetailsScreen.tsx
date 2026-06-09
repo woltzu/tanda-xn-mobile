@@ -361,7 +361,7 @@ export default function LoanDetailsScreen() {
             {loan.automaticApproval && (
               <View style={styles.autoBadge}>
                 <Ionicons name="flash" size={12} color="#10B981" />
-                <Text style={styles.autoBadgeText}>Auto-Approved</Text>
+                <Text style={styles.autoBadgeText}>{t("final_polish.loandetails_auto_approved")}</Text>
               </View>
             )}
           </View>
@@ -412,7 +412,7 @@ export default function LoanDetailsScreen() {
             <View style={styles.rejectionCard}>
               <Ionicons name="alert-circle" size={24} color="#DC2626" />
               <View style={styles.rejectionContent}>
-                <Text style={styles.rejectionTitle}>Application Rejected</Text>
+                <Text style={styles.rejectionTitle}>{t("final_polish.loandetails_application_rejected")}</Text>
                 <Text style={styles.rejectionReason}>{loan.rejectionReason}</Text>
               </View>
             </View>
@@ -425,7 +425,7 @@ export default function LoanDetailsScreen() {
         <View style={styles.bottomBar}>
           <TouchableOpacity style={styles.makePaymentButton} onPress={handleMakePayment}>
             <Ionicons name="cash-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.makePaymentText}>Make a Payment</Text>
+            <Text style={styles.makePaymentText}>{t("final_polish.loandetails_make_a_payment")}</Text>
           </TouchableOpacity>
         </View>
       )}

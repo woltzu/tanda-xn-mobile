@@ -99,7 +99,7 @@ export default function SecuritySettingsScreen() {
                   <Ionicons name="key-outline" size={20} color="#00C6AE" />
                 </View>
                 <View style={styles.menuContent}>
-                  <Text style={styles.menuTitle}>Change Password</Text>
+                  <Text style={styles.menuTitle}>{t("final_polish.securitysettings_change_password")}</Text>
                   <Text style={styles.menuSubtitle}>Last changed 30 days ago</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
@@ -109,7 +109,7 @@ export default function SecuritySettingsScreen() {
 
           {/* Two-Factor Authentication */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Two-Factor Authentication</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.securitysettings_two_factor_authentication")}</Text>
             <View style={styles.card}>
               <TouchableOpacity
                 style={styles.menuItem}
@@ -120,10 +120,10 @@ export default function SecuritySettingsScreen() {
                 </View>
                 <View style={styles.menuContent}>
                   <Text style={styles.menuTitle}>2FA Settings</Text>
-                  <Text style={styles.menuSubtitle}>Authenticator app enabled</Text>
+                  <Text style={styles.menuSubtitle}>{t("final_polish.securitysettings_authenticator_app_enabled")}</Text>
                 </View>
                 <View style={styles.enabledBadge}>
-                  <Text style={styles.enabledText}>Enabled</Text>
+                  <Text style={styles.enabledText}>{t("final_polish.securitysettings_enabled")}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
               </TouchableOpacity>
@@ -132,7 +132,7 @@ export default function SecuritySettingsScreen() {
 
           {/* Biometrics */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Biometrics</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.securitysettings_biometrics")}</Text>
             <View style={styles.card}>
               <View style={styles.toggleItem}>
                 <View style={[styles.menuIcon, { backgroundColor: "#EFF6FF" }]}>
@@ -156,14 +156,14 @@ export default function SecuritySettingsScreen() {
 
           {/* Security Alerts */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Security Alerts</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.securitysettings_security_alerts")}</Text>
             <View style={styles.card}>
               <View style={[styles.toggleItem, styles.borderBottom]}>
                 <View style={[styles.menuIcon, { backgroundColor: "#FEF3C7" }]}>
                   <Ionicons name="log-in-outline" size={20} color="#D97706" />
                 </View>
                 <View style={styles.menuContent}>
-                  <Text style={styles.menuTitle}>Login Alerts</Text>
+                  <Text style={styles.menuTitle}>{t("final_polish.securitysettings_login_alerts")}</Text>
                   <Text style={styles.menuSubtitle}>
                     Get notified of new logins
                   </Text>
@@ -181,7 +181,7 @@ export default function SecuritySettingsScreen() {
                   <Ionicons name="card-outline" size={20} color="#DC2626" />
                 </View>
                 <View style={styles.menuContent}>
-                  <Text style={styles.menuTitle}>Transaction Alerts</Text>
+                  <Text style={styles.menuTitle}>{t("final_polish.securitysettings_transaction_alerts")}</Text>
                   <Text style={styles.menuSubtitle}>
                     Alerts for money movement
                   </Text>
@@ -198,7 +198,7 @@ export default function SecuritySettingsScreen() {
 
           {/* Active Sessions */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Sessions</Text>
+            <Text style={styles.sectionTitle}>{t("final_polish.securitysettings_sessions")}</Text>
             <View style={styles.card}>
               <TouchableOpacity
                 style={styles.menuItem}
@@ -208,7 +208,7 @@ export default function SecuritySettingsScreen() {
                   <Ionicons name="phone-portrait-outline" size={20} color="#0A2342" />
                 </View>
                 <View style={styles.menuContent}>
-                  <Text style={styles.menuTitle}>Active Sessions</Text>
+                  <Text style={styles.menuTitle}>{t("final_polish.securitysettings_active_sessions")}</Text>
                   <Text style={styles.menuSubtitle}>3 devices logged in</Text>
                 </View>
                 <View style={styles.sessionsBadge}>

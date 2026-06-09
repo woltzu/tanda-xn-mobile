@@ -280,7 +280,7 @@ export default function HonorScoreOverviewScreen() {
                   <Text style={styles.tierRange}>{tier.range}</Text>
                   {isCurrentTier && (
                     <View style={[styles.currentIndicator, { backgroundColor: tier.color }]}>
-                      <Text style={styles.currentIndicatorText}>You</Text>
+                      <Text style={styles.currentIndicatorText}>{t("final_polish.honorscoreoverview_you")}</Text>
                     </View>
                   )}
                 </View>

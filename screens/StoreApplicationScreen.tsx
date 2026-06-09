@@ -324,19 +324,19 @@ export default function StoreApplicationScreen() {
           {/* Step 2: Member Benefits */}
           {step === 2 && (
             <>
-              <Text style={styles.sectionLabel}>Offer something special to members</Text>
+              <Text style={styles.sectionLabel}>{t("final_polish.storeapplication_offer_something_special_to_members")}</Text>
 
               <View style={styles.switchRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.switchLabel}>Member discount</Text>
-                  <Text style={styles.switchHint}>Give TandaXn circle members a special rate</Text>
+                  <Text style={styles.switchLabel}>{t("final_polish.storeapplication_member_discount")}</Text>
+                  <Text style={styles.switchHint}>{t("final_polish.storeapplication_give_tandaxn_circle_members_a_special_rate")}</Text>
                 </View>
                 <Switch value={memberDiscount} onValueChange={setMemberDiscount} trackColor={{ true: "#00C6AE" }} />
               </View>
 
               {memberDiscount && (
                 <View style={styles.discountRow}>
-                  <Text style={styles.discountLabel}>Discount</Text>
+                  <Text style={styles.discountLabel}>{t("final_polish.storeapplication_discount")}</Text>
                   <View style={styles.discountPicker}>
                     {["5", "10", "15", "20"].map(pct => (
                       <TouchableOpacity

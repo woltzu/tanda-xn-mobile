@@ -196,7 +196,7 @@ export default function WalletTransactionSuccessScreen() {
               },
             ]}
           >
-            <Text style={styles.detailsTitle}>Transaction Details</Text>
+            <Text style={styles.detailsTitle}>{t("final_polish.wallettransactionsuccess_transaction_details")}</Text>
 
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>{t("final_polish.wallettransactionsuccess_amount")}</Text>
@@ -204,7 +204,7 @@ export default function WalletTransactionSuccessScreen() {
             </View>
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Method</Text>
+              <Text style={styles.detailLabel}>{t("final_polish.wallettransactionsuccess_method")}</Text>
               <Text style={styles.detailValue}>{method}</Text>
             </View>
 
@@ -216,7 +216,7 @@ export default function WalletTransactionSuccessScreen() {
             )}
 
             <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Transaction ID</Text>
+              <Text style={styles.detailLabel}>{t("final_polish.wallettransactionsuccess_transaction_id")}</Text>
               <Text style={styles.detailValueSmall}>{transactionId}</Text>
             </View>
 
@@ -274,7 +274,7 @@ export default function WalletTransactionSuccessScreen() {
                 onPress={handleShareReceipt}
               >
                 <Ionicons name="share-social" size={20} color="#FFFFFF" />
-                <Text style={styles.shareButtonPrimaryText}>Share Receipt</Text>
+                <Text style={styles.shareButtonPrimaryText}>{t("final_polish.wallettransactionsuccess_share_receipt")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.shareButtonSecondary}
@@ -293,7 +293,7 @@ export default function WalletTransactionSuccessScreen() {
             onPress={handleBackToWallet}
           >
             <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.backToWalletText}>Back to Wallet</Text>
+            <Text style={styles.backToWalletText}>{t("final_polish.wallettransactionsuccess_back_to_wallet")}</Text>
           </TouchableOpacity>
         </View>
       </LinearGradient>
