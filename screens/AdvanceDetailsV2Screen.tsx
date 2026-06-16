@@ -13,7 +13,7 @@
 //     rendered from `past_advances` with the `application` source.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -37,6 +37,7 @@ import {
   ActiveAdvance,
   PastAdvance,
 } from "../hooks/useAdvanceDashboard";
+import { supabase } from "../lib/supabase";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -284,6 +285,15 @@ function ActiveAdvanceView({
     }
   };
 
+  // Bucket A P0.3 — disbursement is performed async by a separate engine
+  // (see migration 146 lines 18-20). Right after submission the loans row
+  // exists but the wallet credit may not have landed yet. Use the
+  // `justCreated` route param as the "fresh submission" signal — if the
+  // user has any payment progress (payments_made > 0) we know money flowed,
+  // so treat as completed. Otherwise (just-created window, no payments
+  // yet), show the step as pending with copy that matches reality
+  // ("Disbursing your funds…").
+  const disbursementPending = justCreated && advance.payments_made === 0;
   const timeline = [
     {
       key: "approved",
@@ -292,10 +302,14 @@ function ActiveAdvanceView({
     },
     {
       key: "disbursed",
-      event: t("advance_details_v2.timeline_disbursed", {
-        amount: principal.toFixed(2),
-      }),
-      status: "completed" as const,
+      event: disbursementPending
+        ? t("advance_details_v2.timeline_disbursing")
+        : t("advance_details_v2.timeline_disbursed", {
+            amount: principal.toFixed(2),
+          }),
+      status: (disbursementPending ? "pending" : "completed") as
+        | "completed"
+        | "pending",
     },
     {
       key: "next",
@@ -313,6 +327,50 @@ function ActiveAdvanceView({
       status: "pending" as const,
     },
   ];
+
+  // Bucket A P0.4 — Repayment schedule fetch. The RPC writes
+  // loan_payment_schedule rows in the same transaction as the loan, so by
+  // the time this screen loads they exist. Direct supabase query keeps the
+  // schedule out of the dashboard cache (it doesn't shift between renders
+  // and would just bloat the batched payload).
+  type ScheduleRow = {
+    payment_number: number;
+    due_date: string;
+    total_due_cents: number;
+    status: string;
+  };
+  const [schedule, setSchedule] = useState<ScheduleRow[]>([]);
+  const [scheduleLoading, setScheduleLoading] = useState<boolean>(true);
+  useEffect(() => {
+    let cancelled = false;
+    setScheduleLoading(true);
+    supabase
+      .from("loan_payment_schedule")
+      .select("payment_number, due_date, total_due_cents, status")
+      .eq("loan_id", advance.loan_id)
+      .order("payment_number", { ascending: true })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        setScheduleLoading(false);
+        if (!error && data) {
+          setSchedule(data as ScheduleRow[]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [advance.loan_id]);
+  const fmtScheduleDate = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    } catch {
+      return iso;
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -508,6 +566,52 @@ function ActiveAdvanceView({
                 );
               })}
             </View>
+          </View>
+
+          {/* Bucket A P0.4 — Repayment schedule card */}
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>
+              {t("advance_details_v2.schedule_title")}
+            </Text>
+            {scheduleLoading ? (
+              <ActivityIndicator color={TEAL} style={{ paddingVertical: 16 }} />
+            ) : schedule.length === 0 ? (
+              <Text style={styles.scheduleEmpty}>
+                {t("advance_details_v2.schedule_empty")}
+              </Text>
+            ) : (
+              <>
+                <View style={styles.scheduleHeaderRow}>
+                  <Text style={[styles.scheduleHeader, { width: 60 }]}>
+                    {t("advance_details_v2.schedule_header_n")}
+                  </Text>
+                  <Text style={[styles.scheduleHeader, { flex: 1, textAlign: "center" }]}>
+                    {t("advance_details_v2.schedule_header_date")}
+                  </Text>
+                  <Text style={[styles.scheduleHeader, { textAlign: "right" }]}>
+                    {t("advance_details_v2.schedule_header_amount")}
+                  </Text>
+                </View>
+                {schedule.map((row) => (
+                  <View key={row.payment_number} style={styles.scheduleRow}>
+                    <Text style={[styles.scheduleN, { width: 60 }]}>
+                      {row.payment_number}
+                    </Text>
+                    <Text style={[styles.scheduleDate, { flex: 1 }]}>
+                      {fmtScheduleDate(row.due_date)}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.scheduleAmount,
+                        row.status === "paid" && styles.schedulePaid,
+                      ]}
+                    >
+                      ${(row.total_due_cents / 100).toFixed(2)}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            )}
           </View>
 
           {isActive ? (
@@ -1019,6 +1123,39 @@ const styles = StyleSheet.create({
   nextPaymentValueTeal: { fontSize: 14, fontWeight: "600", color: TEAL },
   nextPaymentValueWhite: { fontSize: 14, fontWeight: "600", color: "#FFFFFF" },
   nextPaymentValueAmber: { fontSize: 14, fontWeight: "600", color: AMBER },
+
+  scheduleEmpty: {
+    fontSize: 13,
+    color: MUTED,
+    paddingVertical: 16,
+    textAlign: "center",
+  },
+  scheduleHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+    marginBottom: 4,
+  },
+  scheduleHeader: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: MUTED,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  scheduleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  scheduleN: { fontSize: 13, color: NAVY, fontWeight: "600" },
+  scheduleDate: { fontSize: 13, color: MUTED, textAlign: "center" },
+  scheduleAmount: { fontSize: 14, color: NAVY, fontWeight: "700" },
+  schedulePaid: { color: "#16A34A" },
 
   timelineRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   timelineLeft: { alignItems: "center" },

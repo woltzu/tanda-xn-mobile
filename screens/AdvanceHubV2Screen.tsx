@@ -240,8 +240,19 @@ export default function AdvanceHubV2Screen() {
   // them back to the hub to re-pick (the product card row depends on
   // live eligibility which can shift between gate + resume).
   const advanceGate = useKYCGate({ resumeRoute: "AdvanceHubV2" });
+
+  // Bucket A P0.2 — ineligible product cards used to silently swallow
+  // taps (disabled prop). Now we surface an explanatory bottom sheet
+  // with a route to the Score Hub so the user can see what's gating
+  // them and act on it.
+  const [unavailableProduct, setUnavailableProduct] =
+    useState<AdvanceProductCard | null>(null);
+
   const handleSelectProduct = async (card: AdvanceProductCard) => {
-    if (!card.eligible) return;
+    if (!card.eligible) {
+      setUnavailableProduct(card);
+      return;
+    }
     const passed = await advanceGate.ensureVerified();
     if (!passed) return;
     navigation.navigate(Routes.SmartCalculator, {
@@ -497,7 +508,111 @@ export default function AdvanceHubV2Screen() {
         visible={showFirstVisit}
         onClose={dismissFirstVisit}
       />
+
+      <ProductUnavailableSheet
+        product={unavailableProduct}
+        onClose={() => setUnavailableProduct(null)}
+        onViewScore={() => {
+          setUnavailableProduct(null);
+          navigation.navigate(Routes.XnScoreDashboard);
+        }}
+      />
     </SafeAreaView>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Bucket A P0.2 — Product unavailable bottom sheet
+// ══════════════════════════════════════════════════════════════════════════
+//
+// Surfaces the reason an ineligible product card can't be opened and a
+// route to the Score Hub. The reason comes off `disqualification_reason`
+// from the dashboard payload; we add a numeric "points to unlock" line
+// when the gate is xnscore_too_low so the user sees the gap concretely.
+//
+// Anchored to the bottom with a translucent backdrop. Tap-outside to
+// dismiss. State is owned by the parent so we can both clear it and
+// navigate in one onPress without racing.
+
+function ProductUnavailableSheet({
+  product,
+  onClose,
+  onViewScore,
+}: {
+  product: AdvanceProductCard | null;
+  onClose: () => void;
+  onViewScore: () => void;
+}) {
+  const { t } = useTranslation();
+  if (!product) return null;
+
+  const reason = product.disqualification_reason ?? "generic";
+  const productName =
+    product.name ?? t(`advance_hub_v2.product_${product.ui_code}_name`);
+  const pointsToUnlock = product.points_to_unlock ?? 0;
+
+  const bodyKey = `advance_hub_v2.product_not_available_${reason}`;
+  const bodyText =
+    reason === "xnscore_too_low" && pointsToUnlock > 0
+      ? t(bodyKey, {
+          points: pointsToUnlock,
+          target: product.min_xnscore ?? 0,
+          defaultValue: t("advance_hub_v2.product_not_available_generic"),
+        })
+      : t(bodyKey, {
+          defaultValue: t("advance_hub_v2.product_not_available_generic"),
+        });
+
+  return (
+    <Modal
+      visible
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity
+        style={styles.sheetBackdrop}
+        activeOpacity={1}
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss"
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          style={styles.sheetCard}
+          // swallow taps so backdrop dismiss only fires outside the card
+          onPress={() => {}}
+        >
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>
+            {t("advance_hub_v2.product_not_available_title", {
+              product: productName,
+            })}
+          </Text>
+          <Text style={styles.sheetBody}>{bodyText}</Text>
+          <View style={styles.sheetActions}>
+            <TouchableOpacity
+              style={styles.sheetSecondary}
+              onPress={onClose}
+              accessibilityRole="button"
+            >
+              <Text style={styles.sheetSecondaryText}>
+                {t("advance_hub_v2.product_not_available_dismiss")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.sheetPrimary}
+              onPress={onViewScore}
+              accessibilityRole="button"
+            >
+              <Text style={styles.sheetPrimaryText}>
+                {t("advance_hub_v2.product_not_available_score_cta")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
   );
 }
 
@@ -546,10 +661,8 @@ function ProductCard({
         },
       ]}
       onPress={onPress}
-      disabled={state !== "active"}
-      activeOpacity={state === "active" ? 0.85 : 1}
+      activeOpacity={state === "active" ? 0.85 : 0.7}
       accessibilityRole="button"
-      accessibilityState={{ disabled: state !== "active" }}
       accessibilityLabel={`${productName}, ${styling.badgeLabel}`}
     >
       <View style={[styles.stateBadge, { backgroundColor: styling.badgeBg }]}>
@@ -1267,4 +1380,58 @@ const styles = StyleSheet.create({
     backgroundColor: TEAL,
   },
   modalPrimaryText: { fontSize: 13, color: "#FFFFFF", fontWeight: "700" },
+
+  // ── Bucket A P0.2 — Product unavailable bottom sheet ────────────────
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  sheetCard: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 28,
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: BORDER,
+    marginBottom: 16,
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: NAVY,
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  sheetBody: {
+    fontSize: 13,
+    color: MUTED,
+    lineHeight: 19,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  sheetActions: { flexDirection: "row", gap: 10 },
+  sheetSecondary: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: "#F5F7FA",
+  },
+  sheetSecondaryText: { fontSize: 13, color: MUTED, fontWeight: "600" },
+  sheetPrimary: {
+    flex: 2,
+    paddingVertical: 13,
+    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: TEAL,
+  },
+  sheetPrimaryText: { fontSize: 13, color: "#FFFFFF", fontWeight: "700" },
 });
