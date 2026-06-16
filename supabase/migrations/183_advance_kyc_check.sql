@@ -68,10 +68,12 @@ BEGIN
   -- blocks the request — this matches the in-app `KYCGate` semantics so the
   -- two layers agree. If the user has never started KYC the row doesn't
   -- exist and v_kyc_status is NULL; that's also a block.
+  -- Schema note: kyc_verifications uses `member_id` as the FK to profiles,
+  -- not `user_id` (legacy naming).
   SELECT status
     INTO v_kyc_status
     FROM public.kyc_verifications
-   WHERE user_id = v_user_id
+   WHERE member_id = v_user_id
    ORDER BY created_at DESC NULLS LAST
    LIMIT 1;
 
