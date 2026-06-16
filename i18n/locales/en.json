@@ -5662,6 +5662,13 @@
     "goals_card_title": "Goals",
     "goals_primary_label": "PRIMARY GOAL",
     "goals_manage_btn": "Manage Goals",
+    "advances": {
+      "title": "Advances",
+      "subtitle_received": "You have received {{amount}} in advances.",
+      "subtitle_repay_by": "Repay by {{date}}.",
+      "progress_label": "{{repaid}} / {{total}} repaid",
+      "button_manage": "Manage advances"
+    },
     "activity_received_payout": "Received payout from {{circle}}",
     "activity_contributed_to": "Contributed to {{circle}}",
     "activity_goal_contribution": "Goal contribution: {{goal}}",

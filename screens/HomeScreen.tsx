@@ -23,6 +23,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useGoalActions } from "../hooks/useGoalActions";
 import type { Goal } from "../types/goals";
 import { useCircles, type Circle } from "../context/CirclesContext";
+import { useCircleNetBalance } from "../hooks/useCircleNetBalance";
+import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
 
 // ==========================================================================
 // Mock data shrinking. Wallet balance comes from useWallet(), goals balance
@@ -112,6 +114,22 @@ function formatSigned(amount: number): string {
 }
 function formatPlain(amount: number): string {
   return `$${amount.toFixed(2)}`;
+}
+
+// Locale-aware short date for the Advances subtitle's "Repay by X" line.
+// Accepts both date-only ("2026-08-15") and timestamp ("2026-08-15T…")
+// inputs from get_advance_dashboard's next_payment_due.date. Falls
+// through to the raw string if Date can't parse it — better to show
+// the wrong format than to crash the card.
+function formatDueDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
 }
 
 // Fallback tier when useMemberTier returns null (unauth / loading / mock).
@@ -226,26 +244,108 @@ export default function HomeScreen() {
   );
   const hasActiveCircle = activeCircles.length > 0;
 
-  // Placeholder until a real contributions-minus-payouts hook lands.
-  // TODO(circles-net): wire to a future `useCircleNetBalance()` that sums
-  // contributions and payouts for the current user across `activeCircles`.
-  // Until then we display $0 net so the Home aggregate stays honest
-  // instead of advertising fake gains.
-  const circleNetBalance = 0;
+  // Real circle net = payouts received minus contributions made,
+  // aggregated across the user's currently-active memberships. Sign
+  // convention matches the bottom-sheet rows below: positive net =
+  // ahead (received more), negative = owed (put in more).
+  const {
+    circleNetBalances,
+    totalNet: totalCircleNet,
+    totalContributed: circleTotalContributed,
+    totalReceived: circleTotalReceived,
+    loading: circleNetLoading,
+    refetch: refetchCircleNet,
+  } = useCircleNetBalance();
+  const circleNetBalance = totalCircleNet;
+
+  // Refresh circle net on focus. Cheap when the cache is hot (the hook
+  // short-circuits to the cached entries); cheap when cold (one round
+  // trip with three small selects in parallel).
+  useFocusEffect(
+    useCallback(() => {
+      void refetchCircleNet();
+    }, [refetchCircleNet]),
+  );
 
   const totalNet = useMemo(
     () => walletBalance + totalGoalsBalance + circleNetBalance,
     [walletBalance, totalGoalsBalance, circleNetBalance],
   );
 
-  // Per-circle aggregates for the breakdown sheet. Real
-  // contributed/received numbers belong to the same future hook noted
-  // above; for now the totals row matches the per-circle placeholders so
-  // the sheet stays internally consistent.
+  // Per-circle aggregates for the breakdown sheet. Real values now —
+  // sums come from the hook's totals so the sheet's totals row
+  // matches the per-row entries exactly.
   const circleTotals = useMemo(
-    () => ({ contributed: 0, received: 0, net: circleNetBalance }),
-    [circleNetBalance],
+    () => ({
+      contributed: circleTotalContributed,
+      received: circleTotalReceived,
+      net: circleNetBalance,
+    }),
+    [circleTotalContributed, circleTotalReceived, circleNetBalance],
   );
+
+  // Map keyed by circle id so the bottom-sheet loop can look up the
+  // per-circle (contributed, received, net) by the activeCircles row's
+  // id in O(1).
+  const circleNetById = useMemo(() => {
+    const m = new Map<string, { contributed: number; received: number; net: number }>();
+    for (const e of circleNetBalances) {
+      m.set(e.circleId, {
+        contributed: e.contributed,
+        received: e.received,
+        net: e.net,
+      });
+    }
+    return m;
+  }, [circleNetBalances]);
+
+  // ── Active advances tile ─────────────────────────────────────────
+  // Active advances feed the new "Advances" card below Goals. The
+  // hook is shared with AdvanceHubV2Screen and caches by user id, so
+  // calling it here is free when the user has already visited the
+  // hub. The dashboard's own useFocusEffect handles refetches — no
+  // extra one needed here.
+  //
+  // We deliberately render the advance amount as a positive
+  // "available" balance and DO NOT subtract it from totalNet. The
+  // wallet balance already reflects the advance being deposited;
+  // double-counting it as a liability would understate the user's
+  // working capital.
+  const { data: advanceDashboard } = useAdvanceDashboard();
+  const activeAdvances = useMemo(
+    () => advanceDashboard?.active_advances ?? [],
+    [advanceDashboard],
+  );
+  const hasActiveAdvances = activeAdvances.length > 0;
+  const totalAdvancePrincipal = useMemo(
+    () =>
+      activeAdvances.reduce(
+        (sum, a) => sum + (a.principal_cents || 0),
+        0,
+      ) / 100,
+    [activeAdvances],
+  );
+  // The dashboard pre-computes the sum of outstanding cents server-
+  // side, so reuse it instead of re-iterating the list. `repaid` is
+  // derived locally — there's no `repaid_cents` column.
+  const totalAdvanceOutstanding =
+    (advanceDashboard?.outstanding_balance_cents ?? 0) / 100;
+  const totalAdvanceRepaid = Math.max(
+    0,
+    totalAdvancePrincipal - totalAdvanceOutstanding,
+  );
+  const advanceRepaidPct =
+    totalAdvancePrincipal > 0
+      ? Math.min(
+          100,
+          Math.round((totalAdvanceRepaid / totalAdvancePrincipal) * 100),
+        )
+      : 0;
+  // The dashboard's `next_payment_due.date` already picks the earliest
+  // upcoming payment across active loans. Keeping it as a single
+  // pre-computed field saves a min() pass over active_advances.
+  const earliestAdvanceDueDate =
+    advanceDashboard?.next_payment_due?.date ?? null;
 
   // Progress % for the primary goal card. 0 when there's no goal or no
   // target set, clamped to 100 so a goal that overshot its target doesn't
@@ -559,7 +659,9 @@ export default function HomeScreen() {
               </Text>
               <View style={styles.breakdownRight}>
                 <Text style={styles.breakdownValue}>
-                  {formatSigned(circleNetBalance)}
+                  {circleNetLoading && circleNetBalances.length === 0
+                    ? "—"
+                    : formatSigned(circleNetBalance)}
                 </Text>
                 <Ionicons name="chevron-forward" size={14} color={colors.textOnNavy} />
               </View>
@@ -666,6 +768,76 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {/* ===== ADVANCES CARD =====
+            Shown only when the user has at least one active advance.
+            Loading is hidden behind hasActiveAdvances so there's no
+            transient flash for users without advances (the hook
+            settles fast from its module-level cache). Spec: surface
+            the advance as a positive "available" balance — never
+            subtracted from totalNet. */}
+        {hasActiveAdvances ? (
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Ionicons
+                name="cash-outline"
+                size={18}
+                color={colors.primaryNavy}
+              />
+              <Text style={styles.sectionTitle}>
+                {t("home_screen.advances.title")}
+              </Text>
+            </View>
+
+            <Text style={styles.goalPrimaryLabel}>
+              {t("home_screen.advances.subtitle_received", {
+                amount: formatPlain(totalAdvancePrincipal),
+              })}
+              {earliestAdvanceDueDate
+                ? " " +
+                  t("home_screen.advances.subtitle_repay_by", {
+                    date: formatDueDate(earliestAdvanceDueDate),
+                  })
+                : ""}
+            </Text>
+
+            <View style={styles.progressBarBg}>
+              <View
+                style={[
+                  styles.progressBarFill,
+                  { width: `${advanceRepaidPct}%` },
+                ]}
+              />
+            </View>
+            <View style={styles.goalAmountRow}>
+              <Text style={styles.goalAmountText}>
+                {t("home_screen.advances.progress_label", {
+                  repaid: formatPlain(totalAdvanceRepaid),
+                  total: formatPlain(totalAdvancePrincipal),
+                })}
+              </Text>
+              <Text style={styles.goalAmountPct}>{advanceRepaidPct}%</Text>
+            </View>
+
+            <View style={styles.advancesButtonRow}>
+              <TouchableOpacity
+                style={styles.primaryBtn}
+                onPress={() => navigation.navigate(Routes.AdvanceHubV2)}
+                accessibilityRole="button"
+                accessibilityLabel={t("home_screen.advances.button_manage")}
+              >
+                <Text style={styles.primaryBtnText}>
+                  {t("home_screen.advances.button_manage")}
+                </Text>
+                <Ionicons
+                  name="arrow-forward"
+                  size={16}
+                  color={colors.textWhite}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
 
         {/* ===== RECENT ACTIVITY CARD ===== */}
         <View style={styles.sectionCard}>
@@ -939,13 +1111,15 @@ export default function HomeScreen() {
                 </Text>
               ) : (
                 activeCircles.map((c) => {
-                  // Per-circle contributed / received come from the same
-                  // future hook as `circleNetBalance` — placeholder 0/0 for
-                  // now so the sheet stays internally consistent with the
-                  // aggregate above.
-                  const contributed = 0;
-                  const received = 0;
-                  const net = received - contributed;
+                  // Real per-circle figures from useCircleNetBalance.
+                  // Falls back to zeros if a circle in `activeCircles`
+                  // has no contributions or payouts yet (or if the
+                  // membership row landed before the hook's cache
+                  // settles) so the row still renders cleanly.
+                  const stat = circleNetById.get(c.id);
+                  const contributed = stat?.contributed ?? 0;
+                  const received = stat?.received ?? 0;
+                  const net = stat?.net ?? received - contributed;
                   return (
                     <View key={c.id} style={styles.sheetRow}>
                       <View style={{ flex: 1 }}>
@@ -1402,6 +1576,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryNavy,
     borderRadius: 10,
     paddingVertical: 12,
+  },
+  // Same shape as goalsButtonRow but with only one CTA — no flex on
+  // the button itself because we don't need to share the row with a
+  // second action.
+  advancesButtonRow: {
+    marginTop: 12,
   },
   primaryBtnText: {
     color: colors.textWhite,

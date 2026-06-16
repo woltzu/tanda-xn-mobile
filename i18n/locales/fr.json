@@ -5662,6 +5662,13 @@
     "goals_card_title": "Objectifs",
     "goals_primary_label": "OBJECTIF PRINCIPAL",
     "goals_manage_btn": "Gérer les objectifs",
+    "advances": {
+      "title": "Avances",
+      "subtitle_received": "Vous avez reçu {{amount}} en avances.",
+      "subtitle_repay_by": "À rembourser avant le {{date}}.",
+      "progress_label": "{{repaid}} / {{total}} remboursés",
+      "button_manage": "Gérer les avances"
+    },
     "activity_received_payout": "Paiement reçu de {{circle}}",
     "activity_contributed_to": "Contribution à {{circle}}",
     "activity_goal_contribution": "Contribution à l'objectif : {{goal}}",
