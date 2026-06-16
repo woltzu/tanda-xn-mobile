@@ -9,15 +9,12 @@ import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { useMemberTier, useTierProgress, useTierLimits } from "../hooks/useGraduatedEntry";
+import { getTierByKeyOrFallback, TIER_CATALOG } from "../lib/tiers";
 
-const TIER_CONFIG: Record<string, { label: string; color: string; icon: string; gradient: [string, string] }> = {
-  newcomer: { label: "Newcomer", color: "#6B7280", icon: "person-outline", gradient: ["#6B7280", "#9CA3AF"] },
-  bronze: { label: "Bronze", color: "#CD7F32", icon: "shield-outline", gradient: ["#CD7F32", "#D4A574"] },
-  silver: { label: "Silver", color: "#C0C0C0", icon: "shield-half", gradient: ["#9CA3AF", "#C0C0C0"] },
-  gold: { label: "Gold", color: "#F59E0B", icon: "shield", gradient: ["#F59E0B", "#FBBF24"] },
-  platinum: { label: "Platinum", color: "#8B5CF6", icon: "diamond", gradient: ["#8B5CF6", "#A78BFA"] },
-  critical: { label: "Critical", color: "#EF4444", icon: "warning", gradient: ["#EF4444", "#F87171"] },
-};
+// Bucket A canonical refactor — the legacy TIER_CONFIG had stale
+// bronze/silver/gold/platinum keys that never existed in the live DB. The
+// catalog at lib/tiers.ts is the single source of truth. Use
+// getTierByKeyOrFallback() at render time for color/icon/label.
 
 export default function GraduatedEntryScreen() {
   const { t } = useTranslation();
@@ -69,7 +66,8 @@ export default function GraduatedEntryScreen() {
     refetchLimits();
   };
 
-  const tierConfig = TIER_CONFIG[currentTier] || TIER_CONFIG.newcomer;
+  const tierConfig = getTierByKeyOrFallback(currentTier);
+  const nextTierConfig = getTierByKeyOrFallback(nextTier);
 
   if (loading && !tier) {
     return (
@@ -94,8 +92,8 @@ export default function GraduatedEntryScreen() {
 
         {/* Tier Badge */}
         <View style={styles.tierBadgeContainer}>
-          <LinearGradient colors={tierConfig.gradient} style={styles.tierBadge}>
-            <Ionicons name={tierConfig.icon as any} size={32} color="#FFFFFF" />
+          <LinearGradient colors={[tierConfig.color, tierConfig.bgColor]} style={styles.tierBadge}>
+            <Text style={{ fontSize: 28, marginRight: 6 }}>{tierConfig.icon}</Text>
             <Text style={styles.tierName}>{tierConfig.label}</Text>
           </LinearGradient>
           {isDemoted && (
@@ -131,7 +129,7 @@ export default function GraduatedEntryScreen() {
             <View style={styles.progressLabels}>
               <Text style={styles.progressLabel}>{tierConfig.label}</Text>
               <Text style={styles.progressLabel}>
-                {nextTierDef ? TIER_CONFIG[nextTier || ""]?.label || "Next Tier" : "Max Tier"}
+                {nextTierDef ? nextTierConfig.label : "Max Tier"}
               </Text>
             </View>
             <View style={styles.progressBarBg}>
@@ -244,21 +242,21 @@ export default function GraduatedEntryScreen() {
             <Text style={styles.cardTitle}>{t("graduated_entry.card_all_tiers")}</Text>
           </View>
 
-          {Object.entries(TIER_CONFIG)
-            .filter(([key]) => key !== "critical")
-            .map(([key, config]) => {
-              const isCurrent = key === currentTier;
+          {TIER_CATALOG
+            .filter((tier) => tier.tierKey !== "critical")
+            .map((tier) => {
+              const isCurrent = tier.tierKey === currentTier;
               return (
-                <View key={key} style={[styles.tierRow, isCurrent && styles.tierRowActive]}>
-                  <View style={[styles.tierDot, { backgroundColor: config.color }]}>
-                    <Ionicons name={config.icon as any} size={14} color="#FFFFFF" />
+                <View key={tier.tierKey} style={[styles.tierRow, isCurrent && styles.tierRowActive]}>
+                  <View style={[styles.tierDot, { backgroundColor: tier.color }]}>
+                    <Text style={{ fontSize: 12 }}>{tier.icon}</Text>
                   </View>
-                  <Text style={[styles.tierRowLabel, isCurrent && { fontWeight: "700", color: config.color }]}>
-                    {config.label}
+                  <Text style={[styles.tierRowLabel, isCurrent && { fontWeight: "700", color: tier.color }]}>
+                    {tier.label}
                   </Text>
                   {isCurrent && (
-                    <View style={[styles.currentBadge, { backgroundColor: config.color + "15" }]}>
-                      <Text style={[styles.currentBadgeText, { color: config.color }]}>{t("graduated_entry.badge_current")}</Text>
+                    <View style={[styles.currentBadge, { backgroundColor: tier.color + "15" }]}>
+                      <Text style={[styles.currentBadgeText, { color: tier.color }]}>{t("graduated_entry.badge_current")}</Text>
                     </View>
                   )}
                 </View>

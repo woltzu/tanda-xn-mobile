@@ -5760,6 +5760,9 @@
     "tier_badge_a11y": "Membership tier: {{tier}}. Tap to view benefits.",
     "tier_benefits_link": "Benefits",
     "tier_benefits_title": "Your tier benefits",
+    "tier_loading_label": "Loading tier…",
+    "tier_unavailable_label": "Tier unavailable",
+    "tier_loading_a11y": "Loading your membership tier",
     "goals_card_title": "Goals",
     "goals_primary_label": "PRIMARY GOAL",
     "goals_manage_btn": "Manage Goals",
@@ -6328,5 +6331,16 @@
     "close": "Close",
     "clear_search": "Clear search",
     "tap_to_choose": "Tap to choose a country"
+  },
+  "tier_explain": {
+    "title": "Why this tier?",
+    "reasoning_label": "How we got here",
+    "score_row": "XnScore: {{score}}",
+    "age_row": "Account age: {{days}} days",
+    "circles_row": "Circles completed: {{circles}}",
+    "benefits_label": "What this tier unlocks",
+    "progress_label": "Progress to {{nextTier}}",
+    "view_full": "View full tier details",
+    "dismiss": "Dismiss"
   }
 }

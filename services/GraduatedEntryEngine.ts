@@ -18,37 +18,30 @@
 
 import { supabase } from '@/lib/supabase';
 import { XnScoreTier } from './XnScoreEngine';
+// Bucket A canonical catalog — all tier metadata lives in lib/tiers.ts.
+// This engine re-exports it under the legacy names so historical imports
+// continue to work without churning every consumer.
+import {
+  TIER_CATALOG,
+  TierKey,
+  PositionAccess as CatalogPositionAccess,
+  TierDefinition as CatalogTierDefinition,
+} from '@/lib/tiers';
 
 
 // ┌─────────────────────────────────────────────────────────────────────────────┐
 // │ TYPES                                                                       │
 // └─────────────────────────────────────────────────────────────────────────────┘
 
-export type EntryTierKey = 'critical' | 'newcomer' | 'established' | 'trusted' | 'elder' | 'elite';
+export type EntryTierKey = TierKey;
 
 export type TierChangeType = 'initial' | 'advancement' | 'demotion' | 'fast_track' | 'manual';
 
 export type FastTrackStatus = 'pending' | 'approved' | 'rejected' | 'expired';
 
-export type PositionAccess = 'none' | 'middle_only' | 'any';
+export type PositionAccess = CatalogPositionAccess;
 
-export interface TierDefinition {
-  tierKey: EntryTierKey;
-  tierNumber: number;
-  label: string;
-  xnScoreMin: number;
-  xnScoreMax: number;
-  maxCircleSize: number | null;
-  maxContributionCents: number | null;
-  positionAccess: PositionAccess;
-  minAccountAgeDays: number;
-  featuresSummary: string | null;
-  fastTrackEligible: boolean;
-  fastTrackMinDays: number | null;
-  icon: string;
-  color: string;
-  description: string | null;
-}
+export type TierDefinition = CatalogTierDefinition;
 
 export interface MemberTierStatus {
   id: string;
@@ -163,69 +156,12 @@ const XN_TIER_TO_ENTRY_TIER: Record<XnScoreTier, EntryTierKey> = {
   elite: 'elite',
 };
 
-/** Static tier definitions (mirrors DB seed data for offline/instant access) */
-const TIER_DEFINITIONS: TierDefinition[] = [
-  {
-    tierKey: 'critical', tierNumber: 0, label: 'Critical',
-    xnScoreMin: 0, xnScoreMax: 24,
-    maxCircleSize: 0, maxContributionCents: 0, positionAccess: 'none',
-    minAccountAgeDays: 0,
-    featuresSummary: 'Observe only — cannot join or create circles',
-    fastTrackEligible: false, fastTrackMinDays: null,
-    icon: '🚫', color: '#991B1B',
-    description: 'Account restricted. Build your XnScore through verification and engagement.',
-  },
-  {
-    tierKey: 'newcomer', tierNumber: 1, label: 'Newcomer',
-    xnScoreMin: 25, xnScoreMax: 44,
-    maxCircleSize: 5, maxContributionCents: 10000, positionAccess: 'middle_only',
-    minAccountAgeDays: 0,
-    featuresSummary: 'Basic circles, savings goals, financial coaching',
-    fastTrackEligible: true, fastTrackMinDays: 45,
-    icon: '🌱', color: '#EF4444',
-    description: 'First 90 days. Small circles, limited contributions.',
-  },
-  {
-    tierKey: 'established', tierNumber: 2, label: 'Established',
-    xnScoreMin: 45, xnScoreMax: 59,
-    maxCircleSize: 10, maxContributionCents: 50000, positionAccess: 'any',
-    minAccountAgeDays: 90,
-    featuresSummary: 'Liquidity advance, referral program, marketplace basic',
-    fastTrackEligible: false, fastTrackMinDays: null,
-    icon: '⚡', color: '#F59E0B',
-    description: '90+ days with clean history. Standard access, higher limits.',
-  },
-  {
-    tierKey: 'trusted', tierNumber: 3, label: 'Trusted',
-    xnScoreMin: 60, xnScoreMax: 74,
-    maxCircleSize: 20, maxContributionCents: 200000, positionAccess: 'any',
-    minAccountAgeDays: 365,
-    featuresSummary: 'Full marketplace, circle admin, matching pool',
-    fastTrackEligible: false, fastTrackMinDays: null,
-    icon: '✓', color: '#10B981',
-    description: '12+ months, multiple completed circles. Full access.',
-  },
-  {
-    tierKey: 'elder', tierNumber: 4, label: 'Elder',
-    xnScoreMin: 75, xnScoreMax: 89,
-    maxCircleSize: null, maxContributionCents: null, positionAccess: 'any',
-    minAccountAgeDays: 730,
-    featuresSummary: 'All features, governance privileges, reduced fees',
-    fastTrackEligible: false, fastTrackMinDays: null,
-    icon: '🏆', color: '#8B5CF6',
-    description: '24+ months, exemplary history. Elder governance rights.',
-  },
-  {
-    tierKey: 'elite', tierNumber: 5, label: 'Elite',
-    xnScoreMin: 90, xnScoreMax: 100,
-    maxCircleSize: null, maxContributionCents: null, positionAccess: 'any',
-    minAccountAgeDays: 730,
-    featuresSummary: 'All features, lowest fees, maximum trust',
-    fastTrackEligible: false, fastTrackMinDays: null,
-    icon: '⭐', color: '#FFD700',
-    description: 'Reserved for long-term exemplary members.',
-  },
-];
+/**
+ * Static tier definitions — re-exported from the canonical catalog at
+ * lib/tiers.ts so this name stays available to existing consumers.
+ * Edit the catalog, not this constant.
+ */
+const TIER_DEFINITIONS: TierDefinition[] = TIER_CATALOG;
 
 
 // ┌─────────────────────────────────────────────────────────────────────────────┐

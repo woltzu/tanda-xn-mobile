@@ -5760,6 +5760,9 @@
     "tier_badge_a11y": "Palier d'adhésion : {{tier}}. Appuyez pour voir les avantages.",
     "tier_benefits_link": "Avantages",
     "tier_benefits_title": "Vos avantages de palier",
+    "tier_loading_label": "Chargement du palier…",
+    "tier_unavailable_label": "Palier indisponible",
+    "tier_loading_a11y": "Chargement de votre palier d'adhésion",
     "goals_card_title": "Objectifs",
     "goals_primary_label": "OBJECTIF PRINCIPAL",
     "goals_manage_btn": "Gérer les objectifs",
@@ -6328,5 +6331,16 @@
     "close": "Fermer",
     "clear_search": "Effacer la recherche",
     "tap_to_choose": "Appuyez pour choisir un pays"
+  },
+  "tier_explain": {
+    "title": "Pourquoi ce palier ?",
+    "reasoning_label": "Comment on y est arrivé",
+    "score_row": "XnScore : {{score}}",
+    "age_row": "Âge du compte : {{days}} jours",
+    "circles_row": "Cercles terminés : {{circles}}",
+    "benefits_label": "Ce que ce palier débloque",
+    "progress_label": "Progression vers {{nextTier}}",
+    "view_full": "Voir tous les détails du palier",
+    "dismiss": "Fermer"
   }
 }

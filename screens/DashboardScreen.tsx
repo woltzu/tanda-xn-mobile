@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useRef, useCallback } from "react";
+import React, { useMemo, useEffect, useRef, useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 import {
@@ -9,6 +9,7 @@ import {
   ScrollView,
   SafeAreaView,
   Image,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
@@ -25,6 +26,7 @@ import { useActiveIntervention } from "../hooks/useEarlyIntervention";
 import { useStressIntervention } from "../hooks/useFinancialStressPrediction";
 import { useMoodIntervention } from "../hooks/useContributionMoodDetection";
 import { useMemberTier } from "../hooks/useGraduatedEntry";
+import { getTierByKeyOrFallback, getNextTier } from "../lib/tiers";
 import { useUserDefaults } from "../hooks/useDefaultCascade";
 import { useLateContributions } from "../hooks/useLateContributions";
 import { useInterest } from "../hooks/useInterest";
@@ -102,41 +104,10 @@ function getGreeting(t: (k: string) => string): string {
 }
 
 // ─── Tier helpers (Phase D3 of feat(tier)) ────────────────────────────────
-// Map graduated_entry_tiers.tier_key → color/bg/emoji. Values mirror the
-// engine's seeded definitions in migration 040.
-function getTierColor(tierKey: string): string {
-  switch (tierKey) {
-    case "critical": return "#991B1B";
-    case "newcomer": return "#EF4444";
-    case "established": return "#F59E0B";
-    case "trusted": return "#10B981";
-    case "elder": return "#8B5CF6";
-    case "elite": return "#FFD700";
-    default: return "#6B7280";
-  }
-}
-function getTierBg(tierKey: string): string {
-  switch (tierKey) {
-    case "critical": return "#FEE2E2";
-    case "newcomer": return "#FEF2F2";
-    case "established": return "#FEF3C7";
-    case "trusted": return "#D1FAE5";
-    case "elder": return "#EDE9FE";
-    case "elite": return "#FEF9C3";
-    default: return "#F3F4F6";
-  }
-}
-function getTierEmoji(tierKey: string): string {
-  switch (tierKey) {
-    case "critical": return "\u{1F6AB}";       // 🚫
-    case "newcomer": return "\u{1F331}";       // 🌱
-    case "established": return "\u{26A1}";     // ⚡
-    case "trusted": return "\u{2713}";         // ✓
-    case "elder": return "\u{1F3C6}";          // 🏆
-    case "elite": return "\u{2B50}";           // ⭐
-    default: return "\u{1F535}";               // 🔵
-  }
-}
+// Bucket A canonical refactor — tier color/bg/emoji now live in the
+// catalog at lib/tiers.ts. Use getTierByKeyOrFallback(currentTier) and
+// read .color / .bgColor / .icon directly. Switch statements lived
+// here historically because the catalog didn't exist yet.
 
 export default function DashboardScreen() {
   const navigation = useNavigation<DashboardScreenNavigationProp>();
@@ -182,7 +153,16 @@ export default function DashboardScreen() {
   // which is now populated daily by graduated-entry-cron (Phase D2). The
   // hook auto-subscribes to realtime so tier advancement is reflected
   // without a refresh.
-  const { status: tierStatus } = useMemberTier();
+  // Bucket A bug fix — the hook returns `{ tier, ... }`, not `{ status }`;
+  // the prior destructure silently set tierStatus to undefined and the
+  // entire tier card never rendered. Renamed for clarity.
+  const { tier: tierStatus } = useMemberTier();
+  const tierDef = getTierByKeyOrFallback(tierStatus?.currentTier);
+  const nextTierDef = getNextTier(tierStatus?.currentTier);
+  // Bucket A — "Why this tier?" sheet. Opens on tap of the tier card,
+  // explains the eligibility math (XnScore + account age + circles),
+  // shows benefits, and offers a deep-dive link to GraduatedEntryScreen.
+  const [showTierExplain, setShowTierExplain] = useState(false);
 
   // Safety net: catch users who landed here without going through
   // SetPassword (e.g. closed the tab between QuickJoin success and the
@@ -781,28 +761,27 @@ export default function DashboardScreen() {
           <TouchableOpacity
             style={[
               styles.tierCard,
-              { backgroundColor: getTierBg(tierStatus.currentTier),
-                borderColor: getTierColor(tierStatus.currentTier) },
+              { backgroundColor: tierDef.bgColor, borderColor: tierDef.color },
             ]}
-            onPress={() => navigation.navigate(Routes.GraduatedEntry)}
+            onPress={() => setShowTierExplain(true)}
             activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel={`View ${tierStatus.currentTier} tier details`}
+            accessibilityLabel={t("tier_explain.title")}
           >
             <View style={[
               styles.tierIcon,
-              { backgroundColor: getTierColor(tierStatus.currentTier) + "22" },
+              { backgroundColor: tierDef.color + "22" },
             ]}>
-              <Text style={styles.tierEmoji}>{getTierEmoji(tierStatus.currentTier)}</Text>
+              <Text style={styles.tierEmoji}>{tierDef.icon}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <View style={styles.tierLabelRow}>
-                <Text style={[styles.tierLabel, { color: getTierColor(tierStatus.currentTier) }]}>
-                  {tierStatus.currentTier.charAt(0).toUpperCase() + tierStatus.currentTier.slice(1)}
+                <Text style={[styles.tierLabel, { color: tierDef.color }]}>
+                  {tierDef.label}
                 </Text>
                 {tierStatus.nextTier ? (
                   <Text style={styles.tierProgress}>
-                    {tierStatus.progressPct}% to {tierStatus.nextTier.charAt(0).toUpperCase() + tierStatus.nextTier.slice(1)}
+                    {tierStatus.progressPct}% to {getTierByKeyOrFallback(tierStatus.nextTier).label}
                   </Text>
                 ) : (
                   <Text style={styles.tierProgress}>{t("final_polish.dashboard_maxed_out")}</Text>
@@ -814,7 +793,7 @@ export default function DashboardScreen() {
                     styles.tierProgressFill,
                     {
                       width: `${Math.min(100, tierStatus.progressPct)}%`,
-                      backgroundColor: getTierColor(tierStatus.currentTier),
+                      backgroundColor: tierDef.color,
                     },
                   ]}
                 />
@@ -825,11 +804,7 @@ export default function DashboardScreen() {
                   : t("dashboard_v3.tier_capped", { size: tierStatus.maxCircleSize, cap: Math.round((tierStatus.maxContributionCents ?? 0) / 100) })}
               </Text>
             </View>
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={getTierColor(tierStatus.currentTier)}
-            />
+            <Ionicons name="chevron-forward" size={16} color={tierDef.color} />
           </TouchableOpacity>
         )}
 
@@ -1493,9 +1468,217 @@ export default function DashboardScreen() {
         {/* ========== 8. Bottom spacing for tab bar ========== */}
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* ========== Bucket A — "Why this tier?" bottom sheet ========== */}
+      <Modal
+        visible={showTierExplain && !!tierStatus}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowTierExplain(false)}
+      >
+        <TouchableOpacity
+          style={tierExplainStyles.backdrop}
+          activeOpacity={1}
+          onPress={() => setShowTierExplain(false)}
+          accessibilityRole="button"
+          accessibilityLabel={t("tier_explain.dismiss")}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={tierExplainStyles.sheet}
+            onPress={() => {}}
+          >
+            <View style={tierExplainStyles.handle} />
+
+            {/* Header — tier badge */}
+            <View style={tierExplainStyles.header}>
+              <View
+                style={[
+                  tierExplainStyles.badgeCircle,
+                  { backgroundColor: tierDef.color + "22" },
+                ]}
+              >
+                <Text style={tierExplainStyles.badgeEmoji}>{tierDef.icon}</Text>
+              </View>
+              <Text style={[tierExplainStyles.badgeLabel, { color: tierDef.color }]}>
+                {tierDef.label}
+              </Text>
+              <Text style={tierExplainStyles.title}>
+                {t("tier_explain.title")}
+              </Text>
+            </View>
+
+            {/* Why this tier — reasoning */}
+            <Text style={tierExplainStyles.sectionLabel}>
+              {t("tier_explain.reasoning_label")}
+            </Text>
+            <View style={tierExplainStyles.reasonRow}>
+              <Ionicons name="star" size={16} color="#F59E0B" />
+              <Text style={tierExplainStyles.reasonText}>
+                {t("tier_explain.score_row", { score: tierStatus?.xnScoreAtEval ?? 0 })}
+              </Text>
+            </View>
+            <View style={tierExplainStyles.reasonRow}>
+              <Ionicons name="calendar-outline" size={16} color="#3B82F6" />
+              <Text style={tierExplainStyles.reasonText}>
+                {t("tier_explain.age_row", {
+                  days: tierStatus?.accountAgeAtEval ?? 0,
+                })}
+              </Text>
+            </View>
+            <View style={tierExplainStyles.reasonRow}>
+              <Ionicons name="people-outline" size={16} color="#10B981" />
+              <Text style={tierExplainStyles.reasonText}>
+                {t("tier_explain.circles_row", {
+                  circles: tierStatus?.circlesCompletedAtEval ?? 0,
+                })}
+              </Text>
+            </View>
+
+            {/* Benefits */}
+            <Text style={[tierExplainStyles.sectionLabel, { marginTop: 18 }]}>
+              {t("tier_explain.benefits_label")}
+            </Text>
+            <Text style={tierExplainStyles.benefitsBody}>
+              {tierDef.featuresSummary}
+            </Text>
+
+            {/* Progress to next tier */}
+            {nextTierDef ? (
+              <>
+                <Text style={[tierExplainStyles.sectionLabel, { marginTop: 18 }]}>
+                  {t("tier_explain.progress_label", {
+                    nextTier: nextTierDef.label,
+                  })}
+                </Text>
+                <View style={tierExplainStyles.progressTrack}>
+                  <View
+                    style={[
+                      tierExplainStyles.progressFill,
+                      {
+                        width: `${Math.min(100, tierStatus?.progressPct ?? 0)}%`,
+                        backgroundColor: tierDef.color,
+                      },
+                    ]}
+                  />
+                </View>
+                <Text style={tierExplainStyles.progressPct}>
+                  {Math.round(tierStatus?.progressPct ?? 0)}%
+                </Text>
+              </>
+            ) : null}
+
+            {/* Actions */}
+            <View style={tierExplainStyles.actions}>
+              <TouchableOpacity
+                style={tierExplainStyles.secondaryBtn}
+                onPress={() => setShowTierExplain(false)}
+                accessibilityRole="button"
+              >
+                <Text style={tierExplainStyles.secondaryText}>
+                  {t("tier_explain.dismiss")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[tierExplainStyles.primaryBtn, { backgroundColor: tierDef.color }]}
+                onPress={() => {
+                  setShowTierExplain(false);
+                  navigation.navigate(Routes.GraduatedEntry);
+                }}
+                accessibilityRole="button"
+              >
+                <Text style={tierExplainStyles.primaryText}>
+                  {t("tier_explain.view_full")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Bucket A — "Why this tier?" bottom sheet styles
+// ══════════════════════════════════════════════════════════════════════════════
+
+const tierExplainStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 28,
+  },
+  handle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#E5E7EB",
+    marginBottom: 14,
+  },
+  header: { alignItems: "center", marginBottom: 18 },
+  badgeCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 8,
+  },
+  badgeEmoji: { fontSize: 26 },
+  badgeLabel: { fontSize: 18, fontWeight: "700", marginBottom: 4 },
+  title: { fontSize: 14, color: "#6B7280" },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  reasonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 6,
+  },
+  reasonText: { flex: 1, fontSize: 14, color: "#0A2342", fontWeight: "500" },
+  benefitsBody: { fontSize: 13, color: "#0A2342", lineHeight: 19 },
+  progressTrack: {
+    height: 8,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 4,
+    overflow: "hidden",
+    marginTop: 4,
+  },
+  progressFill: { height: 8, borderRadius: 4 },
+  progressPct: { fontSize: 11, color: "#6B7280", marginTop: 4, textAlign: "right" },
+  actions: { flexDirection: "row", gap: 10, marginTop: 22 },
+  secondaryBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: "#F5F7FA",
+  },
+  secondaryText: { fontSize: 13, color: "#6B7280", fontWeight: "600" },
+  primaryBtn: {
+    flex: 2,
+    paddingVertical: 13,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  primaryText: { fontSize: 13, color: "#FFFFFF", fontWeight: "700" },
+});
 
 const styles = StyleSheet.create({
   container: {

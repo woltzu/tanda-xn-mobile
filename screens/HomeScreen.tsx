@@ -132,22 +132,16 @@ function formatDueDate(iso: string | null | undefined): string {
   });
 }
 
-// Fallback tier when useMemberTier returns null (unauth / loading / mock).
-const FALLBACK_TIER = {
-  label: "Bronze",
-  icon: "🥉",
-  color: "#CD7F32",
-  featuresSummary: "Standard circles, goal savings, basic marketplace.",
-  description: "Established member — full access to core features.",
-};
-
 // ==========================================================================
 // Component
 // ==========================================================================
 export default function HomeScreen() {
   const { t } = useTranslation();
   const navigation = useTypedNavigation();
-  const { tierDef } = useMemberTier();
+  // Bucket A — no more FALLBACK_TIER mock. `tier` is null until the
+  // hook resolves; the render path shows a skeleton pill in that window
+  // instead of a fake Bronze badge that lied to cold-start users.
+  const { tierDef: tier, loading: tierLoading } = useMemberTier();
 
   const [showCircleSheet, setShowCircleSheet] = useState(false);
   const [showTierModal, setShowTierModal] = useState(false);
@@ -369,8 +363,6 @@ export default function HomeScreen() {
     hasActiveCircle &&
     mockData.has_been_in_circle_30_days;
 
-  const tier = tierDef ?? FALLBACK_TIER;
-
   // ----- Navigation handlers -----
   const handleManageGoals = () => {
     navigation.navigate(Routes.GoalsHubV2);
@@ -558,36 +550,52 @@ export default function HomeScreen() {
             </Text>
             <Text style={styles.balanceAmount}>{formatPlain(totalNet)}</Text>
 
-            {/* Tier badge — small chip directly under the big amount */}
-            <TouchableOpacity
-              style={styles.tierBadgeRow}
-              onPress={(e) => {
-                e.stopPropagation?.();
-                setShowTierModal(true);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={t("home_screen.tier_badge_a11y", {
-                tier: tier.label,
-              })}
-            >
-              <View
-                style={[
-                  styles.tierBadge,
-                  { backgroundColor: `${tier.color}33` },
-                ]}
+            {/* Tier badge — small chip directly under the big amount.
+                Bucket A: skeleton until tier resolves. Don't lie. */}
+            {tier ? (
+              <TouchableOpacity
+                style={styles.tierBadgeRow}
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  setShowTierModal(true);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t("home_screen.tier_badge_a11y", {
+                  tier: tier.label,
+                })}
               >
-                <Text style={styles.tierEmoji}>{tier.icon}</Text>
-                <Text style={styles.tierLabel}>{tier.label}</Text>
+                <View
+                  style={[
+                    styles.tierBadge,
+                    { backgroundColor: `${tier.color}33` },
+                  ]}
+                >
+                  <Text style={styles.tierEmoji}>{tier.icon}</Text>
+                  <Text style={styles.tierLabel}>{tier.label}</Text>
+                </View>
+                <Text style={styles.tierBenefitsLink}>
+                  {t("home_screen.tier_benefits_link")}
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={12}
+                  color={colors.textOnNavy}
+                />
+              </TouchableOpacity>
+            ) : (
+              <View
+                style={styles.tierBadgeRow}
+                accessibilityLabel={t("home_screen.tier_loading_a11y")}
+              >
+                <View style={[styles.tierBadge, styles.tierBadgeSkeleton]}>
+                  <Text style={styles.tierSkeletonLabel}>
+                    {tierLoading
+                      ? t("home_screen.tier_loading_label")
+                      : t("home_screen.tier_unavailable_label")}
+                  </Text>
+                </View>
               </View>
-              <Text style={styles.tierBenefitsLink}>
-                {t("home_screen.tier_benefits_link")}
-              </Text>
-              <Ionicons
-                name="chevron-forward"
-                size={12}
-                color={colors.textOnNavy}
-              />
-            </TouchableOpacity>
+            )}
 
             <View style={styles.divider} />
 
@@ -1245,8 +1253,11 @@ export default function HomeScreen() {
       </Modal>
 
       {/* ===== TIER BENEFITS MODAL ===== */}
+      {/* Gated on `tier` existing — the skeleton badge is non-tappable, so
+          if `tier` is null the modal can't open via UI. Belt-and-suspenders
+          guard here in case any other code path flips showTierModal. */}
       <Modal
-        visible={showTierModal}
+        visible={showTierModal && !!tier}
         transparent
         animationType="fade"
         onRequestClose={() => setShowTierModal(false)}
@@ -1259,20 +1270,20 @@ export default function HomeScreen() {
             <View
               style={[
                 styles.tierModalHeader,
-                { backgroundColor: `${tier.color}1A` },
+                { backgroundColor: `${tier?.color ?? "#6B7280"}1A` },
               ]}
             >
-              <Text style={styles.tierModalEmoji}>{tier.icon}</Text>
-              <Text style={[styles.tierModalLabel, { color: tier.color }]}>
-                {tier.label}
+              <Text style={styles.tierModalEmoji}>{tier?.icon}</Text>
+              <Text style={[styles.tierModalLabel, { color: tier?.color }]}>
+                {tier?.label}
               </Text>
             </View>
 
             <Text style={styles.tierModalTitle}>
               {t("home_screen.tier_benefits_title")}
             </Text>
-            <Text style={styles.tierModalBody}>{tier.featuresSummary}</Text>
-            <Text style={styles.tierModalBodyMuted}>{tier.description}</Text>
+            <Text style={styles.tierModalBody}>{tier?.featuresSummary}</Text>
+            <Text style={styles.tierModalBodyMuted}>{tier?.description}</Text>
 
             <TouchableOpacity
               style={styles.tierModalClose}
@@ -1436,6 +1447,19 @@ const styles = StyleSheet.create({
     color: colors.textOnNavy,
     fontSize: 12,
     textDecorationLine: "underline",
+  },
+  // Bucket A — skeleton pill shown while useMemberTier resolves. Muted
+  // background, neutral text. Non-interactive (not wrapped in a touchable).
+  tierBadgeSkeleton: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(255,255,255,0.15)",
+    borderWidth: 1,
+  },
+  tierSkeletonLabel: {
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.3,
   },
 
   divider: {
