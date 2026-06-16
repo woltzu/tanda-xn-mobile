@@ -31,13 +31,23 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
+  Platform,
 } from "react-native";
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useGoalActions } from "../hooks/useGoalActions";
+
+// P1 (Bucket B.5): quick-chip emoji set. A full picker would be
+// overkill — these cover ~80% of saving goals (home, travel, education,
+// vehicle, health, celebration, generic money). Tapping a chip
+// selects; the chosen one renders with a teal outline.
+const EMOJI_CHIPS = ["💰", "🏠", "✈️", "🎓", "🚗", "🏥", "🎉"] as const;
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -55,6 +65,8 @@ type EditGoal = {
   target?: number;
   monthlyContribution?: number;
   autoDepositEnabled?: boolean;
+  // P1 (Bucket B.5): exposed so the date picker can pre-fill.
+  targetDate?: string | null;
 };
 
 type GoalEditParams = {
@@ -91,6 +103,27 @@ export default function GoalEditScreen() {
   const [autoDeposit, setAutoDeposit] = useState(goal.autoDepositEnabled ?? true);
   const [isSaving, setIsSaving] = useState(false);
 
+  // P1 (Bucket B.5) — editable target date.
+  const initialDate = goal.targetDate ? new Date(goal.targetDate) : null;
+  const [targetDate, setTargetDate] = useState<Date | null>(
+    initialDate && !isNaN(initialDate.getTime()) ? initialDate : null,
+  );
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const handleDateChange = (
+    _e: DateTimePickerEvent,
+    picked: Date | undefined,
+  ) => {
+    // On Android the picker is a one-shot dialog — close it after the
+    // user picks. iOS uses inline-mode, so closing on every change would
+    // be jarring; let the user tap "Done" via the dedicated close
+    // button that appears below the inline picker.
+    if (Platform.OS === "android") setShowDatePicker(false);
+    if (picked) setTargetDate(picked);
+  };
+
+  // P1 (Bucket B.5) — editable emoji.
+  const [emoji, setEmoji] = useState<string>(goal.emoji ?? "🎯");
+
   // Validation: name non-empty, target > 0, monthly >= 0. Monthly = 0 is
   // allowed even though the stepper UI keeps it >= $50 — defensive against
   // any future input that bypasses the stepper.
@@ -112,13 +145,17 @@ export default function GoalEditScreen() {
     }
 
     // The hook accepts camelCase keys (UpdateGoalInput) and converts
-    // dollar amounts to cents on its side.
+    // dollar amounts to cents on its side. Target date is serialised as
+    // ISO-date (YYYY-MM-DD) so PostgREST stores it cleanly in the
+    // target_date column.
     setIsSaving(true);
     const { error } = await updateGoal(goalId, {
       name: goalName.trim(),
       targetAmount,
       monthlyContribution,
       autoDepositEnabled: autoDeposit,
+      emoji,
+      targetDate: targetDate ? targetDate.toISOString().slice(0, 10) : undefined,
     });
     setIsSaving(false);
 
@@ -187,6 +224,81 @@ export default function GoalEditScreen() {
               placeholderTextColor="#9CA3AF"
               style={styles.textInput}
             />
+          </View>
+
+          {/* P1 (Bucket B.5) — emoji picker. Quick-chip set covers the
+              common saving goals; tap to select. */}
+          <View style={styles.card}>
+            <Text style={styles.fieldLabel}>{t("goal_edit.label_emoji")}</Text>
+            <View style={styles.emojiRow}>
+              {EMOJI_CHIPS.map((e) => {
+                const isActive = emoji === e;
+                return (
+                  <TouchableOpacity
+                    key={e}
+                    onPress={() => setEmoji(e)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
+                    style={[
+                      styles.emojiChip,
+                      isActive && styles.emojiChipActive,
+                    ]}
+                  >
+                    <Text style={styles.emojiChipText}>{e}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* P1 (Bucket B.5) — target date picker. Pre-filled from the
+              current target_date when present. Android uses a one-shot
+              dialog; iOS shows the picker inline below the button. */}
+          <View style={styles.card}>
+            <Text style={styles.fieldLabel}>{t("goal_edit.label_target_date")}</Text>
+            <TouchableOpacity
+              style={styles.dateButton}
+              onPress={() => setShowDatePicker((v) => !v)}
+              accessibilityRole="button"
+            >
+              <Ionicons name="calendar-outline" size={20} color={NAVY} />
+              <Text style={styles.dateButtonText}>
+                {targetDate
+                  ? targetDate.toLocaleDateString(undefined, {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })
+                  : t("goal_edit.date_picker_label")}
+              </Text>
+              <Ionicons
+                name={showDatePicker ? "chevron-up" : "chevron-down"}
+                size={16}
+                color={MUTED}
+              />
+            </TouchableOpacity>
+            {showDatePicker && (
+              <View style={{ marginTop: 8 }}>
+                <DateTimePicker
+                  mode="date"
+                  display={Platform.OS === "ios" ? "inline" : "default"}
+                  value={targetDate ?? new Date()}
+                  minimumDate={new Date()}
+                  onChange={handleDateChange}
+                />
+                {Platform.OS === "ios" && (
+                  <TouchableOpacity
+                    style={styles.datePickerDone}
+                    onPress={() => setShowDatePicker(false)}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.datePickerDoneText}>
+                      {t("goal_edit.date_done")}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           </View>
 
           {/* Target amount */}
@@ -423,6 +535,49 @@ const styles = StyleSheet.create({
   quickPillActive: { borderWidth: 2, borderColor: TEAL, backgroundColor: "#F0FDFB" },
   quickPillText: { fontSize: 13, fontWeight: "600", color: MUTED },
   quickPillTextActive: { color: GREEN },
+
+  // P1 (Bucket B.5) — emoji picker chips.
+  emojiRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 10 },
+  emojiChip: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  emojiChipActive: {
+    borderWidth: 2,
+    borderColor: TEAL,
+    backgroundColor: "#F0FDFB",
+  },
+  emojiChipText: { fontSize: 22 },
+
+  // P1 (Bucket B.5) — target date button + picker.
+  dateButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#FFFFFF",
+  },
+  dateButtonText: { flex: 1, fontSize: 15, fontWeight: "600", color: NAVY },
+  datePickerDone: {
+    alignSelf: "flex-end",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    backgroundColor: TEAL,
+    marginTop: 8,
+  },
+  datePickerDoneText: { fontSize: 13, fontWeight: "700", color: "#FFFFFF" },
 
   monthlyRow: {
     flexDirection: "row",

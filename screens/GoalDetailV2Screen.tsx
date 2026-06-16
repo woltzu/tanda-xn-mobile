@@ -42,6 +42,8 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  Modal,
+  Pressable,
   Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -54,7 +56,16 @@ import { useGoalActions } from "../hooks/useGoalActions";
 import { useWallet } from "../context/WalletContext";
 import GoalAddMoneySheet from "../components/GoalAddMoneySheet";
 import GoalWithdrawSheet from "../components/GoalWithdrawSheet";
+import { showToast } from "../components/Toast";
 import { supabase } from "../lib/supabase";
+
+// P1 (Bucket B.6): once-per-session compound RPC cache. The plpgsql
+// short-circuits cheaply with reason='no_days_elapsed' when called
+// twice in the same calendar day, but the round-trip still costs a
+// network hop per focus event. Coarse module-scope Set survives
+// component remounts and tab switches but resets on app restart —
+// which is the right cadence for daily interest accrual.
+const compoundedGoalIdsThisSession = new Set<string>();
 import type {
   Goal as RealGoal,
   GoalMilestone as RealMilestone,
@@ -163,10 +174,17 @@ type Activity = {
   isCredit: boolean;
 };
 
+// P1 (Bucket B.7): the screen now relies on goalId only. The prior
+// `goal` route param was a stale-data shortcut — passing the whole
+// viewModel let the screen render before fetchGoal resolved, but the
+// fetched goal always overwrote it and the duplicated payload was
+// a footgun for stale reads. We accept it in the type for one cycle
+// to keep older deep-link payloads from crashing TS, but the runtime
+// ignores it.
 type GoalDetailV2Params = {
+  goalId?: string;
+  /** @deprecated — pass goalId only; this field is ignored. */
   goal?: Goal;
-  milestones?: Milestone[];
-  recentActivity?: Activity[];
 };
 type GoalDetailV2RouteProp = RouteProp<
   { GoalDetailV2: GoalDetailV2Params },
@@ -343,12 +361,11 @@ export default function GoalDetailV2Screen() {
   const { t } = useTranslation();
 
   const goalId = (route.params as { goalId?: string } | undefined)?.goalId;
-  const passedGoal = (route.params?.goal as Goal | undefined) ?? null;
 
-  // Real backend: fetch the goal + its transactions when a goalId is given.
-  // If a fully-formed render-shaped goal was passed instead (legacy debug
-  // nav from GoalsHubV2's mock cards), use it as-is.
-  const { fetchGoal, setRoundUpEnabled } = useGoalActions();
+  // P1 (Bucket B.7): drop the `goal` route param. The screen now
+  // always fetches by goalId — a brief spinner instead of pre-rendering
+  // possibly-stale data is the cleaner tradeoff.
+  const { fetchGoal, setRoundUpEnabled, updateGoal, deleteGoal } = useGoalActions();
   // P2 (migration 155) — local state for the round-up toggle on the
   // Round-up Savings jar. Initialised from the DB row inside loadGoal()
   // below; flipping calls the helper and refetches.
@@ -375,7 +392,7 @@ export default function GoalDetailV2Screen() {
     // Run once on mount only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [goal, setGoal] = useState<Goal | null>(passedGoal);
+  const [goal, setGoal] = useState<Goal | null>(null);
   const [transactions, setTransactions] = useState<RealTxn[] | null>(null);
   const [milestones, setMilestones] = useState<RealMilestone[]>([]);
   // Raw status from the DB row — kept separate from the viewModel `goal`
@@ -388,6 +405,7 @@ export default function GoalDetailV2Screen() {
   // launch, if the user still hasn't seen the celebration, the banner
   // returns (and Dismiss isn't a permanent silence).
   const [bannerDismissed, setBannerDismissed] = useState<boolean>(false);
+  const [menuVisible, setMenuVisible] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(!!goalId);
 
   const loadGoal = useCallback(async () => {
@@ -432,36 +450,38 @@ export default function GoalDetailV2Screen() {
   // when nothing's changed. The compoundingThisFocus ref guards against
   // React StrictMode's intentional double-invocation of effects in dev
   // (without it we'd issue two compound RPCs per focus in development).
-  const compoundingThisFocus = useRef(false);
+  // P1 (Bucket B.6): compound is gated by the module-scope
+  // `compoundedGoalIdsThisSession` Set declared above the component.
+  // First focus per session = one RPC; subsequent focuses just
+  // refresh the goal row (cheap select, no RPC). This swaps the old
+  // "reset-on-blur" ref for a session-stable cache that survives
+  // remounts and tab switches.
   useFocusEffect(
     useCallback(() => {
       if (!goalId) return;
       let cancelled = false;
       const compoundThenLoad = async () => {
-        if (compoundingThisFocus.current) {
-          // Second StrictMode invocation in dev — skip compound, still
-          // refresh the goal in case state changed elsewhere.
-          if (!cancelled) loadGoal();
-          return;
-        }
-        compoundingThisFocus.current = true;
-        try {
-          await supabase.rpc("compound_interest_for_goal", {
-            p_goal_id: goalId,
-          });
-        } catch (e) {
-          // Non-fatal — the screen still shows the (pre-compound) balance.
-          // Most likely cause for a real error: migration 081 hasn't been
-          // applied yet on this environment.
-          console.warn("[GoalDetailV2] compound_interest_for_goal failed", e);
+        if (!compoundedGoalIdsThisSession.has(goalId)) {
+          compoundedGoalIdsThisSession.add(goalId);
+          try {
+            await supabase.rpc("compound_interest_for_goal", {
+              p_goal_id: goalId,
+            });
+          } catch (e) {
+            // Non-fatal — screen still renders the (pre-compound)
+            // balance. Most likely cause for a real error: migration 081
+            // hasn't been applied yet on this environment.
+            console.warn("[GoalDetailV2] compound_interest_for_goal failed", e);
+            // Bail the session cache so a retry can happen on next
+            // focus instead of permanently silencing.
+            compoundedGoalIdsThisSession.delete(goalId);
+          }
         }
         if (!cancelled) loadGoal();
       };
       compoundThenLoad();
       return () => {
         cancelled = true;
-        // Reset on blur so the next focus compounds again.
-        compoundingThisFocus.current = false;
       };
     }, [goalId, loadGoal])
   );
@@ -550,8 +570,110 @@ export default function GoalDetailV2Screen() {
   };
   const lockStatus = getLockStatus();
 
-  const handleEditGoal = () =>
-    navigation.navigate(Routes.GoalEdit, { goalId: goal.id, goal });
+  // P1 (Bucket B.1): the ellipsis now opens a bottom-sheet menu.
+  // The four menu actions are wired below as the user's spec
+  // requested: Edit / Mark complete / Delete / Share.
+  const openMenu = () => setMenuVisible(true);
+  const closeMenu = () => setMenuVisible(false);
+
+  const handleEditGoal = () => {
+    closeMenu();
+    // Pass the viewModel goal — GoalEdit reads name / target /
+    // monthlyContribution / autoDepositEnabled / emoji / targetDate
+    // from it so the form pre-fills without a second fetch.
+    navigation.navigate(Routes.GoalEdit, {
+      goalId: goal.id,
+      goal: {
+        id: goal.id,
+        name: goal.name,
+        emoji: goal.emoji,
+        target: goal.target,
+        monthlyContribution: goal.monthlyContribution,
+        autoDepositEnabled: goal.autoDepositEnabled,
+        targetDate: goal.targetDate || null,
+      },
+    });
+  };
+
+  // P1 (Bucket B.3): manual mark-complete. The completion trigger from
+  // migration 078 only fires at balance >= target — this lets the user
+  // close out a goal early (e.g. they hit "good enough" or the goal
+  // was a Round-up jar with no target). Confirm copy depends on
+  // whether they're still short of target.
+  const handleMarkComplete = () => {
+    closeMenu();
+    const remaining = Math.max(0, (goal.target ?? 0) - (goal.balance ?? 0));
+    const bodyKey =
+      remaining > 0
+        ? "goal_detail.complete_body_short"
+        : "goal_detail.complete_body_ready";
+    Alert.alert(
+      t("goal_detail.complete_title"),
+      t(bodyKey, { amount: remaining.toLocaleString() }),
+      [
+        { text: t("goal_detail.cancel"), style: "cancel" },
+        {
+          text: t("goal_detail.menu_complete"),
+          style: "default",
+          onPress: async () => {
+            const { error } = await updateGoal(goal.id, { status: "completed" });
+            if (error) {
+              Alert.alert(
+                t("goal_detail.complete_failed_title"),
+                (error as { message?: string })?.message ??
+                  t("goal_detail.try_again"),
+              );
+              return;
+            }
+            showToast(t("goal_detail.toast_completed"), "success");
+            navigation.navigate(Routes.GoalAchieved as any, {
+              goalId: goal.id,
+              goal,
+            });
+          },
+        },
+      ],
+    );
+  };
+
+  // P1 (Bucket B.2): delete with a single confirm. deleteGoal is a soft
+  // delete (goal_status='closed') per useGoalActions — recoverable at
+  // the DB layer even though there's no UI for restoring yet.
+  const handleDelete = () => {
+    closeMenu();
+    Alert.alert(
+      t("goal_detail.delete_title"),
+      t("goal_detail.delete_body"),
+      [
+        { text: t("goal_detail.cancel"), style: "cancel" },
+        {
+          text: t("goal_detail.menu_delete"),
+          style: "destructive",
+          onPress: async () => {
+            const { error } = await deleteGoal(goal.id);
+            if (error) {
+              Alert.alert(
+                t("goal_detail.delete_failed_title"),
+                (error as { message?: string })?.message ??
+                  t("goal_detail.try_again"),
+              );
+              return;
+            }
+            showToast(t("goal_detail.toast_archived"), "success");
+            navigation.navigate(Routes.GoalsHubV2 as any);
+          },
+        },
+      ],
+    );
+  };
+
+  const handleShareProgress = () => {
+    closeMenu();
+    // P1: Share is a polish-future item — flagged in the audit's
+    // Bucket C list. The menu entry is here so the surface is
+    // discoverable; tapping shows a coming-soon toast for now.
+    showToast(t("goal_detail.share_coming_soon"), "info");
+  };
   // Replaced full-screen navigation with bottom-sheet modals — same
   // atomic RPC paths (transfer_to_goal / transfer_from_goal) under the
   // hood, but one less screen transition per deposit / withdrawal.
@@ -631,9 +753,9 @@ export default function GoalDetailV2Screen() {
 
             <TouchableOpacity
               style={styles.iconButton}
-              onPress={handleEditGoal}
+              onPress={openMenu}
               accessibilityRole="button"
-              accessibilityLabel="Goal options"
+              accessibilityLabel={t("goal_detail.menu_a11y")}
             >
               <Ionicons name="ellipsis-horizontal" size={20} color="#FFFFFF" />
             </TouchableOpacity>
@@ -1101,6 +1223,81 @@ export default function GoalDetailV2Screen() {
         onClose={() => setShowWithdrawSheet(false)}
         onSuccess={() => loadGoal()}
       />
+
+      {/* P1 (Bucket B.1) — Goal options bottom-sheet. Mirrors the
+          shape of MethodActionsSheet / the wallet coach mark. Four
+          actions: Edit, Mark complete, Delete (destructive), Share. */}
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeMenu}
+      >
+        <Pressable style={styles.menuBackdrop} onPress={closeMenu}>
+          <Pressable style={styles.menuSheet} onPress={() => {}}>
+            <View style={styles.menuHandle} />
+            <Text style={styles.menuTitle}>{t("goal_detail.menu_title")}</Text>
+
+            <TouchableOpacity
+              style={styles.menuRow}
+              onPress={handleEditGoal}
+              accessibilityRole="button"
+            >
+              <View style={[styles.menuIconBox, { backgroundColor: "#F0FDFB" }]}>
+                <Ionicons name="create-outline" size={18} color={TEAL} />
+              </View>
+              <Text style={styles.menuRowText}>{t("goal_detail.menu_edit")}</Text>
+              <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuRow}
+              onPress={handleMarkComplete}
+              accessibilityRole="button"
+            >
+              <View style={[styles.menuIconBox, { backgroundColor: "#D1FAE5" }]}>
+                <Ionicons name="checkmark-circle-outline" size={18} color={GREEN} />
+              </View>
+              <Text style={styles.menuRowText}>{t("goal_detail.menu_complete")}</Text>
+              <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuRow}
+              onPress={handleShareProgress}
+              accessibilityRole="button"
+            >
+              <View style={[styles.menuIconBox, { backgroundColor: "#EFF6FF" }]}>
+                <Ionicons name="share-outline" size={18} color="#1D4ED8" />
+              </View>
+              <Text style={styles.menuRowText}>{t("goal_detail.menu_share")}</Text>
+              <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.menuRow, styles.menuRowDestructive]}
+              onPress={handleDelete}
+              accessibilityRole="button"
+            >
+              <View style={[styles.menuIconBox, { backgroundColor: "#FEE2E2" }]}>
+                <Ionicons name="trash-outline" size={18} color={RED} />
+              </View>
+              <Text style={[styles.menuRowText, { color: RED }]}>
+                {t("goal_detail.menu_delete")}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuCancel}
+              onPress={closeMenu}
+              accessibilityRole="button"
+            >
+              <Text style={styles.menuCancelText}>{t("goal_detail.cancel")}</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1467,6 +1664,65 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingVertical: 12,
   },
+
+  // P1 (Bucket B.1) — Goal options bottom-sheet menu.
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(10,35,66,0.55)",
+    justifyContent: "flex-end",
+  },
+  menuSheet: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 32,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  menuHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: BORDER,
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  menuTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: MUTED,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 10,
+    paddingHorizontal: 6,
+  },
+  menuRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  menuRowDestructive: { borderBottomWidth: 0 },
+  menuIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuRowText: { flex: 1, fontSize: 15, fontWeight: "600", color: NAVY },
+  menuCancel: {
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    alignItems: "center",
+  },
+  menuCancelText: { fontSize: 14, fontWeight: "700", color: MUTED },
   activityRow: {
     flexDirection: "row",
     alignItems: "center",

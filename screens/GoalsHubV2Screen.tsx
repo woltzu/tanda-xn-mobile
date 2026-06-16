@@ -60,62 +60,26 @@ type HubGoal = {
   linkedCircle: string | null;
   monthlyContribution: number;
   targetDate: string;
+  // P1 (Bucket B.4): expose the DB goal_status so the new Completed
+  // filter pill can split the list.
+  status: string;
 };
 
-type GoalsHubV2Params = {
-  totalSaved?: number;
-  totalInterestEarned?: number;
-  goals?: HubGoal[];
-};
+// P1 (Bucket B): the screen has no remaining route-param inputs — the
+// goals list, totals, and stories all derive from server state. Kept
+// the type alias so the RouteProp doesn't have to be removed everywhere
+// at once, but the body is empty.
+type GoalsHubV2Params = Record<string, never>;
 type GoalsHubV2RouteProp = RouteProp<
   { GoalsHubV2: GoalsHubV2Params },
   "GoalsHubV2"
 >;
 
-const DEFAULT_GOALS: HubGoal[] = [
-  {
-    id: "g1",
-    name: "First Home in Atlanta",
-    emoji: "🏠",
-    category: "Financial Freedom",
-    balance: 8500,
-    target: 25000,
-    interestEarned: 52.4,
-    progressPercent: 34,
-    isOnTrack: true,
-    linkedCircle: "Home Buyers Circle",
-    monthlyContribution: 500,
-    targetDate: "Dec 2027",
-  },
-  {
-    id: "g2",
-    name: "US Citizenship",
-    emoji: "🗽",
-    category: "Personal Transformation",
-    balance: 3200,
-    target: 8000,
-    interestEarned: 28.15,
-    progressPercent: 40,
-    isOnTrack: true,
-    linkedCircle: null,
-    monthlyContribution: 300,
-    targetDate: "Jun 2026",
-  },
-  {
-    id: "g3",
-    name: "Emergency Fund",
-    emoji: "🆘",
-    category: "Financial Freedom",
-    balance: 750,
-    target: 10000,
-    interestEarned: 8.77,
-    progressPercent: 7.5,
-    isOnTrack: false,
-    linkedCircle: null,
-    monthlyContribution: 200,
-    targetDate: "Dec 2026",
-  },
-];
+// P1 (Bucket B): the prior DEFAULT_GOALS mock array seeded the hub with
+// fake "First Home in Atlanta" / "US Citizenship" / "Emergency Fund"
+// cards when no route param overrode it. Removed — the empty-state
+// renders correctly via the cold-load path, and there's no longer a
+// route param that could request the mock fallback.
 
 // P0: the prior `DEFAULT_STORIES` array hardcoded "Aminata D." / "Kwame O."
 // as the production fallback for an Achievement Stories card. The card
@@ -127,6 +91,9 @@ const FILTERS = [
   { key: "all", labelKey: "goals_hub_v2.filter_all" },
   { key: "on_track", labelKey: "goals_hub_v2.filter_on_track" },
   { key: "needs_attention", labelKey: "goals_hub_v2.filter_needs_attention" },
+  // P1 (Bucket B.4): completed goals still show in "All" but the
+  // dedicated pill lets the user find archived wins quickly.
+  { key: "completed", labelKey: "goals_hub_v2.filter_completed" },
 ] as const;
 
 type FilterKey = (typeof FILTERS)[number]["key"];
@@ -187,12 +154,12 @@ function dbGoalToHubGoal(g: Goal): HubGoal {
     linkedCircle: g.linkedCircleId ?? null,
     monthlyContribution: g.monthlyContribution ?? 0,
     targetDate,
+    status: g.status,
   };
 }
 
 export default function GoalsHubV2Screen() {
   const navigation = useTypedNavigation();
-  const route = useRoute<GoalsHubV2RouteProp>();
   const { t } = useTranslation();
   const {
     fetchGoals,
@@ -292,8 +259,10 @@ export default function GoalsHubV2Screen() {
   const [filter, setFilter] = useState<FilterKey>("all");
 
   const filteredGoals = goals.filter((g) => {
-    if (filter === "on_track") return g.isOnTrack;
-    if (filter === "needs_attention") return !g.isOnTrack;
+    if (filter === "on_track") return g.status !== "completed" && g.isOnTrack;
+    if (filter === "needs_attention")
+      return g.status !== "completed" && !g.isOnTrack;
+    if (filter === "completed") return g.status === "completed";
     return true;
   });
 
@@ -433,9 +402,11 @@ export default function GoalsHubV2Screen() {
               <TouchableOpacity
                 key={goal.id}
                 onPress={() =>
+                  // P1 (Bucket B.7): goalId only — the detail screen
+                  // fetches the goal itself rather than rendering a
+                  // potentially-stale passed object.
                   navigation.navigate(Routes.GoalDetailV2, {
                     goalId: goal.id,
-                    goal,
                   })
                 }
                 activeOpacity={0.85}
