@@ -620,6 +620,9 @@
     "section_recent_activity": "Recent Activity",
     "see_all": "See All",
     "empty_transactions": "No transactions yet",
+    "empty_title": "Your wallet is empty",
+    "empty_body": "Add funds to get started with saving and sending money.",
+    "empty_cta": "Add Funds",
     "fx_section_title": "Currencies & FX",
     "breakdown_a11y": "Show balance breakdown",
     "breakdown_title": "Total Net Position",
@@ -2159,6 +2162,10 @@
   },
   "kyc_nudge": {
     "toast": "You have $100+ in your wallet. Verify your identity to send and withdraw."
+  },
+  "transfer_notification": {
+    "title": "Money received",
+    "body": "You received ${{amount}} from {{sender}}."
   },
   "kyc_home_banner": {
     "title": "Verify your identity",

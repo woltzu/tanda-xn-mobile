@@ -620,6 +620,9 @@
     "section_recent_activity": "Activité récente",
     "see_all": "Tout voir",
     "empty_transactions": "Pas encore de transaction",
+    "empty_title": "Votre portefeuille est vide",
+    "empty_body": "Ajoutez des fonds pour commencer à économiser et à envoyer de l'argent.",
+    "empty_cta": "Ajouter des fonds",
     "fx_section_title": "Devises et taux",
     "breakdown_a11y": "Afficher la décomposition du solde",
     "breakdown_title": "Position nette totale",
@@ -2159,6 +2162,10 @@
   },
   "kyc_nudge": {
     "toast": "Vous avez plus de 100 $ dans votre portefeuille. Vérifiez votre identité pour envoyer et retirer."
+  },
+  "transfer_notification": {
+    "title": "Argent reçu",
+    "body": "Vous avez reçu {{amount}} $ de {{sender}}."
   },
   "kyc_home_banner": {
     "title": "Vérifiez votre identité",

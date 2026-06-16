@@ -830,6 +830,114 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
     await loadWalletData();
   };
 
+  // ── P2 (Access Wallet review): realtime balance subscription ─────
+  //
+  // Subscribes to postgres_changes on the user's own user_wallets row.
+  // Server-side filter (`user_id=eq.${uid}`) means Realtime only
+  // pushes the user's own mutations — debits from autopay, credits
+  // from incoming transfers, payouts from a circle cycle. A 300 ms
+  // trailing-edge debounce coalesces tx-internal bursts (e.g. a
+  // contribution that debits and immediately credits the recipient
+  // in the same transaction would otherwise fire twice).
+  //
+  // We only sync the USD balance — the other currency rows in
+  // `currencies` are local-only state with no server counterpart.
+  // The applyMainBalanceCents helper preserves the existing row
+  // shape (flag, symbol, isActive) so a realtime update never
+  // re-orders or resets the rest of the array.
+  //
+  // Failures surface in the channel-status callback; the
+  // `useFocusEffect`-backed `refreshWallet()` consumers (HomeScreen
+  // tile, Wallet pull-to-refresh) remain the documented fallback.
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const uid = user?.id;
+    if (!uid) return;
+
+    const applyMainBalanceCents = (cents: unknown) => {
+      const n = typeof cents === "number" ? cents : Number(cents);
+      if (!Number.isFinite(n)) return;
+      const dollars = n / 100;
+      setCurrencies((prev) => {
+        const hasUSD = prev.some((c) => c.code === "USD");
+        if (!hasUSD) {
+          return [
+            {
+              code: "USD",
+              name: "US Dollar",
+              flag: "🇺🇸",
+              symbol: "$",
+              balance: dollars,
+              change: 0,
+              isActive: true,
+            },
+            ...prev,
+          ];
+        }
+        // No-op when the cents value matches — avoids a re-render
+        // for events that don't move our main balance.
+        const current = prev.find((c) => c.code === "USD");
+        if (current && current.balance === dollars) return prev;
+        return prev.map((c) => (c.code === "USD" ? { ...c, balance: dollars } : c));
+      });
+    };
+
+    type ChannelRef = ReturnType<typeof supabase.channel> | null;
+    let channel: ChannelRef = null;
+
+    try {
+      channel = supabase
+        .channel(`user-wallets-${uid}`)
+        .on(
+          // @ts-expect-error supabase-js types narrow event to a literal but
+          // accept "*" at runtime to subscribe to all change events.
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "user_wallets",
+            filter: `user_id=eq.${uid}`,
+          },
+          (payload: { new?: { main_balance_cents?: unknown } | null; old?: { main_balance_cents?: unknown } | null }) => {
+            if (realtimeDebounceRef.current) {
+              clearTimeout(realtimeDebounceRef.current);
+            }
+            realtimeDebounceRef.current = setTimeout(() => {
+              realtimeDebounceRef.current = null;
+              const cents =
+                payload.new?.main_balance_cents ??
+                payload.old?.main_balance_cents;
+              applyMainBalanceCents(cents);
+            }, 300);
+          },
+        )
+        .subscribe((status) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.warn("[WalletContext] user_wallets channel status:", status);
+          }
+        });
+    } catch (e) {
+      console.warn(
+        "[WalletContext] realtime subscribe failed; falling back to focus refresh:",
+        (e as Error)?.message ?? "unknown",
+      );
+    }
+
+    return () => {
+      if (realtimeDebounceRef.current) {
+        clearTimeout(realtimeDebounceRef.current);
+        realtimeDebounceRef.current = null;
+      }
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch {
+          /* best-effort */
+        }
+      }
+    };
+  }, [user?.id]);
+
   return (
     <WalletContext.Provider
       value={{

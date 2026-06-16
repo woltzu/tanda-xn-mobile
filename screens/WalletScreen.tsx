@@ -407,6 +407,30 @@ export default function WalletScreen() {
             </View>
           </View>
 
+          {/* P2 (Access Wallet review): empty-wallet nudge. Renders
+              when the USD balance is below $1 to give a clear next
+              step. Add Funds reuses handleAddFunds — the KYCGate
+              from P0 still wraps that path, so unverified users are
+              still routed to KYCHub before reaching AddFunds. */}
+          {balance < 1 ? (
+            <TouchableOpacity
+              style={styles.emptyBanner}
+              onPress={handleAddFunds}
+              accessibilityRole="button"
+            >
+              <View style={styles.emptyBannerIcon}>
+                <Ionicons name="cash-outline" size={20} color="#00C6AE" />
+              </View>
+              <View style={styles.emptyBannerTextWrap}>
+                <Text style={styles.emptyBannerTitle}>{t("wallet.empty_title")}</Text>
+                <Text style={styles.emptyBannerBody}>{t("wallet.empty_body")}</Text>
+              </View>
+              <View style={styles.emptyBannerCta}>
+                <Text style={styles.emptyBannerCtaText}>{t("wallet.empty_cta")}</Text>
+              </View>
+            </TouchableOpacity>
+          ) : null}
+
           {/* Remittance Banner */}
           <TouchableOpacity
             style={styles.remittanceBanner}
@@ -1356,6 +1380,47 @@ const styles = StyleSheet.create({
   pmAddButtonText: {
     fontSize: 13,
     fontWeight: "600",
+    color: "#FFFFFF",
+  },
+
+  // ── P2 empty-wallet banner ──────────────────────────────────────
+  emptyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 16,
+  },
+  emptyBannerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,198,174,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyBannerTextWrap: { flex: 1 },
+  emptyBannerTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 2,
+  },
+  emptyBannerBody: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+  emptyBannerCta: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "#00C6AE",
+  },
+  emptyBannerCtaText: {
+    fontSize: 12,
+    fontWeight: "700",
     color: "#FFFFFF",
   },
 
