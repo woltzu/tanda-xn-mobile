@@ -115,6 +115,15 @@ export default function SmartCalculatorScreen() {
 
   const [submitting, setSubmitting] = useState(false);
   const [termsOpen, setTermsOpen] = useState(false);
+  // Bucket B P1.3 — inline error card replaces Alert.alert. The errorKey
+  // (parsed from eligibility_blocked:<key>) drives the secondary CTA:
+  // - xnscore_too_low / not_enough_completed_circles → "View Score Hub"
+  // - kyc_required → "Verify identity"
+  // - everything else → no secondary action, just Retry + Close.
+  const [errorState, setErrorState] = useState<{
+    key: string | null;
+    message: string;
+  } | null>(null);
 
   // Loading / missing-product
   if (dashboard.loading && !product) {
@@ -275,6 +284,7 @@ export default function SmartCalculatorScreen() {
   const handleContinue = async () => {
     if (submitting) return;
     setSubmitting(true);
+    setErrorState(null);
     try {
       const result = await requestAdvance({
         ui_code: advanceType,
@@ -295,11 +305,38 @@ export default function SmartCalculatorScreen() {
             defaultValue: t("smart_calculator.error_generic"),
           })
         : t("smart_calculator.error_generic");
-      Alert.alert(t("smart_calculator.error_title"), localizedReason);
+      setErrorState({ key, message: localizedReason });
     } finally {
       setSubmitting(false);
     }
   };
+
+  // Bucket B P1.3 — error-card secondary action wiring.
+  const errorSecondary = (() => {
+    if (!errorState?.key) return null;
+    if (
+      errorState.key === "xnscore_too_low" ||
+      errorState.key === "not_enough_completed_circles"
+    ) {
+      return {
+        label: t("smart_calculator.error_view_score_hub"),
+        onPress: () => {
+          setErrorState(null);
+          navigation.navigate(Routes.XnScoreDashboard as never);
+        },
+      };
+    }
+    if (errorState.key === "kyc_required") {
+      return {
+        label: t("smart_calculator.error_verify_identity"),
+        onPress: () => {
+          setErrorState(null);
+          navigation.navigate(Routes.KYCHub as never);
+        },
+      };
+    }
+    return null;
+  })();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -769,6 +806,61 @@ export default function SmartCalculatorScreen() {
         </View>
       </ScrollView>
 
+      {/* Bucket B P1.3 — inline error card. Anchored above the bottom bar
+          so the user sees it without scrolling after tapping Request. */}
+      {errorState ? (
+        <View style={styles.errorCard}>
+          <View style={styles.errorHeader}>
+            <Ionicons name="alert-circle" size={20} color={RED} />
+            <Text style={styles.errorTitle}>
+              {t("smart_calculator.error_title")}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setErrorState(null)}
+              style={styles.errorClose}
+              accessibilityRole="button"
+              accessibilityLabel={t("smart_calculator.error_close")}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons name="close" size={18} color={MUTED} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.errorMessage}>{errorState.message}</Text>
+          <View style={styles.errorActions}>
+            <TouchableOpacity
+              style={[
+                styles.errorRetry,
+                submitting && styles.errorRetryDisabled,
+              ]}
+              onPress={handleContinue}
+              disabled={submitting}
+              accessibilityRole="button"
+              accessibilityLabel={t("smart_calculator.error_retry")}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.errorRetryText}>
+                  {t("smart_calculator.error_retry")}
+                </Text>
+              )}
+            </TouchableOpacity>
+            {errorSecondary ? (
+              <TouchableOpacity
+                style={styles.errorSecondary}
+                onPress={errorSecondary.onPress}
+                accessibilityRole="button"
+                accessibilityLabel={errorSecondary.label}
+              >
+                <Text style={styles.errorSecondaryText}>
+                  {errorSecondary.label}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={[
@@ -1122,6 +1214,58 @@ const styles = StyleSheet.create({
     color: MUTED,
     lineHeight: 18,
   },
+
+  // Bucket B P1.3 — inline error card styles
+  errorCard: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    borderRadius: 14,
+    padding: 14,
+  },
+  errorHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+  },
+  errorTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#991B1B",
+  },
+  errorClose: { padding: 2 },
+  errorMessage: {
+    fontSize: 13,
+    color: "#7F1D1D",
+    lineHeight: 19,
+    marginBottom: 12,
+  },
+  errorActions: { flexDirection: "row", gap: 10 },
+  errorRetry: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 10,
+    backgroundColor: TEAL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  errorRetryDisabled: { backgroundColor: BORDER },
+  errorRetryText: { fontSize: 13, fontWeight: "700", color: "#FFFFFF" },
+  errorSecondary: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: BORDER,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  errorSecondaryText: { fontSize: 13, fontWeight: "700", color: NAVY },
 
   bottomBar: {
     paddingHorizontal: 20,

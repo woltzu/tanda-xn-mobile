@@ -423,6 +423,21 @@ function ActiveAdvanceView({
               <Text style={styles.amountTeal}>${outstanding.toFixed(2)}</Text>
             </View>
           </View>
+
+          {/* Bucket B P1.2 — Auto-approved pill. All advances minted by the
+              current request_advance RPC are auto-approved (the flag is
+              hardcoded to true in migration 146/183), so we render this
+              unconditionally for active loans. If a manual-review mode is
+              added later, useAdvanceDashboard's ActiveAdvance type should
+              expose `auto_approved` and this should gate on it. */}
+          <View style={styles.autoApprovedRow}>
+            <View style={styles.autoApprovedPill}>
+              <Ionicons name="checkmark-circle" size={12} color="#FFFFFF" />
+              <Text style={styles.autoApprovedText}>
+                {t("advance_details_v2.badge_auto_approved")}
+              </Text>
+            </View>
+          </View>
         </LinearGradient>
 
         <View style={styles.contentWrap}>
@@ -955,6 +970,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  autoApprovedRow: {
+    flexDirection: "row",
+    marginTop: 14,
+  },
+  autoApprovedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "#16A34A",
+  },
+  autoApprovedText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   amountLabel: {
     fontSize: 13,

@@ -666,6 +666,14 @@ function ProductCard({
       accessibilityLabel={`${productName}, ${styling.badgeLabel}`}
     >
       <View style={[styles.stateBadge, { backgroundColor: styling.badgeBg }]}>
+        {state !== "active" ? (
+          <Ionicons
+            name="lock-closed"
+            size={10}
+            color="#FFFFFF"
+            style={{ marginRight: 4 }}
+          />
+        ) : null}
         <Text style={styles.stateBadgeText}>{styling.badgeLabel}</Text>
       </View>
 
@@ -979,13 +987,18 @@ function stateStyling(state: ProductState, t: (key: string) => string) {
         badgeLabel: t("advance_hub_v2.badge_active"),
       };
     case "preview":
+      // Bucket B P1.1 — preview now reads as "locked": opacity 0.7, lock icon
+      // inside the badge, uniform "Locked" label. The inner unlock-progress
+      // block still differentiates preview (blue bar + close-to-unlock copy)
+      // from locked (gray bar + further-out copy), so users can still tell
+      // them apart inside the card.
       return {
         bg: "#FFFFFF",
         borderColor: BLUE,
         borderWidth: 1,
-        opacity: 1,
+        opacity: 0.7,
         badgeBg: BLUE,
-        badgeLabel: t("advance_hub_v2.badge_preview"),
+        badgeLabel: t("advance_hub_v2.badge_locked"),
       };
     case "locked":
       return {
@@ -1210,6 +1223,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
+    flexDirection: "row",
+    alignItems: "center",
   },
   stateBadgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "700" },
   productInner: { flexDirection: "row", alignItems: "flex-start", gap: 14 },
