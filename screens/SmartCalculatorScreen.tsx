@@ -103,7 +103,7 @@ function HelpDot({
 export default function SmartCalculatorScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<SmartCalculatorRouteProp>();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const dashboard = useAdvanceDashboard();
 
   const advanceType: AdvanceUiCode = route.params?.advanceType ?? "quick";
@@ -213,6 +213,41 @@ export default function SmartCalculatorScreen() {
       (term <= 3 ? term / 12 : term / 12),
   );
   const savingsCents = localLenderFeeCents - feeCents;
+
+  // Repayment schedule preview — first 3 payments, computed client-side from
+  // the same amortization that drives the monthly figure. Dates are estimates
+  // (first payment ~1 month from approval); the RPC stamps the final dates
+  // server-side after submission, so the card carries a "Final dates set
+  // after approval" caveat.
+  const PREVIEW_LIMIT = 3;
+  const schedulePreview = useMemo(() => {
+    const previewCount = Math.min(PREVIEW_LIMIT, term);
+    const locale = i18n.language || undefined;
+    const fmtDate = (d: Date) => {
+      try {
+        return d.toLocaleDateString(locale, {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+      } catch {
+        return d.toDateString();
+      }
+    };
+    const today = new Date();
+    const rows: Array<{ n: number; date: string; amount: string }> = [];
+    for (let n = 1; n <= previewCount; n++) {
+      const d = new Date(today);
+      d.setMonth(d.getMonth() + n);
+      rows.push({
+        n,
+        date: fmtDate(d),
+        amount: (monthlyCents / 100).toFixed(2),
+      });
+    }
+    return rows;
+  }, [term, monthlyCents, i18n.language]);
+  const extraPayments = Math.max(0, term - PREVIEW_LIMIT);
 
   // ── Help-icon callbacks ───────────────────────────────────────────────
   const helpApr = () =>
@@ -620,6 +655,30 @@ export default function SmartCalculatorScreen() {
             </View>
           </View>
 
+          {/* Repayment schedule preview */}
+          <View style={styles.sectionCard}>
+            <Text style={styles.fieldLabel}>
+              {t("smart_calculator.schedule_title")}
+            </Text>
+            <Text style={styles.scheduleNote}>
+              {t("smart_calculator.schedule_estimate_note")}
+            </Text>
+            {schedulePreview.map((row) => (
+              <View key={row.n} style={styles.scheduleRow}>
+                <Text style={styles.scheduleN}>
+                  {t("smart_calculator.schedule_payment_n", { n: row.n })}
+                </Text>
+                <Text style={styles.scheduleDate}>{row.date}</Text>
+                <Text style={styles.scheduleAmount}>${row.amount}</Text>
+              </View>
+            ))}
+            {extraPayments > 0 ? (
+              <Text style={styles.scheduleMore}>
+                {t("smart_calculator.schedule_more", { count: extraPayments })}
+              </Text>
+            ) : null}
+          </View>
+
           {/* Comparison */}
           <View style={styles.sectionCard}>
             <Text style={[styles.fieldLabel, { marginBottom: 12 }]}>
@@ -980,6 +1039,25 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: "rgba(255,255,255,0.2)",
     marginVertical: 6,
+  },
+
+  scheduleNote: { fontSize: 12, color: MUTED, marginBottom: 10 },
+  scheduleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  scheduleN: { flex: 0, width: 80, fontSize: 13, color: NAVY, fontWeight: "600" },
+  scheduleDate: { flex: 1, fontSize: 13, color: MUTED, textAlign: "center" },
+  scheduleAmount: { fontSize: 14, color: NAVY, fontWeight: "700" },
+  scheduleMore: {
+    marginTop: 8,
+    fontSize: 12,
+    color: MUTED,
+    fontStyle: "italic",
+    textAlign: "center",
   },
 
   comparisonRow: { flexDirection: "row", gap: 12 },
