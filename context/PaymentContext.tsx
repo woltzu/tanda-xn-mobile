@@ -6,25 +6,17 @@ import React, {
   useCallback,
   ReactNode,
 } from 'react';
-import { Platform } from 'react-native';
 
-// Stripe React Native is native-only — stub on web
-let StripeProvider: any = ({ children }: any) => children;
-let useStripe: any = () => ({
-  confirmPayment: async () => ({ error: { message: 'Stripe not available on web' } }),
-  initPaymentSheet: async () => ({ error: { message: 'Stripe not available on web' } }),
-  presentPaymentSheet: async () => ({ error: { message: 'Stripe not available on web' } }),
-});
-
-if (Platform.OS !== 'web') {
-  try {
-    const stripe = require('@stripe/stripe-react-native');
-    StripeProvider = stripe.StripeProvider;
-    useStripe = stripe.useStripe;
-  } catch (e) {
-    // Stripe native not available
-  }
-}
+// Stripe is loaded via the platform-resolved shim. On iOS / Android,
+// `lib/stripeShim.ts` re-exports the real API from
+// @stripe/stripe-react-native. On web, Metro picks `lib/stripeShim.web.ts`
+// which exports stubs — so the native-only `codegenNativeCommands`
+// reference that the package ships with never enters the web bundle.
+//
+// The prior `if (Platform.OS !== 'web') require('@stripe/...')` pattern
+// in this file did not work: Metro statically resolves every reachable
+// require() regardless of runtime guards.
+import { StripeProvider, useStripe } from '../lib/stripeShim';
 
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
