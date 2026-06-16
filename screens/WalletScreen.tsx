@@ -8,7 +8,10 @@ import {
   Modal,
   Animated,
   Easing,
+  Pressable,
+  RefreshControl,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -25,19 +28,31 @@ import {
   formatTransferDate,
 } from "../hooks/useRecentTransfers";
 import { useKYCGate } from "../components/KYCGate";
+import { useGoalActions } from "../hooks/useGoalActions";
+import { useCircleNetBalance } from "../hooks/useCircleNetBalance";
+
+// P1 coach-mark gate. v1 because we expect the screen layout to keep
+// drifting — a future redesign can bump this to v2 to re-show the tour.
+const WALLET_COACH_SEEN_KEY = "@tandaxn_wallet_coach_seen_v1";
 
 type WalletScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function WalletScreen() {
   const navigation = useNavigation<WalletScreenNavigationProp>();
   const { t } = useTranslation();
-  const { balance, currencies, addCurrencyWallet } = useWallet();
+  const { balance, currencies, addCurrencyWallet, refreshWallet } = useWallet();
+  const { fetchGoals } = useGoalActions();
+  const { totalNet: circleNetTotal } = useCircleNetBalance();
   // Recent Activity now reads from money_transfers via the new hook —
   // the prior local-AsyncStorage list was missing fresh sends because
   // it lived on the same state tree that gets reset by the navigation
   // .reset() out of the success screen. `useFocusEffect` re-runs the
   // query whenever the user returns to this tab.
-  const { transfers, refetch: refetchTransfers } = useRecentTransfers(10);
+  const {
+    transfers,
+    loading: transfersLoading,
+    refetch: refetchTransfers,
+  } = useRecentTransfers(10);
   useFocusEffect(
     useCallback(() => {
       refetchTransfers();
@@ -107,6 +122,128 @@ export default function WalletScreen() {
     if (!passed) return;
     navigation.navigate("Remittance" as never);
   };
+
+  // ── P1.1 Pull-to-refresh ────────────────────────────────────────
+  // Three things can have moved while the user was off-screen: the
+  // wallet balances (a contribution debited, a send completed), the
+  // recent transfers list, and the live FX rates. Refresh in parallel
+  // so the spinner reflects the slowest, not the sum. Errors from any
+  // one slot are isolated so a flaky rate provider doesn't cancel the
+  // wallet/transfers refresh.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refreshWallet().catch(() => null),
+        refetchTransfers().catch(() => null),
+        refreshRates().catch(() => null),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshWallet, refetchTransfers, refreshRates]);
+
+  // ── P1.3 FX accordion ───────────────────────────────────────────
+  // Open by default when the user holds more than one currency
+  // (active FX usage); closed by default for USD-only users (the
+  // common case — cuts the section's vertical footprint). null means
+  // "follow the auto rule"; once the user manually toggles, the
+  // explicit boolean wins so the auto rule can't clobber their pick.
+  const [fxOpenUser, setFxOpenUser] = useState<boolean | null>(null);
+  const fxOpen = fxOpenUser ?? currencies.length > 1;
+  const toggleFx = () => {
+    setFxOpenUser((prev) => (prev === null ? !(currencies.length > 1) : !prev));
+  };
+
+  // ── P1.5 First-visit coach mark ─────────────────────────────────
+  // Three-step bottom-sheet tour, gated on AsyncStorage. We check on
+  // mount and reveal only if the seen flag is missing. Steps cover
+  // the balance card, the actions row, and the recent activity list.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const [coachStep, setCoachStep] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(WALLET_COACH_SEEN_KEY);
+        if (cancelled) return;
+        if (!seen) setCoachVisible(true);
+      } catch {
+        /* best-effort */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const dismissCoach = async () => {
+    setCoachVisible(false);
+    try {
+      await AsyncStorage.setItem(WALLET_COACH_SEEN_KEY, "1");
+    } catch {
+      /* best-effort */
+    }
+  };
+  const handleCoachNext = () => {
+    if (coachStep >= 2) {
+      dismissCoach();
+    } else {
+      setCoachStep((s) => s + 1);
+    }
+  };
+
+  // ── P1.6 Balance breakdown sheet ────────────────────────────────
+  // Same three components as Home's total-net tile: Wallet + Goals +
+  // Circle Net. Wallet comes from useWallet() and circle net from the
+  // shared cached hook. Goals total is fetched lazily on first sheet
+  // open so the cost (one extra Supabase round-trip) is only paid by
+  // users who actually tap the (?) icon.
+  const [breakdownVisible, setBreakdownVisible] = useState(false);
+  const [goalsTotal, setGoalsTotal] = useState<number | null>(null);
+  const handleOpenBreakdown = async () => {
+    setBreakdownVisible(true);
+    if (goalsTotal === null) {
+      try {
+        const { data } = await fetchGoals();
+        const sum = (data ?? []).reduce(
+          (acc, g) => acc + (g.currentBalance ?? 0),
+          0,
+        );
+        setGoalsTotal(sum);
+      } catch {
+        setGoalsTotal(0);
+      }
+    }
+  };
+  const breakdownTotal = balance + (goalsTotal ?? 0) + circleNetTotal;
+
+  // ── P1.2 Skeleton pulse animation ───────────────────────────────
+  // One shared Animated.Value drives the opacity loop for every
+  // skeleton row. Lighter than animating each row independently and
+  // keeps the pulses in sync visually.
+  const skeletonPulse = useRef(new Animated.Value(0.5)).current;
+  useEffect(() => {
+    if (!transfersLoading) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonPulse, {
+          toValue: 0.5,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [transfersLoading, skeletonPulse]);
 
   const activeCurrencies = currencies.filter((c) => c.isActive && c.balance > 0);
   const inactiveCurrencies = currencies.filter((c) => !c.isActive || c.balance === 0);
@@ -189,32 +326,23 @@ export default function WalletScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#00C6AE"
+            colors={["#00C6AE"]}
+          />
+        }
+      >
         {/* Header */}
         <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
           <View style={styles.headerTop}>
             <Text style={styles.headerTitle}>{t("wallet.header")}</Text>
-            <TouchableOpacity
-              onPress={handleGlobePress}
-              disabled={isLoadingRates}
-              style={[
-                styles.globeButton,
-                autoRefreshEnabled && styles.globeButtonActive,
-              ]}
-            >
-              <Animated.View style={{ transform: [{ rotate: isLoadingRates ? spin : "0deg" }] }}>
-                <Ionicons
-                  name={autoRefreshEnabled ? "globe" : "globe-outline"}
-                  size={24}
-                  color={autoRefreshEnabled ? "#00C6AE" : "rgba(255,255,255,0.7)"}
-                />
-              </Animated.View>
-              {autoRefreshEnabled && (
-                <View style={styles.liveIndicator}>
-                  <View style={styles.liveDot} />
-                </View>
-              )}
-            </TouchableOpacity>
+            {/* P1.4: globe auto-refresh chip moved into the FX section
+                header so the main header reads as money-first, not FX-first. */}
           </View>
 
           {/* Total Balance Card */}
@@ -229,6 +357,20 @@ export default function WalletScreen() {
                 <TouchableOpacity onPress={() => setShowBalance(!showBalance)} style={styles.eyeButton}>
                   <Ionicons
                     name={showBalance ? "eye-outline" : "eye-off-outline"}
+                    size={20}
+                    color="rgba(255,255,255,0.7)"
+                  />
+                </TouchableOpacity>
+                {/* P1.6: tap to open the Wallet + Goals + Circle Net
+                    breakdown that mirrors Home's total-net tile. */}
+                <TouchableOpacity
+                  onPress={handleOpenBreakdown}
+                  style={styles.eyeButton}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("wallet.breakdown_a11y")}
+                >
+                  <Ionicons
+                    name="help-circle-outline"
                     size={20}
                     color="rgba(255,255,255,0.7)"
                   />
@@ -285,20 +427,60 @@ export default function WalletScreen() {
 
         {/* Content */}
         <View style={styles.content}>
-          {/* Live Rates Ticker */}
+          {/* P1.3 Currencies & FX (collapsible) */}
+          {/*   Combines the prior Live Rates ticker and My Currencies sections
+                into a single accordion. Open by default for users with more
+                than one currency (active FX usage); closed by default for
+                USD-only users to cut visual clutter. P1.4: the globe
+                auto-refresh control moved into the header row as a
+                compact chip with the same spinning animation. */}
           <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.liveRatesHeader}>
-                <Text style={styles.sectionTitle}>{t("wallet.section_live_rates")}</Text>
-                {autoRefreshEnabled && (
-                  <View style={styles.liveTagContainer}>
-                    <View style={styles.liveTagDot} />
-                    <Text style={styles.liveTagText}>{t("wallet.live_tag")}</Text>
-                  </View>
-                )}
+            <TouchableOpacity
+              style={styles.sectionHeader}
+              onPress={toggleFx}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: fxOpen }}
+            >
+              <Text style={styles.sectionTitle}>{t("wallet.fx_section_title")}</Text>
+              <View style={styles.fxHeaderRight}>
+                <TouchableOpacity
+                  onPress={(e) => {
+                    // Stop the outer accordion toggle from firing when the
+                    // user just wants to flip auto-refresh on/off.
+                    e.stopPropagation?.();
+                    handleGlobePress();
+                  }}
+                  disabled={isLoadingRates}
+                  style={[
+                    styles.fxRefreshChip,
+                    autoRefreshEnabled && styles.fxRefreshChipActive,
+                  ]}
+                >
+                  <Animated.View style={{ transform: [{ rotate: isLoadingRates ? spin : "0deg" }] }}>
+                    <Ionicons
+                      name={autoRefreshEnabled ? "refresh" : "refresh-outline"}
+                      size={14}
+                      color={autoRefreshEnabled ? "#00C6AE" : "#6B7280"}
+                    />
+                  </Animated.View>
+                  {autoRefreshEnabled && (
+                    <Text style={styles.fxRefreshChipText}>{t("wallet.live_tag")}</Text>
+                  )}
+                </TouchableOpacity>
+                <Ionicons
+                  name={fxOpen ? "chevron-up" : "chevron-down"}
+                  size={18}
+                  color="#9CA3AF"
+                />
               </View>
-              <TouchableOpacity onPress={refreshRates} disabled={isLoadingRates}>
-                <View style={styles.refreshTimestamp}>
+            </TouchableOpacity>
+
+            {fxOpen ? (
+              <View>
+                {/* Live rates ticker */}
+                <View style={styles.fxSubHeader}>
+                  <Text style={styles.fxSubLabel}>{t("wallet.section_live_rates")}</Text>
                   {lastUpdated && (
                     <Text style={styles.ratesTimestamp}>
                       {t("wallet.rates_updated", {
@@ -309,73 +491,65 @@ export default function WalletScreen() {
                       })}
                     </Text>
                   )}
-                  <Ionicons
-                    name="refresh-outline"
-                    size={14}
-                    color={isLoadingRates ? "#00C6AE" : "#9CA3AF"}
-                    style={isLoadingRates ? { opacity: 0.5 } : undefined}
-                  />
                 </View>
-              </TouchableOpacity>
-            </View>
-            <RateTicker baseCurrency="USD" currencies={["EUR", "GBP", "XOF", "NGN", "KES"]} />
-          </View>
+                <RateTicker baseCurrency="USD" currencies={["EUR", "GBP", "XOF", "NGN", "KES"]} />
 
-          {/* My Currencies */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{t("wallet.section_my_currencies")}</Text>
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => setShowAddCurrencyModal(true)}
-              >
-                <Ionicons name="add" size={16} color="#00C6AE" />
-                <Text style={styles.addButtonText}>{t("wallet.add_button")}</Text>
-              </TouchableOpacity>
-            </View>
+                {/* My currencies header + Add button */}
+                <View style={[styles.fxSubHeader, { marginTop: 16 }]}>
+                  <Text style={styles.fxSubLabel}>{t("wallet.section_my_currencies")}</Text>
+                  <TouchableOpacity
+                    style={styles.addButton}
+                    onPress={() => setShowAddCurrencyModal(true)}
+                  >
+                    <Ionicons name="add" size={16} color="#00C6AE" />
+                    <Text style={styles.addButtonText}>{t("wallet.add_button")}</Text>
+                  </TouchableOpacity>
+                </View>
 
-            {activeCurrencies.map((currency) => (
-              // P0: cards no longer pretend to be tappable — there is no
-              // per-currency detail screen wired up. Render as a plain
-              // View so the chevron + active state don't suggest a
-              // destination that doesn't exist.
-              <View key={currency.code} style={styles.currencyCard}>
-                <View style={styles.currencyLeft}>
-                  <View style={styles.flagContainer}>
-                    <Text style={styles.flagText}>{currency.flag}</Text>
+                {activeCurrencies.map((currency) => (
+                  // P0: cards no longer pretend to be tappable — there is no
+                  // per-currency detail screen wired up. Render as a plain
+                  // View so the chevron + active state don't suggest a
+                  // destination that doesn't exist.
+                  <View key={currency.code} style={styles.currencyCard}>
+                    <View style={styles.currencyLeft}>
+                      <View style={styles.flagContainer}>
+                        <Text style={styles.flagText}>{currency.flag}</Text>
+                      </View>
+                      <View>
+                        <Text style={styles.currencyCode}>{currency.code}</Text>
+                        <Text style={styles.currencyName}>{currency.name}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.currencyRight}>
+                      <View>
+                        <Text style={styles.currencyBalance}>
+                          {showBalance ? formatCurrency(currency.balance, currency.code, currency.symbol) : "••••"}
+                        </Text>
+                        {currency.code !== "USD" && currency.usdValue ? (
+                          <Text style={styles.currencyUsdValue}>
+                            ≈ ${currency.usdValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={styles.currencyCode}>{currency.code}</Text>
-                    <Text style={styles.currencyName}>{currency.name}</Text>
+                ))}
+
+                {activeCurrencies.length === 0 && (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="wallet-outline" size={48} color="#D1D5DB" />
+                    <Text style={styles.emptyText}>{t("wallet.empty_currencies")}</Text>
+                    <TouchableOpacity
+                      style={styles.emptyButton}
+                      onPress={() => setShowAddCurrencyModal(true)}
+                    >
+                      <Text style={styles.emptyButtonText}>{t("wallet.empty_currencies_cta")}</Text>
+                    </TouchableOpacity>
                   </View>
-                </View>
-                <View style={styles.currencyRight}>
-                  <View>
-                    <Text style={styles.currencyBalance}>
-                      {showBalance ? formatCurrency(currency.balance, currency.code, currency.symbol) : "••••"}
-                    </Text>
-                    {currency.code !== "USD" && currency.usdValue ? (
-                      <Text style={styles.currencyUsdValue}>
-                        ≈ ${currency.usdValue.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
+                )}
               </View>
-            ))}
-
-            {activeCurrencies.length === 0 && (
-              <View style={styles.emptyState}>
-                <Ionicons name="wallet-outline" size={48} color="#D1D5DB" />
-                <Text style={styles.emptyText}>{t("wallet.empty_currencies")}</Text>
-                <TouchableOpacity
-                  style={styles.emptyButton}
-                  onPress={() => setShowAddCurrencyModal(true)}
-                >
-                  <Text style={styles.emptyButtonText}>{t("wallet.empty_currencies_cta")}</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            ) : null}
           </View>
 
           {/* Payment Methods */}
@@ -438,6 +612,33 @@ export default function WalletScreen() {
               <Text style={styles.sectionTitle}>{t("wallet.section_recent_activity")}</Text>
             </View>
 
+            {/* P1.2 skeleton loader. Three placeholder rows fill the
+                space while the first useRecentTransfers fetch is in
+                flight. Once data lands (or we hit the empty-state),
+                the skeletons are dropped. We only show skeletons on
+                first load — subsequent refetches keep the prior list
+                visible to avoid a jarring blank flash. */}
+            {transfersLoading && transferRows.length === 0
+              ? [0, 1, 2].map((i) => (
+                  <Animated.View
+                    key={`sk-${i}`}
+                    style={[
+                      styles.transactionCard,
+                      { backgroundColor: "#F9FAFB", borderColor: "#F3F4F6", opacity: skeletonPulse },
+                    ]}
+                  >
+                    <View style={styles.transactionLeft}>
+                      <View style={[styles.transactionIcon, { backgroundColor: "#E5E7EB" }]} />
+                      <View style={styles.transactionInfo}>
+                        <View style={styles.skeletonLineWide} />
+                        <View style={styles.skeletonLineNarrow} />
+                      </View>
+                    </View>
+                    <View style={styles.skeletonAmount} />
+                  </Animated.View>
+                ))
+              : null}
+
             {transferRows.slice(0, 5).map((tx) => {
               const txStyle = getTransactionStyle(tx.type);
               const isPositive = tx.amount > 0;
@@ -473,7 +674,7 @@ export default function WalletScreen() {
               );
             })}
 
-            {transferRows.length === 0 && (
+            {transferRows.length === 0 && !transfersLoading && (
               <View style={styles.emptyState}>
                 <Ionicons name="receipt-outline" size={48} color="#D1D5DB" />
                 <Text style={styles.emptyText}>{t("wallet.empty_transactions")}</Text>
@@ -491,6 +692,110 @@ export default function WalletScreen() {
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
         <Text style={styles.floatingHelpText}>{t("common.help")}</Text>
       </TouchableOpacity>
+
+      {/* P1.6 Balance breakdown sheet — same components as Home's
+          total-net tile (Wallet + Goals + Circle Net). */}
+      <Modal
+        visible={breakdownVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setBreakdownVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setBreakdownVisible(false)}
+        >
+          <Pressable style={styles.modalContent} onPress={() => {}}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t("wallet.breakdown_title")}</Text>
+              <TouchableOpacity onPress={() => setBreakdownVisible(false)}>
+                <Ionicons name="close" size={24} color="#0A2342" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>{t("wallet.breakdown_wallet")}</Text>
+              <Text style={styles.breakdownValue}>
+                ${balance.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </Text>
+            </View>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>{t("wallet.breakdown_goals")}</Text>
+              <Text style={styles.breakdownValue}>
+                {goalsTotal === null
+                  ? "…"
+                  : `$${goalsTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+              </Text>
+            </View>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>{t("wallet.breakdown_circle_net")}</Text>
+              <Text
+                style={[
+                  styles.breakdownValue,
+                  circleNetTotal < 0 ? { color: "#DC2626" } : null,
+                ]}
+              >
+                {circleNetTotal < 0 ? "−" : ""}$
+                {Math.abs(circleNetTotal).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </Text>
+            </View>
+            <View style={[styles.breakdownRow, styles.breakdownTotalRow]}>
+              <Text style={styles.breakdownTotalLabel}>{t("wallet.breakdown_total")}</Text>
+              <Text style={styles.breakdownTotalValue}>
+                ${breakdownTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </Text>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* P1.5 First-visit coach mark — three steps over the balance
+          card, actions row, and recent activity. Gated by AsyncStorage
+          so it shows only once per device. */}
+      {coachVisible ? (
+        <Modal
+          visible
+          transparent
+          animationType="slide"
+          onRequestClose={dismissCoach}
+        >
+          <Pressable style={styles.coachBackdrop} onPress={dismissCoach}>
+            <Pressable style={styles.coachSheet} onPress={() => {}}>
+              <View style={styles.coachHandle} />
+              <View style={styles.coachDots}>
+                {[0, 1, 2].map((i) => (
+                  <View
+                    key={i}
+                    style={[
+                      styles.coachDot,
+                      i === coachStep ? styles.coachDotActive : null,
+                      i < coachStep ? styles.coachDotDone : null,
+                    ]}
+                  />
+                ))}
+              </View>
+              <Text style={styles.coachEmoji}>
+                {["💰", "⚡", "📋"][coachStep]}
+              </Text>
+              <Text style={styles.coachTitle}>
+                {t(`wallet.coach.step${coachStep + 1}_title`)}
+              </Text>
+              <Text style={styles.coachBody}>
+                {t(`wallet.coach.step${coachStep + 1}_body`)}
+              </Text>
+              <View style={styles.coachActions}>
+                <TouchableOpacity style={styles.coachSkipBtn} onPress={dismissCoach}>
+                  <Text style={styles.coachSkipText}>{t("wallet.coach.skip")}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.coachNextBtn} onPress={handleCoachNext}>
+                  <Text style={styles.coachNextText}>
+                    {coachStep >= 2 ? t("wallet.coach.finish") : t("wallet.coach.next")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
 
       {/* Add Currency Modal */}
       <Modal
@@ -1053,4 +1358,165 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
+
+  // ── P1 additions ────────────────────────────────────────────────
+  fxHeaderRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  fxRefreshChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: "#F5F7FA",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  fxRefreshChipActive: {
+    backgroundColor: "rgba(0,198,174,0.10)",
+    borderColor: "rgba(0,198,174,0.40)",
+  },
+  fxRefreshChipText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#00C6AE",
+    letterSpacing: 0.5,
+  },
+  fxSubHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  fxSubLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+
+  skeletonLineWide: {
+    height: 12,
+    width: "60%",
+    backgroundColor: "#E5E7EB",
+    borderRadius: 4,
+    marginBottom: 6,
+  },
+  skeletonLineNarrow: {
+    height: 10,
+    width: "40%",
+    backgroundColor: "#E5E7EB",
+    borderRadius: 4,
+  },
+  skeletonAmount: {
+    height: 14,
+    width: 60,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 4,
+  },
+
+  breakdownRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  breakdownLabel: {
+    fontSize: 14,
+    color: "#6B7280",
+  },
+  breakdownValue: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#0A2342",
+  },
+  breakdownTotalRow: {
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    marginTop: 4,
+  },
+  breakdownTotalLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0A2342",
+  },
+  breakdownTotalValue: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#00C6AE",
+  },
+
+  coachBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(10,35,66,0.55)",
+    justifyContent: "flex-end",
+  },
+  coachSheet: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 24,
+    paddingTop: 10,
+    paddingBottom: 32,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  coachHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#E5E7EB",
+    alignSelf: "center",
+    marginBottom: 18,
+  },
+  coachDots: {
+    flexDirection: "row",
+    gap: 6,
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  coachDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#E5E7EB",
+  },
+  coachDotActive: { backgroundColor: "#0A2342", width: 24 },
+  coachDotDone: { backgroundColor: "#00C6AE" },
+  coachEmoji: { fontSize: 48, alignSelf: "center", marginBottom: 12 },
+  coachTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#0A2342",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  coachBody: {
+    fontSize: 14,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  coachActions: { flexDirection: "row", gap: 12 },
+  coachSkipBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+  },
+  coachSkipText: { fontSize: 14, color: "#6B7280", fontWeight: "700" },
+  coachNextBtn: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: "#00C6AE",
+    alignItems: "center",
+  },
+  coachNextText: { fontSize: 14, color: "#FFFFFF", fontWeight: "800" },
 });
