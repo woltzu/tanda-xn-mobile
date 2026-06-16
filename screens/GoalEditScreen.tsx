@@ -183,7 +183,7 @@ export default function GoalEditScreen() {
             <TextInput
               value={goalName}
               onChangeText={setGoalName}
-              placeholder="e.g., First Home in Atlanta"
+              placeholder={t("goal_edit.placeholder_example")}
               placeholderTextColor="#9CA3AF"
               style={styles.textInput}
             />
@@ -267,7 +267,7 @@ export default function GoalEditScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.toggleTitle}>{t("final_polish.goaledit_auto_deposit")}</Text>
                   <Text style={styles.toggleBody}>
-                    Save ${monthlyContribution} automatically each month
+                    {t("goal_edit.auto_save_body", { amount: monthlyContribution })}
                   </Text>
                 </View>
               </View>
@@ -309,7 +309,7 @@ export default function GoalEditScreen() {
                 !canSave && styles.saveButtonTextDisabled,
               ]}
             >
-              Save Changes
+              {t("goal_edit.save_changes")}
             </Text>
           )}
         </TouchableOpacity>

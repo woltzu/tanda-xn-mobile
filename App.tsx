@@ -299,8 +299,6 @@ import GoalsHubV2Screen from "./screens/GoalsHubV2Screen";
 // GoalSetupSuccess (replaced by an inline celebration on GoalDetailV2).
 import GoalCreateExpressScreen from "./screens/GoalCreateExpressScreen";
 import GoalDetailV2Screen from "./screens/GoalDetailV2Screen";
-import GoalAddMoneyScreen from "./screens/GoalAddMoneyScreen";
-import GoalWithdrawScreen from "./screens/GoalWithdrawScreen";
 import GoalLinkCircleScreen from "./screens/GoalLinkCircleScreen";
 import GoalMilestonesScreen from "./screens/GoalMilestonesScreen";
 import GoalAchievedScreen from "./screens/GoalAchievedScreen";
@@ -763,8 +761,6 @@ export type RootStackParamList = {
   // V2 dead route types removed (GoalCategorySelect, GoalTypeSelect,
   // GoalCreate, GoalSetupSuccess).
   GoalDetailV2: { goalId?: string; goal?: object; justCreated?: boolean } | undefined;
-  GoalAddMoney: { goalId?: string; goal?: object } | undefined;
-  GoalWithdraw: { goalId?: string; goal?: object } | undefined;
   GoalLinkCircle: { goalId?: string; goal?: object } | undefined;
   GoalMilestones: { goalId?: string; goal?: object } | undefined;
   GoalAchieved: { goalId?: string; goal?: object } | undefined;
@@ -972,8 +968,6 @@ function HomeStackScreen() {
       <HomeStack.Screen name="GoalsHubV2" component={GoalsHubV2Screen} />
       <HomeStack.Screen name="GoalCreateExpress" component={GoalCreateExpressScreen} />
       <HomeStack.Screen name="GoalDetailV2" component={GoalDetailV2Screen} />
-      <HomeStack.Screen name="GoalAddMoney" component={GoalAddMoneyScreen} />
-      <HomeStack.Screen name="GoalWithdraw" component={GoalWithdrawScreen} />
       <HomeStack.Screen name="GoalLinkCircle" component={GoalLinkCircleScreen} />
       <HomeStack.Screen name="GoalMilestones" component={GoalMilestonesScreen} />
       <HomeStack.Screen name="GoalAchieved" component={GoalAchievedScreen} />

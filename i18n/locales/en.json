@@ -1032,6 +1032,10 @@
     "edit": "Edit",
     "next_payout": "Next payout",
     "link_circle_title": "Link a Circle",
+    "link_circle_body": "Auto-transfer Circle payouts to this goal",
+    "celebration_title": "🎉 Goal created!",
+    "celebration_body": "Your new goal is ready. Tap 'Add money' below to make your first deposit.",
+    "activity_empty": "No activity yet",
     "section_recent_activity": "Recent Activity",
     "see_all": "See All",
     "add_money": "Add Money",
@@ -1083,6 +1087,11 @@
     "round_up_toggle_title": "Auto round-up sends",
     "round_up_toggle_body": "When on, every send rounds up to the next $1, $5, or $10 and the extra goes into this jar.",
     "round_up_save_failed_title": "Couldn't save preference"
+  },
+  "goal_edit": {
+    "save_changes": "Save Changes",
+    "auto_save_body": "Save ${{amount}} automatically each month",
+    "placeholder_example": "e.g., First Home in Atlanta"
   },
   "goal_add_money": {
     "header": "Add Money",

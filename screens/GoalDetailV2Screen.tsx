@@ -140,7 +140,12 @@ type Goal = {
   apy: number;
   lockEndDate: string | null;
   lockPeriodMonths: number | null;
+  // Only populated when we have full circle details (name + payout). When
+  // the goal has an FK but the circle row hasn't been fetched, `linkedCircle`
+  // stays null and the FK is exposed via `linkedCircleId` so the render
+  // can hide the card entirely instead of showing "$0 on —".
   linkedCircle: LinkedCircle | null;
+  linkedCircleId: string | null;
   daysActive: number;
 };
 
@@ -195,6 +200,7 @@ const DEFAULT_GOAL: Goal = {
     payoutAmount: 2000,
     payoutAction: "deposit_all",
   },
+  linkedCircleId: "c1",
   daysActive: 45,
 };
 
@@ -290,15 +296,14 @@ function mapRealGoalToRender(real: RealGoal): Goal {
     apy,
     lockEndDate: real.lockEndDate ?? null,
     lockPeriodMonths: real.lockPeriodMonths ?? null,
-    linkedCircle: real.linkedCircleId
-      ? {
-          id: real.linkedCircleId,
-          name: "Linked Circle",
-          nextPayout: "—",
-          payoutAmount: 0,
-          payoutAction: real.circlePayoutAction ?? "deposit_all",
-        }
-      : null,
+    // P0: do NOT build a placeholder LinkedCircle. The DB row only stores
+    // the FK; rendering name="Linked Circle" / nextPayout="—" / payoutAmount=0
+    // surfaced "$0 on —" in the UI. Leave `linkedCircle` null until we have
+    // a real circle fetch; track the FK separately so the render can hide
+    // the card without showing the "Link a Circle" CTA to an already-linked
+    // user.
+    linkedCircle: null,
+    linkedCircleId: real.linkedCircleId ?? null,
     daysActive,
   };
 }
@@ -363,8 +368,8 @@ export default function GoalDetailV2Screen() {
   useEffect(() => {
     if (justCreated) {
       Alert.alert(
-        "🎉 Goal created!",
-        "Your new goal is ready. Tap 'Add money' below to make your first deposit.",
+        t("goal_detail.celebration_title"),
+        t("goal_detail.celebration_body"),
       );
     }
     // Run once on mount only.
@@ -479,14 +484,15 @@ export default function GoalDetailV2Screen() {
     }));
   }, [milestones]);
 
-  // Recent activity: prefer fetched transactions; fall back to passed params
-  // / mock for the legacy debug path.
+  // P0: recent activity comes from the real transactions list only. The
+  // prior fallback to `DEFAULT_ACTIVITY` showed fake "Daily interest /
+  // Auto-deposit" rows to users who had no real history; the legacy
+  // `route.params.recentActivity` debug path is unreachable from the
+  // current Hub nav. Empty array → empty-state row below.
   const recentActivity = useMemo<Activity[]>(() => {
     if (transactions) return mapRealTxnsToActivities(transactions);
-    return (
-      (route.params?.recentActivity as Activity[] | undefined) ?? DEFAULT_ACTIVITY
-    );
-  }, [transactions, route.params?.recentActivity]);
+    return [];
+  }, [transactions]);
 
   if (loading && !goal) {
     return (
@@ -902,7 +908,13 @@ export default function GoalDetailV2Screen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Linked circle */}
+          {/* Linked circle — three cases:
+              1. Full circle details fetched → show the rich card.
+              2. FK set but no details (current backend default) → render
+                 nothing. The prior placeholder showed "$0 on —" to users
+                 with linked circles, which was confusing. Hiding entirely
+                 is the P0 fix.
+              3. No FK at all → show the dashed "Link a Circle" CTA. */}
           {goal.linkedCircle ? (
             <View style={styles.card}>
               <View style={styles.linkedHeaderRow}>
@@ -936,7 +948,7 @@ export default function GoalDetailV2Screen() {
                 </View>
               </View>
             </View>
-          ) : (
+          ) : goal.linkedCircleId ? null : (
             <TouchableOpacity
               onPress={handleLinkCircle}
               activeOpacity={0.8}
@@ -946,9 +958,7 @@ export default function GoalDetailV2Screen() {
               <Text style={styles.linkCircleEmoji}>🔗</Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.linkCircleTitle}>{t("goal_detail.link_circle_title")}</Text>
-                <Text style={styles.linkCircleBody}>
-                  Auto-transfer Circle payouts to this goal
-                </Text>
+                <Text style={styles.linkCircleBody}>{t("goal_detail.link_circle_body")}</Text>
               </View>
             </TouchableOpacity>
           )}
@@ -970,40 +980,46 @@ export default function GoalDetailV2Screen() {
               </TouchableOpacity>
             </View>
 
-            <View style={{ gap: 10 }}>
-              {recentActivity.slice(0, 4).map((item, idx) => (
-                <View key={idx} style={styles.activityRow}>
-                  <View style={styles.activityLeft}>
-                    <View
+            {recentActivity.length === 0 ? (
+              <Text style={styles.activityEmpty}>
+                {t("goal_detail.activity_empty")}
+              </Text>
+            ) : (
+              <View style={{ gap: 10 }}>
+                {recentActivity.slice(0, 4).map((item, idx) => (
+                  <View key={idx} style={styles.activityRow}>
+                    <View style={styles.activityLeft}>
+                      <View
+                        style={[
+                          styles.activityIconBox,
+                          { backgroundColor: activityIconBg(item.type) },
+                        ]}
+                      >
+                        <Text style={styles.activityIcon}>
+                          {activityIcon(item.type)}
+                        </Text>
+                      </View>
+                      <View>
+                        <Text style={styles.activityDesc}>{item.desc}</Text>
+                        <Text style={styles.activityDate}>{item.date}</Text>
+                      </View>
+                    </View>
+                    <Text
                       style={[
-                        styles.activityIconBox,
-                        { backgroundColor: activityIconBg(item.type) },
+                        styles.activityAmount,
+                        { color: item.isCredit ? GREEN : RED },
                       ]}
                     >
-                      <Text style={styles.activityIcon}>
-                        {activityIcon(item.type)}
-                      </Text>
-                    </View>
-                    <View>
-                      <Text style={styles.activityDesc}>{item.desc}</Text>
-                      <Text style={styles.activityDate}>{item.date}</Text>
-                    </View>
+                      {item.isCredit ? "+" : "-"}$
+                      {item.amount.toLocaleString("en-US", {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </Text>
                   </View>
-                  <Text
-                    style={[
-                      styles.activityAmount,
-                      { color: item.isCredit ? GREEN : RED },
-                    ]}
-                  >
-                    {item.isCredit ? "+" : "-"}$
-                    {item.amount.toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </Text>
-                </View>
-              ))}
-            </View>
+                ))}
+              </View>
+            )}
           </View>
 
           {/* ===== P2 — Round-up jar toggle ===== */}
@@ -1078,7 +1094,7 @@ export default function GoalDetailV2Screen() {
         visible={showWithdrawSheet}
         goalId={goal.id}
         goalName={goal.name}
-        goalBalance={goal.currentBalance ?? 0}
+        goalBalance={goal.balance ?? 0}
         penaltyPercent={
           goal.savingsType === "flexible" ? 0 : 10
         }
@@ -1445,6 +1461,12 @@ const styles = StyleSheet.create({
   linkCircleBody: { fontSize: 11, color: MUTED, marginTop: 2 },
 
   // Activity
+  activityEmpty: {
+    fontSize: 13,
+    color: MUTED,
+    textAlign: "center",
+    paddingVertical: 12,
+  },
   activityRow: {
     flexDirection: "row",
     alignItems: "center",

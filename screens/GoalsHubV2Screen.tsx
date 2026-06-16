@@ -62,21 +62,10 @@ type HubGoal = {
   targetDate: string;
 };
 
-type Story = {
-  id: string;
-  userName: string;
-  goalType: string;
-  emoji: string;
-  headline: string;
-  photoUrl: string | null;
-  monthsToAchieve: number;
-};
-
 type GoalsHubV2Params = {
   totalSaved?: number;
   totalInterestEarned?: number;
   goals?: HubGoal[];
-  achievementStories?: Story[];
 };
 type GoalsHubV2RouteProp = RouteProp<
   { GoalsHubV2: GoalsHubV2Params },
@@ -128,26 +117,10 @@ const DEFAULT_GOALS: HubGoal[] = [
   },
 ];
 
-const DEFAULT_STORIES: Story[] = [
-  {
-    id: "s1",
-    userName: "Aminata D.",
-    goalType: "First Home",
-    emoji: "🏠",
-    headline: "Closed on my first home after 2 years!",
-    photoUrl: null,
-    monthsToAchieve: 24,
-  },
-  {
-    id: "s2",
-    userName: "Kwame O.",
-    goalType: "US Citizenship",
-    emoji: "🗽",
-    headline: "Took the oath last month!",
-    photoUrl: null,
-    monthsToAchieve: 18,
-  },
-];
+// P0: the prior `DEFAULT_STORIES` array hardcoded "Aminata D." / "Kwame O."
+// as the production fallback for an Achievement Stories card. The card
+// has no backing data source today, so it was always showing fake names
+// to real users. Removed entirely until a real story feed is wired.
 
 // i18n: filter labels resolve per-render via t() at the call site.
 const FILTERS = [
@@ -207,7 +180,11 @@ function dbGoalToHubGoal(g: Goal): HubGoal {
     interestEarned: g.interestEarned ?? 0,
     progressPercent: progress,
     isOnTrack,
-    linkedCircle: null,
+    // P0: expose the linked-circle FK so the 🔗 Linked badge on each card
+    // can light up. We don't fetch the circle name here (would require a
+    // join), but the badge text is a generic "Linked" tag — the FK
+    // presence is enough.
+    linkedCircle: g.linkedCircleId ?? null,
     monthlyContribution: g.monthlyContribution ?? 0,
     targetDate,
   };
@@ -267,8 +244,6 @@ export default function GoalsHubV2Screen() {
       setSuggestions((prev) => (prev ?? []).filter((s) => s.id !== id));
     }
   };
-
-  const achievementStories = route.params?.achievementStories ?? DEFAULT_STORIES;
 
   // Real goals from the DB. Replaces the prior route-param + mock fallback
   // that hid newly-created goals from the user — the hub was showing
@@ -573,39 +548,13 @@ export default function GoalsHubV2Screen() {
             </View>
           )}
 
-          {/* Achievement stories */}
-          <View style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardHeading}>{t("goals_hub_v2.stories_title")}</Text>
-              <TouchableOpacity
-                onPress={() => navigation.navigate(Routes.GoalStories)}
-                accessibilityRole="button"
-              >
-                <Text style={styles.linkAction}>{t("goals_hub_v2.see_all")}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={{ gap: 10 }}>
-              {achievementStories.map((story) => (
-                <TouchableOpacity
-                  key={story.id}
-                  onPress={() => navigation.navigate(Routes.GoalStories)}
-                  activeOpacity={0.85}
-                  accessibilityRole="button"
-                  style={styles.storyRow}
-                >
-                  <View style={styles.storyAvatar}>
-                    <Text style={styles.storyAvatarEmoji}>{story.emoji}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.storyName}>{story.userName}</Text>
-                    <Text style={styles.storyHeadline}>{story.headline}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
+          {/* P0: Achievement Stories card removed. The prior render
+              backed the card with `DEFAULT_STORIES` (hardcoded
+              "Aminata D." / "Kwame O." names) because no real story
+              feed exists yet. Restore this card when a real source
+              lands; the styles for storyRow / storyAvatar / storyName /
+              storyHeadline remain in the StyleSheet for that future
+              wire-up. */}
 
           {/* Tip card */}
           <LinearGradient

@@ -1032,6 +1032,10 @@
     "edit": "Modifier",
     "next_payout": "Prochain versement",
     "link_circle_title": "Lier un cercle",
+    "link_circle_body": "Transférer automatiquement les versements du cercle vers cet objectif",
+    "celebration_title": "🎉 Objectif créé !",
+    "celebration_body": "Votre nouvel objectif est prêt. Appuyez sur « Ajouter de l'argent » ci-dessous pour effectuer votre premier dépôt.",
+    "activity_empty": "Aucune activité pour le moment",
     "section_recent_activity": "Activité récente",
     "see_all": "Tout voir",
     "add_money": "Ajouter de l'argent",
@@ -1083,6 +1087,11 @@
     "round_up_toggle_title": "Arrondi automatique des envois",
     "round_up_toggle_body": "Quand activé, chaque envoi est arrondi au $1, $5 ou $10 supérieur et la différence est versée dans cette cagnotte.",
     "round_up_save_failed_title": "Préférence non enregistrée"
+  },
+  "goal_edit": {
+    "save_changes": "Enregistrer les modifications",
+    "auto_save_body": "Économisez {{amount}} $ automatiquement chaque mois",
+    "placeholder_example": "Ex. : Ma première maison à Abidjan"
   },
   "goal_add_money": {
     "header": "Ajouter de l'argent",
