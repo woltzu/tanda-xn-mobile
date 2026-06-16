@@ -1578,8 +1578,8 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-    <PreferencesProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <PreferencesProvider>
         <PaymentProvider>
         <CurrencyProvider>
           <CirclesProvider>
@@ -1624,8 +1624,8 @@ export default function App() {
           </CirclesProvider>
         </CurrencyProvider>
         </PaymentProvider>
-      </AuthProvider>
-    </PreferencesProvider>
+      </PreferencesProvider>
+    </AuthProvider>
     </SafeAreaProvider>
   );
 }
