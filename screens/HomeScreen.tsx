@@ -278,6 +278,84 @@ export default function HomeScreen() {
     [circleTotalContributed, circleTotalReceived, circleNetBalance],
   );
 
+  // Bucket A (Explainable AI) — dynamic "Why this balance?" body. The
+  // legacy sheet rendered a single static i18n string for every user;
+  // this replaces it with one line per real component (wallet / goals /
+  // circle net) plus a dominance summary when one component clearly
+  // outsizes the others. Inline English copy per Bucket A spec — i18n
+  // arrives in a later bucket if we keep these strings.
+  type AiBodyLine = { icon: keyof typeof Ionicons.glyphMap; text: string };
+  type AiBody =
+    | { empty: true; lines: []; summary: null }
+    | { empty: false; lines: AiBodyLine[]; summary: string | null };
+  const aiExplanation = useMemo<AiBody>(() => {
+    const hasWallet = walletBalance > 0;
+    const hasGoals = totalGoalsBalance > 0;
+    const hasCircle =
+      circleTotals.contributed > 0 ||
+      circleTotals.received > 0 ||
+      circleTotals.net !== 0;
+    if (!hasWallet && !hasGoals && !hasCircle) {
+      return { empty: true, lines: [], summary: null };
+    }
+    const lines: AiBodyLine[] = [];
+    if (hasWallet) {
+      lines.push({
+        icon: "wallet-outline",
+        text: `Your wallet has ${formatPlain(walletBalance)} — your liquid cash, available to spend or send.`,
+      });
+    }
+    if (hasGoals) {
+      lines.push({
+        icon: "flag-outline",
+        text: `You've saved ${formatPlain(totalGoalsBalance)} toward your goals.`,
+      });
+    }
+    if (hasCircle) {
+      if (circleTotals.net > 0) {
+        lines.push({
+          icon: "sync-outline",
+          text: `Your circle net is ${formatSigned(circleTotals.net)} — you've contributed more than you've received. You're ahead.`,
+        });
+      } else if (circleTotals.net < 0) {
+        lines.push({
+          icon: "sync-outline",
+          text: `Your circle net is ${formatSigned(circleTotals.net)} — you've received more than you've contributed so far. Stay on top of upcoming contributions.`,
+        });
+      } else {
+        lines.push({
+          icon: "sync-outline",
+          text: `Your circle net is balanced — contributions and payouts match.`,
+        });
+      }
+    }
+    // Dominance: declare a winner when the top component is ≥ 2× the
+    // second by absolute magnitude. Avoids over-claiming on close races.
+    const components: { key: "wallet" | "goals" | "circle"; amount: number }[] = [
+      { key: "wallet", amount: Math.abs(walletBalance) },
+      { key: "goals", amount: Math.abs(totalGoalsBalance) },
+      { key: "circle", amount: Math.abs(circleTotals.net) },
+    ]
+      .filter((c) => c.amount > 0)
+      .sort((a, b) => b.amount - a.amount);
+    let summary: string | null = null;
+    if (components.length >= 2 && components[0].amount >= 2 * components[1].amount) {
+      const top = components[0].key;
+      if (top === "wallet") {
+        summary = "Your total position is driven by your wallet balance.";
+      } else if (top === "goals") {
+        summary = "Your total position is anchored by your goal savings.";
+      } else if (circleTotals.net > 0) {
+        summary =
+          "Your circle activity is the biggest contributor to your position.";
+      } else {
+        summary =
+          "Outstanding circle obligations weigh on your position right now.";
+      }
+    }
+    return { empty: false, lines, summary };
+  }, [walletBalance, totalGoalsBalance, circleTotals]);
+
   // Map keyed by circle id so the bottom-sheet loop can look up the
   // per-circle (contributed, received, net) by the activeCircles row's
   // id in O(1).
@@ -1235,10 +1313,44 @@ export default function HomeScreen() {
               {t("home_screen.ai_sheet_subtitle")}
             </Text>
 
+            {/* Bucket A — data-derived body. Replaces the legacy static
+                i18n string with per-component lines computed from the
+                user's real wallet, goals, and circle net. Empty-state
+                copy when nothing is populated yet. */}
             <View style={styles.aiBodyCard}>
-              <Text style={styles.aiBodyText}>
-                {t("home_screen.ai_explanation_body")}
-              </Text>
+              {aiExplanation.empty ? (
+                <Text style={styles.aiBodyText}>
+                  We don't have enough activity yet to explain your balance.
+                  Start saving or join a circle to see insights.
+                </Text>
+              ) : (
+                <>
+                  {aiExplanation.lines.map((line, idx) => (
+                    <View
+                      key={idx}
+                      style={[
+                        styles.aiBodyLineRow,
+                        idx > 0 && { marginTop: 10 },
+                      ]}
+                    >
+                      <Ionicons
+                        name={line.icon}
+                        size={14}
+                        color={colors.accentTeal}
+                        style={{ marginTop: 3 }}
+                      />
+                      <Text style={[styles.aiBodyText, { flex: 1 }]}>
+                        {line.text}
+                      </Text>
+                    </View>
+                  ))}
+                  {aiExplanation.summary ? (
+                    <Text style={styles.aiBodySummary}>
+                      {aiExplanation.summary}
+                    </Text>
+                  ) : null}
+                </>
+              )}
             </View>
 
             <TouchableOpacity
@@ -1913,6 +2025,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textPrimary,
     lineHeight: 20,
+  },
+  // Bucket A — per-component dynamic body styles
+  aiBodyLineRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  aiBodySummary: {
+    marginTop: 12,
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    lineHeight: 18,
   },
 
   // ----- Tier benefits modal -----
