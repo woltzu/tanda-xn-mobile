@@ -23,7 +23,7 @@
 // round-trip. refetch() invalidates the slot.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
@@ -182,6 +182,126 @@ export function useCircleNetBalance(): UseCircleNetBalanceResult {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // ── Realtime invalidation (D — task C) ──────────────────────────
+  //
+  // Two filtered postgres_changes channels listen for any INSERT /
+  // UPDATE / DELETE against this user's contribution and payout
+  // rows. The filter is server-side (Realtime evaluates it before
+  // pushing), so a busy circle that processes thousands of other
+  // members' rows doesn't fan out to this client.
+  //
+  // Events from a cycle settlement can land in a burst — one
+  // contribution per member, all in the same tx — so we coalesce
+  // into a single refetch via a 300 ms trailing-edge debounce. Cache
+  // invalidation lives in the timer body so a stale entry can't be
+  // re-served if a render happens to fire between the event and the
+  // debounced refetch.
+  //
+  // fetchData is reached through a ref so the subscription effect
+  // only re-subscribes when userId changes — without it, every
+  // fetchData re-creation (currently triggered only by userId, but
+  // that's an internal detail) would tear the channel down and
+  // re-open it.
+  //
+  // Failures (network drop, RLS rejecting the subscription) surface
+  // as channel-status callbacks; we log and continue. The existing
+  // useFocusEffect refetch on HomeScreen is the documented fallback.
+  const fetchDataRef = useRef(fetchData);
+  fetchDataRef.current = fetchData;
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const scheduleRefetch = () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        debounceTimerRef.current = null;
+        cache.delete(userId);
+        void fetchDataRef.current(true);
+      }, 300);
+    };
+
+    type ChannelRef = ReturnType<typeof supabase.channel> | null;
+    let contribChannel: ChannelRef = null;
+    let payoutChannel: ChannelRef = null;
+
+    try {
+      contribChannel = supabase
+        .channel(`circle-net-contributions-${userId}`)
+        .on(
+          // @ts-expect-error supabase-js types narrow event to a literal but
+          // accept "*" at runtime to subscribe to all change events.
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "circle_contributions",
+            filter: `user_id=eq.${userId}`,
+          },
+          () => scheduleRefetch(),
+        )
+        .subscribe((status) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.warn(
+              "[useCircleNetBalance] contributions channel status:",
+              status,
+            );
+          }
+        });
+
+      payoutChannel = supabase
+        .channel(`circle-net-payouts-${userId}`)
+        .on(
+          // @ts-expect-error see contributions channel above.
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "circle_payouts",
+            filter: `recipient_id=eq.${userId}`,
+          },
+          () => scheduleRefetch(),
+        )
+        .subscribe((status) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.warn(
+              "[useCircleNetBalance] payouts channel status:",
+              status,
+            );
+          }
+        });
+    } catch (e) {
+      console.warn(
+        "[useCircleNetBalance] realtime subscribe failed; falling back to focus refresh:",
+        (e as Error)?.message ?? "unknown",
+      );
+    }
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      if (contribChannel) {
+        try {
+          supabase.removeChannel(contribChannel);
+        } catch {
+          /* best-effort */
+        }
+      }
+      if (payoutChannel) {
+        try {
+          supabase.removeChannel(payoutChannel);
+        } catch {
+          /* best-effort */
+        }
+      }
+    };
+  }, [userId]);
 
   const totalNet = useMemo(
     () => entries.reduce((sum, e) => sum + e.net, 0),
