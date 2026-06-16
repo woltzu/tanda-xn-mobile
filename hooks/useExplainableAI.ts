@@ -36,43 +36,130 @@ export type {
 // useDecisionHistory — Paginated decision history for a member
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Bucket C — module-level cache. Mirrors the pattern used by
+// useAdvanceDashboard / useMemberTier. Keyed by `${userId}:${filtersKey}`
+// so multiple consumers (AIInsightsScreen, ScoreExplainerSheet) with
+// different filter shapes don't collide. 5-min TTL; realtime inserts
+// bust the cache immediately so a fresh decision shows up on the next
+// fetch without waiting for the TTL.
+const DECISION_CACHE_TTL_MS = 5 * 60 * 1000;
+const decisionCache = new Map<
+  string,
+  { data: AIDecision[]; fetchedAt: number }
+>();
+
+function cacheKey(userId: string, filters?: DecisionHistoryFilters): string {
+  return `${userId}:${filters?.decisionType ?? ''}:${filters?.fromDate ?? ''}:${filters?.toDate ?? ''}:${filters?.limit ?? ''}`;
+}
+
+/**
+ * Clear cached decision rows. Pass a userId to evict only that user's
+ * entries; omit to clear everything. Useful when:
+ *   - a notification handler consumed a new decision (realtime would
+ *     normally cover this, but offline-mode notification taps can
+ *     bypass realtime)
+ *   - the EF dispatcher confirms a push delivery and the client wants
+ *     to surface the row immediately
+ */
+export function bustDecisionCache(userId?: string) {
+  if (!userId) {
+    decisionCache.clear();
+    return;
+  }
+  for (const key of Array.from(decisionCache.keys())) {
+    if (key.startsWith(`${userId}:`)) decisionCache.delete(key);
+  }
+}
+
+function readDecisionCache(
+  userId: string,
+  filters?: DecisionHistoryFilters,
+): AIDecision[] | null {
+  const entry = decisionCache.get(cacheKey(userId, filters));
+  if (!entry) return null;
+  if (Date.now() - entry.fetchedAt >= DECISION_CACHE_TTL_MS) {
+    decisionCache.delete(cacheKey(userId, filters));
+    return null;
+  }
+  return entry.data;
+}
+
+function writeDecisionCache(
+  userId: string,
+  filters: DecisionHistoryFilters | undefined,
+  data: AIDecision[],
+) {
+  decisionCache.set(cacheKey(userId, filters), {
+    data,
+    fetchedAt: Date.now(),
+  });
+}
+
 export function useDecisionHistory(
   userId?: string,
   filters?: DecisionHistoryFilters
 ) {
-  const [decisions, setDecisions] = useState<AIDecision[]>([]);
+  // Seed initial state from cache so screen-switches don't blank-flash.
+  const [decisions, setDecisions] = useState<AIDecision[]>(() => {
+    if (!userId) return [];
+    return readDecisionCache(userId, filters) ?? [];
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchHistory = useCallback(async () => {
-    if (!userId) {
-      setDecisions([]);
-      setLoading(false);
-      return;
-    }
+  const fetchHistory = useCallback(
+    async (opts?: { force?: boolean }) => {
+      if (!userId) {
+        setDecisions([]);
+        setLoading(false);
+        return;
+      }
 
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await ExplainableAIEngine.getDecisionHistory(userId, filters);
-      setDecisions(data);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch decision history');
-    } finally {
-      setLoading(false);
-    }
-  }, [userId, filters?.decisionType, filters?.fromDate, filters?.toDate, filters?.limit]);
+      if (!opts?.force) {
+        const cached = readDecisionCache(userId, filters);
+        if (cached) {
+          setDecisions(cached);
+          setLoading(false);
+          return;
+        }
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await ExplainableAIEngine.getDecisionHistory(userId, filters);
+        writeDecisionCache(userId, filters, data);
+        setDecisions(data);
+      } catch (err: any) {
+        setError(err.message || 'Failed to fetch decision history');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [userId, filters?.decisionType, filters?.fromDate, filters?.toDate, filters?.limit],
+  );
+
+  /**
+   * Force a refetch from the server. Used by pull-to-refresh and by
+   * notification handlers that know the data has shifted.
+   */
+  const refresh = useCallback(async () => {
+    if (userId) bustDecisionCache(userId);
+    await fetchHistory({ force: true });
+  }, [userId, fetchHistory]);
 
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
 
-  // Realtime subscription
+  // Realtime subscription — bust the cache before refetching so the
+  // fetch path doesn't see the now-stale entry.
   useEffect(() => {
     if (!userId) return;
 
     const channel = ExplainableAIEngine.subscribeToDecisions(userId, () => {
-      fetchHistory();
+      bustDecisionCache(userId);
+      fetchHistory({ force: true });
     });
 
     return () => {
@@ -90,6 +177,7 @@ export function useDecisionHistory(
     loading,
     error,
     refetch: fetchHistory,
+    refresh,
     totalDecisions,
     latestDecision,
     hasDecisions,

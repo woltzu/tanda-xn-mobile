@@ -5687,6 +5687,22 @@
     "category_auto_hint": "Catégorisé automatiquement comme {{category}} d'après votre titre — modifiable à tout moment.",
     "price_suggest_chip": "Des événements similaires coûtent {{amount}} — l'utiliser ?"
   },
+  "ai_notifications": {
+    "insight_title": "Nouvelle analyse",
+    "insight_body_fallback": "Touchez pour voir votre dernière analyse IA.",
+    "digest_title": "Vos analyses IA de la semaine",
+    "digest_body_summary": "Cette semaine : {{summary}}. Touchez pour en voir plus.",
+    "digest_count_score_one": "{{count}} mise à jour de score",
+    "digest_count_score_other": "{{count}} mises à jour de score",
+    "digest_count_tier_one": "{{count}} changement de palier",
+    "digest_count_tier_other": "{{count}} changements de palier",
+    "digest_count_alert_one": "{{count}} alerte",
+    "digest_count_alert_other": "{{count}} alertes",
+    "digest_count_rejection_one": "{{count}} demande refusée",
+    "digest_count_rejection_other": "{{count}} demandes refusées",
+    "digest_count_position_one": "{{count}} mise à jour de paiement",
+    "digest_count_position_other": "{{count}} mises à jour de paiement"
+  },
   "score_explainer": {
     "title": "Comment fonctionnent vos scores",
     "close": "Fermer",

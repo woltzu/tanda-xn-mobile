@@ -5687,6 +5687,22 @@
     "category_auto_hint": "Auto-set as {{category}} based on your title — change it any time.",
     "price_suggest_chip": "Similar events charge {{amount}} — use that?"
   },
+  "ai_notifications": {
+    "insight_title": "New insight",
+    "insight_body_fallback": "Tap to see your latest AI insight.",
+    "digest_title": "Your weekly AI insights",
+    "digest_body_summary": "You had {{summary}} this week. Tap to see more.",
+    "digest_count_score_one": "{{count}} score update",
+    "digest_count_score_other": "{{count}} score updates",
+    "digest_count_tier_one": "{{count}} tier change",
+    "digest_count_tier_other": "{{count}} tier changes",
+    "digest_count_alert_one": "{{count}} alert",
+    "digest_count_alert_other": "{{count}} alerts",
+    "digest_count_rejection_one": "{{count}} rejected request",
+    "digest_count_rejection_other": "{{count}} rejected requests",
+    "digest_count_position_one": "{{count}} payout update",
+    "digest_count_position_other": "{{count}} payout updates"
+  },
   "score_explainer": {
     "title": "How your scores work",
     "close": "Close",
