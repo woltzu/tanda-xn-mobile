@@ -54,6 +54,9 @@ export type AdvanceProductCard = {
     | "product_inactive"
     | "xnscore_too_low"
     | "not_enough_completed_circles"
+    | "kyc_required"
+    | "account_age_too_low"
+    | "too_many_active_advances"
     | null;
   points_to_unlock: number | null;
 };
@@ -109,8 +112,18 @@ let dashboardCache: {
   fetchedAt: number;
 } | null = null;
 
+// Bucket C P1.3 — preflight cache. Keyed by `${userId}:${uiCode}:${amount}`.
+// Cleared whenever requestAdvance or processAdvanceRepayment lands, since
+// those change the eligibility surface (active-advance count, etc.).
+type PreflightCacheEntry = {
+  result: EligibilityCheckResult;
+  fetchedAt: number;
+};
+const preflightCache = new Map<string, PreflightCacheEntry>();
+
 function bustCache() {
   dashboardCache = null;
+  preflightCache.clear();
 }
 
 async function fetchDashboard(userId: string): Promise<AdvanceDashboard> {
@@ -198,6 +211,58 @@ export function useAdvanceDashboard() {
   }, [load]);
 
   return { data, loading, error, refresh };
+}
+
+// ── Preflight eligibility check (Bucket C P1.3) ──────────────────────────
+//
+// Client wrapper for migration 184's `check_advance_eligibility` RPC.
+// Same gates as request_advance, no side effects. The dashboard's
+// `eligible` flag covers xnscore + circle activity but NOT KYC or
+// account-age, so the client today only catches those by submitting.
+// AdvanceHubV2 calls this on product-card tap to surface the right
+// reason in the bottom sheet before opening SmartCalculator.
+
+export type EligibilityCheckResult = {
+  eligible: boolean;
+  reason:
+    | "kyc_required"
+    | "account_age_too_low"
+    | "xnscore_too_low"
+    | "not_enough_completed_circles"
+    | "too_many_active_advances"
+    | "product_not_configured"
+    | "product_inactive"
+    | "amount_below_min"
+    | "amount_above_max"
+    | "unknown_product"
+    | "auth_required"
+    | null;
+  product_ui_code?: AdvanceUiCode;
+  product_db_code?: string;
+  min_amount_cents?: number;
+  max_amount_cents?: number;
+  recommended_amount_cents?: number;
+};
+
+export async function checkAdvanceEligibility(
+  uiCode: AdvanceUiCode,
+  amountCents: number | null = null,
+  userId: string | null = null,
+): Promise<EligibilityCheckResult> {
+  const cacheKey = `${userId ?? "self"}:${uiCode}:${amountCents ?? "na"}`;
+  const cached = preflightCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.result;
+  }
+  const { data, error } = await supabase.rpc("check_advance_eligibility", {
+    p_ui_code: uiCode,
+    p_amount_cents: amountCents,
+    p_user_id: userId,
+  });
+  if (error) throw error;
+  const result = (data ?? { eligible: false, reason: null }) as EligibilityCheckResult;
+  preflightCache.set(cacheKey, { result, fetchedAt: Date.now() });
+  return result;
 }
 
 // ── RPC client wrappers (cache-busting) ──────────────────────────────────

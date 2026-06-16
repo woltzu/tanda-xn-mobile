@@ -270,9 +270,7 @@ import InterestUnlockedSuccessScreen from "./screens/InterestUnlockedSuccessScre
 // via the __DEV__ "Advance V2" button on the Dashboard.
 import AdvanceHubV2Screen from "./screens/AdvanceHubV2Screen";
 import SmartCalculatorScreen from "./screens/SmartCalculatorScreen";
-import ApplicationFlowScreen from "./screens/ApplicationFlowScreen";
 import AdvanceDetailsV2Screen from "./screens/AdvanceDetailsV2Screen";
-import AdvanceApprovalScreen from "./screens/AdvanceApprovalScreen";
 import EarlyRepaymentScreen from "./screens/EarlyRepaymentScreen";
 import RepaymentConfirmScreen from "./screens/RepaymentConfirmScreen";
 import PaymentFailedScreen from "./screens/PaymentFailedScreen";
@@ -688,28 +686,7 @@ export type RootStackParamList = {
         xnscore?: number;
       }
     | undefined;
-  ApplicationFlow:
-    | {
-        advanceType?: string;
-        amount?: number;
-        term?: number;
-        rate?: number;
-        fee?: number;
-        total?: number;
-        upcomingPayouts?: object[];
-        advanceDetails?: object;
-      }
-    | undefined;
   AdvanceDetailsV2: { advanceId?: string; justCreated?: boolean } | undefined;
-  AdvanceApproval:
-    | {
-        advance?: object;
-        advanceId?: string;
-        amount?: number;
-        total?: number;
-        payoutId?: string;
-      }
-    | undefined;
   EarlyRepayment:
     | {
         advanceId?: string;
@@ -944,9 +921,7 @@ function HomeStackScreen() {
           any user menu. */}
       <HomeStack.Screen name="AdvanceHubV2" component={AdvanceHubV2Screen} />
       <HomeStack.Screen name="SmartCalculator" component={SmartCalculatorScreen} />
-      <HomeStack.Screen name="ApplicationFlow" component={ApplicationFlowScreen} />
       <HomeStack.Screen name="AdvanceDetailsV2" component={AdvanceDetailsV2Screen} />
-      <HomeStack.Screen name="AdvanceApproval" component={AdvanceApprovalScreen} />
       <HomeStack.Screen name="EarlyRepayment" component={EarlyRepaymentScreen} />
       <HomeStack.Screen name="RepaymentConfirm" component={RepaymentConfirmScreen} />
       <HomeStack.Screen name="PaymentFailed" component={PaymentFailedScreen} />

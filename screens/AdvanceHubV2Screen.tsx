@@ -37,6 +37,7 @@ import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import {
   useAdvanceDashboard,
+  checkAdvanceEligibility,
   AdvanceProductCard,
   AdvanceUiCode,
   ActiveAdvance,
@@ -255,6 +256,28 @@ export default function AdvanceHubV2Screen() {
     }
     const passed = await advanceGate.ensureVerified();
     if (!passed) return;
+
+    // Bucket C P1.3 — preflight catches KYC + account_age + race
+    // conditions that the dashboard's static `eligible` flag doesn't
+    // cover (the dashboard only gates on xnscore + circles). If the
+    // preflight surfaces a new reason, route to the same bottom sheet
+    // we built for ineligible cards. Preflight network failure is a
+    // soft fail — SmartCalculator's submit will catch any blocker the
+    // user actually hits.
+    try {
+      const preflight = await checkAdvanceEligibility(card.ui_code);
+      if (!preflight.eligible && preflight.reason) {
+        setUnavailableProduct({
+          ...card,
+          disqualification_reason:
+            preflight.reason as AdvanceProductCard["disqualification_reason"],
+        });
+        return;
+      }
+    } catch {
+      /* soft fail — fall through and let SmartCalculator handle it. */
+    }
+
     navigation.navigate(Routes.SmartCalculator, {
       advanceType: card.ui_code,
       product: card,
