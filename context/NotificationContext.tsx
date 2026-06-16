@@ -397,6 +397,24 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
         console.log("Push token registered successfully");
       }
 
+      // Migration 182: also denormalise the most-recent token onto
+      // `profiles.expo_push_token`. The three push-dispatcher Edge
+      // Functions (transfer-notification, goal-notification,
+      // kyc-approval-notification) read from this column for a
+      // single-row JOIN instead of paging through push_tokens. The RPC
+      // above still owns the multi-device history table; this is the
+      // cheap-read shadow.
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ expo_push_token: token })
+        .eq("id", user.id);
+      if (profileError) {
+        console.warn(
+          "[NotificationContext] profiles.expo_push_token write failed:",
+          profileError.message,
+        );
+      }
+
       // Configure Android notification channel
       if (Platform.OS === "android") {
         await Notifications.setNotificationChannelAsync("default", {

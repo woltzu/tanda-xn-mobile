@@ -68,15 +68,15 @@ serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // STUB: pending the `notifications.push_sent_at` column. Until that
-    // lands we can only count what would be delivered. The query
-    // shape below is the one we'll switch to once the column is in
-    // place — keeping it here documents the contract.
+    // Idempotency: pull rows that haven't been pushed yet
+    // (push_sent_at IS NULL). The partial index
+    // notifications_push_unsent_idx (migration 182) keeps this query
+    // cheap as the notifications table grows.
     const { data: pending, error: selErr } = await supabase
       .from("notifications")
       .select("id, user_id, title, body, data, type")
       .like("type", "kyc_%")
-      .eq("read", false)
+      .is("push_sent_at", null)
       .order("created_at", { ascending: true })
       .limit(100);
 
@@ -96,21 +96,22 @@ serve(async (req: Request) => {
     const failures: Array<{ id: string; reason: string }> = [];
 
     for (const row of pending ?? []) {
-      // STUB: pull the push token from profiles. profiles.expo_push_token
-      // does not exist yet — this will silently no-op until the schema
-      // adds it. The PostgREST 400 from selecting a missing column is
-      // suppressed by the try/catch so the loop continues.
-      let token: string | null = null;
-      try {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("expo_push_token")
-          .eq("id", row.user_id)
-          .maybeSingle();
-        token = (prof as { expo_push_token?: string } | null)?.expo_push_token ?? null;
-      } catch {
-        token = null;
+      // Read the recipient's most recent device token. The notification
+      // row was already written by migration 160's status-change
+      // trigger (in-app inbox surface), so a missing token is a
+      // soft-fail — we leave push_sent_at NULL so a later sweep retries
+      // after the user opens the app and registers a token.
+      const { data: prof, error: profErr } = await supabase
+        .from("profiles")
+        .select("expo_push_token")
+        .eq("id", row.user_id)
+        .maybeSingle();
+      if (profErr) {
+        failures.push({ id: row.id, reason: `profile_${profErr.code ?? "err"}` });
+        continue;
       }
+      const token = (prof as { expo_push_token?: string | null } | null)
+        ?.expo_push_token ?? null;
       if (!token) {
         failures.push({ id: row.id, reason: "no_token" });
         continue;
@@ -146,6 +147,16 @@ serve(async (req: Request) => {
           failures.push({ id: row.id, reason: `expo_${resp.status}` });
           continue;
         }
+        // Mark dispatched so the next sweep skips this row.
+        const { error: stampErr } = await supabase
+          .from("notifications")
+          .update({ push_sent_at: new Date().toISOString() })
+          .eq("id", row.id);
+        if (stampErr) {
+          console.warn(
+            `[kyc-approval-notification] failed to stamp push_sent_at on ${row.id}: ${stampErr.message}`,
+          );
+        }
         delivered++;
       } catch (e) {
         failures.push({
@@ -164,9 +175,6 @@ serve(async (req: Request) => {
         delivered,
         failed: failures.length,
         failures,
-        note:
-          "STUB: profiles.expo_push_token and notifications.push_sent_at are not yet in schema; " +
-          "delivery counts will be zero until they land.",
       }),
       {
         status: 200,
