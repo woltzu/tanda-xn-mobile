@@ -138,23 +138,30 @@ export default function DocumentUploadScreen() {
         return;
       }
 
-      // Persist the URL on the user's kyc row. Upsert on user_id so this
-      // works whether or not a kyc row already exists. We also stamp
-      // id_type (idempotent) and move verification_status to 'pending'.
+      // Persist the URL on the user's kyc_verifications row (KYC P0 wired
+      // the user-flow screens onto the engine table — the prior orphan
+      // `user_kyc` write never reached the trigger that updates
+      // `profiles.tier`). We use `member_id` as the natural key for the
+      // upsert and move the row to `provider_pending` so the Persona
+      // webhook can later flip it to `approved` (which then fires
+      // `trg_sync_kyc_tier_to_profile`).
       const sideColumn =
         side === "front" ? "id_document_front_url" : "id_document_back_url";
 
       const { error: dbErr } = await supabase
-        .from("user_kyc")
+        .from("kyc_verifications")
         .upsert(
           {
-            user_id: user.id,
+            member_id: user.id,
+            kyc_type: "persona",
+            provider: "persona",
+            provider_reference_id: "manual_upload",
             id_type: idType,
             [sideColumn]: res.url,
-            verification_status: "pending",
+            status: "provider_pending",
             updated_at: new Date().toISOString(),
           },
-          { onConflict: "user_id" }
+          { onConflict: "member_id" }
         );
 
       if (dbErr) {

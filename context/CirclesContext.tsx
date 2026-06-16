@@ -5,6 +5,7 @@ import React, {
   useEffect,
   ReactNode,
   useCallback,
+  useRef,
 } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
@@ -209,7 +210,7 @@ type CirclesContextType = {
   error: string | null;
   networkUserIds: Set<string>;
   createCircle: (circleData: Omit<Circle, "id" | "createdAt" | "status" | "currentMembers" | "progress">) => Promise<Circle>;
-  joinCircle: (circleId: string) => Promise<void>;
+  joinCircle: (circleId: string, inviteCode?: string) => Promise<void>;
   refreshCircles: () => Promise<void>;
   findCircleByInviteCode: (code: string) => Promise<Circle | null>;
   generateInviteCode: (circle: Circle) => string;
@@ -271,12 +272,11 @@ const getCircleEmoji = (type: string): string => {
   }
 };
 
-// Helper to generate invite code from circle name
-const generateCircleInviteCode = (name: string, createdAt: string): string => {
-  const cleanName = name.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 10);
-  const year = new Date(createdAt).getFullYear();
-  return `${cleanName}${year}`;
-};
+// (Legacy `generateCircleInviteCode` removed — invite codes are now produced
+// by the server-side `gen_invite_code` RPC inside migration 141, which yields
+// a collision-resistant 8-char alphanumeric. Every newly-created circle has
+// `invite_code` set at row-insert time, so client-side code generation is no
+// longer needed.)
 
 // Convert database row to Circle object (snake_case to camelCase)
 const rowToCircle = (row: CircleRow): Circle => ({
@@ -386,6 +386,14 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Refs that mirror state, so the realtime callbacks (which capture state
+  // via closure at subscribe time) can read the CURRENT set without going
+  // stale after every membership change.
+  const myCircleIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    myCircleIdsRef.current = myCircleIds;
+  }, [myCircleIds]);
+
   // Fetch all circles from Supabase
   const fetchCircles = useCallback(async () => {
     if (!session) {
@@ -473,7 +481,26 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
 
           if (payload.eventType === "INSERT") {
             const newCircle = rowToCircle(payload.new as CircleRow);
-            setCircles((prev) => [newCircle, ...prev]);
+            // Upsert by id — never blindly prepend. `createCircle()` does
+            // an optimistic local insert immediately after the RPC returns
+            // (so the new row appears in My Circles before navigation
+            // completes). The realtime channel then delivers the same row
+            // moments later. Without this dedupe the same id ends up in
+            // `circles` twice, which trips React's "duplicate key" warning
+            // wherever the list is rendered (e.g. CirclesV2's My Circles).
+            //
+            // Prefer the realtime payload over the optimistic copy when
+            // both exist — the realtime row reflects post-trigger state
+            // (e.g. current_members already bumped by the
+            // on_circle_member_change trigger), whereas the optimistic
+            // copy is one step behind.
+            setCircles((prev) => {
+              const idx = prev.findIndex((c) => c.id === newCircle.id);
+              if (idx === -1) return [newCircle, ...prev];
+              const next = prev.slice();
+              next[idx] = newCircle;
+              return next;
+            });
           } else if (payload.eventType === "UPDATE") {
             const updatedCircle = rowToCircle(payload.new as CircleRow);
             setCircles((prev) =>
@@ -493,9 +520,47 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
           table: "circle_members",
         },
         (payload) => {
-          console.log("Member change received:", payload);
-          // Refresh circles when membership changes
-          fetchCircles();
+          // Targeted patch instead of full fetchCircles() — the prior
+          // behaviour pulled the entire circles list on every single
+          // member change, which got expensive in active circles and made
+          // the UI feel laggy on join. We only need three things to
+          // change locally:
+          //   - myCircleIds when the change is about ME
+          //   - networkUserIds when the change is about someone joining a
+          //     circle I'm in
+          //   - circles.current_members — already handled by the trigger
+          //     -> circles table UPDATE event above
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as { circle_id: string; user_id: string };
+            if (row.user_id === user?.id) {
+              setMyCircleIds((prev) => {
+                if (prev.has(row.circle_id)) return prev;
+                const next = new Set(prev);
+                next.add(row.circle_id);
+                return next;
+              });
+            } else if (myCircleIdsRef.current.has(row.circle_id)) {
+              setNetworkUserIds((prev) => {
+                if (prev.has(row.user_id)) return prev;
+                const next = new Set(prev);
+                next.add(row.user_id);
+                return next;
+              });
+            }
+          } else if (payload.eventType === "DELETE") {
+            const row = payload.old as { circle_id: string; user_id: string };
+            if (row.user_id === user?.id) {
+              setMyCircleIds((prev) => {
+                if (!prev.has(row.circle_id)) return prev;
+                const next = new Set(prev);
+                next.delete(row.circle_id);
+                return next;
+              });
+            }
+            // networkUserIds intentionally NOT pruned on a single delete —
+            // the same uid could still share another circle with me.
+            // Reconciled on next full fetchCircles() (e.g. cold start).
+          }
         }
       )
       .subscribe((status) => {
@@ -518,7 +583,12 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     (c) => c.createdBy !== user?.id && !myCircleIds.has(c.id) && c.status !== "completed"
   );
 
-  // Create a new circle
+  // Create a new circle — calls the atomic `create_circle` RPC (migration
+  // 141). The RPC INSERTs `circles`, `circle_members` (creator at position 1),
+  // and `invited_members` in a single transaction, generates a collision-
+  // resistant invite code, and posts a system message to circle_messages.
+  // The prior client-side 3-INSERT chain risked orphan circles if any
+  // intermediate step failed.
   const createCircle = async (
     circleData: Omit<Circle, "id" | "createdAt" | "status" | "currentMembers" | "progress">
   ): Promise<Circle> => {
@@ -526,140 +596,95 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
       throw new Error("Must be logged in to create a circle");
     }
 
-    const createdAt = new Date().toISOString();
-    const inviteCode = generateCircleInviteCode(circleData.name, createdAt);
+    // Build parallel arrays (phones, names) for the bulk invited_members
+    // INSERT. The RPC will skip rows with empty phones.
+    const invitees = circleData.invitedMembers ?? [];
+    const phones = invitees.map((m) => m.phone ?? "");
+    const names = invitees.map((m) => m.name ?? "");
 
-    const newCircleData = {
-      ...circleData,
-      createdBy: user.id,
-      createdAt,
-      status: "pending" as const,
-      currentMembers: 1,
-      progress: 0,
-      emoji: circleData.emoji || getCircleEmoji(circleData.type),
-      inviteCode,
-    };
-
-    // Phase Step 2 of feat(circle-reputation) #14. Pre-compute the
-    // creator's inherited reputation so the new circle starts with a
-    // realistic baseline score. As more members accept their invites and
-    // get added to circle_members, the score would ideally refresh — for
-    // now we set the floor here and rely on the completion trigger
-    // (migration 106) to land the final score when the circle completes.
-    // Failure is non-fatal: we'd rather create the circle with a 0 score
-    // than block creation on a transient RPC error.
-    let inheritedReputationScore = 0;
-    try {
-      const { data: inheritData } = await supabase.rpc(
-        "get_inherited_reputation_for_members",
-        { p_member_ids: [user.id] },
-      );
-      const result = inheritData as { average_reputation?: number } | null;
-      if (result?.average_reputation != null) {
-        inheritedReputationScore = Number(result.average_reputation) || 0;
-      }
-    } catch (repErr: any) {
-      console.warn(
-        "[CirclesContext] inherited reputation lookup failed (non-fatal):",
-        repErr?.message,
-      );
-    }
-
-    const rowData = {
-      ...circleToRow(newCircleData),
-      reputation_score: inheritedReputationScore,
-    };
-
-    // Insert into Supabase
-    const { data, error: insertError } = await supabase
-      .from("circles")
-      .insert(rowData)
-      .select()
-      .single();
-
-    if (insertError) {
-      console.error("Error creating circle:", insertError);
-      throw new Error(insertError.message);
-    }
-
-    const newCircle = rowToCircle(data as CircleRow);
-
-    // Add creator as first member
-    const { error: memberError } = await supabase.from("circle_members").insert({
-      circle_id: newCircle.id,
-      user_id: user.id,
-      position: 1,
-      role: "creator",
-      status: "active",
+    const { data, error: rpcError } = await supabase.rpc("create_circle", {
+      p_type: circleData.type,
+      p_name: circleData.name,
+      p_amount: circleData.amount,
+      p_frequency: circleData.frequency,
+      p_member_count: circleData.memberCount,
+      p_start_date: circleData.startDate || null,
+      p_rotation_method: circleData.rotationMethod || "xnscore",
+      p_grace_period_days: circleData.gracePeriodDays ?? 2,
+      p_emoji: circleData.emoji || null,
+      p_description: circleData.description || null,
+      p_min_score: circleData.minScore ?? 0,
+      p_invite_code: circleData.inviteCode || null,
+      p_invited_phones: phones,
+      p_invited_names: names,
     });
 
-    if (memberError) {
-      console.error("Error adding creator as member:", memberError);
-    } else {
-      setMyCircleIds((prev) => new Set([...prev, newCircle.id]));
+    if (rpcError) {
+      console.error("[CirclesContext] create_circle RPC failed:", rpcError);
+      throw new Error(rpcError.message || "create_failed");
     }
 
-    // Add invited members if any
-    if (circleData.invitedMembers && circleData.invitedMembers.length > 0) {
-      const invitations = circleData.invitedMembers.map((member) => ({
-        circle_id: newCircle.id,
-        invited_by: user.id,
-        name: member.name,
-        phone: member.phone,
-        status: "pending",
-      }));
-
-      const { error: inviteError } = await supabase
-        .from("invited_members")
-        .insert(invitations);
-
-      if (inviteError) {
-        console.error("Error adding invited members:", inviteError);
-      }
+    const row = Array.isArray(data) ? data[0] : data;
+    const newCircleId: string | undefined = row?.circle_id;
+    if (!newCircleId) {
+      throw new Error("create_failed");
     }
 
+    // Fetch the full circle row so we can return a complete Circle object
+    // to the caller (the success screen needs invite_code, defaults, etc.).
+    // The realtime subscription will also patch local state shortly, but
+    // we don't want to race the caller's navigation.
+    const { data: full, error: fetchErr } = await supabase
+      .from("circles")
+      .select("*")
+      .eq("id", newCircleId)
+      .single();
+
+    if (fetchErr || !full) {
+      console.error("[CirclesContext] post-create fetch failed:", fetchErr);
+      throw new Error(fetchErr?.message || "circle_fetch_failed");
+    }
+
+    const newCircle = rowToCircle(full as CircleRow);
+
+    // Push the new row into local state immediately so the Circles tab
+    // and HomeScreen pick it up on the next render. The realtime channel
+    // would normally do this via the postgres_changes INSERT event, but
+    // a few-hundred-ms lag can cause the user to navigate back and see
+    // "no circles" — confusing. De-dup against the optimistic insert is
+    // handled in the realtime handler (which prepends but never errors).
+    setCircles((prev) =>
+      prev.some((c) => c.id === newCircle.id) ? prev : [newCircle, ...prev],
+    );
+    setMyCircleIds((prev) => new Set([...prev, newCircleId]));
     return newCircle;
   };
 
-  // Join an existing circle
-  const joinCircle = async (circleId: string) => {
+  // Join an existing circle — calls the atomic `join_circle` RPC (migration
+  // 141). The RPC locks the circles row FOR UPDATE, validates capacity +
+  // min_score + invite code, atomically inserts circle_members + increments
+  // current_members, and posts the "X joined the circle" system message
+  // that the prior path silently dropped.
+  const joinCircle = async (circleId: string, inviteCode?: string) => {
     if (!user?.id) {
       throw new Error("Must be logged in to join a circle");
     }
 
-    // Check if already a member
-    const { data: existingMember } = await supabase
-      .from("circle_members")
-      .select("id")
-      .eq("circle_id", circleId)
-      .eq("user_id", user.id)
-      .single();
-
-    if (existingMember) {
-      throw new Error("Already a member of this circle");
-    }
-
-    // Get current member count to determine position
-    const { data: circle } = await supabase
-      .from("circles")
-      .select("current_members")
-      .eq("id", circleId)
-      .single();
-
-    const position = (circle?.current_members || 0) + 1;
-
-    // Add as member
-    const { error: memberError } = await supabase.from("circle_members").insert({
-      circle_id: circleId,
-      user_id: user.id,
-      position,
-      role: "member",
-      status: "active",
+    const { data, error: rpcError } = await supabase.rpc("join_circle", {
+      p_circle_id: circleId,
+      p_invite_code: inviteCode || null,
     });
 
-    if (memberError) {
-      console.error("Error joining circle:", memberError);
-      throw new Error(memberError.message);
+    if (rpcError) {
+      console.error("[CirclesContext] join_circle RPC failed:", rpcError);
+      // Map typed RPC exceptions to typed error messages the UI can switch on.
+      const msg = (rpcError.message || "").toLowerCase();
+      if (msg.includes("circle_full")) throw new Error("circle_full");
+      if (msg.includes("min_score_not_met")) throw new Error("min_score_not_met");
+      if (msg.includes("invalid_invite_code")) throw new Error("invalid_invite_code");
+      if (msg.includes("circle_not_found")) throw new Error("circle_not_found");
+      if (msg.includes("circle_not_joinable")) throw new Error("circle_not_joinable");
+      throw new Error(rpcError.message || "join_failed");
     }
 
     setMyCircleIds((prev) => new Set([...prev, circleId]));
@@ -667,7 +692,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     // Auto-post: Joined a circle (fire-and-forget, never blocks join)
     try {
       if (user?.id) {
-        const joinedCircle = circles.find(c => c.id === circleId);
+        const joinedCircle = circles.find((c) => c.id === circleId);
         createAutoPost(user.id, "circle_joined", circleId, "circle", {
           circleName: joinedCircle?.name || "a savings circle",
         });
@@ -707,9 +732,11 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // Generate invite code for a circle
+  // Returns the server-generated invite code stored on the circle row.
+  // Pre-migration-141 rows may have a synthesized code in this column;
+  // newly-created circles get a `gen_invite_code()` result at insert time.
   const generateInviteCode = (circle: Circle): string => {
-    if (circle.inviteCode) return circle.inviteCode;
-    return generateCircleInviteCode(circle.name, circle.createdAt);
+    return circle.inviteCode ?? "";
   };
 
   // Get members of a circle with their profile info
@@ -995,38 +1022,29 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     await refreshCircles();
   };
 
-  // Find circle by invite code (searches database)
+  // Find circle by invite code — EXACT match only. The previous version
+  // had a partial-prefix fallback (any code whose first 6 chars matched)
+  // which created a real wrong-circle-by-typo risk for a money-pooling
+  // tool: a typo in the last two characters could resolve to a completely
+  // unrelated circle. With server-generated 8-char codes from migration
+  // 141's `gen_invite_code` (32^8 keyspace), collisions are vanishingly
+  // unlikely — exact-match is the right semantics. The UI surfaces a clean
+  // "Invite code not found" message when nothing matches.
   const findCircleByInviteCode = async (code: string): Promise<Circle | null> => {
     const codeUpper = code.toUpperCase().trim();
+    if (!codeUpper) return null;
 
-    // Search in database
     const { data, error: searchError } = await supabase
       .from("circles")
       .select("*")
-      .ilike("invite_code", codeUpper)
-      .single();
+      .eq("invite_code", codeUpper)
+      .maybeSingle();
 
-    if (searchError && searchError.code !== "PGRST116") {
-      console.error("Error searching for circle:", searchError);
+    if (searchError) {
+      console.error("[CirclesContext] findCircleByInviteCode failed:", searchError);
+      return null;
     }
-
-    if (data) {
-      return rowToCircle(data as CircleRow);
-    }
-
-    // Partial match in database
-    const { data: partialData } = await supabase
-      .from("circles")
-      .select("*")
-      .ilike("invite_code", `${codeUpper.slice(0, 6)}%`)
-      .limit(1)
-      .single();
-
-    if (partialData) {
-      return rowToCircle(partialData as CircleRow);
-    }
-
-    return null;
+    return data ? rowToCircle(data as CircleRow) : null;
   };
 
   // ================================================================
@@ -1309,6 +1327,18 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // Report a member (creates dispute)
+  //
+  // Conflict P0 (2026-06-12) — after the dispute row lands, we fan out a
+  // best-effort `notifications.insert` to every elder of the circle so
+  // someone is actually told there's a case to work on. The previous
+  // path was silent: rows piled up in `disputes` and elders only saw
+  // them by happening to open Elder Dashboard.
+  //
+  // The notifications surface is the existing `notifications` table
+  // (cols: user_id, type, title, body, data jsonb, …). A push-delivery
+  // layer can later read from this table without changing the call
+  // sites here. We swallow notification errors so a delivery glitch
+  // doesn't roll back the dispute itself.
   const reportMember = async (
     circleId: string,
     userId: string,
@@ -1317,20 +1347,86 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
   ): Promise<void> => {
     if (!user?.id) throw new Error("Must be logged in");
 
-    const { error: reportError } = await supabase.from("disputes").insert({
-      reporter_user_id: user.id,
-      against_user_id: userId,
-      circle_id: circleId,
-      type: reason,
-      title: `Report: ${reason}`,
-      description,
-      priority: "medium",
-      status: "open",
-    });
+    const { data: disputeRow, error: reportError } = await supabase
+      .from("disputes")
+      .insert({
+        reporter_user_id: user.id,
+        against_user_id: userId,
+        circle_id: circleId,
+        type: reason,
+        title: `Report: ${reason}`,
+        description,
+        priority: "medium",
+        status: "open",
+      })
+      .select("id")
+      .single();
 
     if (reportError) {
       console.error("Error reporting member:", reportError);
       throw new Error(reportError.message);
+    }
+
+    // Best-effort elder notification — non-fatal on failure.
+    try {
+      const [{ data: elders }, { data: circleRow }] = await Promise.all([
+        supabase
+          .from("circle_members")
+          .select("user_id")
+          .eq("circle_id", circleId)
+          .eq("role", "elder"),
+        supabase
+          .from("circles")
+          .select("name")
+          .eq("id", circleId)
+          .maybeSingle(),
+      ]);
+
+      const elderIds = (elders ?? []).map((e: any) => e.user_id as string);
+      const circleName = (circleRow as any)?.name ?? "your circle";
+
+      if (elderIds.length > 0) {
+        const rows = elderIds.map((elderId) => ({
+          user_id: elderId,
+          type: "dispute_filed",
+          title: "New dispute reported",
+          body: `A member reported a dispute in ${circleName}.`,
+          data: {
+            circle_id: circleId,
+            circle_name: circleName,
+            dispute_id: (disputeRow as any)?.id,
+            reporter_user_id: user.id,
+            against_user_id: userId,
+            reason,
+          },
+          read: false,
+        }));
+
+        const { error: notifyError } = await supabase
+          .from("notifications")
+          .insert(rows);
+        if (notifyError) {
+          // Log and move on — the dispute itself is already filed and
+          // discoverable via Elder Dashboard polling. A real push
+          // delivery layer (FCM/APNs/Expo) can read from the
+          // notifications table out-of-band.
+          console.warn(
+            "[reportMember] elder notifications insert failed:",
+            notifyError.message,
+          );
+        }
+      } else {
+        // No elders in this circle — flag for product to fix the
+        // governance setup. The dispute itself is still filed.
+        console.warn(
+          `[reportMember] circle ${circleId} has no elders to notify`,
+        );
+      }
+    } catch (e: any) {
+      console.warn(
+        "[reportMember] elder notification fan-out failed:",
+        e?.message ?? e,
+      );
     }
   };
 

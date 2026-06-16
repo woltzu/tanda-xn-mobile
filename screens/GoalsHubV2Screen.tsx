@@ -20,7 +20,7 @@
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -29,13 +29,16 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRoute, RouteProp } from "@react-navigation/native";
+import { useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import { useGoalActions } from "../hooks/useGoalActions";
+import type { Goal } from "../types/goals";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -155,15 +158,161 @@ const FILTERS = [
 
 type FilterKey = (typeof FILTERS)[number]["key"];
 
+// Map a DB-backed Goal (cents-aware, raw) into the HubGoal shape the
+// existing render code expects. Heuristics: progressPercent is straight
+// math; `isOnTrack` defaults to true when there's no target_date (we can't
+// assess pace without one) and otherwise checks whether the current trajectory
+// (current balance + monthly contribution × months remaining) reaches the
+// target by the deadline.
+function dbGoalToHubGoal(g: Goal): HubGoal {
+  const target = g.targetAmount ?? 0;
+  const balance = g.currentBalance ?? 0;
+  const progress = target > 0 ? Math.min(100, (balance / target) * 100) : 0;
+
+  let isOnTrack = true;
+  if (g.targetDate && target > 0) {
+    const due = new Date(g.targetDate);
+    const now = new Date();
+    const monthsRemaining = Math.max(
+      0,
+      (due.getFullYear() - now.getFullYear()) * 12 +
+        (due.getMonth() - now.getMonth()),
+    );
+    const projected = balance + (g.monthlyContribution ?? 0) * monthsRemaining;
+    isOnTrack = projected >= target;
+  }
+
+  // Format target date as "Mon YYYY" (short). Fall back to em dash when no
+  // deadline is set so the card still renders cleanly.
+  let targetDate = "—";
+  if (g.targetDate) {
+    try {
+      const d = new Date(g.targetDate);
+      targetDate = d.toLocaleDateString(undefined, {
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      /* keep — */
+    }
+  }
+
+  return {
+    id: g.id,
+    name: g.name,
+    emoji: g.emoji || (g.savingsType === "emergency" ? "🛡️" : g.savingsType === "locked" ? "🔒" : "💰"),
+    category: g.category || "Savings",
+    balance,
+    target,
+    interestEarned: g.interestEarned ?? 0,
+    progressPercent: progress,
+    isOnTrack,
+    linkedCircle: null,
+    monthlyContribution: g.monthlyContribution ?? 0,
+    targetDate,
+  };
+}
+
 export default function GoalsHubV2Screen() {
   const navigation = useTypedNavigation();
   const route = useRoute<GoalsHubV2RouteProp>();
   const { t } = useTranslation();
+  const {
+    fetchGoals,
+    fetchSpendingSuggestions,
+    dismissSpendingSuggestion,
+  } = useGoalActions();
 
-  const totalSaved = route.params?.totalSaved ?? 12450.0;
-  const totalInterestEarned = route.params?.totalInterestEarned ?? 89.32;
-  const goals = route.params?.goals ?? DEFAULT_GOALS;
+  // P2 (migration 155) — server-computed spending insights. Today
+  // populated manually for demo; a future weekly Edge Function will
+  // fill spending_patterns from money_transfers + contributions.
+  // Empty array = no banner; null = still loading.
+  const [suggestions, setSuggestions] = useState<
+    | { id: string; category: string; monthlyAvg: number; suggestedSave: number }[]
+    | null
+  >(null);
+
+  const loadSuggestions = useCallback(async () => {
+    const { data } = await fetchSpendingSuggestions();
+    if (data) {
+      setSuggestions(
+        data.map((s) => ({
+          id: s.id,
+          category: s.category,
+          monthlyAvg: s.monthlyAvg,
+          suggestedSave: s.suggestedSave,
+        })),
+      );
+    } else {
+      setSuggestions([]);
+    }
+  }, [fetchSpendingSuggestions]);
+
+  const handleSuggestionAccept = (s: {
+    id: string;
+    category: string;
+    suggestedSave: number;
+  }) => {
+    navigation.navigate(Routes.GoalCreateExpress as any, {
+      suggestedName: t("goals_hub_v2.spending_default_name", {
+        category: s.category,
+      }),
+      suggestedAmount: s.suggestedSave,
+    });
+  };
+
+  const handleSuggestionDismiss = async (id: string) => {
+    const { data } = await dismissSpendingSuggestion(id);
+    if (data) {
+      setSuggestions((prev) => (prev ?? []).filter((s) => s.id !== id));
+    }
+  };
+
   const achievementStories = route.params?.achievementStories ?? DEFAULT_STORIES;
+
+  // Real goals from the DB. Replaces the prior route-param + mock fallback
+  // that hid newly-created goals from the user — the hub was showing
+  // `DEFAULT_GOALS` until something explicitly passed `goals` via params,
+  // which the express create flow never did.
+  const [dbGoals, setDbGoals] = useState<HubGoal[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadGoals = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await fetchGoals();
+    if (error) {
+      console.warn("[GoalsHubV2] fetchGoals failed:", (error as any)?.message);
+      setDbGoals([]);
+    } else {
+      // Hide soft-deleted / closed goals so the hub only shows active
+      // and completed targets the user actually cares about.
+      const active = (data ?? []).filter(
+        (g) => g.status === "active" || g.status === "completed",
+      );
+      setDbGoals(active.map(dbGoalToHubGoal));
+    }
+    setLoading(false);
+  }, [fetchGoals]);
+
+  // Refetch every time the hub comes into focus — covers the "create new
+  // goal then navigate back" case the user reported (Trip To Bali wasn't
+  // showing).
+  useFocusEffect(
+    useCallback(() => {
+      loadGoals();
+      loadSuggestions();
+    }, [loadGoals, loadSuggestions]),
+  );
+
+  const goals = dbGoals ?? [];
+
+  // Live totals derived from real goals. Falls back to a reasonable empty
+  // state when the user has no goals yet.
+  const totalSaved = goals.reduce((acc, g) => acc + g.balance, 0);
+  const totalInterestEarned = goals.reduce(
+    (acc, g) => acc + g.interestEarned,
+    0,
+  );
 
   const [filter, setFilter] = useState<FilterKey>("all");
 
@@ -195,7 +344,7 @@ export default function GoalsHubV2Screen() {
               <Text style={styles.headerTitle}>{t("goals_hub_v2.title")}</Text>
             </View>
             <TouchableOpacity
-              onPress={() => navigation.navigate(Routes.GoalCategorySelect)}
+              onPress={() => navigation.navigate(Routes.GoalCreateExpress)}
               accessibilityRole="button"
               accessibilityLabel="New goal"
               style={styles.newGoalButton}
@@ -228,6 +377,56 @@ export default function GoalsHubV2Screen() {
 
         {/* ===== CONTENT ===== */}
         <View style={styles.contentWrap}>
+          {/* P2 — Spending-pattern suggestion banners. Today the
+              spending_patterns table is hand-seeded for demo; a future
+              suggest-goals-from-spending edge function will fill it
+              from money_transfers + contributions weekly. Caller can
+              dismiss each row; the partial index keeps the read cheap. */}
+          {suggestions && suggestions.length > 0 ? (
+            <View style={{ marginBottom: 16, gap: 10 }}>
+              {suggestions.map((s) => (
+                <View key={s.id} style={styles.suggestionBanner}>
+                  <View style={styles.suggestionIcon}>
+                    <Ionicons name="bulb-outline" size={18} color="#0A2342" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.suggestionTitle}>
+                      {t("goals_hub_v2.spending_title", {
+                        category: s.category,
+                        amount: `$${Math.round(s.monthlyAvg).toLocaleString()}`,
+                      })}
+                    </Text>
+                    <Text style={styles.suggestionBody}>
+                      {t("goals_hub_v2.spending_body", {
+                        amount: `$${Math.round(s.suggestedSave).toLocaleString()}`,
+                      })}
+                    </Text>
+                    <View style={styles.suggestionActions}>
+                      <TouchableOpacity
+                        style={styles.suggestionPrimary}
+                        onPress={() => handleSuggestionAccept(s)}
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.suggestionPrimaryText}>
+                          {t("goals_hub_v2.spending_cta_create")}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.suggestionGhost}
+                        onPress={() => handleSuggestionDismiss(s.id)}
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.suggestionGhostText}>
+                          {t("goals_hub_v2.spending_cta_dismiss")}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           {/* Filter tabs */}
           <View style={styles.filterRow}>
             {FILTERS.map((tab) => {
@@ -345,8 +544,17 @@ export default function GoalsHubV2Screen() {
             ))}
           </View>
 
+          {/* Loading indicator — only while the initial fetch is in flight
+              AND we don't yet have any data to show. Avoids the empty-state
+              flash that confused users into thinking their goals were gone. */}
+          {loading && dbGoals === null ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={TEAL} />
+            </View>
+          ) : null}
+
           {/* Empty state */}
-          {filteredGoals.length === 0 && (
+          {!loading && filteredGoals.length === 0 && (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyEmoji}>🎯</Text>
               <Text style={styles.emptyTitle}>{t("goals_hub_v2.empty_title")}</Text>
@@ -354,7 +562,7 @@ export default function GoalsHubV2Screen() {
                 {t("goals_hub_v2.empty_body")}
               </Text>
               <TouchableOpacity
-                onPress={() => navigation.navigate(Routes.GoalCategorySelect)}
+                onPress={() => navigation.navigate(Routes.GoalCreateExpress)}
                 accessibilityRole="button"
                 style={styles.emptyButton}
               >
@@ -461,6 +669,44 @@ const styles = StyleSheet.create({
 
   contentWrap: { marginTop: -50, paddingHorizontal: 16 },
 
+  // P2 — spending-pattern suggestion banner
+  suggestionBanner: {
+    flexDirection: "row",
+    gap: 12,
+    backgroundColor: "#FFFBEB",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+  },
+  suggestionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#FEF3C7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  suggestionTitle: { fontSize: 14, fontWeight: "700", color: NAVY, marginBottom: 4 },
+  suggestionBody: { fontSize: 12, color: MUTED, marginBottom: 10, lineHeight: 17 },
+  suggestionActions: { flexDirection: "row", gap: 8 },
+  suggestionPrimary: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: NAVY,
+  },
+  suggestionPrimaryText: { fontSize: 12, fontWeight: "700", color: "#FFFFFF" },
+  suggestionGhost: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+  },
+  suggestionGhostText: { fontSize: 12, fontWeight: "700", color: MUTED },
+
   filterRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
   filterPill: {
     paddingVertical: 8,
@@ -552,6 +798,13 @@ const styles = StyleSheet.create({
   },
   linkedTagEmoji: { fontSize: 10 },
   linkedTagText: { fontSize: 10, color: "#1D4ED8", fontWeight: "500" },
+
+  // Loading row — slim flex shown above the goal list during the initial
+  // fetch. Brief; goes away as soon as fetchGoals() resolves.
+  loadingRow: {
+    paddingVertical: 24,
+    alignItems: "center",
+  },
 
   // Empty state
   emptyCard: {

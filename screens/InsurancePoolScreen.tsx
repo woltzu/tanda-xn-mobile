@@ -47,8 +47,9 @@ const formatCents = (cents: number) =>
   `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
 
 const getHealthColor = (health: string) => {
-  const { t } = useTranslation();
-
+  // Module-level helper — must NOT call hooks here. A stray useTranslation()
+  // here violates Rules of Hooks and crashes the screen with "Invalid hook
+  // call" / "Property 't' doesn't exist" downstream.
   switch (health) {
     case "healthy":
       return COLORS.green;
@@ -97,9 +98,12 @@ type InsurancePoolRouteParams = {
 // ─── Screen ──────────────────────────────────────────────────────────────────
 
 export default function InsurancePoolScreen() {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<InsurancePoolRouteParams, "InsurancePool">>();
-  const { circleId } = route.params;
+  // Defensive: route.params can be undefined if the caller navigates
+  // without a circleId. Fall back to empty so destructuring never throws.
+  const { circleId } = route.params ?? ({} as { circleId: string });
 
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
 

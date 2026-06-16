@@ -79,8 +79,9 @@ export function useCurrentCycle(circleId: string | undefined) {
         .select(`
           *,
           circle:circles(
-            id, name, contribution_amount, contribution_frequency,
-            total_cycles, max_members, community_id, status
+            id, name,
+            contribution_amount:amount, contribution_frequency,
+            total_cycles, max_members:member_count, community_id, status
           ),
           recipient:profiles!circle_cycles_recipient_user_id_fkey(
             id, full_name, avatar_url
@@ -176,8 +177,9 @@ export function useCircleCycles(circleId: string | undefined) {
         .select(`
           *,
           circle:circles(
-            id, name, contribution_amount, contribution_frequency,
-            total_cycles, max_members, community_id, status
+            id, name,
+            contribution_amount:amount, contribution_frequency,
+            total_cycles, max_members:member_count, community_id, status
           ),
           recipient:profiles!circle_cycles_recipient_user_id_fkey(
             id, full_name, avatar_url

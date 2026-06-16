@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { useFeed, FeedPost } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
 import FeedPostCard from "../components/FeedPostCard";
+import ReportButton from "../components/ReportButton";
 import { showToast } from "../components/Toast";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
@@ -347,7 +348,14 @@ export default function UserDreamProfileScreen() {
             <Ionicons name="add-circle-outline" size={24} color={colors.accentTeal} />
           </TouchableOpacity>
         ) : (
-          <View style={{ width: 24 }} />
+          // Moderation P0 (2026-06-13): report this user. ReportButton hides
+          // itself when ownerUserId === auth.uid(), so we also short-circuit
+          // for own-profile above via the isOwnProfile branch.
+          <ReportButton
+            kind="user"
+            targetId={userId}
+            ownerUserId={userId === user?.id ? userId : undefined}
+          />
         )}
       </View>
 

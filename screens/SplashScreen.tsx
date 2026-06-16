@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -20,7 +20,10 @@ export default function SplashScreen() {
 
   const navigation = useNavigation<SplashScreenNavigationProp>();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const [isLoading, setIsLoading] = useState(true);
+  // isLoading is now derived from authLoading — no decorative timer. As soon
+  // as auth resolves we either reset to MainTabs (authed) or surface the
+  // CTAs (unauthed). Saves ~2.5 s on every cold start.
+  const isLoading = authLoading;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
 
@@ -35,10 +38,6 @@ export default function SplashScreen() {
   }, [authLoading, isAuthenticated]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 2500);
-
     // Pulse animation for loading dots
     Animated.loop(
       Animated.sequence([
@@ -71,11 +70,12 @@ export default function SplashScreen() {
       ])
     ).start();
 
-    return () => clearTimeout(timer);
   }, []);
 
   const handleGetStarted = () => {
-    navigation.navigate("Welcome");
+    // Merge: skip the legacy Welcome stop — go straight to Signup.
+    // OnboardingWelcome was redundant with this Splash CTA pair.
+    navigation.navigate("Signup");
   };
 
   const handleLogin = () => {
@@ -117,6 +117,34 @@ export default function SplashScreen() {
         </View>
       ) : null}
 
+      {/* First-launch journey indicator: subtle three-step preview of what
+          a new user will do after signing in. Only shown when we have CTAs
+          (i.e. unauthed and auth check finished). */}
+      {!isLoading ? (
+        <View style={styles.journeyContainer}>
+          <View style={styles.journeyStep}>
+            <View style={[styles.journeyDot, styles.journeyDotActive]} />
+            <Text style={styles.journeyLabel}>
+              {t("splash.journey_step_signin")}
+            </Text>
+          </View>
+          <View style={styles.journeyLine} />
+          <View style={styles.journeyStep}>
+            <View style={styles.journeyDot} />
+            <Text style={styles.journeyLabel}>
+              {t("splash.journey_step_join_circle")}
+            </Text>
+          </View>
+          <View style={styles.journeyLine} />
+          <View style={styles.journeyStep}>
+            <View style={styles.journeyDot} />
+            <Text style={styles.journeyLabel}>
+              {t("splash.journey_step_first_contribution")}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
       {/* Buttons */}
       {!isLoading ? (
         <View style={styles.buttonContainer}>
@@ -138,7 +166,9 @@ export default function SplashScreen() {
             onPress={handleLogin}
             activeOpacity={0.8}
           >
-            <Text style={styles.secondaryButtonText}>I Have an Account</Text>
+            <Text style={styles.secondaryButtonText}>
+              {t("splash.cta_i_have_account")}
+            </Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -197,6 +227,42 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: "#00C6AE",
     marginHorizontal: 4,
+  },
+  // ----- First-launch journey indicator -----
+  journeyContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
+    paddingHorizontal: 16,
+    gap: 4,
+  },
+  journeyStep: {
+    alignItems: "center",
+    gap: 4,
+    maxWidth: 100,
+  },
+  journeyDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "rgba(255,255,255,0.25)",
+  },
+  journeyDotActive: {
+    backgroundColor: "#00C6AE",
+  },
+  journeyLabel: {
+    color: "rgba(255,255,255,0.55)",
+    fontSize: 10,
+    textAlign: "center",
+    lineHeight: 13,
+  },
+  journeyLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    marginHorizontal: 2,
+    marginBottom: 16,
   },
   buttonContainer: {
     width: "100%",

@@ -127,7 +127,7 @@ export default function AccountTiersExplainedScreen() {
   };
 
   const handleContinue = () => {
-    navigation.navigate(Routes.VerificationHub);
+    navigation.navigate(Routes.KYCHub);
   };
 
   return (

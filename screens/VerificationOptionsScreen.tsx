@@ -44,42 +44,45 @@ const MUTED = "#6B7280";
 
 type OptionId = "ssn" | "itin" | "no-itin" | "international";
 
+// Per-option translation-key shape — KYC P0 i18n regression fix. The
+// prior array carried hardcoded English strings; the components now
+// resolve via t() at render time so language flips re-paint.
 type Option = {
   id: OptionId;
   icon: string;
-  title: string;
-  desc: string;
-  tag: string | null;
+  titleKey: string;
+  descKey: string;
+  tagKey: string | null;
 };
 
 const OPTIONS: Option[] = [
   {
     id: "ssn",
     icon: "🇺🇸",
-    title: "I have a Social Security Number",
-    desc: "US citizens and authorized workers",
-    tag: null,
+    titleKey: "verification_options.option_ssn_title",
+    descKey: "verification_options.option_ssn_desc",
+    tagKey: null,
   },
   {
     id: "itin",
     icon: "📋",
-    title: "I have an ITIN",
-    desc: "Individual Taxpayer Identification Number",
-    tag: null,
+    titleKey: "verification_options.option_itin_title",
+    descKey: "verification_options.option_itin_desc",
+    tagKey: null,
   },
   {
     id: "no-itin",
     icon: "🆕",
-    title: "I don't have SSN or ITIN yet",
-    desc: "We'll help you get an ITIN - it's easy!",
-    tag: "We'll help",
+    titleKey: "verification_options.option_noitin_title",
+    descKey: "verification_options.option_noitin_desc",
+    tagKey: "verification_options.option_noitin_tag",
   },
   {
     id: "international",
     icon: "🌍",
-    title: "I'm outside the United States",
-    desc: "Use your country's tax ID or passport",
-    tag: null,
+    titleKey: "verification_options.option_international_title",
+    descKey: "verification_options.option_international_desc",
+    tagKey: null,
   },
 ];
 
@@ -157,6 +160,9 @@ export default function VerificationOptionsScreen() {
           <View style={styles.optionsList}>
             {OPTIONS.map((option) => {
               const isSelected = selectedOption === option.id;
+              const optionTitle = t(option.titleKey);
+              const optionDesc = t(option.descKey);
+              const optionTag = option.tagKey ? t(option.tagKey) : null;
               return (
                 <TouchableOpacity
                   key={option.id}
@@ -167,18 +173,18 @@ export default function VerificationOptionsScreen() {
                   onPress={() => setSelectedOption(option.id)}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: isSelected }}
-                  accessibilityLabel={option.title}
+                  accessibilityLabel={optionTitle}
                 >
                   <View style={styles.optionIconBox}>
                     <Text style={styles.optionIcon}>{option.icon}</Text>
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.optionTitle}>{option.title}</Text>
-                    <Text style={styles.optionDesc}>{option.desc}</Text>
+                    <Text style={styles.optionTitle}>{optionTitle}</Text>
+                    <Text style={styles.optionDesc}>{optionDesc}</Text>
                   </View>
-                  {option.tag && (
+                  {optionTag && (
                     <View style={styles.optionTag}>
-                      <Text style={styles.optionTagText}>{option.tag}</Text>
+                      <Text style={styles.optionTagText}>{optionTag}</Text>
                     </View>
                   )}
                   <View

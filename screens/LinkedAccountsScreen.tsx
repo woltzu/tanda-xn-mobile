@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,17 +7,131 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  Linking,
+  Animated,
+  Easing,
+  RefreshControl,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { Ionicons, FontAwesome } from "@expo/vector-icons";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
+import * as WebBrowser from "expo-web-browser";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { RootStackParamList } from "../App";
 import { usePayment, SavedPaymentMethod } from "../context/PaymentContext";
+import { useProfile } from "../hooks/useProfile";
+import { showToast } from "../components/Toast";
+import MethodActionsSheet from "../components/MethodActionsSheet";
 
 type LinkedAccountsNavigationProp = StackNavigationProp<RootStackParamList>;
+
+const CONNECT_RETURN_URL = "tandaxn://linked-accounts";
+
+// P1.5 (payment-methods review): once-per-user-per-device coach mark
+// gate. Bumped suffix forces re-show if we ever rewrite the copy.
+const COACH_TIP_KEY = "@tandaxn_linked_accounts_tip_seen_v1";
+
+// P1.2 (payment-methods review): Stripe card brands → FontAwesome
+// `cc-*` glyphs. Brands not in this set fall back to the generic
+// Ionicons `card` glyph already rendered in PaymentContext.getMethodIcon.
+// FontAwesome was the cheapest source of trusted brand marks — they
+// ship inside @expo/vector-icons so there's nothing new to install.
+const CARD_BRAND_ICONS: Record<string, keyof typeof FontAwesome.glyphMap> = {
+  visa: "cc-visa",
+  mastercard: "cc-mastercard",
+  amex: "cc-amex",
+  "american express": "cc-amex",
+  discover: "cc-discover",
+  diners: "cc-diners-club",
+  "diners club": "cc-diners-club",
+  jcb: "cc-jcb",
+};
+
+// Card brand → ink color when we render the brand glyph. Generic fallback
+// uses the existing teal/navy palette of the screen.
+const CARD_BRAND_COLORS: Record<string, string> = {
+  visa: "#1A1F71",
+  mastercard: "#EB001B",
+  amex: "#2E77BC",
+  "american express": "#2E77BC",
+  discover: "#FF6000",
+  diners: "#0079BE",
+  "diners club": "#0079BE",
+  jcb: "#0E4C96",
+};
+
+function brandIconFor(brand?: string): {
+  name: keyof typeof FontAwesome.glyphMap | null;
+  color: string;
+} {
+  if (!brand) return { name: null, color: "#3B82F6" };
+  const key = brand.toLowerCase();
+  return {
+    name: CARD_BRAND_ICONS[key] ?? null,
+    color: CARD_BRAND_COLORS[key] ?? "#3B82F6",
+  };
+}
+
+// P1.2 (payment-methods review): expiry classifier.
+//   "expired"     — month/year already in the past (rendered red).
+//   "expires_now" — same calendar month as today (rendered amber).
+//   null          — none of the above; no badge.
+// Uses Date arithmetic in the local zone — Stripe stores exp_month as
+// 1-12, exp_year as four-digit. Months are 1-indexed in our column,
+// 0-indexed in JS Date, so be careful.
+function classifyExpiry(
+  expMonth?: number,
+  expYear?: number,
+): "expired" | "expires_now" | null {
+  if (!expMonth || !expYear) return null;
+  const now = new Date();
+  const nowYear = now.getFullYear();
+  const nowMonth = now.getMonth() + 1; // 1-12
+  if (expYear < nowYear) return "expired";
+  if (expYear === nowYear && expMonth < nowMonth) return "expired";
+  if (expYear === nowYear && expMonth === nowMonth) return "expires_now";
+  return null;
+}
+
+// P1.4 — small skeleton row that fades in/out with Animated.loop. Two of
+// these render while the initial fetch is in flight and the list is empty.
+// We do not pull in shimmer libs — Animated.timing on opacity is enough
+// for the "something is loading" signal at P1 scope.
+function SkeletonRow() {
+  const opacity = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0.4,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity]);
+  return (
+    <Animated.View style={[styles.skeletonRow, { opacity }]}>
+      <View style={styles.skeletonIcon} />
+      <View style={{ flex: 1 }}>
+        <View style={[styles.skeletonBar, { width: "60%" }]} />
+        <View
+          style={[styles.skeletonBar, { width: "35%", marginTop: 6 }]}
+        />
+      </View>
+    </Animated.View>
+  );
+}
 
 export default function LinkedAccountsScreen() {
   const { t } = useTranslation();
@@ -31,74 +145,260 @@ export default function LinkedAccountsScreen() {
     removePaymentMethod,
     setDefaultPaymentMethod,
     refreshPaymentMethods,
+    setupCardForLater,
   } = usePayment();
+
+  // P2.5 (payment-methods review): country gate. ACH / Stripe Connect
+  // onboarding are US-only — non-US users see card-only.
+  const { profile } = useProfile();
+  const isUS = (profile?.country ?? "").toUpperCase() === "US";
+
+  const [addingCard, setAddingCard] = useState(false);
+  // P1.1: which row's ⋮ sheet is open (null = closed).
+  const [openMethod, setOpenMethod] = useState<SavedPaymentMethod | null>(null);
+  // P1.4: pull-to-refresh spinner state. Separate from isLoadingMethods so
+  // a user-initiated refresh shows the iOS swipe-indicator even when the
+  // context refetch is fast.
+  const [refreshing, setRefreshing] = useState(false);
 
   const bankAccounts = paymentMethods.filter((m) => m.type === "us_bank_account");
   const cardAccounts = paymentMethods.filter((m) => m.type !== "us_bank_account");
 
+  useFocusEffect(
+    useCallback(() => {
+      refreshPaymentMethods();
+    }, [refreshPaymentMethods]),
+  );
+
+  // P1.5: one-shot coach mark. Fires only when (a) the user has at least
+  // one method (otherwise the tip is meaningless — there's no ⋮ to tap)
+  // and (b) AsyncStorage doesn't yet record that we've shown it. We set
+  // the flag immediately so a second render in the same session doesn't
+  // re-toast.
+  useEffect(() => {
+    if (paymentMethods.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_TIP_KEY);
+        if (cancelled || seen === "true") return;
+        await AsyncStorage.setItem(COACH_TIP_KEY, "true");
+        showToast(t("linked_accounts_v2.coach_tip"), "info");
+      } catch {
+        // AsyncStorage failure is non-fatal — worst case the tip shows
+        // again next launch, which is harmless.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentMethods.length, t]);
+
   const handleAddBank = async () => {
     try {
-      const onboardingUrl = await setupConnectedAccount("tandaxn://linked-accounts");
-      if (onboardingUrl) {
-        await Linking.openURL(onboardingUrl);
-      }
+      const onboardingUrl = await setupConnectedAccount(CONNECT_RETURN_URL);
+      if (!onboardingUrl) return;
+      await WebBrowser.openAuthSessionAsync(onboardingUrl, CONNECT_RETURN_URL);
+      await refreshPaymentMethods();
     } catch (err: any) {
-      Alert.alert(t("linked_accounts_v2.alert_error_title"), err.message || t("linked_accounts_v2.alert_failed_start"));
+      Alert.alert(
+        t("linked_accounts_v2.alert_error_title"),
+        err.message || t("linked_accounts_v2.alert_failed_start"),
+      );
     }
   };
 
-  const handleAddCard = () => {
-    Alert.alert(
-      "Add Card",
-      "Card collection coming soon \u2014 use Add Funds to save a card.",
-      [{ text: "OK" }]
-    );
+  const handleAddCard = async () => {
+    if (addingCard) return;
+    setAddingCard(true);
+    try {
+      const { success, error } = await setupCardForLater();
+      if (success) {
+        showToast(t("linked_accounts_v2.toast_card_saved"), "success");
+      } else if (error === "Canceled") {
+        // Silent cancel — see P0.4 rationale.
+      } else {
+        showToast(
+          error || t("linked_accounts_v2.toast_card_failed"),
+          "error",
+        );
+      }
+    } finally {
+      setAddingCard(false);
+    }
   };
 
-  const handleSetPrimary = (method: SavedPaymentMethod) => {
-    Alert.alert(
-      "Set as Primary",
-      `Use ${method.label} for automatic payments and payouts?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Confirm",
-          onPress: async () => {
-            try {
-              await setDefaultPaymentMethod(method.id);
-            } catch (err: any) {
-              Alert.alert(t("linked_accounts_v2.alert_error_title"), err.message || t("linked_accounts_v2.alert_failed_default"));
-            }
-          },
-        },
-      ]
-    );
+  const handleSetPrimary = async (method: SavedPaymentMethod) => {
+    try {
+      await setDefaultPaymentMethod(method.id);
+      showToast(t("linked_accounts_v2.toast_default_set"), "success");
+    } catch (err: any) {
+      Alert.alert(
+        t("linked_accounts_v2.alert_error_title"),
+        err.message || t("linked_accounts_v2.alert_failed_default"),
+      );
+    }
   };
 
   const handleRemoveAccount = (method: SavedPaymentMethod) => {
     Alert.alert(
-      "Remove Account",
-      `Are you sure you want to remove ${method.label}?`,
+      t("linked_accounts_v2.remove_title"),
+      t("linked_accounts_v2.remove_body", { label: method.label }),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("linked_accounts_v2.action_cancel"), style: "cancel" },
         {
-          text: "Remove",
+          text: t("linked_accounts_v2.action_remove"),
           style: "destructive",
           onPress: async () => {
             try {
               await removePaymentMethod(method.id);
+              showToast(
+                t("linked_accounts_v2.toast_method_removed"),
+                "success",
+              );
             } catch (err: any) {
-              Alert.alert(t("linked_accounts_v2.alert_error_title"), err.message || t("linked_accounts_v2.alert_failed_remove"));
+              Alert.alert(
+                t("linked_accounts_v2.alert_error_title"),
+                err.message || t("linked_accounts_v2.alert_failed_remove"),
+              );
             }
           },
         },
-      ]
+      ],
     );
   };
 
+  const onPullRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      // P2 (payment-methods review): only the manual pull-refresh asks
+      // the EF to re-sync from Stripe. Focus + realtime paths stay
+      // local-only — that's the brief's "best effort" guidance.
+      await refreshPaymentMethods({ syncRemote: true });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshPaymentMethods]);
+
+  // Render helpers ──────────────────────────────────────────────────────────
+
+  // Render the leading icon for a method row. Cards with a recognised
+  // brand get the brand glyph; everything else falls back to the
+  // PaymentContext-provided Ionicons name. Apple/Google Pay / Cash App /
+  // Link already get their logo via that fallback.
+  const renderMethodIcon = (method: SavedPaymentMethod, bg: string, fg: string) => {
+    if (method.type === "card") {
+      const { name, color } = brandIconFor(method.cardBrand);
+      if (name) {
+        return (
+          <View style={[styles.accountIcon, { backgroundColor: "#FFFFFF" }]}>
+            <FontAwesome name={name} size={26} color={color} />
+          </View>
+        );
+      }
+    }
+    return (
+      <View style={[styles.accountIcon, { backgroundColor: bg }]}>
+        <Ionicons name={method.icon as any} size={24} color={fg} />
+      </View>
+    );
+  };
+
+  const renderExpiryBadge = (method: SavedPaymentMethod) => {
+    const cls = classifyExpiry(method.cardExpMonth, method.cardExpYear);
+    if (!cls) return null;
+    const isExpired = cls === "expired";
+    return (
+      <View
+        style={[
+          styles.expiryPill,
+          isExpired ? styles.expiryPillExpired : styles.expiryPillSoon,
+        ]}
+      >
+        <Ionicons
+          name={isExpired ? "alert-circle" : "time-outline"}
+          size={10}
+          color={isExpired ? "#991B1B" : "#92400E"}
+        />
+        <Text
+          style={[
+            styles.expiryPillText,
+            { color: isExpired ? "#991B1B" : "#92400E" },
+          ]}
+        >
+          {isExpired
+            ? t("linked_accounts_v2.expired")
+            : t("linked_accounts_v2.expires_this_month")}
+        </Text>
+      </View>
+    );
+  };
+
+  // Single render fn so cards + banks share the row layout. The only
+  // difference is the leading icon background + the secondary line
+  // (cardLast4 vs bankLast4).
+  const renderMethodRow = (
+    method: SavedPaymentMethod,
+    secondaryLast4: string | undefined,
+    bg: string,
+    fg: string,
+    showLastInRow: boolean,
+  ) => (
+    <View
+      key={method.id}
+      style={[styles.accountItem, !showLastInRow && styles.borderBottom]}
+    >
+      {renderMethodIcon(method, bg, fg)}
+      <View style={styles.accountContent}>
+        <View style={styles.accountTitleRow}>
+          <Text style={styles.accountName} numberOfLines={1}>
+            {method.label}
+          </Text>
+          {method.isDefault && (
+            <View style={styles.primaryBadge}>
+              <Text style={styles.primaryBadgeText}>
+                {t("linked_accounts_v2.badge_primary")}
+              </Text>
+            </View>
+          )}
+          {renderExpiryBadge(method)}
+        </View>
+        {secondaryLast4 && (
+          <Text style={styles.accountNumber}>****{secondaryLast4}</Text>
+        )}
+        <View style={styles.verifiedRow}>
+          <Ionicons name="shield-checkmark" size={12} color="#00C6AE" />
+          <Text style={styles.verifiedText}>
+            {t("linked_accounts_v2.tag_verified")}
+          </Text>
+        </View>
+      </View>
+      <TouchableOpacity
+        style={styles.moreButton}
+        onPress={() => setOpenMethod(method)}
+        accessibilityRole="button"
+        accessibilityLabel={t("linked_accounts_v2.action_set_primary")}
+      >
+        <Ionicons name="ellipsis-vertical" size={18} color="#6B7280" />
+      </TouchableOpacity>
+    </View>
+  );
+
+  const isInitialLoading = isLoadingMethods && paymentMethods.length === 0;
+
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onPullRefresh}
+            tintColor="#00C6AE"
+            colors={["#00C6AE"]}
+          />
+        }
+      >
         {/* Header */}
         <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
           <View style={styles.headerRow}>
@@ -109,9 +409,11 @@ export default function LinkedAccountsScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View>
-              <Text style={styles.headerTitle}>{t("screen_headers.linked_accounts")}</Text>
+              <Text style={styles.headerTitle}>
+                {t("screen_headers.linked_accounts")}
+              </Text>
               <Text style={styles.headerSubtitle}>
-                Manage your payment methods
+                {t("linked_accounts_v2.header_subtitle")}
               </Text>
             </View>
           </View>
@@ -119,223 +421,164 @@ export default function LinkedAccountsScreen() {
 
         {/* Content */}
         <View style={styles.content}>
-          {/* Onboarding Banner */}
-          {!isOnboarded && (
+          {/* Onboarding Banner — P2.5: only when ACH/Connect makes sense
+              for this user (US only, Connect onboarding incomplete). */}
+          {isUS && !isOnboarded && (
             <TouchableOpacity style={styles.onboardingBanner} onPress={handleAddBank}>
               <View style={styles.onboardingIcon}>
                 <Ionicons name="warning" size={20} color="#F59E0B" />
               </View>
               <View style={styles.onboardingContent}>
                 <Text style={styles.onboardingTitle}>
-                  Complete Account Setup
+                  {t("linked_accounts_v2.banner_setup_title")}
                 </Text>
                 <Text style={styles.onboardingText}>
-                  Finish Stripe onboarding to enable payouts and bank transfers.
+                  {t("linked_accounts_v2.banner_setup_body")}
+                </Text>
+                <Text style={styles.onboardingNote}>
+                  {t("linked_accounts_v2.banner_setup_note")}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#6B7280" />
             </TouchableOpacity>
           )}
 
-          {/* Loading State */}
-          {isLoadingMethods ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#00C6AE" />
-              <Text style={styles.loadingText}>{t("linked_accounts_v2.loading_text")}</Text>
+          {/* P1.4 — Initial loading: skeletons rather than a centered
+              spinner. Once any data lands we drop straight into the real
+              list; subsequent refreshes are signalled by the
+              RefreshControl swipe-indicator instead. */}
+          {isInitialLoading ? (
+            <View style={styles.section}>
+              <View style={styles.card}>
+                <SkeletonRow />
+                <SkeletonRow />
+              </View>
             </View>
           ) : (
             <>
-              {/* Bank Accounts */}
+              {/* P2.5 — Pay-in section. Renamed from "Cards & Other"
+                  to surface the user's intent (paying in) rather than
+                  the implementation. */}
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>{t("linked_accounts_v2.section_bank_accounts")}</Text>
-                  <TouchableOpacity style={styles.addButton} onPress={handleAddBank}>
-                    <Ionicons name="add" size={18} color="#00C6AE" />
-                    <Text style={styles.addButtonText}>{t("linked_accounts_v2.btn_add_bank")}</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {bankAccounts.length > 0 ? (
-                  <View style={styles.card}>
-                    {bankAccounts.map((method, index) => (
-                      <View
-                        key={method.id}
-                        style={[
-                          styles.accountItem,
-                          index < bankAccounts.length - 1 && styles.borderBottom,
-                        ]}
-                      >
-                        <View style={styles.accountIcon}>
-                          <Ionicons
-                            name={method.icon as any}
-                            size={24}
-                            color="#0A2342"
-                          />
-                        </View>
-                        <View style={styles.accountContent}>
-                          <View style={styles.accountTitleRow}>
-                            <Text style={styles.accountName}>{method.label}</Text>
-                            {method.isDefault && (
-                              <View style={styles.primaryBadge}>
-                                <Text style={styles.primaryBadgeText}>{t("linked_accounts_v2.badge_primary")}</Text>
-                              </View>
-                            )}
-                          </View>
-                          {method.bankLast4 && (
-                            <Text style={styles.accountNumber}>
-                              ****{method.bankLast4}
-                            </Text>
-                          )}
-                          <View style={styles.verifiedRow}>
-                            <Ionicons
-                              name="shield-checkmark"
-                              size={12}
-                              color="#00C6AE"
-                            />
-                            <Text style={styles.verifiedText}>{t("linked_accounts_v2.tag_verified")}</Text>
-                          </View>
-                        </View>
-                        <TouchableOpacity
-                          style={styles.moreButton}
-                          onPress={() => {
-                            Alert.alert(
-                              method.label,
-                              method.bankLast4 ? `****${method.bankLast4}` : undefined,
-                              [
-                                { text: "Cancel", style: "cancel" },
-                                !method.isDefault
-                                  ? {
-                                      text: "Set as Primary",
-                                      onPress: () => handleSetPrimary(method),
-                                    }
-                                  : null,
-                                {
-                                  text: "Remove",
-                                  style: "destructive",
-                                  onPress: () => handleRemoveAccount(method),
-                                },
-                              ].filter(Boolean) as any
-                            );
-                          }}
-                        >
-                          <Ionicons
-                            name="ellipsis-vertical"
-                            size={18}
-                            color="#6B7280"
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sectionTitle}>
+                      {t("linked_accounts_v2.section_payin_title")}
+                    </Text>
+                    <Text style={styles.sectionSubtitle}>
+                      {t("linked_accounts_v2.section_payin_subtitle")}
+                    </Text>
                   </View>
-                ) : (
-                  <View style={styles.emptyCard}>
-                    <Ionicons name="business-outline" size={40} color="#9CA3AF" />
-                    <Text style={styles.emptyText}>{t("linked_accounts_v2.empty_no_banks")}</Text>
-                    <TouchableOpacity
-                      style={styles.emptyButton}
-                      onPress={handleAddBank}
-                    >
-                      <Text style={styles.emptyButtonText}>{t("linked_accounts_v2.btn_link_bank")}</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-
-              {/* Cards & Other Methods */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>Cards & Other</Text>
-                  <TouchableOpacity style={styles.addButton} onPress={handleAddCard}>
-                    <Ionicons name="add" size={18} color="#00C6AE" />
-                    <Text style={styles.addButtonText}>{t("linked_accounts_v2.btn_add_card")}</Text>
+                  <TouchableOpacity
+                    style={styles.addButton}
+                    onPress={handleAddCard}
+                    disabled={addingCard}
+                  >
+                    {addingCard ? (
+                      <ActivityIndicator size="small" color="#00C6AE" />
+                    ) : (
+                      <Ionicons name="add" size={18} color="#00C6AE" />
+                    )}
+                    <Text style={styles.addButtonText}>
+                      {t("linked_accounts_v2.btn_add_card")}
+                    </Text>
                   </TouchableOpacity>
                 </View>
 
                 {cardAccounts.length > 0 ? (
                   <View style={styles.card}>
-                    {cardAccounts.map((method, index) => (
-                      <View
-                        key={method.id}
-                        style={[
-                          styles.accountItem,
-                          index < cardAccounts.length - 1 && styles.borderBottom,
-                        ]}
-                      >
-                        <View style={[styles.accountIcon, { backgroundColor: "#EFF6FF" }]}>
-                          <Ionicons
-                            name={method.icon as any}
-                            size={24}
-                            color="#3B82F6"
-                          />
-                        </View>
-                        <View style={styles.accountContent}>
-                          <View style={styles.accountTitleRow}>
-                            <Text style={styles.accountName}>{method.label}</Text>
-                            {method.isDefault && (
-                              <View style={styles.primaryBadge}>
-                                <Text style={styles.primaryBadgeText}>{t("linked_accounts_v2.badge_primary")}</Text>
-                              </View>
-                            )}
-                          </View>
-                          {method.cardLast4 && (
-                            <Text style={styles.accountNumber}>
-                              ****{method.cardLast4}
-                            </Text>
-                          )}
-                          <View style={styles.verifiedRow}>
-                            <Ionicons
-                              name="shield-checkmark"
-                              size={12}
-                              color="#00C6AE"
-                            />
-                            <Text style={styles.verifiedText}>{t("linked_accounts_v2.tag_verified")}</Text>
-                          </View>
-                        </View>
-                        <TouchableOpacity
-                          style={styles.moreButton}
-                          onPress={() => {
-                            Alert.alert(
-                              method.label,
-                              method.cardLast4 ? `****${method.cardLast4}` : undefined,
-                              [
-                                { text: "Cancel", style: "cancel" },
-                                !method.isDefault
-                                  ? {
-                                      text: "Set as Primary",
-                                      onPress: () => handleSetPrimary(method),
-                                    }
-                                  : null,
-                                {
-                                  text: "Remove",
-                                  style: "destructive",
-                                  onPress: () => handleRemoveAccount(method),
-                                },
-                              ].filter(Boolean) as any
-                            );
-                          }}
-                        >
-                          <Ionicons
-                            name="ellipsis-vertical"
-                            size={18}
-                            color="#6B7280"
-                          />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
+                    {cardAccounts.map((method, index) =>
+                      renderMethodRow(
+                        method,
+                        method.cardLast4,
+                        "#EFF6FF",
+                        "#3B82F6",
+                        index === cardAccounts.length - 1,
+                      ),
+                    )}
                   </View>
                 ) : (
                   <View style={styles.emptyCard}>
                     <Ionicons name="card-outline" size={40} color="#9CA3AF" />
-                    <Text style={styles.emptyText}>{t("linked_accounts_v2.empty_no_cards")}</Text>
+                    <Text style={styles.emptyText}>
+                      {t("linked_accounts_v2.empty_no_cards")}
+                    </Text>
                     <TouchableOpacity
                       style={styles.emptyButton}
                       onPress={handleAddCard}
+                      disabled={addingCard}
                     >
-                      <Text style={styles.emptyButtonText}>{t("linked_accounts_v2.btn_add_a_card")}</Text>
+                      {addingCard ? (
+                        <ActivityIndicator size="small" color="#00C6AE" />
+                      ) : (
+                        <Text style={styles.emptyButtonText}>
+                          {t("linked_accounts_v2.btn_add_a_card")}
+                        </Text>
+                      )}
                     </TouchableOpacity>
                   </View>
                 )}
               </View>
+
+              {/* Bank Accounts section — second (P1.3), US-only (P2.5).
+                  Non-US users see a single note instead of an empty
+                  section that would lead nowhere. */}
+              {isUS ? (
+                <View style={styles.section}>
+                  <View style={styles.sectionHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.sectionTitle}>
+                        {t("linked_accounts_v2.section_bank_accounts")}
+                      </Text>
+                      <Text style={styles.sectionSubtitle}>
+                        {t("linked_accounts_v2.section_bank_subtitle")}
+                      </Text>
+                    </View>
+                    <TouchableOpacity style={styles.addButton} onPress={handleAddBank}>
+                      <Ionicons name="add" size={18} color="#00C6AE" />
+                      <Text style={styles.addButtonText}>
+                        {t("linked_accounts_v2.btn_add_bank")}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {bankAccounts.length > 0 ? (
+                    <View style={styles.card}>
+                      {bankAccounts.map((method, index) =>
+                        renderMethodRow(
+                          method,
+                          method.bankLast4,
+                          "#F5F7FA",
+                          "#0A2342",
+                          index === bankAccounts.length - 1,
+                        ),
+                      )}
+                    </View>
+                  ) : (
+                    <View style={styles.emptyCard}>
+                      <Ionicons name="business-outline" size={40} color="#9CA3AF" />
+                      <Text style={styles.emptyText}>
+                        {t("linked_accounts_v2.empty_no_banks")}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.emptyButton}
+                        onPress={handleAddBank}
+                      >
+                        <Text style={styles.emptyButtonText}>
+                          {t("linked_accounts_v2.btn_link_bank")}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.countryGateCard}>
+                  <Ionicons name="globe-outline" size={20} color="#1E40AF" />
+                  <Text style={styles.countryGateText}>
+                    {t("linked_accounts_v2.country_gate_note")}
+                  </Text>
+                </View>
+              )}
             </>
           )}
 
@@ -345,10 +588,11 @@ export default function LinkedAccountsScreen() {
               <Ionicons name="lock-closed" size={20} color="#00897B" />
             </View>
             <View style={styles.securityContent}>
-              <Text style={styles.securityTitle}>{t("final_polish.linkedaccounts_bank_level_security")}</Text>
+              <Text style={styles.securityTitle}>
+                {t("final_polish.linkedaccounts_bank_level_security")}
+              </Text>
               <Text style={styles.securityText}>
-                Your financial data is encrypted and securely stored. We never
-                store your bank login credentials.
+                {t("linked_accounts_v2.security_body")}
               </Text>
             </View>
           </View>
@@ -357,12 +601,19 @@ export default function LinkedAccountsScreen() {
           <View style={styles.infoCard}>
             <Ionicons name="information-circle" size={18} color="#3B82F6" />
             <Text style={styles.infoText}>
-              Link your bank account for free ACH transfers. Debit cards enable
-              instant transfers with a small fee.
+              {t("linked_accounts_v2.info_text")}
             </Text>
           </View>
         </View>
       </ScrollView>
+
+      <MethodActionsSheet
+        visible={openMethod !== null}
+        method={openMethod}
+        onClose={() => setOpenMethod(null)}
+        onSetPrimary={handleSetPrimary}
+        onRemove={handleRemoveAccount}
+      />
     </View>
   );
 }
@@ -437,15 +688,28 @@ const styles = StyleSheet.create({
     color: "#A16207",
     lineHeight: 17,
   },
-  loadingContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 60,
+  onboardingNote: {
+    fontSize: 11,
+    color: "#A16207",
+    marginTop: 4,
+    fontStyle: "italic",
   },
-  loadingText: {
-    fontSize: 14,
-    color: "#6B7280",
-    marginTop: 12,
+  // P2.5 — country-gate replacement for the Bank Accounts section when
+  // the user's profile country is non-US. Single info card, no CTA.
+  countryGateCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#EFF6FF",
+    borderRadius: 12,
+    padding: 14,
+    gap: 10,
+    marginBottom: 24,
+  },
+  countryGateText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#1E40AF",
+    lineHeight: 18,
   },
   section: {
     marginBottom: 24,
@@ -460,6 +724,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#0A2342",
+  },
+  // P2.5 — sub-title under each section header. Explains what the
+  // section is *for* so the user picks the right one.
+  sectionSubtitle: {
+    fontSize: 11,
+    color: "#6B7280",
+    marginTop: 2,
+    lineHeight: 15,
   },
   addButton: {
     flexDirection: "row",
@@ -503,6 +775,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    flexWrap: "wrap",
   },
   accountName: {
     fontSize: 15,
@@ -520,6 +793,19 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#00C6AE",
   },
+  // P1.2 — expiry chips. Two tones (amber for "this month", red for
+  // already expired) keep the visual hierarchy honest.
+  expiryPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  expiryPillSoon: { backgroundColor: "#FEF3C7" },
+  expiryPillExpired: { backgroundColor: "#FEE2E2" },
+  expiryPillText: { fontSize: 9, fontWeight: "800" },
   accountNumber: {
     fontSize: 13,
     color: "#6B7280",
@@ -610,5 +896,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#1E40AF",
     lineHeight: 18,
+  },
+  // P1.4 — skeleton loader. Greyscale rectangles, opacity-animated via
+  // Animated.loop in SkeletonRow.
+  skeletonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    gap: 14,
+  },
+  skeletonIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonBar: {
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#E5E7EB",
   },
 });

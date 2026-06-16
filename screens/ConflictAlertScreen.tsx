@@ -18,6 +18,7 @@ import {
   type ReviewOutcome,
 } from "../hooks/useConflictPrediction";
 import { useAuth } from "../context/AuthContext";
+import { useCircles } from "../context/CirclesContext";
 
 // Engine return types use snake_case; the FlaggedPairSummary interface from
 // the engine matches what's actually inside circle_formation_flags.flagged_pair_ids.
@@ -37,12 +38,16 @@ const shortId = (id: string | undefined): string =>
 const formatFactor = (factor: string): string =>
   String(factor).replace(/_/g, " ");
 
-type TabKey = "formation" | "monitoring" | "history";
+// Conflict P1 (2026-06-12): collapsed 3 tabs → 2. The legacy split between
+// Formation (pre-cycle) and Monitoring (mid-cycle) sat behind the same
+// "what's happening now?" question. They now share a single "Live signals"
+// tab that renders pending formation reviews above active monitoring rows.
+// History stays as-is because users explicitly browse it as a separate axis.
+type TabKey = "live_signals" | "history";
 
-const TABS: { key: TabKey; label: string; icon: string }[] = [
-  { key: "formation", label: "Formation", icon: "shield-checkmark-outline" },
-  { key: "monitoring", label: "Monitoring", icon: "pulse-outline" },
-  { key: "history", label: "History", icon: "time-outline" },
+const TABS: { key: TabKey; labelKey: string; icon: string }[] = [
+  { key: "live_signals", labelKey: "conflict_alert.tab_live_signals", icon: "pulse-outline" },
+  { key: "history", labelKey: "conflict_alert.tab_history", icon: "time-outline" },
 ];
 
 const SEVERITY_CONFIG: Record<string, { color: string; bg: string; icon: string }> = {
@@ -67,26 +72,45 @@ export default function ConflictAlertScreen() {
 
   const navigation = useNavigation<any>();
   const route = useRoute();
-  const circleId = (route.params as any)?.circleId as string;
+  const routeCircleId = (route.params as any)?.circleId as string | undefined;
   const { user } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<TabKey>("formation");
+  // Conflict P0 (2026-06-12): the route now declares `circleId?` to
+  // match how CirclesV2Screen historically navigates (no params). When
+  // missing, we render an inline picker using the user's active circles
+  // and let them choose. The selected id flows into all the hooks
+  // below, so swapping a circle re-fetches everything cleanly.
+  const { myCircles } = useCircles();
+  const activeCircles = myCircles.filter((c) => c.status === "active");
+  const [selectedCircleId, setSelectedCircleId] = useState<string | undefined>(
+    routeCircleId,
+  );
+  const effectiveCircleId = selectedCircleId ?? routeCircleId;
+  const noCirclesAtAll = activeCircles.length === 0;
+  const showCirclePicker = !effectiveCircleId && !noCirclesAtAll;
+  const showNoCirclesState = !effectiveCircleId && noCirclesAtAll;
 
-  // Wire to real hooks
+  const [activeTab, setActiveTab] = useState<TabKey>("live_signals");
+
+  // Wire to real hooks. The cache layer added in P0 (see
+  // useConflictPrediction.ts) is keyed by the id passed in, so passing
+  // `undefined` short-circuits the fetch and returns empty data.
   const formation = useFormationReview();
-  const monitor = usePostFormationMonitor(circleId);
-  const history = useConflictHistory(circleId);
+  const monitor = usePostFormationMonitor(effectiveCircleId);
+  const history = useConflictHistory(effectiveCircleId);
   const actions = useConflictActions();
 
   const isRefreshing =
-    (activeTab === "formation" && formation.loading) ||
-    (activeTab === "monitoring" && monitor.loading) ||
+    (activeTab === "live_signals" && (formation.loading || monitor.loading)) ||
     (activeTab === "history" && history.loading);
 
   const handleRefresh = useCallback(() => {
-    if (activeTab === "formation") formation.refresh();
-    else if (activeTab === "monitoring") monitor.refresh();
-    else history.refresh();
+    if (activeTab === "live_signals") {
+      formation.refresh();
+      monitor.refresh();
+    } else {
+      history.refresh();
+    }
   }, [activeTab, formation, monitor, history]);
 
   // ── Formation review handlers ──────────────────────────────────────────────
@@ -449,11 +473,13 @@ export default function ConflictAlertScreen() {
         <View style={styles.tabBar}>
           {TABS.map((tab) => {
             const isActive = activeTab === tab.key;
-            // Badge counts
+            // Badge counts — live_signals now combines formation + monitoring.
             let badge = 0;
-            if (tab.key === "formation") badge = formation.pendingReviews.length;
-            else if (tab.key === "monitoring") badge = monitor.escalated.length;
-            else if (tab.key === "history") badge = history.unresolvedCount;
+            if (tab.key === "live_signals") {
+              badge = formation.pendingReviews.length + monitor.escalated.length;
+            } else if (tab.key === "history") {
+              badge = history.unresolvedCount;
+            }
 
             return (
               <TouchableOpacity
@@ -467,7 +493,7 @@ export default function ConflictAlertScreen() {
                   color={isActive ? "#00C6AE" : "rgba(255,255,255,0.5)"}
                 />
                 <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
-                  {tab.label}
+                  {t(tab.labelKey)}
                 </Text>
                 {badge > 0 && (
                   <View style={styles.badge}>
@@ -486,9 +512,52 @@ export default function ConflictAlertScreen() {
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
       >
         <View style={styles.section}>
-          {activeTab === "formation" && renderFormationTab()}
-          {activeTab === "monitoring" && renderMonitoringTab()}
-          {activeTab === "history" && renderHistoryTab()}
+          {showNoCirclesState ? (
+            <EmptyState
+              icon="people-outline"
+              title={t("conflict_alert.no_circle_title")}
+              subtitle={t("conflict_alert.no_circle_body")}
+            />
+          ) : showCirclePicker ? (
+            <View style={styles.pickerCard}>
+              <Text style={styles.pickerTitle}>
+                {t("conflict_alert.pick_title")}
+              </Text>
+              <Text style={styles.pickerSubtitle}>
+                {t("conflict_alert.pick_subtitle")}
+              </Text>
+              {activeCircles.map((c) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={styles.pickerRow}
+                  onPress={() => setSelectedCircleId(c.id)}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.pickerEmoji}>{c.emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pickerName}>{c.name}</Text>
+                    <Text style={styles.pickerSub}>
+                      {t("conflict_alert.pick_members", {
+                        n: c.memberCount,
+                      })}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <>
+              {activeTab === "live_signals" && (
+                <>
+                  {renderFormationTab()}
+                  <View style={{ height: 14 }} />
+                  {renderMonitoringTab()}
+                </>
+              )}
+              {activeTab === "history" && renderHistoryTab()}
+            </>
+          )}
         </View>
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -606,6 +675,38 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: 14, color: "#6B7280", marginTop: 4, textAlign: "center" },
 
   // Loading
+  // Circle picker (rendered when route.params.circleId is undefined).
+  pickerCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  pickerTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 4,
+  },
+  pickerSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginBottom: 14,
+    lineHeight: 17,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+  },
+  pickerEmoji: { fontSize: 22 },
+  pickerName: { fontSize: 14, fontWeight: "700", color: "#0A2342" },
+  pickerSub: { fontSize: 11, color: "#6B7280", marginTop: 2 },
+
   loadingContainer: { alignItems: "center", paddingVertical: 60 },
   loadingText: { fontSize: 14, color: "#9CA3AF", marginTop: 12 },
 });

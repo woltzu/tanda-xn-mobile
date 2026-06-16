@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -10,17 +10,27 @@ import {
   Alert,
   Share,
   ActivityIndicator,
+  Platform,
+  Animated,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
+import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { Circle, CircleMember, CircleActivity, useCircles } from "../context/CirclesContext";
+import * as Clipboard from "expo-clipboard";
 import { useAuth } from "../context/AuthContext";
 import { useActivePlan } from "../hooks/usePartialContribution";
 import { useCircleHealth } from "../hooks/useCircleHealth";
+import { useCircleAutopayConfig } from "../hooks/useCircleAutopay";
+import { useCircleAutopaySuggestion } from "../hooks/useCircleAutopaySuggestion";
+import { useCircleNotificationMute } from "../hooks/useCircleNotificationMute";
+import MuteCircleSheet from "../components/MuteCircleSheet";
+import { showToast } from "../components/Toast";
 
 type CircleDetailNavigationProp = StackNavigationProp<RootStackParamList>;
 type CircleDetailRouteProp = RouteProp<RootStackParamList, "CircleDetail">;
@@ -96,6 +106,48 @@ export default function CircleDetailScreen() {
   const { circleId } = route.params;
   const { circles, browseCircles, myCircles, getCircleMembers, getCircleActivities, refreshCircles } = useCircles();
   const { user } = useAuth();
+  // Phase 1 of Circle Contribution Autopay — drives the "Autopay
+  // enabled" badge below. Single network call, 60-s cached in the
+  // hook; null when the user has no autopay for this circle.
+  const { config: autopayConfig } = useCircleAutopayConfig(circleId);
+  const autopayActive =
+    !!autopayConfig &&
+    autopayConfig.enabled &&
+    autopayConfig.status === "active";
+  const autopayPaused =
+    !!autopayConfig && autopayConfig.status === "paused";
+  // Phase 2 — missed-contribution suggestion banner. detect_missed_circle_contributions
+  // inserts a row when the user missed a cycle without having autopay
+  // set up. Banner is dismissible.
+  const { suggestion: autopaySuggestion, dismiss: dismissSuggestion } =
+    useCircleAutopaySuggestion(circleId);
+  const showAutopaySuggestion =
+    !!autopaySuggestion && !autopayActive && !autopayPaused;
+  // Phase 2 (notification-prefs review): per-circle notification mute.
+  // Tapping the bell opens the bottom sheet; the screen renders a
+  // "Muted" pill near the circle name when active.
+  const {
+    isMuted: circleMuted,
+    mute: muteCircle,
+    unmute: unmuteCircle,
+  } = useCircleNotificationMute(circleId);
+  const [muteSheetOpen, setMuteSheetOpen] = useState(false);
+  const handleMute = async (durationDays: number | null) => {
+    try {
+      await muteCircle(durationDays);
+      showToast(t("mute_circle.toast_muted"), "success");
+    } catch {
+      showToast(t("mute_circle.toast_failed"), "error");
+    }
+  };
+  const handleUnmute = async () => {
+    try {
+      await unmuteCircle();
+      showToast(t("mute_circle.toast_unmuted"), "success");
+    } catch {
+      showToast(t("mute_circle.toast_failed"), "error");
+    }
+  };
 
   const [activeTab, setActiveTab] = useState<"overview" | "members" | "activity">("overview");
   const [showMenu, setShowMenu] = useState(false);
@@ -103,6 +155,66 @@ export default function CircleDetailScreen() {
   const [activities, setActivities] = useState<CircleActivity[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(true);
   const [isLoadingActivities, setIsLoadingActivities] = useState(true);
+
+  // P2 (first-launch review): when the user lands on a circle detail
+  // for the very first time after their initial circle join (myCircles
+  // length === 1) AND the shown-flag isn't already set, kick off a
+  // 5-second pulse around the Contribute button. The AsyncStorage
+  // flag is the one-shot gate — once written, never pulses again.
+  const HIGHLIGHT_FLAG_KEY = "@tandaxn_onboarding_highlight_contribute_v1";
+  const [shouldPulse, setShouldPulse] = useState(false);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if ((myCircles?.length ?? 0) !== 1) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(HIGHLIGHT_FLAG_KEY);
+        if (cancelled || seen) return;
+        await AsyncStorage.setItem(HIGHLIGHT_FLAG_KEY, "1");
+        if (!cancelled) setShouldPulse(true);
+      } catch {
+        /* best-effort */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [myCircles?.length]);
+
+  useEffect(() => {
+    if (!shouldPulse) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.06,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    // Auto-clear after 5 s so the pulse isn't permanent if the user
+    // sits on the screen without tapping Contribute.
+    pulseTimerRef.current = setTimeout(() => {
+      setShouldPulse(false);
+    }, 5000);
+    return () => {
+      loop.stop();
+      if (pulseTimerRef.current) {
+        clearTimeout(pulseTimerRef.current);
+        pulseTimerRef.current = null;
+      }
+    };
+  }, [shouldPulse, pulseAnim]);
+
 
   // Phase D4 of feat(partial). Active partial-contribution plan for this
   // member + this circle (driven by the migration 102 RPCs, surfaced via
@@ -196,14 +308,32 @@ export default function CircleDetailScreen() {
   const spotsLeft = circle.memberCount - circle.currentMembers;
   const isFull = spotsLeft <= 0;
 
-  // Generate invite code from circle name
-  const inviteCode = circle.name.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 10) + new Date(circle.createdAt).getFullYear();
+  // Authoritative invite code from the server (gen_invite_code() — migration
+  // 141). The previous line built a fake code from `name.slice(0,10) + year`,
+  // which never matched the real value stored in `circles.invite_code` — so
+  // every "Share" handed out a code the lookup couldn't find.
+  const inviteCode = circle.inviteCode ?? "";
+
+  // Local feedback when the user taps "Copy" — flips to true for ~1.6s.
+  const [codeCopied, setCodeCopied] = useState(false);
+  const handleCopyCode = async () => {
+    if (!inviteCode) return;
+    await Clipboard.setStringAsync(inviteCode);
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 1600);
+  };
 
   // Menu actions
   const handleInviteMembers = async () => {
     try {
+      // Surface the raw code on its own line so the recipient can paste it
+      // directly into "Have an invite code?" — many users on iMessage /
+      // WhatsApp won't click the link and need the code visible.
       await Share.share({
-        message: `You've been invited to join ${circle.name} on TandaXn! Tap to join instantly: https://v0-tanda-xn.vercel.app/join/${inviteCode}`,
+        message:
+          `You've been invited to join ${circle.name} on TandaXn!\n\n` +
+          `Invite code: ${inviteCode}\n\n` +
+          `Or tap to join instantly: https://v0-tanda-xn.vercel.app/join/${inviteCode}`,
         title: `Join ${circle.name}`,
       });
     } catch (error) {
@@ -291,7 +421,10 @@ export default function CircleDetailScreen() {
     setShowMenu(false);
     try {
       await Share.share({
-        message: `You've been invited to join ${circle.name} on TandaXn! Tap to join instantly: https://v0-tanda-xn.vercel.app/join/${inviteCode}`,
+        message:
+          `You've been invited to join ${circle.name} on TandaXn!\n\n` +
+          `Invite code: ${inviteCode}\n\n` +
+          `Or tap to join instantly: https://v0-tanda-xn.vercel.app/join/${inviteCode}`,
         title: `Share ${circle.name}`,
       });
     } catch (error) {
@@ -378,7 +511,10 @@ export default function CircleDetailScreen() {
 
   const handleMediationTools = () => {
     setShowMenu(false);
-    navigation.navigate("MediationTools" as any, { circleName: circle.name, circleId });
+    // Conflict P1 (2026-06-12): MediationTools is now an alias for the merged
+    // ConflictCaseScreen — but route by the canonical name so callers can
+    // find the navigation target without crossing the alias.
+    navigation.navigate("ConflictCase" as any, { circleName: circle.name, circleId });
   };
 
   const handleAuditTrail = () => {
@@ -424,12 +560,90 @@ export default function CircleDetailScreen() {
 
   const renderOverviewTab = () => (
     <View style={styles.tabContent}>
+      {/* Phase 2 (circle autopay) — missed-contribution banner. Sits
+          at the top of Overview so it's the first thing users see
+          when returning to the circle after missing a cycle. */}
+      {showAutopaySuggestion && (
+        <View style={styles.suggestionBanner}>
+          <Ionicons name="alert-circle" size={20} color="#92400E" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.suggestionTitle}>
+              {t("circle_detail.autopay_suggestion_title")}
+            </Text>
+            <Text style={styles.suggestionBody}>
+              {t("circle_detail.autopay_suggestion_body")}
+            </Text>
+            <View style={styles.suggestionActions}>
+              <TouchableOpacity
+                style={styles.suggestionCta}
+                onPress={() =>
+                  navigation.navigate("CircleAutopaySetup", { circleId })
+                }
+              >
+                <Text style={styles.suggestionCtaText}>
+                  {t("circle_detail.autopay_suggestion_cta")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.suggestionDismiss}
+                onPress={dismissSuggestion}
+              >
+                <Text style={styles.suggestionDismissText}>
+                  {t("circle_detail.autopay_suggestion_dismiss")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
       {/* Stats Cards */}
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
           <Text style={styles.statLabel}>{t("circle_detail.stat_contribution")}</Text>
           <Text style={styles.statValue}>${circle.amount}</Text>
           <Text style={styles.statSubtext}>per {isOneTime ? "member" : getFrequencyLabel(circle.frequency).toLowerCase()}</Text>
+          {/* Phase 1 (circle autopay): tappable pill — active or
+              paused. Tap routes to management so the user can adjust
+              the schedule or retry. */}
+          {(autopayActive || autopayPaused) && (
+            <TouchableOpacity
+              style={[
+                styles.autopayBadge,
+                autopayPaused && styles.autopayBadgePaused,
+              ]}
+              onPress={() => navigation.navigate("CircleAutopayManagement")}
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name={autopayPaused ? "alert-circle" : "checkmark-circle"}
+                size={11}
+                color={autopayPaused ? "#92400E" : "#047857"}
+              />
+              <Text
+                style={[
+                  styles.autopayBadgeText,
+                  autopayPaused && styles.autopayBadgeTextPaused,
+                ]}
+              >
+                {t(
+                  autopayPaused
+                    ? "circle_detail.autopay_paused_badge"
+                    : "circle_detail.autopay_enabled_badge",
+                )}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {/* Phase 2 (notification-prefs review): "Muted" pill when
+              the user has an active circle-scoped mute. */}
+          {circleMuted && (
+            <View style={[styles.autopayBadge, styles.mutedBadge]}>
+              <Ionicons name="notifications-off" size={11} color="#1F2937" />
+              <Text style={[styles.autopayBadgeText, styles.mutedBadgeText]}>
+                {t("circle_detail.muted_badge")}
+              </Text>
+            </View>
+          )}
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statLabel}>{t("circle_detail.stat_total_pot")}</Text>
@@ -776,6 +990,79 @@ export default function CircleDetailScreen() {
         </View>
       )}
 
+      {/* Invite Code — visible to everyone viewing the circle.
+          Reads circle.inviteCode (server-set by gen_invite_code() in migration
+          141). The user can copy or share from here, so they don't have to
+          go back to the create-success screen to find the code. */}
+      {isMember && inviteCode ? (
+        <View style={styles.inviteCard}>
+          <View style={styles.inviteCardHeader}>
+            <Ionicons name="key-outline" size={16} color="#00C6AE" />
+            <Text style={styles.inviteCardTitle}>
+              {t("circle_detail.invite_code_title")}
+            </Text>
+          </View>
+          <View style={styles.inviteCodeChipRow}>
+            <Text
+              style={styles.inviteCodeChip}
+              accessibilityRole="text"
+              accessibilityLabel={t("circle_detail.invite_code_a11y", {
+                code: inviteCode.split("").join(" "),
+              })}
+              selectable
+            >
+              {inviteCode}
+            </Text>
+          </View>
+          <View style={styles.inviteActionsRow}>
+            <TouchableOpacity
+              style={[
+                styles.inviteActionBtn,
+                styles.inviteActionBtnOutline,
+                codeCopied && styles.inviteActionBtnCopied,
+              ]}
+              onPress={handleCopyCode}
+              accessibilityRole="button"
+              accessibilityLabel={t("circle_detail.invite_btn_copy")}
+            >
+              <Ionicons
+                name={codeCopied ? "checkmark" : "copy-outline"}
+                size={16}
+                color={codeCopied ? "#FFFFFF" : "#0A2342"}
+              />
+              <Text
+                style={[
+                  styles.inviteActionBtnOutlineText,
+                  codeCopied && styles.inviteActionBtnCopiedText,
+                ]}
+              >
+                {codeCopied
+                  ? t("circle_detail.invite_btn_copied")
+                  : t("circle_detail.invite_btn_copy")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.inviteActionBtn, styles.inviteActionBtnPrimary]}
+              onPress={handleShareCircle}
+              accessibilityRole="button"
+              accessibilityLabel={t("circle_detail.invite_btn_share")}
+            >
+              <Ionicons
+                name="share-social-outline"
+                size={16}
+                color="#FFFFFF"
+              />
+              <Text style={styles.inviteActionBtnPrimaryText}>
+                {t("circle_detail.invite_btn_share")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.inviteHelpText}>
+            {t("circle_detail.invite_help")}
+          </Text>
+        </View>
+      ) : null}
+
       {/* Circle Details */}
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{t("circle_detail.card_circle_details")}</Text>
@@ -873,6 +1160,48 @@ export default function CircleDetailScreen() {
             <Ionicons name="chatbubbles-outline" size={22} color="#D97706" />
           </View>
           <Text style={styles.actionText}>{t("circle_detail.action_group_chat")}</Text>
+          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+        </TouchableOpacity>
+
+        {/* Circle Contribution Autopay — Phase 0 (2026-06-15). Routes
+            to CircleAutopaySetup with the circle pre-selected so the
+            picker is hidden. */}
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() =>
+            navigation.navigate("CircleAutopaySetup", { circleId })
+          }
+        >
+          <View style={[styles.actionIcon, { backgroundColor: "#ECFDF5" }]}>
+            <Ionicons name="repeat-outline" size={22} color="#047857" />
+          </View>
+          <Text style={styles.actionText}>
+            {t("circle_detail.action_set_up_autopay")}
+          </Text>
+          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+        </TouchableOpacity>
+
+        {/* Phase 2 (notification-prefs review) — mute / unmute circle
+            notifications. Triggers a bottom-sheet picker; the saved
+            state drives the small "Muted" pill near the circle name. */}
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => setMuteSheetOpen(true)}
+        >
+          <View style={[styles.actionIcon, { backgroundColor: "#F3F4F6" }]}>
+            <Ionicons
+              name={circleMuted ? "notifications-off" : "notifications-outline"}
+              size={22}
+              color={circleMuted ? "#92400E" : "#0A2342"}
+            />
+          </View>
+          <Text style={styles.actionText}>
+            {t(
+              circleMuted
+                ? "circle_detail.action_unmute_circle"
+                : "circle_detail.action_mute_circle",
+            )}
+          </Text>
           <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
         </TouchableOpacity>
       </View>
@@ -1099,7 +1428,8 @@ export default function CircleDetailScreen() {
             )}
           </View>
 
-          {/* Tabs */}
+          {/* Tabs — first 3 switch inline content; Timeline + Voting navigate
+              to dedicated screens (CycleTimeline / CircleVoting). */}
           <View style={styles.tabsContainer}>
             {(["overview", "members", "activity"] as const).map((tab) => (
               <TouchableOpacity
@@ -1112,6 +1442,30 @@ export default function CircleDetailScreen() {
                 </Text>
               </TouchableOpacity>
             ))}
+
+            <TouchableOpacity
+              style={styles.tab}
+              onPress={() =>
+                navigation.navigate(Routes.CycleTimeline as never, { circleId } as never)
+              }
+              accessibilityRole="button"
+            >
+              <Text style={styles.tabText}>
+                {t("circle_detail.tab_timeline")}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.tab}
+              onPress={() =>
+                navigation.navigate(Routes.CircleVoting as never, { circleId } as never)
+              }
+              accessibilityRole="button"
+            >
+              <Text style={styles.tabText}>
+                {t("circle_detail.tab_voting")}
+              </Text>
+            </TouchableOpacity>
           </View>
         </LinearGradient>
 
@@ -1124,13 +1478,30 @@ export default function CircleDetailScreen() {
       {/* Bottom Action Button */}
       <View style={styles.bottomBar}>
         {isMember ? (
-          <TouchableOpacity
-            style={styles.payButton}
-            onPress={() => navigation.navigate("MakeContribution", { circleId })}
+          <Animated.View
+            style={{
+              transform: [{ scale: shouldPulse ? pulseAnim : 1 }],
+              borderRadius: 14,
+              shadowColor: shouldPulse ? "#00C6AE" : "transparent",
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: shouldPulse ? 0.6 : 0,
+              shadowRadius: shouldPulse ? 14 : 0,
+              elevation: shouldPulse ? 8 : 0,
+            }}
           >
-            <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.payButtonText}>Contribute ${circle.amount}</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.payButton}
+              onPress={() => {
+                // Tapping Contribute clears the pulse immediately —
+                // user has acknowledged the affordance.
+                if (shouldPulse) setShouldPulse(false);
+                navigation.navigate("MakeContribution", { circleId });
+              }}
+            >
+              <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.payButtonText}>Contribute ${circle.amount}</Text>
+            </TouchableOpacity>
+          </Animated.View>
         ) : (
           <TouchableOpacity
             style={[styles.payButton, isFull && styles.payButtonDisabled]}
@@ -1436,6 +1807,17 @@ export default function CircleDetailScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Phase 2 (notification-prefs review) — per-circle mute sheet.
+          Persists to circle_notification_overrides via the hook. */}
+      <MuteCircleSheet
+        visible={muteSheetOpen}
+        circleName={circle?.name ?? ""}
+        isMuted={circleMuted}
+        onClose={() => setMuteSheetOpen(false)}
+        onMute={handleMute}
+        onUnmute={handleUnmute}
+      />
     </View>
   );
 }
@@ -1584,6 +1966,63 @@ const styles = StyleSheet.create({
     color: "#9CA3AF",
     marginTop: 2,
   },
+  // Phase 1 — circle autopay status pill that sits under the
+  // contribution amount in the stat card.
+  autopayBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    marginTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "#ECFDF5",
+  },
+  autopayBadgePaused: { backgroundColor: "#FEF3C7" },
+  autopayBadgeText: { fontSize: 10, fontWeight: "800", color: "#047857" },
+  autopayBadgeTextPaused: { color: "#92400E" },
+  // Phase 2 — muted-circle pill (sits next to the autopay pill).
+  mutedBadge: { backgroundColor: "#F3F4F6", marginTop: 4 },
+  mutedBadgeText: { color: "#1F2937" },
+
+  // Phase 2 — missed-contribution suggestion banner.
+  suggestionBanner: {
+    flexDirection: "row",
+    gap: 12,
+    padding: 14,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    marginBottom: 16,
+  },
+  suggestionTitle: { fontSize: 14, fontWeight: "700", color: "#92400E" },
+  suggestionBody: {
+    fontSize: 12,
+    color: "#92400E",
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  suggestionActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 10,
+    alignItems: "center",
+  },
+  suggestionCta: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    backgroundColor: "#92400E",
+    borderRadius: 10,
+  },
+  suggestionCtaText: { fontSize: 12, fontWeight: "700", color: "#FFFFFF" },
+  suggestionDismiss: { paddingVertical: 8 },
+  suggestionDismissText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#92400E",
+  },
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
@@ -1597,6 +2036,88 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#0A2342",
     marginBottom: 14,
+  },
+
+  // ── Invite Code card ──────────────────────────────────────────────────
+  inviteCard: {
+    backgroundColor: "#F0FDFB",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#00C6AE",
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  inviteCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+  },
+  inviteCardTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#00897B",
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  inviteCodeChipRow: {
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  inviteCodeChip: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#0A2342",
+    letterSpacing: 4,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    textAlign: "center",
+  },
+  inviteActionsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+  inviteActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  inviteActionBtnOutline: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#0A2342",
+  },
+  inviteActionBtnOutlineText: {
+    color: "#0A2342",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  inviteActionBtnCopied: {
+    backgroundColor: "#0A2342",
+    borderColor: "#0A2342",
+  },
+  inviteActionBtnCopiedText: {
+    color: "#FFFFFF",
+  },
+  inviteActionBtnPrimary: {
+    backgroundColor: "#00C6AE",
+  },
+  inviteActionBtnPrimaryText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  inviteHelpText: {
+    fontSize: 11,
+    color: "#065F46",
+    marginTop: 10,
+    lineHeight: 16,
+    fontStyle: "italic",
   },
   progressContainer: {
     marginBottom: 12,

@@ -19,6 +19,7 @@ import { RootStackParamList } from "../App";
 import * as Contacts from "expo-contacts";
 import { useFormDraft } from "../hooks/useFormDraft";
 import { CircleDraft, CIRCLE_DRAFT_KEY } from "../lib/circleDraft";
+import { supabase } from "../lib/supabase";
 
 type CreateCircleInviteNavigationProp = StackNavigationProp<RootStackParamList>;
 type CreateCircleInviteRouteProp = RouteProp<RootStackParamList, "CreateCircleInvite">;
@@ -32,20 +33,59 @@ type Contact = {
   xnScore?: number;
 };
 
-// Simulate checking which contacts are on TandaXn
-// In production, this would call your backend API with hashed phone numbers
-const checkTandaXnUsers = (contacts: Contact[]): Contact[] => {
-  // For demo purposes, randomly mark some contacts as TandaXn users
-  // In production: send hashed phone numbers to backend, get back matching users
-  return contacts.map((contact) => {
-    const isOnTandaXn = Math.random() > 0.7; // ~30% chance for demo
-    return {
-      ...contact,
-      isOnTandaXn,
-      xnScore: isOnTandaXn ? Math.floor(Math.random() * 40) + 50 : undefined,
-    };
+// Real TandaXn membership lookup — calls the SECURITY DEFINER RPC
+// `search_users_by_phone` (migration 139), which returns only the matched
+// profiles (no enumeration of the full table). The prior Math.random()
+// mock was a trust violation: it tagged contacts as "On TandaXn" who weren't,
+// and produced fake XnScore numbers. Mirrors the proven batching pattern
+// used by components/ContactPickerModal.tsx.
+//
+// The RPC caps each call at 200 phones; we batch larger contact lists.
+// Returns the contacts list with isOnTandaXn flipped on matches (xnScore
+// left undefined because the lookup RPC doesn't return it — the UI already
+// handles a missing score).
+const MATCH_BATCH_SIZE = 200;
+
+function normalizePhone(raw: string): string {
+  const trimmed = raw.trim();
+  const hasPlus = trimmed.startsWith("+");
+  const digits = trimmed.replace(/\D/g, "");
+  return hasPlus ? `+${digits}` : digits;
+}
+
+async function matchTandaXnUsers(contacts: Contact[]): Promise<Contact[]> {
+  const normalizedByContactId = new Map<string, string>();
+  const allPhones: string[] = [];
+  for (const c of contacts) {
+    const norm = normalizePhone(c.phone);
+    if (!norm) continue;
+    normalizedByContactId.set(c.id, norm);
+    allPhones.push(norm);
+  }
+  const uniquePhones = Array.from(new Set(allPhones));
+  const matched = new Set<string>();
+  for (let i = 0; i < uniquePhones.length; i += MATCH_BATCH_SIZE) {
+    const batch = uniquePhones.slice(i, i + MATCH_BATCH_SIZE);
+    const { data: rows, error } = await supabase.rpc("search_users_by_phone", {
+      phone_numbers: batch,
+    });
+    if (error) {
+      // Soft-fail this batch — leave unmatched contacts as "not on TandaXn"
+      // rather than blocking the whole screen on a transient network blip.
+      console.warn("[CreateCircleInvite] phone match batch failed:", error.message);
+      continue;
+    }
+    for (const r of (rows as { phone: string }[] | null) ?? []) {
+      if (r?.phone) matched.add(r.phone);
+    }
+  }
+  return contacts.map((c) => {
+    const norm = normalizedByContactId.get(c.id);
+    return norm && matched.has(norm)
+      ? { ...c, isOnTandaXn: true }
+      : { ...c, isOnTandaXn: false };
   });
-};
+}
 
 export default function CreateCircleInviteScreen() {
   const navigation = useNavigation<CreateCircleInviteNavigationProp>();
@@ -117,8 +157,8 @@ export default function CreateCircleInviteScreen() {
           }));
         // Show all contacts - no limit
 
-        // Check which contacts are on TandaXn
-        const contactsWithStatus = checkTandaXnUsers(processedContacts);
+        // Check which contacts are on TandaXn — real RPC, not Math.random().
+        const contactsWithStatus = await matchTandaXnUsers(processedContacts);
 
         // Sort: TandaXn users first, then alphabetically
         contactsWithStatus.sort((a, b) => {

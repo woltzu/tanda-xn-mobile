@@ -30,52 +30,34 @@ export default function JoinCircleByCodeScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Simulate extracting code from various link formats
+  // Extract a clean code from various accepted input forms — bare codes,
+  // ?code= URL params, tandaxn:// deep links, and txn.io short links.
   const extractCodeFromLink = (input: string): string => {
-    // Handle full URL with code parameter
     const urlMatch = input.match(/[?&]code=([A-Z0-9]+)/i);
     if (urlMatch) return urlMatch[1].toUpperCase();
 
-    // Handle deep link format: tandaxn://join/CODE
     const deepLinkMatch = input.match(/tandaxn:\/\/join\/([A-Z0-9]+)/i);
     if (deepLinkMatch) return deepLinkMatch[1].toUpperCase();
 
-    // Handle short link format: txn.io/CODE
     const shortLinkMatch = input.match(/txn\.io\/([A-Z0-9]+)/i);
     if (shortLinkMatch) return shortLinkMatch[1].toUpperCase();
 
-    // Just return the cleaned code
     return input.replace(/[^A-Z0-9]/gi, "").toUpperCase();
   };
 
-  // Generate invite code from circle (same logic as in CircleDetailScreen)
-  const generateInviteCode = (circle: any): string => {
-    return circle.name.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 10) +
-      new Date(circle.createdAt).getFullYear();
-  };
-
-  // Find circle by invite code - uses context function (async for database search)
+  // Exact-match lookup via the context function (which itself calls
+  // Supabase with `.eq("invite_code", ...)` — no partial-prefix fallback,
+  // so a typo can't accidentally land the user on the wrong circle). The
+  // prior local-iteration fallback used a name-derived code generator
+  // that no longer matches the server-generated 8-char codes anyway.
   const findCircleByCode = async (code: string): Promise<string | null> => {
-    // Use context function to find circle (async - searches database)
-    const foundCircle = await findCircleByInviteCode(code);
-    if (foundCircle) {
-      return foundCircle.id;
-    }
-
-    // Also search local circles directly as fallback
-    for (const circle of circles) {
-      const inviteCode = generateInviteCode(circle);
-      if (inviteCode === code || circle.inviteCode === code) {
-        return circle.id;
-      }
-    }
-
-    return null;
+    const found = await findCircleByInviteCode(code);
+    return found?.id ?? null;
   };
 
   const handleJoinByCode = async () => {
     if (inviteCode.trim().length < 4) {
-      setError("Please enter a valid invite code or link");
+      setError(t("join_by_code.error_invalid_code"));
       return;
     }
 
@@ -84,20 +66,19 @@ export default function JoinCircleByCodeScreen() {
 
     try {
       const cleanCode = extractCodeFromLink(inviteCode.trim());
-
-      // Search for circle in database
       const circleId = await findCircleByCode(cleanCode);
 
       if (circleId) {
-        // Found a circle, navigate to confirm screen
         navigation.navigate("JoinCircleConfirm", { circleId });
       } else {
-        // No circle found with this code
-        setError(`No circle found with code "${cleanCode}". Please check the code and try again.`);
+        // Exact match failed — no partial fallback. Surface the typed
+        // error key so the user gets a localized "Invite code not found"
+        // hint instead of an interpolated raw code.
+        setError(t("join_by_code.error_invite_code_not_found"));
       }
     } catch (err) {
       console.error("Error finding circle:", err);
-      setError("Something went wrong. Please try again.");
+      setError(t("join_by_code.error_generic"));
     } finally {
       setIsSearching(false);
     }

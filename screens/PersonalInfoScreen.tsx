@@ -6,57 +6,135 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
-import { useNavigation } from "@react-navigation/native";
-import { useEffect } from "react";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import type { StackNavigationProp } from "@react-navigation/stack";
+import { useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import * as Localization from "expo-localization";
 import { supabase } from "../lib/supabase";
+import { showToast } from "../components/Toast";
+import { useProfile } from "../hooks/useProfile";
+import CountryPicker, {
+  findCountryByCode,
+} from "../components/CountryPicker";
+import EmailChangeModal from "../components/EmailChangeModal";
+import type { RootStackParamList } from "../App";
+
+type Nav = StackNavigationProp<RootStackParamList>;
 
 export default function PersonalInfoScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<Nav>();
   const { t } = useTranslation();
-  const { user, updateProfile, isLoading } = useAuth();
+  const { user, updateProfile, requestPhoneChange, isLoading } = useAuth();
+  // P1 (profile review): central fetch, 60 s cache.
+  const { profile, refetch: refetchProfile } = useProfile();
 
   const [name, setName] = useState(user?.name || "");
   const [phone, setPhone] = useState(user?.phone || "");
-  // Phase 1b: city + country are direct columns on `profiles`. updateProfile
-  // (from AuthContext) doesn't accept these fields, so we save them via a
-  // direct supabase update inside handleSave. Initial values load from the
-  // DB on mount because the auth user object doesn't carry them.
   const [city, setCity] = useState("");
+  // P1: country is now an ISO 3166-1 alpha-2 code from CountryPicker.
+  // Freeform input + interim regex check from P0 are both gone.
   const [country, setCountry] = useState("");
   const [originalCity, setOriginalCity] = useState("");
   const [originalCountry, setOriginalCountry] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
+  const [avatarErrored, setAvatarErrored] = useState(false);
+  const [countryPickerOpen, setCountryPickerOpen] = useState(false);
+  // P2: editable email + phone verification + auto-detect country.
+  const [emailChangeOpen, setEmailChangeOpen] = useState(false);
+  const [pendingNewEmail, setPendingNewEmail] = useState<string | null>(null);
+  const [verifyingPhone, setVerifyingPhone] = useState(false);
+  // P2.8: device-detected country code, surfaced as a hint chip when
+  // profiles.country was empty on first mount.
+  const [detectedCountry, setDetectedCountry] = useState<string | null>(null);
+  const avatarUrl = profile?.avatar_url ?? null;
+  // True once profiles.phone_verified flips. Drives the green pill.
+  const phoneVerified = !!profile?.phone_verified;
+  // True iff the saved (verified) phone matches what's in the input —
+  // editing the field drops the badge until the next OTP success.
+  const phoneMatchesSaved = (profile?.phone ?? "") === phone;
+  // Phone is verifiable when the input has a value and either the
+  // verified flag is false OR the user has edited the field since the
+  // last verification.
+  const canVerifyPhone = phone.trim().length >= 6 && (!phoneVerified || !phoneMatchesSaved);
 
+  // Hydrate edits state from the central profile snapshot. Tracks
+  // changes against the latest `profile` so cache refreshes after
+  // saving land correctly.
+  useEffect(() => {
+    if (!profile) return;
+    const c = profile.city ?? "";
+    const co = (profile.country ?? "").toUpperCase();
+    setCity(c);
+    setCountry(co);
+    setOriginalCity(c);
+    setOriginalCountry(co);
+    setAvatarErrored(false);
+    // Mirror profile.phone into the editable input — important after
+    // OTP success bumps profile.phone via the migration 167 trigger.
+    if (profile.phone !== null) setPhone(profile.phone);
+
+    // P2.8: if profile.country is empty, pre-fill the picker from the
+    // device region and surface it as an info chip. We do NOT write to
+    // the DB here — the user has to actually save (or change country)
+    // to commit. This keeps "auto-detection" feeling suggestive rather
+    // than silently writing data the user didn't ask for.
+    if (!co) {
+      try {
+        const locales = Localization.getLocales();
+        const region = locales?.[0]?.regionCode?.toUpperCase() ?? null;
+        if (region && findCountryByCode(region)) {
+          setCountry(region);
+          setDetectedCountry(region);
+          // Surface in hasChanges so Save lights up — user can choose
+          // to accept or open the picker to override.
+          setHasChanges(true);
+        }
+      } catch {
+        // Localization can throw on web bundles missing the polyfill;
+        // skip silently.
+      }
+    }
+  }, [profile?.city, profile?.country, profile?.avatar_url, profile?.phone]);
+
+  // P2 (profile review): refetch profile every time the screen gets
+  // focus. OTPScreen's profile_edit flow flips phone_verified inside
+  // AuthContext, then pops back here — without this refetch the
+  // cached snapshot from useProfile would hide the change for up to
+  // its 60-s TTL.
+  useFocusEffect(
+    useCallback(() => {
+      refetchProfile();
+    }, [refetchProfile]),
+  );
+
+  // P2: check Supabase for a pending email change. auth.users.new_email
+  // is populated between requestEmailChange and the link click. The
+  // value persists across mounts, so we refresh on focus.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!user?.id) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("city, country")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (cancelled) return;
-      const c = data?.city ?? "";
-      const co = data?.country ?? "";
-      setCity(c);
-      setCountry(co);
-      setOriginalCity(c);
-      setOriginalCountry(co);
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (cancelled) return;
+        const newEmail = (data?.user as any)?.new_email ?? null;
+        setPendingNewEmail(newEmail || null);
+      } catch {
+        // non-fatal
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.email]);
 
   const recomputeChanges = (
     n: string,
@@ -84,18 +162,61 @@ export default function PersonalInfoScreen() {
     setHasChanges(recomputeChanges(name, phone, text, country));
   };
 
-  const handleCountryChange = (text: string) => {
-    // Country is stored as a free-form code (existing semantic: 'US', etc.).
-    // Uppercase the input so it normalises consistently.
-    setCountry(text.toUpperCase());
-    setHasChanges(recomputeChanges(name, phone, city, text.toUpperCase()));
+  const handleCountryPick = (code: string) => {
+    // P1: code is guaranteed to be a valid ISO 3166-1 alpha-2 because
+    // it came from the static picker list. No regex validation needed.
+    setCountry(code);
+    setHasChanges(recomputeChanges(name, phone, city, code));
+    setCountryPickerOpen(false);
+    // User overrode the auto-detected suggestion — drop the chip so we
+    // stop telling them about a value they already replaced.
+    setDetectedCountry(null);
+  };
+
+  // P2 (profile review): kick off the SMS OTP for the current phone
+  // input, then route to OTPScreen with from='profile_edit'. On success
+  // OTPScreen pops back here and useProfile refetch surfaces the
+  // verified flag. If anything fails before navigation we surface a
+  // toast — once on the OTP screen, errors are handled there.
+  const handleVerifyPhone = async () => {
+    const trimmed = phone.trim();
+    if (trimmed.length < 6) {
+      showToast(t("personal_info.phone_verify_invalid"), "error");
+      return;
+    }
+    setVerifyingPhone(true);
+    try {
+      await requestPhoneChange(trimmed);
+      navigation.navigate("OTP", { phone: trimmed, from: "profile_edit" });
+    } catch (e: any) {
+      showToast(
+        e?.message || t("personal_info.phone_verify_request_failed"),
+        "error",
+      );
+    } finally {
+      setVerifyingPhone(false);
+    }
+  };
+
+  // P2: after EmailChangeModal succeeds, hold the pending address in
+  // local state so the badge renders immediately. The mount-time
+  // getUser() effect refreshes it from auth.users.new_email on next
+  // open in case the user clicked through and came back.
+  const handleEmailChangeSubmitted = (newEmail: string) => {
+    setPendingNewEmail(newEmail);
+    showToast(t("email_change.toast_sent"), "success");
   };
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert(t("common.error"), t("personal_info.validation_name_empty"));
+      showToast(t("personal_info.validation_name_empty"), "error");
       return;
     }
+
+    // P1 (profile review): country is picker-driven now, so its value
+    // is either empty (optional, allowed) or a valid ISO 3166-1
+    // alpha-2 code. Interim P0 regex check is gone.
+    const trimmedCountry = country.trim();
 
     try {
       // Auth-context fields (name + phone) go through the existing flow.
@@ -113,7 +234,7 @@ export default function PersonalInfoScreen() {
           .from("profiles")
           .update({
             city: city.trim() || null,
-            country: country.trim() || null,
+            country: trimmedCountry || null,
           })
           .eq("id", user.id);
         if (error) throw error;
@@ -133,13 +254,16 @@ export default function PersonalInfoScreen() {
         }
       }
 
-      Alert.alert(
-        t("common.success"),
-        t("personal_info.save_success_body"),
-        [{ text: t("common.ok"), onPress: () => navigation.goBack() }],
-      );
+      // P2: refresh the cached profile so a return visit reflects the
+      // new name/phone without waiting for the 60-s TTL.
+      await refetchProfile();
+      // P0: swap the Alert+OK round-trip for a non-blocking toast and
+      // immediately pop back. User lands on ProfileScreen with the
+      // confirmation hanging on top of the rendered view.
+      showToast(t("personal_info.save_success_body"), "success");
+      navigation.goBack();
     } catch (error) {
-      Alert.alert(t("common.error"), t("personal_info.save_failed_body"));
+      showToast(t("personal_info.save_failed_body"), "error");
     }
   };
 
@@ -168,22 +292,29 @@ export default function PersonalInfoScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Profile Avatar */}
+          {/* Profile Avatar (P0 review): real avatar from
+              profiles.avatar_url with initial-letter fallback. The
+              dead camera button + "Change photo" affordance was
+              removed — P1 will wire a working picker. */}
           <View style={styles.avatarSection}>
             <View style={styles.avatarContainer}>
-              <LinearGradient
-                colors={["#00C6AE", "#00A896"]}
-                style={styles.avatar}
-              >
-                <Text style={styles.avatarText}>
-                  {(name || "U").charAt(0).toUpperCase()}
-                </Text>
-              </LinearGradient>
-              <TouchableOpacity style={styles.editAvatarButton}>
-                <Ionicons name="camera" size={16} color="#FFFFFF" />
-              </TouchableOpacity>
+              {avatarUrl && !avatarErrored ? (
+                <Image
+                  source={{ uri: avatarUrl }}
+                  style={styles.avatar}
+                  onError={() => setAvatarErrored(true)}
+                />
+              ) : (
+                <LinearGradient
+                  colors={["#00C6AE", "#00A896"]}
+                  style={styles.avatar}
+                >
+                  <Text style={styles.avatarText}>
+                    {(name || "U").charAt(0).toUpperCase()}
+                  </Text>
+                </LinearGradient>
+              )}
             </View>
-            <Text style={styles.changePhotoText}>{t("personal_info.change_photo")}</Text>
           </View>
 
           {/* Form Fields */}
@@ -209,29 +340,49 @@ export default function PersonalInfoScreen() {
               </View>
             </View>
 
-            {/* Email (Read-only) */}
+            {/* Email — P2: tappable. Opens EmailChangeModal which fires
+                supabase.auth.updateUser({ email }). Renders a "Pending
+                verification" pill when auth.users.new_email exists. */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>{t("personal_info.email_label")}</Text>
-              <View style={[styles.inputContainer, styles.inputDisabled]}>
+              <TouchableOpacity
+                style={styles.inputContainer}
+                onPress={() => setEmailChangeOpen(true)}
+                accessibilityRole="button"
+              >
                 <Ionicons
                   name="mail-outline"
                   size={20}
-                  color="#9CA3AF"
+                  color="#6B7280"
                   style={styles.inputIcon}
                 />
-                <TextInput
-                  style={[styles.input, styles.inputTextDisabled]}
-                  value={user?.email || ""}
-                  editable={false}
-                  placeholder={t("personal_info.email_placeholder")}
-                  placeholderTextColor="#9CA3AF"
-                />
-                <Ionicons name="lock-closed" size={16} color="#9CA3AF" />
-              </View>
-              <Text style={styles.helperText}>{t("personal_info.email_helper")}</Text>
+                <Text style={styles.input} numberOfLines={1}>
+                  {user?.email || t("personal_info.email_placeholder")}
+                </Text>
+                {pendingNewEmail ? (
+                  <View style={styles.pendingPill}>
+                    <Ionicons name="time-outline" size={11} color="#92400E" />
+                    <Text style={styles.pendingPillText}>
+                      {t("personal_info.email_pending_pill")}
+                    </Text>
+                  </View>
+                ) : null}
+                <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+              <Text style={styles.helperText}>
+                {pendingNewEmail
+                  ? t("personal_info.email_pending_helper", {
+                      email: pendingNewEmail,
+                    })
+                  : t("personal_info.email_tap_helper")}
+              </Text>
             </View>
 
-            {/* Phone */}
+            {/* Phone — P2: Verify pill (teal) when there's an
+                unverified number in the input; Verified pill (green)
+                when profile.phone_verified is true AND the input
+                matches the saved number. Editing the field drops the
+                verified state until re-verified. */}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>{t("personal_info.phone_label")}</Text>
               <View style={styles.inputContainer}>
@@ -249,7 +400,38 @@ export default function PersonalInfoScreen() {
                   placeholderTextColor="#9CA3AF"
                   keyboardType="phone-pad"
                 />
+                {phoneVerified && phoneMatchesSaved ? (
+                  <View style={styles.verifiedPill}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={12}
+                      color="#047857"
+                    />
+                    <Text style={styles.verifiedPillText}>
+                      {t("personal_info.phone_verified_pill")}
+                    </Text>
+                  </View>
+                ) : canVerifyPhone ? (
+                  <TouchableOpacity
+                    style={styles.verifyPill}
+                    onPress={handleVerifyPhone}
+                    disabled={verifyingPhone}
+                  >
+                    {verifyingPhone ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.verifyPillText}>
+                        {t("personal_info.phone_verify_pill")}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ) : null}
               </View>
+              {phoneVerified && !phoneMatchesSaved ? (
+                <Text style={styles.helperText}>
+                  {t("personal_info.phone_changed_helper")}
+                </Text>
+              ) : null}
             </View>
 
             {/* City (Phase 1b) */}
@@ -274,41 +456,61 @@ export default function PersonalInfoScreen() {
               <Text style={styles.helperText}>{t("personal_info.city_helper")}</Text>
             </View>
 
-            {/* Country (Phase 1b) */}
+            {/* Country — P1 picker. Tap to open the ISO 3166-1 alpha-2
+                modal; the chip on the right shows the current code, the
+                main label shows the display name. */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>{t("personal_info.country_label")}</Text>
-              <View style={styles.inputContainer}>
+              <Text style={styles.label}>
+                {t("personal_info.country_label")}
+              </Text>
+              <TouchableOpacity
+                style={styles.inputContainer}
+                onPress={() => setCountryPickerOpen(true)}
+                accessibilityRole="button"
+              >
                 <Ionicons
                   name="globe-outline"
                   size={20}
                   color="#6B7280"
                   style={styles.inputIcon}
                 />
-                <TextInput
-                  style={styles.input}
-                  value={country}
-                  onChangeText={handleCountryChange}
-                  placeholder={t("personal_info.country_placeholder")}
-                  placeholderTextColor="#9CA3AF"
-                  autoCapitalize="characters"
-                  maxLength={3}
-                />
-              </View>
-              <Text style={styles.helperText}>{t("personal_info.country_helper")}</Text>
+                <Text
+                  style={[
+                    styles.input,
+                    !country && styles.countryPlaceholder,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {country
+                    ? findCountryByCode(country)?.name ?? country
+                    : t("country_picker.tap_to_choose")}
+                </Text>
+                {country ? (
+                  <Text style={styles.countryCodeChip}>{country}</Text>
+                ) : null}
+                <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+              {detectedCountry ? (
+                // P2.8 (profile review): info chip the first time we
+                // auto-detect from device locale. Disappears on
+                // override (handleCountryPick clears it).
+                <View style={styles.detectedChip}>
+                  <Ionicons name="locate" size={12} color="#1E40AF" />
+                  <Text style={styles.detectedChipText}>
+                    {t("personal_info.country_detected_chip", {
+                      code: detectedCountry,
+                    })}
+                  </Text>
+                </View>
+              ) : null}
+              <Text style={styles.helperText}>
+                {t("personal_info.country_helper")}
+              </Text>
             </View>
           </View>
 
-          {/* XnScore Info */}
-          <View style={styles.xnScoreSection}>
-            <View style={styles.xnScoreCard}>
-              <View style={styles.xnScoreHeader}>
-                <Text style={styles.xnScoreIcon}>⭐</Text>
-                <Text style={styles.xnScoreTitle}>{t("personal_info.xn_score_title")}</Text>
-              </View>
-              <Text style={styles.xnScoreValue}>{user?.xnScore || 15}</Text>
-              <Text style={styles.xnScoreDesc}>{t("personal_info.xn_score_description")}</Text>
-            </View>
-          </View>
+          {/* P0 (profile review): XnScore card removed — duplicated the
+              one already on ProfileScreen's header. */}
         </ScrollView>
 
         {/* Save Button */}
@@ -329,6 +531,20 @@ export default function PersonalInfoScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      <CountryPicker
+        visible={countryPickerOpen}
+        currentCode={country}
+        onPick={handleCountryPick}
+        onClose={() => setCountryPickerOpen(false)}
+      />
+
+      <EmailChangeModal
+        visible={emailChangeOpen}
+        currentEmail={user?.email || ""}
+        onClose={() => setEmailChangeOpen(false)}
+        onSubmitted={handleEmailChangeSubmitted}
+      />
     </View>
   );
 }
@@ -394,24 +610,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
   },
-  editAvatarButton: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#0A2342",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: "#F5F7FA",
-  },
-  changePhotoText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#00C6AE",
-  },
   formSection: {
     gap: 20,
   },
@@ -448,45 +646,70 @@ const styles = StyleSheet.create({
   inputTextDisabled: {
     color: "#9CA3AF",
   },
+  countryPlaceholder: {
+    color: "#9CA3AF",
+  },
+  countryCodeChip: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#374151",
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: 8,
+    letterSpacing: 0.5,
+  },
+  // P2 (profile review) — inline status / action pills inside the
+  // phone + email rows.
+  verifyPill: {
+    backgroundColor: "#00C6AE",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    minWidth: 64,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  verifyPillText: { fontSize: 12, fontWeight: "700", color: "#FFFFFF" },
+  verifiedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  verifiedPillText: { fontSize: 11, fontWeight: "700", color: "#047857" },
+  pendingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginRight: 4,
+  },
+  pendingPillText: { fontSize: 11, fontWeight: "700", color: "#92400E" },
+  detectedChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    marginLeft: 4,
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#DBEAFE",
+  },
+  detectedChipText: { fontSize: 11, fontWeight: "700", color: "#1E40AF" },
   helperText: {
     fontSize: 12,
     color: "#6B7280",
     marginLeft: 4,
-  },
-  xnScoreSection: {
-    marginTop: 30,
-  },
-  xnScoreCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  xnScoreHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
-  },
-  xnScoreIcon: {
-    fontSize: 20,
-  },
-  xnScoreTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#0A2342",
-  },
-  xnScoreValue: {
-    fontSize: 36,
-    fontWeight: "700",
-    color: "#00C6AE",
-    marginBottom: 8,
-  },
-  xnScoreDesc: {
-    fontSize: 14,
-    color: "#6B7280",
-    lineHeight: 20,
   },
   footer: {
     position: "absolute",

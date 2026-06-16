@@ -34,7 +34,7 @@ export function usePendingPayouts(circleId?: string) {
         .from('circle_cycles')
         .select(`
           *,
-          circle:circles(name, contribution_amount),
+          circle:circles(name, contribution_amount:amount),
           recipient:profiles!circle_cycles_recipient_user_id_fkey(full_name, email)
         `)
         .eq('recipient_user_id', user.id)
@@ -197,7 +197,7 @@ export function usePayoutHistory(options: {
           .from('payout_executions')
           .select(`
             *,
-            circle:circles(name, contribution_amount)
+            circle:circles(name, contribution_amount:amount)
           `)
           .eq('recipient_user_id', user.id)
           .in('execution_status', ['completed', 'partial'])
@@ -264,7 +264,7 @@ export function usePayoutDetails(executionId: string) {
           .from('payout_executions')
           .select(`
             *,
-            circle:circles(name, contribution_amount),
+            circle:circles(name, contribution_amount:amount),
             cycle:circle_cycles(cycle_number, payout_date),
             recipient:profiles!payout_executions_recipient_user_id_fkey(full_name, email)
           `)

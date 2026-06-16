@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,26 +10,63 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Linking,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
+import { useRoute, RouteProp } from "@react-navigation/native";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
 import { getEmailRedirectUrl } from "../context/AuthContext";
+import AuthProgressStrip from "../components/AuthProgressStrip";
+
+const RESEND_COOLDOWN_SECONDS = 30;
 
 type ForgotPasswordScreenNavigationProp = StackNavigationProp<RootStackParamList, "ForgotPassword">;
+type ForgotPasswordScreenRouteProp = RouteProp<RootStackParamList, "ForgotPassword">;
+
+// Keep in sync with LoginScreen.tsx — both files read/write this key.
+const LAST_IDENTIFIER_KEY = "@tandaxn/last_login_identifier";
 
 export default function ForgotPasswordScreen() {
   const navigation = useTypedNavigation();
+  const route = useRoute<ForgotPasswordScreenRouteProp>();
   const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const [error, setError] = useState("");
+  // Resend cooldown counter. Seeded to RESEND_COOLDOWN_SECONDS the moment
+  // emailSent flips to true (initial send) AND when the user successfully
+  // resends. Ticks down to 0 via the effect below.
+  const [secondsLeft, setSecondsLeft] = useState(0);
+
+  // Pre-fill email on mount: prefer the navigation param (passed from
+  // LoginScreen if the user typed an email there before tapping
+  // "Forgot password?") and fall back to the last-used identifier in
+  // AsyncStorage. Phone-format identifiers are ignored — password
+  // reset is email-only on the Supabase side, so a pre-filled phone
+  // string would just look like a bug.
+  useEffect(() => {
+    const fromParam = route.params?.email?.trim();
+    if (fromParam && fromParam.includes("@")) {
+      setEmail(fromParam);
+      return;
+    }
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(LAST_IDENTIFIER_KEY);
+        if (stored && stored.includes("@")) setEmail(stored);
+      } catch {
+        /* AsyncStorage failure is non-fatal — pre-fill is best-effort */
+      }
+    })();
+  }, [route.params?.email]);
 
   const validateEmail = (email: string) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -61,6 +98,7 @@ export default function ForgotPasswordScreen() {
       if (resetError) throw resetError;
 
       setEmailSent(true);
+      setSecondsLeft(RESEND_COOLDOWN_SECONDS);
     } catch (err: any) {
       setError(err.message || t("forgot_password.err_send_failed"));
     } finally {
@@ -68,11 +106,79 @@ export default function ForgotPasswordScreen() {
     }
   };
 
+  const handleResend = async () => {
+    if (secondsLeft > 0 || isLoading) return;
+    setError("");
+    setIsLoading(true);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+        email,
+        { redirectTo: getEmailRedirectUrl("reset-password") },
+      );
+      if (resetError) throw resetError;
+      setSecondsLeft(RESEND_COOLDOWN_SECONDS);
+    } catch (err: any) {
+      setError(err.message || t("forgot_password.err_send_failed"));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleOpenMail = async () => {
+    // iOS Mail exposes a stable URL scheme to open the inbox. Everywhere
+    // else (Android, web), no inbox URL exists — the next-best is mailto:
+    // which opens the default mail composer; users can navigate to inbox
+    // from there.
+    const url = Platform.OS === "ios" ? "message://" : "mailto:";
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) return;
+      await Linking.openURL(url);
+    } catch {
+      /* best-effort — nothing to surface if the mail app is missing */
+    }
+  };
+
   const handleTryAgain = () => {
     setEmailSent(false);
     setEmail("");
     setError("");
+    setSecondsLeft(0);
   };
+
+  // Resend cooldown ticker. Decrements once per second while emailSent
+  // and the counter is above 0. Uses chained setTimeouts (one per tick)
+  // so cleanup is automatic when the component unmounts mid-countdown.
+  useEffect(() => {
+    if (!emailSent || secondsLeft <= 0) return;
+    const id = setTimeout(
+      () => setSecondsLeft((s) => Math.max(0, s - 1)),
+      1000,
+    );
+    return () => clearTimeout(id);
+  }, [emailSent, secondsLeft]);
+
+  // Same-device auto-jump. If the user taps the reset link on the same
+  // device while the email-sent panel is still visible, Supabase fires
+  // PASSWORD_RECOVERY (or SIGNED_IN as the session lands). Hop straight
+  // to ResetPassword so the user doesn't have to come back to this
+  // screen to dismiss it manually.
+  useEffect(() => {
+    if (!emailSent) return;
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event) => {
+        if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "ResetPassword" }],
+          });
+        }
+      },
+    );
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
+  }, [emailSent, navigation]);
 
   return (
     <View style={styles.container}>
@@ -104,38 +210,84 @@ export default function ForgotPasswordScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.formCard}
       >
+        <AuthProgressStrip step={1} />
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
           {emailSent ? (
-            /* Success State */
-            <View style={styles.successContainer}>
-              <View style={styles.successIcon}>
-                <Ionicons name="mail-open" size={60} color="#00C6AE" />
+            /* Inline "email sent" panel (P2). Compact — keeps the user
+               oriented in the flow rather than swapping to a full-screen
+               success state. */
+            <View style={styles.sentPanel}>
+              <View style={styles.sentIconRow}>
+                <Ionicons name="mail-open" size={28} color="#00C6AE" />
+                <Text style={styles.sentTitle}>
+                  {t("forgot_password.email_sent_to", { email })}
+                </Text>
               </View>
-              <Text style={styles.successTitle}>{t("forgot_password.success_title")}</Text>
-              <Text style={styles.successText}>
-                {t("forgot_password.success_text")}
+              <Text style={styles.sentHint}>
+                {t("forgot_password.spam_hint")}
               </Text>
-              <Text style={styles.emailText}>{email}</Text>
-              <Text style={styles.instructionText}>
-                {t("forgot_password.instruction")}
-              </Text>
+
+              {error ? (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={18} color="#DC2626" />
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
 
               <TouchableOpacity
                 style={styles.primaryButton}
-                onPress={() => navigation.navigate(Routes.Login)}
+                onPress={handleOpenMail}
+                accessibilityRole="button"
               >
-                <Text style={styles.primaryButtonText}>{t("forgot_password.btn_back_to_login")}</Text>
+                <Ionicons name="mail" size={18} color="#FFFFFF" />
+                <Text style={styles.primaryButtonText}>
+                  {t("forgot_password.open_mail")}
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={handleTryAgain}
+                style={[
+                  styles.secondaryActionButton,
+                  (secondsLeft > 0 || isLoading) && styles.buttonDisabled,
+                ]}
+                onPress={handleResend}
+                disabled={secondsLeft > 0 || isLoading}
+                accessibilityRole="button"
               >
-                <Text style={styles.secondaryButtonText}>
+                {isLoading ? (
+                  <ActivityIndicator color="#00C6AE" />
+                ) : (
+                  <Text style={styles.secondaryActionText}>
+                    {secondsLeft > 0
+                      ? t("forgot_password.resend_in_seconds", {
+                          count: secondsLeft,
+                        })
+                      : t("forgot_password.resend")}
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.backToLogin}
+                onPress={() => navigation.navigate(Routes.Login)}
+                accessibilityRole="button"
+              >
+                <Ionicons name="arrow-back" size={16} color="#00C6AE" />
+                <Text style={styles.backToLoginText}>
+                  {t("forgot_password.back_to_login")}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.tryAgainLink}
+                onPress={handleTryAgain}
+                accessibilityRole="button"
+              >
+                <Text style={styles.tryAgainLinkText}>
                   {t("forgot_password.btn_try_again")}
                 </Text>
               </TouchableOpacity>
@@ -358,50 +510,51 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
-  successContainer: {
+  // Inline "email sent" panel (P2). Replaces the full-screen success
+  // state — keeps the user in the same visual frame so the progress
+  // strip and form context stay continuous.
+  sentPanel: {
+    paddingTop: 4,
+  },
+  sentIconRow: {
+    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 20,
-  },
-  successIcon: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "#E6FAF7",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 24,
-  },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#0A2342",
-    marginBottom: 12,
-  },
-  successText: {
-    fontSize: 15,
-    color: "#666",
+    gap: 10,
     marginBottom: 8,
   },
-  emailText: {
-    fontSize: 16,
-    fontWeight: "600",
+  sentTitle: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "700",
     color: "#0A2342",
-    marginBottom: 16,
   },
-  instructionText: {
-    fontSize: 14,
+  sentHint: {
+    fontSize: 12,
     color: "#666",
-    textAlign: "center",
-    lineHeight: 22,
-    marginBottom: 32,
-    paddingHorizontal: 20,
+    marginBottom: 20,
+    lineHeight: 18,
   },
-  secondaryButton: {
-    paddingVertical: 12,
+  secondaryActionButton: {
+    borderWidth: 1,
+    borderColor: "#00C6AE",
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
   },
-  secondaryButtonText: {
+  secondaryActionText: {
     color: "#00C6AE",
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+  tryAgainLink: {
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  tryAgainLinkText: {
+    color: "#9CA3AF",
+    fontSize: 13,
+    fontWeight: "500",
   },
 });

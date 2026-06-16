@@ -3,10 +3,15 @@ import React, {
   useState,
   useContext,
   useEffect,
+  useRef,
   ReactNode,
 } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import i18n from "i18next";
 import { supabase } from "../lib/supabase";
+import { useAuth } from "./AuthContext";
+import { showToast } from "../components/Toast";
+import { WALLET_NUDGE_THRESHOLD_USD } from "../lib/kycTiers";
 
 export type Transaction = {
   id: string;
@@ -48,7 +53,18 @@ type WalletContextType = {
   // Funds management
   addFunds: (amount: number, method: string, currency?: string) => Promise<string>;
   withdraw: (amount: number, method: string, currency?: string) => Promise<string>;
-  sendMoney: (amount: number, recipientName: string, method: string, currency?: string) => Promise<string>;
+  sendMoney: (
+    amount: number,
+    recipientName: string,
+    method: string,
+    options: {
+      currency: string;
+      recipientIdentifier: string;
+      fundingSource: "wallet" | "stripe";
+      feeCents?: number;
+      stripePaymentIntentId?: string | null;
+    }
+  ) => Promise<string>;
   // Multi-currency operations
   addCurrencyWallet: (currencyCode: string) => Promise<void>;
   removeCurrencyWallet: (currencyCode: string) => Promise<void>;
@@ -128,12 +144,70 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
   const [transactions, setTransactions] = useState<Transaction[]>(DEFAULT_TRANSACTIONS);
   const [isLoading, setIsLoading] = useState(true);
 
+  // P0 (kyc-trigger review): read the auth-level kyc projection. The
+  // KYCGate components on each money screen are the primary defense;
+  // this closure is a server-side safety net inside sendMoney for
+  // any future call site that bypasses the screen (deep link,
+  // automation, retry from a notification handler, etc.).
+  const { user } = useAuth();
+
+  // P2 (kyc-trigger review): one-time threshold nudge. When the user's
+  // USD-equivalent wallet balance crosses the nudge threshold AND they
+  // haven't been nudged in the last 7 days AND they're not approved,
+  // we fire a non-modal toast. The persistent Home banner from P1
+  // still owns the actionable "Verify now" tap; this toast is just the
+  // wake-up that draws the user's attention to it.
+  //
+  // initialBalanceSettleRef gates the first useEffect run so the
+  // 0 → real-balance cold-start jump doesn't fire a phantom nudge
+  // for users who already had funds in their wallet.
+  const initialBalanceSettleRef = useRef(true);
+
   // Calculate total balance in USD
   const balance = currencies.reduce((total, curr) => {
     if (!curr.isActive) return total;
     if (curr.code === "USD") return total + curr.balance;
     return total + (curr.usdValue || 0);
   }, 0);
+
+  // P2 (kyc-trigger review): threshold-crossing nudge. Runs whenever
+  // balance / user / kyc.status changes. Each branch short-circuits
+  // so the common case (verified user, low balance, recently nudged)
+  // is two reads against AuthContext and one ref read.
+  useEffect(() => {
+    if (initialBalanceSettleRef.current) {
+      initialBalanceSettleRef.current = false;
+      return;
+    }
+    if (!user?.id) return;
+    if (user.kyc?.status === "approved") return;
+    if (balance < WALLET_NUDGE_THRESHOLD_USD) return;
+
+    const NUDGE_KEY = "@tandaxn_kyc_nudge_last_shown";
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const lastRaw = await AsyncStorage.getItem(NUDGE_KEY);
+        const lastMs = lastRaw ? new Date(lastRaw).getTime() : 0;
+        const now = new Date();
+        if (now.getTime() - lastMs < SEVEN_DAYS_MS) return;
+        if (cancelled) return;
+        await AsyncStorage.setItem(NUDGE_KEY, now.toISOString());
+        showToast(i18n.t("kyc_nudge.toast"), "info", 5000);
+      } catch (e) {
+        console.warn(
+          "[WalletContext] kyc threshold nudge skipped:",
+          (e as Error)?.message ?? "unknown",
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [balance, user?.id, user?.kyc?.status]);
 
   // Load wallet data from storage on mount, then reconcile USD balance
   // against the user's Supabase user_wallets row so the UI reflects
@@ -284,30 +358,196 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
     return transactionId;
   };
 
-  const sendMoney = async (amount: number, recipientName: string, method: string, currency: string = "USD"): Promise<string> => {
-    const transactionId = generateTransactionId();
-    const currencyInfo = CURRENCY_INFO[currency] || { flag: "🏳️" };
+  // Send money — calls the server-side process_send_money RPC (migration 140)
+  // which atomically debits user_wallets, resolves the recipient on TandaXn,
+  // and records a money_transfers row. Returns the canonical transfer id.
+  //
+  // The local AsyncStorage transaction list is updated optimistically for
+  // a snappy UI, but the authoritative balance comes back from the RPC's
+  // new_balance_cents — no drift between client and server.
+  const sendMoney = async (
+    amount: number,
+    recipientName: string,
+    method: string,
+    options: {
+      currency: string;
+      recipientIdentifier: string;
+      fundingSource: "wallet" | "stripe";
+      feeCents?: number;
+      stripePaymentIntentId?: string | null;
+    }
+  ): Promise<string> => {
+    // Defensive: if a caller still uses the legacy signature
+    // sendMoney(amount, name, method, "USD"), the 4th arg arrives as a
+    // STRING instead of an options object. Destructuring it would silently
+    // produce undefined for every field — JSON.stringify then drops those
+    // keys from the RPC body, and PostgREST fails with PGRST202 because
+    // the resulting (4-key) call doesn't match any function signature.
+    // Treat a non-object `options` as empty and use ?? fallbacks below.
+    const opts =
+      options && typeof options === "object" ? options : ({} as typeof options);
 
+    // P0 (kyc-trigger review): defensive gate. KYCGate on the screen
+    // is the primary guard; this throw closes the loophole where a
+    // call site bypasses the UI (e.g. background retry, deep link).
+    // The error code is the contract: any caller that catches this
+    // can route the user to the KYCHub instead of surfacing a raw
+    // RPC error. Plain text message is intentional — the screens
+    // typically translate this themselves before showing the user.
+    if (user?.kyc?.status !== "approved") {
+      const err = new Error("KYC_REQUIRED") as Error & { code?: string };
+      err.code = "KYC_REQUIRED";
+      throw err;
+    }
+
+    const {
+      currency,
+      recipientIdentifier,
+      fundingSource,
+      feeCents = 0,
+      stripePaymentIntentId = null,
+    } = opts;
+
+    const amountCents = Math.round(amount * 100);
+
+    // Surface incomplete payloads early — easier to debug than chasing
+    // PGRST202 in the Metro console.
+    if (!currency || !recipientIdentifier || !fundingSource) {
+      console.warn("[WalletContext.sendMoney] incomplete options", {
+        gotOptionsType: typeof options,
+        currency,
+        recipientIdentifier,
+        fundingSource,
+      });
+    }
+
+    // 1. Call the RPC — single source of truth. ALL 7 keys must be present
+    //    in the JSON body or PostgREST can't resolve the overload. Hence
+    //    the `??` fallbacks: the RPC's own input validation then raises a
+    //    typed exception (`missing_recipient`, `invalid_method`, etc.)
+    //    that surfaces in the catch below — much clearer than PGRST202.
+    const { data, error } = await supabase.rpc("process_send_money", {
+      p_amount_cents: amountCents,
+      p_currency: currency ?? "USD",
+      p_recipient_identifier: recipientIdentifier ?? "",
+      p_method: method ?? "wallet",
+      p_funding_source: fundingSource ?? "wallet",
+      p_fee_cents: feeCents ?? 0,
+      p_stripe_intent_id: stripePaymentIntentId ?? null,
+    });
+
+    if (error) {
+      console.error("[WalletContext.sendMoney] RPC failed", error);
+      // Surface a human-readable message for known failure codes that the
+      // RPC raises. Falls back to the generic error.message.
+      const code = (error.message || "").toLowerCase();
+      if (code.includes("insufficient_funds")) {
+        throw new Error("insufficient_funds");
+      }
+      if (code.includes("auth_required")) {
+        throw new Error("auth_required");
+      }
+      throw new Error(error.message || "send_failed");
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    const transferId: string = row?.transfer_id ?? generateTransactionId();
+    const newBalanceCents: number | null =
+      typeof row?.new_balance_cents === "number" ? row.new_balance_cents : null;
+
+    console.log("[WalletContext.sendMoney] RPC returned", {
+      transferId,
+      newBalanceCents,
+      recipientMatched: row?.recipient_matched,
+      currency,
+      fundingSource,
+    });
+
+    // 2. Update the USD row from the RPC's authoritative balance.
+    //    `user_wallets.main_balance_cents` IS the USD wallet — the RPC's
+    //    new_balance_cents is therefore always the new USD balance,
+    //    regardless of the SEND currency. Failing to update USD here is
+    //    what caused the "balance unchanged after send" bug — the prior
+    //    code keyed the local update on `c.code === currency`, so an
+    //    NGN-denominated send never updated the USD row the user actually
+    //    sees on screen.
+    //
+    //    Non-USD rows (when multi-currency lands) get an optimistic local
+    //    debit for fast UI feedback; loadWalletData() at the end is the
+    //    safety net.
+    const currencyInfo = CURRENCY_INFO[currency] || { flag: "🏳️" };
+    const newCurrencies = currencies.map((c) => {
+      if (c.code === "USD") {
+        if (newBalanceCents !== null) {
+          return { ...c, balance: newBalanceCents / 100 };
+        }
+        if (fundingSource === "wallet" && currency === "USD") {
+          return { ...c, balance: c.balance - amount - feeCents / 100 };
+        }
+        return c;
+      }
+      if (c.code === currency && fundingSource === "wallet" && currency !== "USD") {
+        return {
+          ...c,
+          balance: Math.max(0, c.balance - amount - feeCents / 100),
+        };
+      }
+      return c;
+    });
+
+    // 3. Append the local transaction record for the activity log.
     const newTransaction: Transaction = {
-      id: transactionId,
+      id: transferId,
       type: "sent",
       description: `To ${recipientName}`,
       amount: -amount,
-      currency: currency,
+      currency,
       date: formatDate(),
       recipientName,
       method,
       flag: currencyInfo.flag,
     };
 
-    // Update currency balance
-    const newCurrencies = currencies.map((c) =>
-      c.code === currency ? { ...c, balance: c.balance - amount } : c
-    );
-
     const newTransactions = [newTransaction, ...transactions];
     await saveWalletData(newCurrencies, newTransactions);
-    return transactionId;
+
+    // Phase 2 of Circle Contribution Autopay — round-up sweep. After
+    // a successful wallet-funded send, hand the cents-to-next-dollar
+    // delta to apply_round_up_to_circle_autopay (migration 173) so it
+    // credits the soonest active autopay config that has round_up
+    // enabled. Best-effort: any failure here is non-fatal — the send
+    // already succeeded.
+    if (fundingSource === "wallet") {
+      try {
+        const { data: authData } = await supabase.auth.getUser();
+        const uid = authData?.user?.id;
+        if (uid) {
+          await supabase.rpc("apply_round_up_to_circle_autopay", {
+            p_user_id: uid,
+            p_debit_amount_cents: amountCents + (feeCents ?? 0),
+          });
+        }
+      } catch (err) {
+        console.warn(
+          "[WalletContext.sendMoney] round-up sweep failed (continuing)",
+          err,
+        );
+      }
+    }
+
+    // 4. Server reconciliation — guarantees the on-screen balance matches
+    //    what the DB now holds. Idempotent and cheap; mirrors the pattern
+    //    in makeContribution(). Without this, any RPC that returns an
+    //    unexpected shape (or a NULL new_balance_cents) leaves the UI
+    //    stale. Best-effort — a reconciliation failure must not fail the
+    //    send.
+    try {
+      await loadWalletData();
+    } catch (err) {
+      console.warn("[WalletContext.sendMoney] post-send reconcile failed", err);
+    }
+
+    return transferId;
   };
 
   const addCurrencyWallet = async (currencyCode: string): Promise<void> => {

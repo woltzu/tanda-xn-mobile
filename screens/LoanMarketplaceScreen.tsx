@@ -272,7 +272,7 @@ export default function LoanMarketplaceScreen() {
           {/* How It Works */}
           <TouchableOpacity
             style={styles.howItWorksCard}
-            onPress={() => navigation.navigate(Routes.AdvanceExplanation)}
+            onPress={() => navigation.navigate(Routes.AdvanceHubV2)}
           >
             <View style={styles.howItWorksLeft}>
               <Ionicons name="help-circle" size={24} color="#00C6AE" />

@@ -221,6 +221,18 @@ export default function SettingsMainScreen() {
       subtitle: t("settings_main.item_help_subtitle"),
       route: "HelpCenter",
     },
+    // P0 (legal-docs review): wire the previously-orphan
+    // LegalDocumentsScreen into Settings. Before this row was added
+    // the route was registered but unreachable from the UI.
+    {
+      id: "legal",
+      icon: "document-text-outline",
+      iconBg: "#EFF6FF",
+      iconColor: "#3B82F6",
+      title: t("settings_main.item_legal_documents"),
+      subtitle: t("settings_main.item_legal_documents_subtitle"),
+      route: "LegalDocuments",
+    },
     {
       id: "about",
       icon: "information-circle-outline",

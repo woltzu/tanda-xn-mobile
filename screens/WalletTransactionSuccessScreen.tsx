@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute, RouteProp, CommonActions } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
@@ -21,7 +21,55 @@ type WalletTransactionSuccessRouteProp = RouteProp<RootStackParamList, "WalletTr
 export default function WalletTransactionSuccessScreen() {
   const navigation = useNavigation<WalletTransactionSuccessNavigationProp>();
   const route = useRoute<WalletTransactionSuccessRouteProp>();
-  const { type, amount, method, recipientName, transactionId } = route.params;
+  const {
+    type,
+    amount,
+    method,
+    recipientName,
+    transactionId,
+    currency,
+    convertedAmount,
+    convertedCurrency,
+    feeAmount,
+    feeCurrency,
+  } = route.params;
+  const displayCurrency = currency || "USD";
+  // Fee defaults to source currency when not specified explicitly. Most
+  // sends pay the fee out of the same currency they debit.
+  const feeDisplayCurrency = feeCurrency || displayCurrency;
+  const hasFee = typeof feeAmount === "number" && feeAmount > 0;
+  // Total debited only makes sense when both amount and fee are in the
+  // same currency — otherwise we'd be summing apples and oranges. The
+  // current Send flows always satisfy this; the guard is defensive.
+  const showTotalDebited = hasFee && feeDisplayCurrency === displayCurrency;
+  const totalDebited = hasFee ? amount + (feeAmount as number) : amount;
+
+  // Currency-aware money formatter. Intl.NumberFormat handles symbol +
+  // decimal-place rules for every ISO 4217 code — no per-currency table.
+  // Accepts an explicit currency arg so it works for both source amounts
+  // and the cross-border secondary line.
+  const formatMoney = (value: number, code?: string): string => {
+    const cur = code || displayCurrency;
+    try {
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: cur,
+      }).format(value);
+    } catch {
+      // Defensive: if a caller passed a bogus currency code, fall back to
+      // a plain number with the code as a prefix.
+      return `${cur} ${value.toFixed(2)}`;
+    }
+  };
+
+  // Cross-border display: the converted-amount line only renders when the
+  // caller actually passed both fields AND the target currency differs
+  // from the source (a USA→USA send should NOT show "≈ $1.00").
+  const showConverted =
+    typeof convertedAmount === "number" &&
+    !!convertedCurrency &&
+    convertedCurrency !== displayCurrency &&
+    convertedAmount > 0;
 
   // Animation values
   const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -67,13 +115,14 @@ export default function WalletTransactionSuccessScreen() {
   };
 
   const getSubtitle = () => {
+    const money = formatMoney(amount);
     switch (type) {
       case "add":
-        return `$${amount.toFixed(2)} has been added to your wallet`;
+        return `${money} has been added to your wallet`;
       case "withdraw":
-        return `$${amount.toFixed(2)} is on its way to your ${method}`;
+        return `${money} is on its way to your ${method}`;
       case "send":
-        return `$${amount.toFixed(2)} has been sent to ${recipientName}`;
+        return `${money} has been sent to ${recipientName}`;
       default:
         return "Transaction completed successfully";
     }
@@ -120,34 +169,22 @@ export default function WalletTransactionSuccessScreen() {
   const handleShareReceipt = async () => {
     try {
       await Share.share({
-        message: `TandaXn Transaction Receipt\n\n${getTitle()}\nAmount: $${amount.toFixed(2)}\nMethod: ${method}\n${recipientName ? `Recipient: ${recipientName}\n` : ""}Transaction ID: ${transactionId}\nDate: ${formatDate()}\n\nPowered by TandaXn`,
+        message: `TandaXn Transaction Receipt\n\n${getTitle()}\nAmount: ${formatMoney(amount)}\nMethod: ${method}\n${recipientName ? `Recipient: ${recipientName}\n` : ""}Transaction ID: ${transactionId}\nDate: ${formatDate()}\n\nPowered by TandaXn`,
       });
     } catch (error) {
       console.error("Error sharing:", error);
     }
   };
 
+  // Reset to MainTabs — the active tab navigator (Home / Circles / Action /
+  // Market / Community) has no dedicated "Wallet" tab; the wallet surface
+  // lives inside Home. Dropping the user on Home is therefore the correct
+  // "back to where the balance lives" target.
   const handleBackToWallet = () => {
-    // Navigate to MainTabs and then to the Wallet tab
-    navigation.dispatch(
-      CommonActions.reset({
-        index: 0,
-        routes: [
-          {
-            name: "MainTabs",
-            state: {
-              routes: [
-                { name: "Home" },
-                { name: "Wallet" },
-                { name: "Circles" },
-                { name: "Profile" },
-              ],
-              index: 1, // Index 1 is Wallet tab
-            },
-          },
-        ],
-      })
-    );
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "MainTabs" }],
+    });
   };
 
   return (
@@ -184,6 +221,14 @@ export default function WalletTransactionSuccessScreen() {
           >
             <Text style={styles.successTitle}>{getTitle()}</Text>
             <Text style={styles.successSubtitle}>{getSubtitle()}</Text>
+            {showConverted && (
+              <Text style={styles.convertedLine}>
+                {t("final_polish.wallettransactionsuccess_converted_approx", {
+                  amount: formatMoney(convertedAmount!, convertedCurrency!),
+                  defaultValue: `≈ ${formatMoney(convertedAmount!, convertedCurrency!)}`,
+                })}
+              </Text>
+            )}
           </Animated.View>
 
           {/* Transaction Details Card */}
@@ -200,8 +245,47 @@ export default function WalletTransactionSuccessScreen() {
 
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>{t("final_polish.wallettransactionsuccess_amount")}</Text>
-              <Text style={styles.detailValue}>${amount.toFixed(2)}</Text>
+              <Text style={styles.detailValue}>{formatMoney(amount)}</Text>
             </View>
+
+            {hasFee && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>
+                  {t("final_polish.wallettransactionsuccess_fee", {
+                    defaultValue: "Fee",
+                  })}
+                </Text>
+                <Text style={styles.detailValue}>
+                  {formatMoney(feeAmount as number, feeDisplayCurrency)}
+                </Text>
+              </View>
+            )}
+
+            {showTotalDebited && (
+              <View style={styles.detailRow}>
+                <Text style={[styles.detailLabel, styles.detailLabelBold]}>
+                  {t("final_polish.wallettransactionsuccess_total_debited", {
+                    defaultValue: "Total debited",
+                  })}
+                </Text>
+                <Text style={[styles.detailValue, styles.detailValueBold]}>
+                  {formatMoney(totalDebited)}
+                </Text>
+              </View>
+            )}
+
+            {showConverted && (
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>
+                  {t("final_polish.wallettransactionsuccess_recipient_receives", {
+                    defaultValue: "Recipient receives",
+                  })}
+                </Text>
+                <Text style={styles.detailValue}>
+                  {formatMoney(convertedAmount!, convertedCurrency!)}
+                </Text>
+              </View>
+            )}
 
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>{t("final_polish.wallettransactionsuccess_method")}</Text>
@@ -346,6 +430,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     paddingHorizontal: 20,
   },
+  convertedLine: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.65)",
+    textAlign: "center",
+    marginTop: 6,
+    fontStyle: "italic",
+  },
   detailsCard: {
     width: "100%",
     backgroundColor: "#FFFFFF",
@@ -375,6 +466,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#0A2342",
+  },
+  // Visual emphasis on the "Total debited" row — it's the number the user
+  // will want to reconcile against their wallet balance change.
+  detailLabelBold: {
+    fontWeight: "700",
+    color: "#0A2342",
+  },
+  detailValueBold: {
+    fontWeight: "800",
+    fontSize: 15,
   },
   detailValueSmall: {
     fontSize: 12,

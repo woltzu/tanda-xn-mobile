@@ -102,8 +102,8 @@ export default function OnboardingWelcomeScreen() {
       navigation.navigate(Routes.TaxIDEntry);
     } else {
       // Defensive: kycDraft.has() returned true but no recognized fields
-      // are populated. Send the user through the normal entry point.
-      navigation.navigate(Routes.VerificationOptions);
+      // are populated. Send the user through the unified KYCHub.
+      navigation.navigate(Routes.KYCHub);
     }
   };
 
@@ -216,7 +216,11 @@ export default function OnboardingWelcomeScreen() {
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.primaryButton}
-          onPress={() => navigation.navigate(Routes.VerificationOptions)}
+          // KYC deferred — drop the user straight into the app. The Home
+          // soft-banner reminds them to verify before any $-action. If they
+          // had a partial KYC draft, handleRestoreDraft is still surfaced
+          // earlier in the screen as an inline banner.
+          onPress={() => navigation.reset({ index: 0, routes: [{ name: "MainTabs" as never }] })}
           accessibilityRole="button"
           accessibilityLabel="Get started"
         >

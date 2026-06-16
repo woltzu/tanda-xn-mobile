@@ -31,7 +31,7 @@
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -42,6 +42,7 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -50,6 +51,9 @@ import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useGoalActions } from "../hooks/useGoalActions";
+import { useWallet } from "../context/WalletContext";
+import GoalAddMoneySheet from "../components/GoalAddMoneySheet";
+import GoalWithdrawSheet from "../components/GoalWithdrawSheet";
 import { supabase } from "../lib/supabase";
 import type {
   Goal as RealGoal,
@@ -339,7 +343,33 @@ export default function GoalDetailV2Screen() {
   // Real backend: fetch the goal + its transactions when a goalId is given.
   // If a fully-formed render-shaped goal was passed instead (legacy debug
   // nav from GoalsHubV2's mock cards), use it as-is.
-  const { fetchGoal } = useGoalActions();
+  const { fetchGoal, setRoundUpEnabled } = useGoalActions();
+  // P2 (migration 155) — local state for the round-up toggle on the
+  // Round-up Savings jar. Initialised from the DB row inside loadGoal()
+  // below; flipping calls the helper and refetches.
+  const [roundUpEnabled, setRoundUpEnabledLocal] = useState<boolean>(true);
+  const [roundUpSaving, setRoundUpSaving] = useState(false);
+  const [isRoundUpJar, setIsRoundUpJar] = useState(false);
+  const { balance: walletBalance } = useWallet();
+  const [showAddMoneySheet, setShowAddMoneySheet] = useState(false);
+  const [showWithdrawSheet, setShowWithdrawSheet] = useState(false);
+  // One-shot celebration when arriving from GoalCreateExpress. Reads the
+  // route param on mount and fires a single Alert so the user lands with
+  // immediate feedback. The alert is intentionally lightweight — a
+  // richer inline confetti banner is a follow-up polish item.
+  const justCreated = !!(
+    (route.params as { justCreated?: boolean } | undefined)?.justCreated
+  );
+  useEffect(() => {
+    if (justCreated) {
+      Alert.alert(
+        "🎉 Goal created!",
+        "Your new goal is ready. Tap 'Add money' below to make your first deposit.",
+      );
+    }
+    // Run once on mount only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [goal, setGoal] = useState<Goal | null>(passedGoal);
   const [transactions, setTransactions] = useState<RealTxn[] | null>(null);
   const [milestones, setMilestones] = useState<RealMilestone[]>([]);
@@ -372,6 +402,9 @@ export default function GoalDetailV2Screen() {
     setTransactions(data.transactions);
     setMilestones(data.milestones);
     setRealStatus(data.goal.status);
+    // P2 — sync the round-up toggle with the DB row (default true if NULL).
+    setRoundUpEnabledLocal(data.goal.roundUpEnabled ?? true);
+    setIsRoundUpJar(data.goal.goalType === "round_up");
 
     // Look up persisted "seen" flag. Errors are non-fatal (treated as
     // not-seen) — worst case the user sees the banner an extra time.
@@ -513,10 +546,11 @@ export default function GoalDetailV2Screen() {
 
   const handleEditGoal = () =>
     navigation.navigate(Routes.GoalEdit, { goalId: goal.id, goal });
-  const handleAddMoney = () =>
-    navigation.navigate(Routes.GoalAddMoney, { goalId: goal.id, goal });
-  const handleWithdraw = () =>
-    navigation.navigate(Routes.GoalWithdraw, { goalId: goal.id, goal });
+  // Replaced full-screen navigation with bottom-sheet modals — same
+  // atomic RPC paths (transfer_to_goal / transfer_from_goal) under the
+  // hood, but one less screen transition per deposit / withdrawal.
+  const handleAddMoney = () => setShowAddMoneySheet(true);
+  const handleWithdraw = () => setShowWithdrawSheet(true);
   const handleLinkCircle = () =>
     navigation.navigate(Routes.GoalLinkCircle, { goalId: goal.id, goal });
   // Forward real milestones via route params so GoalMilestonesScreen can
@@ -971,6 +1005,43 @@ export default function GoalDetailV2Screen() {
               ))}
             </View>
           </View>
+
+          {/* ===== P2 — Round-up jar toggle ===== */}
+          {/* Only renders for goal_type='round_up'. Flips
+              user_savings_goals.round_up_enabled so future sends stop
+              sweeping into this jar (existing balance is preserved). */}
+          {isRoundUpJar ? (
+            <View style={styles.roundUpCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.roundUpTitle}>
+                  {t("goal_detail.round_up_toggle_title")}
+                </Text>
+                <Text style={styles.roundUpBody}>
+                  {t("goal_detail.round_up_toggle_body")}
+                </Text>
+              </View>
+              <Switch
+                value={roundUpEnabled}
+                disabled={roundUpSaving}
+                onValueChange={async (next) => {
+                  setRoundUpSaving(true);
+                  const prev = roundUpEnabled;
+                  setRoundUpEnabledLocal(next);
+                  const { error } = await setRoundUpEnabled(goal.id, next);
+                  setRoundUpSaving(false);
+                  if (error) {
+                    setRoundUpEnabledLocal(prev);
+                    Alert.alert(
+                      t("goal_detail.round_up_save_failed_title"),
+                      (error as { message?: string })?.message ?? "",
+                    );
+                  }
+                }}
+                trackColor={{ false: "#D1D5DB", true: "#A7F3D0" }}
+                thumbColor={roundUpEnabled ? "#00C6AE" : "#F3F4F6"}
+              />
+            </View>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -992,6 +1063,28 @@ export default function GoalDetailV2Screen() {
           <Text style={styles.withdrawText}>{t("goal_detail.withdraw")}</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Bottom-sheet modals — replace the full-screen GoalAddMoneyScreen
+          and GoalWithdrawScreen for the common wallet-funded paths. */}
+      <GoalAddMoneySheet
+        visible={showAddMoneySheet}
+        goalId={goal.id}
+        goalName={goal.name}
+        walletBalance={walletBalance ?? 0}
+        onClose={() => setShowAddMoneySheet(false)}
+        onSuccess={() => loadGoal()}
+      />
+      <GoalWithdrawSheet
+        visible={showWithdrawSheet}
+        goalId={goal.id}
+        goalName={goal.name}
+        goalBalance={goal.currentBalance ?? 0}
+        penaltyPercent={
+          goal.savingsType === "flexible" ? 0 : 10
+        }
+        onClose={() => setShowWithdrawSheet(false)}
+        onSuccess={() => loadGoal()}
+      />
     </SafeAreaView>
   );
 }
@@ -1372,6 +1465,21 @@ const styles = StyleSheet.create({
   activityDesc: { fontSize: 13, fontWeight: "500", color: NAVY },
   activityDate: { fontSize: 11, color: MUTED, marginTop: 2 },
   activityAmount: { fontSize: 14, fontWeight: "600" },
+
+  // P2 — Round-up jar toggle card.
+  roundUpCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#F0FDFB",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    marginTop: 16,
+  },
+  roundUpTitle: { fontSize: 14, fontWeight: "700", color: NAVY },
+  roundUpBody: { fontSize: 12, color: MUTED, marginTop: 2, lineHeight: 16 },
 
   // Bottom actions
   bottomBar: {

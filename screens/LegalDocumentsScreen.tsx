@@ -1,85 +1,214 @@
-import React, { useState, useCallback } from "react";
+// LegalDocumentsScreen — P1 of the Legal documents review.
+//
+// Per-row state model:
+//
+//   * accepted              — user has accepted the current version. Show
+//                             "Accepted on YYYY-MM-DD (vN)" line.
+//   * never accepted        — fresh signup or new doc type. Banner +
+//                             auto-expand + amber "What's new" pill is
+//                             skipped (no "what's new" without a "what
+//                             was" to compare against).
+//   * requires reconfirm    — accepted an older version, current is
+//                             newer. Auto-expanded; amber "What's new"
+//                             pill renders the change_summary bullets
+//                             in the member's language.
+//
+// Pull-to-refresh on the ScrollView and useFocusEffect both call the
+// hook's refetch() — which bypasses the 5-min module cache added in P1.
+//
+// Search filter runs against the translated type label + content
+// summary (200ms debounce on input), case-insensitive. Empty input
+// short-circuits to the full list.
+//
+// Banner tap scrolls to the first pending row. We capture per-doc Y
+// offsets through onLayout — simpler than converting the ScrollView to
+// a FlatList just for scrollToIndex.
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert,
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+  TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import {
+  useFocusEffect,
+  useNavigation,
+} from "@react-navigation/native";
+import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
+import { RootStackParamList } from "../App";
 import {
   useActiveDocuments,
+  useAllAcceptances,
   usePendingAcceptances,
-  useLegalDocumentActions,
   type LegalDocument,
+  type LegalDocumentType,
+  type MemberLegalAcceptance,
 } from "../hooks/useLegalDocuments";
 import { useAuth } from "../context/AuthContext";
+import LegalVersionHistoryModal from "../components/LegalVersionHistoryModal";
+
+type NavProp = StackNavigationProp<RootStackParamList>;
 
 const COLORS = {
   navy: "#0A2342",
   teal: "#00C6AE",
   green: "#22C55E",
   orange: "#F97316",
-  red: "#EF4444",
+  amber: "#D97706",
+  amberBg: "#FEF3C7",
   bg: "#F5F7FA",
   muted: "#6B7280",
   border: "#E5E7EB",
   white: "#FFFFFF",
 };
 
-const DATA_RIGHTS: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  desc: string;
-}[] = [
-  { icon: "download-outline", label: "Download My Data", desc: "Get a copy of all your data" },
-  { icon: "trash-outline", label: "Delete My Data", desc: "Request account & data deletion" },
-  { icon: "eye-off-outline", label: "Opt Out of AI", desc: "Disable mood & stress analysis" },
-  { icon: "hand-left-outline", label: "Withdraw Consent", desc: "Revoke specific data consents" },
-];
+const TYPE_LABEL_KEY: Record<LegalDocumentType, string> = {
+  terms_of_service: "legal_documents.doc_type_terms_of_service",
+  privacy_policy: "legal_documents.doc_type_privacy_policy",
+  circle_participation: "legal_documents.doc_type_circle_participation",
+  liquidity_advance: "legal_documents.doc_type_liquidity_advance",
+  kyc_consent: "legal_documents.doc_type_kyc_consent",
+  payout_authorization: "legal_documents.doc_type_payout_authorization",
+};
+
+const SEARCH_DEBOUNCE_MS = 200;
+
+// Format an ISO timestamp to "YYYY-MM-DD". Date.now() is forbidden in
+// workflows but standard `new Date()` works fine here. Falls back to
+// the raw string so a malformed input never crashes the row.
+function formatYmd(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 
 export default function LegalDocumentsScreen() {
-  const navigation = useNavigation<any>();
-  const { t } = useTranslation();
+  const navigation = useNavigation<NavProp>();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
 
   const {
-    documents, loading: docsLoading, refetch: refetchDocs,
+    documents,
+    loading: docsLoading,
+    refetch: refetchDocs,
   } = useActiveDocuments();
 
   const {
-    pending, pendingCount, hasPending, loading: pendingLoading, refetch: refetchPending,
+    pending,
+    pendingCount,
+    hasPending,
+    loading: pendingLoading,
+    refetch: refetchPending,
   } = usePendingAcceptances(user?.id);
 
   const {
-    acceptDocument, accepting, error: actionError,
-  } = useLegalDocumentActions();
-
-  const [expandedDoc, setExpandedDoc] = useState<string | null>(null);
+    byType: acceptanceByType,
+    refetch: refetchAcceptances,
+  } = useAllAcceptances(user?.id);
 
   const loading = docsLoading || pendingLoading;
+
+  // Refetch when the screen actually comes into focus. The module
+  // cache means this is usually a no-op (hits the 5-min TTL); when
+  // it's not, the refresh is silent.
+  useFocusEffect(
+    useCallback(() => {
+      refetchDocs();
+      refetchPending();
+      refetchAcceptances();
+    }, [refetchDocs, refetchPending, refetchAcceptances]),
+  );
 
   const onRefresh = useCallback(() => {
     refetchDocs();
     refetchPending();
-  }, [refetchDocs, refetchPending]);
+    refetchAcceptances();
+  }, [refetchDocs, refetchPending, refetchAcceptances]);
 
-  // Check if a document needs re-acceptance
-  const needsReaccept = (doc: LegalDocument) => {
-    return pending.some((p) => p.documentId === doc.id);
-  };
+  // Map: documentId → pending entry. Empty for "fully accepted".
+  const pendingByDocId = useMemo(() => {
+    const map = new Map<string, (typeof pending)[number]>();
+    for (const p of pending) map.set(p.document.id, p);
+    return map;
+  }, [pending]);
 
-  const isAccepted = (doc: LegalDocument) => {
-    return !needsReaccept(doc);
-  };
+  // Search input + debounced search term used for filtering. The state
+  // split prevents the typing animation from being throttled while
+  // still keeping the filter pass cheap.
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  useEffect(() => {
+    const handle = setTimeout(
+      () => setSearchTerm(searchInput.trim().toLowerCase()),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => clearTimeout(handle);
+  }, [searchInput]);
 
-  const handleAccept = async (docId: string) => {
-    if (!user?.id) return;
-    const result = await acceptDocument(user.id, docId);
-    if (result) {
-      Alert.alert(t("legal_documents.alert_accepted_title"), t("legal_documents.alert_accepted_body"));
-      refetchPending();
-    }
-  };
+  // Per-doc state: whether the "What's new" / change-summary block is
+  // expanded. Pending docs default to true; accepted docs default to
+  // false. Tapping the pill flips.
+  const [expandedByDocId, setExpandedByDocId] = useState<
+    Record<string, boolean>
+  >({});
+
+  const titleFor = useCallback(
+    (doc: LegalDocument) =>
+      t(TYPE_LABEL_KEY[doc.documentType] ?? "legal_reader.header_default"),
+    [t],
+  );
+
+  // Filtered list (after search). Empty searchTerm → identity.
+  const visibleDocs = useMemo(() => {
+    if (!searchTerm) return documents;
+    return documents.filter((doc) => {
+      const title = titleFor(doc).toLowerCase();
+      if (title.includes(searchTerm)) return true;
+      const summary = pendingByDocId
+        .get(doc.id)
+        ?.content?.summaryText?.toLowerCase();
+      if (summary && summary.includes(searchTerm)) return true;
+      return false;
+    });
+  }, [documents, searchTerm, titleFor, pendingByDocId]);
+
+  // ── Scroll-to-pending wiring ──────────────────────────────────────
+  const scrollRef = useRef<ScrollView | null>(null);
+  // y coordinate per docId, captured via onLayout. We need the layout
+  // measurement, not the index, because rows have variable height
+  // (expanded vs collapsed, with/without summary).
+  const rowYByDocId = useRef<Record<string, number>>({});
+
+  const scrollToFirstPending = useCallback(() => {
+    const firstPending = visibleDocs.find((d) => pendingByDocId.has(d.id));
+    if (!firstPending) return;
+    const y = rowYByDocId.current[firstPending.id];
+    if (y == null) return;
+    // Offset a bit so the row isn't flush with the search bar.
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+  }, [visibleDocs, pendingByDocId]);
+
+  // ── Version-history modal state ───────────────────────────────────
+  const [historyDocType, setHistoryDocType] =
+    useState<LegalDocumentType | null>(null);
+
+  // ── Render ────────────────────────────────────────────────────────
 
   if (loading && documents.length === 0) {
     return (
@@ -92,143 +221,305 @@ export default function LegalDocumentsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.headerBtn}
+        >
           <Ionicons name="arrow-back" size={22} color={COLORS.white} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Legal & Policies</Text>
+        <Text style={styles.headerTitle}>{t("legal_documents.header")}</Text>
         <View style={styles.headerBtn} />
       </View>
 
+      <View style={styles.searchBar}>
+        <Ionicons name="search" size={16} color={COLORS.muted} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={t("legal_documents.search_placeholder")}
+          placeholderTextColor={COLORS.muted}
+          value={searchInput}
+          onChangeText={setSearchInput}
+          accessibilityLabel={t("legal_documents.search_placeholder")}
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+        {searchInput.length > 0 && (
+          <TouchableOpacity
+            onPress={() => setSearchInput("")}
+            accessibilityLabel={t("common.close")}
+          >
+            <Ionicons name="close-circle" size={16} color={COLORS.muted} />
+          </TouchableOpacity>
+        )}
+      </View>
+
       <ScrollView
+        ref={scrollRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor={COLORS.teal} />
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={onRefresh}
+            tintColor={COLORS.teal}
+          />
         }
       >
-        {/* Action Required Banner */}
         {hasPending && (
-          <View style={styles.actionBanner}>
+          <TouchableOpacity
+            style={styles.actionBanner}
+            onPress={scrollToFirstPending}
+            accessibilityRole="button"
+            accessibilityLabel={t("legal_documents.banner_pending", {
+              count: pendingCount,
+            })}
+          >
             <Ionicons name="alert-circle" size={20} color={COLORS.orange} />
             <Text style={styles.actionBannerText}>
-              {pendingCount} document{pendingCount > 1 ? "s" : ""} need
-              {pendingCount === 1 ? "s" : ""} your review
+              {t("legal_documents.banner_pending", { count: pendingCount })}
+            </Text>
+            <Ionicons name="chevron-down" size={18} color={COLORS.orange} />
+          </TouchableOpacity>
+        )}
+
+        {documents.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons
+              name="document-text-outline"
+              size={48}
+              color={COLORS.muted}
+            />
+            <Text style={styles.emptyStateText}>
+              {t("legal_documents.empty_body")}
+            </Text>
+          </View>
+        ) : visibleDocs.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="search" size={48} color={COLORS.muted} />
+            <Text style={styles.emptyStateText}>
+              {t("legal_documents.no_search_match", { term: searchInput })}
+            </Text>
+          </View>
+        ) : (
+          visibleDocs.map((doc) =>
+            renderDocCard({
+              doc,
+              t,
+              language: i18n.language,
+              pendingItem: pendingByDocId.get(doc.id),
+              acceptance: acceptanceByType.get(doc.documentType) ?? null,
+              expanded: expandedByDocId[doc.id] ?? !!pendingByDocId.get(doc.id),
+              onToggleExpanded: () =>
+                setExpandedByDocId((m) => ({
+                  ...m,
+                  [doc.id]: !(m[doc.id] ?? !!pendingByDocId.get(doc.id)),
+                })),
+              onReadFull: () =>
+                navigation.navigate("LegalDocumentReader", {
+                  documentType: doc.documentType,
+                }),
+              onShowHistory: () => setHistoryDocType(doc.documentType),
+              onLayoutY: (y: number) => {
+                rowYByDocId.current[doc.id] = y;
+              },
+              titleFor,
+            }),
+          )
+        )}
+      </ScrollView>
+
+      <LegalVersionHistoryModal
+        visible={historyDocType !== null}
+        documentType={historyDocType}
+        title={
+          historyDocType
+            ? t(TYPE_LABEL_KEY[historyDocType] ?? "legal_reader.header_default")
+            : ""
+        }
+        onClose={() => setHistoryDocType(null)}
+        onSelectVersion={(documentId) => {
+          if (!historyDocType) return;
+          const type = historyDocType;
+          setHistoryDocType(null);
+          navigation.navigate("LegalDocumentReader", {
+            documentType: type,
+            documentId,
+            readOnly: true,
+          });
+        }}
+      />
+    </View>
+  );
+}
+
+// Card render is split out so the parent body stays readable. Pure
+// function of inputs — all callbacks come from the parent.
+function renderDocCard(args: {
+  doc: LegalDocument;
+  t: (k: string, opts?: any) => string;
+  language: string;
+  pendingItem: ReturnType<
+    typeof usePendingAcceptances
+  >["pending"][number] | undefined;
+  acceptance: MemberLegalAcceptance | null;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  onReadFull: () => void;
+  onShowHistory: () => void;
+  onLayoutY: (y: number) => void;
+  titleFor: (doc: LegalDocument) => string;
+}) {
+  const {
+    doc,
+    t,
+    language,
+    pendingItem,
+    acceptance,
+    expanded,
+    onToggleExpanded,
+    onReadFull,
+    onShowHistory,
+    onLayoutY,
+    titleFor,
+  } = args;
+  const isPending = !!pendingItem;
+  const requiresReconfirm = !!pendingItem?.requiresReconfirmation;
+  const accepted = !isPending;
+
+  // Pick the change-summary bullets in the member's language with EN
+  // fallback (same precedence the engine uses elsewhere).
+  const summaryBullets: string[] = (() => {
+    if (!pendingItem) return [];
+    const raw = doc.changeSummary || {};
+    const inLang = raw[language];
+    if (Array.isArray(inLang) && inLang.length > 0) return inLang as string[];
+    const inEn = raw.en;
+    if (Array.isArray(inEn) && inEn.length > 0) return inEn as string[];
+    return [];
+  })();
+
+  return (
+    <View
+      key={doc.id}
+      style={[styles.docCard, isPending && styles.docCardPending]}
+      onLayout={(e) => onLayoutY(e.nativeEvent.layout.y)}
+    >
+      <View style={styles.docRow}>
+        <View
+          style={[
+            styles.docIcon,
+            {
+              backgroundColor: accepted
+                ? `${COLORS.green}20`
+                : `${COLORS.orange}20`,
+            },
+          ]}
+        >
+          <Ionicons
+            name={accepted ? "document-text-outline" : "alert-circle"}
+            size={20}
+            color={accepted ? COLORS.green : COLORS.orange}
+          />
+        </View>
+
+        <View style={styles.docInfo}>
+          <Text style={styles.docTitle}>{titleFor(doc)}</Text>
+          <Text style={styles.docMeta}>
+            {t("legal_documents.row_version_meta", {
+              version: doc.version,
+              date: doc.effectiveDate ?? "",
+            })}
+          </Text>
+        </View>
+
+        {accepted ? (
+          <Ionicons
+            name="checkmark-circle"
+            size={20}
+            color={COLORS.green}
+          />
+        ) : (
+          <View style={styles.reviewBadge}>
+            <Text style={styles.reviewBadgeText}>
+              {t("legal_documents.review_badge")}
             </Text>
           </View>
         )}
+      </View>
 
-        {/* Documents List */}
-        {documents.map((doc) => {
-          const isExpanded = expandedDoc === doc.id;
-          const accepted = isAccepted(doc);
-          const pendingItem = pending.find((p) => p.documentId === doc.id);
+      {accepted && acceptance ? (
+        <View style={styles.acceptedLine}>
+          <Ionicons name="checkmark-circle" size={14} color={COLORS.green} />
+          <Text style={styles.acceptedLineText}>
+            {t("legal_documents.accepted_on", {
+              date: formatYmd(acceptance.acceptedAt),
+              version: acceptance.version,
+            })}
+          </Text>
+        </View>
+      ) : null}
 
-          return (
-            <TouchableOpacity
-              key={doc.id}
-              style={[styles.docCard, !accepted && styles.docCardPending]}
-              onPress={() => setExpandedDoc(isExpanded ? null : doc.id)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.docRow}>
-                <View
-                  style={[
-                    styles.docIcon,
-                    { backgroundColor: accepted ? `${COLORS.green}20` : `${COLORS.orange}20` },
-                  ]}
-                >
-                  {accepted ? (
-                    <Ionicons name="document-text-outline" size={20} color={COLORS.green} />
-                  ) : (
-                    <Ionicons name="alert-circle" size={20} color={COLORS.orange} />
-                  )}
-                </View>
+      {requiresReconfirm ? (
+        <TouchableOpacity
+          style={styles.whatsNewPill}
+          onPress={onToggleExpanded}
+          accessibilityRole="button"
+        >
+          <Ionicons name="sparkles-outline" size={14} color={COLORS.amber} />
+          <Text style={styles.whatsNewPillText}>
+            {t("legal_documents.whats_new")}
+          </Text>
+          <Ionicons
+            name={expanded ? "chevron-up" : "chevron-down"}
+            size={14}
+            color={COLORS.amber}
+          />
+        </TouchableOpacity>
+      ) : null}
 
-                <View style={styles.docInfo}>
-                  <Text style={styles.docTitle}>{doc.title}</Text>
-                  <Text style={styles.docMeta}>
-                    v{doc.version} - Updated {doc.effectiveDate ?? ""}
-                  </Text>
-                </View>
-
-                {accepted ? (
-                  <Ionicons name="checkmark-circle" size={20} color={COLORS.green} />
-                ) : (
-                  <View style={styles.reviewBadge}>
-                    <Text style={styles.reviewBadgeText}>{t("legal_documents.review_badge")}</Text>
-                  </View>
-                )}
-
-                <Ionicons
-                  name={isExpanded ? "chevron-down" : "chevron-forward"}
-                  size={18}
-                  color={COLORS.muted}
-                  style={{ marginLeft: 6 }}
-                />
-              </View>
-
-              {isExpanded && (
-                <View style={styles.docExpanded}>
-                  <Text style={styles.docSummary}>
-                    {doc.description ?? "No description available."}
-                  </Text>
-
-                  {pendingItem?.changeSummary && pendingItem.changeSummary.length > 0 && (
-                    <View style={styles.changesBox}>
-                      <Text style={styles.changesTitle}>What Changed:</Text>
-                      {pendingItem.changeSummary.map((change, i) => (
-                        <View key={i} style={styles.changeRow}>
-                          <View style={styles.changeDot} />
-                          <Text style={styles.changeText}>{change.description}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-
-                  <TouchableOpacity style={styles.readButton}>
-                    <Ionicons name="open-outline" size={16} color={COLORS.navy} />
-                    <Text style={styles.readButtonText}>{t("legal_documents.btn_read_full")}</Text>
-                  </TouchableOpacity>
-
-                  {!accepted && (
-                    <TouchableOpacity
-                      style={styles.acceptButton}
-                      onPress={() => handleAccept(doc.id)}
-                      disabled={accepting}
-                    >
-                      {accepting ? (
-                        <ActivityIndicator size="small" color={COLORS.white} />
-                      ) : (
-                        <Text style={styles.acceptButtonText}>{t("legal_documents.btn_accept_updated")}</Text>
-                      )}
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
-            </TouchableOpacity>
-          );
-        })}
-
-        {/* Data Rights */}
-        <View style={styles.card}>
-          <Text style={styles.rightsTitle}>{t("legal_documents.rights_title")}</Text>
-          {DATA_RIGHTS.map((right, i) => (
-            <TouchableOpacity
-              key={i}
-              style={[styles.rightRow, i < DATA_RIGHTS.length - 1 && styles.rightRowBorder]}
-            >
-              <Ionicons name={right.icon} size={20} color={COLORS.teal} />
-              <View style={styles.rightInfo}>
-                <Text style={styles.rightLabel}>{right.label}</Text>
-                <Text style={styles.rightDesc}>{right.desc}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={COLORS.muted} />
-            </TouchableOpacity>
+      {isPending && expanded && summaryBullets.length > 0 ? (
+        <View style={styles.changesBox}>
+          <Text style={styles.changesTitle}>
+            {t("legal_documents.whats_new_summary_title")}
+          </Text>
+          {summaryBullets.map((bullet, i) => (
+            <View key={i} style={styles.changeRow}>
+              <View style={styles.changeDot} />
+              <Text style={styles.changeText}>{bullet}</Text>
+            </View>
           ))}
         </View>
-      </ScrollView>
+      ) : null}
+
+      {isPending && expanded && pendingItem?.content?.summaryText ? (
+        <Text style={styles.docSummary} numberOfLines={4}>
+          {pendingItem.content.summaryText}
+        </Text>
+      ) : null}
+
+      <View style={styles.actionsRow}>
+        <TouchableOpacity
+          style={styles.readButton}
+          onPress={onReadFull}
+          accessibilityRole="button"
+        >
+          <Ionicons name="open-outline" size={16} color={COLORS.navy} />
+          <Text style={styles.readButtonText}>
+            {t("legal_documents.btn_read_full")}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.historyLink}
+          onPress={onShowHistory}
+          accessibilityRole="button"
+        >
+          <Ionicons name="time-outline" size={14} color={COLORS.muted} />
+          <Text style={styles.historyLinkText}>
+            {t("legal_documents.view_previous_versions")}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -268,6 +559,25 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.white,
   },
+  searchBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.navy,
+    padding: 0,
+  },
   scrollView: {
     flex: 1,
   },
@@ -285,9 +595,22 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   actionBannerText: {
+    flex: 1,
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "600",
     color: COLORS.orange,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 40,
+    gap: 10,
+  },
+  emptyStateText: {
+    fontSize: 13,
+    color: COLORS.muted,
+    textAlign: "center",
+    paddingHorizontal: 24,
   },
   docCard: {
     backgroundColor: COLORS.white,
@@ -340,33 +663,49 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: COLORS.white,
   },
-  docExpanded: {
-    marginTop: 14,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+  acceptedLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 10,
   },
-  docSummary: {
-    fontSize: 13,
-    color: COLORS.muted,
-    lineHeight: 20,
-    marginBottom: 12,
+  acceptedLineText: {
+    fontSize: 12,
+    color: COLORS.green,
+    fontWeight: "500",
+  },
+  whatsNewPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 5,
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: COLORS.amberBg,
+  },
+  whatsNewPillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.amber,
+    letterSpacing: 0.3,
   },
   changesBox: {
     backgroundColor: `${COLORS.orange}08`,
     borderRadius: 10,
     padding: 12,
-    marginBottom: 12,
+    marginTop: 10,
   },
   changesTitle: {
     fontSize: 12,
-    fontWeight: "600",
+    fontWeight: "700",
     color: COLORS.orange,
     marginBottom: 8,
   },
   changeRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 8,
     marginBottom: 4,
   },
@@ -375,10 +714,23 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: COLORS.orange,
+    marginTop: 7,
   },
   changeText: {
+    flex: 1,
     fontSize: 12,
     color: COLORS.muted,
+    lineHeight: 17,
+  },
+  docSummary: {
+    marginTop: 10,
+    fontSize: 13,
+    color: COLORS.muted,
+    lineHeight: 19,
+  },
+  actionsRow: {
+    marginTop: 12,
+    gap: 8,
   },
   readButton: {
     flexDirection: "row",
@@ -388,63 +740,23 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bg,
     borderRadius: 10,
     paddingVertical: 12,
-    marginBottom: 8,
   },
   readButtonText: {
     fontSize: 13,
     fontWeight: "600",
     color: COLORS.navy,
   },
-  acceptButton: {
-    backgroundColor: COLORS.teal,
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  acceptButtonText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: COLORS.white,
-  },
-  card: {
-    backgroundColor: COLORS.white,
-    borderRadius: 14,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
-    overflow: "hidden",
-  },
-  rightsTitle: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: COLORS.navy,
-    padding: 16,
-    paddingBottom: 8,
-  },
-  rightRow: {
+  historyLink: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    gap: 12,
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 6,
   },
-  rightRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  rightInfo: {
-    flex: 1,
-  },
-  rightLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: COLORS.navy,
-  },
-  rightDesc: {
+  historyLinkText: {
     fontSize: 12,
     color: COLORS.muted,
-    marginTop: 2,
+    fontWeight: "500",
+    textDecorationLine: "underline",
   },
 });

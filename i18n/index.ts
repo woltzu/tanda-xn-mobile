@@ -40,6 +40,42 @@ export const APP_LANGUAGE_STORAGE_KEY = "app-language";
 export const SUPPORTED_LANGUAGES = ["en", "fr"] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
+// P1 (language-switcher review): sentinel for "follow device language".
+// Stored verbatim under APP_LANGUAGE_STORAGE_KEY; resolved to a real
+// SupportedLanguage code at read time via getEffectiveLanguage().
+export const SYSTEM_LANGUAGE_SENTINEL = "system" as const;
+
+// Resolves whichever language code i18next should currently be on.
+// "system" sentinel + unknown values both fall back to the device
+// locale and then to English.
+export function resolveDeviceLanguage(): SupportedLanguage {
+  try {
+    const locales = Localization.getLocales();
+    const detected = locales?.[0]?.languageCode ?? null;
+    if (detected && SUPPORTED_LANGUAGES.includes(detected as SupportedLanguage)) {
+      return detected as SupportedLanguage;
+    }
+  } catch {
+    // Localization can throw on edge web bundles — fall through.
+  }
+  return "en";
+}
+
+// Returns the effective language code for a given stored value.
+// Single-source-of-truth helper so PreferencesContext + i18n bootstrap
+// agree on resolution rules.
+export function resolveStoredLanguage(
+  stored: string | null,
+): SupportedLanguage {
+  if (stored === SYSTEM_LANGUAGE_SENTINEL || !stored) {
+    return resolveDeviceLanguage();
+  }
+  if (SUPPORTED_LANGUAGES.includes(stored as SupportedLanguage)) {
+    return stored as SupportedLanguage;
+  }
+  return resolveDeviceLanguage();
+}
+
 const resources = {
   en: { translation: en },
   fr: { translation: fr },
@@ -63,18 +99,7 @@ i18n.use(initReactI18next).init({
 (async () => {
   try {
     const stored = await AsyncStorage.getItem(APP_LANGUAGE_STORAGE_KEY);
-    let lang: string | null = stored;
-    if (!lang) {
-      // Localization.getLocales() is the SDK-54 idiomatic API; the older
-      // `Localization.locale` (a single string) was deprecated. Use the
-      // first entry's languageCode and fall back to 'en'.
-      const locales = Localization.getLocales();
-      lang = locales?.[0]?.languageCode ?? "en";
-    }
-    if (!lang) lang = "en";
-    if (!SUPPORTED_LANGUAGES.includes(lang as SupportedLanguage)) {
-      lang = "en";
-    }
+    const lang = resolveStoredLanguage(stored);
     if (i18n.language !== lang) {
       await i18n.changeLanguage(lang);
     }
@@ -87,14 +112,40 @@ i18n.use(initReactI18next).init({
 // the PreferencesContext setLanguage) any other UI that flips language.
 // Persists to AsyncStorage AND updates the live i18n instance so every
 // useTranslation() consumer re-renders.
-export const setAppLanguage = async (code: string) => {
-  const normalized = SUPPORTED_LANGUAGES.includes(code as SupportedLanguage)
-    ? code
-    : "en";
-  await AsyncStorage.setItem(APP_LANGUAGE_STORAGE_KEY, normalized);
-  if (i18n.language !== normalized) {
-    await i18n.changeLanguage(normalized);
+export const setAppLanguage = async (
+  code: string,
+): Promise<SupportedLanguage> => {
+  // P0 (language-switcher review): if a caller hands us a code that
+  // isn't in SUPPORTED_LANGUAGES we fall back to English — but warn
+  // so we notice (the picker should never offer an unsupported code
+  // after P0; if this fires, something else is calling this with bad
+  // data). Kept the en fallback for safety until we ship migration
+  // logic for users who already saved an unsupported code.
+  //
+  // P1 (language-switcher review): "system" sentinel is honored —
+  // stored verbatim under APP_LANGUAGE_STORAGE_KEY so subsequent
+  // reads can re-resolve against the *current* device locale.
+  // Returns the effective code so callers can update local state.
+  let storedValue: string;
+  let effective: SupportedLanguage;
+  if (code === SYSTEM_LANGUAGE_SENTINEL) {
+    storedValue = SYSTEM_LANGUAGE_SENTINEL;
+    effective = resolveDeviceLanguage();
+  } else if (SUPPORTED_LANGUAGES.includes(code as SupportedLanguage)) {
+    storedValue = code;
+    effective = code as SupportedLanguage;
+  } else {
+    console.warn(
+      `[i18n] setAppLanguage: unsupported code "${code}" — falling back to "en"`,
+    );
+    storedValue = "en";
+    effective = "en";
   }
+  await AsyncStorage.setItem(APP_LANGUAGE_STORAGE_KEY, storedValue);
+  if (i18n.language !== effective) {
+    await i18n.changeLanguage(effective);
+  }
+  return effective;
 };
 
 export default i18n;

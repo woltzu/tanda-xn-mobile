@@ -1,32 +1,22 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// screens/AdvanceHubV2Screen.tsx — ADVANCE-001 hub (Stage 8, V2 redesign)
+// screens/AdvanceHubV2Screen.tsx — Advance Hub (P1 — tabs + modal + chip)
 // ══════════════════════════════════════════════════════════════════════════════
 //
-// Translated from web JSX: 103-ADVANCE-001-AdvanceHub.jsx.
-//
-// V2 NAMING NOTE — this is the new redesign of the advance hub.
-// The existing AdvanceHubScreen.tsx (1,049 lines, wired to useAdvance
-// context) is intentionally NOT replaced. Both screens coexist until a
-// future decision on which to keep (red-emoji-gated retirement).
-//
-// The screen displays 4 advance products with 3 visual states keyed off
-// the user's XnScore:
-//   - active   → user qualifies; tappable with teal border + "ACTIVE" badge
-//   - preview  → user is close but below threshold; blue border, shows
-//                progress bar to unlock
-//   - locked   → far from threshold; greyed out, shows distance to unlock
-//
-// Route params (all optional — replaced by real useAdvance data later):
-//   user?: { name, xnScore, smc, nextPayout, onTimePayments, circlesCompleted }
-//
-// Navigation:
-//   - back chevron → goBack
-//   - "What is an Advance?" → AdvanceExplanationV2
-//   - select an active product → SmartCalculator { advanceType }
-//   - "See improvement path" → XnScoreDashboard (existing screen)
+// P1 rewrite (2026-06-12):
+//   - Three tabs (Available | Active | History) replacing the standalone
+//     AdvanceStatusDashboard and AdvanceHistory screens. Tab state lives
+//     on the hub; data is the same `useAdvanceDashboard()` payload.
+//   - First-visit explainer modal (AsyncStorage key
+//     `@tandaxn_advance_hub_seen_v1`) replacing the AdvanceExplanationV2
+//     screen entry. "What is an advance?" card now re-opens the same
+//     modal on demand.
+//   - (?) help icons on each product card → Alert.alert with the
+//     product description and a one-line use case.
+//   - Progress chip "Step 1 of 3 — Choose a product" above the content.
+//   - Gear icon in the header → AdvanceSettings (kept reachable per spec).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -35,151 +25,236 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
+  Alert,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import {
+  useAdvanceDashboard,
+  AdvanceProductCard,
+  AdvanceUiCode,
+  ActiveAdvance,
+  PastAdvance,
+} from "../hooks/useAdvanceDashboard";
+import { useKYCGate } from "../components/KYCGate";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
 const BORDER = "#E5E7EB";
 const MUTED = "#6B7280";
 const BLUE = "#3B82F6";
+const RED = "#EF4444";
 const GREEN_DARK = "#065F46";
 const GREEN_BODY = "#047857";
 
+const PRODUCT_ICON: Record<AdvanceUiCode, string> = {
+  contribution: "\u{1F6E1}️",
+  quick: "⚡",
+  flex: "\u{1F4CA}",
+  premium: "\u{1F48E}",
+};
+
+const FIRST_VISIT_KEY = "@tandaxn_advance_hub_seen_v1";
+
+type TabKey = "available" | "active" | "history";
 type ProductState = "active" | "preview" | "locked";
-type ProductId = "contribution" | "quick" | "flex" | "premium";
 
-// i18n: name/tagline/description/advanceFee/repayment carry translation
-// keys instead of literal strings. Resolved per-render via t() at the
-// call site so language flips re-paint without re-instantiating the list.
-type Product = {
-  id: ProductId;
-  nameKey: string;
-  icon: string;
-  taglineKey: string;
-  descriptionKey: string;
-  maxAdvance: number;
-  advanceFeeKey: string;
-  repaymentKey: string;
-  minScore: number;
-  state: ProductState;
-  userRateKey: string | null;
-  scoreNeeded?: number;
-};
-
-type AdvanceHubUser = {
-  name: string;
-  xnScore: number;
-  smc: number;
-  nextPayout: { amount: number; date: string; circleName: string };
-  onTimePayments: number;
-  circlesCompleted: number;
-};
-
-type AdvanceHubV2Params = {
-  user?: AdvanceHubUser;
-};
-type AdvanceHubV2RouteProp = RouteProp<
-  { AdvanceHubV2: AdvanceHubV2Params },
-  "AdvanceHubV2"
->;
-
-const DEFAULT_USER: AdvanceHubUser = {
-  name: "Franck",
-  xnScore: 72,
-  smc: 200,
-  nextPayout: { amount: 500, date: "Feb 15, 2025", circleName: "Family Circle" },
-  onTimePayments: 18,
-  circlesCompleted: 2,
-};
-
-function buildProducts(xnScore: number): Product[] {
-  const stateFor = (minScore: number): ProductState =>
-    xnScore >= minScore ? "active" : xnScore >= minScore - 10 ? "preview" : "locked";
-  return [
-    {
-      id: "contribution",
-      nameKey: "advance_hub_v2.product_contribution_name",
-      icon: "🛡️",
-      taglineKey: "advance_hub_v2.product_contribution_tagline",
-      descriptionKey: "advance_hub_v2.product_contribution_desc",
-      maxAdvance: 500,
-      advanceFeeKey: "advance_hub_v2.fee_flat",
-      repaymentKey: "advance_hub_v2.repayment_next_payout",
-      minScore: 50,
-      state: stateFor(50),
-      userRateKey: null,
-    },
-    {
-      id: "quick",
-      nameKey: "advance_hub_v2.product_quick_name",
-      icon: "⚡",
-      taglineKey: "advance_hub_v2.product_quick_tagline",
-      descriptionKey: "advance_hub_v2.product_quick_desc",
-      maxAdvance: 400,
-      advanceFeeKey: "advance_hub_v2.fee_9_5",
-      repaymentKey: "advance_hub_v2.repayment_1_4_weeks",
-      minScore: 65,
-      state: stateFor(65),
-      userRateKey: xnScore >= 65 ? "advance_hub_v2.fee_9_5" : null,
-    },
-    {
-      id: "flex",
-      nameKey: "advance_hub_v2.product_flex_name",
-      icon: "📊",
-      taglineKey: "advance_hub_v2.product_flex_tagline",
-      descriptionKey: "advance_hub_v2.product_flex_desc",
-      maxAdvance: 2500,
-      advanceFeeKey: "advance_hub_v2.fee_from_8",
-      repaymentKey: "advance_hub_v2.repayment_3_12_months",
-      minScore: 75,
-      state: stateFor(75),
-      userRateKey: null,
-      scoreNeeded: 75,
-    },
-    {
-      id: "premium",
-      nameKey: "advance_hub_v2.product_premium_name",
-      icon: "💎",
-      taglineKey: "advance_hub_v2.product_premium_tagline",
-      descriptionKey: "advance_hub_v2.product_premium_desc",
-      maxAdvance: 5000,
-      advanceFeeKey: "advance_hub_v2.fee_from_6",
-      repaymentKey: "advance_hub_v2.repayment_up_to_24",
-      minScore: 85,
-      state: stateFor(85),
-      userRateKey: null,
-      scoreNeeded: 85,
-    },
-  ];
+function productState(card: AdvanceProductCard, xnscore: number): ProductState {
+  if (card.eligible) return "active";
+  const min = card.min_xnscore ?? 999;
+  if (xnscore >= min - 10) return "preview";
+  return "locked";
 }
+
+function dollars(cents: number | null | undefined): string {
+  if (cents == null) return "—";
+  return `$${Math.round(cents / 100).toLocaleString()}`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// First-visit explainer modal — replaces AdvanceExplanationV2 screen.
+// ══════════════════════════════════════════════════════════════════════════
+
+function FirstVisitModal({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [slide, setSlide] = useState(0);
+  const isLast = slide === 1;
+  const goNext = () => {
+    if (isLast) onClose();
+    else setSlide(1);
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <Ionicons
+            name={slide === 0 ? "wallet-outline" : "swap-horizontal-outline"}
+            size={36}
+            color={TEAL}
+            style={styles.modalIcon}
+          />
+          <Text style={styles.modalTitle}>
+            {t(`advance_hub_v2.first_visit_slide${slide + 1}_title`)}
+          </Text>
+          <Text style={styles.modalBody}>
+            {t(`advance_hub_v2.first_visit_slide${slide + 1}_body`)}
+          </Text>
+          <View style={styles.modalDots}>
+            <View style={[styles.modalDot, slide === 0 && styles.modalDotActive]} />
+            <View style={[styles.modalDot, slide === 1 && styles.modalDotActive]} />
+          </View>
+          <View style={styles.modalActions}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.modalSkipBtn}
+              accessibilityRole="button"
+            >
+              <Text style={styles.modalSkipText}>
+                {t("advance_hub_v2.first_visit_skip")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={goNext}
+              style={styles.modalPrimaryBtn}
+              accessibilityRole="button"
+            >
+              <Text style={styles.modalPrimaryText}>
+                {isLast
+                  ? t("advance_hub_v2.first_visit_got_it")
+                  : t("advance_hub_v2.first_visit_next")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Screen
+// ══════════════════════════════════════════════════════════════════════════
 
 export default function AdvanceHubV2Screen() {
   const navigation = useTypedNavigation();
-  const route = useRoute<AdvanceHubV2RouteProp>();
   const { t } = useTranslation();
-  const user = route.params?.user ?? DEFAULT_USER;
-  const products = buildProducts(user.xnScore);
+  const { data, loading, error, refresh } = useAdvanceDashboard();
+  const [tab, setTab] = useState<TabKey>("available");
 
-  const availableCount = products.filter((p) => p.state === "active").length;
+  // First-visit modal — gated by AsyncStorage so it shows once per device.
+  const [showFirstVisit, setShowFirstVisit] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(FIRST_VISIT_KEY);
+        if (!cancelled && seen !== "1") setShowFirstVisit(true);
+      } catch {
+        /* AsyncStorage failures are non-fatal — skip the modal. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const dismissFirstVisit = useCallback(() => {
+    setShowFirstVisit(false);
+    AsyncStorage.setItem(FIRST_VISIT_KEY, "1").catch(() => {});
+  }, []);
+  const reopenExplainer = () => setShowFirstVisit(true);
+
+  // ── Loading / error ──────────────────────────────────────────────────
+  if (loading && !data) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+        <View style={styles.fullCenter}>
+          <ActivityIndicator size="large" color={TEAL} />
+          <Text style={styles.fullCenterLabel}>
+            {t("advance_hub_v2.loading")}
+          </Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+        <View style={styles.fullCenter}>
+          <Ionicons name="alert-circle-outline" size={36} color={RED} />
+          <Text style={styles.fullCenterLabel}>
+            {t("advance_hub_v2.load_error")}
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={refresh}>
+            <Text style={styles.retryButtonText}>
+              {t("advance_hub_v2.retry")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const xnscore = data?.xnscore ?? 0;
+  const completed = data?.completed_circles ?? 0;
+  const products = data?.products ?? [];
+  const activeAdvances = data?.active_advances ?? [];
+  const pastAdvances = data?.past_advances ?? [];
+  const outstanding = data?.outstanding_balance_cents ?? 0;
+  const nextPayment = data?.next_payment_due ?? null;
+
+  const eligibleCount = products.filter((p) => p.eligible).length;
   const availabilityLabel =
-    availableCount >= 3
-      ? t("advance_hub_v2.availability_many", { count: availableCount })
-      : availableCount === 2
+    eligibleCount >= 3
+      ? t("advance_hub_v2.availability_many", { count: eligibleCount })
+      : eligibleCount === 2
         ? t("advance_hub_v2.availability_two")
-        : availableCount === 1
+        : eligibleCount === 1
           ? t("advance_hub_v2.availability_one")
           : t("advance_hub_v2.availability_locked");
 
-  const handleSelectProduct = (product: Product) => {
-    if (product.state !== "active") return;
-    navigation.navigate(Routes.SmartCalculator, { advanceType: product.id });
+  // P0 (kyc-trigger review): unverified members get gated here at the
+  // funnel entry — Hub → SmartCalculator → Apply. Catching it before
+  // SmartCalculator is consistent with the spec ("wrap the Apply
+  // button for each advance product"); the resume snapshot just sends
+  // them back to the hub to re-pick (the product card row depends on
+  // live eligibility which can shift between gate + resume).
+  const advanceGate = useKYCGate({ resumeRoute: "AdvanceHubV2" });
+  const handleSelectProduct = async (card: AdvanceProductCard) => {
+    if (!card.eligible) return;
+    const passed = await advanceGate.ensureVerified();
+    if (!passed) return;
+    navigation.navigate(Routes.SmartCalculator, {
+      advanceType: card.ui_code,
+      product: card,
+      xnscore,
+    } as never);
   };
+
+  const openAdvanceDetails = (loanId: string) =>
+    navigation.navigate(Routes.AdvanceDetailsV2 as never, {
+      advanceId: loanId,
+    } as never);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -207,21 +282,29 @@ export default function AdvanceHubV2Screen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>{t("advance_hub_v2.header")}</Text>
-            <View style={{ width: 40 }} />
+            <TouchableOpacity
+              style={styles.gearButton}
+              onPress={() => navigation.navigate(Routes.AdvanceSettings)}
+              accessibilityRole="button"
+              accessibilityLabel={t("advance_hub_v2.settings_a11y")}
+            >
+              <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
 
           {/* XnScore display */}
           <View style={styles.scoreRow}>
             <View style={styles.scoreRing}>
-              <Text style={styles.scoreValue}>{user.xnScore}</Text>
-              <Text style={styles.scoreLabel}>{t("advance_hub_v2.score_label")}</Text>
+              <Text style={styles.scoreValue}>{xnscore}</Text>
+              <Text style={styles.scoreLabel}>
+                {t("advance_hub_v2.score_label")}
+              </Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.availabilityText}>{availabilityLabel}</Text>
               <Text style={styles.statsText}>
-                {t("advance_hub_v2.stats_text", {
-                  circles: user.circlesCompleted,
-                  payments: user.onTimePayments,
+                {t("advance_hub_v2.stats_text_completed_only", {
+                  circles: completed,
                 })}
               </Text>
               <TouchableOpacity
@@ -240,105 +323,216 @@ export default function AdvanceHubV2Screen() {
         </LinearGradient>
 
         <View style={styles.contentWrap}>
-          {/* Upcoming Payout */}
-          <View style={styles.payoutCard}>
-            <View style={styles.payoutIconBox}>
-              <Ionicons name="calendar" size={22} color={TEAL} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.payoutLabel}>
-                {t("advance_hub_v2.payout_label")}
-              </Text>
-              <Text style={styles.payoutAmount}>
-                {t("advance_hub_v2.payout_amount", {
-                  amount: user.nextPayout.amount,
-                  date: user.nextPayout.date,
-                })}
-              </Text>
-              <Text style={styles.payoutCircle}>{user.nextPayout.circleName}</Text>
-            </View>
-            <View style={{ alignItems: "flex-end" }}>
-              <Text style={styles.advanceUpToLabel}>{t("advance_hub_v2.advance_up_to_label")}</Text>
-              <Text style={styles.advanceUpToValue}>
-                ${Math.floor(user.nextPayout.amount * 0.8)}
-              </Text>
-            </View>
-          </View>
-
-          {/* What is an Advance? */}
-          <TouchableOpacity
-            style={styles.learnCard}
-            onPress={() => navigation.navigate(Routes.AdvanceExplanationV2)}
-            accessibilityRole="button"
-            accessibilityLabel="Learn what an advance payout is"
-          >
-            <View style={styles.learnIconBox}>
-              <Ionicons name="information-circle" size={20} color={TEAL} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.learnTitle}>
-                {t("advance_hub_v2.learn_title")}
-              </Text>
-              <Text style={styles.learnBody}>
-                {t("advance_hub_v2.learn_body")}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={TEAL} />
-          </TouchableOpacity>
-
-          {/* Product cards */}
-          <View style={styles.productsList}>
-            {products.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                userXnScore={user.xnScore}
-                onPress={() => handleSelectProduct(product)}
-                t={t}
-              />
-            ))}
-          </View>
-
-          {/* Comparison note */}
-          <View style={styles.comparisonNote}>
-            <View style={styles.comparisonHeader}>
-              <Ionicons name="star" size={18} color="#00897B" />
-              <Text style={styles.comparisonTitle}>{t("advance_hub_v2.comparison_title")}</Text>
-            </View>
-            <Text style={styles.comparisonBody}>
-              <Text style={styles.comparisonStrong}>{t("advance_hub_v2.comparison_local")}</Text>
-              {" | "}
-              <Text style={styles.comparisonStrong}>{t("advance_hub_v2.comparison_payday")}</Text>
-              {" | "}
-              <Text style={styles.comparisonStrong}>{t("advance_hub_v2.comparison_tandaxn")}</Text>
-              {t("advance_hub_v2.comparison_tagline")}
+          {/* Progress chip */}
+          <View style={styles.progressChip}>
+            <Ionicons name="ellipse" size={8} color={TEAL} />
+            <Text style={styles.progressChipText}>
+              {t("advance_hub_v2.progress_step_1")}
             </Text>
           </View>
+
+          {/* Outstanding-balance summary (top of every tab when applicable) */}
+          {activeAdvances.length > 0 ? (
+            <View style={styles.outstandingCard}>
+              <View style={styles.outstandingIconBox}>
+                <Ionicons name="receipt-outline" size={22} color={TEAL} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.outstandingLabel}>
+                  {t("advance_hub_v2.outstanding_label")}
+                </Text>
+                <Text style={styles.outstandingAmount}>
+                  {dollars(outstanding)}
+                </Text>
+                {nextPayment ? (
+                  <Text style={styles.outstandingNext}>
+                    {t("advance_hub_v2.next_payment_due", {
+                      amount: dollars(nextPayment.amount_cents),
+                      date: nextPayment.date ?? "—",
+                    })}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+
+          {/* Tab bar (segmented control) */}
+          <View style={styles.tabBar}>
+            {(["available", "active", "history"] as TabKey[]).map((key) => {
+              const isActive = tab === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  onPress={() => setTab(key)}
+                  style={[styles.tab, isActive && styles.tabActive]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
+                >
+                  <Text
+                    style={[
+                      styles.tabText,
+                      isActive && styles.tabTextActive,
+                    ]}
+                  >
+                    {t(`advance_hub_v2.tab_${key}`)}
+                  </Text>
+                  {key === "active" && activeAdvances.length > 0 ? (
+                    <View style={styles.tabBadge}>
+                      <Text style={styles.tabBadgeText}>
+                        {activeAdvances.length}
+                      </Text>
+                    </View>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* AVAILABLE TAB */}
+          {tab === "available" ? (
+            <>
+              {/* "What is an Advance?" — re-opens the first-visit modal */}
+              <TouchableOpacity
+                style={styles.learnCard}
+                onPress={reopenExplainer}
+                accessibilityRole="button"
+                accessibilityLabel="Learn what an advance is"
+              >
+                <View style={styles.learnIconBox}>
+                  <Ionicons
+                    name="information-circle"
+                    size={20}
+                    color={TEAL}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.learnTitle}>
+                    {t("advance_hub_v2.learn_title")}
+                  </Text>
+                  <Text style={styles.learnBody}>
+                    {t("advance_hub_v2.learn_body")}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={TEAL} />
+              </TouchableOpacity>
+
+              <View style={styles.productsList}>
+                {products.map((p) => (
+                  <ProductCard
+                    key={p.ui_code}
+                    card={p}
+                    xnscore={xnscore}
+                    onPress={() => handleSelectProduct(p)}
+                    t={t}
+                  />
+                ))}
+              </View>
+
+              {/* Comparison note */}
+              <View style={styles.comparisonNote}>
+                <View style={styles.comparisonHeader}>
+                  <Ionicons name="star" size={18} color="#00897B" />
+                  <Text style={styles.comparisonTitle}>
+                    {t("advance_hub_v2.comparison_title")}
+                  </Text>
+                </View>
+                <Text style={styles.comparisonBody}>
+                  <Text style={styles.comparisonStrong}>
+                    {t("advance_hub_v2.comparison_local")}
+                  </Text>
+                  {" | "}
+                  <Text style={styles.comparisonStrong}>
+                    {t("advance_hub_v2.comparison_payday")}
+                  </Text>
+                  {" | "}
+                  <Text style={styles.comparisonStrong}>
+                    {t("advance_hub_v2.comparison_tandaxn")}
+                  </Text>
+                  {t("advance_hub_v2.comparison_tagline")}
+                </Text>
+              </View>
+            </>
+          ) : null}
+
+          {/* ACTIVE TAB */}
+          {tab === "active" ? (
+            <View style={styles.listWrap}>
+              {activeAdvances.length === 0 ? (
+                <EmptyState
+                  icon="receipt-outline"
+                  label={t("advance_hub_v2.empty_active")}
+                />
+              ) : (
+                activeAdvances.map((a) => (
+                  <ActiveRow
+                    key={a.loan_id}
+                    advance={a}
+                    onPress={() => openAdvanceDetails(a.loan_id)}
+                    t={t}
+                  />
+                ))
+              )}
+            </View>
+          ) : null}
+
+          {/* HISTORY TAB */}
+          {tab === "history" ? (
+            <View style={styles.listWrap}>
+              {pastAdvances.length === 0 ? (
+                <EmptyState
+                  icon="time-outline"
+                  label={t("advance_hub_v2.empty_history")}
+                />
+              ) : (
+                pastAdvances.map((p) => (
+                  <PastRow key={p.entry_id} advance={p} t={t} />
+                ))
+              )}
+            </View>
+          ) : null}
         </View>
       </ScrollView>
+
+      <FirstVisitModal
+        visible={showFirstVisit}
+        onClose={dismissFirstVisit}
+      />
     </SafeAreaView>
   );
 }
 
-// ── Product card sub-component ───────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+// Sub-components
+// ══════════════════════════════════════════════════════════════════════════
 
 function ProductCard({
-  product,
-  userXnScore,
+  card,
+  xnscore,
   onPress,
   t,
 }: {
-  product: Product;
-  userXnScore: number;
+  card: AdvanceProductCard;
+  xnscore: number;
   onPress: () => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
-  const styling = stateStyling(product.state, t);
-  const progress = product.scoreNeeded
-    ? Math.min(100, Math.round((userXnScore / product.scoreNeeded) * 100))
-    : 100;
-  const pointsNeeded = product.scoreNeeded ? product.scoreNeeded - userXnScore : 0;
-  const productName = t(product.nameKey);
+  const state = productState(card, xnscore);
+  const styling = stateStyling(state, t);
+  const min = card.min_xnscore ?? 0;
+  const progress = min > 0 ? Math.min(100, Math.round((xnscore / min) * 100)) : 100;
+  const pointsNeeded = card.points_to_unlock ?? 0;
+  const icon = PRODUCT_ICON[card.ui_code];
+  const productName =
+    card.name ?? t(`advance_hub_v2.product_${card.ui_code}_name`);
+  const productTagline = t(`advance_hub_v2.product_${card.ui_code}_tagline`);
+  const productDescription =
+    card.description ?? t(`advance_hub_v2.product_${card.ui_code}_desc`);
+
+  const openHelp = () =>
+    Alert.alert(
+      t(`advance_hub_v2.help_${card.ui_code}_title`),
+      t(`advance_hub_v2.help_${card.ui_code}_body`),
+    );
 
   return (
     <TouchableOpacity
@@ -352,15 +546,25 @@ function ProductCard({
         },
       ]}
       onPress={onPress}
-      disabled={product.state === "locked"}
-      activeOpacity={product.state === "active" ? 0.85 : 1}
+      disabled={state !== "active"}
+      activeOpacity={state === "active" ? 0.85 : 1}
       accessibilityRole="button"
-      accessibilityState={{ disabled: product.state === "locked" }}
+      accessibilityState={{ disabled: state !== "active" }}
       accessibilityLabel={`${productName}, ${styling.badgeLabel}`}
     >
       <View style={[styles.stateBadge, { backgroundColor: styling.badgeBg }]}>
         <Text style={styles.stateBadgeText}>{styling.badgeLabel}</Text>
       </View>
+
+      <TouchableOpacity
+        style={styles.helpButton}
+        onPress={openHelp}
+        accessibilityRole="button"
+        accessibilityLabel={t(`advance_hub_v2.help_${card.ui_code}_title`)}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Ionicons name="help-circle-outline" size={18} color={MUTED} />
+      </TouchableOpacity>
 
       <View style={styles.productInner}>
         <View
@@ -368,16 +572,16 @@ function ProductCard({
             styles.productIconBox,
             {
               backgroundColor:
-                product.state === "active"
+                state === "active"
                   ? "#F0FDFB"
-                  : product.state === "preview"
+                  : state === "preview"
                     ? "#EFF6FF"
                     : "#F5F7FA",
-              opacity: product.state === "locked" ? 0.6 : 1,
+              opacity: state === "locked" ? 0.6 : 1,
             },
           ]}
         >
-          <Text style={styles.productIcon}>{product.icon}</Text>
+          <Text style={styles.productIcon}>{icon}</Text>
         </View>
 
         <View style={{ flex: 1 }}>
@@ -387,87 +591,105 @@ function ProductCard({
               styles.productTagline,
               {
                 color:
-                  product.state === "active"
+                  state === "active"
                     ? TEAL
-                    : product.state === "preview"
+                    : state === "preview"
                       ? BLUE
                       : MUTED,
               },
             ]}
           >
-            {t(product.taglineKey)}
+            {productTagline}
           </Text>
-          <Text style={styles.productDescription}>{t(product.descriptionKey)}</Text>
+          <Text style={styles.productDescription}>{productDescription}</Text>
 
-          {/* Stats row */}
           <View style={styles.statsRow}>
             <View>
-              <Text style={styles.statLabel}>{t("advance_hub_v2.stat_max_advance")}</Text>
+              <Text style={styles.statLabel}>
+                {t("advance_hub_v2.stat_max_advance")}
+              </Text>
               <Text style={styles.statValueNavy}>
-                {t("advance_hub_v2.stat_max_advance_value", { amount: product.maxAdvance.toLocaleString() })}
+                {t("advance_hub_v2.stat_max_advance_value", {
+                  amount: dollars(card.max_amount_cents).replace("$", ""),
+                })}
               </Text>
             </View>
             <View>
-              <Text style={styles.statLabel}>{t("advance_hub_v2.stat_advance_fee")}</Text>
+              <Text style={styles.statLabel}>
+                {t("advance_hub_v2.stat_advance_fee")}
+              </Text>
               <Text style={styles.statValueTeal}>
-                {product.state === "active" && product.userRateKey
-                  ? t(product.userRateKey)
-                  : t(product.advanceFeeKey)}
+                {card.estimated_apr != null
+                  ? `${card.estimated_apr.toFixed(1)}%`
+                  : "—"}
               </Text>
             </View>
             <View>
-              <Text style={styles.statLabel}>{t("advance_hub_v2.stat_repayment")}</Text>
-              <Text style={styles.statValueNavy}>{t(product.repaymentKey)}</Text>
+              <Text style={styles.statLabel}>
+                {t("advance_hub_v2.stat_repayment")}
+              </Text>
+              <Text style={styles.statValueNavy}>
+                {card.min_term_months && card.max_term_months
+                  ? card.min_term_months === card.max_term_months
+                    ? t("advance_hub_v2.term_n_months", {
+                        n: card.min_term_months,
+                      })
+                    : t("advance_hub_v2.term_range_months", {
+                        min: card.min_term_months,
+                        max: card.max_term_months,
+                      })
+                  : "—"}
+              </Text>
             </View>
           </View>
 
-          {/* Unlock progress for non-active states */}
-          {(product.state === "preview" || product.state === "locked") &&
-            product.scoreNeeded && (
-              <View style={styles.unlockBlock}>
-                <View style={styles.unlockTopRow}>
-                  <Text style={styles.unlockLabel}>
-                    {t("advance_hub_v2.unlock_progress_label")}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.unlockProgressText,
-                      product.state === "preview" && { color: BLUE },
-                    ]}
-                  >
-                    {userXnScore}/{product.scoreNeeded}
-                  </Text>
-                </View>
-                <View style={styles.progressBg}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      {
-                        width: `${progress}%`,
-                        backgroundColor:
-                          product.state === "preview" ? BLUE : "#9CA3AF",
-                      },
-                    ]}
-                  />
-                </View>
+          {state !== "active" && card.min_xnscore != null ? (
+            <View style={styles.unlockBlock}>
+              <View style={styles.unlockTopRow}>
+                <Text style={styles.unlockLabel}>
+                  {t("advance_hub_v2.unlock_progress_label")}
+                </Text>
                 <Text
                   style={[
-                    styles.unlockHint,
-                    product.state === "preview" && { color: BLUE },
+                    styles.unlockProgressText,
+                    state === "preview" && { color: BLUE },
                   ]}
                 >
-                  {product.state === "preview"
-                    ? t("advance_hub_v2.unlock_hint_preview", { points: pointsNeeded })
-                    : t("advance_hub_v2.unlock_hint_locked", {
-                        payments: Math.ceil(pointsNeeded / 2),
-                        target: product.scoreNeeded,
-                      })}
+                  {xnscore}/{card.min_xnscore}
                 </Text>
               </View>
-            )}
+              <View style={styles.progressBg}>
+                <View
+                  style={[
+                    styles.progressFillSm,
+                    {
+                      width: `${progress}%`,
+                      backgroundColor:
+                        state === "preview" ? BLUE : "#9CA3AF",
+                    },
+                  ]}
+                />
+              </View>
+              <Text
+                style={[
+                  styles.unlockHint,
+                  state === "preview" && { color: BLUE },
+                ]}
+              >
+                {state === "preview"
+                  ? t("advance_hub_v2.unlock_hint_preview", {
+                      points: pointsNeeded,
+                    })
+                  : t("advance_hub_v2.unlock_hint_locked", {
+                      payments: Math.ceil(pointsNeeded / 2),
+                      target: card.min_xnscore,
+                    })}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
-        {product.state === "active" && (
+        {state === "active" && (
           <Ionicons name="chevron-forward" size={20} color={TEAL} />
         )}
       </View>
@@ -475,10 +697,164 @@ function ProductCard({
   );
 }
 
-function stateStyling(
-  state: ProductState,
+function ActiveRow({
+  advance,
+  onPress,
+  t,
+}: {
+  advance: ActiveAdvance;
+  onPress: () => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const icon = (advance.db_code && PRODUCT_ICON_BY_DB[advance.db_code]) ?? "💼";
+  return (
+    <TouchableOpacity
+      style={styles.listRow}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${advance.product_name ?? "Advance"}, $${(advance.outstanding_cents / 100).toFixed(2)} outstanding`}
+    >
+      <View style={styles.listIconBox}>
+        <Text style={styles.listIcon}>{icon}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.listTitle}>
+          {advance.product_name ?? t("advance_hub_v2.advance_label")}
+        </Text>
+        <Text style={styles.listSubtitle}>
+          {t("advance_hub_v2.outstanding_short", {
+            amount: dollars(advance.outstanding_cents),
+          })}
+        </Text>
+        {advance.next_payment_date ? (
+          <Text style={styles.listSubtitleMuted}>
+            {t("advance_hub_v2.next_payment_inline", {
+              amount: dollars(advance.next_payment_cents ?? 0),
+              date: advance.next_payment_date,
+            })}
+          </Text>
+        ) : null}
+      </View>
+      {advance.is_delinquent ? (
+        <View style={[styles.listPill, { backgroundColor: "#FEE2E2" }]}>
+          <Text style={[styles.listPillText, { color: "#DC2626" }]}>
+            {t("advance_hub_v2.delinquent_pill")}
+          </Text>
+        </View>
+      ) : (
+        <Ionicons name="chevron-forward" size={18} color={MUTED} />
+      )}
+    </TouchableOpacity>
+  );
+}
+
+function PastRow({
+  advance,
+  t,
+}: {
+  advance: PastAdvance;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const icon = (advance.db_code && PRODUCT_ICON_BY_DB[advance.db_code]) ?? "💼";
+  const pill = pastStatusPill(advance.status, t);
+  return (
+    <View style={styles.listRow}>
+      <View style={styles.listIconBox}>
+        <Text style={styles.listIcon}>{icon}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.listTitle}>
+          {advance.product_name ?? t("advance_hub_v2.advance_label")}
+        </Text>
+        <Text style={styles.listSubtitle}>
+          {t("advance_hub_v2.principal_short", {
+            amount: dollars(advance.principal_cents),
+          })}
+        </Text>
+        {advance.closed_at ? (
+          <Text style={styles.listSubtitleMuted}>
+            {new Date(advance.closed_at).toLocaleDateString()}
+          </Text>
+        ) : null}
+      </View>
+      <View style={[styles.listPill, { backgroundColor: pill.bg }]}>
+        <Text style={[styles.listPillText, { color: pill.color }]}>
+          {pill.label}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function EmptyState({
+  icon,
+  label,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+}) {
+  return (
+    <View style={styles.emptyState}>
+      <Ionicons name={icon} size={36} color={MUTED} />
+      <Text style={styles.emptyStateText}>{label}</Text>
+    </View>
+  );
+}
+
+const PRODUCT_ICON_BY_DB: Record<string, string> = {
+  circle_boost: "\u{1F6E1}️",
+  micro_emergency: "⚡",
+  education: "\u{1F4CA}",
+  small_business: "\u{1F48E}",
+};
+
+function pastStatusPill(
+  status: string,
   t: (key: string) => string,
-) {
+): { label: string; bg: string; color: string } {
+  switch (status) {
+    case "paid_off":
+      return {
+        label: t("advance_hub_v2.history_status_paid"),
+        bg: "#F0FDF4",
+        color: "#166534",
+      };
+    case "defaulted":
+      return {
+        label: t("advance_hub_v2.history_status_defaulted"),
+        bg: "#FEE2E2",
+        color: "#DC2626",
+      };
+    case "written_off":
+      return {
+        label: t("advance_hub_v2.history_status_written_off"),
+        bg: "#FEE2E2",
+        color: "#DC2626",
+      };
+    case "rejected":
+      return {
+        label: t("advance_hub_v2.history_status_rejected"),
+        bg: "#FEF3C7",
+        color: "#92400E",
+      };
+    case "cancelled":
+      return {
+        label: t("advance_hub_v2.history_status_cancelled"),
+        bg: "#F5F7FA",
+        color: MUTED,
+      };
+    case "expired":
+      return {
+        label: t("advance_hub_v2.history_status_expired"),
+        bg: "#F5F7FA",
+        color: MUTED,
+      };
+    default:
+      return { label: status, bg: "#F5F7FA", color: MUTED };
+  }
+}
+
+function stateStyling(state: ProductState, t: (key: string) => string) {
   switch (state) {
     case "active":
       return {
@@ -510,10 +886,31 @@ function stateStyling(
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// Styles
+// ══════════════════════════════════════════════════════════════════════════
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#F5F7FA" },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 40 },
+
+  fullCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    padding: 24,
+  },
+  fullCenterLabel: { fontSize: 14, color: MUTED, textAlign: "center" },
+  retryButton: {
+    marginTop: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: TEAL,
+    borderRadius: 10,
+  },
+  retryButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
 
   header: { paddingTop: 20, paddingBottom: 80, paddingHorizontal: 20 },
   headerTopRow: {
@@ -535,6 +932,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+  gearButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   scoreRow: { flexDirection: "row", alignItems: "center", gap: 16 },
@@ -572,7 +977,22 @@ const styles = StyleSheet.create({
 
   contentWrap: { marginTop: -40, paddingHorizontal: 20 },
 
-  payoutCard: {
+  progressChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  progressChipText: { fontSize: 11, fontWeight: "700", color: NAVY },
+
+  outstandingCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -583,7 +1003,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
   },
-  payoutIconBox: {
+  outstandingIconBox: {
     width: 44,
     height: 44,
     borderRadius: 12,
@@ -591,21 +1011,45 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  payoutLabel: { fontSize: 12, color: MUTED },
-  payoutAmount: {
-    fontSize: 16,
+  outstandingLabel: { fontSize: 12, color: MUTED },
+  outstandingAmount: {
+    fontSize: 18,
     fontWeight: "700",
     color: NAVY,
     marginTop: 2,
   },
-  payoutCircle: { fontSize: 11, color: MUTED, marginTop: 2 },
-  advanceUpToLabel: { fontSize: 11, color: MUTED },
-  advanceUpToValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: TEAL,
-    marginTop: 2,
+  outstandingNext: { fontSize: 11, color: MUTED, marginTop: 2 },
+
+  tabBar: {
+    flexDirection: "row",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
   },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 8,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 6,
+  },
+  tabActive: { backgroundColor: NAVY },
+  tabText: { fontSize: 13, fontWeight: "600", color: MUTED },
+  tabTextActive: { color: "#FFFFFF" },
+  tabBadge: {
+    backgroundColor: TEAL,
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    minWidth: 18,
+    alignItems: "center",
+  },
+  tabBadgeText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
 
   learnCard: {
     flexDirection: "row",
@@ -639,10 +1083,17 @@ const styles = StyleSheet.create({
     padding: 16,
     position: "relative",
   },
+  helpButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    padding: 4,
+    zIndex: 1,
+  },
   stateBadge: {
     position: "absolute",
     top: -8,
-    right: 16,
+    right: 36,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
@@ -695,7 +1146,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     overflow: "hidden",
   },
-  progressFill: { height: 6, borderRadius: 3 },
+  progressFillSm: { height: 6, borderRadius: 3 },
   unlockHint: { fontSize: 11, color: MUTED, marginTop: 6 },
 
   comparisonNote: {
@@ -717,10 +1168,103 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: GREEN_DARK,
   },
-  comparisonBody: {
-    fontSize: 12,
-    color: GREEN_BODY,
-    lineHeight: 18,
-  },
+  comparisonBody: { fontSize: 12, color: GREEN_BODY, lineHeight: 18 },
   comparisonStrong: { fontWeight: "700" },
+
+  // ── List rows (Active + History) ────────────────────────────────────
+  listWrap: { gap: 10 },
+  listRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  listIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#F0FDFB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  listIcon: { fontSize: 22 },
+  listTitle: { fontSize: 14, fontWeight: "700", color: NAVY },
+  listSubtitle: { fontSize: 12, fontWeight: "600", color: NAVY, marginTop: 2 },
+  listSubtitleMuted: { fontSize: 11, color: MUTED, marginTop: 2 },
+  listPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  listPillText: { fontSize: 10, fontWeight: "700" },
+
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    padding: 32,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  emptyStateText: { fontSize: 13, color: MUTED, textAlign: "center" },
+
+  // ── First-visit modal ───────────────────────────────────────────────
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 24,
+    alignItems: "center",
+  },
+  modalIcon: { marginBottom: 14 },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: NAVY,
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  modalBody: {
+    fontSize: 13,
+    color: MUTED,
+    lineHeight: 19,
+    textAlign: "center",
+    marginBottom: 18,
+  },
+  modalDots: { flexDirection: "row", gap: 6, marginBottom: 18 },
+  modalDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: BORDER,
+  },
+  modalDotActive: { backgroundColor: TEAL, width: 18 },
+  modalActions: { flexDirection: "row", gap: 10, width: "100%" },
+  modalSkipBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: "#F5F7FA",
+  },
+  modalSkipText: { fontSize: 13, color: MUTED, fontWeight: "600" },
+  modalPrimaryBtn: {
+    flex: 2,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: TEAL,
+  },
+  modalPrimaryText: { fontSize: 13, color: "#FFFFFF", fontWeight: "700" },
 });

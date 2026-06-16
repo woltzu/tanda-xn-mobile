@@ -24,10 +24,17 @@ import { useAuth } from '../context/AuthContext';
 import { useCommunity } from '../context/CommunityContext';
 import { useElder } from '../context/ElderContext';
 import {
+  useUpcomingEvents,
+  formatEventDate,
+  formatEventTime,
+} from '../hooks/useEvents';
+import { Routes } from '../lib/routes';
+import {
   useArrivals,
   useGatherings,
   useCommunityMemory,
   useNearYou,
+  useDreamFeed,
 } from '../hooks/useCommunityFeatures';
 
 // ============================================================================
@@ -92,7 +99,10 @@ const timeAgo = (dateStr?: string | null): string => {
   return `${diffWeeks}w ago`;
 };
 
-const formatEventDate = (dateStr?: string | null): { day: string; month: string } => {
+// Gathering-card date chip ({ day: "5", month: "MAY" } shape). Distinct from
+// the events teaser's formatEventDate (imported from hooks/useEvents.ts),
+// which returns a full sentence ("Monday, May 5, 2026").
+const formatGatheringDate = (dateStr?: string | null): { day: string; month: string } => {
   if (!dateStr) return { day: '--', month: '---' };
   const date = new Date(dateStr);
   return {
@@ -135,6 +145,19 @@ const CommunityTabScreen: React.FC = () => {
   const { user } = useAuth();
   const { myCommunities, isLoading: communitiesLoading } = useCommunity();
   const { elderProfile } = useElder();
+
+  // Top-level upcoming-events query — lifted out of renderUpcomingEvents
+  // to fix a Rules-of-Hooks violation (hook was being invoked inside a
+  // render-time callback). Shares the same cached payload that
+  // EventsScreen consumes, so the Community-tab teaser and the full
+  // EventsScreen list reuse one network round-trip.
+  //
+  // TODO(events-engagement): once `community_events` gains like_count /
+  // view_count columns, swap to a query ordered by engagement instead of
+  // chronology so the teaser highlights the most loved event, not just
+  // the next one.
+  const { events: upcomingEvents } = useUpcomingEvents({ limit: 50 });
+  const nextEvent = upcomingEvents[0] ?? null;
 
   // Selected community pill
   const [selectedCommunityId, setSelectedCommunityId] = useState<string>(
@@ -342,6 +365,138 @@ const CommunityTabScreen: React.FC = () => {
   // 2. NEW ARRIVALS
   // ──────────────────────────────────────────────────────────────────────────
 
+  // Compact "Dreams" teaser — pulls a single rotating dream card for the
+  // currently selected community via useDreamFeed (hook ships a single item
+  // by design, not a list). Empty state offers a direct CreateDreamPost
+  // shortcut. Tap either the card or the section link to open the full
+  // DreamFeed.
+  const renderDreamFeed = () => {
+    const { dream } = useDreamFeed(selectedCommunityId);
+    const openFeed = () => navigation.navigate(Routes.DreamFeed as never);
+    const openCreate = () =>
+      navigation.navigate(Routes.CreateDreamPost as never);
+
+    return (
+      <View style={styles.section}>
+        {renderSectionHeader(
+          t('community_tab.dreams.section_title'),
+          t('community_tab.see_all'),
+          openFeed,
+        )}
+
+        {dream ? (
+          <TouchableOpacity
+            style={styles.dreamTeaserCard}
+            onPress={openFeed}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+          >
+            <View style={styles.dreamTeaserIcon}>
+              <Ionicons name="cloud" size={20} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.dreamTeaserTitle} numberOfLines={1}>
+                {dream.goalTitle}
+              </Text>
+              <Text style={styles.dreamTeaserMeta} numberOfLines={1}>
+                {dream.memberOriginCity
+                  ? `${dream.memberFirstName} · ${dream.memberOriginCity}`
+                  : dream.memberFirstName}
+                {dream.progressPhase ? ` · ${dream.progressPhase}` : ''}
+              </Text>
+              {dream.goalDescription ? (
+                <Text style={styles.dreamTeaserBody} numberOfLines={2}>
+                  {dream.goalDescription}
+                </Text>
+              ) : null}
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={COLORS.subtitle}
+            />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.dreamTeaserCard}
+            onPress={openCreate}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel={t('community_tab.dreams.empty_cta')}
+          >
+            <View style={styles.dreamTeaserIcon}>
+              <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.dreamTeaserTitle} numberOfLines={1}>
+                {t('community_tab.dreams.empty_title')}
+              </Text>
+              <Text style={styles.dreamTeaserMeta} numberOfLines={1}>
+                {t('community_tab.dreams.empty_subtitle')}
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={COLORS.subtitle}
+            />
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
+  // Compact "Upcoming Events" teaser — surfaces the first item from
+  // the shared `useUpcomingEvents` cache (see top of component). Tapping
+  // navigates to the full EventsScreen; empty state offers a direct
+  // CreateEvent shortcut.
+  const renderUpcomingEvents = () => {
+    const handleOpenList = () => navigation.navigate('Events' as never);
+    const handleCreate = () =>
+      navigation.navigate(Routes.CreateEvent as never);
+
+    return (
+      <View style={styles.section}>
+        {renderSectionHeader(
+          t('community_events.tab_section_title'),
+          t('community_events.tab_section_link'),
+          handleOpenList,
+        )}
+        <TouchableOpacity
+          style={styles.eventsTeaserCard}
+          onPress={nextEvent ? handleOpenList : handleCreate}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+        >
+          <View style={styles.eventsTeaserIcon}>
+            <Ionicons
+              name={nextEvent ? 'calendar' : 'add-circle-outline'}
+              size={20}
+              color="#FFFFFF"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.eventsTeaserTitle} numberOfLines={1}>
+              {nextEvent
+                ? nextEvent.title
+                : t('community_events.teaser_empty_title')}
+            </Text>
+            <Text style={styles.eventsTeaserSubtitle} numberOfLines={1}>
+              {nextEvent
+                ? `${formatEventDate(nextEvent.event_datetime)} · ${formatEventTime(nextEvent.event_datetime)}`
+                : t('community_events.teaser_empty_subtitle')}
+            </Text>
+          </View>
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color={COLORS.subtitle}
+          />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const renderNewArrivals = () => {
     const hasArrivals = arrivals?.length > 0;
 
@@ -442,7 +597,7 @@ const CommunityTabScreen: React.FC = () => {
           contentContainerStyle={styles.gatheringsScroll}
         >
           {displayGatherings?.slice(0, 6).map((gathering, index) => {
-            const { day, month } = formatEventDate(gathering.startsAt);
+            const { day, month } = formatGatheringDate(gathering.startsAt);
             const emoji = getEventEmoji(gathering.eventType);
 
             return (
@@ -781,6 +936,12 @@ const CommunityTabScreen: React.FC = () => {
         {/* 2. New Arrivals */}
         {renderNewArrivals()}
 
+        {/* 2b. Upcoming Events teaser (full list in EventsScreen) */}
+        {renderUpcomingEvents()}
+
+        {/* 2c. Dreams teaser (full list in DreamFeedScreen) */}
+        {renderDreamFeed()}
+
         {/* Kente Divider */}
         <View style={styles.kenteDivider}>
           {Array.from({ length: 8 }).map((_, i) => (
@@ -1017,6 +1178,82 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     gap: 8,
   },
+
+  // ----- Events teaser card -----
+  eventsTeaserCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    padding: 14,
+    gap: 12,
+    marginHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  eventsTeaserIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#00C6AE',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventsTeaserTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0A2342',
+  },
+  eventsTeaserSubtitle: {
+    fontSize: 12,
+    color: COLORS.subtitle,
+    marginTop: 2,
+  },
+
+  // ----- Dreams teaser card -----
+  dreamTeaserCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    padding: 14,
+    gap: 12,
+    marginHorizontal: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  dreamTeaserIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#8B5CF6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dreamTeaserTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0A2342',
+  },
+  dreamTeaserMeta: {
+    fontSize: 12,
+    color: COLORS.subtitle,
+    marginTop: 2,
+  },
+  dreamTeaserBody: {
+    fontSize: 12,
+    color: '#0A2342',
+    marginTop: 4,
+    lineHeight: 16,
+  },
+
+
   emptyText: {
     fontSize: 14,
     color: COLORS.subtitle,

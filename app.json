@@ -18,7 +18,10 @@
       "associatedDomains": [
         "applinks:tandaxn.com",
         "applinks:v0-tanda-xn.vercel.app"
-      ]
+      ],
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use Face ID to securely sign in to TandaXn and unlock your wallet."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -67,7 +70,9 @@
           "merchantIdentifier": "merchant.com.tandaxn.app",
           "enableGooglePay": true
         }
-      ]
+      ],
+      "expo-localization",
+      "expo-web-browser"
     ]
   }
 }

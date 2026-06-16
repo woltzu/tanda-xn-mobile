@@ -17,6 +17,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
+import AuthProgressStrip from "../components/AuthProgressStrip";
+import PasswordStrengthBar, {
+  computeStrengthChecks,
+} from "../components/PasswordStrengthBar";
 
 type ResetPasswordScreenNavigationProp = StackNavigationProp<RootStackParamList, "ResetPassword">;
 type ResetPasswordScreenRouteProp = RouteProp<RootStackParamList, "ResetPassword">;
@@ -27,32 +31,22 @@ export default function ResetPasswordScreen() {
   const { t } = useTranslation();
 
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
-  // Password validation
-  const passwordChecks = {
-    length: password.length >= 8,
-    uppercase: /[A-Z]/.test(password),
-    lowercase: /[a-z]/.test(password),
-    number: /[0-9]/.test(password),
-  };
-
+  // Acceptance criteria unchanged from the pre-P1 4-row checklist —
+  // length / upper / lower / digit. Submit gate is "all four pass".
+  // The visual bar lives in <PasswordStrengthBar /> (shared with
+  // SignupScreen, Sign-up P1 review); we only need the booleans here
+  // to gate the submit button.
+  const passwordChecks = computeStrengthChecks(password);
   const isPasswordValid = Object.values(passwordChecks).every(Boolean);
-  const passwordsMatch = password === confirmPassword && confirmPassword.length > 0;
 
   const handleResetPassword = async () => {
     if (!isPasswordValid) {
       setError(t("reset_password.err_password_requirements"));
-      return;
-    }
-
-    if (!passwordsMatch) {
-      setError(t("reset_password.err_passwords_no_match"));
       return;
     }
 
@@ -66,35 +60,22 @@ export default function ResetPasswordScreen() {
 
       if (updateError) throw updateError;
 
-      setSuccess(true);
-
-      // Sign out and redirect to login after 3 seconds
-      setTimeout(async () => {
-        await supabase.auth.signOut();
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "Login" }],
-        });
-      }, 3000);
+      // updateUser already returned a fresh authenticated session — the
+      // user is signed in with the new password. Skip the legacy
+      // signOut → re-login round-trip and drop them straight into the
+      // app. (P0 fix: previous version waited 3s, signed out, and
+      // bounced through Login forcing the user to re-enter the password
+      // they just set.)
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "MainTabs" }],
+      });
     } catch (err: any) {
       setError(err.message || t("reset_password.err_update_failed"));
     } finally {
       setIsLoading(false);
     }
   };
-
-  const PasswordCheck = ({ passed, label }: { passed: boolean; label: string }) => (
-    <View style={styles.checkRow}>
-      <Ionicons
-        name={passed ? "checkmark-circle" : "ellipse-outline"}
-        size={16}
-        color={passed ? "#10B981" : "#999"}
-      />
-      <Text style={[styles.checkText, passed && styles.checkTextPassed]}>
-        {label}
-      </Text>
-    </View>
-  );
 
   return (
     <View style={styles.container}>
@@ -121,6 +102,7 @@ export default function ResetPasswordScreen() {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.formCard}
       >
+        <AuthProgressStrip step={3} />
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -187,71 +169,18 @@ export default function ResetPasswordScreen() {
                 </View>
               </View>
 
-              {/* Password Requirements */}
-              <View style={styles.checksContainer}>
-                <Text style={styles.checksTitle}>{t("reset_password.checks_title")}</Text>
-                <PasswordCheck passed={passwordChecks.length} label={t("reset_password.check_length")} />
-                <PasswordCheck passed={passwordChecks.uppercase} label={t("reset_password.check_uppercase")} />
-                <PasswordCheck passed={passwordChecks.lowercase} label={t("reset_password.check_lowercase")} />
-                <PasswordCheck passed={passwordChecks.number} label={t("reset_password.check_number")} />
-              </View>
-
-              {/* Confirm Password Input */}
-              <View style={styles.inputContainer}>
-                <Text style={styles.label}>{t("reset_password.label_confirm_password")}</Text>
-                <View style={[
-                  styles.inputWrapper,
-                  confirmPassword.length > 0 && !passwordsMatch ? styles.inputError : null,
-                  confirmPassword.length > 0 && passwordsMatch ? styles.inputSuccess : null,
-                ]}>
-                  <Ionicons
-                    name="lock-closed-outline"
-                    size={20}
-                    color="#999"
-                    style={styles.inputIcon}
-                  />
-                  <TextInput
-                    style={styles.input}
-                    placeholder={t("reset_password.placeholder_confirm_password")}
-                    placeholderTextColor="#999"
-                    value={confirmPassword}
-                    onChangeText={(text) => {
-                      setConfirmPassword(text);
-                      setError("");
-                    }}
-                    secureTextEntry={!showConfirmPassword}
-                    autoCapitalize="none"
-                  />
-                  <TouchableOpacity
-                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                    style={styles.eyeButton}
-                  >
-                    <Ionicons
-                      name={showConfirmPassword ? "eye-outline" : "eye-off-outline"}
-                      size={20}
-                      color="#999"
-                    />
-                  </TouchableOpacity>
-                </View>
-                {confirmPassword.length > 0 && (
-                  <Text style={[
-                    styles.matchText,
-                    passwordsMatch ? styles.matchTextSuccess : styles.matchTextError,
-                  ]}>
-                    {passwordsMatch ? t("reset_password.match_success") : t("reset_password.match_error")}
-                  </Text>
-                )}
-              </View>
+              {/* Strength indicator — shared component (Sign-up P1). */}
+              <PasswordStrengthBar password={password} />
 
               {/* Update Password Button */}
               <TouchableOpacity
                 style={[
                   styles.primaryButton,
-                  (!isPasswordValid || !passwordsMatch || isLoading) ? styles.buttonDisabled : null,
+                  (!isPasswordValid || isLoading) ? styles.buttonDisabled : null,
                 ]}
                 onPress={handleResetPassword}
                 activeOpacity={0.8}
-                disabled={!isPasswordValid || !passwordsMatch || isLoading}
+                disabled={!isPasswordValid || isLoading}
               >
                 {isLoading ? (
                   <ActivityIndicator color="#FFFFFF" />
@@ -361,9 +290,6 @@ const styles = StyleSheet.create({
   inputError: {
     borderColor: "#EF4444",
   },
-  inputSuccess: {
-    borderColor: "#10B981",
-  },
   inputIcon: {
     marginLeft: 14,
   },
@@ -376,42 +302,6 @@ const styles = StyleSheet.create({
   },
   eyeButton: {
     padding: 14,
-  },
-  checksContainer: {
-    backgroundColor: "#F9FAFB",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-  },
-  checksTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#666",
-    marginBottom: 12,
-  },
-  checkRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 8,
-  },
-  checkText: {
-    fontSize: 13,
-    color: "#999",
-  },
-  checkTextPassed: {
-    color: "#10B981",
-  },
-  matchText: {
-    fontSize: 13,
-    marginTop: 8,
-    marginLeft: 4,
-  },
-  matchTextSuccess: {
-    color: "#10B981",
-  },
-  matchTextError: {
-    color: "#EF4444",
   },
   primaryButton: {
     backgroundColor: "#00C6AE",

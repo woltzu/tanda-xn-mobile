@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useWallet } from "../context/WalletContext";
 import { usePayment } from "../context/PaymentContext";
+import CountryPickerModal from "../components/CountryPickerModal";
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 
@@ -66,7 +67,22 @@ const RECENT_RECIPIENTS: Recipient[] = [
   { id: "r4", name: "Kwame Asante", phone: "+233 24 XXX XX33", country: "GH", flag: "\u{1F1EC}\u{1F1ED}" },
 ];
 
+// USA + Canada lead the list so the default destination matches the
+// most common TandaXn USD user case (sender already in North America).
+// Picking USA results in a 1:1 rate, effectively letting the screen serve
+// as a domestic USD send when the recipient lives in the US.
 const COUNTRIES: Country[] = [
+  { code: "US", name: "United States", flag: "\u{1F1FA}\u{1F1F8}", currency: "USD", currencyName: "US Dollar", dialCode: "+1", rate: 1.00, decimals: 2 },
+  { code: "CA", name: "Canada", flag: "\u{1F1E8}\u{1F1E6}", currency: "CAD", currencyName: "Canadian Dollar", dialCode: "+1", rate: 1.36, decimals: 2 },
+  { code: "GB", name: "United Kingdom", flag: "\u{1F1EC}\u{1F1E7}", currency: "GBP", currencyName: "Pound", dialCode: "+44", rate: 0.79, decimals: 2 },
+  { code: "FR", name: "France", flag: "\u{1F1EB}\u{1F1F7}", currency: "EUR", currencyName: "Euro", dialCode: "+33", rate: 0.92, decimals: 2 },
+  { code: "DE", name: "Germany", flag: "\u{1F1E9}\u{1F1EA}", currency: "EUR", currencyName: "Euro", dialCode: "+49", rate: 0.92, decimals: 2 },
+  { code: "ES", name: "Spain", flag: "\u{1F1EA}\u{1F1F8}", currency: "EUR", currencyName: "Euro", dialCode: "+34", rate: 0.92, decimals: 2 },
+  { code: "IT", name: "Italy", flag: "\u{1F1EE}\u{1F1F9}", currency: "EUR", currencyName: "Euro", dialCode: "+39", rate: 0.92, decimals: 2 },
+  { code: "AU", name: "Australia", flag: "\u{1F1E6}\u{1F1FA}", currency: "AUD", currencyName: "Australian Dollar", dialCode: "+61", rate: 1.54, decimals: 2 },
+  { code: "JP", name: "Japan", flag: "\u{1F1EF}\u{1F1F5}", currency: "JPY", currencyName: "Yen", dialCode: "+81", rate: 150.00, decimals: 0 },
+  { code: "CN", name: "China", flag: "\u{1F1E8}\u{1F1F3}", currency: "CNY", currencyName: "Yuan", dialCode: "+86", rate: 7.25, decimals: 2 },
+  { code: "BR", name: "Brazil", flag: "\u{1F1E7}\u{1F1F7}", currency: "BRL", currencyName: "Real", dialCode: "+55", rate: 5.10, decimals: 2 },
   { code: "SN", name: "Senegal", flag: "\u{1F1F8}\u{1F1F3}", currency: "XOF", currencyName: "CFA Franc", dialCode: "+221", rate: 605.50, decimals: 0 },
   { code: "NG", name: "Nigeria", flag: "\u{1F1F3}\u{1F1EC}", currency: "NGN", currencyName: "Naira", dialCode: "+234", rate: 1550.00, decimals: 0 },
   { code: "KE", name: "Kenya", flag: "\u{1F1F0}\u{1F1EA}", currency: "KES", currencyName: "Shilling", dialCode: "+254", rate: 129.50, decimals: 0 },
@@ -95,8 +111,6 @@ const COUNTRIES: Country[] = [
   { code: "CO", name: "Colombia", flag: "\u{1F1E8}\u{1F1F4}", currency: "COP", currencyName: "Peso", dialCode: "+57", rate: 3950.00, decimals: 0 },
   { code: "HT", name: "Haiti", flag: "\u{1F1ED}\u{1F1F9}", currency: "HTG", currencyName: "Gourde", dialCode: "+509", rate: 132.50, decimals: 0 },
   { code: "JM", name: "Jamaica", flag: "\u{1F1EF}\u{1F1F2}", currency: "JMD", currencyName: "Dollar", dialCode: "+1876", rate: 155.00, decimals: 0 },
-  { code: "GB", name: "United Kingdom", flag: "\u{1F1EC}\u{1F1E7}", currency: "GBP", currencyName: "Pound", dialCode: "+44", rate: 0.79, decimals: 2 },
-  { code: "FR", name: "France", flag: "\u{1F1EB}\u{1F1F7}", currency: "EUR", currencyName: "Euro", dialCode: "+33", rate: 0.92, decimals: 2 },
 ];
 
 const DELIVERY_OPTIONS: DeliveryOption[] = [
@@ -115,11 +129,6 @@ export default function RemittanceScreen() {
   const { balance, sendMoney } = useWallet();
   const { paymentMethods, createDeposit, presentPaymentSheet } = usePayment();
 
-  // i18n: resolve a country's displayed name. Falls back to the source
-  // English name for codes without a dedicated translation key.
-  const countryName = (c: { code: string; name: string }) =>
-    t(`remittance.country_${c.code}`, { defaultValue: c.name });
-
   // Funding source
   const [fundingSource, setFundingSource] = useState<"wallet" | string>("wallet");
 
@@ -129,9 +138,11 @@ export default function RemittanceScreen() {
   const [newRecipientName, setNewRecipientName] = useState("");
   const [newRecipientPhone, setNewRecipientPhone] = useState("");
 
+  // Default to USA — the most common starting point for TandaXn USD users.
+  // The picker swaps this freely (each Country object carries currency +
+  // rate + decimals, so the "they receive" line auto-updates).
   const [selectedCountry, setSelectedCountry] = useState(COUNTRIES[0]);
   const [showCountryPicker, setShowCountryPicker] = useState(false);
-  const [countrySearch, setCountrySearch] = useState("");
 
   const [sendAmount, setSendAmount] = useState("");
   const [receiveAmount, setReceiveAmount] = useState("");
@@ -149,18 +160,6 @@ export default function RemittanceScreen() {
   const numericSendAmount = parseFloat(sendAmount) || 0;
   const numericReceiveAmount = parseFloat(receiveAmount) || 0;
   const totalToPay = numericSendAmount + currentFee;
-
-  const filteredCountries = COUNTRIES.filter((c) => {
-    const q = countrySearch.toLowerCase();
-    // Match against both the source English name AND the localized name
-    // so French speakers can find "Sénégal" by typing either form.
-    return (
-      c.name.toLowerCase().includes(q) ||
-      countryName(c).toLowerCase().includes(q) ||
-      c.currency.toLowerCase().includes(q) ||
-      c.code.toLowerCase().includes(q)
-    );
-  });
 
   // Validation
   const validateForm = useCallback(() => {
@@ -243,14 +242,45 @@ export default function RemittanceScreen() {
       const deliveryLabel = selectedDelivery
         ? t(selectedDelivery.labelKey)
         : t("remittance.delivery_standard");
-      const method = t("remittance.method_label_intl", { label: deliveryLabel });
-      const txnId = await sendMoney(numericSendAmount, name, method, selectedCountry.currency);
+      const methodLabel = t("remittance.method_label_intl", { label: deliveryLabel });
+      // Canonical method for the RPC's CHECK constraint — international
+      // remittance defaults to bank settlement; the translated label still
+      // flows to the success screen for display.
+      const recipientPhone =
+        selectedRecipient?.phone || newRecipientPhone || name;
+
+      // SOURCE currency is USD — the user's wallet is USD-denominated and
+      // the amount they typed (numericSendAmount) is dollars. The TARGET
+      // currency (selectedCountry.currency, e.g. XOF) only matters for the
+      // recipient-side display; it must NOT be passed as the transfer's
+      // currency or main_balance_cents gets debited by an XOF-cent count.
+      const txnId = await sendMoney(numericSendAmount, name, "bank", {
+        currency: "USD",
+        recipientIdentifier: recipientPhone,
+        fundingSource: fundingSource === "wallet" ? "wallet" : "stripe",
+        feeCents: Math.round(currentFee * 100),
+        stripePaymentIntentId: null,
+      });
+
+      // Pass BOTH the source ($1 USD) and the converted display value
+      // (≈ 605 FCFA) to the success screen so it can render
+      //   "$1.00 USD sent to Amadou Diallo"
+      //   "≈ 605 XOF"
+      // without the prior bug where the headline was "FCFA 1".
+      // feeAmount/feeCurrency drive the new "Fee" + "Total debited" rows
+      // — the user can then reconcile "$1 sent" against the larger
+      // "$8.99 debited" they see in the wallet.
       navigation.navigate("WalletTransactionSuccess", {
         type: "send",
         amount: numericSendAmount,
-        method,
+        method: methodLabel,
         recipientName: name,
         transactionId: txnId || `TXN${Date.now()}`,
+        currency: "USD",
+        convertedAmount: numericReceiveAmount,
+        convertedCurrency: selectedCountry.currency,
+        feeAmount: currentFee,
+        feeCurrency: "USD",
       });
     } catch (error) {
       Alert.alert(
@@ -487,35 +517,20 @@ export default function RemittanceScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* COUNTRY PICKER */}
-      <Modal visible={showCountryPicker} animationType="slide" transparent onRequestClose={() => setShowCountryPicker(false)}>
-        <View style={s.modalOverlay}>
-          <View style={s.modalContent}>
-            <View style={s.modalHeader}>
-              <Text style={s.modalTitle}>{t("remittance.modal_select_country")}</Text>
-              <TouchableOpacity onPress={() => { setShowCountryPicker(false); setCountrySearch(""); }} style={s.modalClose}>
-                <Ionicons name="close" size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-            <View style={s.modalSearchContainer}>
-              <Ionicons name="search" size={18} color="#9CA3AF" />
-              <TextInput style={s.modalSearchInput} value={countrySearch} onChangeText={setCountrySearch} placeholder={t("remittance.modal_search_placeholder")} placeholderTextColor="#9CA3AF" />
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              {filteredCountries.map((c) => (
-                <TouchableOpacity key={c.code} style={[s.countryOption, selectedCountry.code === c.code && s.countryOptionSelected]} onPress={() => { setSelectedCountry(c); setShowCountryPicker(false); setCountrySearch(""); }} activeOpacity={0.7}>
-                  <Text style={s.countryFlag}>{c.flag}</Text>
-                  <View style={s.flex1}>
-                    <Text style={s.countryName}>{countryName(c)}</Text>
-                    <Text style={s.countryCurrency}>{c.currency} - 1 USD = {c.rate} {c.currency}</Text>
-                  </View>
-                  {selectedCountry.code === c.code && <Ionicons name="checkmark" size={22} color="#00C6AE" />}
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      {/* COUNTRY PICKER — reusable modal in components/CountryPickerModal.
+          Passes RemittanceScreen's COUNTRIES list (which carries currency,
+          rate, decimals on each row) so the selected object preserves
+          those FX fields for the receive-amount calc. */}
+      <CountryPickerModal
+        visible={showCountryPicker}
+        onClose={() => setShowCountryPicker(false)}
+        selectedCode={selectedCountry.code}
+        countries={COUNTRIES}
+        onSelect={(c) => {
+          setSelectedCountry(c as Country);
+          setShowCountryPicker(false);
+        }}
+      />
     </View>
   );
 }

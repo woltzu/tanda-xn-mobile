@@ -1,12 +1,27 @@
-import React, { useState } from "react";
+// LanguageRegionScreen — P2 (language-switcher review).
+//
+// Post-P2 this screen is language-only. The "Where I'm from" + "Join
+// communities" sections live in CommunityPreferencesScreen.tsx, reached
+// from a sibling row in ProfileScreen → Preferences.
+//
+// Sections, top → bottom:
+//   1. App Language card
+//      - Device-locale hint banner (when the device locale differs from
+//        the active app language and the user hasn't dismissed it).
+//      - Follow-device toggle (i18n "system" sentinel).
+//      - Inline language rows (en + fr).
+//      - Example sentence card — live preview that the switch worked.
+//   2. Coming-soon list — 13 unsupported languages with a vote-stub
+//      Alert when tapped. Static list; no vote storage. Keeps users
+//      who scroll past the picker oriented on what's planned.
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Modal,
-  FlatList,
+  Switch,
   Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -15,83 +30,88 @@ import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import {
   usePreferences,
-  LANGUAGES,
-  ORIGIN_REGIONS,
-  COMMUNITY_CATEGORIES,
-  Community,
+  SUPPORTED_LANGUAGES,
 } from "../context/PreferencesContext";
+import { resolveDeviceLanguage } from "../i18n";
+
+// P2 — 13 languages we plan to support but haven't shipped yet. Order
+// roughly by speaker count + diaspora overlap with TandaXn's target
+// markets. Tap fires a vote-stub Alert — we don't persist the vote
+// anywhere yet, but the message acknowledges interest so the row
+// doesn't feel inert.
+const COMING_SOON_LANGUAGES: ReadonlyArray<{
+  code: string;
+  name: string;
+  nativeName: string;
+  flag: string;
+}> = [
+  { code: "es", name: "Spanish",        nativeName: "Español",          flag: "🇪🇸" },
+  { code: "pt", name: "Portuguese",     nativeName: "Português",        flag: "🇵🇹" },
+  { code: "ht", name: "Haitian Creole", nativeName: "Kreyòl Ayisyen",   flag: "🇭🇹" },
+  { code: "ar", name: "Arabic",         nativeName: "العربية",          flag: "🇸🇦" },
+  { code: "sw", name: "Swahili",        nativeName: "Kiswahili",        flag: "🇰🇪" },
+  { code: "yo", name: "Yoruba",         nativeName: "Yorùbá",           flag: "🇳🇬" },
+  { code: "ha", name: "Hausa",          nativeName: "Hausa",            flag: "🇳🇬" },
+  { code: "am", name: "Amharic",        nativeName: "አማርኛ",            flag: "🇪🇹" },
+  { code: "hi", name: "Hindi",          nativeName: "हिन्दी",           flag: "🇮🇳" },
+  { code: "tl", name: "Tagalog",        nativeName: "Tagalog",          flag: "🇵🇭" },
+  { code: "vi", name: "Vietnamese",     nativeName: "Tiếng Việt",       flag: "🇻🇳" },
+  { code: "ko", name: "Korean",         nativeName: "한국어",           flag: "🇰🇷" },
+  { code: "zh", name: "Chinese",        nativeName: "中文",             flag: "🇨🇳" },
+];
 
 export default function LanguageRegionScreen() {
   const navigation = useNavigation();
-  const { t } = useTranslation();
-  const {
-    preferences,
-    setLanguage,
-    addOriginCountry,
-    removeOriginCountry,
-    toggleCommunity,
-    isCommunitySelected,
-    isOriginSelected,
-  } = usePreferences();
+  const { t, i18n } = useTranslation();
+  const { setLanguage, isSystemLanguage, setFollowDeviceLanguage } =
+    usePreferences();
 
-  const [showLanguageModal, setShowLanguageModal] = useState(false);
-  const [showOriginModal, setShowOriginModal] = useState(false);
-  const [showCountryModal, setShowCountryModal] = useState(false);
-  const [showCommunityModal, setShowCommunityModal] = useState(false);
-  const [selectedRegion, setSelectedRegion] = useState<(typeof ORIGIN_REGIONS)[0] | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<(typeof COMMUNITY_CATEGORIES)[0] | null>(null);
+  const [hintDismissed, setHintDismissed] = useState(false);
 
-  const handleLanguageSelect = async (language: (typeof LANGUAGES)[0]) => {
+  const deviceCode = useMemo(() => resolveDeviceLanguage(), []);
+  const deviceLanguageMeta = useMemo(
+    () => SUPPORTED_LANGUAGES.find((l) => l.code === deviceCode) ?? null,
+    [deviceCode],
+  );
+
+  // P2 — the source of truth for the active language is i18n.language,
+  // not the preferences blob (we removed language from the blob). When
+  // following the device, i18n.language is the resolved code, not the
+  // "system" sentinel — so direct equality is safe here.
+  const activeCode = i18n.language;
+
+  const showDeviceHint =
+    !isSystemLanguage &&
+    !hintDismissed &&
+    deviceLanguageMeta != null &&
+    deviceCode !== activeCode;
+
+  const handleLanguageSelect = async (
+    language: (typeof SUPPORTED_LANGUAGES)[0],
+  ) => {
     await setLanguage(language);
-    setShowLanguageModal(false);
-    // i18n already flipped inside setLanguage (PreferencesContext.setLanguage
-    // mirrors to setAppLanguage which calls i18n.changeLanguage). Surface a
-    // brief toast so the user knows some labels may need a restart -- React
-    // Navigation tab labels update reactively but stack header titles set
-    // by individual screens may not until the screen re-mounts.
+  };
+
+  const handleToggleFollowDevice = async (value: boolean) => {
+    await setFollowDeviceLanguage(value);
+  };
+
+  const handleSwitchToDevice = async () => {
+    if (!deviceLanguageMeta) return;
+    await setLanguage(deviceLanguageMeta);
+    setHintDismissed(true);
+  };
+
+  const handleComingSoonTap = (lang: (typeof COMING_SOON_LANGUAGES)[0]) => {
     Alert.alert(
-      t("language_region.language_changed_title"),
-      t("language_region.language_changed_body", { language: language.name }),
+      t("language_screen.coming_soon_vote_title", { name: lang.name }),
+      t("language_screen.coming_soon_vote_body"),
+      [{ text: t("common.ok") }],
     );
   };
 
-  const handleRegionSelect = (region: (typeof ORIGIN_REGIONS)[0]) => {
-    setSelectedRegion(region);
-    setShowOriginModal(false);
-    setShowCountryModal(true);
-  };
-
-  const handleCountryToggle = async (country: (typeof ORIGIN_REGIONS)[0]["countries"][0]) => {
-    if (!selectedRegion) return;
-
-    if (isOriginSelected(country.code)) {
-      await removeOriginCountry(country.code);
-    } else {
-      await addOriginCountry({
-        code: country.code,
-        name: country.name,
-        emoji: country.emoji,
-        regionId: selectedRegion.id,
-        regionName: selectedRegion.name,
-      });
-    }
-  };
-
-  const handleCategorySelect = (category: (typeof COMMUNITY_CATEGORIES)[0]) => {
-    setSelectedCategory(category);
-    setShowCommunityModal(true);
-  };
-
-  const handleCommunityToggle = async (community: Community) => {
-    await toggleCommunity(community);
-  };
-
-  const totalSelections =
-    preferences.originCountries.length + preferences.communities.length;
-
   return (
     <View style={styles.container}>
-      {/* Header */}
       <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
         <View style={styles.headerContent}>
           <TouchableOpacity
@@ -100,7 +120,7 @@ export default function LanguageRegionScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t("language_region.header")}</Text>
+          <Text style={styles.headerTitle}>{t("language_screen.title")}</Text>
           <View style={styles.placeholder} />
         </View>
       </LinearGradient>
@@ -110,366 +130,141 @@ export default function LanguageRegionScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Language Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("language_region.app_language")}</Text>
-          <TouchableOpacity
-            style={styles.optionCard}
-            onPress={() => setShowLanguageModal(true)}
-          >
-            <View style={styles.optionLeft}>
-              <Text style={styles.optionFlag}>{preferences.language.flag}</Text>
-              <View>
-                <Text style={styles.optionLabel}>{preferences.language.name}</Text>
-                <Text style={styles.optionSubLabel}>
-                  {preferences.language.nativeName}
+
+          {showDeviceHint && deviceLanguageMeta && (
+            <View style={styles.hintBanner}>
+              <Ionicons name="globe-outline" size={18} color="#1E40AF" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.hintBannerText}>
+                  {t("language_screen.device_hint_body", {
+                    name: deviceLanguageMeta.nativeName,
+                  })}
                 </Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-          </TouchableOpacity>
-        </View>
-
-        {/* My Communities Summary */}
-        {totalSelections > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{t("language_region.my_communities")}</Text>
-              <Text style={styles.selectionCount}>
-                {t("language_region.selected_count", { count: totalSelections })}
-              </Text>
-            </View>
-            <View style={styles.selectedChips}>
-              {preferences.originCountries.map((country) => (
-                <TouchableOpacity
-                  key={country.code}
-                  style={styles.chip}
-                  onPress={() => removeOriginCountry(country.code)}
-                >
-                  <Text style={styles.chipEmoji}>{country.emoji}</Text>
-                  <Text style={styles.chipText}>{country.name}</Text>
-                  <Ionicons name="close-circle" size={16} color="#6B7280" />
-                </TouchableOpacity>
-              ))}
-              {preferences.communities.map((community) => (
-                <TouchableOpacity
-                  key={community.id}
-                  style={styles.chip}
-                  onPress={() => toggleCommunity(community)}
-                >
-                  <Text style={styles.chipEmoji}>{community.emoji}</Text>
-                  <Text style={styles.chipText}>{community.name}</Text>
-                  <Ionicons name="close-circle" size={16} color="#6B7280" />
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Origin Country Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("language_region.where_im_from")}</Text>
-          <Text style={styles.sectionDesc}>
-            {t("language_region.where_im_from_desc")}
-          </Text>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => setShowOriginModal(true)}
-          >
-            <Ionicons name="earth" size={24} color="#00C6AE" />
-            <Text style={styles.addButtonText}>
-              {t("language_region.add_origin_country")}
-            </Text>
-            <Ionicons name="add-circle" size={24} color="#00C6AE" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Community Categories */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("language_region.join_communities")}</Text>
-          <Text style={styles.sectionDesc}>
-            {t("language_region.join_communities_desc")}
-          </Text>
-
-          {COMMUNITY_CATEGORIES.map((category) => {
-            const selectedInCategory = preferences.communities.filter(
-              (c) => c.category === category.id
-            ).length;
-
-            return (
-              <TouchableOpacity
-                key={category.id}
-                style={styles.categoryCard}
-                onPress={() => handleCategorySelect(category)}
-              >
-                <View style={styles.categoryLeft}>
-                  <Text style={styles.categoryEmoji}>{category.emoji}</Text>
-                  <View>
-                    <Text style={styles.categoryName}>{category.name}</Text>
-                    <Text style={styles.categoryDesc}>{category.description}</Text>
-                  </View>
-                </View>
-                <View style={styles.categoryRight}>
-                  {selectedInCategory > 0 && (
-                    <View style={styles.categoryBadge}>
-                      <Text style={styles.categoryBadgeText}>
-                        {selectedInCategory}
-                      </Text>
-                    </View>
-                  )}
-                  <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Info Card */}
-        <View style={styles.infoCard}>
-          <Ionicons name="information-circle" size={24} color="#00C6AE" />
-          <Text style={styles.infoText}>{t("language_region.info_text")}</Text>
-        </View>
-      </ScrollView>
-
-      {/* Language Selection Modal */}
-      <Modal
-        visible={showLanguageModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowLanguageModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t("language_region.select_language")}</Text>
-              <TouchableOpacity onPress={() => setShowLanguageModal(false)}>
-                <Ionicons name="close" size={24} color="#0A2342" />
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={LANGUAGES}
-              keyExtractor={(item) => item.code}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.modalItem,
-                    preferences.language.code === item.code &&
-                      styles.modalItemSelected,
-                  ]}
-                  onPress={() => handleLanguageSelect(item)}
-                >
-                  <Text style={styles.modalItemFlag}>{item.flag}</Text>
-                  <View style={styles.modalItemText}>
-                    <Text style={styles.modalItemLabel}>{item.name}</Text>
-                    <Text style={styles.modalItemSubLabel}>{item.nativeName}</Text>
-                  </View>
-                  {preferences.language.code === item.code && (
-                    <Ionicons name="checkmark-circle" size={24} color="#00C6AE" />
-                  )}
-                </TouchableOpacity>
-              )}
-              showsVerticalScrollIndicator={false}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Region Selection Modal */}
-      <Modal
-        visible={showOriginModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowOriginModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t("language_region.select_region")}</Text>
-              <TouchableOpacity onPress={() => setShowOriginModal(false)}>
-                <Ionicons name="close" size={24} color="#0A2342" />
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={ORIGIN_REGIONS}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.modalItem}
-                  onPress={() => handleRegionSelect(item)}
-                >
-                  <Text style={styles.modalItemFlag}>{item.emoji}</Text>
-                  <View style={styles.modalItemText}>
-                    <Text style={styles.modalItemLabel}>{item.name}</Text>
-                    <Text style={styles.modalItemSubLabel}>
-                      {t("language_region.countries_count", {
-                        count: item.countries.length,
+                <View style={styles.hintBannerActions}>
+                  <TouchableOpacity
+                    style={styles.hintSwitchBtn}
+                    onPress={handleSwitchToDevice}
+                  >
+                    <Text style={styles.hintSwitchBtnText}>
+                      {t("language_screen.device_hint_switch", {
+                        name: deviceLanguageMeta.name,
                       })}
                     </Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
-                </TouchableOpacity>
-              )}
-              showsVerticalScrollIndicator={false}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Country Selection Modal (Multi-select) */}
-      <Modal
-        visible={showCountryModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => {
-          setShowCountryModal(false);
-          setSelectedRegion(null);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowCountryModal(false);
-                  setShowOriginModal(true);
-                }}
-              >
-                <Ionicons name="arrow-back" size={24} color="#0A2342" />
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>
-                {selectedRegion?.name || t("language_region.select_countries")}
-              </Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowCountryModal(false);
-                  setSelectedRegion(null);
-                }}
-              >
-                <Ionicons name="close" size={24} color="#0A2342" />
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.modalSubtitle}>
-              {t("language_region.select_all_countries_apply")}
-            </Text>
-            <FlatList
-              data={selectedRegion?.countries || []}
-              keyExtractor={(item) => item.code}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.modalItem,
-                    isOriginSelected(item.code) && styles.modalItemSelected,
-                  ]}
-                  onPress={() => handleCountryToggle(item)}
-                >
-                  <Text style={styles.modalItemFlag}>{item.emoji}</Text>
-                  <View style={styles.modalItemText}>
-                    <Text style={styles.modalItemLabel}>{item.name}</Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.checkbox,
-                      isOriginSelected(item.code) && styles.checkboxSelected,
-                    ]}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.hintDismissBtn}
+                    onPress={() => setHintDismissed(true)}
                   >
-                    {isOriginSelected(item.code) && (
-                      <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-                    )}
-                  </View>
-                </TouchableOpacity>
-              )}
-              showsVerticalScrollIndicator={false}
-            />
-            <TouchableOpacity
-              style={styles.doneButton}
-              onPress={() => {
-                setShowCountryModal(false);
-                setSelectedRegion(null);
-              }}
-            >
-              <Text style={styles.doneButtonText}>{t("common.done")}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Community Selection Modal (Multi-select) */}
-      <Modal
-        visible={showCommunityModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => {
-          setShowCommunityModal(false);
-          setSelectedCategory(null);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowCommunityModal(false);
-                  setSelectedCategory(null);
-                }}
-              >
-                <Ionicons name="arrow-back" size={24} color="#0A2342" />
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>
-                {selectedCategory?.name || t("language_region.select_communities")}
-              </Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowCommunityModal(false);
-                  setSelectedCategory(null);
-                }}
-              >
-                <Ionicons name="close" size={24} color="#0A2342" />
-              </TouchableOpacity>
+                    <Text style={styles.hintDismissBtnText}>
+                      {t("language_screen.device_hint_dismiss")}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
-            <Text style={styles.modalSubtitle}>
-              {t("language_region.select_all_apply")}
-            </Text>
-            <FlatList
-              data={selectedCategory?.communities || []}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.modalItem,
-                    isCommunitySelected(item.id) && styles.modalItemSelected,
-                  ]}
-                  onPress={() => handleCommunityToggle(item)}
-                >
-                  <Text style={styles.modalItemFlag}>{item.emoji}</Text>
-                  <View style={styles.modalItemText}>
-                    <Text style={styles.modalItemLabel}>{item.name}</Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.checkbox,
-                      isCommunitySelected(item.id) && styles.checkboxSelected,
-                    ]}
-                  >
-                    {isCommunitySelected(item.id) && (
-                      <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-                    )}
-                  </View>
-                </TouchableOpacity>
-              )}
-              showsVerticalScrollIndicator={false}
+          )}
+
+          <View style={styles.followRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.followRowTitle}>
+                {t("language_screen.follow_device_title")}
+              </Text>
+              <Text style={styles.followRowSubtitle}>
+                {t("language_screen.follow_device_subtitle")}
+              </Text>
+            </View>
+            <Switch
+              value={isSystemLanguage}
+              onValueChange={handleToggleFollowDevice}
+              trackColor={{ false: "#E5E7EB", true: "#00C6AE" }}
+              thumbColor="#FFFFFF"
             />
-            <TouchableOpacity
-              style={styles.doneButton}
-              onPress={() => {
-                setShowCommunityModal(false);
-                setSelectedCategory(null);
-              }}
-            >
-              <Text style={styles.doneButtonText}>{t("common.done")}</Text>
-            </TouchableOpacity>
+          </View>
+
+          <View style={styles.languageRowsCard}>
+            {SUPPORTED_LANGUAGES.map((lang, index) => {
+              const isSelected = activeCode === lang.code;
+              return (
+                <TouchableOpacity
+                  key={lang.code}
+                  style={[
+                    styles.languageRow,
+                    index < SUPPORTED_LANGUAGES.length - 1 && styles.languageRowBorder,
+                    isSystemLanguage && styles.languageRowDimmed,
+                  ]}
+                  onPress={() => handleLanguageSelect(lang)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isSelected }}
+                >
+                  <Text style={styles.languageRowFlag}>{lang.flag}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.languageRowLabel}>{lang.name}</Text>
+                    <Text style={styles.languageRowSubLabel}>
+                      {lang.nativeName}
+                    </Text>
+                  </View>
+                  {isSelected && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={22}
+                      color="#00C6AE"
+                    />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <View style={styles.exampleCard}>
+            <Text style={styles.exampleLabel}>
+              {t("language_screen.example_label")}
+            </Text>
+            <Text style={styles.exampleSentence}>
+              {t("language_screen.example_sentence")}
+            </Text>
           </View>
         </View>
-      </Modal>
+
+        {/* P2 — Coming-soon list. Static; tap fires a vote-stub Alert.
+            No vote storage yet — the message acknowledges interest so
+            the row isn't inert, but we don't persist it. */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            {t("language_screen.coming_soon_header")}
+          </Text>
+          <Text style={styles.sectionDesc}>
+            {t("language_screen.coming_soon_body")}
+          </Text>
+          <View style={styles.comingSoonCard}>
+            {COMING_SOON_LANGUAGES.map((lang, index) => (
+              <TouchableOpacity
+                key={lang.code}
+                style={[
+                  styles.comingSoonRow,
+                  index < COMING_SOON_LANGUAGES.length - 1 &&
+                    styles.comingSoonRowBorder,
+                ]}
+                onPress={() => handleComingSoonTap(lang)}
+              >
+                <Text style={styles.comingSoonFlag}>{lang.flag}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.comingSoonLabel}>{lang.name}</Text>
+                  <Text style={styles.comingSoonSubLabel}>
+                    {lang.nativeName}
+                  </Text>
+                </View>
+                <View style={styles.comingSoonBadge}>
+                  <Text style={styles.comingSoonBadgeText}>
+                    {t("language_screen.coming_soon_chip")}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -515,12 +310,6 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 24,
   },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
   sectionTitle: {
     fontSize: 13,
     fontWeight: "600",
@@ -534,227 +323,120 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     lineHeight: 20,
   },
-  selectionCount: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#00C6AE",
-  },
-  selectedChips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  chip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  chipEmoji: {
-    fontSize: 16,
-  },
-  chipText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#0A2342",
-  },
-  optionCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  optionLeft: {
+  followRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-  },
-  optionFlag: {
-    fontSize: 28,
-  },
-  optionLabel: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#0A2342",
-  },
-  optionSubLabel: {
-    fontSize: 13,
-    color: "#6B7280",
-    marginTop: 2,
-  },
-  addButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
-    padding: 16,
-    borderWidth: 2,
-    borderColor: "#00C6AE",
-    borderStyle: "dashed",
-  },
-  addButtonText: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#00C6AE",
-    marginLeft: 12,
-  },
-  categoryCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 10,
+    padding: 14,
     borderWidth: 1,
     borderColor: "#E5E7EB",
+    marginBottom: 12,
   },
-  categoryLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    flex: 1,
-  },
-  categoryEmoji: {
-    fontSize: 28,
-  },
-  categoryName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#0A2342",
-  },
-  categoryDesc: {
-    fontSize: 13,
-    color: "#6B7280",
-    marginTop: 2,
-  },
-  categoryRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  categoryBadge: {
-    backgroundColor: "#00C6AE",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    minWidth: 24,
-    alignItems: "center",
-  },
-  categoryBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  infoCard: {
-    flexDirection: "row",
-    backgroundColor: "#F0FDF9",
-    borderRadius: 14,
-    padding: 16,
-    gap: 12,
-    alignItems: "flex-start",
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 13,
-    color: "#0A2342",
-    lineHeight: 20,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
+  followRowTitle: { fontSize: 15, fontWeight: "700", color: "#0A2342" },
+  followRowSubtitle: { fontSize: 12, color: "#6B7280", marginTop: 2 },
+  languageRowsCard: {
     backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: "80%",
-    paddingBottom: 34,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    overflow: "hidden",
   },
-  modalHeader: {
+  languageRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
   },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#0A2342",
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: "#6B7280",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: "#F9FAFB",
-  },
-  modalItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    paddingHorizontal: 20,
+  languageRowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
   },
-  modalItemSelected: {
-    backgroundColor: "#F0FDF9",
-  },
-  modalItemFlag: {
-    fontSize: 28,
-    marginRight: 12,
-  },
-  modalItemText: {
-    flex: 1,
-  },
-  modalItemLabel: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#0A2342",
-  },
-  modalItemSubLabel: {
-    fontSize: 13,
-    color: "#6B7280",
-    marginTop: 2,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
+  languageRowDimmed: { opacity: 0.5 },
+  languageRowFlag: { fontSize: 24 },
+  languageRowLabel: { fontSize: 15, fontWeight: "600", color: "#0A2342" },
+  languageRowSubLabel: { fontSize: 12, color: "#6B7280", marginTop: 1 },
+  hintBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 12,
+    backgroundColor: "#EFF6FF",
     borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "#D1D5DB",
-    alignItems: "center",
-    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    marginBottom: 12,
   },
-  checkboxSelected: {
-    backgroundColor: "#00C6AE",
+  hintBannerText: { fontSize: 13, color: "#1E40AF", lineHeight: 18 },
+  hintBannerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 10,
+  },
+  hintSwitchBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: "#1E40AF",
+    borderRadius: 8,
+  },
+  hintSwitchBtnText: { fontSize: 12, fontWeight: "700", color: "#FFFFFF" },
+  hintDismissBtn: { paddingVertical: 6 },
+  hintDismissBtnText: { fontSize: 12, fontWeight: "600", color: "#1E40AF" },
+  exampleCard: {
+    marginTop: 12,
+    padding: 14,
+    backgroundColor: "#F0FDFB",
+    borderRadius: 12,
+    borderWidth: 1,
     borderColor: "#00C6AE",
   },
-  doneButton: {
-    backgroundColor: "#00C6AE",
-    marginHorizontal: 20,
-    marginTop: 16,
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: "center",
+  exampleLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#00897B",
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
-  doneButtonText: {
-    fontSize: 16,
+  exampleSentence: {
+    fontSize: 13,
+    fontStyle: "italic",
+    color: "#065F46",
+    lineHeight: 18,
+  },
+  comingSoonCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    overflow: "hidden",
+  },
+  comingSoonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  comingSoonRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  comingSoonFlag: { fontSize: 22, opacity: 0.85 },
+  comingSoonLabel: { fontSize: 14, fontWeight: "600", color: "#374151" },
+  comingSoonSubLabel: { fontSize: 12, color: "#9CA3AF", marginTop: 1 },
+  comingSoonBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: "#F3F4F6",
+  },
+  comingSoonBadgeText: {
+    fontSize: 11,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: "#6B7280",
+    letterSpacing: 0.3,
   },
 });

@@ -58,6 +58,10 @@ export interface NotificationPreferences {
   quiet_hours_start: string;
   quiet_hours_end: string;
   quiet_hours_timezone: string;
+  // P1 (notification-prefs review): "Pause all for 24h" snooze. ISO
+  // timestamp; the server-side dispatcher skips push delivery while
+  // now() < push_snooze_until.
+  push_snooze_until: string | null;
 }
 
 type NotificationContextType = {
@@ -83,6 +87,17 @@ type NotificationContextType = {
   preferences: NotificationPreferences | null;
   updatePreferences: (prefs: Partial<NotificationPreferences>) => Promise<void>;
   fetchPreferences: () => Promise<void>;
+
+  // P1 (notification-prefs review):
+  //   snoozePush(hours)  — write push_snooze_until = now()+hours.
+  //   resumePush()       — clear push_snooze_until.
+  //   sendTestNotification() — fires a local notification immediately
+  //     so the user can verify permissions + delivery. Returns
+  //     { granted } so the caller can surface a permission-prompt
+  //     fallback when the device denies.
+  snoozePush: (hours: number) => Promise<void>;
+  resumePush: () => Promise<void>;
+  sendTestNotification: () => Promise<{ granted: boolean }>;
 
   // Handlers
   handleNotificationReceived: (notification: Notifications.Notification) => void;
@@ -116,6 +131,7 @@ const defaultPreferences: NotificationPreferences = {
   quiet_hours_start: "22:00",
   quiet_hours_end: "08:00",
   quiet_hours_timezone: "UTC",
+  push_snooze_until: null,
 };
 
 // =============================================================================
@@ -261,6 +277,16 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     async (id: string) => {
       if (!user) return;
 
+      // P2 (notification-prefs review): capture category BEFORE the
+      // optimistic filter wipes the row out of state. The auto-mute
+      // EF (process-dismissal-auto-mute) reads from
+      // notification_dismissal_log to spot users dismissing the same
+      // category repeatedly. Falls back to `type` when the server
+      // didn't set an explicit category — anything off the
+      // ELIGIBLE_CATEGORIES list in the EF is silently ignored.
+      const dismissed = notifications.find((n) => n.id === id);
+      const dismissedCategory = dismissed?.category ?? dismissed?.type ?? null;
+
       // Optimistic update
       setNotifications((prev) => prev.filter((n) => n.id !== id));
 
@@ -274,13 +300,30 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
         if (deleteError) {
           console.error("Error deleting notification:", deleteError);
           await fetchNotifications();
+          return;
+        }
+
+        // Log the dismissal AFTER the delete commits. Best-effort —
+        // a failure here doesn't block the UI.
+        if (dismissedCategory) {
+          try {
+            await supabase.rpc("record_notification_dismissal", {
+              p_user_id: user.id,
+              p_category: dismissedCategory,
+            });
+          } catch (e) {
+            console.warn(
+              "[NotificationContext] dismissal log skipped:",
+              (e as Error).message,
+            );
+          }
         }
       } catch (err) {
         console.error("Error deleting notification:", err);
         await fetchNotifications();
       }
     },
-    [user, fetchNotifications]
+    [user, fetchNotifications, notifications]
   );
 
   // ==========================================================================
@@ -433,6 +476,40 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
 
       if (data) {
         setPreferences(data);
+        // P0 (notification-prefs review): one-shot timezone sync. If
+        // the row still has the 'UTC' default and the user's profile
+        // carries a real IANA zone (set by AuthContext on first auth
+        // — migration 167), copy it over. The dispatcher uses
+        // quiet_hours_timezone to compare against the user's clock;
+        // a stale 'UTC' here is what makes DND fire at the wrong
+        // local times. Best-effort: any error is non-fatal, the
+        // user can edit it from the screen anyway.
+        if (!data.quiet_hours_timezone || data.quiet_hours_timezone === "UTC") {
+          try {
+            const { data: profileRow } = await supabase
+              .from("profiles")
+              .select("timezone")
+              .eq("id", user.id)
+              .maybeSingle();
+            const tz: string | null = profileRow?.timezone ?? null;
+            if (tz && tz !== "UTC") {
+              const { error: tzErr } = await supabase
+                .from("notification_preferences")
+                .update({ quiet_hours_timezone: tz })
+                .eq("user_id", user.id);
+              if (!tzErr) {
+                setPreferences((prev) =>
+                  prev ? { ...prev, quiet_hours_timezone: tz } : prev,
+                );
+              }
+            }
+          } catch (e) {
+            console.warn(
+              "[NotificationContext] timezone sync skipped:",
+              (e as Error).message,
+            );
+          }
+        }
       } else {
         // Create default preferences
         const { data: newPrefs, error: createError } = await supabase
@@ -478,6 +555,47 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     },
     [user, fetchPreferences]
   );
+
+  // ==========================================================================
+  // P1 (notification-prefs review): SNOOZE + TEST
+  // ==========================================================================
+
+  // Set push_snooze_until = now() + hours. Server-side dispatcher
+  // gates push delivery against this column; client just persists.
+  const snoozePush = useCallback(
+    async (hours: number) => {
+      const until = new Date(Date.now() + hours * 3_600_000).toISOString();
+      await updatePreferences({ push_snooze_until: until });
+    },
+    [updatePreferences],
+  );
+
+  // Clear push_snooze_until.
+  const resumePush = useCallback(async () => {
+    await updatePreferences({ push_snooze_until: null });
+  }, [updatePreferences]);
+
+  // Fire a LOCAL notification (no server hop) so the user can verify
+  // permissions + delivery. trigger=null = "immediately". Returns
+  // { granted } so the caller can route to system settings if the OS
+  // has notifications blocked.
+  const sendTestNotification = useCallback(async (): Promise<{
+    granted: boolean;
+  }> => {
+    const { status } = await Notifications.getPermissionsAsync();
+    if (status !== "granted") {
+      return { granted: false };
+    }
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "TandaXn",
+        body: "Test notification — looks good!",
+        data: { test: true },
+      },
+      trigger: null,
+    });
+    return { granted: true };
+  }, []);
 
   // ==========================================================================
   // NOTIFICATION HANDLERS
@@ -656,6 +774,9 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
         preferences,
         updatePreferences,
         fetchPreferences,
+        snoozePush,
+        resumePush,
+        sendTestNotification,
         handleNotificationReceived,
         handleNotificationResponse,
       }}

@@ -5,29 +5,29 @@ import React, {
   useEffect,
   ReactNode,
 } from "react";
+import { AppState, AppStateStatus } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 // i18n integration -- setLanguage mirrors the selected code into the
 // i18n module's separate AsyncStorage key + calls changeLanguage so
 // every useTranslation() consumer re-renders without an app restart.
-import { setAppLanguage } from "../i18n";
+import {
+  APP_LANGUAGE_STORAGE_KEY,
+  SYSTEM_LANGUAGE_SENTINEL,
+  resolveDeviceLanguage,
+  setAppLanguage,
+} from "../i18n";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "./AuthContext";
 
-// Available languages
-export const LANGUAGES = [
-  { code: "en", name: "English", nativeName: "English", flag: "🇺🇸" },
-  { code: "fr", name: "French", nativeName: "Français", flag: "🇫🇷" },
-  { code: "es", name: "Spanish", nativeName: "Español", flag: "🇪🇸" },
-  { code: "pt", name: "Portuguese", nativeName: "Português", flag: "🇧🇷" },
-  { code: "hi", name: "Hindi", nativeName: "हिन्दी", flag: "🇮🇳" },
-  { code: "tl", name: "Tagalog", nativeName: "Tagalog", flag: "🇵🇭" },
-  { code: "zh", name: "Chinese", nativeName: "中文", flag: "🇨🇳" },
-  { code: "vi", name: "Vietnamese", nativeName: "Tiếng Việt", flag: "🇻🇳" },
-  { code: "ko", name: "Korean", nativeName: "한국어", flag: "🇰🇷" },
-  { code: "ar", name: "Arabic", nativeName: "العربية", flag: "🇸🇦" },
-  { code: "am", name: "Amharic", nativeName: "አማርኛ", flag: "🇪🇹" },
-  { code: "sw", name: "Swahili", nativeName: "Kiswahili", flag: "🇰🇪" },
-  { code: "yo", name: "Yoruba", nativeName: "Yorùbá", flag: "🇳🇬" },
-  { code: "ha", name: "Hausa", nativeName: "Hausa", flag: "🇳🇬" },
-  { code: "ht", name: "Haitian Creole", nativeName: "Kreyòl Ayisyen", flag: "🇭🇹" },
+// P0 (language-switcher review): only locales that ship a translation
+// bundle live here. Picking "Spanish" used to silently fall back to
+// English because no es.json existed — surfacing only what works
+// keeps the picker honest. Add a row here ONLY after the matching
+// locales/<code>.json file ships AND the i18n module's
+// SUPPORTED_LANGUAGES list is bumped to include the code.
+export const SUPPORTED_LANGUAGES = [
+  { code: "en", name: "English", nativeName: "English", flag: "🇬🇧" },
+  { code: "fr", name: "French",  nativeName: "Français", flag: "🇫🇷" },
 ];
 
 // Community categories
@@ -365,7 +365,11 @@ export const COMMUNITY_CATEGORIES: CommunityCategory[] = [
   },
 ];
 
-type Language = (typeof LANGUAGES)[0];
+// P0 (language-switcher review) fix-up — the typedef accidentally
+// retained the legacy LANGUAGES identifier. Now sourced from the
+// trimmed SUPPORTED_LANGUAGES export so it can't pick up unsupported
+// codes.
+type Language = (typeof SUPPORTED_LANGUAGES)[0];
 type OriginCountry = {
   code: string;
   name: string;
@@ -374,8 +378,11 @@ type OriginCountry = {
   regionName: string;
 };
 
+// P2 (language-switcher review): language is no longer stored in the
+// preferences blob. AsyncStorage('app-language') + i18n.language are
+// the source of truth; the picker reads from useTranslation() (which
+// gives i18n.language).
 type UserPreferences = {
-  language: Language;
   originCountries: OriginCountry[]; // Multiple origin countries
   communities: Community[]; // Multiple communities from all categories
 };
@@ -384,6 +391,12 @@ type PreferencesContextType = {
   preferences: UserPreferences;
   isLoading: boolean;
   setLanguage: (language: Language) => Promise<void>;
+  // P1 (language-switcher review): "Follow device language" mode.
+  // When true, AsyncStorage holds the "system" sentinel and the
+  // effective language tracks Localization.getLocales()[0] on every
+  // resume; when false, the user's explicit choice persists.
+  isSystemLanguage: boolean;
+  setFollowDeviceLanguage: (follow: boolean) => Promise<void>;
   addOriginCountry: (country: OriginCountry) => Promise<void>;
   removeOriginCountry: (countryCode: string) => Promise<void>;
   toggleCommunity: (community: Community) => Promise<void>;
@@ -393,7 +406,6 @@ type PreferencesContextType = {
 };
 
 const DEFAULT_PREFERENCES: UserPreferences = {
-  language: LANGUAGES[0], // English
   originCountries: [],
   communities: [],
 };
@@ -411,7 +423,15 @@ export const usePreferences = () => {
 const STORAGE_KEY = "@tandaxn_preferences";
 
 export const PreferencesProvider = ({ children }: { children: ReactNode }) => {
+  // P2 — `useAuth` powers the profiles.language sync. Auth boots
+  // before PreferencesProvider in the App.tsx provider tree, so
+  // `user` is always defined by the time these effects fire.
+  const { user } = useAuth();
   const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
+  // P1 — system-language tracking. Lives outside `preferences` because
+  // it doesn't fit the blob-shape contract and shouldn't trigger a
+  // savePreferences write.
+  const [isSystemLanguage, setIsSystemLanguage] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Load preferences from storage on mount
@@ -421,15 +441,38 @@ export const PreferencesProvider = ({ children }: { children: ReactNode }) => {
 
   const loadPreferences = async () => {
     try {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      // P0 (language-switcher review): the i18n module's
+      // `app-language` key is the source-of-truth for the chosen
+      // language code. The preferences blob can carry a stale value
+      // (e.g., from before this refactor) — resolve from app-language
+      // first, fall back to the blob, then to the default.
+      const [stored, appLang] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEY),
+        AsyncStorage.getItem(APP_LANGUAGE_STORAGE_KEY),
+      ]);
+      let parsed: {
+        language?: Language;
+        originCountries?: OriginCountry[];
+        communities?: Community[];
+      } | null = null;
       if (stored) {
-        const parsed = JSON.parse(stored);
-        setPreferences({
-          language: parsed.language || DEFAULT_PREFERENCES.language,
-          originCountries: parsed.originCountries || [],
-          communities: parsed.communities || [],
-        });
+        try {
+          parsed = JSON.parse(stored);
+        } catch {
+          // malformed blob — fall through to defaults
+        }
       }
+      // P1: "system" sentinel resolves to whichever language the
+      // device currently advertises.
+      const followDevice = appLang === SYSTEM_LANGUAGE_SENTINEL;
+      setIsSystemLanguage(followDevice);
+      // P2 — `language` no longer lives on the preferences blob;
+      // useTranslation()'s i18n.language is the active code now.
+      // Any `parsed.language` field on a legacy blob is ignored.
+      setPreferences({
+        originCountries: parsed?.originCountries ?? [],
+        communities: parsed?.communities ?? [],
+      });
     } catch (error) {
       console.error("Error loading preferences:", error);
     } finally {
@@ -447,19 +490,136 @@ export const PreferencesProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const setLanguage = async (language: Language) => {
-    const newPrefs = { ...preferences, language };
-    await savePreferences(newPrefs);
-    // i18n mirror: persist the bare code into the i18n-owned key and
-    // flip the live i18next instance so React re-renders pick up the
-    // new translations immediately. Soft-fail -- a storage hiccup in
-    // i18n shouldn't block the preference write.
+  // P2 — best-effort write-through to profiles.language. Idempotent
+  // server-side; we don't await it from the caller path (UI shouldn't
+  // wait on a network round-trip to flip text). Skipped when the
+  // user isn't authenticated yet.
+  const syncToProfile = async (code: string) => {
+    if (!user?.id) return;
     try {
-      await setAppLanguage(language.code);
-    } catch {
-      // ignore
+      await supabase
+        .from("profiles")
+        .update({ language: code })
+        .eq("id", user.id);
+    } catch (e) {
+      console.warn(
+        "[PreferencesContext] profiles.language sync failed:",
+        (e as Error).message,
+      );
     }
   };
+
+  const setLanguage = async (language: Language) => {
+    // P0 (language-switcher review): single-writer pattern. The
+    // language no longer round-trips through the preferences blob —
+    // setAppLanguage owns the persisted code (under
+    // APP_LANGUAGE_STORAGE_KEY) and triggers i18next.changeLanguage so
+    // every useTranslation() consumer re-renders.
+    //
+    // P1 — manually picking a language always clears system mode.
+    // P2 — also mirror into profiles.language so the choice follows
+    // the user to other devices.
+    try {
+      await setAppLanguage(language.code);
+    } catch (e) {
+      console.error("[PreferencesContext] setAppLanguage failed:", e);
+      return;
+    }
+    setIsSystemLanguage(false);
+    void syncToProfile(language.code);
+  };
+
+  // P1 — toggle "follow device language". When `follow` is true we
+  // persist the sentinel and immediately resolve the effective code
+  // from the device; when false we lock in whichever language is
+  // currently effective.
+  // P2 — the effective code is also mirrored into profiles.language
+  // so the cross-device source-of-truth tracks the user's intent.
+  const setFollowDeviceLanguage = async (follow: boolean) => {
+    if (follow) {
+      try {
+        const effective = await setAppLanguage(SYSTEM_LANGUAGE_SENTINEL);
+        setIsSystemLanguage(true);
+        void syncToProfile(effective);
+      } catch (e) {
+        console.error("[PreferencesContext] setFollowDeviceLanguage(on) failed:", e);
+      }
+      return;
+    }
+    // follow=false — anchor whatever is currently effective. The
+    // effective code is whatever i18next is on right now.
+    try {
+      const current = resolveDeviceLanguage();
+      // Caller may already be on a non-device language at this point;
+      // resolveDeviceLanguage() is the right fallback only when no
+      // manual choice precedes this. Pull the live i18next language
+      // if present.
+      // NOTE: importing i18n here would be circular; the deferred
+      // import in the i18n module already resolves the actual current
+      // language. For now we lean on resolveDeviceLanguage as a safe
+      // anchor; the next manual setLanguage from the UI overrides.
+      await setAppLanguage(current);
+      setIsSystemLanguage(false);
+      void syncToProfile(current);
+    } catch (e) {
+      console.error("[PreferencesContext] setFollowDeviceLanguage(off) failed:", e);
+    }
+  };
+
+  // P1 — AppState listener. When the user backgrounds the app, flips
+  // their OS language, and returns, we re-resolve from the device
+  // ONLY if they opted into system mode. Otherwise this is a no-op.
+  useEffect(() => {
+    const handler = async (state: AppStateStatus) => {
+      if (state !== "active" || !isSystemLanguage) return;
+      try {
+        const effective = await setAppLanguage(SYSTEM_LANGUAGE_SENTINEL);
+        void syncToProfile(effective);
+      } catch {
+        // non-fatal
+      }
+    };
+    const sub = AppState.addEventListener("change", handler);
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSystemLanguage, user?.id]);
+
+  // P2 — one-shot adopt: when the user logs in, if AsyncStorage holds
+  // no app-language preference (e.g., fresh install on a new device),
+  // pull from profiles.language as a cross-device fallback. Otherwise
+  // mirror the local choice up so the server snapshot tracks.
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(APP_LANGUAGE_STORAGE_KEY);
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("language")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (cancelled) return;
+        const profileCode = (prof?.language as string | undefined) ?? null;
+        if (!stored && profileCode) {
+          // Adopt the server's language locally.
+          await setAppLanguage(profileCode);
+        } else if (stored && stored !== SYSTEM_LANGUAGE_SENTINEL && stored !== profileCode) {
+          // Mirror local → server.
+          await syncToProfile(stored);
+        }
+      } catch (e) {
+        console.warn(
+          "[PreferencesContext] profile/local language reconcile skipped:",
+          (e as Error).message,
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const addOriginCountry = async (country: OriginCountry) => {
     if (preferences.originCountries.some((c) => c.code === country.code)) {
@@ -517,6 +677,8 @@ export const PreferencesProvider = ({ children }: { children: ReactNode }) => {
         preferences,
         isLoading,
         setLanguage,
+        isSystemLanguage,
+        setFollowDeviceLanguage,
         addOriginCountry,
         removeOriginCountry,
         toggleCommunity,

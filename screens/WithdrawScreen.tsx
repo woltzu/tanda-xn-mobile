@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,8 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useWallet } from "../context/WalletContext";
 import { usePayment } from "../context/PaymentContext";
+import { useRoute, RouteProp } from "@react-navigation/native";
+import { useKYCGate } from "../components/KYCGate";
 
 type WithdrawNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -84,6 +86,20 @@ export default function WithdrawScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSettingUpAccount, setIsSettingUpAccount] = useState(false);
 
+  // P0 (kyc-trigger review): rehydrate from a deferred-action resume.
+  const route = useRoute<RouteProp<RootStackParamList, "Withdraw">>();
+  useEffect(() => {
+    const r = route.params?.resume;
+    if (!r) return;
+    if (typeof r.amount === "string") setAmount(r.amount);
+    if (typeof r.selectedMethod === "string" || r.selectedMethod === null)
+      setSelectedMethod(r.selectedMethod);
+    // One-shot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const { ensureVerified } = useKYCGate({ resumeRoute: "Withdraw" });
+
   // Filter to bank accounts only for withdrawals
   const bankAccounts = paymentMethods.filter((pm: any) => pm.type === "us_bank_account");
 
@@ -123,6 +139,12 @@ export default function WithdrawScreen() {
 
   const handleContinue = async () => {
     if (!canContinue) return;
+
+    // P0 (kyc-trigger review): block before any state change.
+    const gatePassed = await ensureVerified(() => ({
+      resume: { amount, selectedMethod },
+    }));
+    if (!gatePassed) return;
 
     setIsProcessing(true);
     try {

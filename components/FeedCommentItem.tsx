@@ -2,6 +2,7 @@ import React from "react";
 import { View, Text, StyleSheet, Image } from "react-native";
 import { FeedComment } from "../context/FeedContext";
 import { colors, typography, spacing } from "../theme/tokens";
+import ReportButton from "./ReportButton";
 
 type FeedCommentItemProps = {
   comment: FeedComment;
@@ -43,6 +44,15 @@ export default function FeedCommentItem({ comment, currentUserId }: FeedCommentI
             {isOwnComment ? "You" : comment.authorName}
           </Text>
           <Text style={styles.time}>{formatRelativeTime(comment.createdAt)}</Text>
+          {/* Moderation P0 (2026-06-13): report a comment. Hidden on own
+              comments by the component's ownerUserId guard. */}
+          <ReportButton
+            kind="content"
+            contentType="comment"
+            targetId={comment.id}
+            ownerUserId={comment.userId}
+            compact
+          />
         </View>
         <Text style={styles.content}>{comment.content}</Text>
       </View>

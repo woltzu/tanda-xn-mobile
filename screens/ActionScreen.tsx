@@ -178,7 +178,7 @@ const ActionScreen: React.FC = () => {
         icon: "send",
         iconBgColor: COLORS.navyIconBg,
         iconColor: COLORS.navy,
-        route: "SendMoney",
+        route: "DomesticSendMoney",
         priority: 50,
         visible: true,
         isUrgent: false,

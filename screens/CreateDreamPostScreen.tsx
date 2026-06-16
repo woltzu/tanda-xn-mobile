@@ -1,55 +1,73 @@
-import React, { useState } from "react";
+// ══════════════════════════════════════════════════════════════════════════════
+// screens/CreateDreamPostScreen.tsx — Dream-post composer (P1 single-screen rewrite)
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// Replaces the prior 4-step wizard (2,039 LoC: choose_source → select_item
+// → compose → review). The new layout is one screen, optimistic-insert,
+// background upload:
+//
+//   1. Live post-card preview at the top.
+//   2. Caption input (multiline, autofocus) + 3 example-prompt chips.
+//   3. "Attach a goal or circle" — opens a single sheet that lists the
+//      user's active goals + circles. One tap links the post.
+//   4. Media picker (image only; the prior video flow is dropped — keeping
+//      the screen focused on the most-common case).
+//   5. "More options ▾" disclosure → visibility, location, hashtags.
+//   6. Post → optimistic insert with `image_upload_status = 'pending'`
+//      (or `'completed'` if no image), navigation back, and a
+//      fire-and-forget background upload that PATCHes the row via
+//      updateDreamPostImage / markDreamPostImageFailed when it settles.
+//      A failed upload surfaces a "Retry upload" pill on the post card
+//      (FeedPostCard) — see FeedContext + migration 150.
+//
+// Shared image helpers come from utils/image.ts (downscale + bucket
+// upload). The retry path stashes the local URI in AsyncStorage keyed by
+// post id so the author can re-upload without re-picking.
+// ══════════════════════════════════════════════════════════════════════════════
+
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
+  ScrollView,
   TextInput,
   TouchableOpacity,
   SafeAreaView,
-  ScrollView,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
   Image,
+  Alert,
+  Modal,
+  Pressable,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import * as ImagePicker from "expo-image-picker";
-import { useFeed, FeedVisibility } from "../context/FeedContext";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuth } from "../context/AuthContext";
+import { useFeed, FeedVisibility, FeedPost } from "../context/FeedContext";
 import { useSavings, SavingsGoal } from "../context/SavingsContext";
 import { useCircles, Circle } from "../context/CirclesContext";
-import { useCommunity, Community } from "../context/CommunityContext";
-import { useAuth } from "../context/AuthContext";
-import VisibilityPicker from "../components/VisibilityPicker";
-import VideoPlayer from "../components/VideoPlayer";
-import { colors, radius, typography, spacing } from "../theme/tokens";
-import { supabase } from "../lib/supabase";
 import { showToast } from "../components/Toast";
+import { uploadToBucket } from "../utils/image";
+import { colors, radius, typography, spacing } from "../theme/tokens";
 
-// ============================================
-// Types
-// ============================================
+// ══════════════════════════════════════════════════════════════════════════
+// Constants
+// ══════════════════════════════════════════════════════════════════════════
 
-type PostSource = "goal" | "circle" | "new_dream";
-type Step = "choose_source" | "select_item" | "compose" | "review";
-type MediaType = "image" | "video" | null;
+const FEED_IMAGES_BUCKET = "feed-images";
+const RETRY_URI_KEY_PREFIX = "@tandaxn_dream_post_retry_uri:";
 
-const DREAM_CATEGORIES = [
-  { id: "home", emoji: "\u{1F3E0}", label: "Home" },
-  { id: "education", emoji: "\u{1F4DA}", label: "Education" },
-  { id: "travel", emoji: "\u{2708}\u{FE0F}", label: "Travel" },
-  { id: "vehicle", emoji: "\u{1F697}", label: "Vehicle" },
-  { id: "business", emoji: "\u{1F4BC}", label: "Business" },
-  { id: "family", emoji: "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}", label: "Family" },
-  { id: "health", emoji: "\u{1F3E5}", label: "Health" },
-  { id: "other", emoji: "\u{2728}", label: "Other" },
-];
+type AttachKind = "goal" | "circle";
 
-// ============================================
-// Main Component
-// ============================================
+// ══════════════════════════════════════════════════════════════════════════
+// Screen
+// ══════════════════════════════════════════════════════════════════════════
 
 export default function CreateDreamPostScreen() {
   const navigation = useNavigation();
@@ -57,1983 +75,1228 @@ export default function CreateDreamPostScreen() {
   const { user } = useAuth();
   const { getActiveGoals } = useSavings();
   const { myCircles } = useCircles();
-  const { myCommunities } = useCommunity();
-  const { createDreamPost } = useFeed();
+  const { createDreamPost, updateDreamPostImage, markDreamPostImageFailed } =
+    useFeed();
 
-  // Flow state
-  const [step, setStep] = useState<Step>("choose_source");
-  const [source, setSource] = useState<PostSource | null>(null);
-
-  // Selected item
+  // ── Form state ────────────────────────────────────────────────────────
+  const [caption, setCaption] = useState("");
+  const [mediaUri, setMediaUri] = useState<string | null>(null);
+  const [visibility, setVisibility] = useState<FeedVisibility>("public");
+  const [location, setLocation] = useState("");
+  const [hashtagsText, setHashtagsText] = useState("");
   const [selectedGoal, setSelectedGoal] = useState<SavingsGoal | null>(null);
   const [selectedCircle, setSelectedCircle] = useState<Circle | null>(null);
 
-  // Compose state
-  const [caption, setCaption] = useState("");
-  const [mediaUri, setMediaUri] = useState<string | null>(null);
-  const [mediaType, setMediaType] = useState<MediaType>(null);
-  const [mediaBlob, setMediaBlob] = useState<Blob | null>(null); // Captured at pick time
-  const [visibility, setVisibility] = useState<FeedVisibility>("public");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // UI state
+  const [attachSheetOpen, setAttachSheetOpen] = useState(false);
+  const [attachKind, setAttachKind] = useState<AttachKind>("goal");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  // Tagging state
-  const [selectedCommunities, setSelectedCommunities] = useState<Community[]>([]);
-  const [location, setLocation] = useState("");
-  const [hashtags, setHashtags] = useState("");
+  const activeGoals = useMemo(() => getActiveGoals(), [getActiveGoals]);
 
-  // New dream fields
-  const [dreamTitle, setDreamTitle] = useState("");
-  const [dreamAmount, setDreamAmount] = useState("");
-  const [dreamCategory, setDreamCategory] = useState<string | null>(null);
-
-  const activeGoals = getActiveGoals();
-
-  // ============================================
-  // Navigation Handlers
-  // ============================================
-
-  const handleSourceSelect = (src: PostSource) => {
-    setSource(src);
-    if (src === "new_dream") {
-      setStep("compose");
-    } else {
-      setStep("select_item");
-    }
+  // P2 (2026-06-14): most-recently-updated active goal. Drives the
+  // "Share progress on X?" chip that pre-fills the caption + selects
+  // the goal so the post lands linked. Hidden when nothing is active,
+  // when the user already typed a caption, or when they've already
+  // picked a goal manually.
+  const suggestedGoal = useMemo<SavingsGoal | null>(() => {
+    if (activeGoals.length === 0) return null;
+    return [...activeGoals].sort((a, b) =>
+      (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""),
+    )[0];
+  }, [activeGoals]);
+  const showGoalSuggestionChip =
+    suggestedGoal !== null &&
+    caption.trim().length === 0 &&
+    selectedGoal === null;
+  const acceptGoalSuggestion = () => {
+    if (!suggestedGoal) return;
+    setSelectedGoal(suggestedGoal);
+    setCaption(
+      t("create_dream.goal_suggest_prefill", {
+        goal: suggestedGoal.name,
+      }),
+    );
   };
 
-  const handleGoalSelect = (goal: SavingsGoal) => {
-    setSelectedGoal(goal);
-    const progress = Math.round((goal.currentBalance / goal.targetAmount) * 100);
-    setCaption(`${progress}% of the way to ${goal.name}! \u{1F4AA}`);
-    setStep("compose");
-  };
+  const activeCircles = useMemo(
+    () => myCircles.filter((c) => c.status === "active"),
+    [myCircles],
+  );
 
-  const handleCircleSelect = (circle: Circle) => {
-    setSelectedCircle(circle);
-    setCaption(`Saving together in ${circle.name}! \u{1F91D}`);
-    setStep("compose");
-  };
+  // ── Example-prompt chips ──────────────────────────────────────────────
+  const promptChips = useMemo(
+    () => [
+      { key: "working", template: t("create_dream.chip_working_template") },
+      { key: "milestone", template: t("create_dream.chip_milestone_template") },
+      {
+        key: "accountability",
+        template: t("create_dream.chip_accountability_template"),
+      },
+    ],
+    [t],
+  );
 
-  const handleBack = () => {
-    if (step === "review") {
-      setStep("compose");
-    } else if (step === "compose" && source !== "new_dream") {
-      setStep("select_item");
-      if (source === "goal") setSelectedGoal(null);
-      if (source === "circle") setSelectedCircle(null);
-      setCaption("");
-    } else if (step === "compose" && source === "new_dream") {
-      setStep("choose_source");
-      setSource(null);
-      setDreamTitle("");
-      setDreamAmount("");
-      setDreamCategory(null);
-    } else if (step === "select_item") {
-      setStep("choose_source");
-      setSource(null);
-    } else {
-      navigation.goBack();
-    }
-  };
-
-  // ============================================
-  // Media Picker
-  // ============================================
-
-  const pickMedia = async () => {
+  // ── Image picker ──────────────────────────────────────────────────────
+  const handlePickImage = async () => {
+    setPicking(true);
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images", "videos"],
-        allowsEditing: true,
-        aspect: [9, 16], // Portrait-first (TikTok-style)
-        quality: 0.8,
-        videoMaxDuration: 60,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        setMediaUri(asset.uri);
-        const type: MediaType = asset.type === "video" ? "video" : "image";
-        setMediaType(type);
-
-        // Immediately capture the blob at pick time to prevent web blob URL revocation.
-        // On web, blob URLs can be garbage-collected before upload time → empty file.
-        try {
-          const response = await fetch(asset.uri);
-          const blob = await response.blob();
-          if (blob.size > 0) {
-            setMediaBlob(blob);
-            const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
-            console.log(`[Media] Captured ${type}: ${sizeMB}MB, type: ${blob.type}`);
-          } else {
-            console.warn("[Media] Blob is empty — file may not have been captured correctly");
-            setMediaBlob(null);
-          }
-        } catch (blobErr) {
-          console.warn("[Media] Failed to pre-capture blob:", blobErr);
-          setMediaBlob(null);
-        }
-
-        showToast(
-          type === "video" ? "Video selected (up to 60s)" : "Photo selected",
-          "info"
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm.status !== "granted") {
+        Alert.alert(
+          t("create_dream.media_perm_title"),
+          t("create_dream.media_perm_body"),
         );
-      }
-    } catch (err) {
-      console.error("Media picker error:", err);
-      Alert.alert(t("create_dream_post.alert_error_title"), t("create_dream_post.alert_could_not_open_picker"));
-    }
-  };
-
-  const uploadMedia = async (uri: string): Promise<string | null> => {
-    try {
-      // Use pre-captured blob (from pick time) or fetch as fallback
-      let blob: Blob;
-      if (mediaBlob && mediaBlob.size > 0) {
-        blob = mediaBlob;
-        console.log(`[Upload] Using pre-captured blob: ${(blob.size / 1024 / 1024).toFixed(1)}MB`);
-      } else {
-        console.log("[Upload] No pre-captured blob, fetching from URI...");
-        const response = await fetch(uri);
-        blob = await response.blob();
-      }
-
-      // Reject empty files
-      if (!blob || blob.size === 0) {
-        throw new Error("File is empty (0 bytes). Please try selecting the media again.");
-      }
-
-      // Smart extension detection — handles blob URLs, data URIs, and file paths
-      let fileExt: string;
-      const blobType = blob.type; // e.g. "video/mp4", "image/jpeg"
-      if (blobType && blobType.includes("/")) {
-        const mimeExt = blobType.split("/")[1].replace("quicktime", "mov");
-        fileExt = mimeExt === "jpeg" ? "jpg" : mimeExt;
-      } else {
-        const uriExt = uri.split(".").pop()?.split("?")[0]?.toLowerCase();
-        fileExt = uriExt && uriExt.length <= 5 ? uriExt : (mediaType === "video" ? "mp4" : "jpg");
-      }
-
-      const fileName = `${user?.id}/${Date.now()}.${fileExt}`;
-      const videoExts = ["mp4", "mov", "avi", "m4v", "webm"];
-      const isVideo = mediaType === "video" || videoExts.includes(fileExt);
-      const contentType = blobType || (isVideo ? `video/${fileExt === "mov" ? "quicktime" : fileExt}` : `image/${fileExt}`);
-
-      const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
-      console.log(`[Upload] Uploading ${isVideo ? "video" : "image"}: ${fileName} (${contentType}, ${sizeMB}MB)`);
-
-      // Platform-specific upload:
-      // - Web: blob works fine with Supabase SDK
-      // - React Native: blob.arrayBuffer() unavailable, Supabase SDK sends 0 bytes
-      //   → use FileReader to get real bytes, then upload ArrayBuffer
-      let uploadBody: ArrayBuffer | Uint8Array | Blob = blob;
-
-      if (Platform.OS !== "web") {
-        // React Native: read blob bytes via FileReader
-        try {
-          const bytes = await new Promise<Uint8Array>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              if (reader.result && reader.result instanceof ArrayBuffer) {
-                resolve(new Uint8Array(reader.result));
-              } else {
-                reject(new Error("FileReader did not return ArrayBuffer"));
-              }
-            };
-            reader.onerror = () => reject(reader.error || new Error("FileReader failed"));
-            reader.readAsArrayBuffer(blob);
-          });
-
-          if (bytes.byteLength > 0) {
-            uploadBody = bytes;
-            console.log(`[Upload] FileReader got ${(bytes.byteLength / 1024 / 1024).toFixed(1)}MB`);
-          } else {
-            console.warn("[Upload] FileReader returned 0 bytes, trying base64 decode...");
-            // Fallback: read as base64 data URL then decode
-            const base64 = await new Promise<string>((resolve, reject) => {
-              const r2 = new FileReader();
-              r2.onload = () => {
-                const dataUrl = r2.result as string;
-                const b64 = dataUrl.split(",")[1];
-                if (b64) resolve(b64);
-                else reject(new Error("No base64 data in data URL"));
-              };
-              r2.onerror = () => reject(r2.error || new Error("FileReader base64 failed"));
-              r2.readAsDataURL(blob);
-            });
-            const binaryStr = atob(base64);
-            const uint8 = new Uint8Array(binaryStr.length);
-            for (let i = 0; i < binaryStr.length; i++) {
-              uint8[i] = binaryStr.charCodeAt(i);
-            }
-            uploadBody = uint8;
-            console.log(`[Upload] Base64 decode got ${(uint8.byteLength / 1024 / 1024).toFixed(1)}MB`);
-          }
-        } catch (convErr: any) {
-          console.warn("[Upload] Byte conversion failed:", convErr.message);
-          // Last resort: upload via REST API with FormData (RN native file streaming)
-          try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session?.access_token) throw new Error("No auth session");
-
-            const formData = new FormData();
-            formData.append("", {
-              uri: uri,
-              name: fileName.split("/").pop() || `upload.${fileExt}`,
-              type: contentType,
-            } as any);
-
-            const restUrl = `https://fjqdkyjkwqeoafwvnjgv.supabase.co/storage/v1/object/feed-images/${fileName}`;
-            const restRes = await fetch(restUrl, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${session.access_token}`,
-              },
-              body: formData,
-            });
-
-            if (!restRes.ok) {
-              const errText = await restRes.text();
-              throw new Error(`REST upload failed (${restRes.status}): ${errText}`);
-            }
-
-            const { data: urlData } = supabase.storage
-              .from("feed-images")
-              .getPublicUrl(fileName);
-            console.log("[Upload] REST API Success:", urlData.publicUrl);
-            return urlData.publicUrl;
-          } catch (restErr: any) {
-            console.error("[Upload] REST API fallback failed:", restErr.message);
-            throw restErr;
-          }
-        }
-      }
-
-      const { data, error } = await supabase.storage
-        .from("feed-images")
-        .upload(fileName, uploadBody, {
-          contentType,
-          upsert: false,
-        });
-
-      if (error) {
-        console.error("[Upload] Storage error:", error.message);
-        throw new Error(error.message);
-      }
-
-      const { data: urlData } = supabase.storage
-        .from("feed-images")
-        .getPublicUrl(data.path);
-
-      console.log("[Upload] Success:", urlData.publicUrl);
-      return urlData.publicUrl;
-    } catch (err: any) {
-      console.error("[Upload] Media upload failed:", err);
-      throw err;
-    }
-  };
-
-  // ============================================
-  // Community Tag Toggle
-  // ============================================
-
-  const toggleCommunity = (community: Community) => {
-    setSelectedCommunities((prev) => {
-      const exists = prev.find((c) => c.id === community.id);
-      if (exists) {
-        return prev.filter((c) => c.id !== community.id);
-      }
-      return [...prev, community];
-    });
-  };
-
-  // ============================================
-  // Parse hashtags
-  // ============================================
-
-  const parseHashtags = (raw: string): string[] => {
-    return raw
-      .split(/[\s,]+/)
-      .map((tag) => tag.trim())
-      .filter((tag) => tag.length > 0)
-      .map((tag) => (tag.startsWith("#") ? tag : `#${tag}`))
-      .slice(0, 10);
-  };
-
-  // ============================================
-  // Submit
-  // ============================================
-
-  const handleSubmit = async () => {
-    if (isSubmitting) return;
-
-    let content = caption.trim();
-    let amount: number | undefined;
-    let metadata: Record<string, any> = {};
-    let relatedId: string | undefined;
-    let relatedType: string | undefined;
-
-    if (source === "goal" && selectedGoal) {
-      const progress = Math.round((selectedGoal.currentBalance / selectedGoal.targetAmount) * 100);
-      if (!content) content = `Saving for ${selectedGoal.name}! ${progress}% there!`;
-      amount = selectedGoal.currentBalance;
-      metadata = {
-        goalName: selectedGoal.name,
-        goalEmoji: selectedGoal.emoji,
-        goalType: selectedGoal.type,
-        currentBalance: selectedGoal.currentBalance,
-        targetAmount: selectedGoal.targetAmount,
-        progress,
-        interestEarned: selectedGoal.interestEarned,
-      };
-      relatedId = selectedGoal.id;
-      relatedType = "savings_goal";
-    } else if (source === "circle" && selectedCircle) {
-      if (!content) content = `Saving together in ${selectedCircle.name}!`;
-      amount = selectedCircle.amount;
-      metadata = {
-        circleName: selectedCircle.name,
-        circleEmoji: selectedCircle.emoji,
-        circleType: selectedCircle.type,
-        memberCount: selectedCircle.memberCount,
-        currentMembers: selectedCircle.currentMembers,
-        contributionAmount: selectedCircle.amount,
-        frequency: selectedCircle.frequency,
-        progress: selectedCircle.progress,
-      };
-      relatedId = selectedCircle.id;
-      relatedType = "circle";
-    } else if (source === "new_dream") {
-      if (!dreamTitle.trim()) {
-        Alert.alert(t("create_dream_post.alert_missing_title_title"), t("create_dream_post.alert_missing_title_body"));
         return;
       }
-      if (!content) content = dreamTitle.trim();
-      amount = dreamAmount ? parseFloat(dreamAmount) : undefined;
-      metadata = {
-        dreamTitle: dreamTitle.trim(),
-        dreamCategory,
-        dreamCategoryEmoji: DREAM_CATEGORIES.find((c) => c.id === dreamCategory)?.emoji || "\u{2728}",
-      };
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+        allowsEditing: false,
+      });
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setMediaUri(result.assets[0].uri);
+      }
+    } finally {
+      setPicking(false);
     }
+  };
 
-    if (!content) {
-      Alert.alert(t("create_dream_post.alert_missing_content_title"), t("create_dream_post.alert_missing_content_body"));
+  // ── Visibility help ───────────────────────────────────────────────────
+  const showVisibilityHelp = () => {
+    Alert.alert(
+      t("create_dream.visibility_help_title"),
+      t("create_dream.visibility_help_body"),
+    );
+  };
+
+  // ── Attach goal/circle sheet ──────────────────────────────────────────
+  const handleAttachOpen = () => {
+    setAttachKind(selectedCircle ? "circle" : "goal");
+    setAttachSheetOpen(true);
+  };
+  const handleAttachClose = () => setAttachSheetOpen(false);
+  const handlePickGoal = (g: SavingsGoal) => {
+    setSelectedGoal(g);
+    setSelectedCircle(null);
+    setAttachSheetOpen(false);
+  };
+  const handlePickCircle = (c: Circle) => {
+    setSelectedCircle(c);
+    setSelectedGoal(null);
+    setAttachSheetOpen(false);
+  };
+  const handleClearAttachment = () => {
+    setSelectedGoal(null);
+    setSelectedCircle(null);
+  };
+
+  // ── Build metadata for both the live preview and the insert payload ──
+  const metadata = useMemo(() => {
+    const m: Record<string, any> = {};
+    if (mediaUri) m.mediaType = "image";
+    if (selectedGoal) {
+      m.goalName = selectedGoal.name;
+      m.goalEmoji = selectedGoal.emoji;
+      m.targetAmount = selectedGoal.targetAmount;
+      m.currentBalance = selectedGoal.currentBalance;
+    }
+    if (selectedCircle) {
+      m.circleId = selectedCircle.id;
+      m.circleName = selectedCircle.name;
+      m.circleEmoji = selectedCircle.emoji;
+      // Use rough completion percent if available so the support CTA shows.
+      m.progress = Math.round(
+        ((selectedCircle.myPosition ?? 0) /
+          Math.max(selectedCircle.memberCount, 1)) *
+          100,
+      );
+    }
+    const trimmedLocation = location.trim();
+    if (trimmedLocation) m.location = trimmedLocation;
+    const tags = hashtagsText
+      .split(/[,\s]+/)
+      .map((s) => s.trim().replace(/^#/, ""))
+      .filter(Boolean);
+    if (tags.length > 0) m.hashtags = tags;
+    return m;
+  }, [mediaUri, selectedGoal, selectedCircle, location, hashtagsText]);
+
+  // ── Submit (optimistic insert + background upload) ────────────────────
+  const handlePost = async () => {
+    if (submitting) return;
+    const captionTrimmed = caption.trim();
+    if (!captionTrimmed) {
+      Alert.alert(
+        t("create_dream.validation_caption_missing_title"),
+        t("create_dream.validation_caption_missing_body"),
+      );
+      return;
+    }
+    if (!user?.id) {
+      Alert.alert(
+        t("create_dream.auth_required_title"),
+        t("create_dream.auth_required_body"),
+      );
       return;
     }
 
-    // Add tagging metadata
-    if (mediaType) {
-      metadata.mediaType = mediaType;
-    }
-    if (selectedCommunities.length > 0) {
-      metadata.communityTags = selectedCommunities.map((c) => ({
-        id: c.id,
-        name: c.name,
-        icon: c.icon,
-      }));
-    }
-    const parsedTags = parseHashtags(hashtags);
-    if (parsedTags.length > 0) {
-      metadata.hashtags = parsedTags;
-    }
-    if (location.trim()) {
-      metadata.location = location.trim();
-    }
+    setSubmitting(true);
+    const hasImage = !!mediaUri;
+    const relatedId = selectedGoal?.id ?? selectedCircle?.id;
+    const relatedType = selectedGoal
+      ? "goal"
+      : selectedCircle
+        ? "circle"
+        : undefined;
 
+    let createdPost: FeedPost;
     try {
-      setIsSubmitting(true);
+      createdPost = await createDreamPost(
+        captionTrimmed,
+        undefined,
+        undefined,
+        visibility,
+        metadata,
+        relatedId,
+        relatedType,
+        hasImage ? "pending" : "completed",
+      );
+    } catch (e) {
+      setSubmitting(false);
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert(t("create_dream.post_failed_title"), msg);
+      return;
+    }
 
-      // Upload media if selected
-      let imageUrl: string | undefined;
-      if (mediaUri) {
-        showToast(
-          mediaType === "video" ? "Uploading video..." : "Uploading photo...",
-          "info",
-          10000
-        );
-        try {
-          const uploaded = await uploadMedia(mediaUri);
-          if (uploaded) {
-            imageUrl = uploaded;
-            showToast("Upload complete!", "success");
-          }
-        } catch (uploadErr: any) {
-          // Upload failed — ask user what to do
-          const errorMsg = uploadErr?.message || "Unknown error";
-          const proceed = await new Promise<boolean>((resolve) => {
-            Alert.alert(
-              "Upload Failed",
-              `Could not upload your ${mediaType || "media"}: ${errorMsg}\n\nPost without media?`,
-              [
-                { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-                { text: "Post Anyway", onPress: () => resolve(true) },
-              ]
-            );
-          });
-          if (!proceed) {
-            setIsSubmitting(false);
-            return;
-          }
-          // Clear media metadata if posting without it
-          delete metadata.mediaType;
-        }
-      }
+    // Navigate back immediately — the upload runs in the background.
+    showToast(
+      hasImage
+        ? t("create_dream.success_toast_with_image")
+        : t("create_dream.success_toast"),
+      "success",
+    );
+    navigation.goBack();
 
-      await createDreamPost(content, imageUrl, amount, visibility, metadata, relatedId, relatedType);
-      showToast("Dream posted successfully! \u{2728}", "success");
-      navigation.goBack();
-    } catch (err) {
-      Alert.alert(t("create_dream_post.alert_error_title"), t("create_dream_post.alert_failed_create"));
-      console.error("Error creating post:", err);
-    } finally {
-      setIsSubmitting(false);
+    if (hasImage && mediaUri) {
+      // Best-effort: stash the local URI so a retry can re-upload without
+      // re-picking. Swallow AsyncStorage errors — they're non-fatal.
+      AsyncStorage.setItem(
+        RETRY_URI_KEY_PREFIX + createdPost.id,
+        mediaUri,
+      ).catch(() => {});
+      kickOffUpload(createdPost.id, mediaUri, user.id, {
+        updateDreamPostImage,
+        markDreamPostImageFailed,
+        t,
+      });
     }
   };
 
-  const canSubmit =
-    source === "new_dream"
-      ? dreamTitle.trim().length > 0
-      : selectedGoal !== null || selectedCircle !== null;
+  // ══════════════════════════════════════════════════════════════════════
+  // Render
+  // ══════════════════════════════════════════════════════════════════════
+  const previewPost = buildPreviewPost({
+    user,
+    caption,
+    mediaUri,
+    visibility,
+    metadata,
+    selectedGoal,
+    selectedCircle,
+  });
 
-  const canPreview = canSubmit && caption.trim().length > 0;
-
-  // ============================================
-  // Header
-  // ============================================
-
-  const headerTitle =
-    step === "choose_source"
-      ? "Share a Dream"
-      : step === "select_item"
-        ? source === "goal"
-          ? "Select Goal"
-          : "Select Circle"
-        : step === "compose"
-          ? "Compose Post"
-          : "Review Post";
-
-  const stepIndex = ["choose_source", "select_item", "compose", "review"].indexOf(step);
+  const hasAttachment = !!selectedGoal || !!selectedCircle;
+  const attachmentLabel = selectedGoal
+    ? `${selectedGoal.emoji}  ${selectedGoal.name}`
+    : selectedCircle
+      ? `${selectedCircle.emoji}  ${selectedCircle.name}`
+      : null;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleBack} style={styles.headerBtn}>
-            {step === "choose_source" ? (
-              <Ionicons name="close" size={24} color={colors.textPrimary} />
-            ) : (
-              <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
-            )}
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{headerTitle}</Text>
-          <View style={{ width: 40 }} />
-        </View>
-
-        {/* Step Indicator — 4 dots */}
-        <View style={styles.stepIndicator}>
-          {[0, 1, 2, 3].map((i) => {
-            const isActive = i <= stepIndex || (source === "new_dream" && i >= 0 && stepIndex >= 2 && i <= stepIndex);
-            return (
-              <View
-                key={i}
-                style={[styles.stepDot, isActive && styles.stepDotActive]}
-              />
-            );
-          })}
-        </View>
-
-        {/* ============================================ */}
-        {/* STEP 1: Choose Source */}
-        {/* ============================================ */}
-        {step === "choose_source" && (
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            <Text style={styles.stepTitle}>{t("create_dream_post.step_what_share")}</Text>
-            <Text style={styles.stepSubtitle}>
-              Connect your post to real financial activity
-            </Text>
-
-            {/* Goal Source */}
-            <TouchableOpacity
-              style={styles.sourceCard}
-              onPress={() => handleSourceSelect("goal")}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.sourceIconWrap, { backgroundColor: "#D1FAE5" }]}>
-                <Text style={styles.sourceEmoji}>{"\u{1F3AF}"}</Text>
-              </View>
-              <View style={styles.sourceInfo}>
-                <Text style={styles.sourceTitle}>{t("create_dream_post.source_goal")}</Text>
-                <Text style={styles.sourceDescription}>
-                  Share progress on a savings goal
-                </Text>
-                {activeGoals.length > 0 && (
-                  <Text style={styles.sourceCount}>
-                    {activeGoals.length} active goal{activeGoals.length !== 1 ? "s" : ""}
-                  </Text>
-                )}
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-
-            {/* Circle Source */}
-            <TouchableOpacity
-              style={styles.sourceCard}
-              onPress={() => handleSourceSelect("circle")}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.sourceIconWrap, { backgroundColor: "#EEF2FF" }]}>
-                <Text style={styles.sourceEmoji}>{"\u{1F91D}"}</Text>
-              </View>
-              <View style={styles.sourceInfo}>
-                <Text style={styles.sourceTitle}>{t("create_dream_post.source_circle")}</Text>
-                <Text style={styles.sourceDescription}>
-                  Share your circle savings journey
-                </Text>
-                {myCircles.length > 0 && (
-                  <Text style={styles.sourceCount}>
-                    {myCircles.length} circle{myCircles.length !== 1 ? "s" : ""}
-                  </Text>
-                )}
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-
-            {/* New Dream Source */}
-            <TouchableOpacity
-              style={styles.sourceCard}
-              onPress={() => handleSourceSelect("new_dream")}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.sourceIconWrap, { backgroundColor: "#FEF3C7" }]}>
-                <Text style={styles.sourceEmoji}>{"\u{2728}"}</Text>
-              </View>
-              <View style={styles.sourceInfo}>
-                <Text style={styles.sourceTitle}>{t("create_dream_post.source_new")}</Text>
-                <Text style={styles.sourceDescription}>
-                  Share a new dream or aspiration
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
-          </ScrollView>
-        )}
-
-        {/* ============================================ */}
-        {/* STEP 2A: Select Goal */}
-        {/* ============================================ */}
-        {step === "select_item" && source === "goal" && (
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            <Text style={styles.stepTitle}>{t("create_dream_post.step_select_goal")}</Text>
-            {activeGoals.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyEmoji}>{"\u{1F3AF}"}</Text>
-                <Text style={styles.emptyTitle}>{t("create_dream_post.empty_no_goals")}</Text>
-                <Text style={styles.emptyText}>
-                  Create a savings goal first to share your progress!
-                </Text>
-              </View>
-            ) : (
-              activeGoals.map((goal) => {
-                const progress = Math.round(
-                  (goal.currentBalance / goal.targetAmount) * 100
-                );
-                return (
-                  <TouchableOpacity
-                    key={goal.id}
-                    style={styles.itemCard}
-                    onPress={() => handleGoalSelect(goal)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.itemHeader}>
-                      <Text style={styles.itemEmoji}>{goal.emoji}</Text>
-                      <View style={styles.itemInfo}>
-                        <Text style={styles.itemName}>{goal.name}</Text>
-                        <Text style={styles.itemSubtext}>
-                          ${goal.currentBalance.toLocaleString()} / $
-                          {goal.targetAmount.toLocaleString()}
-                        </Text>
-                      </View>
-                      <View style={styles.progressBadge}>
-                        <Text style={styles.progressBadgeText}>{progress}%</Text>
-                      </View>
-                    </View>
-                    <View style={styles.progressBarBg}>
-                      <View
-                        style={[
-                          styles.progressBarFill,
-                          { width: `${Math.min(progress, 100)}%` },
-                        ]}
-                      />
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
-            )}
-          </ScrollView>
-        )}
-
-        {/* ============================================ */}
-        {/* STEP 2B: Select Circle */}
-        {/* ============================================ */}
-        {step === "select_item" && source === "circle" && (
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            <Text style={styles.stepTitle}>{t("create_dream_post.step_select_circle")}</Text>
-            {myCircles.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyEmoji}>{"\u{1F91D}"}</Text>
-                <Text style={styles.emptyTitle}>{t("create_dream_post.empty_no_circles")}</Text>
-                <Text style={styles.emptyText}>
-                  Join or create a savings circle to share your journey!
-                </Text>
-              </View>
-            ) : (
-              myCircles.map((circle) => (
-                <TouchableOpacity
-                  key={circle.id}
-                  style={styles.itemCard}
-                  onPress={() => handleCircleSelect(circle)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.itemHeader}>
-                    <Text style={styles.itemEmoji}>{circle.emoji}</Text>
-                    <View style={styles.itemInfo}>
-                      <Text style={styles.itemName}>{circle.name}</Text>
-                      <Text style={styles.itemSubtext}>
-                        {circle.currentMembers}/{circle.memberCount} members{" "}
-                        {"\u00B7"} ${circle.amount}/{circle.frequency}
-                      </Text>
-                    </View>
-                    <View style={styles.progressBadge}>
-                      <Text style={styles.progressBadgeText}>{circle.progress}%</Text>
-                    </View>
-                  </View>
-                  <View style={styles.progressBarBg}>
-                    <View
-                      style={[
-                        styles.progressBarFill,
-                        { width: `${Math.min(circle.progress, 100)}%` },
-                      ]}
-                    />
-                  </View>
-                </TouchableOpacity>
-              ))
-            )}
-          </ScrollView>
-        )}
-
-        {/* ============================================ */}
-        {/* STEP 3: Compose & Tag */}
-        {/* ============================================ */}
-        {step === "compose" && (
-          <ScrollView
-            style={styles.content}
-            contentContainerStyle={{ paddingBottom: 100 }}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
+        <LinearGradient
+          colors={[colors.primaryNavy, "#143654"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backBtn}
+            accessibilityRole="button"
           >
-            {/* Preview Card — Goal */}
-            {source === "goal" && selectedGoal && (() => {
-              const progress = Math.round(
-                (selectedGoal.currentBalance / selectedGoal.targetAmount) * 100
-              );
-              return (
-                <View style={styles.previewCard}>
-                  <View style={styles.previewHeader}>
-                    <Text style={styles.previewEmoji}>{selectedGoal.emoji}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.previewTitle}>{selectedGoal.name}</Text>
-                      <Text style={styles.previewAmount}>
-                        ${selectedGoal.currentBalance.toLocaleString()} of $
-                        {selectedGoal.targetAmount.toLocaleString()}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.progressBarBg}>
-                    <View
-                      style={[
-                        styles.progressBarFill,
-                        { width: `${Math.min(progress, 100)}%` },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.previewProgress}>{progress}% complete</Text>
-                </View>
-              );
-            })()}
+            <Ionicons name="arrow-back" size={22} color={colors.textWhite} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>
+            {t("create_dream.header_title")}
+          </Text>
+          <View style={{ width: 36 }} />
+        </LinearGradient>
 
-            {/* Preview Card — Circle */}
-            {source === "circle" && selectedCircle && (
-              <View style={styles.previewCard}>
-                <View style={styles.previewHeader}>
-                  <Text style={styles.previewEmoji}>{selectedCircle.emoji}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.previewTitle}>{selectedCircle.name}</Text>
-                    <Text style={styles.previewAmount}>
-                      ${selectedCircle.amount}/{selectedCircle.frequency} {"\u00B7"}{" "}
-                      {selectedCircle.currentMembers} members
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.progressBarBg}>
-                  <View
-                    style={[
-                      styles.progressBarFill,
-                      { width: `${Math.min(selectedCircle.progress, 100)}%` },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.previewProgress}>
-                  {selectedCircle.progress}% of cycle complete
-                </Text>
-              </View>
-            )}
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* ── Live preview ──────────────────────────────────────────── */}
+          <Text style={styles.sectionLabel}>
+            {t("create_dream.preview_label")}
+          </Text>
+          <PostPreviewCard post={previewPost} t={t} />
 
-            {/* New Dream Fields */}
-            {source === "new_dream" && (
-              <>
-                <TextInput
-                  style={styles.dreamTitleInput}
-                  placeholder={t("create_dream_post.placeholder_dream_name")}
-                  placeholderTextColor={colors.textSecondary}
-                  value={dreamTitle}
-                  onChangeText={setDreamTitle}
-                  maxLength={100}
-                  autoFocus
+          {/* ── Caption + prompt chips ────────────────────────────────── */}
+          <Text style={styles.sectionLabel}>
+            {t("create_dream.caption_label")}
+          </Text>
+          <View style={styles.chipRow}>
+            {promptChips.map((c) => (
+              <TouchableOpacity
+                key={c.key}
+                style={styles.chip}
+                onPress={() => setCaption(c.template)}
+                accessibilityRole="button"
+                accessibilityLabel={t(`create_dream.chip_${c.key}_label`)}
+              >
+                <Ionicons
+                  name="sparkles-outline"
+                  size={12}
+                  color={colors.accentTeal}
                 />
-
-                <View style={styles.amountRow}>
-                  <Text style={styles.amountLabel}>Target Amount (optional)</Text>
-                  <View style={styles.amountInputWrap}>
-                    <Text style={styles.dollarSign}>$</Text>
-                    <TextInput
-                      style={styles.amountInput}
-                      placeholder="0"
-                      placeholderTextColor={colors.textSecondary}
-                      keyboardType="decimal-pad"
-                      value={dreamAmount}
-                      onChangeText={setDreamAmount}
-                    />
-                  </View>
-                </View>
-
-                <Text style={styles.categoryLabel}>{t("create_dream_post.category_label")}</Text>
-                <View style={styles.categoryGrid}>
-                  {DREAM_CATEGORIES.map((cat) => (
-                    <TouchableOpacity
-                      key={cat.id}
-                      style={[
-                        styles.categoryChip,
-                        dreamCategory === cat.id && styles.categoryChipActive,
-                      ]}
-                      onPress={() => setDreamCategory(cat.id)}
-                    >
-                      <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
-                      <Text
-                        style={[
-                          styles.categoryText,
-                          dreamCategory === cat.id && styles.categoryTextActive,
-                        ]}
-                      >
-                        {cat.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </>
-            )}
-
-            {/* Media Picker — with Video Preview */}
-            <TouchableOpacity style={styles.photoButton} onPress={pickMedia} activeOpacity={0.7}>
-              {mediaUri ? (
-                <View style={styles.mediaPreviewContainer}>
-                  {mediaType === "video" ? (
-                    <VideoPlayer
-                      uri={mediaUri}
-                      style={styles.mediaPreview}
-                      showControls
-                      thumbnailMode={false}
-                    />
-                  ) : (
-                    <View style={styles.photoPreview}>
-                      <Image source={{ uri: mediaUri }} style={styles.photoImage} />
-                      <View style={styles.mediaBadge}>
-                        <Ionicons name="image" size={12} color="#FFFFFF" />
-                        <Text style={styles.mediaBadgeText}>{t("create_dream_post.badge_photo")}</Text>
-                      </View>
-                    </View>
-                  )}
-                  <TouchableOpacity
-                    style={styles.photoRemove}
-                    onPress={() => { setMediaUri(null); setMediaType(null); }}
-                  >
-                    <Ionicons name="close-circle" size={28} color="#FF4444" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.changeMediaBtn} onPress={pickMedia}>
-                    <Ionicons name="swap-horizontal" size={16} color="#FFFFFF" />
-                    <Text style={styles.changeMediaText}>{t("create_dream_post.change_media")}</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={styles.photoPlaceholder}>
-                  <Ionicons name="videocam-outline" size={24} color={colors.accentTeal} />
-                  <Text style={styles.photoText}>{t("create_dream_post.add_photo_video")}</Text>
-                </View>
-              )}
+                <Text style={styles.chipText}>
+                  {t(`create_dream.chip_${c.key}_label`)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {/* P2 (2026-06-14) — "Share progress on X?" goal-suggestion
+              chip. Shown only when the user hasn't typed yet and hasn't
+              already picked a goal manually. Tapping pre-fills the
+              caption and selects the goal so the post lands linked. */}
+          {showGoalSuggestionChip && suggestedGoal ? (
+            <TouchableOpacity
+              style={styles.p2GoalSuggestChip}
+              onPress={acceptGoalSuggestion}
+              accessibilityRole="button"
+            >
+              <Ionicons name="sparkles-outline" size={12} color="#0A2342" />
+              <Text style={styles.p2GoalSuggestText}>
+                {t("create_dream.goal_suggest_chip", {
+                  goal: suggestedGoal.name,
+                })}
+              </Text>
             </TouchableOpacity>
+          ) : null}
+          <TextInput
+            style={styles.captionInput}
+            value={caption}
+            onChangeText={setCaption}
+            placeholder={t("create_dream.caption_placeholder")}
+            placeholderTextColor={colors.textSecondary}
+            multiline
+            numberOfLines={5}
+            textAlignVertical="top"
+            autoFocus
+          />
 
-            {/* Caption */}
-            <TextInput
-              style={styles.captionInput}
-              placeholder={
-                source === "new_dream"
-                  ? "Tell the community about your dream..."
-                  : "Add a caption to your post..."
-              }
-              placeholderTextColor={colors.textSecondary}
-              multiline
-              value={caption}
-              onChangeText={setCaption}
-              maxLength={500}
+          {/* ── Attach goal / circle ──────────────────────────────────── */}
+          <Text style={styles.sectionLabel}>
+            {t("create_dream.attach_label")}
+          </Text>
+          {hasAttachment ? (
+            <View style={styles.attachmentPill}>
+              <Text style={styles.attachmentText} numberOfLines={1}>
+                {attachmentLabel}
+              </Text>
+              <TouchableOpacity
+                onPress={handleClearAttachment}
+                accessibilityRole="button"
+                accessibilityLabel={t("create_dream.attach_clear")}
+              >
+                <Ionicons
+                  name="close-circle"
+                  size={18}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.attachBtn}
+              onPress={handleAttachOpen}
+              accessibilityRole="button"
+            >
+              <Ionicons name="link-outline" size={16} color={colors.primaryNavy} />
+              <Text style={styles.attachBtnText}>
+                {t("create_dream.attach_cta")}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* ── Media ─────────────────────────────────────────────────── */}
+          <Text style={styles.sectionLabel}>
+            {t("create_dream.media_label")}
+          </Text>
+          {mediaUri ? (
+            <View>
+              <Image
+                source={{ uri: mediaUri }}
+                style={styles.mediaPreview}
+                resizeMode="cover"
+              />
+              <TouchableOpacity
+                style={styles.mediaBtn}
+                onPress={handlePickImage}
+                disabled={picking}
+                accessibilityRole="button"
+              >
+                <Ionicons
+                  name="refresh-outline"
+                  size={16}
+                  color={colors.primaryNavy}
+                />
+                <Text style={styles.mediaBtnText}>
+                  {picking
+                    ? t("create_dream.media_picking")
+                    : t("create_dream.media_replace")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.mediaBtn}
+              onPress={handlePickImage}
+              disabled={picking}
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name="image-outline"
+                size={16}
+                color={colors.primaryNavy}
+              />
+              <Text style={styles.mediaBtnText}>
+                {picking
+                  ? t("create_dream.media_picking")
+                  : t("create_dream.media_pick")}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* ── More options ─────────────────────────────────────────── */}
+          <TouchableOpacity
+            style={styles.disclosureHeader}
+            onPress={() => setMoreOpen((v) => !v)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: moreOpen }}
+          >
+            <Ionicons
+              name="options-outline"
+              size={18}
+              color={colors.primaryNavy}
             />
-            <Text style={styles.charCount}>{caption.length}/500</Text>
+            <Text style={styles.disclosureText}>
+              {t("create_dream.more_options")}
+            </Text>
+            <Ionicons
+              name={moreOpen ? "chevron-up" : "chevron-down"}
+              size={18}
+              color={colors.textSecondary}
+            />
+          </TouchableOpacity>
 
-            {/* ---- TAGGING SECTION ---- */}
-            <View style={styles.sectionDivider} />
-
-            {/* Community Tags */}
-            {myCommunities.length > 0 && (
-              <View style={styles.tagSection}>
-                <View style={styles.tagLabelRow}>
-                  <Ionicons name="people-outline" size={18} color={colors.textSecondary} />
-                  <Text style={styles.tagLabel}>{t("create_dream_post.tag_label")}</Text>
-                </View>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.tagScrollRow}
+          {moreOpen && (
+            <View style={styles.moreCard}>
+              {/* Visibility */}
+              <View style={styles.fieldLabelRow}>
+                <Text style={styles.fieldLabel}>
+                  {t("create_dream.visibility_label")}
+                </Text>
+                <TouchableOpacity
+                  onPress={showVisibilityHelp}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t(
+                    "create_dream.visibility_help_title",
+                  )}
                 >
-                  {myCommunities.map((community) => {
-                    const isSelected = selectedCommunities.some((c) => c.id === community.id);
+                  <Ionicons
+                    name="help-circle-outline"
+                    size={16}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.visibilityRow}>
+                {(["public", "community", "anonymous"] as FeedVisibility[]).map(
+                  (v) => {
+                    const isActive = visibility === v;
                     return (
                       <TouchableOpacity
-                        key={community.id}
-                        style={[styles.communityChip, isSelected && styles.communityChipActive]}
-                        onPress={() => toggleCommunity(community)}
+                        key={v}
+                        style={[
+                          styles.visibilityChip,
+                          isActive && styles.visibilityChipActive,
+                        ]}
+                        onPress={() => setVisibility(v)}
+                        accessibilityRole="button"
+                        accessibilityState={{ selected: isActive }}
                       >
-                        <Text style={styles.communityChipIcon}>{community.icon}</Text>
                         <Text
                           style={[
-                            styles.communityChipText,
-                            isSelected && styles.communityChipTextActive,
+                            styles.visibilityChipText,
+                            isActive && styles.visibilityChipTextActive,
                           ]}
-                          numberOfLines={1}
                         >
-                          {community.name}
+                          {t(`create_dream.visibility_${v}`)}
                         </Text>
-                        {isSelected && (
-                          <Ionicons name="checkmark-circle" size={16} color={colors.accentTeal} />
-                        )}
                       </TouchableOpacity>
                     );
-                  })}
-                </ScrollView>
+                  },
+                )}
               </View>
+
+              <Text style={styles.fieldLabel}>
+                {t("create_dream.location_label")}
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={location}
+                onChangeText={setLocation}
+                placeholder={t("create_dream.location_placeholder")}
+                placeholderTextColor={colors.textSecondary}
+              />
+
+              <Text style={styles.fieldLabel}>
+                {t("create_dream.hashtags_label")}
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={hashtagsText}
+                onChangeText={setHashtagsText}
+                placeholder={t("create_dream.hashtags_placeholder")}
+                placeholderTextColor={colors.textSecondary}
+                autoCapitalize="none"
+              />
+            </View>
+          )}
+        </ScrollView>
+
+        {/* ── Submit bar ─────────────────────────────────────────────── */}
+        <View style={styles.bottomBar}>
+          <TouchableOpacity
+            style={[styles.postBtn, submitting && styles.postBtnDisabled]}
+            onPress={handlePost}
+            disabled={submitting}
+            accessibilityRole="button"
+          >
+            {submitting ? (
+              <ActivityIndicator color={colors.textWhite} />
+            ) : (
+              <>
+                <Ionicons
+                  name="paper-plane-outline"
+                  size={16}
+                  color={colors.textWhite}
+                />
+                <Text style={styles.postBtnText}>
+                  {t("create_dream.submit_btn")}
+                </Text>
+              </>
             )}
-
-            {/* Location */}
-            <View style={styles.tagSection}>
-              <View style={styles.tagInputRow}>
-                <Ionicons name="location-outline" size={18} color={colors.textSecondary} />
-                <TextInput
-                  style={styles.tagInput}
-                  placeholder={t("create_dream_post.placeholder_location")}
-                  placeholderTextColor={colors.textSecondary}
-                  value={location}
-                  onChangeText={setLocation}
-                  maxLength={100}
-                />
-              </View>
-            </View>
-
-            {/* Hashtags */}
-            <View style={styles.tagSection}>
-              <View style={styles.tagInputRow}>
-                <Text style={styles.hashIcon}>#</Text>
-                <TextInput
-                  style={styles.tagInput}
-                  placeholder={t("create_dream_post.placeholder_hashtags")}
-                  placeholderTextColor={colors.textSecondary}
-                  value={hashtags}
-                  onChangeText={setHashtags}
-                  maxLength={200}
-                />
-              </View>
-              {hashtags.trim().length > 0 && (
-                <View style={styles.hashtagPreviewRow}>
-                  {parseHashtags(hashtags).map((tag, idx) => (
-                    <View key={idx} style={styles.hashtagPill}>
-                      <Text style={styles.hashtagPillText}>{tag}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-
-            {/* Visibility */}
-            <View style={styles.visibilitySection}>
-              <VisibilityPicker selected={visibility} onChange={setVisibility} />
-            </View>
-
-            {/* Preview Post Button */}
-            <TouchableOpacity
-              style={[styles.previewPostBtn, !canPreview && styles.previewPostBtnDisabled]}
-              onPress={() => canPreview && setStep("review")}
-              disabled={!canPreview}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="eye-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.previewPostBtnText}>{t("create_dream_post.btn_preview")}</Text>
-            </TouchableOpacity>
-
-            <View style={{ height: 40 }} />
-          </ScrollView>
-        )}
-
-        {/* ============================================ */}
-        {/* STEP 4: Review & Post — TikTok-style */}
-        {/* ============================================ */}
-        {step === "review" && (
-          <View style={{ flex: 1 }}>
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={{ paddingBottom: 20 }}
-              showsVerticalScrollIndicator={true}
-            >
-              {/* Media Hero — capped height, with floating side actions */}
-              {mediaUri && (
-                <View style={styles.rvHeroWrap}>
-                  {mediaType === "video" ? (
-                    <VideoPlayer
-                      uri={mediaUri}
-                      style={styles.rvHeroMedia}
-                      disableTouch
-                      showControls={false}
-                      aspectRatio={3 / 4}
-                    />
-                  ) : (
-                    <Image source={{ uri: mediaUri }} style={styles.rvHeroImage} resizeMode="cover" />
-                  )}
-
-                  {/* Floating Side Actions — TandaXn Blueprint engagement */}
-                  <View style={styles.rvSideActions}>
-                    <View style={styles.rvSideBtn}>
-                      <View style={[styles.rvSideBtnCircle, { backgroundColor: "rgba(0, 198, 174, 0.3)" }]}>
-                        <Ionicons name="wallet" size={22} color={colors.accentTeal} />
-                      </View>
-                      <Text style={styles.rvSideBtnLabel}>{t("create_dream_post.side_i_saved")}</Text>
-                    </View>
-                    <View style={styles.rvSideBtn}>
-                      <View style={styles.rvSideBtnCircle}>
-                        <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
-                      </View>
-                      <Text style={styles.rvSideBtnLabel}>{t("create_dream_post.side_comment")}</Text>
-                    </View>
-                    <View style={styles.rvSideBtn}>
-                      <View style={styles.rvSideBtnCircle}>
-                        <Ionicons name="copy-outline" size={20} color="#FFFFFF" />
-                      </View>
-                      <Text style={styles.rvSideBtnLabel}>{t("create_dream_post.side_clone")}</Text>
-                    </View>
-                    {(source === "goal" || source === "circle") && (
-                      <View style={styles.rvSideBtn}>
-                        <View style={[styles.rvSideBtnCircle, { backgroundColor: colors.accentTeal }]}>
-                          <Ionicons name="hand-left" size={18} color="#FFFFFF" />
-                        </View>
-                        <Text style={styles.rvSideBtnLabel}>{t("create_dream_post.side_support")}</Text>
-                      </View>
-                    )}
-                    <View style={styles.rvSideBtn}>
-                      <View style={styles.rvSideBtnCircle}>
-                        <Ionicons name="arrow-redo" size={20} color="#FFFFFF" />
-                      </View>
-                      <Text style={styles.rvSideBtnLabel}>{t("create_dream_post.side_share")}</Text>
-                    </View>
-                  </View>
-
-                  {/* Bottom overlay — author + caption on the video */}
-                  <View style={styles.rvOverlayBottom}>
-                    <View style={styles.rvOverlayAuthor}>
-                      <View style={styles.rvOverlayAvatar}>
-                        <Text style={styles.rvOverlayAvatarText}>
-                          {visibility === "anonymous"
-                            ? "?"
-                            : (user?.name || "U").charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                      <Text style={styles.rvOverlayName}>
-                        {visibility === "anonymous" ? "Anonymous" : user?.name || "You"}
-                      </Text>
-                      <View style={styles.rvOverlayBadge}>
-                        <Text style={styles.rvOverlayBadgeText}>
-                          {source === "goal" ? "\u{1F3AF}" : source === "circle" ? "\u{1F91D}" : "\u{2728}"}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={styles.rvOverlayCaption} numberOfLines={2}>
-                      {caption}
-                    </Text>
-                    {location.trim().length > 0 && (
-                      <View style={styles.rvOverlayLocation}>
-                        <Ionicons name="location" size={12} color="#FFFFFF" />
-                        <Text style={styles.rvOverlayLocationText}>{location.trim()}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              )}
-
-              {/* If no media — show simple text preview */}
-              {!mediaUri && (
-                <View style={styles.rvNoMediaCard}>
-                  <View style={styles.rvOverlayAuthor}>
-                    <View style={[styles.rvOverlayAvatar, { backgroundColor: colors.primaryNavy }]}>
-                      <Text style={styles.rvOverlayAvatarText}>
-                        {(user?.name || "U").charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                    <Text style={[styles.rvOverlayName, { color: colors.textPrimary }]}>
-                      {user?.name || "You"}
-                    </Text>
-                  </View>
-                  <Text style={styles.rvNoMediaCaption}>{caption}</Text>
-                </View>
-              )}
-
-              {/* Goal/Circle Detail Card — rich info below video */}
-              {source === "goal" && selectedGoal && (() => {
-                const p = Math.round((selectedGoal.currentBalance / selectedGoal.targetAmount) * 100);
-                return (
-                  <View style={styles.rvDetailCard}>
-                    <View style={styles.rvDetailHeader}>
-                      <Text style={styles.rvDetailEmoji}>{selectedGoal.emoji}</Text>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.rvDetailTitle}>{selectedGoal.name}</Text>
-                        <Text style={styles.rvDetailSubtext}>
-                          ${Number(selectedGoal.currentBalance).toLocaleString()} of ${Number(selectedGoal.targetAmount).toLocaleString()}
-                        </Text>
-                      </View>
-                      <View style={styles.rvDetailPercentBadge}>
-                        <Text style={styles.rvDetailPercentText}>{p}%</Text>
-                      </View>
-                    </View>
-                    <View style={styles.rvDetailProgressBg}>
-                      <View style={[styles.rvDetailProgressFill, { width: `${Math.min(p, 100)}%` }]} />
-                    </View>
-                  </View>
-                );
-              })()}
-
-              {source === "circle" && selectedCircle && (
-                <View style={styles.rvDetailCard}>
-                  <View style={styles.rvDetailHeader}>
-                    <Text style={styles.rvDetailEmoji}>{selectedCircle.emoji}</Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.rvDetailTitle}>{selectedCircle.name}</Text>
-                      <Text style={styles.rvDetailSubtext}>
-                        {selectedCircle.currentMembers}/{selectedCircle.memberCount} members {"\u00B7"} ${selectedCircle.amount}/{selectedCircle.frequency}
-                      </Text>
-                    </View>
-                    <View style={styles.rvDetailPercentBadge}>
-                      <Text style={styles.rvDetailPercentText}>{selectedCircle.progress}%</Text>
-                    </View>
-                  </View>
-                  <View style={styles.rvDetailProgressBg}>
-                    <View style={[styles.rvDetailProgressFill, { width: `${Math.min(selectedCircle.progress, 100)}%` }]} />
-                  </View>
-                </View>
-              )}
-
-              {/* Community tags */}
-              {selectedCommunities.length > 0 && (
-                <View style={styles.rvTagsSection}>
-                  {selectedCommunities.map((c) => (
-                    <View key={c.id} style={styles.rvCommunityPill}>
-                      <Text style={styles.rvCommunityPillIcon}>{c.icon}</Text>
-                      <Text style={styles.rvCommunityPillText}>{c.name}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {/* Post Details Summary */}
-              <View style={styles.rvSummary}>
-                <View style={styles.rvSummaryRow}>
-                  <Text style={styles.rvSummaryLabel}>{t("create_dream_post.summary_visibility")}</Text>
-                  <Text style={styles.rvSummaryValue}>
-                    {visibility === "public" ? "\u{1F30D} Public" : visibility === "community" ? "\u{1F465} Community" : "\u{1F441}\u{FE0F}\u{200D}\u{1F5E8}\u{FE0F} Anonymous"}
-                  </Text>
-                </View>
-                {mediaUri && (
-                  <View style={styles.rvSummaryRow}>
-                    <Text style={styles.rvSummaryLabel}>{t("create_dream_post.summary_media")}</Text>
-                    <Text style={styles.rvSummaryValue}>
-                      {mediaType === "video" ? "\u{1F3AC} Video" : "\u{1F4F7} Photo"}
-                    </Text>
-                  </View>
-                )}
-                {parseHashtags(hashtags).length > 0 && (
-                  <View style={[styles.rvSummaryRow, { borderBottomWidth: 0 }]}>
-                    <Text style={styles.rvSummaryLabel}>{t("create_dream_post.summary_hashtags")}</Text>
-                    <Text style={[styles.rvSummaryValue, { color: colors.accentTeal }]}>
-                      {parseHashtags(hashtags).join(" ")}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </ScrollView>
-
-            {/* FIXED BOTTOM — Edit & Post buttons (always visible) */}
-            <View style={styles.rvFixedBottom}>
-              <TouchableOpacity
-                style={styles.editBtn}
-                onPress={() => setStep("compose")}
-              >
-                <Ionicons name="create-outline" size={18} color={colors.accentTeal} />
-                <Text style={styles.editBtnText}>{t("final_polish.createdreampost_edit")}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.submitBtn, isSubmitting && { opacity: 0.6 }]}
-                onPress={handleSubmit}
-                disabled={isSubmitting}
-                activeOpacity={0.7}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Ionicons name="sparkles" size={18} color="#FFFFFF" />
-                    <Text style={styles.submitBtnText}>{t("create_dream_post.btn_post_dream")}</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+          </TouchableOpacity>
+        </View>
       </KeyboardAvoidingView>
+
+      {/* ── Attach sheet ──────────────────────────────────────────────── */}
+      <Modal
+        visible={attachSheetOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={handleAttachClose}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={handleAttachClose}>
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>
+              {t("create_dream.attach_sheet_title")}
+            </Text>
+
+            <View style={styles.sheetSegmented}>
+              <TouchableOpacity
+                style={[
+                  styles.sheetSegment,
+                  attachKind === "goal" && styles.sheetSegmentActive,
+                ]}
+                onPress={() => setAttachKind("goal")}
+              >
+                <Text
+                  style={[
+                    styles.sheetSegmentText,
+                    attachKind === "goal" && styles.sheetSegmentTextActive,
+                  ]}
+                >
+                  {t("create_dream.attach_tab_goal")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.sheetSegment,
+                  attachKind === "circle" && styles.sheetSegmentActive,
+                ]}
+                onPress={() => setAttachKind("circle")}
+              >
+                <Text
+                  style={[
+                    styles.sheetSegmentText,
+                    attachKind === "circle" && styles.sheetSegmentTextActive,
+                  ]}
+                >
+                  {t("create_dream.attach_tab_circle")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 360 }}>
+              {attachKind === "goal" ? (
+                activeGoals.length === 0 ? (
+                  <Text style={styles.sheetEmpty}>
+                    {t("create_dream.attach_empty_goals")}
+                  </Text>
+                ) : (
+                  activeGoals.map((g) => (
+                    <TouchableOpacity
+                      key={g.id}
+                      style={styles.sheetRow}
+                      onPress={() => handlePickGoal(g)}
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.sheetRowEmoji}>{g.emoji}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.sheetRowTitle}>{g.name}</Text>
+                        <Text style={styles.sheetRowSub}>
+                          {t("create_dream.attach_goal_balance", {
+                            current: Math.round(g.currentBalance),
+                            target: Math.round(g.targetAmount),
+                          })}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name="chevron-forward"
+                        size={18}
+                        color={colors.textSecondary}
+                      />
+                    </TouchableOpacity>
+                  ))
+                )
+              ) : activeCircles.length === 0 ? (
+                <Text style={styles.sheetEmpty}>
+                  {t("create_dream.attach_empty_circles")}
+                </Text>
+              ) : (
+                activeCircles.map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={styles.sheetRow}
+                    onPress={() => handlePickCircle(c)}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.sheetRowEmoji}>{c.emoji}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.sheetRowTitle}>{c.name}</Text>
+                      <Text style={styles.sheetRowSub}>
+                        {t("create_dream.attach_circle_members", {
+                          n: c.memberCount,
+                        })}
+                      </Text>
+                    </View>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={18}
+                      color={colors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-// ============================================
+// ══════════════════════════════════════════════════════════════════════════
+// Background upload — fire-and-forget after the row insert. On success
+// patches image_url + image_upload_status='completed'; on failure marks
+// 'failed' so FeedPostCard surfaces the Retry pill (and the local URI
+// stays cached in AsyncStorage for the retry handler).
+// ══════════════════════════════════════════════════════════════════════════
+
+function kickOffUpload(
+  postId: string,
+  localUri: string,
+  userId: string,
+  deps: {
+    updateDreamPostImage: (id: string, url: string) => Promise<void>;
+    markDreamPostImageFailed: (id: string) => Promise<void>;
+    t: (key: string) => string;
+  },
+) {
+  (async () => {
+    const { publicUrl, error } = await uploadToBucket(
+      localUri,
+      userId,
+      FEED_IMAGES_BUCKET,
+    );
+    if (error || !publicUrl) {
+      await deps.markDreamPostImageFailed(postId);
+      return;
+    }
+    try {
+      await deps.updateDreamPostImage(postId, publicUrl);
+      AsyncStorage.removeItem(RETRY_URI_KEY_PREFIX + postId).catch(() => {});
+    } catch {
+      await deps.markDreamPostImageFailed(postId);
+    }
+  })().catch(() => {
+    deps.markDreamPostImageFailed(postId).catch(() => {});
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Inline preview card — a stripped-down FeedPostCard with no interactions.
+// Mirrors the eventual rendering closely enough to function as a preview.
+// ══════════════════════════════════════════════════════════════════════════
+
+type PreviewInputs = {
+  user: { id?: string; name?: string } | null | undefined;
+  caption: string;
+  mediaUri: string | null;
+  visibility: FeedVisibility;
+  metadata: Record<string, any>;
+  selectedGoal: SavingsGoal | null;
+  selectedCircle: Circle | null;
+};
+
+function buildPreviewPost(input: PreviewInputs): FeedPost {
+  return {
+    id: "preview",
+    userId: input.user?.id ?? "preview",
+    type: "dream",
+    content: input.caption || "",
+    imageUrl: input.mediaUri ?? undefined,
+    imageUploadStatus: "completed",
+    currency: "USD",
+    visibility: input.visibility,
+    metadata: input.metadata,
+    likesCount: 0,
+    commentsCount: 0,
+    isAuto: false,
+    createdAt: new Date(0).toISOString(),
+    authorName: input.user?.name ?? "You",
+    authorAvatar: undefined,
+    authorXnScore: undefined,
+  };
+}
+
+function PostPreviewCard({
+  post,
+  t,
+}: {
+  post: FeedPost;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const meta = post.metadata || {};
+  return (
+    <View style={previewStyles.card}>
+      <View style={previewStyles.headerRow}>
+        <View style={previewStyles.avatar}>
+          <Ionicons name="person" size={16} color={colors.textWhite} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={previewStyles.author}>{post.authorName}</Text>
+          <Text style={previewStyles.tagline}>
+            {t("create_dream.preview_tagline")}
+          </Text>
+        </View>
+        <View style={previewStyles.typeBadge}>
+          <Text style={previewStyles.typeBadgeText}>✨ Dream</Text>
+        </View>
+      </View>
+
+      <Text style={previewStyles.caption}>
+        {post.content || t("create_dream.preview_caption_placeholder")}
+      </Text>
+
+      {post.imageUrl && (
+        <Image
+          source={{ uri: post.imageUrl }}
+          style={previewStyles.image}
+          resizeMode="cover"
+        />
+      )}
+
+      {meta.goalName && (
+        <View style={previewStyles.metaRow}>
+          <Ionicons name="trophy-outline" size={14} color={colors.accentTeal} />
+          <Text style={previewStyles.metaText} numberOfLines={1}>
+            {meta.goalName}
+          </Text>
+        </View>
+      )}
+      {meta.circleName && (
+        <View style={previewStyles.metaRow}>
+          <Ionicons name="people-outline" size={14} color={colors.accentTeal} />
+          <Text style={previewStyles.metaText} numberOfLines={1}>
+            {meta.circleName}
+          </Text>
+        </View>
+      )}
+      {meta.location && (
+        <View style={previewStyles.metaRow}>
+          <Ionicons
+            name="location-outline"
+            size={14}
+            color={colors.textSecondary}
+          />
+          <Text style={previewStyles.metaText} numberOfLines={1}>
+            {meta.location}
+          </Text>
+        </View>
+      )}
+      {Array.isArray(meta.hashtags) && meta.hashtags.length > 0 && (
+        <View style={previewStyles.hashtagRow}>
+          {meta.hashtags.map((tag: string, i: number) => (
+            <Text key={i} style={previewStyles.hashtag}>
+              #{tag}
+            </Text>
+          ))}
+        </View>
+      )}
+
+      <View style={previewStyles.visibilityRow}>
+        <Ionicons
+          name="eye-outline"
+          size={12}
+          color={colors.textSecondary}
+        />
+        <Text style={previewStyles.visibilityText}>
+          {t(`create_dream.visibility_${post.visibility}`)}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // Styles
-// ============================================
+// ══════════════════════════════════════════════════════════════════════════
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.cardBg,
-  },
+  safe: { flex: 1, backgroundColor: colors.screenBg },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 16, paddingBottom: 24 },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
-  headerBtn: {
-    width: 40,
-    height: 40,
+  backBtn: {
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
   },
   headerTitle: {
-    fontSize: typography.bodyLarge,
-    fontWeight: typography.semibold,
-    color: colors.textPrimary,
-  },
-
-  // Step indicator
-  stepIndicator: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: spacing.sm,
-    gap: 6,
-  },
-  stepDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.border,
-  },
-  stepDotActive: {
-    backgroundColor: colors.accentTeal,
-    width: 24,
-  },
-
-  content: {
-    flex: 1,
-    padding: spacing.lg,
-  },
-
-  // Step titles
-  stepTitle: {
-    fontSize: typography.sectionHeader,
-    fontWeight: typography.bold,
-    color: colors.textPrimary,
-    marginBottom: spacing.xs,
-  },
-  stepSubtitle: {
-    fontSize: typography.bodySmall,
-    color: colors.textSecondary,
-    marginBottom: spacing.xl,
-  },
-
-  // Source cards (Step 1)
-  sourceCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.screenBg,
-    borderRadius: radius.card,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  sourceIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: spacing.md,
-  },
-  sourceEmoji: {
-    fontSize: 22,
-  },
-  sourceInfo: {
-    flex: 1,
-  },
-  sourceTitle: {
-    fontSize: typography.body,
-    fontWeight: typography.semibold,
-    color: colors.textPrimary,
-  },
-  sourceDescription: {
-    fontSize: typography.labelSmall,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  sourceCount: {
-    fontSize: typography.caption,
-    color: colors.accentTeal,
-    fontWeight: typography.semibold,
-    marginTop: 4,
-  },
-
-  // Item cards (Step 2)
-  itemCard: {
-    backgroundColor: colors.screenBg,
-    borderRadius: radius.card,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  itemHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: spacing.sm,
-  },
-  itemEmoji: {
-    fontSize: 28,
-    marginRight: spacing.md,
-  },
-  itemInfo: {
-    flex: 1,
-  },
-  itemName: {
-    fontSize: typography.body,
-    fontWeight: typography.semibold,
-    color: colors.textPrimary,
-  },
-  itemSubtext: {
-    fontSize: typography.labelSmall,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  progressBadge: {
-    backgroundColor: colors.tealTintBg,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.pill,
-  },
-  progressBadgeText: {
-    fontSize: typography.labelSmall,
-    fontWeight: typography.bold,
-    color: colors.accentTeal,
-  },
-  progressBarBg: {
-    height: 6,
-    backgroundColor: colors.border,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: 6,
-    backgroundColor: colors.accentTeal,
-    borderRadius: 3,
-  },
-
-  // Empty state
-  emptyState: {
-    alignItems: "center",
-    paddingVertical: spacing.xxl,
-  },
-  emptyEmoji: {
-    fontSize: 48,
-    marginBottom: spacing.md,
-  },
-  emptyTitle: {
-    fontSize: typography.bodyLarge,
-    fontWeight: typography.semibold,
-    color: colors.textPrimary,
-    marginBottom: spacing.sm,
-  },
-  emptyText: {
-    fontSize: typography.bodySmall,
-    color: colors.textSecondary,
-    textAlign: "center",
-    paddingHorizontal: spacing.xl,
-  },
-
-  // Preview card (Step 3)
-  previewCard: {
-    backgroundColor: colors.screenBg,
-    borderRadius: radius.card,
-    padding: spacing.lg,
-    marginBottom: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.tealTintBg,
-  },
-  previewHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: spacing.md,
-  },
-  previewEmoji: {
-    fontSize: 32,
-    marginRight: spacing.md,
-  },
-  previewTitle: {
-    fontSize: typography.body,
-    fontWeight: typography.bold,
-    color: colors.textPrimary,
-  },
-  previewAmount: {
-    fontSize: typography.labelSmall,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  previewProgress: {
-    fontSize: typography.labelSmall,
-    color: colors.accentTeal,
-    fontWeight: typography.semibold,
-    marginTop: spacing.sm,
-    textAlign: "right",
-  },
-
-  // New Dream fields
-  dreamTitleInput: {
-    fontSize: typography.sectionHeader,
-    fontWeight: typography.semibold,
-    color: colors.textPrimary,
-    borderBottomWidth: 2,
-    borderBottomColor: colors.accentTeal,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  amountRow: {
-    marginBottom: spacing.lg,
-  },
-  amountLabel: {
-    fontSize: typography.bodySmall,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  amountInputWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.screenBg,
-    borderRadius: radius.small,
-    paddingHorizontal: spacing.md,
-  },
-  dollarSign: {
-    fontSize: typography.sectionHeader,
-    fontWeight: typography.bold,
-    color: colors.textPrimary,
-    marginRight: spacing.xs,
-  },
-  amountInput: {
-    flex: 1,
-    fontSize: typography.sectionHeader,
-    fontWeight: typography.semibold,
-    color: colors.textPrimary,
-    paddingVertical: spacing.md,
-  },
-  categoryLabel: {
-    fontSize: typography.bodySmall,
-    color: colors.textSecondary,
-    marginBottom: spacing.sm,
-  },
-  categoryGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  categoryChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.screenBg,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  categoryChipActive: {
-    backgroundColor: colors.tealTintBg,
-    borderColor: colors.accentTeal,
-  },
-  categoryEmoji: {
-    fontSize: 14,
-    marginRight: spacing.xs,
-  },
-  categoryText: {
-    fontSize: typography.labelSmall,
-    color: colors.textSecondary,
-    fontWeight: typography.medium,
-  },
-  categoryTextActive: {
-    color: colors.accentTeal,
-    fontWeight: typography.semibold,
-  },
-
-  // Media picker
-  photoButton: {
-    marginBottom: spacing.lg,
-  },
-  photoPlaceholder: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.screenBg,
-    borderRadius: radius.card,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderStyle: "dashed",
-  },
-  photoText: {
-    fontSize: typography.body,
-    color: colors.accentTeal,
-    fontWeight: typography.semibold,
-    marginLeft: spacing.sm,
-  },
-  mediaPreviewContainer: {
-    position: "relative",
-    borderRadius: radius.card,
-    overflow: "hidden",
-  },
-  mediaPreview: {
-    width: "100%",
-    aspectRatio: 4 / 3,
-    borderRadius: radius.card,
-  },
-  photoPreview: {
-    position: "relative",
-    borderRadius: radius.card,
-    overflow: "hidden",
-  },
-  photoImage: {
-    width: "100%",
-    height: 220,
-    borderRadius: radius.card,
-  },
-  mediaBadge: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    gap: 4,
-  },
-  mediaBadgeText: {
-    fontSize: 10,
+    color: colors.textWhite,
+    fontSize: 17,
     fontWeight: "700",
-    color: "#FFFFFF",
-    letterSpacing: 0.5,
   },
-  photoRemove: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 14,
-  },
-  changeMediaBtn: {
-    position: "absolute",
-    bottom: 10,
-    right: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 16,
-    gap: 4,
-  },
-  changeMediaText: {
+
+  sectionLabel: {
     fontSize: 12,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
-
-  // Caption
-  captionInput: {
-    fontSize: typography.body,
-    color: colors.textPrimary,
-    minHeight: 80,
-    textAlignVertical: "top",
-    lineHeight: 22,
-    backgroundColor: colors.screenBg,
-    borderRadius: radius.small,
-    padding: spacing.md,
-    marginBottom: spacing.xs,
-  },
-  charCount: {
-    fontSize: typography.caption,
-    color: colors.textSecondary,
-    textAlign: "right",
-    marginBottom: spacing.md,
-  },
-
-  // Section divider
-  sectionDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.md,
-  },
-
-  // Tag sections
-  tagSection: {
-    marginBottom: spacing.md,
-  },
-  tagLabelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: spacing.sm,
-  },
-  tagLabel: {
-    fontSize: typography.bodySmall,
-    fontWeight: typography.semibold,
-    color: colors.textSecondary,
-  },
-  tagScrollRow: {
-    marginBottom: spacing.xs,
-  },
-  communityChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.screenBg,
-    borderRadius: radius.pill,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    gap: 6,
-  },
-  communityChipActive: {
-    backgroundColor: colors.tealTintBg,
-    borderColor: colors.accentTeal,
-  },
-  communityChipIcon: {
-    fontSize: 16,
-  },
-  communityChipText: {
-    fontSize: typography.labelSmall,
-    color: colors.textSecondary,
-    fontWeight: typography.medium,
-    maxWidth: 120,
-  },
-  communityChipTextActive: {
-    color: colors.accentTeal,
-    fontWeight: typography.semibold,
-  },
-  tagInputRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.screenBg,
-    borderRadius: radius.small,
-    paddingHorizontal: spacing.md,
-    gap: 8,
-  },
-  hashIcon: {
-    fontSize: 18,
     fontWeight: "700",
     color: colors.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginTop: 14,
+    marginBottom: 8,
+    paddingHorizontal: 2,
   },
-  tagInput: {
-    flex: 1,
-    fontSize: typography.body,
-    color: colors.textPrimary,
-    paddingVertical: spacing.md,
-  },
-  hashtagPreviewRow: {
+
+  // Chips
+  chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 6,
-    marginTop: spacing.sm,
-  },
-  hashtagPill: {
-    backgroundColor: colors.tealTintBg,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-  },
-  hashtagPillText: {
-    fontSize: typography.caption,
-    color: colors.accentTeal,
-    fontWeight: typography.semibold,
-  },
-
-  // Visibility
-  visibilitySection: {
-    marginTop: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-
-  // Preview Post button
-  previewPostBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.accentTeal,
-    borderRadius: radius.button,
-    paddingVertical: 16,
-    gap: 8,
-  },
-  previewPostBtnDisabled: {
-    opacity: 0.4,
-  },
-  previewPostBtnText: {
-    fontSize: typography.body,
-    fontWeight: typography.bold,
-    color: "#FFFFFF",
-  },
-
-  // ============================================
-  // STEP 4: Review — TikTok-style
-  // ============================================
-
-  // Hero media container (full-width)
-  rvHeroWrap: {
-    position: "relative",
-    width: "100%",
-    backgroundColor: "#000000",
-    marginBottom: spacing.md,
-  },
-  rvHeroMedia: {
-    width: "100%",
-    borderRadius: 0,
-  },
-  rvHeroImage: {
-    width: "100%",
-    aspectRatio: 3 / 4,
-    maxHeight: 420,
-  },
-
-  // Floating side action buttons (right side, TikTok-style)
-  rvSideActions: {
-    position: "absolute",
-    right: 8,
-    bottom: 60,
-    alignItems: "center",
-    gap: 10,
-  },
-  rvSideBtn: {
-    alignItems: "center",
-    gap: 2,
-  },
-  rvSideBtnCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "rgba(0, 0, 0, 0.45)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rvSideBtnLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#FFFFFF",
-    textShadowColor: "rgba(0,0,0,0.7)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-
-  // Bottom overlay (author + caption on the media)
-  rvOverlayBottom: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 60,
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-    paddingTop: 40,
-    background: "linear-gradient(transparent, rgba(0,0,0,0.7))",
-    // RN fallback:
-    backgroundColor: "transparent",
-  },
-  rvOverlayAuthor: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 8,
     marginBottom: 8,
   },
-  rvOverlayAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.accentTeal,
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#F0FDFB",
+    borderWidth: 1,
+    borderColor: colors.accentTeal,
+  },
+  chipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.accentTeal,
+  },
+
+  // P2 — goal-suggestion chip styles
+  p2GoalSuggestChip: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#F0FDFB",
+    borderWidth: 1,
+    borderColor: colors.accentTeal,
+    marginBottom: 8,
+  },
+  p2GoalSuggestText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#0A2342",
+  },
+
+  captionInput: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: colors.textPrimary,
+    minHeight: 100,
+    borderWidth: 1,
+    borderColor: colors.border,
+    textAlignVertical: "top",
+  },
+
+  // Attach goal/circle
+  attachBtn: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.primaryNavy,
+    backgroundColor: colors.cardBg,
   },
-  rvOverlayAvatarText: {
+  attachBtnText: {
+    color: colors.primaryNavy,
+    fontWeight: "600",
+    fontSize: 13,
+  },
+  attachmentPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "#F0FDFB",
+    borderWidth: 1,
+    borderColor: colors.accentTeal,
+  },
+  attachmentText: {
+    flex: 1,
     fontSize: 13,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.textPrimary,
   },
-  rvOverlayName: {
+
+  // Media
+  mediaPreview: {
+    width: "100%",
+    height: 200,
+    borderRadius: 12,
+    backgroundColor: colors.screenBg,
+    marginBottom: 8,
+  },
+  mediaBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.primaryNavy,
+    backgroundColor: colors.cardBg,
+  },
+  mediaBtnText: {
+    color: colors.primaryNavy,
+    fontWeight: "600",
+    fontSize: 13,
+  },
+
+  // Disclosure
+  disclosureHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.cardBg,
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  disclosureText: {
+    flex: 1,
     fontSize: 14,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    textShadowColor: "rgba(0,0,0,0.7)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    fontWeight: "600",
+    color: colors.primaryNavy,
   },
-  rvOverlayBadge: {
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
+  moreCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  rvOverlayBadgeText: {
-    fontSize: 12,
-  },
-  rvOverlayCaption: {
-    fontSize: 13,
-    color: "#FFFFFF",
-    lineHeight: 18,
-    textShadowColor: "rgba(0,0,0,0.7)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-    marginBottom: 6,
-  },
-  rvOverlayLocation: {
+  fieldLabelRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    marginTop: 8,
     marginBottom: 4,
   },
-  rvOverlayLocationText: {
-    fontSize: 11,
-    color: "#FFFFFF",
-    textShadowColor: "rgba(0,0,0,0.7)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  rvOverlayTags: {
-    fontSize: 12,
+  fieldLabel: {
+    fontSize: 13,
     fontWeight: "600",
-    color: colors.accentTeal,
-    textShadowColor: "rgba(0,0,0,0.5)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-
-  // (Progress overlay removed — detail card shown below video instead)
-
-  // No media fallback
-  rvNoMediaCard: {
-    backgroundColor: colors.screenBg,
-    borderRadius: radius.card,
-    padding: spacing.lg,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  rvNoMediaCaption: {
-    fontSize: typography.body,
     color: colors.textPrimary,
-    lineHeight: 22,
-    marginTop: spacing.md,
+    marginTop: 6,
   },
-
-  // Community tags below media
-  rvTagsSection: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  rvCommunityPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.tealTintBg,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: radius.pill,
-    gap: 4,
-  },
-  rvCommunityPillIcon: {
-    fontSize: 12,
-  },
-  rvCommunityPillText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: colors.accentTeal,
-  },
-
-  // Summary
-  rvSummary: {
+  input: {
     backgroundColor: colors.screenBg,
-    borderRadius: radius.card,
-    padding: spacing.lg,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: colors.textPrimary,
+    minHeight: 42,
+    marginTop: 4,
   },
-  rvSummaryRow: {
+  visibilityRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 8,
+    marginTop: 4,
+  },
+  visibilityChip: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardBg,
     alignItems: "center",
+  },
+  visibilityChipActive: {
+    borderColor: colors.accentTeal,
+    backgroundColor: "#F0FDFB",
+  },
+  visibilityChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.textSecondary,
+  },
+  visibilityChipTextActive: { color: colors.accentTeal },
+
+  // Submit
+  bottomBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.cardBg,
+  },
+  postBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: colors.accentTeal,
+  },
+  postBtnDisabled: { opacity: 0.6 },
+  postBtnText: {
+    color: colors.textWhite,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+
+  // Attach sheet
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: colors.cardBg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 24,
+    maxHeight: "82%",
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: 12,
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginBottom: 12,
+  },
+  sheetSegmented: {
+    flexDirection: "row",
+    backgroundColor: colors.screenBg,
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 14,
+  },
+  sheetSegment: {
+    flex: 1,
     paddingVertical: 8,
+    alignItems: "center",
+    borderRadius: 8,
+  },
+  sheetSegmentActive: { backgroundColor: colors.primaryNavy },
+  sheetSegmentText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.textSecondary,
+  },
+  sheetSegmentTextActive: { color: colors.textWhite },
+  sheetEmpty: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: "center",
+    paddingVertical: 30,
+    fontStyle: "italic",
+  },
+  sheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
-  rvSummaryLabel: {
-    fontSize: typography.bodySmall,
-    color: colors.textSecondary,
-  },
-  rvSummaryValue: {
-    fontSize: typography.bodySmall,
-    fontWeight: typography.semibold,
+  sheetRowEmoji: { fontSize: 24 },
+  sheetRowTitle: {
+    fontSize: 14,
+    fontWeight: "700",
     color: colors.textPrimary,
   },
-
-  // Goal/Circle detail card below video
-  rvDetailCard: {
-    backgroundColor: colors.screenBg,
-    borderRadius: radius.card,
-    padding: spacing.md,
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  rvDetailHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: spacing.sm,
-  },
-  rvDetailEmoji: {
-    fontSize: 28,
-    marginRight: spacing.md,
-  },
-  rvDetailTitle: {
-    fontSize: typography.body,
-    fontWeight: typography.bold,
-    color: colors.textPrimary,
-  },
-  rvDetailSubtext: {
-    fontSize: typography.labelSmall,
+  sheetRowSub: {
+    fontSize: 12,
     color: colors.textSecondary,
     marginTop: 2,
   },
-  rvDetailPercentBadge: {
-    backgroundColor: colors.tealTintBg,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
-    marginLeft: spacing.sm,
-  },
-  rvDetailPercentText: {
-    fontSize: typography.labelSmall,
-    fontWeight: typography.bold,
-    color: colors.accentTeal,
-  },
-  rvDetailProgressBg: {
-    height: 6,
-    backgroundColor: colors.border,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  rvDetailProgressFill: {
-    height: 6,
-    backgroundColor: colors.accentTeal,
-    borderRadius: 3,
-  },
+});
 
-  // Fixed bottom bar with Edit & Post buttons
-  rvFixedBottom: {
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    paddingBottom: 30,
+// Local preview styles — kept separate so the visual treatment can drift
+// from the production FeedPostCard without bleeding styles back.
+const previewStyles = StyleSheet.create({
+  card: {
     backgroundColor: colors.cardBg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  editBtn: {
-    flex: 1,
+  headerRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
+    marginBottom: 10,
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primaryNavy,
+    alignItems: "center",
     justifyContent: "center",
-    borderWidth: 2,
-    borderColor: colors.accentTeal,
-    borderRadius: radius.button,
-    paddingVertical: 16,
+  },
+  author: { fontSize: 14, fontWeight: "700", color: colors.textPrimary },
+  tagline: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  typeBadge: {
+    backgroundColor: "#F3E8FF",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  typeBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#8B5CF6",
+  },
+  caption: {
+    fontSize: 14,
+    color: colors.textPrimary,
+    lineHeight: 20,
+    marginBottom: 10,
+  },
+  image: {
+    width: "100%",
+    height: 180,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
+    marginBottom: 6,
   },
-  editBtnText: {
-    fontSize: typography.body,
-    fontWeight: typography.semibold,
-    color: colors.accentTeal,
+  metaText: { fontSize: 12, color: colors.textSecondary, flex: 1 },
+  hashtagRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 6,
   },
-  submitBtn: {
-    flex: 2,
+  hashtag: { fontSize: 12, color: colors.accentTeal, fontWeight: "600" },
+  visibilityRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.accentTeal,
-    borderRadius: radius.button,
-    paddingVertical: 16,
-    gap: 8,
+    gap: 4,
+    marginTop: 4,
   },
-  submitBtnText: {
-    fontSize: typography.body,
-    fontWeight: typography.bold,
-    color: "#FFFFFF",
-  },
+  visibilityText: { fontSize: 11, color: colors.textSecondary },
 });

@@ -2,28 +2,39 @@
 // screens/AutopaySetupScreen.tsx — ADVANCE-015 early-repayment autopay
 // ══════════════════════════════════════════════════════════════════════════════
 //
-// Translated from web JSX: 117-ADVANCE-015-AutopaySetup.jsx.
+// Originally translated from web JSX 117-ADVANCE-015-AutopaySetup.jsx as a
+// pure mock. The autopay-review P0 (2026-06-15) replaced every hardcoded
+// fixture with live data and started persisting changes to the database.
 //
-// IMPORTANT framing: advance repayment is auto-withheld from payouts
-// by DEFAULT. This screen is purely for *optional* early-repayment
-// autopay (pay off from wallet before the payout date to save fees).
+// Framing: advance repayment is auto-withheld from payouts by DEFAULT.
+// This screen is for the *optional* early-repayment autopay — pay the
+// advance off from wallet / card once it can be covered, so the user
+// saves on fees and gets a small XnScore bump.
 //
-// Controls:
-//   - autopay toggle (when wallet >= total due, auto-pay early)
-//   - payment-method picker (shown only when autopay is on)
-//   - reminder-days selector (1 / 3 / 5 / 7 days before withholding)
+// Data sources (P0):
+//   - active advance        useAdvanceDashboard().data.active_advances[0]
+//   - payment methods       usePayment().paymentMethods + a synthesised
+//                           "Wallet" entry powered by useWallet().balance
+//   - default selection     usePayment().defaultPaymentMethod (which now
+//                           respects default_for_payin from migration 168)
+//   - existing config       loan_autopay_configs row keyed by
+//                           (user_id, loan_id)
 //
-// Route params (all optional, defaults match canonical mock):
-//   activeAdvance?: { id; amount; totalDue; withholdingDate; daysUntil }
-//   paymentMethods?: PaymentMethod[]
+// Persistence (P0):
+//   - load on focus  → SELECT loan_autopay_configs WHERE user_id, loan_id
+//   - save on change → SELECT ↦ INSERT or UPDATE (single-write semantics
+//                       come later in P2 with a UNIQUE partial index)
+//   - status enum    → 'active' when autopayEnabled, 'disabled' otherwise
+//   - autopay_type   → 'full_balance' (full early repayment from balance)
+//   - payment_method_id is NULL when "wallet" is selected (Stripe
+//     payment methods get their UUID stored)
 //
-// Navigation:
-//   - back → goBack
-//   - "Save Settings" → Alert success → goBack (Phase 3 persists to
-//     a real settings table)
+// Empty state: no active advance → CTA back to AdvanceHubV2. The
+// Profile menu also hides the entry point in that case (P0.1), but a
+// user could still reach this screen via a stale notification deep link.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -32,84 +43,68 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
-  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
+import { useAutopayConfig } from "../hooks/useAutopay";
+import { usePayment, SavedPaymentMethod } from "../context/PaymentContext";
+import { useWallet } from "../context/WalletContext";
+import { showToast } from "../components/Toast";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
 const BORDER = "#E5E7EB";
 const MUTED = "#6B7280";
 
-type PaymentMethod = {
-  id: string;
-  name: string;
-  balance?: number;
-  icon: string;
-  default?: boolean;
-};
+// P1.4 (autopay review): the "Reminder Before Withholding" chip row
+// moved out of this screen. The column is still loaded + persisted so
+// the existing cron + notification path keep working — we just stop
+// exposing the chip-picker UI here. TODO(P2): build the real picker
+// inside NotificationPrefsScreen under an "Advance reminders" section
+// + drop this default once that ships.
+const DEFAULT_REMINDER_DAYS = 3;
 
-type ActiveAdvance = {
-  id: string;
-  amount: number;
-  totalDue: number;
-  withholdingDate: string;
-  daysUntil: number;
-};
+// P1.3 (autopay review): once-per-device coach mark gate. Suffix bump
+// re-shows the tip if we materially change the copy.
+const COACH_TIP_KEY = "@tandaxn_autopay_tip_seen_v1";
 
-type AutopaySetupParams = {
-  activeAdvance?: ActiveAdvance;
-  paymentMethods?: PaymentMethod[];
-};
-type AutopaySetupRouteProp = RouteProp<
-  { AutopaySetup: AutopaySetupParams },
-  "AutopaySetup"
->;
+// Wallet sentinel — pgkey for the synthesised "TandaXn Wallet" picker
+// row. Never stored in payment_method_id (we write NULL + 'wallet' for
+// payment_method_type when the user picks wallet).
+const WALLET_METHOD_ID = "wallet";
 
-const DEFAULT_ADVANCE: ActiveAdvance = {
-  id: "ADV-2025-0120-001",
-  amount: 300,
-  totalDue: 315,
-  withholdingDate: "Feb 15, 2025",
-  daysUntil: 25,
-};
+// The autopay_type / status enum values + the on-disk schema mapping
+// live in hooks/useAutopay.ts now (P2 hook extraction). The screen
+// just calls save({ enabled, paymentMethodId, paymentMethodType,
+// daysBeforeDue }) and the hook does the right thing.
 
-const DEFAULT_METHODS: PaymentMethod[] = [
-  { id: "wallet", name: "TandaXn Wallet", balance: 450, icon: "💳", default: true },
-  { id: "bank1", name: "Chase Checking ••••4521", icon: "🏦", default: false },
-];
-
-const REMINDER_OPTIONS = [1, 3, 5, 7];
-
-const BENEFITS = [
-  { icon: "💰", text: "Save on advance fees (pro-rated)" },
-  { icon: "⭐", text: "+2 bonus XnScore points" },
-  { icon: "🔓", text: "Keep your full payout" },
-  { icon: "📈", text: "Better rates on future advances" },
-];
-
-// Simple toggle — RN has no animated CSS transition out of the box,
-// so the knob just snaps to the new side. A future polish pass can
-// wrap this in Animated for a smooth slide.
 function Toggle({
   value,
   onToggle,
+  disabled,
   accessibilityLabel,
 }: {
   value: boolean;
   onToggle: () => void;
+  disabled?: boolean;
   accessibilityLabel: string;
 }) {
   return (
     <TouchableOpacity
-      style={[styles.toggle, value && styles.toggleOn]}
+      style={[
+        styles.toggle,
+        value && styles.toggleOn,
+        disabled && styles.toggleDisabled,
+      ]}
       onPress={onToggle}
+      disabled={disabled}
       accessibilityRole="switch"
-      accessibilityState={{ checked: value }}
+      accessibilityState={{ checked: value, disabled }}
       accessibilityLabel={accessibilityLabel}
     >
       <View style={[styles.toggleKnob, value && styles.toggleKnobOn]} />
@@ -117,29 +112,281 @@ function Toggle({
   );
 }
 
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function daysUntil(iso: string | null): number {
+  if (!iso) return 0;
+  const ms = new Date(iso).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+}
+
 export default function AutopaySetupScreen() {
   const navigation = useTypedNavigation();
-  const route = useRoute<AutopaySetupRouteProp>();
   const { t } = useTranslation();
+  const { data: dashboard, loading: dashboardLoading } = useAdvanceDashboard();
+  const { paymentMethods, defaultPaymentMethod } = usePayment();
+  const { balance: walletBalance } = useWallet();
 
-  const activeAdvance = route.params?.activeAdvance ?? DEFAULT_ADVANCE;
-  const paymentMethods = route.params?.paymentMethods ?? DEFAULT_METHODS;
+  // Pick the first active advance. Multi-advance picker is future work.
+  const activeAdvance = dashboard?.active_advances?.[0] ?? null;
+  const loanId = activeAdvance?.loan_id ?? null;
 
+  // P2 (autopay review): hook-owned config state. The hook caches by
+  // (userId, loanId) for 60 s and busts the cache on save().
+  const {
+    config,
+    loading: configLoading,
+    save: saveAutopay,
+  } = useAutopayConfig(loanId);
+
+  // Local UI state — what the toggle / picker render right now. Driven
+  // by the hook's snapshot on first hit; updated optimistically on
+  // each save, reverted on failure.
   const [autopayEnabled, setAutopayEnabled] = useState(false);
-  const [selectedMethod, setSelectedMethod] = useState<string>(
-    paymentMethods[0]?.id ?? "wallet",
+  const [selectedMethodId, setSelectedMethodId] = useState<string>(
+    WALLET_METHOD_ID,
   );
-  const [reminderDays, setReminderDays] = useState(3);
+  // Still tracked + persisted (default 3) — only the picker UI is gone
+  // for P1.4. See DEFAULT_REMINDER_DAYS comment above.
+  const [reminderDays, setReminderDays] = useState(DEFAULT_REMINDER_DAYS);
 
-  const handleSave = () => {
-    // Phase 3: persist { autopayEnabled, selectedMethod, reminderDays }
-    // to a real advance-settings table.
-    Alert.alert(
-      "Settings Saved",
-      "Your repayment preferences have been updated.",
-      [{ text: "OK", onPress: () => navigation.goBack() }],
-    );
+  // ── Payment-method picker rows ────────────────────────────────────────────
+  // Synthesise a Wallet entry first; then append real Stripe-backed
+  // methods. The list flips order based on whether the user has any
+  // saved methods at all — wallet is always present.
+  const methodRows = useMemo(() => {
+    const wallet = {
+      id: WALLET_METHOD_ID,
+      label: t("autopay_setup.wallet_label"),
+      sub: t("autopay_setup.wallet_balance", {
+        amount: walletBalance.toFixed(2),
+      }),
+      icon: "wallet-outline" as const,
+      isWallet: true,
+    };
+    const real = paymentMethods.map((m) => ({
+      id: m.id,
+      label: m.label,
+      sub: m.bankLast4
+        ? `•••• ${m.bankLast4}`
+        : m.cardLast4
+          ? `•••• ${m.cardLast4}`
+          : "",
+      icon: "card-outline" as const,
+      isWallet: false,
+    }));
+    return [wallet, ...real];
+  }, [paymentMethods, walletBalance, t]);
+
+  // ── Hydrate local state from the hook's snapshot ──────────────────────────
+  // useAutopayConfig owns the network read; this effect re-projects its
+  // result into the optimistic UI state. If no config exists yet, fall
+  // back to the PaymentContext default (which itself honours
+  // default_for_payin from migration 168).
+  useEffect(() => {
+    if (configLoading) return;
+    if (config) {
+      setAutopayEnabled(config.status === "active");
+      setSelectedMethodId(
+        config.payment_method_type === "wallet" || !config.payment_method_id
+          ? WALLET_METHOD_ID
+          : config.payment_method_id,
+      );
+      setReminderDays(
+        typeof config.days_before_due === "number"
+          ? config.days_before_due
+          : DEFAULT_REMINDER_DAYS,
+      );
+    } else if (defaultPaymentMethod?.id) {
+      // No saved config — pre-select the user's default pay-in method.
+      setSelectedMethodId(defaultPaymentMethod.id);
+    }
+  }, [config, configLoading, defaultPaymentMethod?.id]);
+
+  // ── Persistence — single thin wrapper around the hook ────────────────────
+  // The hook handles the upsert keyed on the migration-169 UNIQUE
+  // constraint + cache invalidation. We just translate UI ↔ hook
+  // params and surface failures.
+  const persist = useCallback(
+    async (next: { enabled: boolean; methodId: string; days: number }) => {
+      const chosen = methodRows.find((r) => r.id === next.methodId);
+      const isWallet = chosen?.isWallet ?? true;
+      const realMethod: SavedPaymentMethod | undefined = isWallet
+        ? undefined
+        : paymentMethods.find((m) => m.id === next.methodId);
+      try {
+        await saveAutopay({
+          enabled: next.enabled,
+          paymentMethodId: isWallet ? null : next.methodId,
+          paymentMethodType: isWallet
+            ? "wallet"
+            : realMethod?.type ?? "card",
+          daysBeforeDue: next.days,
+        });
+      } catch (err: any) {
+        console.warn("[AutopaySetup] persist failed:", err?.message);
+        showToast(
+          err?.message || t("autopay_setup.toast_save_failed"),
+          "error",
+        );
+        throw err;
+      }
+    },
+    [methodRows, paymentMethods, saveAutopay, t],
+  );
+
+  const handleToggle = async () => {
+    const next = !autopayEnabled;
+    setAutopayEnabled(next); // optimistic
+    try {
+      await persist({
+        enabled: next,
+        methodId: selectedMethodId,
+        days: reminderDays,
+      });
+      showToast(
+        next
+          ? t("autopay_setup.toast_enabled")
+          : t("autopay_setup.toast_disabled"),
+        "success",
+      );
+    } catch {
+      setAutopayEnabled(!next); // revert
+    }
   };
+
+  const handlePickMethod = async (methodId: string) => {
+    if (methodId === selectedMethodId) return;
+    const prev = selectedMethodId;
+    setSelectedMethodId(methodId);
+    try {
+      await persist({
+        enabled: autopayEnabled,
+        methodId,
+        days: reminderDays,
+      });
+      showToast(t("autopay_setup.toast_method_changed"), "success");
+    } catch {
+      setSelectedMethodId(prev);
+    }
+  };
+
+  // P1.3 (autopay review): show the coach-mark toast once per device.
+  // Gated on having an active advance (the tip references behaviour
+  // that's meaningless without one) and on having finished the initial
+  // config load so we don't toast on top of a still-spinning screen.
+  useEffect(() => {
+    if (!activeAdvance || configLoading) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_TIP_KEY);
+        if (cancelled || seen === "true") return;
+        await AsyncStorage.setItem(COACH_TIP_KEY, "true");
+        showToast(t("autopay_setup.coach_tip"), "info");
+      } catch {
+        // AsyncStorage failure → tip simply re-fires next launch.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAdvance?.loan_id, configLoading, t]);
+
+  // ── Empty state — no active advance ───────────────────────────────────────
+  if (!dashboardLoading && !activeAdvance) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+        <LinearGradient
+          colors={[NAVY, "#143654"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >
+          <View style={styles.headerTopRow}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+              accessibilityRole="button"
+              accessibilityLabel={t("autopay_setup.a11y_back")}
+            >
+              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerTitle}>
+                {t("autopay_setup.header_title")}
+              </Text>
+              <Text style={styles.headerSubtitle}>
+                {t("autopay_setup.header_subtitle")}
+              </Text>
+            </View>
+          </View>
+        </LinearGradient>
+
+        <View style={styles.emptyContainer}>
+          <Ionicons name="repeat" size={48} color={MUTED} />
+          <Text style={styles.emptyTitle}>
+            {t("autopay_setup.empty_state_title")}
+          </Text>
+          <Text style={styles.emptyBody}>
+            {t("autopay_setup.empty_state_body")}
+          </Text>
+          <TouchableOpacity
+            style={styles.emptyCta}
+            onPress={() => navigation.navigate("AdvanceHubV2")}
+          >
+            <Text style={styles.emptyCtaText}>
+              {t("autopay_setup.empty_state_cta")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const totalDueDollars = activeAdvance
+    ? (activeAdvance.next_payment_cents ??
+        activeAdvance.outstanding_cents ??
+        0) / 100
+    : 0;
+  const withholdingDate = formatDate(activeAdvance?.next_payment_date ?? null);
+  const days = daysUntil(activeAdvance?.next_payment_date ?? null);
+
+  // P1.1 (autopay review): can the wallet alone clear the advance?
+  // True drives the green "sufficient" chip; false drives the amber
+  // "may fail" chip. We don't disable the toggle on insufficient —
+  // users may add funds later, and the cron will retry. Only inform.
+  const walletCovers = walletBalance >= totalDueDollars;
+
+  // P1.2 (autopay review): rough early-repayment savings estimate.
+  //
+  // The dashboard DTO doesn't expose a fee schedule, so we estimate:
+  //   remaining_fee = outstanding_cents - principal_cents
+  //   savings       = remaining_fee × 0.5 (≈half — exact pro-rata is
+  //                   product-dependent and the screen prefixes "≈").
+  //
+  // We never show a negative number — if the user is past principal
+  // (somehow), we just suppress the line.
+  const remainingFeeCents = activeAdvance
+    ? Math.max(
+        0,
+        (activeAdvance.outstanding_cents ?? 0) -
+          (activeAdvance.principal_cents ?? 0),
+      )
+    : 0;
+  const estimatedSavingsDollars = (remainingFeeCents * 0.5) / 100;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -162,14 +409,16 @@ export default function AutopaySetupScreen() {
               style={styles.backButton}
               onPress={() => navigation.goBack()}
               accessibilityRole="button"
-              accessibilityLabel="Back"
+              accessibilityLabel={t("autopay_setup.a11y_back")}
             >
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>{t("autopay_setup.header_title")}</Text>
+              <Text style={styles.headerTitle}>
+                {t("autopay_setup.header_title")}
+              </Text>
               <Text style={styles.headerSubtitle}>
-                Manage your advance repayment
+                {t("autopay_setup.header_subtitle")}
               </Text>
             </View>
           </View>
@@ -185,41 +434,59 @@ export default function AutopaySetupScreen() {
               style={{ marginTop: 2 }}
             />
             <View style={{ flex: 1 }}>
-              <Text style={styles.infoTitle}>{t("autopay_setup.info_title")}</Text>
+              <Text style={styles.infoTitle}>
+                {t("autopay_setup.info_title")}
+              </Text>
               <Text style={styles.infoBody}>
-                By default, your advance is{" "}
-                <Text style={styles.infoStrong}>
-                  auto-withheld from your circle payout
-                </Text>{" "}
-                on {activeAdvance.withholdingDate}. No action needed!
-                {"\n\n"}
-                The settings below are for{" "}
-                <Text style={styles.infoStrong}>optional early repayment</Text>{" "}
-                if you want to pay off before your payout date.
+                {t("autopay_setup.info_body", {
+                  date: withholdingDate,
+                })}
               </Text>
             </View>
           </View>
 
           {/* Current advance */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>{t("autopay_setup.section_current")}</Text>
+            <Text style={styles.sectionTitle}>
+              {t("autopay_setup.section_current")}
+            </Text>
             <View style={styles.advanceRow}>
               <View>
-                <Text style={styles.advanceLabel}>{t("autopay_setup.label_amount_due")}</Text>
+                <Text style={styles.advanceLabel}>
+                  {t("autopay_setup.label_amount_due")}
+                </Text>
                 <Text style={styles.advanceAmount}>
-                  ${activeAdvance.totalDue}
+                  ${totalDueDollars.toFixed(2)}
                 </Text>
               </View>
               <View style={{ alignItems: "flex-end" }}>
-                <Text style={styles.advanceLabel}>{t("final_polish.autopaysetup_auto_withhold_on")}</Text>
-                <Text style={styles.advanceDate}>
-                  {activeAdvance.withholdingDate}
+                <Text style={styles.advanceLabel}>
+                  {t("final_polish.autopaysetup_auto_withhold_on")}
                 </Text>
+                <Text style={styles.advanceDate}>{withholdingDate}</Text>
                 <Text style={styles.advanceDays}>
-                  {activeAdvance.daysUntil} days
+                  {t("autopay_setup.days_remaining", { count: days })}
                 </Text>
               </View>
             </View>
+
+            {/* P1.2 — Savings estimate. Different copy depending on
+                whether autopay is already on (informational) vs off
+                (nudge). Suppressed when remainingFeeCents is 0. */}
+            {estimatedSavingsDollars > 0 ? (
+              <View style={styles.savingsRow}>
+                <Ionicons name="cash-outline" size={14} color="#047857" />
+                <Text style={styles.savingsText}>
+                  {autopayEnabled
+                    ? t("autopay_setup.savings_estimate_enabled", {
+                        amount: estimatedSavingsDollars.toFixed(2),
+                      })
+                    : t("autopay_setup.savings_estimate", {
+                        amount: estimatedSavingsDollars.toFixed(2),
+                      })}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Early repayment autopay */}
@@ -227,25 +494,68 @@ export default function AutopaySetupScreen() {
             <View style={styles.toggleHeader}>
               <View style={{ flex: 1, paddingRight: 12 }}>
                 <Text style={styles.sectionTitle}>
-                  Early Repayment Autopay
+                  {t("autopay_setup.section_autopay_title")}
                 </Text>
                 <Text style={styles.toggleHint}>
-                  Automatically repay early when you have sufficient funds
+                  {t("autopay_setup.section_autopay_hint")}
                 </Text>
               </View>
-              <Toggle
-                value={autopayEnabled}
-                onToggle={() => setAutopayEnabled(!autopayEnabled)}
-                accessibilityLabel="Toggle early repayment autopay"
-              />
+              {configLoading ? (
+                <ActivityIndicator size="small" color={TEAL} />
+              ) : (
+                <Toggle
+                  value={autopayEnabled}
+                  onToggle={handleToggle}
+                  accessibilityLabel={t("autopay_setup.a11y_toggle")}
+                />
+              )}
             </View>
+
+            {/* P1.1 — wallet-cover chip. Renders whenever there's an
+                amount due so the user sees it before flipping the
+                toggle. Two tones: green when wallet covers, amber when
+                not. */}
+            {totalDueDollars > 0 ? (
+              <View
+                style={[
+                  styles.walletChip,
+                  walletCovers ? styles.walletChipOk : styles.walletChipWarn,
+                ]}
+              >
+                <Ionicons
+                  name={walletCovers ? "checkmark-circle" : "alert-circle"}
+                  size={14}
+                  color={walletCovers ? "#047857" : "#92400E"}
+                />
+                <Text
+                  style={[
+                    styles.walletChipText,
+                    walletCovers
+                      ? styles.walletChipTextOk
+                      : styles.walletChipTextWarn,
+                  ]}
+                >
+                  {walletCovers
+                    ? t("autopay_setup.wallet_sufficient_chip", {
+                        amount: walletBalance.toFixed(2),
+                        due: totalDueDollars.toFixed(2),
+                      })
+                    : t("autopay_setup.wallet_warning_chip", {
+                        amount: walletBalance.toFixed(2),
+                        due: totalDueDollars.toFixed(2),
+                      })}
+                </Text>
+              </View>
+            ) : null}
 
             {autopayEnabled && (
               <View style={{ marginTop: 16 }}>
-                <Text style={styles.fieldLabelSmall}>{t("autopay_setup.field_pay_from")}</Text>
+                <Text style={styles.fieldLabelSmall}>
+                  {t("autopay_setup.field_pay_from")}
+                </Text>
                 <View style={styles.methodsList}>
-                  {paymentMethods.map((method) => {
-                    const selected = selectedMethod === method.id;
+                  {methodRows.map((method) => {
+                    const selected = selectedMethodId === method.id;
                     return (
                       <TouchableOpacity
                         key={method.id}
@@ -253,19 +563,17 @@ export default function AutopaySetupScreen() {
                           styles.methodRow,
                           selected && styles.methodRowSelected,
                         ]}
-                        onPress={() => setSelectedMethod(method.id)}
+                        onPress={() => handlePickMethod(method.id)}
                         accessibilityRole="radio"
                         accessibilityState={{ selected }}
-                        accessibilityLabel={method.name}
+                        accessibilityLabel={method.label}
                       >
                         <View style={styles.methodLeft}>
-                          <Text style={styles.methodIcon}>{method.icon}</Text>
+                          <Ionicons name={method.icon} size={20} color={NAVY} />
                           <View>
-                            <Text style={styles.methodName}>{method.name}</Text>
-                            {method.balance != null && (
-                              <Text style={styles.methodSub}>
-                                Balance: ${method.balance}
-                              </Text>
+                            <Text style={styles.methodName}>{method.label}</Text>
+                            {!!method.sub && (
+                              <Text style={styles.methodSub}>{method.sub}</Text>
                             )}
                           </View>
                         </View>
@@ -289,75 +597,62 @@ export default function AutopaySetupScreen() {
                 </View>
                 <View style={styles.autoTriggerNote}>
                   <Text style={styles.autoTriggerText}>
-                    When enabled: If your wallet balance exceeds $
-                    {activeAdvance.totalDue}, we'll automatically pay off your
-                    advance early, saving you fees.
+                    {t("autopay_setup.auto_trigger_note", {
+                      amount: totalDueDollars.toFixed(2),
+                    })}
                   </Text>
                 </View>
               </View>
             )}
           </View>
 
-          {/* Reminder days */}
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>{t("autopay_setup.section_reminder")}</Text>
-            <Text style={styles.reminderHint}>
-              Get notified before your payout withholding date
-            </Text>
-            <View style={styles.reminderRow}>
-              {REMINDER_OPTIONS.map((days) => {
-                const selected = reminderDays === days;
-                return (
-                  <TouchableOpacity
-                    key={days}
-                    style={[
-                      styles.reminderButton,
-                      selected && styles.reminderButtonSelected,
-                    ]}
-                    onPress={() => setReminderDays(days)}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected }}
-                    accessibilityLabel={`${days} ${days === 1 ? "day" : "days"} before`}
-                  >
-                    <Text style={styles.reminderValue}>{days}</Text>
-                    <Text style={styles.reminderUnit}>
-                      {days === 1 ? "day" : "days"}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
+          {/* P1.4 — Reminder chip row removed. Value still persisted
+              via reminderDays state so the daily cron + push notifier
+              keep firing. TODO(P2): rebuild a dedicated picker inside
+              NotificationPrefsScreen under "Advance reminders". */}
 
           {/* Benefits */}
           <View style={styles.sectionCard}>
             <Text style={styles.benefitsTitle}>
-              Benefits of early repayment:
+              {t("autopay_setup.section_benefits_title")}
             </Text>
             <View style={styles.benefitsList}>
-              {BENEFITS.map((b, idx) => (
-                <View key={idx} style={styles.benefitRow}>
-                  <Text style={styles.benefitIcon}>{b.icon}</Text>
-                  <Text style={styles.benefitText}>{b.text}</Text>
-                </View>
-              ))}
+              <Benefit
+                icon="cash-outline"
+                text={t("autopay_setup.benefit_savings")}
+              />
+              <Benefit
+                icon="star-outline"
+                text={t("autopay_setup.benefit_xnscore")}
+              />
+              <Benefit
+                icon="lock-open-outline"
+                text={t("autopay_setup.benefit_keep_payout")}
+              />
+              <Benefit
+                icon="trending-up-outline"
+                text={t("autopay_setup.benefit_better_rates")}
+              />
             </View>
           </View>
         </View>
       </ScrollView>
-
-      {/* Bottom CTA */}
-      <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={handleSave}
-          accessibilityRole="button"
-          accessibilityLabel="Save settings"
-        >
-          <Text style={styles.primaryButtonText}>{t("autopay_setup.btn_save")}</Text>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
+  );
+}
+
+function Benefit({
+  icon,
+  text,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  text: string;
+}) {
+  return (
+    <View style={styles.benefitRow}>
+      <Ionicons name={icon} size={16} color={TEAL} />
+      <Text style={styles.benefitText}>{text}</Text>
+    </View>
   );
 }
 
@@ -403,7 +698,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 6,
   },
-  infoStrong: { fontWeight: "700" },
 
   sectionCard: {
     backgroundColor: "#FFFFFF",
@@ -435,6 +729,34 @@ const styles = StyleSheet.create({
   },
   advanceDays: { fontSize: 11, color: MUTED, marginTop: 2 },
 
+  // P1.2 — savings estimate line, sits below the advance grid.
+  savingsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#F0FDFB",
+  },
+  savingsText: { flex: 1, fontSize: 12, color: "#047857", fontWeight: "600" },
+
+  // P1.1 — wallet-cover chip below the autopay toggle.
+  walletChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+  },
+  walletChipOk: { backgroundColor: "#ECFDF5" },
+  walletChipWarn: { backgroundColor: "#FEF3C7" },
+  walletChipText: { flex: 1, fontSize: 12, fontWeight: "600", lineHeight: 17 },
+  walletChipTextOk: { color: "#047857" },
+  walletChipTextWarn: { color: "#92400E" },
+
   toggleHeader: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -451,6 +773,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   toggleOn: { backgroundColor: TEAL },
+  toggleDisabled: { opacity: 0.5 },
   toggleKnob: {
     width: 24,
     height: 24,
@@ -488,7 +811,6 @@ const styles = StyleSheet.create({
     margin: -1,
   },
   methodLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  methodIcon: { fontSize: 18 },
   methodName: { fontSize: 13, fontWeight: "600", color: NAVY },
   methodSub: { fontSize: 11, color: MUTED, marginTop: 2 },
   radioDot: {
@@ -538,22 +860,35 @@ const styles = StyleSheet.create({
   },
   benefitsList: { gap: 8 },
   benefitRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  benefitIcon: { fontSize: 16 },
   benefitText: { flex: 1, fontSize: 12, color: "#4B5563" },
 
-  bottomBar: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 32,
-    backgroundColor: "#FFFFFF",
-    borderTopWidth: 1,
-    borderTopColor: BORDER,
-  },
-  primaryButton: {
-    paddingVertical: 16,
-    borderRadius: 14,
-    backgroundColor: TEAL,
+  // Empty state — no active advance
+  emptyContainer: {
+    flex: 1,
     alignItems: "center",
+    justifyContent: "center",
+    padding: 32,
+    gap: 12,
   },
-  primaryButtonText: { fontSize: 16, fontWeight: "600", color: "#FFFFFF" },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: NAVY,
+    marginTop: 12,
+    textAlign: "center",
+  },
+  emptyBody: {
+    fontSize: 13,
+    color: MUTED,
+    textAlign: "center",
+    lineHeight: 19,
+  },
+  emptyCta: {
+    marginTop: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    backgroundColor: TEAL,
+    borderRadius: 12,
+  },
+  emptyCtaText: { fontSize: 14, fontWeight: "700", color: "#FFFFFF" },
 });

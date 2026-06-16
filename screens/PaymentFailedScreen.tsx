@@ -138,8 +138,8 @@ export default function PaymentFailedScreen() {
 
   const handleAddFunds = () => navigation.navigate(Routes.AddFunds);
   const handleChangeMethod = () =>
-    navigation.navigate(Routes.AdvanceDisbursement, {
-      advanceAmount: failure.attemptedAmount,
+    navigation.navigate(Routes.AdvanceDetailsV2, {
+      advanceId: failure.advanceId,
     });
   const handleRetry = () =>
     navigation.navigate(Routes.EarlyRepayment, {

@@ -11,6 +11,28 @@ import { useAuth } from "./AuthContext";
 import { HonorScoreEngine } from "@/services/HonorScoreEngine";
 
 /**
+ * ⚠ Architecture note (Conflict P0, 2026-06-12)
+ * ─────────────────────────────────────────────────────────────────────────
+ * This context is **Universe B** — the manual elder + dispute + mediation
+ * workflow. It reads/writes:
+ *   - disputes                    (member-reported issues)
+ *   - dispute_cases               (rolled-up case state)
+ *   - dispute_messages            (chat thread on a case)
+ *   - mediation_cases             (formal mediation tracks)
+ *   - elder_profiles, elder_council_votes, elder_endorsements,
+ *     elder_stats, elder_vote_records, elder_applications
+ *
+ * **It does NOT read `conflict_history` or `conflict_prediction_dashboard`.**
+ * Those tables belong to **Universe A**, owned by `hooks/useConflictPrediction`
+ * + `services/ConflictPredictionEngine`. The AI engine's flagged formations
+ * are INVISIBLE here; a member-reported dispute is INVISIBLE there.
+ *
+ * The two universes will be unified into a single `circle_conflicts` table
+ * with a `kind` enum in P2. Until then, treat each module as authoritative
+ * for its own table set and DO NOT cross-write. See
+ * `docs/architecture/conflict_resolution.md` for the consolidation plan.
+ * ─────────────────────────────────────────────────────────────────────────
+ *
  * TANDAXN ELDER SYSTEM
  *
  * Elders are trusted community members who:
@@ -136,6 +158,13 @@ export interface MediationCase {
     explanation: string;
     date: string;
   };
+  // P2 (migration 161) — true when the dispute was auto-created by the
+  // contributions trigger (missed contribution). Drives the "AUTO" pill
+  // and the "Mark as resolved" affordance on ConflictCaseScreen.
+  autoCreated?: boolean;
+  // P2 (migration 161) — null until escalate-stale-disputes promotes
+  // the dispute. UI banner: "Escalated — pending Elder L2 review".
+  escalationTier?: "elder_l2" | "global_queue" | null;
 }
 
 export interface TrainingCourse {

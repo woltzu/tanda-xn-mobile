@@ -53,6 +53,17 @@ export default function CreateCircleSuccessScreen() {
   const circleSavedRef = useRef(false);
   const preflightStartedRef = useRef(false);
   const [createdCircleId, setCreatedCircleId] = useState<string | null>(null);
+  // Track the full Circle row (not just its id) so the success card can
+  // display the AUTHORITATIVE invite_code from the server. The prior code
+  // computed an invite code client-side as `name.slice(0,6) + "2025"`,
+  // which never matched the real `gen_invite_code()` output stored in
+  // the row — every share/copy handed out a code the lookup couldn't
+  // find. See diagnosis: kimagui@hotmail.com's three "Sope elementary
+  // school" circles had real codes 55RZY84B / LQUHPJY2 / TU5ZCWBP but
+  // the UI showed SOPEEL2025 in every case.
+  const [createdCircle, setCreatedCircle] = useState<{
+    inviteCode?: string;
+  } | null>(null);
 
   // ── Conflict Prediction Engine: formation-time pairwise friction check ──
   // Phase D1 of feat(conflict): before we actually write the circle, run the
@@ -318,8 +329,10 @@ export default function CreateCircleSuccessScreen() {
         cyclesCompleted: 0,
         totalPayoutToDate: 0,
       });
-      // Store the created circle ID for navigation
+      // Store the created circle ID for navigation AND the row itself so
+      // the invite-code display reads from the server-set value.
       setCreatedCircleId(newCircle.id);
+      setCreatedCircle({ inviteCode: newCircle.inviteCode });
       // Created successfully — clear the saved wizard draft so it won't
       // reappear next time. Inside the try, after success only: a failed
       // createCircle (catch below) leaves the draft intact for retry.
@@ -331,8 +344,11 @@ export default function CreateCircleSuccessScreen() {
 
   const circleEmoji = getCircleEmoji(circleType);
 
-  // Generate a mock invite code
-  const inviteCode = name.replace(/\s+/g, "").toUpperCase().slice(0, 6) + "2025";
+  // Real server-generated invite code from migration 141's gen_invite_code().
+  // Falls back to a placeholder while the create RPC is in flight (the UI
+  // already gates the share/copy buttons on `createdCircleId`, so the
+  // empty string is never used for an actual share).
+  const inviteCode = createdCircle?.inviteCode ?? "";
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);

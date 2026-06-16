@@ -1,0 +1,1766 @@
+import React, { useCallback, useMemo, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  StatusBar,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useTranslation } from "react-i18next";
+import { colors } from "../theme/tokens";
+import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
+import { useMemberTier } from "../hooks/useGraduatedEntry";
+import { useAuth } from "../context/AuthContext";
+import { useWallet } from "../context/WalletContext";
+import { useFocusEffect } from "@react-navigation/native";
+import { useGoalActions } from "../hooks/useGoalActions";
+import type { Goal } from "../types/goals";
+import { useCircles, type Circle } from "../context/CirclesContext";
+
+// ==========================================================================
+// Mock data shrinking. Wallet balance comes from useWallet(), goals balance
+// from useGoalActions().fetchGoals(), and as of 2026-06-12 circles come
+// from useCircles().myCircles (real UUIDs, real names, real positions).
+// What remains here is only the static thresholds + the activity/upcoming/
+// expected feeds that don't have their own hook yet.
+// ==========================================================================
+const mockData = {
+  has_been_in_circle_30_days: true,
+  xn_score: 78,
+};
+
+const mockGoal = {
+  id: "g1",
+  name: "New Car",
+  currentAmount: 1200,
+  targetAmount: 3000,
+};
+
+type ActivityRow = {
+  id: string;
+  direction: "in" | "out";
+  descKey: string;
+  descParams?: Record<string, string>;
+  amount: number;
+  date: string;
+};
+
+const mockActivity: ActivityRow[] = [
+  {
+    id: "a1",
+    direction: "in",
+    descKey: "home_screen.activity_received_payout",
+    descParams: { circle: "Family Circle" },
+    amount: 200,
+    date: "Mar 10",
+  },
+  {
+    id: "a2",
+    direction: "out",
+    descKey: "home_screen.activity_contributed_to",
+    descParams: { circle: "Business Circle" },
+    amount: -100,
+    date: "Mar 5",
+  },
+  {
+    id: "a3",
+    direction: "out",
+    descKey: "home_screen.activity_goal_contribution",
+    descParams: { goal: mockGoal.name },
+    amount: -50,
+    date: "Mar 1",
+  },
+  {
+    id: "a4",
+    direction: "in",
+    descKey: "home_screen.activity_received_advance",
+    amount: 300,
+    date: "Feb 25",
+  },
+  {
+    id: "a5",
+    direction: "out",
+    descKey: "home_screen.activity_fee_maintenance",
+    amount: -5,
+    date: "Feb 20",
+  },
+];
+
+const mockUpcoming = [
+  { id: "u1", date: "Mar 15", name: "Family Circle", amount: 100 },
+  { id: "u2", date: "Mar 20", name: "Business Builders", amount: 250 },
+];
+
+const mockExpectedPayouts = [
+  { id: "p1", date: "Mar 25", name: "Family Circle", amount: 400 },
+  { id: "p2", date: "Apr 5", name: "Business Builders", amount: 500 },
+];
+
+// ==========================================================================
+// Helpers
+// ==========================================================================
+function formatSigned(amount: number): string {
+  const sign = amount > 0 ? "+ " : amount < 0 ? "− " : "";
+  return `${sign}$${Math.abs(amount).toFixed(2)}`;
+}
+function formatPlain(amount: number): string {
+  return `$${amount.toFixed(2)}`;
+}
+
+// Fallback tier when useMemberTier returns null (unauth / loading / mock).
+const FALLBACK_TIER = {
+  label: "Bronze",
+  icon: "🥉",
+  color: "#CD7F32",
+  featuresSummary: "Standard circles, goal savings, basic marketplace.",
+  description: "Established member — full access to core features.",
+};
+
+// ==========================================================================
+// Component
+// ==========================================================================
+export default function HomeScreen() {
+  const { t } = useTranslation();
+  const navigation = useTypedNavigation();
+  const { tierDef } = useMemberTier();
+
+  const [showCircleSheet, setShowCircleSheet] = useState(false);
+  const [showTierModal, setShowTierModal] = useState(false);
+  const [showAiSheet, setShowAiSheet] = useState(false);
+  // Soft-verify banner. KYC is deferred until first $-action; this nudge
+  // shows from cold-start until the user either taps "Verify" or dismisses
+  // it for this session. (Per-session is intentional: persistent dismissal
+  // would let the user forget; per-launch would nag.)
+  const { isEmailVerified, user } = useAuth();
+  // P1 (kyc-trigger review): persistent KYC banner for unverified
+  // users. Shown when no kyc row exists yet AND for terminal "needs
+  // action" states (rejected, expired). Hidden while the user is
+  // mid-flow (pending / review states) so we don't duplicate the
+  // Hub's own progress chip. Approved → no banner.
+  const kycStatus = user?.kyc?.status;
+  const showKycBanner =
+    !!user?.id &&
+    kycStatus !== "approved" &&
+    !["pending", "provider_pending", "provider_review", "admin_review"].includes(
+      kycStatus ?? "",
+    );
+  const handleOpenKycBanner = () => {
+    navigation.navigate(Routes.KYCHub);
+  };
+  // Real wallet balance from WalletContext — already USD-equivalent and
+  // in dollars (not cents). Updates reactively after a send: WalletContext
+  // calls loadWalletData() at the end of sendMoney(), which re-reads
+  // user_wallets.main_balance_cents from Supabase and pushes the new
+  // value into the currencies array. The render here re-runs as soon as
+  // that state lands.
+  const { balance: walletBalance } = useWallet();
+
+  // Real goals from the DB. Replaces the prior `mockData.goals_balance`
+  // constant (was $400) and `mockGoal` ("New Car"). Refetches every time
+  // the screen comes into focus so a goal created in the Express flow
+  // or money added via the bottom-sheets reflects immediately on the
+  // user's return to Home.
+  const { fetchGoals } = useGoalActions();
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [goalsLoading, setGoalsLoading] = useState(true);
+  const loadGoals = useCallback(async () => {
+    setGoalsLoading(true);
+    const { data, error } = await fetchGoals();
+    if (error) {
+      console.warn("[HomeScreen] fetchGoals failed:", (error as any)?.message);
+      setGoals([]);
+    } else {
+      setGoals((data ?? []).filter((g) => g.status === "active"));
+    }
+    setGoalsLoading(false);
+  }, [fetchGoals]);
+  useFocusEffect(
+    useCallback(() => {
+      loadGoals();
+    }, [loadGoals]),
+  );
+
+  // Aggregate balance across all active goals (already in dollars from
+  // useGoalActions' centsToDollars mapping).
+  const totalGoalsBalance = useMemo(
+    () => goals.reduce((acc, g) => acc + (g.currentBalance ?? 0), 0),
+    [goals],
+  );
+
+  // Pick the most recently created active goal as the "primary" surface
+  // on the Goals card. Null when the user has no goals yet → triggers
+  // the empty-state CTA further down.
+  const primaryGoal = useMemo<Goal | null>(() => {
+    if (goals.length === 0) return null;
+    return [...goals].sort(
+      (a, b) =>
+        new Date(b.createdAt ?? 0).getTime() -
+        new Date(a.createdAt ?? 0).getTime(),
+    )[0];
+  }, [goals]);
+  const [verifyBannerDismissed, setVerifyBannerDismissed] = useState(false);
+  const showVerifyBanner = !isEmailVerified && !verifyBannerDismissed;
+  const handleOpenVerify = () => {
+    setVerifyBannerDismissed(true);
+    // KYC P1: unified KYCHub is the canonical entry point — merges the
+    // P0 engine wiring with the prior VerificationHub layout, coach
+    // mark, progress chip, and tier-explainer modal.
+    navigation.navigate(Routes.KYCHub);
+  };
+
+  // Real circles for this user. `myCircles` from CirclesContext is the
+  // authoritative source — replaces the prior `mockCircles` constant whose
+  // string ids (e.g. "family-circle-1") were not UUIDs and crashed the
+  // CircleDetail member fetch with `invalid input syntax for type uuid`.
+  const { myCircles } = useCircles();
+  const activeCircles = useMemo(
+    () => myCircles.filter((c) => c.status === "active"),
+    [myCircles],
+  );
+  const hasActiveCircle = activeCircles.length > 0;
+
+  // Placeholder until a real contributions-minus-payouts hook lands.
+  // TODO(circles-net): wire to a future `useCircleNetBalance()` that sums
+  // contributions and payouts for the current user across `activeCircles`.
+  // Until then we display $0 net so the Home aggregate stays honest
+  // instead of advertising fake gains.
+  const circleNetBalance = 0;
+
+  const totalNet = useMemo(
+    () => walletBalance + totalGoalsBalance + circleNetBalance,
+    [walletBalance, totalGoalsBalance, circleNetBalance],
+  );
+
+  // Per-circle aggregates for the breakdown sheet. Real
+  // contributed/received numbers belong to the same future hook noted
+  // above; for now the totals row matches the per-circle placeholders so
+  // the sheet stays internally consistent.
+  const circleTotals = useMemo(
+    () => ({ contributed: 0, received: 0, net: circleNetBalance }),
+    [circleNetBalance],
+  );
+
+  // Progress % for the primary goal card. 0 when there's no goal or no
+  // target set, clamped to 100 so a goal that overshot its target doesn't
+  // overflow the progress bar.
+  const goalProgressPct = useMemo(() => {
+    if (!primaryGoal || !primaryGoal.targetAmount || primaryGoal.targetAmount <= 0) {
+      return 0;
+    }
+    const raw =
+      ((primaryGoal.currentBalance ?? 0) / primaryGoal.targetAmount) * 100;
+    return Math.min(100, Math.round(raw));
+  }, [primaryGoal]);
+
+  // P1 eligibility rule (2026-06-12): allow the user to open the Advance
+  // hub as long as they are in at least one active circle and their net
+  // position isn't negative. The real, score-aware gating happens
+  // server-side in get_advance_dashboard / request_advance — the button
+  // only needs to surface a meaningful entry point here.
+  const advanceEligible =
+    circleNetBalance >= 0 &&
+    hasActiveCircle &&
+    mockData.has_been_in_circle_30_days;
+
+  const tier = tierDef ?? FALLBACK_TIER;
+
+  // ----- Navigation handlers -----
+  const handleManageGoals = () => {
+    navigation.navigate(Routes.GoalsHubV2);
+  };
+  const handleRequestAdvance = () => {
+    if (!advanceEligible) return;
+    navigation.navigate(Routes.AdvanceHubV2);
+  };
+  const handleCirclePress = (circle: Circle) => {
+    navigation.navigate(Routes.CircleDetail, { circleId: circle.id });
+  };
+  const handleViewCreditReport = () => {
+    navigation.navigate(Routes.CreditReport);
+  };
+  const handleOpenScoreHub = () => {
+    navigation.navigate(Routes.ScoreHub);
+  };
+  const handleOpenProfile = () => {
+    navigation.navigate(Routes.ProfileMain);
+  };
+  const handleOpenNotifications = () => {
+    navigation.navigate(Routes.NotificationsInbox);
+  };
+  const handleOpenWallet = () => {
+    navigation.navigate(Routes.WalletMain);
+  };
+  const handleCreateGoal = () => {
+    navigation.navigate(Routes.GoalCreateExpress);
+  };
+  const handleOpenCircleBreakdown = () => {
+    setShowCircleSheet(true);
+  };
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ===== KYC BANNER (P1 — persistent, non-dismissible) =====
+            Distinct from the dismissible "soft verify" email-verification
+            banner below: this one nags every visit until KYC is approved
+            (or in a pending state). The dismiss affordance is omitted
+            deliberately — the banner is the single source-of-truth that
+            money actions remain blocked, and the P0 KYCGate uses the
+            same status field so the two surfaces stay in sync. */}
+        {showKycBanner ? (
+          <View style={styles.kycBanner}>
+            <Ionicons
+              name="shield-outline"
+              size={20}
+              color={colors.warningLabel}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.kycBannerTitle}>
+                {t("kyc_home_banner.title")}
+              </Text>
+              <Text style={styles.kycBannerBody}>
+                {t("kyc_home_banner.body")}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={handleOpenKycBanner}
+              style={styles.kycBannerCta}
+              accessibilityRole="button"
+              accessibilityLabel={t("kyc_home_banner.button")}
+            >
+              <Text style={styles.kycBannerCtaText}>
+                {t("kyc_home_banner.button")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* ===== SOFT VERIFY BANNER ===== */}
+        {showVerifyBanner ? (
+          <View style={styles.verifyBanner}>
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={18}
+              color={colors.warningAmber}
+            />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.verifyBannerTitle}>
+                {t("home_screen.verify_banner_title")}
+              </Text>
+              <Text style={styles.verifyBannerBody}>
+                {t("home_screen.verify_banner_body")}
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={handleOpenVerify}
+              style={styles.verifyBannerCta}
+              accessibilityRole="button"
+            >
+              <Text style={styles.verifyBannerCtaText}>
+                {t("home_screen.verify_banner_cta")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setVerifyBannerDismissed(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={t("home_screen.verify_banner_dismiss_a11y")}
+            >
+              <Ionicons
+                name="close"
+                size={18}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* ===== TOP BAR — header icon row =====
+            HomeStack has headerShown: false, so all top-bar triggers live
+            in-content above the Balance Card. Left: profile (avatar
+            replacement). Right: notifications + Score Hub.
+            Restores the Profile + Notifications entry points that the
+            old DashboardScreen exposed in its avatar/bell pair. */}
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            onPress={handleOpenProfile}
+            style={styles.topBarIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t("home_screen.header_profile_a11y")}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons
+              name="person-circle-outline"
+              size={24}
+              color={colors.primaryNavy}
+            />
+          </TouchableOpacity>
+
+          <View style={{ flex: 1 }} />
+
+          <TouchableOpacity
+            onPress={handleOpenNotifications}
+            style={[styles.topBarIconBtn, { marginRight: 8 }]}
+            accessibilityRole="button"
+            accessibilityLabel={t("home_screen.header_notifications_a11y")}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons
+              name="notifications-outline"
+              size={20}
+              color={colors.primaryNavy}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleOpenScoreHub}
+            style={styles.topBarIconBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t("home_screen.header_score_hub_a11y")}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons
+              name="stats-chart-outline"
+              size={22}
+              color={colors.primaryNavy}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* ===== MAIN BALANCE CARD ===== */}
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPress={() => setShowCircleSheet(true)}
+          style={styles.balanceCardWrap}
+          accessibilityRole="button"
+          accessibilityLabel={t("home_screen.balance_card_a11y")}
+        >
+          <LinearGradient
+            colors={[colors.primaryNavy, "#143654"]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.balanceCard}
+          >
+            <Text style={styles.balanceLabel}>
+              {t("home_screen.total_net_position")}
+            </Text>
+            <Text style={styles.balanceAmount}>{formatPlain(totalNet)}</Text>
+
+            {/* Tier badge — small chip directly under the big amount */}
+            <TouchableOpacity
+              style={styles.tierBadgeRow}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                setShowTierModal(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={t("home_screen.tier_badge_a11y", {
+                tier: tier.label,
+              })}
+            >
+              <View
+                style={[
+                  styles.tierBadge,
+                  { backgroundColor: `${tier.color}33` },
+                ]}
+              >
+                <Text style={styles.tierEmoji}>{tier.icon}</Text>
+                <Text style={styles.tierLabel}>{tier.label}</Text>
+              </View>
+              <Text style={styles.tierBenefitsLink}>
+                {t("home_screen.tier_benefits_link")}
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={12}
+                color={colors.textOnNavy}
+              />
+            </TouchableOpacity>
+
+            <View style={styles.divider} />
+
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation?.();
+                handleOpenWallet();
+              }}
+              style={({ pressed }) => [
+                styles.breakdownRow,
+                styles.breakdownRowTappable,
+                pressed && styles.breakdownRowPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={t("home_screen.breakdown_wallet_a11y")}
+            >
+              <Text style={styles.breakdownLabel}>
+                {t("home_screen.wallet")}
+              </Text>
+              <View style={styles.breakdownRight}>
+                <Text style={styles.breakdownValue}>
+                  {formatPlain(walletBalance)}
+                </Text>
+                <Ionicons name="chevron-forward" size={14} color={colors.textOnNavy} />
+              </View>
+            </Pressable>
+
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation?.();
+                handleManageGoals();
+              }}
+              style={({ pressed }) => [
+                styles.breakdownRow,
+                styles.breakdownRowTappable,
+                pressed && styles.breakdownRowPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={t("home_screen.breakdown_goals_a11y")}
+            >
+              <Text style={styles.breakdownLabel}>
+                {t("home_screen.goals")}
+              </Text>
+              <View style={styles.breakdownRight}>
+                <Text style={styles.breakdownValue}>
+                  {goalsLoading && goals.length === 0
+                    ? "—"
+                    : formatSigned(totalGoalsBalance)}
+                </Text>
+                <Ionicons name="chevron-forward" size={14} color={colors.textOnNavy} />
+              </View>
+            </Pressable>
+
+            <Pressable
+              onPress={(e) => {
+                e.stopPropagation?.();
+                handleOpenCircleBreakdown();
+              }}
+              style={({ pressed }) => [
+                styles.breakdownRow,
+                styles.breakdownRowTappable,
+                pressed && styles.breakdownRowPressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={t("home_screen.breakdown_circle_net_a11y")}
+            >
+              <Text style={styles.breakdownLabel}>
+                {t("home_screen.circle_net")}
+              </Text>
+              <View style={styles.breakdownRight}>
+                <Text style={styles.breakdownValue}>
+                  {formatSigned(circleNetBalance)}
+                </Text>
+                <Ionicons name="chevron-forward" size={14} color={colors.textOnNavy} />
+              </View>
+            </Pressable>
+
+            <TouchableOpacity
+              style={styles.whyBalanceRow}
+              onPress={(e) => {
+                e.stopPropagation?.();
+                setShowAiSheet(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={t("home_screen.why_balance_link")}
+            >
+              <Ionicons
+                name="information-circle-outline"
+                size={14}
+                color={colors.textOnNavy}
+              />
+              <Text style={styles.whyBalanceText}>
+                {t("home_screen.why_balance_link")}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.tapHintRow}>
+              <Text style={styles.tapHint}>
+                {t("home_screen.tap_for_breakdown")}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.textOnNavy} />
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        {/* ===== GOALS CARD ===== */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="flag-outline" size={18} color={colors.primaryNavy} />
+            <Text style={styles.sectionTitle}>
+              {t("home_screen.goals_card_title")}
+            </Text>
+          </View>
+
+          {primaryGoal ? (
+            <>
+              <Text style={styles.goalPrimaryLabel}>
+                {t("home_screen.goals_primary_label")}
+              </Text>
+              <Text style={styles.goalName}>{primaryGoal.name}</Text>
+
+              <View style={styles.progressBarBg}>
+                <View
+                  style={[styles.progressBarFill, { width: `${goalProgressPct}%` }]}
+                />
+              </View>
+              <View style={styles.goalAmountRow}>
+                <Text style={styles.goalAmountText}>
+                  {formatPlain(primaryGoal.currentBalance ?? 0)}
+                  <Text style={styles.goalAmountSep}>
+                    {" "}
+                    / {formatPlain(primaryGoal.targetAmount ?? 0)}
+                  </Text>
+                </Text>
+                <Text style={styles.goalAmountPct}>{goalProgressPct}%</Text>
+              </View>
+            </>
+          ) : (
+            <Text style={styles.goalEmptyText}>
+              {goalsLoading
+                ? t("home_screen.goals_loading", {
+                    defaultValue: "Loading your goals…",
+                  })
+                : t("home_screen.goals_empty", {
+                    defaultValue:
+                      "No goals yet. Tap Create goal to start saving for what matters.",
+                  })}
+            </Text>
+          )}
+
+          <View style={styles.goalsButtonRow}>
+            <TouchableOpacity
+              style={[styles.primaryBtn, styles.goalsButtonFlex]}
+              onPress={handleManageGoals}
+              accessibilityRole="button"
+            >
+              <Text style={styles.primaryBtnText}>
+                {t("home_screen.goals_manage_btn")}
+              </Text>
+              <Ionicons name="arrow-forward" size={16} color={colors.textWhite} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.outlineBtn, styles.goalsButtonFlex]}
+              onPress={handleCreateGoal}
+              accessibilityRole="button"
+              accessibilityLabel={t("home_screen.goals_create_btn")}
+            >
+              <Ionicons
+                name="add-circle-outline"
+                size={16}
+                color={colors.primaryNavy}
+              />
+              <Text style={styles.outlineBtnText}>
+                {t("home_screen.goals_create_btn")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* ===== RECENT ACTIVITY CARD ===== */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="receipt-outline" size={18} color={colors.primaryNavy} />
+            <Text style={styles.sectionTitle}>
+              {t("home_screen.recent_activity")}
+            </Text>
+          </View>
+
+          {mockActivity.map((row, idx) => (
+            <View
+              key={row.id}
+              style={[
+                styles.activityRow,
+                idx === mockActivity.length - 1 && styles.activityRowLast,
+              ]}
+            >
+              <View
+                style={[
+                  styles.activityIcon,
+                  {
+                    backgroundColor:
+                      row.direction === "in"
+                        ? colors.successBg
+                        : colors.warningBg,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={
+                    row.direction === "in"
+                      ? "arrow-down-outline"
+                      : "arrow-up-outline"
+                  }
+                  size={14}
+                  color={
+                    row.direction === "in"
+                      ? colors.successText
+                      : colors.warningLabel
+                  }
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.activityDesc} numberOfLines={1}>
+                  {t(row.descKey, row.descParams ?? {})}
+                </Text>
+                <Text style={styles.activityDate}>{row.date}</Text>
+              </View>
+              <Text
+                style={[
+                  styles.activityAmount,
+                  row.amount >= 0
+                    ? { color: colors.successText }
+                    : { color: colors.textPrimary },
+                ]}
+              >
+                {formatSigned(row.amount)}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {/* ===== ACTIVE CIRCLES & POSITIONS CARD ===== */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="people-outline" size={18} color={colors.primaryNavy} />
+            <Text style={styles.sectionTitle}>
+              {t("home_screen.active_circles")}
+            </Text>
+          </View>
+
+          {activeCircles.length === 0 ? (
+            <View style={styles.circlesEmpty}>
+              <Ionicons
+                name="people-outline"
+                size={28}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.circlesEmptyTitle}>
+                {t("home_screen.circles_empty_title")}
+              </Text>
+              <Text style={styles.circlesEmptyBody}>
+                {t("home_screen.circles_empty_body")}
+              </Text>
+            </View>
+          ) : (
+            activeCircles.map((circle, idx) => {
+              const position =
+                circle.myPosition && circle.memberCount
+                  ? t("home_screen.circles_position_format", {
+                      position: circle.myPosition,
+                      total: circle.memberCount,
+                    })
+                  : t("home_screen.circles_position_next");
+              return (
+                <TouchableOpacity
+                  key={circle.id}
+                  style={[
+                    styles.circleRow,
+                    idx === activeCircles.length - 1 && styles.circleRowLast,
+                  ]}
+                  onPress={() => handleCirclePress(circle)}
+                  accessibilityRole="button"
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.circleName}>
+                      {circle.emoji ? `${circle.emoji}  ` : ""}
+                      {circle.name}
+                    </Text>
+                    <Text style={styles.circleMeta}>
+                      {t("home_screen.circles_amount_per_cycle", {
+                        amount: circle.amount.toFixed(0),
+                        frequency: t(
+                          `home_screen.circles_frequency_${circle.frequency}`,
+                          { defaultValue: circle.frequency },
+                        ),
+                      })}
+                    </Text>
+                    <Text style={styles.circleMeta}>
+                      {t("home_screen.circles_position_label")}{" "}
+                      <Text style={styles.circlePosition}>{position}</Text>
+                    </Text>
+                  </View>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color={colors.textSecondary}
+                  />
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </View>
+
+        {/* ===== FUTURE SNAPSHOT CARD ===== */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="calendar-outline" size={18} color={colors.primaryNavy} />
+            <Text style={styles.sectionTitle}>
+              {t("home_screen.future_snapshot")}
+            </Text>
+          </View>
+
+          {/* Upcoming obligations */}
+          <Text style={styles.subSectionLabel}>
+            {t("home_screen.future_upcoming_title")}
+          </Text>
+          {mockUpcoming.map((row) => (
+            <View key={row.id} style={styles.futureRow}>
+              <Text style={styles.futureDate}>{row.date}</Text>
+              <Text style={styles.futureName} numberOfLines={1}>
+                {row.name}
+              </Text>
+              <Text style={[styles.futureAmount, { color: colors.textPrimary }]}>
+                {formatSigned(-row.amount)}
+              </Text>
+            </View>
+          ))}
+
+          {/* Expected payouts */}
+          <Text style={[styles.subSectionLabel, { marginTop: 14 }]}>
+            {t("home_screen.future_expected_title")}
+          </Text>
+          {mockExpectedPayouts.map((row) => (
+            <View key={row.id} style={styles.futureRow}>
+              <Text style={styles.futureDate}>{row.date}</Text>
+              <Text style={styles.futureName} numberOfLines={1}>
+                {row.name}
+              </Text>
+              <Text style={[styles.futureAmount, { color: colors.successText }]}>
+                {formatSigned(row.amount)}
+              </Text>
+            </View>
+          ))}
+
+          {/* Credit Report snapshot */}
+          <TouchableOpacity
+            style={styles.creditRow}
+            onPress={handleViewCreditReport}
+            accessibilityRole="button"
+            accessibilityLabel={t("home_screen.credit_view_full_report")}
+          >
+            <View style={styles.creditLeft}>
+              <Ionicons
+                name="trending-up-outline"
+                size={16}
+                color={colors.primaryNavy}
+              />
+              <Text style={styles.creditLabel}>
+                {t("home_screen.xn_score_label")}
+              </Text>
+              <Text style={styles.creditScore}>{mockData.xn_score}</Text>
+            </View>
+            <View style={styles.creditRight}>
+              <Text style={styles.creditLink}>
+                {t("home_screen.credit_view_full_report")}
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={14}
+                color={colors.accentTeal}
+              />
+            </View>
+          </TouchableOpacity>
+
+          {/* Advance V2 button */}
+          <TouchableOpacity
+            style={[
+              styles.advanceBtn,
+              !advanceEligible && styles.advanceBtnDisabled,
+            ]}
+            onPress={handleRequestAdvance}
+            disabled={!advanceEligible}
+            accessibilityRole="button"
+            accessibilityLabel={
+              advanceEligible
+                ? t("home_screen.advance_btn")
+                : t("home_screen.advance_tooltip_ineligible")
+            }
+          >
+            <Ionicons
+              name="flash-outline"
+              size={16}
+              color={advanceEligible ? colors.textWhite : colors.textSecondary}
+            />
+            <Text
+              style={[
+                styles.advanceBtnText,
+                !advanceEligible && styles.advanceBtnTextDisabled,
+              ]}
+            >
+              {advanceEligible
+                ? t("home_screen.advance_btn")
+                : t("home_screen.advance_btn_ineligible")}
+            </Text>
+          </TouchableOpacity>
+          {!advanceEligible && (
+            <Text style={styles.advanceHint}>
+              {t("home_screen.advance_tooltip_ineligible")}
+            </Text>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* ===== CIRCLE NET BREAKDOWN BOTTOM SHEET ===== */}
+      <Modal
+        visible={showCircleSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCircleSheet(false)}
+      >
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setShowCircleSheet(false)}
+        >
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
+
+            <Text style={styles.sheetTitle}>
+              {t("home_screen.sheet_title")}
+            </Text>
+            <Text style={styles.sheetSubtitle}>
+              {t("home_screen.sheet_subtitle")}
+            </Text>
+
+            <View style={styles.sheetList}>
+              {activeCircles.length === 0 ? (
+                <Text style={styles.sheetEmpty}>
+                  {t("home_screen.circles_empty_body")}
+                </Text>
+              ) : (
+                activeCircles.map((c) => {
+                  // Per-circle contributed / received come from the same
+                  // future hook as `circleNetBalance` — placeholder 0/0 for
+                  // now so the sheet stays internally consistent with the
+                  // aggregate above.
+                  const contributed = 0;
+                  const received = 0;
+                  const net = received - contributed;
+                  return (
+                    <View key={c.id} style={styles.sheetRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.sheetCircleName}>
+                          {c.emoji ? `${c.emoji}  ` : ""}
+                          {c.name}
+                        </Text>
+                        <Text style={styles.sheetCircleSub}>
+                          {t("home_screen.contributed_received", {
+                            contributed: contributed.toFixed(2),
+                            received: received.toFixed(2),
+                          })}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.sheetCircleNet,
+                          net > 0
+                            ? { color: colors.successText }
+                            : net < 0
+                              ? { color: colors.errorText }
+                              : { color: colors.textSecondary },
+                        ]}
+                      >
+                        {formatSigned(net)}
+                      </Text>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+
+            <View style={styles.sheetTotalsCard}>
+              <View style={styles.sheetTotalsRow}>
+                <Text style={styles.sheetTotalsLabel}>
+                  {t("home_screen.total_contributed")}
+                </Text>
+                <Text style={styles.sheetTotalsValue}>
+                  {formatPlain(circleTotals.contributed)}
+                </Text>
+              </View>
+              <View style={styles.sheetTotalsRow}>
+                <Text style={styles.sheetTotalsLabel}>
+                  {t("home_screen.total_received")}
+                </Text>
+                <Text style={styles.sheetTotalsValue}>
+                  {formatPlain(circleTotals.received)}
+                </Text>
+              </View>
+              <View style={[styles.sheetTotalsRow, styles.sheetTotalsRowBold]}>
+                <Text style={styles.sheetTotalsLabelBold}>
+                  {t("home_screen.net_position")}
+                </Text>
+                <Text
+                  style={[
+                    styles.sheetTotalsValueBold,
+                    circleTotals.net > 0
+                      ? { color: colors.successText }
+                      : circleTotals.net < 0
+                        ? { color: colors.errorText }
+                        : { color: colors.textPrimary },
+                  ]}
+                >
+                  {formatSigned(circleTotals.net)}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.sheetCloseBtn}
+              onPress={() => setShowCircleSheet(false)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.sheetCloseBtnText}>{t("common.close")}</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ===== "WHY THIS BALANCE?" AI EXPLAINER SHEET ===== */}
+      <Modal
+        visible={showAiSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAiSheet(false)}
+      >
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setShowAiSheet(false)}
+        >
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
+
+            <View style={styles.aiSheetHeader}>
+              <Ionicons
+                name="sparkles-outline"
+                size={18}
+                color={colors.accentTeal}
+              />
+              <Text style={styles.sheetTitle}>
+                {t("home_screen.ai_sheet_title")}
+              </Text>
+            </View>
+            <Text style={styles.sheetSubtitle}>
+              {t("home_screen.ai_sheet_subtitle")}
+            </Text>
+
+            <View style={styles.aiBodyCard}>
+              <Text style={styles.aiBodyText}>
+                {t("home_screen.ai_explanation_body")}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.sheetCloseBtn}
+              onPress={() => setShowAiSheet(false)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.sheetCloseBtnText}>{t("common.close")}</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ===== TIER BENEFITS MODAL ===== */}
+      <Modal
+        visible={showTierModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTierModal(false)}
+      >
+        <Pressable
+          style={styles.tierBackdrop}
+          onPress={() => setShowTierModal(false)}
+        >
+          <Pressable style={styles.tierModal} onPress={() => {}}>
+            <View
+              style={[
+                styles.tierModalHeader,
+                { backgroundColor: `${tier.color}1A` },
+              ]}
+            >
+              <Text style={styles.tierModalEmoji}>{tier.icon}</Text>
+              <Text style={[styles.tierModalLabel, { color: tier.color }]}>
+                {tier.label}
+              </Text>
+            </View>
+
+            <Text style={styles.tierModalTitle}>
+              {t("home_screen.tier_benefits_title")}
+            </Text>
+            <Text style={styles.tierModalBody}>{tier.featuresSummary}</Text>
+            <Text style={styles.tierModalBodyMuted}>{tier.description}</Text>
+
+            <TouchableOpacity
+              style={styles.tierModalClose}
+              onPress={() => setShowTierModal(false)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.tierModalCloseText}>{t("common.close")}</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+// ==========================================================================
+// Styles
+// ==========================================================================
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: colors.screenBg },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 16, paddingBottom: 40 },
+
+  // ----- KYC banner (P1 — persistent, non-dismissible) -----
+  kycBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 14,
+    backgroundColor: colors.warningBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    marginBottom: 12,
+  },
+  kycBannerTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: colors.warningLabel,
+  },
+  kycBannerBody: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  kycBannerCta: {
+    backgroundColor: colors.primaryNavy,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 9,
+  },
+  kycBannerCtaText: {
+    color: colors.textWhite,
+    fontWeight: "700",
+    fontSize: 12,
+  },
+
+  // ----- Soft verify banner (email confirmation nudge) -----
+  verifyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    backgroundColor: colors.warningBg,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    marginBottom: 12,
+  },
+  verifyBannerTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.warningLabel,
+  },
+  verifyBannerBody: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 1,
+    lineHeight: 14,
+  },
+  verifyBannerCta: {
+    backgroundColor: colors.primaryNavy,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  verifyBannerCtaText: {
+    color: colors.textWhite,
+    fontWeight: "700",
+    fontSize: 11,
+  },
+
+  // ----- In-content top bar (Score Hub icon) -----
+  topBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginBottom: 8,
+  },
+  topBarIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.cardBg,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  // ----- Balance card -----
+  balanceCardWrap: {
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 4,
+    marginBottom: 16,
+  },
+  balanceCard: { borderRadius: 16, padding: 20 },
+  balanceLabel: {
+    color: colors.textOnNavy,
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  balanceAmount: {
+    color: colors.textWhite,
+    fontSize: 36,
+    fontWeight: "700",
+    marginBottom: 10,
+  },
+
+  // ----- Tier badge inside balance card -----
+  tierBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  tierBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  tierEmoji: { fontSize: 12 },
+  tierLabel: {
+    color: colors.textWhite,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+  },
+  tierBenefitsLink: {
+    color: colors.textOnNavy,
+    fontSize: 12,
+    textDecorationLine: "underline",
+  },
+
+  divider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    marginVertical: 14,
+  },
+  breakdownRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  breakdownRowTappable: {
+    paddingHorizontal: 6,
+    marginHorizontal: -6,
+    borderRadius: 8,
+  },
+  breakdownRowPressed: {
+    backgroundColor: "rgba(255,255,255,0.08)",
+  },
+  breakdownLabel: { color: colors.textOnNavy, fontSize: 14 },
+  breakdownRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  breakdownValue: {
+    color: colors.textWhite,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  tapHintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 4,
+    marginTop: 12,
+  },
+  tapHint: {
+    color: colors.textOnNavy,
+    fontSize: 12,
+    fontStyle: "italic",
+  },
+  whyBalanceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 10,
+  },
+  whyBalanceText: {
+    color: colors.textOnNavy,
+    fontSize: 12,
+    textDecorationLine: "underline",
+  },
+
+  // ----- Section card (Goals / Activity / Circles / Future) -----
+  sectionCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+
+  // ----- Goals -----
+  goalPrimaryLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  // Rendered in place of the progress bar / amount line when the user
+  // has no active goals yet (or while the initial fetch is in flight).
+  goalEmptyText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 19,
+    marginVertical: 12,
+  },
+  goalName: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginTop: 2,
+    marginBottom: 10,
+  },
+  progressBarBg: {
+    height: 8,
+    backgroundColor: colors.border,
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: colors.accentTeal,
+    borderRadius: 4,
+  },
+  goalAmountRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  goalAmountText: {
+    fontSize: 14,
+    color: colors.textPrimary,
+    fontWeight: "600",
+  },
+  goalAmountSep: {
+    color: colors.textSecondary,
+    fontWeight: "400",
+  },
+  goalAmountPct: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.accentTeal,
+  },
+  primaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: colors.primaryNavy,
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  primaryBtnText: {
+    color: colors.textWhite,
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  outlineBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: colors.cardBg,
+    borderColor: colors.primaryNavy,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 12,
+  },
+  outlineBtnText: {
+    color: colors.primaryNavy,
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  goalsButtonRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  goalsButtonFlex: {
+    flex: 1,
+  },
+
+  // ----- Activity -----
+  activityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  activityRowLast: { borderBottomWidth: 0 },
+  activityIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  activityDesc: {
+    fontSize: 14,
+    color: colors.textPrimary,
+    fontWeight: "500",
+  },
+  activityDate: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  activityAmount: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  // ----- Circles -----
+  circleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  circleRowLast: { borderBottomWidth: 0 },
+  circleName: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  circleMeta: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  circlePosition: {
+    color: colors.accentTeal,
+    fontWeight: "700",
+  },
+
+  // ----- Future Snapshot -----
+  subSectionLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginBottom: 6,
+  },
+  futureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    gap: 10,
+  },
+  futureDate: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: "600",
+    width: 50,
+  },
+  futureName: { flex: 1, fontSize: 13, color: colors.textPrimary },
+  futureAmount: { fontSize: 13, fontWeight: "700" },
+
+  creditRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: colors.screenBg,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 14,
+  },
+  creditLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  creditLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: "500",
+  },
+  creditScore: {
+    fontSize: 15,
+    color: colors.primaryNavy,
+    fontWeight: "700",
+    marginLeft: 4,
+  },
+  creditRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  creditLink: {
+    fontSize: 12,
+    color: colors.accentTeal,
+    fontWeight: "600",
+  },
+  advanceBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: colors.accentTeal,
+    borderRadius: 10,
+    paddingVertical: 12,
+    marginTop: 10,
+  },
+  advanceBtnDisabled: {
+    backgroundColor: colors.screenBg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  advanceBtnText: {
+    color: colors.textWhite,
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  advanceBtnTextDisabled: { color: colors.textSecondary },
+  advanceHint: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginTop: 6,
+    fontStyle: "italic",
+  },
+
+  // ----- Bottom sheet -----
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: colors.cardBg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 28,
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: 14,
+  },
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  sheetSubtitle: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 16,
+  },
+  sheetList: { marginBottom: 14 },
+  sheetEmpty: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    paddingVertical: 18,
+    textAlign: "center",
+  },
+  circlesEmpty: {
+    alignItems: "center",
+    paddingVertical: 20,
+    gap: 8,
+  },
+  circlesEmptyTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  circlesEmptyBody: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: "center",
+    paddingHorizontal: 12,
+  },
+  sheetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  sheetCircleName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.textPrimary,
+  },
+  sheetCircleSub: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  sheetCircleNet: { fontSize: 15, fontWeight: "700" },
+  sheetTotalsCard: {
+    backgroundColor: colors.screenBg,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  sheetTotalsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+  },
+  sheetTotalsRowBold: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginTop: 4,
+    paddingTop: 8,
+  },
+  sheetTotalsLabel: { fontSize: 13, color: colors.textSecondary },
+  sheetTotalsValue: {
+    fontSize: 13,
+    color: colors.textPrimary,
+    fontWeight: "500",
+  },
+  sheetTotalsLabelBold: {
+    fontSize: 14,
+    color: colors.textPrimary,
+    fontWeight: "700",
+  },
+  sheetTotalsValueBold: { fontSize: 15, fontWeight: "700" },
+  sheetCloseBtn: {
+    backgroundColor: colors.primaryNavy,
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  sheetCloseBtnText: {
+    color: colors.textWhite,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+
+  // ----- AI explainer sheet -----
+  aiSheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  aiBodyCard: {
+    backgroundColor: colors.tealTintBg,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 16,
+  },
+  aiBodyText: {
+    fontSize: 14,
+    color: colors.textPrimary,
+    lineHeight: 20,
+  },
+
+  // ----- Tier benefits modal -----
+  tierBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  tierModal: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  tierModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 16,
+  },
+  tierModalEmoji: { fontSize: 24 },
+  tierModalLabel: { fontSize: 18, fontWeight: "700" },
+  tierModalTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+  },
+  tierModalBody: {
+    fontSize: 14,
+    color: colors.textPrimary,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    lineHeight: 20,
+  },
+  tierModalBodyMuted: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 14,
+    lineHeight: 18,
+  },
+  tierModalClose: {
+    backgroundColor: colors.primaryNavy,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  tierModalCloseText: {
+    color: colors.textWhite,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+});

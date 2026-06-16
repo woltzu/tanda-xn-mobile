@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,13 +7,23 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  Modal,
+  Pressable,
+  ActivityIndicator,
+  Image,
+  TextInput,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
+import { useProfile } from "../hooks/useProfile";
+import AvatarPicker from "../components/AvatarPicker";
 import { useXnScore } from "../context/XnScoreContext";
 import { useWallet } from "../context/WalletContext";
+import { useIsAdmin } from "../hooks/useIsAdmin";
+import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
 import { supabase } from "../lib/supabase";
+import { showToast } from "../components/Toast";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
@@ -24,51 +34,196 @@ type ProfileScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 export default function ProfileScreen() {
   const navigation = useNavigation<ProfileScreenNavigationProp>();
   const { t } = useTranslation();
-  const { user, signOut } = useAuth();
+  const { user, signOut, updateProfile } = useAuth();
+  // P1 (profile review): central fetch with 60 s cache. Replaces the
+  // ad-hoc supabase.from('profiles').select(...) round-trip the screen
+  // used to run on every mount.
+  const { profile, refetch: refetchProfile } = useProfile();
   const { score, level } = useXnScore();
   const { balance: walletBalance } = useWallet();
+  // Moderation P0 (2026-06-13): platform-admin tools section. Hidden for
+  // non-admins; surfaces both the moderation queue and the AI ops health
+  // monitor (previously dev-only). Source of truth is admin_users via
+  // public.is_admin() — see migration 114.
+  const { isAdmin } = useIsAdmin();
+  // Autopay-review P0 (2026-06-15): autopay only makes sense if the
+  // user has an active advance. Hide the Payment Settings section
+  // entirely when there's nothing to configure, so the menu row no
+  // longer routes users to a mock-only screen.
+  const { data: advanceDashboard } = useAdvanceDashboard();
+  const hasActiveAdvance =
+    (advanceDashboard?.active_advances?.length ?? 0) > 0;
+
+  // Send-Money P2 (2026-06-14): round-up sends preference. Stored in
+  // profiles.round_up_increment (migration 154). 0 = off, 1/5/10 = round
+  // every send up to the next dollar / $5 / $10 and sweep the delta into
+  // the user's "Round-up Savings" goal.
+  const [roundUpIncrement, setRoundUpIncrement] = useState<number>(0);
+  const [roundUpModalOpen, setRoundUpModalOpen] = useState(false);
+  // Sign-out in-flight flag — drives the button spinner and disabled state.
+  // Reset to false in the catch branch so the user can retry; on success
+  // the navigation.reset unmounts the screen, no cleanup needed.
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  // P1 (profile review): avatar + name editing surfaces.
+  const [avatarErrored, setAvatarErrored] = useState(false);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [draftName, setDraftName] = useState<string>("");
+  const avatarUrl = profile?.avatar_url ?? null;
+  // Sync the locally-cached round-up state from the central profile
+  // hook. We keep the local state so the round-up modal can update
+  // optimistically before refetch lands.
+  useEffect(() => {
+    if (typeof profile?.round_up_increment === "number") {
+      setRoundUpIncrement(profile.round_up_increment);
+    }
+    setAvatarErrored(false);
+  }, [profile?.round_up_increment, profile?.avatar_url]);
+
+  const saveRoundUp = async (next: number) => {
+    if (!user?.id) return;
+    const prev = roundUpIncrement;
+    setRoundUpIncrement(next); // optimistic
+    setRoundUpModalOpen(false);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ round_up_increment: next })
+      .eq("id", user.id);
+    if (error) {
+      setRoundUpIncrement(prev);
+      Alert.alert(
+        t("profile.round_up_save_failed_title"),
+        error.message,
+      );
+    }
+  };
+
+  const roundUpLabel = (n: number): string =>
+    n === 0
+      ? t("profile.round_up_off")
+      : t("profile.round_up_value", { n: `$${n}` });
+
+  // P1 (profile review): inline name editor on the header card. Tap
+  // name → swap to TextInput → blur or "Done" → save via the same
+  // updateProfile() the PersonalInfoScreen uses. Refetch hits
+  // useProfile()'s cache buster.
+  const beginEditingName = () => {
+    setDraftName(user?.name ?? "");
+    setEditingName(true);
+  };
+  const commitName = async () => {
+    const next = draftName.trim();
+    setEditingName(false);
+    if (!next || next === (user?.name ?? "")) return;
+    try {
+      await updateProfile({ name: next });
+      await refetchProfile();
+      showToast(t("profile.name_saved_toast"), "success");
+    } catch (err: any) {
+      showToast(err?.message ?? t("profile.name_save_failed_toast"), "error");
+    }
+  };
+  const cancelEditingName = () => {
+    setEditingName(false);
+    setDraftName("");
+  };
 
   const handleSignOut = async () => {
     console.log("[ProfileScreen] sign out tapped");
 
-    // Alert.alert button callbacks don't fire reliably on react-native-web,
-    // so use window.confirm for the web confirmation and Alert.alert on
-    // native. Each path resolves a single boolean.
-    const confirmed: boolean = Platform.OS === "web"
-      ? (typeof window !== "undefined" && typeof window.confirm === "function"
-          ? window.confirm(t("profile.sign_out_confirm_body"))
-          : true)
-      : await new Promise<boolean>((resolve) => {
-          Alert.alert(
-            t("profile.sign_out_confirm_title"),
-            t("profile.sign_out_confirm_body"),
-            [
-              { text: t("common.cancel"), style: "cancel", onPress: () => resolve(false) },
-              { text: t("profile.sign_out"), style: "destructive", onPress: () => resolve(true) },
-            ],
-            { cancelable: true, onDismiss: () => resolve(false) },
+    // P2 (logout review): three-way confirmation. The user can sign
+    // out only this device (default) or revoke every session attached
+    // to the user (global scope). Alert.alert button callbacks are
+    // flaky on react-native-web, so web uses two chained
+    // window.confirms; native uses a single 3-button Alert.
+    const choice: { confirmed: boolean; global: boolean } =
+      Platform.OS === "web"
+        ? (typeof window !== "undefined" && typeof window.confirm === "function"
+            ? (() => {
+                const proceed = window.confirm(
+                  t("profile.sign_out_confirm_body"),
+                );
+                if (!proceed) return { confirmed: false, global: false };
+                const allDevices = window.confirm(
+                  t("profile.sign_out_all_devices"),
+                );
+                return { confirmed: true, global: allDevices };
+              })()
+            : { confirmed: true, global: false })
+        : await new Promise<{ confirmed: boolean; global: boolean }>(
+            (resolve) => {
+              Alert.alert(
+                t("profile.sign_out_confirm_title"),
+                t("profile.sign_out_confirm_body"),
+                [
+                  {
+                    text: t("common.cancel"),
+                    style: "cancel",
+                    onPress: () =>
+                      resolve({ confirmed: false, global: false }),
+                  },
+                  {
+                    text: t("profile.sign_out"),
+                    onPress: () =>
+                      resolve({ confirmed: true, global: false }),
+                  },
+                  {
+                    text: t("profile.sign_out_all_devices"),
+                    style: "destructive",
+                    onPress: () =>
+                      resolve({ confirmed: true, global: true }),
+                  },
+                ],
+                {
+                  cancelable: true,
+                  onDismiss: () =>
+                    resolve({ confirmed: false, global: false }),
+                },
+              );
+            },
           );
-        });
 
-    if (!confirmed) {
+    if (!choice.confirmed) {
       console.log("[ProfileScreen] sign out cancelled");
       return;
     }
 
+    setIsSigningOut(true);
     try {
-      console.log("[ProfileScreen] calling supabase.auth.signOut");
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-      // Keep the in-app AuthContext in sync (clears cached user/session),
-      // but don't block on it if it's a no-op.
-      try { await signOut?.(); } catch {}
-      console.log("[ProfileScreen] signOut complete, navigating to Welcome");
+      // P0 (logout review): drive sign-out through the AuthContext so the
+      // whitelist AsyncStorage purge actually runs — the previous direct
+      // supabase.auth.signOut() bypassed it. AuthContext flushes events,
+      // purges non-preference keys, then revokes the JWT.
+      // P2: pass the user's scope choice and read the offline flag from
+      // the result. Offline still navigates (the local session is gone);
+      // we just surface a toast so the user knows the revocation will
+      // sync when they're back online.
+      console.log(
+        `[ProfileScreen] calling AuthContext.signOut scope=${
+          choice.global ? "global" : "local"
+        }`,
+      );
+      const { offline } = await signOut({
+        scope: choice.global ? "global" : "local",
+      });
+      if (offline) {
+        showToast(t("profile.sign_out_offline_toast"), "info");
+      }
+      // Route straight to Login — Welcome is a marketing intro screen
+      // that's irrelevant for someone who just signed out; they almost
+      // always want to sign back in.
+      console.log("[ProfileScreen] signOut complete, navigating to Login");
       navigation.reset({
         index: 0,
-        routes: [{ name: "Welcome" }],
+        routes: [{ name: "Login" }],
       });
+      // No need to setIsSigningOut(false) — navigation.reset unmounts
+      // this screen, the state goes with it.
     } catch (err: any) {
       console.error("[ProfileScreen] sign out error", err);
+      // Re-enable the button so the user can retry without re-tapping
+      // the menu, then surface the error.
+      setIsSigningOut(false);
       const msg = err?.message ?? t("profile.sign_out_failed_default");
       if (Platform.OS === "web" && typeof window !== "undefined") {
         window.alert(`${t("profile.sign_out_failed_title")}: ${msg}`);
@@ -89,7 +244,13 @@ export default function ProfileScreen() {
         { icon: "shield-checkmark-outline", label: t("profile.item_security"), onPress: () => navigation.navigate("SecuritySettings") },
         { icon: "card-outline", label: t("profile.item_payment_methods"), onPress: () => navigation.navigate("LinkedAccounts") },
         { icon: "wallet-outline", label: t("profile.item_wallet"), value: `$${walletBalance.toFixed(2)}`, onPress: () => navigation.navigate("WalletMain") },
-        { icon: "notifications-outline", label: t("profile.item_notifications"), onPress: () => navigation.navigate("NotificationPrefs") },
+        // P0 (notification-prefs review, 2026-06-15): the "Notifications"
+        // row used to live here and on Settings → both routed to the
+        // same screen. Profile now stays focused on identity/money
+        // (per the profile P1 review) and Settings owns Notifications.
+        // Send-Money P2 — round-up jar preference. Row shows the current
+        // setting; tapping it opens the picker.
+        { icon: "trending-up-outline", label: t("profile.item_round_up"), value: roundUpLabel(roundUpIncrement), onPress: () => setRoundUpModalOpen(true) },
       ],
     },
     {
@@ -103,26 +264,72 @@ export default function ProfileScreen() {
       section: t("profile.section_community"),
       items: [
         { icon: "people-circle-outline", label: t("profile.item_my_communities"), onPress: () => navigation.navigate("MyCommunities") },
+        // Circle Contribution Autopay — Phase 0 (2026-06-15). Always
+        // visible because eligibility depends on the user's circle
+        // membership, which the management screen surfaces (empty
+        // state walks the user through adding their first config).
+        { icon: "repeat-outline", label: t("profile.item_circle_autopay"), onPress: () => navigation.navigate("CircleAutopayManagement") },
       ],
     },
+    // Autopay-review P0 (2026-06-15): only render this section when the
+    // user has at least one active advance — the linked AutopaySetup
+    // screen has no useful state for users without an advance and used
+    // to lead to a mock-only page.
+    ...(hasActiveAdvance
+      ? [
+          {
+            section: t("profile.section_payment_settings"),
+            items: [
+              { icon: "repeat-outline", label: t("profile.item_autopay_setup"), onPress: () => navigation.navigate("AutopaySetup") },
+            ],
+          },
+        ]
+      : []),
     {
       section: t("profile.section_preferences"),
       items: [
         { icon: "globe-outline", label: t("profile.item_language"), onPress: () => navigation.navigate("LanguageRegion") },
+        { icon: "people-outline", label: t("profile.item_communities"), onPress: () => navigation.navigate("CommunityPreferences") },
         { icon: "eye-off-outline", label: t("profile.item_privacy"), onPress: () => navigation.navigate("PrivacySettings") },
         { icon: "cog-outline", label: t("profile.item_all_settings"), onPress: () => navigation.navigate("Settings") },
       ],
     },
-    {
-      section: t("profile.section_support"),
-      items: [
-        { icon: "help-circle-outline", label: t("profile.item_help"), onPress: () => navigation.navigate("HelpCenter") },
-        { icon: "book-outline", label: t("profile.item_faq"), onPress: () => navigation.navigate("FAQ") },
-        { icon: "gift-outline", label: t("profile.item_refer"), onPress: () => navigation.navigate("Referral") },
-        { icon: "heart-outline", label: t("profile.item_donation_prefs"), onPress: () => navigation.navigate("DonationPreferences") },
-        { icon: "information-circle-outline", label: t("profile.item_about"), onPress: () => navigation.navigate("AboutApp") },
-      ],
-    },
+    // P1 (profile review): "Support" section removed — Help, FAQ,
+    // Referral, Donation, About, Legal Documents now live behind the
+    // existing "All Settings" entry in the Preferences section above.
+    // Keeps the Profile screen focused on identity + money rather than
+    // being a settings dump.
+    // Moderation P0 (2026-06-13): admin-only tools section. Appended at
+    // the bottom of the menu so it never shadows a member-facing item.
+    ...(isAdmin
+      ? [
+          {
+            section: t("profile.section_admin_tools"),
+            items: [
+              {
+                icon: "shield-checkmark-outline",
+                label: t("profile.item_moderation_queue"),
+                onPress: () => navigation.navigate("AdminModeration"),
+              },
+              {
+                icon: "document-text-outline",
+                label: t("profile.item_audit_trail"),
+                onPress: () => navigation.navigate("PlatformAuditTrail"),
+              },
+              {
+                icon: "pulse-outline",
+                label: t("profile.item_ai_jobs_health"),
+                onPress: () => navigation.navigate("AIJobsHealth"),
+              },
+              {
+                icon: "bar-chart-outline",
+                label: t("profile.item_advance_portfolio"),
+                onPress: () => navigation.navigate("AdminDashboard"),
+              },
+            ],
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -134,21 +341,61 @@ export default function ProfileScreen() {
 
           {/* Profile Card */}
           <View style={styles.profileCard}>
-            <View style={styles.avatarContainer}>
-              <LinearGradient
-                colors={["#00C6AE", "#00A896"]}
-                style={styles.avatar}
-              >
-                <Text style={styles.avatarText}>
-                  {(user?.name || "U").charAt(0).toUpperCase()}
-                </Text>
-              </LinearGradient>
-              <TouchableOpacity style={styles.editAvatarButton}>
-                <Ionicons name="camera" size={14} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+            {/* P1: tap avatar → picker. Whole circle is the hit
+                target; visual is the avatar itself. */}
+            <TouchableOpacity
+              style={styles.avatarContainer}
+              onPress={() => setAvatarPickerOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t("avatar_picker.title")}
+            >
+              {avatarUrl && !avatarErrored ? (
+                <Image
+                  source={{ uri: avatarUrl }}
+                  style={styles.avatar}
+                  onError={() => setAvatarErrored(true)}
+                />
+              ) : (
+                <LinearGradient
+                  colors={["#00C6AE", "#00A896"]}
+                  style={styles.avatar}
+                >
+                  <Text style={styles.avatarText}>
+                    {(user?.name || "U").charAt(0).toUpperCase()}
+                  </Text>
+                </LinearGradient>
+              )}
+              <View style={styles.avatarEditChip}>
+                <Ionicons name="camera" size={12} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
 
-            <Text style={styles.userName}>{user?.name || t("profile.default_user")}</Text>
+            {/* P1: inline name editing. Tap → TextInput; blur or
+                submit → updateProfile + toast. Esc-equivalent: tap
+                away to commit (mobile back-press won't fire here). */}
+            {editingName ? (
+              <TextInput
+                style={styles.userNameInput}
+                value={draftName}
+                onChangeText={setDraftName}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={commitName}
+                onBlur={commitName}
+                placeholder={t("profile.default_user")}
+                placeholderTextColor="rgba(255,255,255,0.6)"
+                maxLength={64}
+              />
+            ) : (
+              <TouchableOpacity
+                onPress={beginEditingName}
+                accessibilityRole="button"
+              >
+                <Text style={styles.userName}>
+                  {user?.name || t("profile.default_user")}
+                </Text>
+              </TouchableOpacity>
+            )}
             <Text style={styles.userEmail}>{user?.email || ""}</Text>
 
             {/* XnScore Badge */}
@@ -207,9 +454,26 @@ export default function ProfileScreen() {
           ))}
 
           {/* Sign Out Button */}
-          <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-            <Ionicons name="log-out-outline" size={20} color="#DC2626" />
-            <Text style={styles.signOutText}>{t("profile.sign_out")}</Text>
+          <TouchableOpacity
+            style={[styles.signOutButton, isSigningOut && styles.signOutButtonDisabled]}
+            onPress={handleSignOut}
+            disabled={isSigningOut}
+            accessibilityRole="button"
+            accessibilityState={{ busy: isSigningOut, disabled: isSigningOut }}
+          >
+            {isSigningOut ? (
+              <>
+                <ActivityIndicator size="small" color="#DC2626" />
+                <Text style={styles.signOutText}>
+                  {t("profile.sign_out_in_progress")}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+                <Text style={styles.signOutText}>{t("profile.sign_out")}</Text>
+              </>
+            )}
           </TouchableOpacity>
 
           {/* App Version */}
@@ -225,6 +489,65 @@ export default function ProfileScreen() {
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
         <Text style={styles.floatingHelpText}>{t("common.help")}</Text>
       </TouchableOpacity>
+
+      {/* P1 (profile review): avatar picker. Self-renders to null
+          when not visible. Updates push back through useProfile()'s
+          refetch so the header avatar re-renders with the new URL. */}
+      <AvatarPicker
+        visible={avatarPickerOpen}
+        hasExisting={!!avatarUrl}
+        onClose={() => setAvatarPickerOpen(false)}
+        onUpdated={async () => {
+          await refetchProfile();
+        }}
+      />
+
+      {/* Send-Money P2 — round-up picker. Tap the Account row to open. */}
+      <Modal
+        visible={roundUpModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setRoundUpModalOpen(false)}
+      >
+        <Pressable
+          style={styles.roundUpBackdrop}
+          onPress={() => setRoundUpModalOpen(false)}
+        >
+          <Pressable style={styles.roundUpSheet} onPress={() => {}}>
+            <View style={styles.roundUpHandle} />
+            <Text style={styles.roundUpTitle}>
+              {t("profile.round_up_title")}
+            </Text>
+            <Text style={styles.roundUpBody}>
+              {t("profile.round_up_body")}
+            </Text>
+            {[0, 1, 5, 10].map((inc) => {
+              const isActive = roundUpIncrement === inc;
+              return (
+                <TouchableOpacity
+                  key={inc}
+                  style={[
+                    styles.roundUpOption,
+                    isActive && styles.roundUpOptionActive,
+                  ]}
+                  onPress={() => saveRoundUp(inc)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: isActive }}
+                >
+                  <Ionicons
+                    name={isActive ? "radio-button-on" : "radio-button-off"}
+                    size={18}
+                    color={isActive ? "#00C6AE" : "#9CA3AF"}
+                  />
+                  <Text style={styles.roundUpOptionText}>
+                    {roundUpLabel(inc)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -267,24 +590,36 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
   },
-  editAvatarButton: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#0A2342",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-  },
   userName: {
     fontSize: 22,
     fontWeight: "700",
     color: "#FFFFFF",
     marginBottom: 4,
+  },
+  userNameInput: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginBottom: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderBottomWidth: 2,
+    borderBottomColor: "rgba(255,255,255,0.5)",
+    minWidth: 180,
+    textAlign: "center",
+  },
+  avatarEditChip: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#0A2342",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
   },
   userEmail: {
     fontSize: 14,
@@ -386,6 +721,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#00C6AE",
   },
+  signOutButtonDisabled: {
+    opacity: 0.6,
+  },
   signOutButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -428,5 +766,59 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  // Send-Money P2 — round-up picker styles
+  roundUpBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(10, 35, 66, 0.55)",
+    justifyContent: "flex-end",
+  },
+  roundUpSheet: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 28,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+  },
+  roundUpHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#E5E7EB",
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  roundUpTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 4,
+  },
+  roundUpBody: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  roundUpOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+    marginBottom: 8,
+  },
+  roundUpOptionActive: {
+    borderColor: "#00C6AE",
+    backgroundColor: "#F0FDFB",
+  },
+  roundUpOptionText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0A2342",
   },
 });

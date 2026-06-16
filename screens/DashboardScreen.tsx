@@ -36,8 +36,10 @@ import { RootStackParamList, TabParamList } from "../App";
 import { Routes } from "../lib/routes";
 import { colors, radius, typography } from "../theme/tokens";
 import { ProgressBar } from "../components/ui";
-import { useOnboarding } from "../context/OnboardingContext";
 import DreamFeedWidget from "../components/DreamFeedWidget";
+import FirstLaunchProgressStrip from "../components/FirstLaunchProgressStrip";
+import DashboardTourOverlay from "../components/DashboardTourOverlay";
+import { useSuggestedCircles } from "../hooks/useSuggestedCircles";
 
 type DashboardScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<TabParamList, "Home">,
@@ -262,13 +264,23 @@ export default function DashboardScreen() {
     getElderTierInfo,
   } = useElder();
   const { unreadCount } = useNotifications();
-  const {
-    isOnboardingComplete,
-    profileCompletion,
-    suggestedCommunities,
-    pendingInvite,
-    completeStep,
-  } = useOnboarding();
+  // P2 (first-launch review): real public-circle suggestions for users
+  // with no circles yet. Self-caches 5 min so a Dashboard re-mount
+  // doesn't re-hit Supabase. enabled=false when the user already has
+  // circles — no point spending a query for content we won't render.
+  const { suggestions: suggestedCircles } = useSuggestedCircles({
+    enabled: (myCircles?.length ?? 0) === 0,
+  });
+  // P0 (first-launch review): the previous destructure of
+  // `isOnboardingComplete`, `profileCompletion`, `suggestedCommunities`,
+  // `pendingInvite`, `completeStep` was an orphan — none of them were
+  // referenced anywhere in the render or downstream logic. They came
+  // from the old 6-step + tooltip + mock-suggestions surface that has
+  // been replaced by the slim auto-derived 3-step model. P1 of the
+  // review will mount a `<FirstLaunchProgressStrip />` that reads
+  // `firstLaunchProgress` from `useOnboarding()` directly — until then
+  // this screen carries no onboarding consumer.
+
 
   // Map circles for display
   const displayCircles = myCircles.map((circle, index) => ({
@@ -362,6 +374,10 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* P2 (first-launch review): one-shot 3-step tour. Self-gates on
+          AsyncStorage flag + onboarding.join_circle. No-op for returning
+          users or once dismissed. */}
+      <DashboardTourOverlay />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -747,28 +763,11 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           )}
 
-          {/* DEBUG ONLY -- entry point to AIJobsHealthScreen.
-              CronAIJobEngine #191. 17th debug chip. Read-only admin
-              dashboard showing fleet status across all AI cron jobs
-              (cron_job_logs), default-probability model accuracy +
-              drift (model_performance_logs), and cohort retention
-              metrics (cohort_analytics). The new weekly + monthly
-              EFs scheduled via migration 113 surface here too. */}
-          {__DEV__ && (
-            <TouchableOpacity
-              style={styles.debugButton}
-              onPress={() =>
-                navigation.navigate(Routes.AIJobsHealth as never)
-              }
-              accessibilityLabel="Open AI Job Fleet (debug)"
-              accessibilityRole="button"
-            >
-              <Ionicons name="pulse-outline" size={14} color="#FFFFFF" />
-              <Text style={styles.debugButtonText}>
-                AI Job Fleet (debug)
-              </Text>
-            </TouchableOpacity>
-          )}
+          {/* Moderation P0 (2026-06-13): the __DEV__ AI Jobs Health chip
+              was removed when ProfileScreen.section_admin_tools shipped.
+              Production admins now reach AIJobsHealth + AdminModeration
+              from Profile → Admin tools. Non-admins never see the
+              section thanks to the useIsAdmin gate. */}
         </View>
 
         {/* ========== 1a-prime. MEMBER TIER CARD ========== */}
@@ -1113,6 +1112,12 @@ export default function DashboardScreen() {
           )
         )}
 
+        {/* P1 (first-launch review): 3-pip progress strip. Self-renders
+            to null once firstLaunchProgress.isComplete, so no outer
+            gating needed. Sits between the navy header and the pulse
+            banner — first thing a returning new user notices. */}
+        <FirstLaunchProgressStrip />
+
         {/* ========== 2. PULSE BANNER (Teal gradient) ========== */}
         <TouchableOpacity
           style={styles.pulseBanner}
@@ -1129,6 +1134,90 @@ export default function DashboardScreen() {
           </Text>
           <Text style={styles.pulseCta}>{pulseBanner.cta} {"\u2192"}</Text>
         </TouchableOpacity>
+
+        {/* P2 (first-launch review): empty-state guidance. When the
+            user has zero circles, surface 0-3 real public suggestions
+            from Supabase, a fallback CTA when none exist, and a
+            "Learn how circles work" link to the existing explainer
+            screen (HowCirclesWorkScreen lives in CirclesStack). */}
+        {(myCircles?.length ?? 0) === 0 ? (
+          <View style={styles.suggestionsSection}>
+            {suggestedCircles.length > 0 ? (
+              <>
+                <Text style={styles.suggestionsTitle}>
+                  {t("dashboard_suggestions.title")}
+                </Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.suggestionsScroll}
+                >
+                  {suggestedCircles.map((c) => (
+                    <View key={c.id} style={styles.suggestionCard}>
+                      <Text style={styles.suggestionEmoji}>
+                        {c.emoji ?? "\ud83d\udd04"}
+                      </Text>
+                      <Text style={styles.suggestionName} numberOfLines={1}>
+                        {c.name}
+                      </Text>
+                      <Text style={styles.suggestionMeta} numberOfLines={1}>
+                        {`${(c.currency ?? "$")}${c.amount} \u00b7 ${c.frequency}`}
+                      </Text>
+                      <Text style={styles.suggestionMembers}>
+                        {t("dashboard_suggestions.members_count", {
+                          n: c.current_members,
+                        })}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.suggestionJoinBtn}
+                        onPress={() =>
+                          navigation.navigate("JoinCircleConfirm" as any, {
+                            circleId: c.id,
+                            inviteCode: c.invite_code,
+                          })
+                        }
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.suggestionJoinText}>
+                          {t("dashboard_suggestions.join_button")}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              </>
+            ) : (
+              <View style={styles.suggestionsFallback}>
+                <Text style={styles.suggestionsFallbackText}>
+                  {t("dashboard_suggestions.empty_fallback")}
+                </Text>
+                <TouchableOpacity
+                  style={styles.suggestionsFallbackBtn}
+                  onPress={() =>
+                    navigation.navigate("CreateCircleExpress" as any)
+                  }
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.suggestionsFallbackBtnText}>
+                    {t("dashboard_suggestions.empty_cta")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.howCirclesWorkLink}
+              onPress={() =>
+                navigation.navigate("HowCirclesWork" as any)
+              }
+              accessibilityRole="link"
+            >
+              <Ionicons name="information-circle-outline" size={14} color="#00C6AE" />
+              <Text style={styles.howCirclesWorkText}>
+                {t("dashboard_suggestions.learn_link")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* ========== 3. YOUR CIRCLES (Horizontal scroll) ========== */}
         <View style={styles.section}>
@@ -1881,6 +1970,64 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#92400E",
   },
+
+  // ===== P2 (first-launch review): empty-state suggestions =====
+  suggestionsSection: {
+    marginTop: 16,
+    paddingHorizontal: 16,
+  },
+  suggestionsTitle: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#0A2342",
+    marginBottom: 10,
+  },
+  suggestionsScroll: { gap: 10, paddingRight: 4 },
+  suggestionCard: {
+    width: 180,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 14,
+    padding: 12,
+    marginRight: 10,
+  },
+  suggestionEmoji: { fontSize: 26, marginBottom: 6 },
+  suggestionName: { fontSize: 14, fontWeight: "700", color: "#0A2342" },
+  suggestionMeta: { fontSize: 12, color: "#374151", marginTop: 2 },
+  suggestionMembers: { fontSize: 11, color: "#6B7280", marginTop: 4 },
+  suggestionJoinBtn: {
+    marginTop: 10,
+    backgroundColor: TEAL,
+    paddingVertical: 8,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  suggestionJoinText: { color: "#FFFFFF", fontSize: 12, fontWeight: "800" },
+  suggestionsFallback: {
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 14,
+    padding: 14,
+  },
+  suggestionsFallbackText: { fontSize: 13, color: "#4B5563", lineHeight: 18 },
+  suggestionsFallbackBtn: {
+    marginTop: 10,
+    paddingVertical: 10,
+    backgroundColor: TEAL,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  suggestionsFallbackBtnText: { color: "#FFFFFF", fontWeight: "800", fontSize: 13 },
+  howCirclesWorkLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 12,
+    paddingVertical: 6,
+  },
+  howCirclesWorkText: { color: TEAL, fontSize: 13, fontWeight: "700" },
 
   // ===== 2. PULSE BANNER =====
   pulseBanner: {

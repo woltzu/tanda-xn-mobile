@@ -198,7 +198,7 @@ export default function LimitedModeScreen() {
         {!isPending && (
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={() => navigation.navigate(Routes.VerificationOptions)}
+            onPress={() => navigation.navigate(Routes.KYCHub)}
             accessibilityRole="button"
             accessibilityLabel="Actually, I'll verify now"
           >

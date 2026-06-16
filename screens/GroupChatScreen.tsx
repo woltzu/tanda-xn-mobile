@@ -27,6 +27,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
+import ReportButton from "../components/ReportButton";
 
 // UUID validity check — guards Postgres uuid columns against non-UUID strings
 // (e.g. UI placeholder IDs leaking via navigation). 22P02 errors are silenced
@@ -262,7 +263,18 @@ export default function GroupChatScreen() {
             {item.body}
           </Text>
         </View>
-        <Text style={styles.timestamp}>{formatMessageTime(item.created_at)}</Text>
+        <View style={styles.metaRow}>
+          <Text style={styles.timestamp}>{formatMessageTime(item.created_at)}</Text>
+          {/* Moderation P0 (2026-06-13): flag a message. Hidden on own
+              messages by the component's ownerUserId guard. */}
+          <ReportButton
+            kind="content"
+            contentType="circle_message"
+            targetId={item.id}
+            ownerUserId={item.user_id}
+            compact
+          />
+        </View>
       </View>
     );
   };
@@ -386,6 +398,12 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     marginTop: 2,
     marginHorizontal: 12,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 2,
   },
   systemRow: { alignItems: "center", marginVertical: 8 },
   systemText: {

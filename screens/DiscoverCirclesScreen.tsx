@@ -299,6 +299,9 @@ export default function DiscoverCirclesScreen() {
 // ─── Shared header ──────────────────────────────────────────────────────
 
 function Header({ navigation }: { navigation: any }) {
+  // Sub-components that use t() must call useTranslation() themselves —
+  // they don't inherit the binding from the parent component's scope.
+  const { t } = useTranslation();
   return (
     <LinearGradient colors={[NAVY, "#143654"]} style={styles.header}>
       <TouchableOpacity

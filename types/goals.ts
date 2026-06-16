@@ -60,6 +60,22 @@ export interface Goal {
   achievedAt?: string; // completed_at
   createdAt: string;
   updatedAt: string;
+  // P2 (migration 155): per-jar opt-out for the round-up sweep. Only
+  // meaningful on goal_type='round_up' but defaulted on every goal so
+  // existing rows stay valid.
+  roundUpEnabled?: boolean;
+}
+
+// P2 — banner data driving the "Save instead?" suggestion on the
+// Goals hub. Populated by suggest-goals-from-spending edge function
+// (placeholder shipped in 2026-06-14) and surfaced via
+// fetchSpendingSuggestions.
+export interface SpendingSuggestion {
+  id: string;
+  category: string;
+  monthlyAvg: number;        // dollars
+  suggestedSave: number;     // dollars
+  lastComputedAt: string;
 }
 
 /** Dollar-facing transaction, mapped from a `savings_transactions` row. */

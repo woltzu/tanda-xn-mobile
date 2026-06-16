@@ -10,13 +10,13 @@ import {
   NavigationContainer,
   CommonActions,
   useNavigation,
-  createNavigationContainerRef,
 } from "@react-navigation/native";
+import { navigationRef } from "./lib/navigation";
 import * as Linking from "expo-linking";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-import { View, TouchableWithoutFeedback, AppState } from "react-native";
+import { View, TouchableWithoutFeedback, AppState, Modal } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { eventService } from "./services/EventService";
@@ -30,16 +30,25 @@ import SplashScreen from "./screens/SplashScreen";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import LoginScreen from "./screens/LoginScreen";
 import SignupScreen from "./screens/SignupScreen";
+import SignupWelcomeScreen from "./screens/SignupWelcomeScreen";
 import OTPScreen from "./screens/OTPScreen";
 import EmailVerificationScreen from "./screens/EmailVerificationScreen";
 import AuthCallbackScreen from "./screens/AuthCallbackScreen";
 import DashboardScreen from "./screens/DashboardScreen";
+import HomeScreen from "./screens/HomeScreen";
 import WalletScreen from "./screens/WalletScreen";
 import CirclesScreen from "./screens/CirclesScreen";
+import CirclesV2Screen from "./screens/CirclesV2Screen";
+import ScoreHubScreen from "./screens/ScoreHubScreen";
+import CircleHealthScreen from "./screens/CircleHealthScreen";
+import AIInsightsScreen from "./screens/AIInsightsScreen";
+import EventsScreen from "./screens/EventsScreen";
+import CreateEventScreen from "./screens/CreateEventScreen";
 import ProfileScreen from "./screens/ProfileScreen";
 import PersonalInfoScreen from "./screens/PersonalInfoScreen";
 import LanguageRegionScreen from "./screens/LanguageRegionScreen";
 import CreateCircleStartScreen from "./screens/CreateCircleStartScreen";
+import CreateCircleExpressScreen from "./screens/CreateCircleExpressScreen";
 import QuickCircleScreen from "./screens/QuickCircleScreen";
 import ReferralScreen from "./screens/ReferralScreen";
 import CreateCircleDetailsScreen from "./screens/CreateCircleDetailsScreen";
@@ -54,7 +63,6 @@ import MakeContributionScreen from "./screens/MakeContributionScreen";
 import ContributionSuccessScreen from "./screens/ContributionSuccessScreen";
 import AddFundsScreen from "./screens/AddFundsScreen";
 import WithdrawScreen from "./screens/WithdrawScreen";
-import SendMoneyScreen from "./screens/SendMoneyScreen";
 import WalletTransactionSuccessScreen from "./screens/WalletTransactionSuccessScreen";
 import XnScoreDashboardScreen from "./screens/XnScoreDashboardScreen";
 import XnScoreHistoryScreen from "./screens/XnScoreHistoryScreen";
@@ -63,33 +71,32 @@ import HonorSystemScreen from "./screens/HonorSystemScreen";
 import AccessRestrictedScreen from "./screens/AccessRestrictedScreen";
 import RemittanceScreen from "./screens/RemittanceScreen";
 import DomesticSendMoneyScreen from "./screens/DomesticSendMoneyScreen";
-import AdvanceHubScreen from "./screens/AdvanceHubScreen";
-import RequestAdvanceScreen from "./screens/RequestAdvanceScreen";
-import AdvanceDetailsScreen from "./screens/AdvanceDetailsScreen";
-import AdvanceRepaymentScreen from "./screens/AdvanceRepaymentScreen";
-import AdvanceExplanationScreen from "./screens/AdvanceExplanationScreen";
 import LoanMarketplaceScreen from "./screens/LoanMarketplaceScreen";
 import LoanApplicationScreen from "./screens/LoanApplicationScreen";
 import LoanDetailsScreen from "./screens/LoanDetailsScreen";
 import LoanCalculatorScreen from "./screens/LoanCalculatorScreen";
 import LoanDashboardScreen from "./screens/LoanDashboardScreen";
-import GoalsHubScreen from "./screens/GoalsHubScreen";
-import CreateGoalScreen from "./screens/CreateGoalScreen";
-import GoalDetailsScreen from "./screens/GoalDetailsScreen";
-import DepositToGoalScreen from "./screens/DepositToGoalScreen";
-import WithdrawFromGoalScreen from "./screens/WithdrawFromGoalScreen";
-import EditGoalScreen from "./screens/EditGoalScreen";
+// V1 goal stack (GoalsHubScreen, CreateGoalScreen, GoalDetailsScreen,
+// DepositToGoalScreen, WithdrawFromGoalScreen, EditGoalScreen) was removed
+// in the Goals P0 cut-over. V2 is the live path; entry is GoalsHubV2 +
+// GoalCreateExpress.
 import SavedRecipientsScreen from "./screens/SavedRecipientsScreen";
 import AddRecipientScreen from "./screens/AddRecipientScreen";
 import CommunityBrowserScreen from "./screens/CommunityBrowserScreen";
 import CommunityHubScreen from "./screens/CommunityHubScreen";
 import MyCommunitiesScreen from "./screens/MyCommunitiesScreen";
 import CreateCommunityScreen from "./screens/CreateCommunityScreen";
-import BecomeElderScreen from "./screens/BecomeElderScreen";
+// Conflict P1 (2026-06-12): BecomeElder + ElderTrainingHub merged into
+// ElderOnboarding; MediationCase + MediationTools merged into ConflictCase.
+// Legacy imports retained as commented references so the screens can be
+// restored if onboarding telemetry comes back negative.
+// import BecomeElderScreen from "./screens/BecomeElderScreen";
 import HonorScoreOverviewScreen from "./screens/HonorScoreOverviewScreen";
 import VouchSystemScreen from "./screens/VouchSystemScreen";
-import MediationCaseScreen from "./screens/MediationCaseScreen";
-import ElderTrainingHubScreen from "./screens/ElderTrainingHubScreen";
+// import MediationCaseScreen from "./screens/MediationCaseScreen";
+// import ElderTrainingHubScreen from "./screens/ElderTrainingHubScreen";
+import ConflictCaseScreen from "./screens/ConflictCaseScreen";
+import ElderOnboardingScreen from "./screens/ElderOnboardingScreen";
 import ElderDashboardScreen from "./screens/ElderDashboardScreen";
 import JoinCircleByCodeScreen from "./screens/JoinCircleByCodeScreen";
 import QRScannerScreen from "./screens/QRScannerScreen";
@@ -115,7 +122,8 @@ import CloseCircleScreen from "./screens/CloseCircleScreen";
 import ExportDataScreen from "./screens/ExportDataScreen";
 import AdminSettingsScreen from "./screens/AdminSettingsScreen";
 import OversightDashboardScreen from "./screens/OversightDashboardScreen";
-import MediationToolsScreen from "./screens/MediationToolsScreen";
+// Conflict P1 (2026-06-12): MediationToolsScreen replaced by ConflictCaseScreen.
+// import MediationToolsScreen from "./screens/MediationToolsScreen";
 import AuditTrailScreen from "./screens/AuditTrailScreen";
 import SelectCircleContributionScreen from "./screens/SelectCircleContributionScreen";
 import { XnScoreProvider } from "./context/XnScoreContext";
@@ -142,6 +150,7 @@ import ResetPasswordScreen from "./screens/ResetPasswordScreen";
 import { linkingConfig } from "./lib/deepLinking";
 import { PaymentProvider } from './context/PaymentContext';
 import { ToastType, registerToastHandler } from './components/Toast';
+import OfflineBanner from './components/OfflineBanner';
 // Marketplace Screens (Migration 057)
 import MarketplaceScreen from "./screens/MarketplaceScreen";
 import StoreDetailScreen from "./screens/StoreDetailScreen";
@@ -175,6 +184,7 @@ import EarlyInterventionScreen from "./screens/EarlyInterventionScreen";
 import CrossCircleLendingScreen from "./screens/CrossCircleLendingScreen";
 import DynamicPayoutScreen from "./screens/DynamicPayoutScreen";
 import LegalDocumentsScreen from "./screens/LegalDocumentsScreen";
+import LegalDocumentReaderScreen from "./screens/LegalDocumentReaderScreen";
 import CircleVisualizerScreen from "./screens/CircleVisualizerScreen";
 // Dream Feed Screens
 import DreamFeedScreen from "./screens/DreamFeedScreen";
@@ -235,6 +245,10 @@ import ITINEducationScreen from "./screens/ITINEducationScreen";
 import ITINApplicationHelpScreen from "./screens/ITINApplicationHelpScreen";
 import InternationalVerificationScreen from "./screens/InternationalVerificationScreen";
 import TaxIDEntryScreen from "./screens/TaxIDEntryScreen";
+// KYC P1: the legacy "Universe A" screens below are imported only so the
+// commented-out registrations below them still parse — the unified
+// KYCHubScreen + KYCDocumentScreen replace them as the canonical surfaces.
+// Files are intentionally kept for reference until P2 deletes them.
 import AccountTiersExplainedScreen from "./screens/AccountTiersExplainedScreen";
 import IDVerificationStartScreen from "./screens/IDVerificationStartScreen";
 import DocumentUploadScreen from "./screens/DocumentUploadScreen";
@@ -242,6 +256,9 @@ import Tier2SuccessScreen from "./screens/Tier2SuccessScreen";
 import VerificationHubScreen from "./screens/VerificationHubScreen";
 import LimitedModeScreen from "./screens/LimitedModeScreen";
 import ITINPendingScreen from "./screens/ITINPendingScreen";
+// KYC P1 (2026-06-12): unified hub + single document screen.
+import KYCHubScreen from "./screens/KYCHubScreen";
+import KYCDocumentScreen from "./screens/KYCDocumentScreen";
 // Interest-First KYC entry/success screens (Phase KYC-2). Reached
 // from the Dashboard interest card, not from signup.
 import UnlockInterestPromptScreen from "./screens/UnlockInterestPromptScreen";
@@ -252,35 +269,35 @@ import InterestUnlockedSuccessScreen from "./screens/InterestUnlockedSuccessScre
 // future reconciliation; the rest are net-new. Reachable for testing
 // via the __DEV__ "Advance V2" button on the Dashboard.
 import AdvanceHubV2Screen from "./screens/AdvanceHubV2Screen";
-import AdvanceExplanationV2Screen from "./screens/AdvanceExplanationV2Screen";
 import SmartCalculatorScreen from "./screens/SmartCalculatorScreen";
 import ApplicationFlowScreen from "./screens/ApplicationFlowScreen";
-import AdvanceStatusDashboardScreen from "./screens/AdvanceStatusDashboardScreen";
 import AdvanceDetailsV2Screen from "./screens/AdvanceDetailsV2Screen";
-import AdvanceHistoryScreen from "./screens/AdvanceHistoryScreen";
 import AdvanceApprovalScreen from "./screens/AdvanceApprovalScreen";
-import AdvanceDisbursementScreen from "./screens/AdvanceDisbursementScreen";
-import AdvanceAgreementScreen from "./screens/AdvanceAgreementScreen";
 import EarlyRepaymentScreen from "./screens/EarlyRepaymentScreen";
 import RepaymentConfirmScreen from "./screens/RepaymentConfirmScreen";
 import PaymentFailedScreen from "./screens/PaymentFailedScreen";
 import PaymentReminderScreen from "./screens/PaymentReminderScreen";
 import HardshipRequestScreen from "./screens/HardshipRequestScreen";
-import AdvanceRejectedScreen from "./screens/AdvanceRejectedScreen";
 import AutopaySetupScreen from "./screens/AutopaySetupScreen";
+import CircleAutopaySetupScreen from "./screens/CircleAutopaySetupScreen";
+import CircleAutopayManagementScreen from "./screens/CircleAutopayManagementScreen";
+import CommunityPreferencesScreen from "./screens/CommunityPreferencesScreen";
 import RateBreakdownScreen from "./screens/RateBreakdownScreen";
 import AdvanceSettingsScreen from "./screens/AdvanceSettingsScreen";
 import AdminDashboardScreen from "./screens/AdminDashboardScreen";
+import AdminModerationScreen from "./screens/AdminModerationScreen";
+import PlatformAuditTrailScreen from "./screens/PlatformAuditTrailScreen";
 // Goals flow (GOALS-001..015) — 13 screens translated from web JSX.
 // GoalDetailV2 / GoalsHubV2 are redesigns that coexist with the existing
 // GoalDetails / GoalsHub production screens (registered above); the rest are
 // net-new. Reachable for testing via the __DEV__ "Goals V2" button on the
 // Dashboard. Forward navigation between them is still TODO(goals-wiring).
 import GoalsHubV2Screen from "./screens/GoalsHubV2Screen";
-import GoalCategorySelectScreen from "./screens/GoalCategorySelectScreen";
-import GoalTypeSelectScreen from "./screens/GoalTypeSelectScreen";
-import GoalCreateScreen from "./screens/GoalCreateScreen";
-import GoalSetupSuccessScreen from "./screens/GoalSetupSuccessScreen";
+// V2 dead screens removed in the P1 cut-over: GoalCategorySelect (vanity
+// metadata — folded into express form), GoalTypeSelect (now an inline
+// expand inside express), GoalCreate (replaced by GoalCreateExpress),
+// GoalSetupSuccess (replaced by an inline celebration on GoalDetailV2).
+import GoalCreateExpressScreen from "./screens/GoalCreateExpressScreen";
 import GoalDetailV2Screen from "./screens/GoalDetailV2Screen";
 import GoalAddMoneyScreen from "./screens/GoalAddMoneyScreen";
 import GoalWithdrawScreen from "./screens/GoalWithdrawScreen";
@@ -296,17 +313,28 @@ export type RootStackParamList = {
   Splash: undefined;
   Welcome: undefined;
   Login: undefined;
-  Signup: undefined;
-  ForgotPassword: undefined;
+  Signup: { email?: string } | undefined;
+  SignupWelcome: undefined;
+  ForgotPassword: { email?: string } | undefined;
   ResetPassword: undefined;
-  OTP: { phone: string };
-  EmailVerification: { email: string };
+  OTP: { phone: string; from?: "login" | "signup" | "profile_edit" };
+  // Circle Contribution Autopay — Phase 0.
+  // Setup screen can be reached either from CircleDetail (with the
+  // circle pre-selected) or from the management screen (where the
+  // user picks a circle inside the setup flow).
+  CircleAutopaySetup: { circleId?: string; configId?: string } | undefined;
+  CircleAutopayManagement: undefined;
+  // P2 (language-switcher review): origin/communities split out of
+  // LanguageRegionScreen so each screen is single-purpose.
+  CommunityPreferences: undefined;
+  EmailVerification: { email: string; flow?: "signup" | "recovery" };
   AuthCallback: undefined;
   MainTabs: undefined;
   PersonalInfo: undefined;
   LanguageRegion: undefined;
   // Create Circle Flow
   CreateCircleStart: undefined;
+  CreateCircleExpress: undefined;
   QuickCircle: undefined;
   Referral: undefined;
   SyncLobby: undefined;
@@ -376,9 +404,34 @@ export type RootStackParamList = {
   ContributionSuccess: { circleId: string; amount: number; transactionId?: string };
   // Wallet Flow
   AddFunds: undefined;
-  Withdraw: undefined;
-  SendMoney: undefined;
-  DomesticSendMoney: undefined;
+  // P0 (kyc-trigger review): optional resume snapshot used by the
+  // KYCHub resume effect to land the user back on the Withdraw screen
+  // with their previously typed amount + selected payout method.
+  Withdraw: {
+    resume?: {
+      amount?: string;
+      selectedMethod?: string | null;
+    };
+  } | undefined;
+  // P0 (kyc-trigger review): optional `resume` snapshot lets the
+  // KYCHub resume effect navigate the user back here with their last
+  // form state. Schema mirrors useState calls in the screen; the
+  // screen reads them in a mount effect and short-circuits when the
+  // resume key is absent (the common case).
+  DomesticSendMoney: {
+    resume?: {
+      amount?: string;
+      recipientTab?: "new" | "recent";
+      selectedMethod?: string;
+      recipientName?: string;
+      selectedBank?: string;
+      accountNumber?: string;
+      selectedNetwork?: string;
+      phoneNumber?: string;
+      selectedLocation?: string;
+      fundingSource?: string;
+    };
+  } | undefined;
   Remittance: undefined;
   WalletTransactionSuccess: {
     type: "add" | "withdraw" | "send";
@@ -386,6 +439,20 @@ export type RootStackParamList = {
     method: string;
     recipientName?: string;
     transactionId: string;
+    /** ISO 4217 currency code (e.g. "USD", "NGN"). Defaults to USD on the
+     *  success screen for back-compat with older nav calls. */
+    currency?: string;
+    /** Cross-border display only — the converted amount in the recipient's
+     *  currency, shown as a secondary line under the headline. The source
+     *  `amount` / `currency` above remain the canonical (debit) values. */
+    convertedAmount?: number;
+    convertedCurrency?: string;
+    /** Send fee in the source currency. When > 0 the success screen
+     *  renders a "Fee" row + a "Total debited" row showing amount + fee
+     *  — so the user can reconcile the on-screen "$1 sent" with the
+     *  larger wallet debit ($1 + $7.99 = $8.99). */
+    feeAmount?: number;
+    feeCurrency?: string;
   };
   // XnScore Flow
   XnScoreDashboard: undefined;
@@ -398,12 +465,6 @@ export type RootStackParamList = {
     requiredScore?: number;
     circleId?: string;
   };
-  // Advance on Future Payout Flow
-  AdvanceHub: undefined;
-  RequestAdvance: { payoutId: string };
-  AdvanceDetails: { advanceId: string };
-  AdvanceRepayment: { advanceId: string };
-  AdvanceExplanation: undefined;
   // Loan Marketplace Flow
   LoanMarketplace: undefined;
   LoanApplication: { productId: string };
@@ -411,12 +472,8 @@ export type RootStackParamList = {
   LoanCalculator: undefined;
   LoanDashboard: undefined;
   // Savings Goals Flow
-  GoalsHub: undefined;
-  CreateGoal: { goalType?: string };
-  GoalDetails: { goalId: string };
-  DepositToGoal: { goalId: string };
-  WithdrawFromGoal: { goalId: string };
-  EditGoal: { goalId: string };
+  // V1 goal route types removed in the P0 cut-over. The live entries are
+  // GoalsHubV2, GoalCreateExpress, GoalDetailV2 below.
   EditStore: { storeId: string };
   // Remittance Recipients Flow
   SavedRecipients: undefined;
@@ -434,6 +491,11 @@ export type RootStackParamList = {
   VouchSystem: undefined;
   MediationCase: undefined;
   ElderTrainingHub: undefined;
+  // Conflict P1 (2026-06-12): merged screens.
+  ConflictCase:
+    | { caseId?: string; circleId?: string; circleName?: string }
+    | undefined;
+  ElderOnboarding: undefined;
   // Join Circle by Code Flow
   JoinCircleByCode: undefined;
   QRScanner: undefined;
@@ -516,7 +578,10 @@ export type RootStackParamList = {
   StressScoreDashboard: undefined;
   MoodInsights: undefined;
   DiscoverCircles: undefined;
-  ConflictAlert: { circleId: string };
+  // KYC P0 (2026-06-12): circleId is OPTIONAL — when omitted, the screen
+  // renders a circle picker. The prior `string` signature was a lie that
+  // CirclesV2Screen exercised at line 256 (no params passed).
+  ConflictAlert: { circleId?: string } | undefined;
   InsurancePool: { circleId: string };
   SubstitutePool: undefined;
   CreditReport: undefined;
@@ -533,10 +598,38 @@ export type RootStackParamList = {
   CircleVoting: { circleId: string };
   GraduatedEntry: undefined;
   KYCVerification: undefined;
+  // KYC P1: unified hub + single document screen. The legacy
+  // KYCVerification + VerificationHub route names redirect to KYCHub
+  // for backward compatibility with existing deep links.
+  KYCHub: undefined;
+  KYCDocument:
+    | {
+        idType?:
+          | "passport"
+          | "national_id"
+          | "drivers_license"
+          | "residence_permit";
+        country?: string;
+      }
+    | undefined;
   EarlyIntervention: undefined;
   CrossCircleLending: undefined;
   DynamicPayout: { circleId: string };
   LegalDocuments: undefined;
+  // P0 (legal-docs review): reader screen for a single active doc.
+  // Takes the LegalDocumentType so the reader can refetch via
+  // useLegalDocument — keeps the route deep-linkable.
+  //
+  // P1: optional documentId opens that specific historical version
+  // (from the version-history modal); readOnly forces the Accept
+  // button hidden regardless of acceptance state. The combination
+  // covers "I want to read what I signed last year" without
+  // accidentally re-accepting an archived doc.
+  LegalDocumentReader: {
+    documentType: string;
+    documentId?: string;
+    readOnly?: boolean;
+  };
   CircleVisualizer: { circleId: string };
   // KYC native flow (Phase KYC-1). Routes live inside a nested
   // navigator registered as KycStack; they're listed here so
@@ -590,12 +683,11 @@ export type RootStackParamList = {
   // sites and the navigator typing resolve. advanceId is the common
   // forward-key threaded through the flow.
   AdvanceHubV2: { user?: object } | undefined;
-  AdvanceExplanationV2: { user?: object } | undefined;
   SmartCalculator:
     | {
-        advanceType?: "contribution" | "quick" | "flex";
-        user?: object;
-        upcomingPayout?: object;
+        advanceType?: "contribution" | "quick" | "flex" | "premium";
+        product?: object;
+        xnscore?: number;
       }
     | undefined;
   ApplicationFlow:
@@ -610,23 +702,7 @@ export type RootStackParamList = {
         advanceDetails?: object;
       }
     | undefined;
-  AdvanceStatusDashboard:
-    | {
-        user?: object;
-        activeAdvances?: object[];
-        totalAdvanced?: number;
-        totalDue?: number;
-      }
-    | undefined;
-  AdvanceDetailsV2: { advanceId?: string; advance?: object } | undefined;
-  AdvanceHistory:
-    | {
-        pastAdvances?: object[];
-        totalAdvanced?: number;
-        totalRepaid?: number;
-        averageRepayTime?: number;
-      }
-    | undefined;
+  AdvanceDetailsV2: { advanceId?: string; justCreated?: boolean } | undefined;
   AdvanceApproval:
     | {
         advance?: object;
@@ -634,21 +710,6 @@ export type RootStackParamList = {
         amount?: number;
         total?: number;
         payoutId?: string;
-      }
-    | undefined;
-  AdvanceDisbursement:
-    | {
-        advanceAmount?: number;
-        userBankAccounts?: object[];
-        walletBalance?: number;
-      }
-    | undefined;
-  AdvanceAgreement:
-    | {
-        advance?: object;
-        agreementDate?: string;
-        userName?: string;
-        advanceId?: string;
       }
     | undefined;
   EarlyRepayment:
@@ -671,7 +732,6 @@ export type RootStackParamList = {
   PaymentFailed: { failureDetails?: object; gracePeriod?: object } | undefined;
   PaymentReminder: { reminder?: object; walletBalance?: number } | undefined;
   HardshipRequest: { advanceId?: string; advance?: object } | undefined;
-  AdvanceRejected: { rejection?: object; improvements?: object[]; advanceId?: string } | undefined;
   AutopaySetup:
     | { activeAdvance?: object; paymentMethods?: object[] }
     | undefined;
@@ -690,16 +750,19 @@ export type RootStackParamList = {
         alerts?: object[];
       }
     | undefined;
+  // Moderation P0 (2026-06-13) — platform-wide content + user-report queue.
+  AdminModeration: undefined;
+  // Audit Trail P0 (2026-06-13) — immutable platform compliance log.
+  PlatformAuditTrail: undefined;
   // Goals flow (GOALS-001..015). Params are intentionally loose — each
   // screen reads a richer locally-typed RouteProp internally with sensible
   // defaults, so these entries exist only so navigate() call sites and the
   // navigator typing resolve. goalId is the common forward-key for wiring.
   GoalsHubV2: undefined;
-  GoalCategorySelect: undefined;
-  GoalTypeSelect: { category?: object } | undefined;
-  GoalCreate: { goalType?: object; availableCircles?: object[] } | undefined;
-  GoalSetupSuccess: { goal?: object } | undefined;
-  GoalDetailV2: { goalId?: string; goal?: object } | undefined;
+  GoalCreateExpress: undefined;
+  // V2 dead route types removed (GoalCategorySelect, GoalTypeSelect,
+  // GoalCreate, GoalSetupSuccess).
+  GoalDetailV2: { goalId?: string; goal?: object; justCreated?: boolean } | undefined;
   GoalAddMoney: { goalId?: string; goal?: object } | undefined;
   GoalWithdraw: { goalId?: string; goal?: object } | undefined;
   GoalLinkCircle: { goalId?: string; goal?: object } | undefined;
@@ -727,11 +790,14 @@ const MarketStack = createStackNavigator();
 const CommunityStack = createStackNavigator();
 const KycStack = createStackNavigator();
 const SyncStack = createStackNavigator();
+const ScoreHubStack = createStackNavigator();
 
 // Navigation ref so the SyncStream deep-link handler in App's effect
 // can call .navigate() without needing the useNavigation hook (which
-// is only available to children of NavigationContainer).
-const navigationRef = createNavigationContainerRef<RootStackParamList>();
+// is only available to children of NavigationContainer). The ref now
+// lives in lib/navigation.ts so AuthContext can import it without a
+// circular runtime dependency (only the RootStackParamList type cycles
+// back, and that's erased at runtime via `import type`).
 
 // Parse tandaxn://sync-room?id=...&invite=... links into route params.
 // Returns null for anything we don't recognize -- the caller leaves
@@ -759,23 +825,12 @@ function parseSyncRoomUrl(url: string | null | undefined): { roomId: string; inv
 function HomeStackScreen() {
   return (
     <HomeStack.Navigator screenOptions={{ headerShown: false }}>
-      <HomeStack.Screen name="Dashboard" component={DashboardScreen} />
+      <HomeStack.Screen name="Dashboard" component={HomeScreen} />
       <HomeStack.Screen name="CircleDetail" component={CircleDetailScreen} />
       <HomeStack.Screen name="GroupChat" component={GroupChatScreen} options={{ headerShown: false }} />
-      <HomeStack.Screen name="SendMoney" component={SendMoneyScreen} />
       <HomeStack.Screen name="DomesticSendMoney" component={DomesticSendMoneyScreen} />
       <HomeStack.Screen name="Remittance" component={RemittanceScreen} />
-      <HomeStack.Screen name="GoalsHub" component={GoalsHubScreen} />
-      <HomeStack.Screen name="CreateGoal" component={CreateGoalScreen} />
-      <HomeStack.Screen name="GoalDetails" component={GoalDetailsScreen} />
-      <HomeStack.Screen name="DepositToGoal" component={DepositToGoalScreen} />
-      <HomeStack.Screen name="WithdrawFromGoal" component={WithdrawFromGoalScreen} />
-      <HomeStack.Screen name="EditGoal" component={EditGoalScreen} />
-      <HomeStack.Screen name="AdvanceHub" component={AdvanceHubScreen} />
-      <HomeStack.Screen name="RequestAdvance" component={RequestAdvanceScreen} />
-      <HomeStack.Screen name="AdvanceDetails" component={AdvanceDetailsScreen} />
-      <HomeStack.Screen name="AdvanceRepayment" component={AdvanceRepaymentScreen} />
-      <HomeStack.Screen name="AdvanceExplanation" component={AdvanceExplanationScreen} />
+      {/* V1 goal mounts removed — see notes in the import block above. */}
       <HomeStack.Screen name="LoanMarketplace" component={LoanMarketplaceScreen} />
       <HomeStack.Screen name="LoanApplication" component={LoanApplicationScreen} />
       <HomeStack.Screen name="LoanDetails" component={LoanDetailsScreen} />
@@ -798,15 +853,23 @@ function HomeStackScreen() {
       <HomeStack.Screen name="CreateCommunity" component={CreateCommunityScreen} />
       <HomeStack.Screen name="MyCommunities" component={MyCommunitiesScreen} />
       <HomeStack.Screen name="ElderDashboard" component={ElderDashboardScreen} />
-      <HomeStack.Screen name="BecomeElder" component={BecomeElderScreen} />
+      {/* Conflict P1 — legacy elder route names alias to ElderOnboarding /
+          ConflictCase so any existing deep links keep landing somewhere
+          sensible. The dedicated entries below are what new code uses. */}
+      <HomeStack.Screen name="BecomeElder" component={ElderOnboardingScreen} />
       <HomeStack.Screen name="HonorScoreOverview" component={HonorScoreOverviewScreen} />
+      <HomeStack.Screen name="ScoreHub" component={ScoreHubScreen} />
+      <HomeStack.Screen name="AIInsights" component={AIInsightsScreen} />
       <HomeStack.Screen name="VouchSystem" component={VouchSystemScreen} />
-      <HomeStack.Screen name="MediationCase" component={MediationCaseScreen} />
-      <HomeStack.Screen name="ElderTrainingHub" component={ElderTrainingHubScreen} />
+      <HomeStack.Screen name="MediationCase" component={ConflictCaseScreen} />
+      <HomeStack.Screen name="ElderTrainingHub" component={ElderOnboardingScreen} />
+      <HomeStack.Screen name="ConflictCase" component={ConflictCaseScreen} />
+      <HomeStack.Screen name="ElderOnboarding" component={ElderOnboardingScreen} />
       <HomeStack.Screen name="AddFunds" component={AddFundsScreen} />
       <HomeStack.Screen name="WalletMain" component={WalletScreen} />
       <HomeStack.Screen name="Withdraw" component={WithdrawScreen} />
       <HomeStack.Screen name="CreateCircleStart" component={CreateCircleStartScreen} />
+      <HomeStack.Screen name="CreateCircleExpress" component={CreateCircleExpressScreen} />
       <HomeStack.Screen name="QuickCircle" component={QuickCircleScreen} />
       <HomeStack.Screen name="Referral" component={ReferralScreen} />
       <HomeStack.Screen name="DonationPreferences" component={DonationPreferencesScreen} />
@@ -815,9 +878,9 @@ function HomeStackScreen() {
       <HomeStack.Screen name="CreateCircleInvite" component={CreateCircleInviteScreen} />
       <HomeStack.Screen name="CreateCircleSuccess" component={CreateCircleSuccessScreen} />
       {/* Conflict Prediction admin/Elder dashboard. Also registered in
-          CirclesStack; duplicated here so the __DEV__ debug button on the
-          Dashboard (Home tab) can navigate without a tab switch. */}
-      <HomeStack.Screen name="ConflictAlert" component={ConflictAlertScreen} />
+          CirclesStack. The HomeStack duplicate was removed in Step
+          "audit dedup" — ConflictAlert is now reachable from the Circles
+          tab only. */}
       {/* Marketplace (Migration 057) */}
       <HomeStack.Screen name="Marketplace" component={MarketplaceScreen} />
       <HomeStack.Screen name="StoreDetail" component={StoreDetailScreen} />
@@ -826,39 +889,18 @@ function HomeStackScreen() {
       <HomeStack.Screen name="BookService" component={BookServiceScreen} />
       <HomeStack.Screen name="OwnerDashboard" component={OwnerDashboardScreen} />
       <HomeStack.Screen name="MarketInsight" component={MarketInsightScreen} />
-      {/* Trip Circle Screens */}
+      {/* Provider-onboarding screens (kept in HomeStack — not part of the
+          Trip Organizer flow which now lives in CirclesStack only) */}
       <HomeStack.Screen name="ProviderDiscovery" component={ProviderDiscoveryScreen} />
       <HomeStack.Screen name="ProviderProfileSetup" component={ProviderProfileSetupScreen} />
       <HomeStack.Screen name="ProviderVerification" component={ProviderVerificationScreen} />
-      <HomeStack.Screen name="CreateTripListing" component={CreateTripListingScreen} />
-      <HomeStack.Screen name="ProviderTripDashboard" component={ProviderTripDashboardScreen} />
-      <HomeStack.Screen name="TripDetail" component={TripDetailScreen} />
-      <HomeStack.Screen name="MemberTripDashboard" component={MemberTripDashboardScreen} />
-      {/* Trip Organizer Screens */}
-      <HomeStack.Screen name="OrganizerTripList" component={OrganizerTripListScreen} />
-      <HomeStack.Screen name="CreateTripWizard" component={CreateTripWizardScreen} />
-      <HomeStack.Screen name="OrganizerTripDashboard" component={OrganizerTripDashboardScreen} />
-      <HomeStack.Screen name="ItineraryBuilder" component={ItineraryBuilderScreen} />
-      <HomeStack.Screen name="ParticipantManager" component={ParticipantManagerScreen} />
-      <HomeStack.Screen name="ParticipantDetail" component={ParticipantDetailScreen} />
-      <HomeStack.Screen name="TripPublicPage" component={TripPublicPageScreen} />
-      <HomeStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
-      <HomeStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />
-      <HomeStack.Screen name="TripPayment" component={TripPaymentScreen} />
-      <HomeStack.Screen name="TripPublishSuccess" component={TripPublishSuccessScreen} />
-      <HomeStack.Screen name="ActivityEditor" component={ActivityEditorScreen} />
+      {/* Trip Organizer family deduplicated → CirclesStack canonical only. */}
       {/* AI / Financial Insight Screens */}
       <HomeStack.Screen name="StressScoreDashboard" component={StressScoreDashboardScreen} />
       <HomeStack.Screen name="MoodInsights" component={MoodInsightsScreen} />
       <HomeStack.Screen name="DiscoverCircles" component={DiscoverCirclesScreen} />
-      {/* DynamicPayoutScreen also registered in CirclesStack at line 931;
-          duplicated here so the Dashboard debug chip + CreateCircleSuccess
-          screen (both in HomeStack) can navigate without a tab switch. */}
-      <HomeStack.Screen name="DynamicPayout" component={DynamicPayoutScreen} />
-      {/* InsurancePoolScreen also registered in CirclesStack — duplicated
-          here for the Dashboard debug chip (Phase D3 of feat(insurance)). */}
-      <HomeStack.Screen name="InsurancePool" component={InsurancePoolScreen} />
-      <HomeStack.Screen name="SubstitutePool" component={SubstitutePoolScreen} />
+      {/* DynamicPayout / InsurancePool / SubstitutePool deduplicated →
+          CirclesStack canonical only. */}
       <HomeStack.Screen name="CreditReport" component={CreditReportScreen} />
       <HomeStack.Screen name="DecisionHistory" component={DecisionHistoryScreen} />
       <HomeStack.Screen name="AIJobsHealth" component={AIJobsHealthScreen} />
@@ -866,32 +908,38 @@ function HomeStackScreen() {
       <HomeStack.Screen name="ScoreBreakdown" component={ScoreBreakdownScreen} />
       <HomeStack.Screen name="CreditProfile" component={CreditProfileScreen} />
       <HomeStack.Screen name="GraduatedEntry" component={GraduatedEntryScreen} />
-      <HomeStack.Screen name="CrossCircleLending" component={CrossCircleLendingScreen} />
+      {/* CrossCircleLending deduplicated → CirclesStack canonical only. */}
       <HomeStack.Screen name="DefaultRecovery" component={DefaultRecoveryScreen} />
       <HomeStack.Screen name="DefaultDetail" component={DefaultDetailScreen} />
       <HomeStack.Screen name="LateContributionDetail" component={LateContributionDetailScreen} />
-      <HomeStack.Screen name="KYCVerification" component={KYCVerificationScreen} />
+      {/* KYC P1 (2026-06-12): unified hub + single document screen.
+          Legacy KYCVerification + VerificationHub route names point to
+          the same KYCHubScreen component so existing deep links keep
+          working. */}
+      <HomeStack.Screen name="KYCVerification" component={KYCHubScreen} />
+      <HomeStack.Screen name="KYCHub" component={KYCHubScreen} />
+      <HomeStack.Screen name="KYCDocument" component={KYCDocumentScreen} />
       <HomeStack.Screen name="LegalDocuments" component={LegalDocumentsScreen} />
+      <HomeStack.Screen name="LegalDocumentReader" component={LegalDocumentReaderScreen} />
       {/* Interest-First KYC flow (Phase KYC-2). Entered from the
-          Dashboard interest card → UnlockInterestPrompt, then
-          branches per VerificationOptions. All screens live in
-          HomeStack so the back-button trail leads cleanly back to
-          Dashboard. OnboardingWelcome, AccountTiersExplained, and
-          VerificationHub from the prior generic KYC flow are
-          intentionally NOT registered here — they're unreachable in
-          the new flow and stay as orphans until a separate cleanup
-          PR with red-emoji approval. */}
+          Dashboard interest card → UnlockInterestPrompt, then folds
+          into KYCHub for the actual identity flow. */}
       <HomeStack.Screen name="UnlockInterestPrompt" component={UnlockInterestPromptScreen} />
       <HomeStack.Screen name="InterestUnlockedSuccess" component={InterestUnlockedSuccessScreen} />
-      <HomeStack.Screen name="VerificationOptions" component={VerificationOptionsScreen} />
       <HomeStack.Screen name="TaxIDEntry" component={TaxIDEntryScreen} />
-      <HomeStack.Screen name="ITINEducation" component={ITINEducationScreen} />
-      <HomeStack.Screen name="ITINApplicationHelp" component={ITINApplicationHelpScreen} />
-      <HomeStack.Screen name="ITINPending" component={ITINPendingScreen} />
       <HomeStack.Screen name="LimitedMode" component={LimitedModeScreen} />
       <HomeStack.Screen name="InternationalVerification" component={InternationalVerificationScreen} />
-      <HomeStack.Screen name="IDVerificationStart" component={IDVerificationStartScreen} />
-      <HomeStack.Screen name="DocumentUpload" component={DocumentUploadScreen} />
+      {/* KYC P1: the following screens are commented out because their
+          functionality is now folded into KYCHubScreen + KYCDocumentScreen
+          + KYCTiersModal. Files retained for reference; routes will be
+          deleted in P2 once a runtime sweep confirms no inbound deep links.
+              <HomeStack.Screen name="VerificationOptions" component={VerificationOptionsScreen} />
+              <HomeStack.Screen name="ITINEducation" component={ITINEducationScreen} />
+              <HomeStack.Screen name="ITINApplicationHelp" component={ITINApplicationHelpScreen} />
+              <HomeStack.Screen name="ITINPending" component={ITINPendingScreen} />
+              <HomeStack.Screen name="IDVerificationStart" component={IDVerificationStartScreen} />
+              <HomeStack.Screen name="DocumentUpload" component={DocumentUploadScreen} />
+          */}
       {/* Advance Payout V2 flow (Stage 8). Entered (for now) via the
           __DEV__ "Advance V2" button on the Dashboard → AdvanceHubV2.
           The 3 *V2 screens coexist with the existing non-V2 Advance
@@ -899,34 +947,30 @@ function HomeStackScreen() {
           decision. AdminDashboard is staff-only and not linked from
           any user menu. */}
       <HomeStack.Screen name="AdvanceHubV2" component={AdvanceHubV2Screen} />
-      <HomeStack.Screen name="AdvanceExplanationV2" component={AdvanceExplanationV2Screen} />
       <HomeStack.Screen name="SmartCalculator" component={SmartCalculatorScreen} />
       <HomeStack.Screen name="ApplicationFlow" component={ApplicationFlowScreen} />
-      <HomeStack.Screen name="AdvanceStatusDashboard" component={AdvanceStatusDashboardScreen} />
       <HomeStack.Screen name="AdvanceDetailsV2" component={AdvanceDetailsV2Screen} />
-      <HomeStack.Screen name="AdvanceHistory" component={AdvanceHistoryScreen} />
       <HomeStack.Screen name="AdvanceApproval" component={AdvanceApprovalScreen} />
-      <HomeStack.Screen name="AdvanceDisbursement" component={AdvanceDisbursementScreen} />
-      <HomeStack.Screen name="AdvanceAgreement" component={AdvanceAgreementScreen} />
       <HomeStack.Screen name="EarlyRepayment" component={EarlyRepaymentScreen} />
       <HomeStack.Screen name="RepaymentConfirm" component={RepaymentConfirmScreen} />
       <HomeStack.Screen name="PaymentFailed" component={PaymentFailedScreen} />
       <HomeStack.Screen name="PaymentReminder" component={PaymentReminderScreen} />
       <HomeStack.Screen name="HardshipRequest" component={HardshipRequestScreen} />
-      <HomeStack.Screen name="AdvanceRejected" component={AdvanceRejectedScreen} />
       <HomeStack.Screen name="AutopaySetup" component={AutopaySetupScreen} />
+      <HomeStack.Screen name="CircleAutopaySetup" component={CircleAutopaySetupScreen} />
+      <HomeStack.Screen name="CircleAutopayManagement" component={CircleAutopayManagementScreen} />
+      <HomeStack.Screen name="CommunityPreferences" component={CommunityPreferencesScreen} />
       <HomeStack.Screen name="RateBreakdown" component={RateBreakdownScreen} />
       <HomeStack.Screen name="AdvanceSettings" component={AdvanceSettingsScreen} />
       <HomeStack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+      <HomeStack.Screen name="AdminModeration" component={AdminModerationScreen} />
+      <HomeStack.Screen name="PlatformAuditTrail" component={PlatformAuditTrailScreen} />
       {/* Goals flow (GOALS-001..015). Entered (for now) via the __DEV__
           "Goals V2" button on the Dashboard → GoalsHubV2. GoalDetailV2 /
           GoalsHubV2 coexist with the existing GoalDetails / GoalsHub screens
           registered above; reconciliation is a later decision. */}
       <HomeStack.Screen name="GoalsHubV2" component={GoalsHubV2Screen} />
-      <HomeStack.Screen name="GoalCategorySelect" component={GoalCategorySelectScreen} />
-      <HomeStack.Screen name="GoalTypeSelect" component={GoalTypeSelectScreen} />
-      <HomeStack.Screen name="GoalCreate" component={GoalCreateScreen} />
-      <HomeStack.Screen name="GoalSetupSuccess" component={GoalSetupSuccessScreen} />
+      <HomeStack.Screen name="GoalCreateExpress" component={GoalCreateExpressScreen} />
       <HomeStack.Screen name="GoalDetailV2" component={GoalDetailV2Screen} />
       <HomeStack.Screen name="GoalAddMoney" component={GoalAddMoneyScreen} />
       <HomeStack.Screen name="GoalWithdraw" component={GoalWithdrawScreen} />
@@ -937,14 +981,10 @@ function HomeStackScreen() {
       <HomeStack.Screen name="GoalStories" component={GoalStoriesScreen} />
       <HomeStack.Screen name="GoalActivity" component={GoalActivityScreen} />
       <HomeStack.Screen name="GoalEdit" component={GoalEditScreen} />
-      {/* Dream Feed Screens (moved from Dreams tab) */}
-      <HomeStack.Screen name="DreamFeed" component={DreamFeedScreen} />
-      <HomeStack.Screen name="CreateDreamPost" component={CreateDreamPostScreen} />
+      {/* Dream Feed family deduplicated → CommunityStack canonical only.
+          PostDetail and FeedSettings remain here (not Dream-Feed-specific). */}
       <HomeStack.Screen name="PostDetail" component={PostDetailScreen} />
-      <HomeStack.Screen name="PostComments" component={DreamPostCommentsScreen} />
-      <HomeStack.Screen name="UserDreamProfile" component={UserDreamProfileScreen} />
       <HomeStack.Screen name="FeedSettings" component={FeedSettingsScreen} />
-      <HomeStack.Screen name="SupportDream" component={SupportDreamScreen} />
       {/* Profile Screens (moved from Profile tab — profile is now avatar in top-right) */}
       <HomeStack.Screen name="ProfileMain" component={ProfileScreen} />
       <HomeStack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
@@ -974,10 +1014,22 @@ function HomeStackScreen() {
 function CirclesStackScreen() {
   return (
     <CirclesStack.Navigator screenOptions={{ headerShown: false }}>
-      <CirclesStack.Screen name="CirclesMain" component={CirclesScreen} />
+      <CirclesStack.Screen name="CirclesMain" component={CirclesV2Screen} />
       <CirclesStack.Screen name="CircleDetail" component={CircleDetailScreen} />
+      {/* Circle Contribution Autopay — also registered in HomeStack
+          above. CircleDetail (which navigates to CircleAutopaySetup
+          for "Set up autopay") lives inside CirclesStack, so the
+          target must exist on this stack too — otherwise React
+          Navigation throws "no navigator handled the action". */}
+      <CirclesStack.Screen name="CircleAutopaySetup" component={CircleAutopaySetupScreen} />
+      <CirclesStack.Screen name="CircleAutopayManagement" component={CircleAutopayManagementScreen} />
       <CirclesStack.Screen name="GroupChat" component={GroupChatScreen} options={{ headerShown: false }} />
       <CirclesStack.Screen name="CreateCircleStart" component={CreateCircleStartScreen} />
+      <CirclesStack.Screen name="CreateCircleExpress" component={CreateCircleExpressScreen} />
+      <CirclesStack.Screen name="DiscoverCircles" component={DiscoverCirclesScreen} />
+      <CirclesStack.Screen name="CircleHealth" component={CircleHealthScreen} />
+      <CirclesStack.Screen name="SubstitutePool" component={SubstitutePoolScreen} />
+      <CirclesStack.Screen name="CrossCircleLending" component={CrossCircleLendingScreen} />
       <CirclesStack.Screen name="QuickCircle" component={QuickCircleScreen} />
       <CirclesStack.Screen name="CreateCircleDetails" component={CreateCircleDetailsScreen} />
       <CirclesStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} />
@@ -1000,7 +1052,10 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="AdminSettings" component={AdminSettingsScreen} />
       <CirclesStack.Screen name="ReportIssue" component={ReportIssueScreen} />
       <CirclesStack.Screen name="OversightDashboard" component={OversightDashboardScreen} />
-      <CirclesStack.Screen name="MediationTools" component={MediationToolsScreen} />
+      {/* Conflict P1 — legacy name aliased to ConflictCase. */}
+      <CirclesStack.Screen name="MediationTools" component={ConflictCaseScreen} />
+      <CirclesStack.Screen name="ConflictCase" component={ConflictCaseScreen} />
+      <CirclesStack.Screen name="ElderOnboarding" component={ElderOnboardingScreen} />
       <CirclesStack.Screen name="AuditTrail" component={AuditTrailScreen} />
       {/* Circle Feature Screens */}
       <CirclesStack.Screen name="ConflictAlert" component={ConflictAlertScreen} />
@@ -1011,6 +1066,15 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="CircleVoting" component={CircleVotingScreen} />
       <CirclesStack.Screen name="DynamicPayout" component={DynamicPayoutScreen} />
       <CirclesStack.Screen name="CircleVisualizer" component={CircleVisualizerScreen} />
+      {/* Advance V2 — reachable from both Home (HomeStack) and Circles
+          (CirclesStack). Duplicated registration is intentional: each
+          tab owns its own nav stack, and the "Manage active advances"
+          card on CirclesV2Screen must resolve AdvanceHubV2 inside the
+          Circles stack rather than crash to no-match. */}
+      <CirclesStack.Screen name="AdvanceHubV2" component={AdvanceHubV2Screen} />
+      <CirclesStack.Screen name="SmartCalculator" component={SmartCalculatorScreen} />
+      <CirclesStack.Screen name="AdvanceDetailsV2" component={AdvanceDetailsV2Screen} />
+      <CirclesStack.Screen name="AdvanceSettings" component={AdvanceSettingsScreen} />
       {/* Trip Organizer Screens */}
       <CirclesStack.Screen name="OrganizerTripList" component={OrganizerTripListScreen} />
       <CirclesStack.Screen name="CreateTripWizard" component={CreateTripWizardScreen} />
@@ -1039,27 +1103,12 @@ function MarketStackScreen() {
       <MarketStack.Screen name="BookService" component={BookServiceScreen} />
       <MarketStack.Screen name="OwnerDashboard" component={OwnerDashboardScreen} />
       <MarketStack.Screen name="MarketInsight" component={MarketInsightScreen} />
-      {/* Trip Circle Screens */}
+      {/* Provider-onboarding screens (kept in MarketStack — not part of the
+          Trip Organizer flow which now lives in CirclesStack only) */}
       <MarketStack.Screen name="ProviderDiscovery" component={ProviderDiscoveryScreen} />
       <MarketStack.Screen name="ProviderProfileSetup" component={ProviderProfileSetupScreen} />
       <MarketStack.Screen name="ProviderVerification" component={ProviderVerificationScreen} />
-      <MarketStack.Screen name="CreateTripListing" component={CreateTripListingScreen} />
-      <MarketStack.Screen name="ProviderTripDashboard" component={ProviderTripDashboardScreen} />
-      <MarketStack.Screen name="TripDetail" component={TripDetailScreen} />
-      <MarketStack.Screen name="MemberTripDashboard" component={MemberTripDashboardScreen} />
-      {/* Trip Organizer Screens */}
-      <MarketStack.Screen name="OrganizerTripList" component={OrganizerTripListScreen} />
-      <MarketStack.Screen name="CreateTripWizard" component={CreateTripWizardScreen} />
-      <MarketStack.Screen name="OrganizerTripDashboard" component={OrganizerTripDashboardScreen} />
-      <MarketStack.Screen name="ItineraryBuilder" component={ItineraryBuilderScreen} />
-      <MarketStack.Screen name="ParticipantManager" component={ParticipantManagerScreen} />
-      <MarketStack.Screen name="ParticipantDetail" component={ParticipantDetailScreen} />
-      <MarketStack.Screen name="TripPublicPage" component={TripPublicPageScreen} />
-      <MarketStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
-      <MarketStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />
-      <MarketStack.Screen name="TripPayment" component={TripPaymentScreen} />
-      <MarketStack.Screen name="TripPublishSuccess" component={TripPublishSuccessScreen} />
-      <MarketStack.Screen name="ActivityEditor" component={ActivityEditorScreen} />
+      {/* Trip Organizer family deduplicated → CirclesStack canonical only. */}
       {/* Provider-request form — closes the dead RequestProvider nav target
           that lived in RootStackParamList without a screen attached. */}
       <MarketStack.Screen name="RequestProvider" component={RequestProviderScreen} />
@@ -1089,6 +1138,13 @@ function CommunityStackScreen() {
   return (
     <CommunityStack.Navigator screenOptions={{ headerShown: false }}>
       <CommunityStack.Screen name="CommunityMain" component={CommunityTabScreen} />
+      <CommunityStack.Screen name="Events" component={EventsScreen} />
+      <CommunityStack.Screen name="CreateEvent" component={CreateEventScreen} />
+      <CommunityStack.Screen name="DreamFeed" component={DreamFeedScreen} />
+      <CommunityStack.Screen name="CreateDreamPost" component={CreateDreamPostScreen} />
+      <CommunityStack.Screen name="PostComments" component={DreamPostCommentsScreen} />
+      <CommunityStack.Screen name="UserDreamProfile" component={UserDreamProfileScreen} />
+      <CommunityStack.Screen name="SupportDream" component={SupportDreamScreen} />
       <CommunityStack.Screen name="CommunityBrowser" component={CommunityBrowserScreen} />
       <CommunityStack.Screen name="CommunityHub" component={CommunityHubScreen} />
       <CommunityStack.Screen name="CreateCommunity" component={CreateCommunityScreen} />
@@ -1100,11 +1156,14 @@ function CommunityStackScreen() {
       <CommunityStack.Screen name="CommunityMemory" component={CommunityMemoryScreen} />
       <CommunityStack.Screen name="PostToCommunity" component={PostToCommunityScreen} />
       <CommunityStack.Screen name="ElderDashboard" component={ElderDashboardScreen} />
-      <CommunityStack.Screen name="BecomeElder" component={BecomeElderScreen} />
+      {/* Conflict P1 — legacy elder route names aliased to merged screens. */}
+      <CommunityStack.Screen name="BecomeElder" component={ElderOnboardingScreen} />
       <CommunityStack.Screen name="HonorScoreOverview" component={HonorScoreOverviewScreen} />
       <CommunityStack.Screen name="VouchSystem" component={VouchSystemScreen} />
-      <CommunityStack.Screen name="MediationCase" component={MediationCaseScreen} />
-      <CommunityStack.Screen name="ElderTrainingHub" component={ElderTrainingHubScreen} />
+      <CommunityStack.Screen name="MediationCase" component={ConflictCaseScreen} />
+      <CommunityStack.Screen name="ElderTrainingHub" component={ElderOnboardingScreen} />
+      <CommunityStack.Screen name="ConflictCase" component={ConflictCaseScreen} />
+      <CommunityStack.Screen name="ElderOnboarding" component={ElderOnboardingScreen} />
       {/* Profile accessible from avatar in community */}
       <CommunityStack.Screen name="ProfileMain" component={ProfileScreen} />
       <CommunityStack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
@@ -1155,6 +1214,18 @@ function KycStackScreen() {
       <KycStack.Screen name="LimitedMode" component={LimitedModeScreen} />
       <KycStack.Screen name="ITINPending" component={ITINPendingScreen} />
     </KycStack.Navigator>
+  );
+}
+
+// Score Hub Tab Stack — single-screen stack so the Score Hub tab follows the
+// same navigator pattern as Home/Circles/Market/Community. Deep-dive routes
+// (CreditReport, XnScoreDashboard, etc.) live in HomeStack and are reached via
+// cross-tab navigation, so they don't need to be re-registered here.
+function ScoreHubStackScreen() {
+  return (
+    <ScoreHubStack.Navigator screenOptions={{ headerShown: false }}>
+      <ScoreHubStack.Screen name="ScoreHubMain" component={ScoreHubScreen} />
+    </ScoreHubStack.Navigator>
   );
 }
 
@@ -1235,16 +1306,40 @@ function AppContent() {
     };
   }, []);
 
-  // If user is authenticated but locked, show lock screen
-  if (isAuthenticated && isLocked) {
-    return <LockScreen />;
-  }
+  // Render the lock screen as a Modal OVERLAY (not a replacement). The
+  // previous version returned <LockScreen /> in place of the navigator,
+  // which unmounted the entire navigation tree — so after unlock the
+  // navigator remounted at initialRouteName="Splash", and any transient
+  // auth-state hiccup during the password re-verify could land the user
+  // on the Login screen. With an overlay, the navigation state under the
+  // lock is preserved: unlock dismisses the modal and the user is back
+  // on whatever screen they were on (Wallet, Send Money, etc).
+  const lockOverlay =
+    isAuthenticated && isLocked ? (
+      <Modal
+        visible
+        animationType="fade"
+        presentationStyle="fullScreen"
+        statusBarTranslucent
+        // Hardware back must NOT dismiss the lock — onRequestClose left as
+        // a no-op so Android's back button can't bypass the gate.
+        onRequestClose={() => {}}
+      >
+        <LockScreen />
+      </Modal>
+    ) : null;
 
   // Wrap navigation in TouchableWithoutFeedback to reset timer on any touch
   return (
     <TouchableWithoutFeedback onPress={resetTimer} accessible={false}>
       <View style={{ flex: 1 }}>
         <StatusBar style="light" />
+        {lockOverlay}
+        {/* Global amber band when the device is offline. Self-renders to
+            null when isOffline is false, so there's zero layout cost in
+            the happy path. Sits above the Navigator so it overlays every
+            route, including auth screens. */}
+        <OfflineBanner />
         <Stack.Navigator
           initialRouteName="Splash"
           screenOptions={{
@@ -1257,6 +1352,7 @@ function AppContent() {
           <Stack.Screen name="Welcome" component={WelcomeScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Signup" component={SignupScreen} />
+          <Stack.Screen name="SignupWelcome" component={SignupWelcomeScreen} />
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
           <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
           <Stack.Screen name="OTP" component={OTPScreen} />
@@ -1282,7 +1378,13 @@ function AppContent() {
           {/* Same root-Stack fallback for MediationTools — same Circle Options
               sheet, same Portal escapes CirclesStack scope. Existing
               CirclesStack registration at line ~589 is kept (duplicate is fine). */}
-          <Stack.Screen name="MediationTools" component={MediationToolsScreen} />
+          {/* Conflict P1 (2026-06-12): MediationTools now aliases to the
+              merged ConflictCaseScreen. The root-Stack registration stays
+              so the Circle Options Portal route resolves regardless of
+              which navigator's prop the closure captured. */}
+          <Stack.Screen name="MediationTools" component={ConflictCaseScreen} />
+          <Stack.Screen name="ConflictCase" component={ConflictCaseScreen} />
+          <Stack.Screen name="ElderOnboarding" component={ElderOnboardingScreen} />
           {/* Remaining Circle Options sheet items — same Portal pattern as
               ReportIssue/MediationTools. Each is also registered in CirclesStack
               (and a few elsewhere); the root-Stack duplicate ensures

@@ -122,9 +122,9 @@ export default function AdvanceSettingsScreen() {
   const settings = route.params?.settings ?? DEFAULT_SETTINGS;
   const advanceId = activeAdvance?.id ?? DEFAULT_ADVANCE.id;
 
-  const [autopayEnabled, setAutopayEnabled] = useState(
-    settings.earlyPayAutopay,
-  );
+  // P2 (autopay review): autopayEnabled state removed — the only
+  // surface that read it (the inline Toggle) is gone, replaced by a
+  // link to AutopaySetupScreen which owns the real state.
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     settings.notificationsEnabled,
   );
@@ -156,7 +156,7 @@ export default function AdvanceSettingsScreen() {
       sublabel: "Terms & conditions",
       highlight: false,
       onPress: () =>
-        navigation.navigate(Routes.AdvanceAgreement, { advanceId }),
+        navigation.navigate(Routes.AdvanceDetailsV2, { advanceId }),
     },
     {
       id: "hardship",
@@ -254,33 +254,36 @@ export default function AdvanceSettingsScreen() {
             </View>
           </View>
 
-          {/* Autopay setting */}
-          <View style={styles.sectionCard}>
-            <Text style={[styles.sectionTitle, { marginBottom: 16 }]}>
-              Early Repayment Autopay
-            </Text>
-            <View style={styles.toggleRow}>
-              <View style={{ flex: 1, paddingRight: 12 }}>
-                <Text style={styles.toggleLabel}>
-                  Auto-pay when wallet has funds
+          {/* P2 (autopay review): the duplicate inline toggle that
+              lived here has been removed in favour of a link to
+              AutopaySetupScreen, which is now the single source of
+              truth for autopay (loads + persists to loan_autopay_configs
+              via the useAutopay hook). The Toggle component on this
+              screen used to render against ephemeral useState that
+              never persisted. */}
+          <TouchableOpacity
+            style={styles.sectionCard}
+            onPress={() => navigation.navigate("AutopaySetup")}
+            accessibilityRole="button"
+            accessibilityLabel={t(
+              "advance_settings.configure_autopay_a11y",
+            )}
+          >
+            <View style={styles.linkRow}>
+              <View style={styles.linkIcon}>
+                <Ionicons name="repeat-outline" size={20} color="#00897B" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.linkTitle}>
+                  {t("advance_settings.configure_autopay_title")}
                 </Text>
-                <Text style={styles.toggleHint}>
-                  Automatically pay early to save fees
+                <Text style={styles.linkSubtitle}>
+                  {t("advance_settings.configure_autopay_subtitle")}
                 </Text>
               </View>
-              <Toggle
-                value={autopayEnabled}
-                onToggle={() => setAutopayEnabled(!autopayEnabled)}
-                accessibilityLabel="Toggle early repayment autopay"
-              />
+              <Ionicons name="chevron-forward" size={18} color={MUTED} />
             </View>
-            <View style={styles.autopayNote}>
-              <Text style={styles.autopayNoteText}>
-                Note: Your advance is already auto-withheld from your payout.
-                This setting is for paying early from your wallet balance.
-              </Text>
-            </View>
-          </View>
+          </TouchableOpacity>
 
           {/* Notification settings */}
           <View style={styles.sectionCard}>
@@ -320,7 +323,7 @@ export default function AdvanceSettingsScreen() {
           <View style={styles.moreCard}>
             <TouchableOpacity
               style={styles.moreRow}
-              onPress={() => navigation.navigate(Routes.AdvanceHistory)}
+              onPress={() => navigation.navigate(Routes.AdvanceHubV2)}
               accessibilityRole="button"
               accessibilityLabel="Advance history"
             >
@@ -501,6 +504,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   autopayNoteText: { fontSize: 11, color: "#9CA3AF", lineHeight: 16 },
+
+  // P2 (autopay review) — link row used in place of the removed
+  // inline autopay toggle; tapping it routes to AutopaySetupScreen.
+  linkRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  linkIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#F0FDFB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  linkTitle: { fontSize: 14, fontWeight: "700", color: NAVY },
+  linkSubtitle: { fontSize: 12, color: MUTED, marginTop: 2 },
 
   notifDivider: {
     height: 1,

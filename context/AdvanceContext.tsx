@@ -4,6 +4,29 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 /**
  * TANDAXN ADVANCE/LOAN SYSTEM
  *
+ * ⚠️ DEPRECATION NOTE (Advance P0, 2026-06-12)
+ * ------------------------------------------------------------------
+ * The Advance V2 chain (AdvanceHubV2Screen + SmartCalculatorScreen +
+ * AdvanceDetailsV2Screen) NO LONGER consumes this context. They use
+ * `hooks/useAdvanceDashboard` which hits the live backend via
+ * migrations 145–147 (get_advance_dashboard / request_advance /
+ * process_advance_repayment).
+ *
+ * This file is retained AS-IS because the following surfaces still
+ * read from it and have not been migrated yet:
+ *   - V1 Advance chain: AdvanceHubScreen, AdvanceDetailsScreen,
+ *     AdvanceRepaymentScreen, RequestAdvanceScreen
+ *   - Loan family:      LoanApplicationScreen, LoanCalculatorScreen,
+ *                       LoanDashboardScreen, LoanDetailsScreen,
+ *                       LoanMarketplaceScreen
+ *   - DashboardScreen   (reads ELIGIBILITY_TIERS + LOAN_PRODUCTS)
+ *
+ * Everything below this banner is AsyncStorage-backed mock state.
+ * Do NOT wire new V2 features through here — call useAdvanceDashboard
+ * (or the requestAdvance / processAdvanceRepayment helpers it
+ * exports) directly.
+ * ------------------------------------------------------------------
+ *
  * Three loan tiers:
  * 1. Small Advances ($50-$1,000) - Quick advances on circle payouts
  * 2. Medium Loans ($1,000-$10,000) - Business, education, vehicles

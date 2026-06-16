@@ -1,36 +1,22 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// screens/SmartCalculatorScreen.tsx — ADVANCE-003 advance calculator
+// screens/SmartCalculatorScreen.tsx — Advance calculator + apply (P1)
 // ══════════════════════════════════════════════════════════════════════════════
 //
-// Translated from web JSX: 105-ADVANCE-003-SmartCalculator.jsx.
-//
-// Live-updating cost calculator for an advance against an upcoming
-// circle payout. Calculates rate dynamically from user.xnScore +
-// countryRisk + tierBonus, then derives fee, total, monthly payment,
-// affordability check, and local-lender savings comparison.
-//
-// SLIDER NOTE — the web version used <input type="range"> for the
-// amount control. RN has no native slider; rather than pull in
-// @react-native-community/slider as a new dependency in this batch,
-// we replace the drag with two equivalent controls:
-//   - 4 quick-amount buttons ($100, $200, $300, max) — preserved
-//     from the web design
-//   - 2 stepper buttons (−$10 / +$10) for fine-grained adjustment
-// The progress bar above remains as a static visual indicator.
-// A real draggable slider can be wired later if needed.
-//
-// Route params (all optional):
-//   advanceType?: 'contribution' | 'quick' | 'flex'
-//   user?: { xnScore; smc; countryRisk; tierBonus }
-//   upcomingPayout?: { amount; date; circleName }
-//
-// Navigation:
-//   - back chevron → goBack
-//   - "Why this rate?" → RateBreakdown
-//   - "Request $X Advance" → ApplicationFlow (with the calc params)
+// P1 update (2026-06-12):
+//   - Slider initial value pre-filled from `product.recommended_amount_cents`
+//     (server-computed in migration 148: 60% of max, clamped to min). Note
+//     line shown above the control: "We suggest $X based on your eligibility."
+//   - Quick-amount preset buttons removed; only the stepper + progress bar
+//     remain as the amount control (one surface, not three).
+//   - Inline expandable Terms & Conditions section replaces the standalone
+//     AdvanceAgreement screen.
+//   - Help icons on APR / Fee / Amount / Term that open Alert.alert with a
+//     plain-language explanation.
+//   - Progress chip "Step 2 of 3 — Confirm amount & terms" above the
+//     content.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -39,6 +25,8 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -46,159 +34,236 @@ import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import {
+  useAdvanceDashboard,
+  requestAdvance,
+  AdvanceProductCard,
+  AdvanceUiCode,
+} from "../hooks/useAdvanceDashboard";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
 const BORDER = "#E5E7EB";
 const MUTED = "#6B7280";
 const AMBER = "#D97706";
+const RED = "#EF4444";
 
-type AdvanceType = "contribution" | "quick" | "flex";
+const LOCAL_LENDER_RATE = 15;
 
-type CalculatorUser = {
-  xnScore: number;
-  smc: number;
-  countryRisk: number;
-  tierBonus: number;
-};
-
-type UpcomingPayout = {
-  amount: number;
-  date: string;
-  circleName: string;
+const TYPE_TITLE_KEYS: Record<AdvanceUiCode, string> = {
+  contribution: "smart_calculator.type_contribution",
+  quick: "smart_calculator.type_quick",
+  flex: "smart_calculator.type_flex",
+  premium: "smart_calculator.type_premium",
 };
 
 type SmartCalculatorParams = {
-  advanceType?: AdvanceType;
-  user?: CalculatorUser;
-  upcomingPayout?: UpcomingPayout;
+  advanceType?: AdvanceUiCode;
+  product?: AdvanceProductCard;
+  xnscore?: number;
 };
 type SmartCalculatorRouteProp = RouteProp<
   { SmartCalculator: SmartCalculatorParams },
   "SmartCalculator"
 >;
 
-const DEFAULT_USER: CalculatorUser = {
-  xnScore: 78,
-  smc: 200,
-  countryRisk: 2,
-  tierBonus: 0.5,
-};
+function amortizationMonthlyCents(
+  principalCents: number,
+  aprPct: number,
+  termMonths: number,
+): number {
+  if (termMonths <= 0) return principalCents;
+  if (aprPct <= 0) return Math.ceil(principalCents / termMonths);
+  const r = aprPct / 100 / 12;
+  const cf = Math.pow(1 + r, termMonths);
+  return Math.round((principalCents * r * cf) / (cf - 1));
+}
 
-const DEFAULT_PAYOUT: UpcomingPayout = {
-  amount: 500,
-  date: "Feb 15, 2025",
-  circleName: "Family Circle",
-};
-
-const BASE_RATES: Record<AdvanceType, number> = {
-  contribution: 0,
-  quick: 8,
-  flex: 7,
-};
-
-const MAX_ADVANCE_PERCENT = 80;
-const LOCAL_LENDER_RATE = 15;
-
-// i18n: type → translation key. Resolved per-render via t() at the
-// call site so language flips re-paint without re-instantiating.
-const TYPE_TITLE_KEYS: Record<AdvanceType, string> = {
-  contribution: "smart_calculator.type_contribution",
-  quick: "smart_calculator.type_quick",
-  flex: "smart_calculator.type_flex",
-};
+// Help-icon trigger with a stable shape (used by APR / Fee / Amount / Term).
+function HelpDot({
+  onPress,
+  a11yLabel,
+}: {
+  onPress: () => void;
+  a11yLabel: string;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={a11yLabel}
+      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      style={{ marginLeft: 4 }}
+    >
+      <Ionicons name="help-circle-outline" size={14} color={MUTED} />
+    </TouchableOpacity>
+  );
+}
 
 export default function SmartCalculatorScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<SmartCalculatorRouteProp>();
   const { t } = useTranslation();
+  const dashboard = useAdvanceDashboard();
 
-  const advanceType: AdvanceType = route.params?.advanceType ?? "quick";
-  const user = route.params?.user ?? DEFAULT_USER;
-  const upcomingPayout = route.params?.upcomingPayout ?? DEFAULT_PAYOUT;
+  const advanceType: AdvanceUiCode = route.params?.advanceType ?? "quick";
+  const productFromParams = route.params?.product ?? null;
+  const productFromHook =
+    dashboard.data?.products.find((p) => p.ui_code === advanceType) ?? null;
+  const product = productFromParams ?? productFromHook;
+  const xnscore = route.params?.xnscore ?? dashboard.data?.xnscore ?? 0;
 
-  const maxAdvance = Math.floor(
-    upcomingPayout.amount * (MAX_ADVANCE_PERCENT / 100),
-  );
-  const minAmount = 50;
+  const [submitting, setSubmitting] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
 
-  const [amount, setAmount] = useState<number>(
-    Math.min(200, maxAdvance),
-  );
-  const [term, setTerm] = useState<number>(
-    advanceType === "quick" ? 2 : advanceType === "flex" ? 3 : 0,
-  );
-
-  // ── Rate calculation (mirrors the web logic) ───────────────────────────
-  const rateInfo = useMemo(() => {
-    if (advanceType === "contribution") {
-      return { rate: 0, fee: 5, type: "flat" as const };
-    }
-    const base = BASE_RATES[advanceType];
-    const scoreAdjust =
-      user.xnScore >= 80 ? -1 : user.xnScore >= 70 ? 0 : user.xnScore >= 60 ? 1 : 2;
-    const tierAdjust = -user.tierBonus;
-    const totalRate = Math.max(
-      6,
-      base + user.countryRisk + scoreAdjust + tierAdjust,
+  // Loading / missing-product
+  if (dashboard.loading && !product) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+        <View style={styles.fullCenter}>
+          <ActivityIndicator size="large" color={TEAL} />
+          <Text style={styles.fullCenterLabel}>
+            {t("smart_calculator.loading")}
+          </Text>
+        </View>
+      </SafeAreaView>
     );
-    return { rate: totalRate, type: "percent" as const, fee: 0 };
-  }, [advanceType, user.xnScore, user.countryRisk, user.tierBonus]);
+  }
+  if (!product) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+        <View style={styles.fullCenter}>
+          <Ionicons name="alert-circle-outline" size={36} color={RED} />
+          <Text style={styles.fullCenterLabel}>
+            {t("smart_calculator.product_not_found")}
+          </Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.retryButtonText}>
+              {t("smart_calculator.go_back")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-  const advanceFee = useMemo(() => {
-    if (rateInfo.type === "flat") return rateInfo.fee;
-    if (advanceType === "quick") {
-      const weeklyRate = rateInfo.rate / 100 / 52;
-      return amount * weeklyRate * term;
-    }
-    const monthlyRate = rateInfo.rate / 100 / 12;
-    return amount * monthlyRate * term;
-  }, [rateInfo, advanceType, amount, term]);
+  // Bounds from live product
+  const minAmountCents = product.min_amount_cents ?? 5000;
+  const maxAmountCents = product.max_amount_cents ?? 100000;
+  const minTerm = product.min_term_months ?? 1;
+  const maxTerm = product.max_term_months ?? 12;
+  const apr = product.estimated_apr ?? 0;
 
-  const totalRepayment = amount + advanceFee;
-  const monthlyPayment =
-    advanceType === "flex" && term > 0 ? totalRepayment / term : null;
-  const affordabilityPercent = monthlyPayment
-    ? (monthlyPayment / user.smc) * 100
-    : null;
-  const isAffordable = !monthlyPayment || (affordabilityPercent ?? 0) <= 30;
+  // P1: use server-suggested amount (60% of max, clamped to min).
+  const recommendedCents = Math.max(
+    minAmountCents,
+    Math.min(
+      maxAmountCents,
+      product.recommended_amount_cents ?? Math.floor(maxAmountCents * 0.6),
+    ),
+  );
+  const [amountCents, setAmountCents] = useState<number>(recommendedCents);
+  const [term, setTerm] = useState<number>(minTerm);
 
-  const localLenderFee =
-    amount *
-    (LOCAL_LENDER_RATE / 100) *
-    (advanceType === "quick" ? term / 52 : term / 12);
-  const savings = localLenderFee - advanceFee;
+  // Derived
+  const monthlyCents = useMemo(
+    () => amortizationMonthlyCents(amountCents, apr, term),
+    [amountCents, apr, term],
+  );
+  const totalRepayCents = monthlyCents * term;
+  const feeCents = totalRepayCents - amountCents;
+  const originationFeeCents = Math.round(
+    amountCents * (product.origination_fee_percent ?? 0) / 100,
+  );
+  const monthlyPayment = monthlyCents / 100;
 
-  const termOptions =
-    advanceType === "quick" ? [1, 2, 3, 4] : advanceType === "flex" ? [3, 6, 9, 12] : [];
+  const termOptions = useMemo(() => {
+    if (maxTerm <= minTerm) return [minTerm];
+    const span = maxTerm - minTerm;
+    if (span <= 3) return Array.from({ length: span + 1 }, (_, i) => minTerm + i);
+    return [
+      minTerm,
+      minTerm + Math.round(span / 3),
+      minTerm + Math.round((2 * span) / 3),
+      maxTerm,
+    ];
+  }, [minTerm, maxTerm]);
 
   const progressPct =
-    maxAdvance > minAmount
-      ? Math.round(((amount - minAmount) / (maxAdvance - minAmount)) * 100)
+    maxAmountCents > minAmountCents
+      ? Math.round(
+          ((amountCents - minAmountCents) / (maxAmountCents - minAmountCents)) *
+            100,
+        )
       : 0;
 
-  const quickAmounts = Array.from(
-    new Set([100, 200, 300, maxAdvance].filter((a) => a >= minAmount && a <= maxAdvance)),
-  );
-
-  const stepAmount = (delta: number) => {
-    setAmount((prev) =>
-      Math.max(minAmount, Math.min(maxAdvance, prev + delta)),
+  const stepAmount = (deltaCents: number) =>
+    setAmountCents((prev) =>
+      Math.max(minAmountCents, Math.min(maxAmountCents, prev + deltaCents)),
     );
-  };
 
-  const continueDisabled = !isAffordable && !!monthlyPayment;
+  const localLenderFeeCents = Math.round(
+    amountCents *
+      (LOCAL_LENDER_RATE / 100) *
+      (term <= 3 ? term / 12 : term / 12),
+  );
+  const savingsCents = localLenderFeeCents - feeCents;
 
-  const handleContinue = () => {
-    if (continueDisabled) return;
-    navigation.navigate(Routes.ApplicationFlow, {
-      advanceType,
-      amount,
-      term,
-      rate: rateInfo.rate,
-      fee: advanceFee,
-      total: totalRepayment,
-    });
+  // ── Help-icon callbacks ───────────────────────────────────────────────
+  const helpApr = () =>
+    Alert.alert(
+      t("smart_calculator.help_apr_title"),
+      t("smart_calculator.help_apr_body"),
+    );
+  const helpFee = () =>
+    Alert.alert(
+      t("smart_calculator.help_fee_title"),
+      t("smart_calculator.help_fee_body"),
+    );
+  const helpAmount = () =>
+    Alert.alert(
+      t("smart_calculator.help_amount_title"),
+      t("smart_calculator.help_amount_body"),
+    );
+  const helpTerm = () =>
+    Alert.alert(
+      t("smart_calculator.help_term_title"),
+      t("smart_calculator.help_term_body"),
+    );
+
+  // ── Submit ────────────────────────────────────────────────────────────
+  const handleContinue = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const result = await requestAdvance({
+        ui_code: advanceType,
+        requested_amount_cents: amountCents,
+        term_months: term,
+        repayment_preference: "payout_withholding",
+      });
+      navigation.navigate(Routes.AdvanceDetailsV2 as never, {
+        advanceId: result.loan_id,
+        justCreated: true,
+      } as never);
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : String(e);
+      const blockedMatch = raw.match(/eligibility_blocked:(\w+)/);
+      const key = blockedMatch ? blockedMatch[1] : null;
+      const localizedReason = key
+        ? t(`smart_calculator.error_${key}`, {
+            defaultValue: t("smart_calculator.error_generic"),
+          })
+        : t("smart_calculator.error_generic");
+      Alert.alert(t("smart_calculator.error_title"), localizedReason);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -210,7 +275,6 @@ export default function SmartCalculatorScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <LinearGradient
           colors={[NAVY, "#143654"]}
           start={{ x: 0, y: 0 }}
@@ -227,12 +291,15 @@ export default function SmartCalculatorScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>{t(TYPE_TITLE_KEYS[advanceType])}</Text>
-              <Text style={styles.headerSubtitle}>{t("smart_calculator.header_subtitle")}</Text>
+              <Text style={styles.headerTitle}>
+                {t(TYPE_TITLE_KEYS[advanceType])}
+              </Text>
+              <Text style={styles.headerSubtitle}>
+                {t("smart_calculator.header_subtitle")}
+              </Text>
             </View>
           </View>
 
-          {/* Rate Badge */}
           <View style={styles.rateBadge}>
             <View style={styles.rateLeft}>
               <View style={styles.rateIconBox}>
@@ -240,13 +307,19 @@ export default function SmartCalculatorScreen() {
               </View>
               <View>
                 <Text style={styles.rateScoreLabel}>
-                  {t("smart_calculator.rate_score_arrow", { score: user.xnScore })}
+                  {t("smart_calculator.rate_score_arrow", { score: xnscore })}
                 </Text>
-                <Text style={styles.rateValue}>
-                  {rateInfo.type === "flat"
-                    ? t("smart_calculator.rate_flat_fee", { fee: rateInfo.fee })
-                    : t("smart_calculator.rate_percent", { rate: rateInfo.rate.toFixed(1) })}
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Text style={styles.rateValue}>
+                    {t("smart_calculator.rate_percent", {
+                      rate: apr.toFixed(1),
+                    })}
+                  </Text>
+                  <HelpDot
+                    onPress={helpApr}
+                    a11yLabel={t("smart_calculator.help_apr_title")}
+                  />
+                </View>
               </View>
             </View>
             <TouchableOpacity
@@ -255,208 +328,297 @@ export default function SmartCalculatorScreen() {
               accessibilityRole="button"
               accessibilityLabel="Why this rate?"
             >
-              <Text style={styles.whyButtonText}>{t("smart_calculator.why_this_rate")}</Text>
+              <Text style={styles.whyButtonText}>
+                {t("smart_calculator.why_this_rate")}
+              </Text>
             </TouchableOpacity>
           </View>
         </LinearGradient>
 
         <View style={styles.contentWrap}>
-          {/* Advancing against */}
+          {/* Progress chip */}
+          <View style={styles.progressChip}>
+            <Ionicons name="ellipse" size={8} color={TEAL} />
+            <Text style={styles.progressChipText}>
+              {t("smart_calculator.progress_step_2")}
+            </Text>
+          </View>
+
+          {/* About this product */}
           <View style={styles.sectionCard}>
-            <Text style={styles.fieldLabel}>{t("smart_calculator.field_advancing_against")}</Text>
-            <View style={styles.payoutRow}>
-              <View>
-                <Text style={styles.payoutCircle}>
-                  {upcomingPayout.circleName}
-                </Text>
-                <Text style={styles.payoutDate}>
-                  {t("smart_calculator.payout_date_prefix", { date: upcomingPayout.date })}
-                </Text>
-              </View>
-              <View style={{ alignItems: "flex-end" }}>
-                <Text style={styles.payoutAmount}>
-                  ${upcomingPayout.amount}
-                </Text>
-                <Text style={styles.payoutMax}>{t("smart_calculator.payout_max_prefix", { amount: maxAdvance })}</Text>
-              </View>
+            <Text style={styles.fieldLabel}>
+              {t("smart_calculator.about_product_label")}
+            </Text>
+            <Text style={styles.aboutBody}>
+              {product.description ??
+                t(`advance_hub_v2.product_${advanceType}_desc`)}
+            </Text>
+            <View style={styles.aboutStatRow}>
+              <Text style={styles.aboutStatLabel}>
+                {t("smart_calculator.about_max")}
+              </Text>
+              <Text style={styles.aboutStatValue}>
+                ${(maxAmountCents / 100).toLocaleString()}
+              </Text>
+            </View>
+            <View style={styles.aboutStatRow}>
+              <Text style={styles.aboutStatLabel}>
+                {t("smart_calculator.about_term_range")}
+              </Text>
+              <Text style={styles.aboutStatValue}>
+                {minTerm === maxTerm
+                  ? t("advance_hub_v2.term_n_months", { n: minTerm })
+                  : t("advance_hub_v2.term_range_months", {
+                      min: minTerm,
+                      max: maxTerm,
+                    })}
+              </Text>
             </View>
           </View>
 
-          {/* Amount controls */}
+          {/* Amount control */}
           <View style={styles.sectionCard}>
-            <Text style={styles.fieldLabel}>{t("smart_calculator.field_how_much")}</Text>
-
-            <View style={styles.amountDisplay}>
-              <Text style={styles.amountText}>${amount}</Text>
+            <View style={styles.labelRow}>
+              <Text style={styles.fieldLabel}>
+                {t("smart_calculator.field_how_much")}
+              </Text>
+              <HelpDot
+                onPress={helpAmount}
+                a11yLabel={t("smart_calculator.help_amount_title")}
+              />
             </View>
 
-            {/* Stepper row */}
+            {/* Recommended amount note */}
+            <Text style={styles.recommendedNote}>
+              {t("smart_calculator.recommended_note", {
+                amount: (recommendedCents / 100).toLocaleString(),
+              })}
+            </Text>
+
+            <View style={styles.amountDisplay}>
+              <Text style={styles.amountText}>
+                ${Math.round(amountCents / 100).toLocaleString()}
+              </Text>
+            </View>
+
+            {/* P2 — Recommended-amount tooltip that updates live with the
+                slider. (i) icon opens an Alert explaining the calc. The
+                tooltip's color flips green when the user is close to the
+                recommendation and amber when they're far above it. */}
+            {(() => {
+              const recommendedDollars = Math.round(recommendedCents / 100);
+              const currentDollars = Math.round(amountCents / 100);
+              const distance = Math.abs(currentDollars - recommendedDollars);
+              const closeEnough = distance <= Math.max(20, recommendedDollars * 0.1);
+              const overTop = currentDollars > recommendedDollars;
+              const tone = closeEnough
+                ? "#10B981"
+                : overTop
+                ? "#F59E0B"
+                : "#0A2342";
+              return (
+                <View style={styles.recommendBlock}>
+                  <View style={[styles.recommendChip, { borderColor: tone }]}>
+                    <Ionicons
+                      name="flash-outline"
+                      size={12}
+                      color={tone}
+                    />
+                    <Text style={[styles.recommendChipText, { color: tone }]}>
+                      {closeEnough
+                        ? t("smart_calculator.recommend_chip_match", {
+                            amount: `$${recommendedDollars.toLocaleString()}`,
+                          })
+                        : t("smart_calculator.recommend_chip", {
+                            amount: `$${recommendedDollars.toLocaleString()}`,
+                          })}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() =>
+                        Alert.alert(
+                          t("smart_calculator.recommend_info_title"),
+                          t("smart_calculator.recommend_info_body", {
+                            amount: `$${recommendedDollars.toLocaleString()}`,
+                            max: `$${(maxAmountCents / 100).toLocaleString()}`,
+                          }),
+                        )
+                      }
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={t("smart_calculator.recommend_info_title")}
+                    >
+                      <Ionicons
+                        name="information-circle-outline"
+                        size={14}
+                        color={tone}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                  {!closeEnough ? (
+                    <TouchableOpacity
+                      onPress={() => setAmountCents(recommendedCents)}
+                      style={styles.recommendUseBtn}
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.recommendUseBtnText}>
+                        {t("smart_calculator.recommend_use_cta")}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              );
+            })()}
+
             <View style={styles.stepperRow}>
               <TouchableOpacity
                 style={[
                   styles.stepperButton,
-                  amount <= minAmount && styles.stepperButtonDisabled,
+                  amountCents <= minAmountCents && styles.stepperButtonDisabled,
                 ]}
-                onPress={() => stepAmount(-10)}
-                disabled={amount <= minAmount}
+                onPress={() => stepAmount(-1000)}
+                disabled={amountCents <= minAmountCents}
                 accessibilityRole="button"
-                accessibilityLabel="Decrease by 10"
+                accessibilityLabel="Decrease by $10"
               >
                 <Ionicons name="remove" size={20} color={NAVY} />
               </TouchableOpacity>
-
-              {/* Visual progress bar (read-only) */}
               <View style={styles.progressTrack}>
                 <View
                   style={[styles.progressFill, { width: `${progressPct}%` }]}
                 />
               </View>
-
               <TouchableOpacity
                 style={[
                   styles.stepperButton,
-                  amount >= maxAdvance && styles.stepperButtonDisabled,
+                  amountCents >= maxAmountCents && styles.stepperButtonDisabled,
                 ]}
-                onPress={() => stepAmount(10)}
-                disabled={amount >= maxAdvance}
+                onPress={() => stepAmount(1000)}
+                disabled={amountCents >= maxAmountCents}
                 accessibilityRole="button"
-                accessibilityLabel="Increase by 10"
+                accessibilityLabel="Increase by $10"
               >
                 <Ionicons name="add" size={20} color={NAVY} />
               </TouchableOpacity>
             </View>
 
             <View style={styles.rangeLabels}>
-              <Text style={styles.rangeLabel}>${minAmount}</Text>
-              <Text style={styles.rangeLabel}>{t("smart_calculator.range_max_suffix", { amount: maxAdvance })}</Text>
-            </View>
-
-            {/* Quick amount buttons */}
-            <View style={styles.quickRow}>
-              {quickAmounts.map((amt) => {
-                const isActive = amount === amt;
-                return (
-                  <TouchableOpacity
-                    key={amt}
-                    style={[
-                      styles.quickButton,
-                      isActive && styles.quickButtonActive,
-                    ]}
-                    onPress={() => setAmount(amt)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isActive }}
-                  >
-                    <Text style={styles.quickButtonText}>${amt}</Text>
-                  </TouchableOpacity>
-                );
-              })}
+              <Text style={styles.rangeLabel}>
+                ${(minAmountCents / 100).toLocaleString()}
+              </Text>
+              <Text style={styles.rangeLabel}>
+                {t("smart_calculator.range_max_only", {
+                  amount: (maxAmountCents / 100).toLocaleString(),
+                })}
+              </Text>
             </View>
           </View>
 
-          {/* Term selector — hidden for contribution */}
-          {advanceType !== "contribution" && (
+          {/* Term selector */}
+          {termOptions.length > 1 ? (
             <View style={styles.sectionCard}>
-              <Text style={styles.fieldLabel}>{t("smart_calculator.field_repayment_term")}</Text>
+              <View style={styles.labelRow}>
+                <Text style={styles.fieldLabel}>
+                  {t("smart_calculator.field_repayment_term")}
+                </Text>
+                <HelpDot
+                  onPress={helpTerm}
+                  a11yLabel={t("smart_calculator.help_term_title")}
+                />
+              </View>
               <View style={styles.termRow}>
                 {termOptions.map((termOpt) => {
                   const isActive = term === termOpt;
                   return (
                     <TouchableOpacity
                       key={termOpt}
-                      style={[styles.termButton, isActive && styles.termButtonActive]}
+                      style={[
+                        styles.termButton,
+                        isActive && styles.termButtonActive,
+                      ]}
                       onPress={() => setTerm(termOpt)}
                       accessibilityRole="button"
                       accessibilityState={{ selected: isActive }}
                     >
                       <Text style={styles.termValue}>{termOpt}</Text>
                       <Text style={styles.termUnit}>
-                        {advanceType === "quick"
-                          ? t("smart_calculator.term_unit_weeks")
-                          : t("smart_calculator.term_unit_months")}
+                        {t("smart_calculator.term_unit_months")}
                       </Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
             </View>
-          )}
+          ) : null}
 
           {/* Cost summary */}
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>{t("smart_calculator.summary_title")}</Text>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>{t("smart_calculator.summary_advance_amount")}</Text>
-              <Text style={styles.summaryValue}>${amount}</Text>
+            <View style={styles.summaryTitleRow}>
+              <Text style={styles.summaryTitle}>
+                {t("smart_calculator.summary_title")}
+              </Text>
+              <TouchableOpacity
+                onPress={helpFee}
+                accessibilityRole="button"
+                accessibilityLabel={t("smart_calculator.help_fee_title")}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Ionicons
+                  name="help-circle-outline"
+                  size={14}
+                  color="rgba(255,255,255,0.7)"
+                />
+              </TouchableOpacity>
             </View>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>
-                {rateInfo.type === "flat"
-                  ? t("smart_calculator.summary_advance_fee_flat")
-                  : t("smart_calculator.summary_advance_fee_pct", { rate: rateInfo.rate.toFixed(1) })}
+                {t("smart_calculator.summary_advance_amount")}
               </Text>
-              <Text style={styles.summaryFee}>+${advanceFee.toFixed(2)}</Text>
+              <Text style={styles.summaryValue}>
+                ${(amountCents / 100).toFixed(2)}
+              </Text>
             </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>
+                {t("smart_calculator.summary_advance_fee_pct", {
+                  rate: apr.toFixed(1),
+                })}
+              </Text>
+              <Text style={styles.summaryFee}>
+                +${(feeCents / 100).toFixed(2)}
+              </Text>
+            </View>
+            {originationFeeCents > 0 ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>
+                  {t("smart_calculator.summary_origination_fee", {
+                    rate: (product.origination_fee_percent ?? 0).toFixed(2),
+                  })}
+                </Text>
+                <Text style={styles.summaryFee}>
+                  +${(originationFeeCents / 100).toFixed(2)}
+                </Text>
+              </View>
+            ) : null}
             <View style={styles.summaryDivider} />
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabelStrong}>
-                {advanceType === "contribution"
-                  ? t("smart_calculator.summary_total_withheld")
-                  : t("smart_calculator.summary_total_to_repay")}
+                {t("smart_calculator.summary_total_to_repay")}
               </Text>
               <Text style={styles.summaryTotal}>
-                ${totalRepayment.toFixed(2)}
+                ${(totalRepayCents / 100).toFixed(2)}
               </Text>
             </View>
-            {monthlyPayment != null && (
-              <View style={[styles.summaryRow, { marginTop: 8 }]}>
-                <Text style={styles.summaryLabel}>{t("smart_calculator.summary_monthly_payment")}</Text>
-                <Text style={styles.summaryValue}>
-                  {t("smart_calculator.summary_monthly_value", { amount: monthlyPayment.toFixed(2) })}
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* Affordability */}
-          {monthlyPayment != null && affordabilityPercent != null && (
-            <View
-              style={[
-                styles.affordabilityCard,
-                isAffordable
-                  ? styles.affordabilityOk
-                  : styles.affordabilityWarn,
-              ]}
-            >
-              <Ionicons
-                name={isAffordable ? "checkmark-circle" : "alert-circle"}
-                size={20}
-                color={isAffordable ? "#00897B" : AMBER}
-              />
-              <View style={{ flex: 1 }}>
-                <Text
-                  style={[
-                    styles.affordabilityTitle,
-                    { color: isAffordable ? "#065F46" : "#92400E" },
-                  ]}
-                >
-                  {isAffordable ? t("smart_calculator.affordability_ok") : t("smart_calculator.affordability_warn")}
-                </Text>
-                <Text
-                  style={[
-                    styles.affordabilityBody,
-                    { color: isAffordable ? "#047857" : "#B45309" },
-                  ]}
-                >
-                  {t("smart_calculator.affordability_body", {
-                    payment: monthlyPayment.toFixed(2),
-                    percent: affordabilityPercent.toFixed(0),
-                    smc: user.smc,
-                  })}
-                  {!isAffordable && t("smart_calculator.affordability_body_warn_suffix")}
-                </Text>
-              </View>
+            <View style={[styles.summaryRow, { marginTop: 8 }]}>
+              <Text style={styles.summaryLabel}>
+                {t("smart_calculator.summary_monthly_payment")}
+              </Text>
+              <Text style={styles.summaryValue}>
+                {t("smart_calculator.summary_monthly_value", {
+                  amount: monthlyPayment.toFixed(2),
+                })}
+              </Text>
             </View>
-          )}
+          </View>
 
           {/* Comparison */}
           <View style={styles.sectionCard}>
@@ -465,56 +627,110 @@ export default function SmartCalculatorScreen() {
             </Text>
             <View style={styles.comparisonRow}>
               <View style={styles.compChip}>
-                <Text style={styles.compLabel}>{t("smart_calculator.comp_local_label")}</Text>
+                <Text style={styles.compLabel}>
+                  {t("smart_calculator.comp_local_label")}
+                </Text>
                 <Text style={styles.compRateStrike}>{LOCAL_LENDER_RATE}%</Text>
                 <Text style={styles.compFee}>
-                  {t("smart_calculator.comp_fee_prefix", { amount: localLenderFee.toFixed(2) })}
+                  {t("smart_calculator.comp_fee_prefix", {
+                    amount: (localLenderFeeCents / 100).toFixed(2),
+                  })}
                 </Text>
               </View>
               <View style={styles.compChipWin}>
-                <Text style={styles.compLabelWin}>{t("smart_calculator.comp_tandaxn_label")}</Text>
+                <Text style={styles.compLabelWin}>
+                  {t("smart_calculator.comp_tandaxn_label")}
+                </Text>
                 <Text style={styles.compRateWin}>
-                  {rateInfo.type === "flat"
-                    ? t("smart_calculator.comp_flat_fee")
-                    : t("smart_calculator.comp_percent", { rate: rateInfo.rate.toFixed(1) })}
+                  {t("smart_calculator.comp_percent", {
+                    rate: apr.toFixed(1),
+                  })}
                 </Text>
                 <Text style={styles.compFeeWin}>
-                  {t("smart_calculator.comp_fee_prefix", { amount: advanceFee.toFixed(2) })}
+                  {t("smart_calculator.comp_fee_prefix", {
+                    amount: (feeCents / 100).toFixed(2),
+                  })}
                 </Text>
               </View>
             </View>
-            {savings > 0 && (
+            {savingsCents > 0 && (
               <View style={styles.savingsBanner}>
                 <Text style={styles.savingsText}>
-                  {t("smart_calculator.savings_text", { amount: savings.toFixed(2) })}
+                  {t("smart_calculator.savings_text", {
+                    amount: (savingsCents / 100).toFixed(2),
+                  })}
                 </Text>
               </View>
             )}
           </View>
+
+          {/* Inline Terms & Conditions (replaces AdvanceAgreement screen) */}
+          <TouchableOpacity
+            style={styles.termsHeader}
+            onPress={() => setTermsOpen((v) => !v)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: termsOpen }}
+            accessibilityLabel={t("smart_calculator.terms_title")}
+          >
+            <Ionicons
+              name="document-text-outline"
+              size={18}
+              color={NAVY}
+            />
+            <Text style={styles.termsHeaderText}>
+              {t("smart_calculator.terms_title")}
+            </Text>
+            <Ionicons
+              name={termsOpen ? "chevron-up" : "chevron-down"}
+              size={18}
+              color={MUTED}
+            />
+          </TouchableOpacity>
+          {termsOpen ? (
+            <View style={styles.termsBody}>
+              <Text style={styles.termsParagraph}>
+                {t("smart_calculator.terms_p1", {
+                  amount: (amountCents / 100).toFixed(2),
+                  total: (totalRepayCents / 100).toFixed(2),
+                  apr: apr.toFixed(1),
+                  term,
+                })}
+              </Text>
+              <Text style={styles.termsParagraph}>
+                {t("smart_calculator.terms_p2")}
+              </Text>
+              <Text style={styles.termsParagraph}>
+                {t("smart_calculator.terms_p3")}
+              </Text>
+              <Text style={styles.termsParagraph}>
+                {t("smart_calculator.terms_p4")}
+              </Text>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
 
-      {/* Bottom CTA */}
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={[
             styles.primaryButton,
-            continueDisabled && styles.primaryButtonDisabled,
+            submitting && styles.primaryButtonDisabled,
           ]}
           onPress={handleContinue}
-          disabled={continueDisabled}
+          disabled={submitting}
           accessibilityRole="button"
-          accessibilityState={{ disabled: continueDisabled }}
-          accessibilityLabel={`Request $${amount} advance`}
+          accessibilityState={{ disabled: submitting }}
+          accessibilityLabel={`Request $${Math.round(amountCents / 100)} advance`}
         >
-          <Text
-            style={[
-              styles.primaryButtonText,
-              continueDisabled && styles.primaryButtonTextDisabled,
-            ]}
-          >
-            {t("smart_calculator.btn_request_advance", { amount })}
-          </Text>
+          {submitting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.primaryButtonText}>
+              {t("smart_calculator.btn_request_advance", {
+                amount: Math.round(amountCents / 100),
+              })}
+            </Text>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -525,6 +741,23 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#F5F7FA" },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 20 },
+
+  fullCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    padding: 24,
+  },
+  fullCenterLabel: { fontSize: 14, color: MUTED, textAlign: "center" },
+  retryButton: {
+    marginTop: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    backgroundColor: TEAL,
+    borderRadius: 10,
+  },
+  retryButtonText: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
 
   header: { paddingTop: 20, paddingBottom: 20, paddingHorizontal: 20 },
   headerTopRow: {
@@ -582,6 +815,21 @@ const styles = StyleSheet.create({
 
   contentWrap: { padding: 20 },
 
+  progressChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  progressChipText: { fontSize: 11, fontWeight: "700", color: NAVY },
+
   sectionCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
@@ -596,25 +844,65 @@ const styles = StyleSheet.create({
     color: NAVY,
     marginBottom: 12,
   },
+  labelRow: { flexDirection: "row", alignItems: "center" },
 
-  payoutRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  aboutBody: {
+    fontSize: 13,
+    color: MUTED,
+    lineHeight: 19,
+    marginBottom: 12,
   },
-  payoutCircle: { fontSize: 16, fontWeight: "600", color: NAVY },
-  payoutDate: { fontSize: 12, color: MUTED, marginTop: 2 },
-  payoutAmount: { fontSize: 18, fontWeight: "700", color: TEAL },
-  payoutMax: { fontSize: 11, color: MUTED, marginTop: 2 },
+  aboutStatRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 6,
+    borderTopWidth: 1,
+    borderTopColor: BORDER,
+  },
+  aboutStatLabel: { fontSize: 12, color: MUTED },
+  aboutStatValue: { fontSize: 14, color: NAVY, fontWeight: "600" },
+
+  recommendedNote: {
+    fontSize: 12,
+    color: TEAL,
+    fontStyle: "italic",
+    marginBottom: 12,
+  },
 
   amountDisplay: { alignItems: "center", marginBottom: 16 },
   amountText: { fontSize: 42, fontWeight: "700", color: NAVY },
-
-  stepperRow: {
+  // P2 — recommended-amount chip
+  recommendBlock: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 14,
+    flexWrap: "wrap",
   },
+  recommendChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    backgroundColor: "#FFFFFF",
+  },
+  recommendChipText: { fontSize: 11, fontWeight: "700" },
+  recommendUseBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#F0FDFB",
+    borderWidth: 1,
+    borderColor: "#00C6AE",
+  },
+  recommendUseBtnText: { fontSize: 11, fontWeight: "700", color: "#0A2342" },
+
+  stepperRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   stepperButton: {
     width: 40,
     height: 40,
@@ -642,23 +930,6 @@ const styles = StyleSheet.create({
   },
   rangeLabel: { fontSize: 12, color: MUTED },
 
-  quickRow: { flexDirection: "row", gap: 8, marginTop: 12 },
-  quickButton: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: BORDER,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-  },
-  quickButtonActive: {
-    borderWidth: 2,
-    borderColor: TEAL,
-    backgroundColor: "#F0FDFB",
-  },
-  quickButtonText: { fontSize: 13, fontWeight: "600", color: NAVY },
-
   termRow: { flexDirection: "row", gap: 10 },
   termButton: {
     flex: 1,
@@ -684,11 +955,16 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 16,
   },
+  summaryTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 16,
+  },
   summaryTitle: {
     fontSize: 14,
     fontWeight: "600",
     color: "rgba(255,255,255,0.8)",
-    marginBottom: 16,
   },
   summaryRow: {
     flexDirection: "row",
@@ -705,20 +981,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.2)",
     marginVertical: 6,
   },
-
-  affordabilityCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 16,
-    borderWidth: 1,
-  },
-  affordabilityOk: { backgroundColor: "#F0FDFB", borderColor: TEAL },
-  affordabilityWarn: { backgroundColor: "#FEF3C7", borderColor: AMBER },
-  affordabilityTitle: { fontSize: 13, fontWeight: "600" },
-  affordabilityBody: { fontSize: 12, marginTop: 2 },
 
   comparisonRow: { flexDirection: "row", gap: 12 },
   compChip: {
@@ -757,6 +1019,32 @@ const styles = StyleSheet.create({
   },
   savingsText: { fontSize: 14, fontWeight: "700", color: "#065F46" },
 
+  termsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  termsHeaderText: { flex: 1, fontSize: 14, fontWeight: "600", color: NAVY },
+  termsBody: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    marginTop: -1,
+    borderWidth: 1,
+    borderColor: BORDER,
+    gap: 10,
+  },
+  termsParagraph: {
+    fontSize: 12,
+    color: MUTED,
+    lineHeight: 18,
+  },
+
   bottomBar: {
     paddingHorizontal: 20,
     paddingTop: 16,
@@ -773,5 +1061,4 @@ const styles = StyleSheet.create({
   },
   primaryButtonDisabled: { backgroundColor: BORDER },
   primaryButtonText: { fontSize: 16, fontWeight: "600", color: "#FFFFFF" },
-  primaryButtonTextDisabled: { color: "#9CA3AF" },
 });

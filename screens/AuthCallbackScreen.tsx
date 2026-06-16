@@ -13,6 +13,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
+import AuthProgressStrip from "../components/AuthProgressStrip";
 
 type AuthCallbackNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -26,48 +27,64 @@ type AuthCallbackNavigationProp = StackNavigationProp<RootStackParamList>;
  * calls supabase.auth.verifyOtp() to complete verification, and then
  * navigates to the appropriate screen.
  */
+// Detect whether the incoming URL is a recovery (password-reset) link.
+// Checks query params first (web ?type=recovery), then the hash fragment
+// (#access_token=…&type=recovery). Native deep-link flows that lack a
+// readable URL return false and fall back to the PASSWORD_RECOVERY auth
+// event for detection.
+function detectRecoveryFromUrl(): boolean {
+  if (Platform.OS !== "web" || typeof window === "undefined") return false;
+  const qp = new URLSearchParams(window.location.search).get("type");
+  if (qp === "recovery") return true;
+  const hash = window.location.hash || "";
+  const hashParams = new URLSearchParams(
+    hash.startsWith("#") ? hash.slice(1) : hash,
+  );
+  return hashParams.get("type") === "recovery";
+}
+
 export default function AuthCallbackScreen() {
   const { t } = useTranslation();
 
   const navigation = useNavigation<AuthCallbackNavigationProp>();
   const [status, setStatus] = useState<"verifying" | "success" | "error">("verifying");
   const [errorMessage, setErrorMessage] = useState("");
+  // Drives the recovery-aware copy below. Initialised from the URL at
+  // mount so we render the correct verifying-screen text on the first
+  // paint, then flipped to true if a PASSWORD_RECOVERY event arrives
+  // later (native deep-link case where the URL didn't disambiguate).
+  const [isRecovery, setIsRecovery] = useState<boolean>(() =>
+    detectRecoveryFromUrl(),
+  );
 
   useEffect(() => {
     let cancelled = false;
-    // Set to true when supabase.auth.onAuthStateChange fires PASSWORD_RECOVERY.
-    // Some recovery links (hash-fragment / deep-link) deliver the recovery
-    // signal via the auth event rather than a parseable `type=recovery` URL
-    // param, so we need both paths to converge on the same routing target.
-    let isRecoveryEvent = false;
-    let successTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    // Routing-decision flag. Read by navigateOnSuccess at the moment it
+    // fires — never relies on event ordering. Seeded from the URL so the
+    // routing target is known before any auth event arrives, then
+    // latched to true if PASSWORD_RECOVERY arrives later (defensive
+    // against native deep-link flows where the URL is not readable).
+    let isRecoveryFlow = detectRecoveryFromUrl();
     let errorTimeoutId: ReturnType<typeof setTimeout> | null = null;
     let timeoutGuardId: ReturnType<typeof setTimeout> | null = null;
 
-    // Determine routing target based on URL params (for hash flow we
-    // can't know type without parsing, default to signup behavior)
-    const getTypeFromUrl = (): string => {
-      if (Platform.OS !== "web" || typeof window === "undefined") return "signup";
-      const qp = new URLSearchParams(window.location.search).get("type");
-      if (qp) return qp;
-      // Hash flow: type comes as &type=signup inside the hash fragment
-      const hash = window.location.hash || "";
-      const hashParams = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash);
-      return hashParams.get("type") || "signup";
+    const markRecovery = () => {
+      isRecoveryFlow = true;
+      setIsRecovery(true);
     };
 
     const navigateOnSuccess = () => {
       if (cancelled) return;
       setStatus("success");
-      const type = getTypeFromUrl();
-      successTimeoutId = setTimeout(() => {
-        if (cancelled) return;
-        if (isRecoveryEvent || type === "recovery") {
-          navigation.reset({ index: 0, routes: [{ name: "ResetPassword" }] });
-        } else {
-          navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] });
-        }
-      }, 1500);
+      // P0 fix: no decorative timeout. The routing target is read at
+      // call time from isRecoveryFlow, which is authoritative — set
+      // upfront from the URL and latched by PASSWORD_RECOVERY. Recovery
+      // always lands on ResetPassword regardless of which auth event
+      // arrives first.
+      navigation.reset({
+        index: 0,
+        routes: [{ name: isRecoveryFlow ? "ResetPassword" : "MainTabs" }],
+      });
     };
 
     const navigateOnError = (message: string) => {
@@ -84,11 +101,11 @@ export default function AuthCallbackScreen() {
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
       // PASSWORD_RECOVERY fires when the user lands here via a recovery
-      // link (regardless of whether the URL had `type=recovery` parseable).
-      // Latch the flag so `navigateOnSuccess` routes to ResetPassword
-      // instead of MainTabs even if SIGNED_IN arrives later.
+      // link. Latch the flag in case SIGNED_IN arrives later, AND in
+      // case it already fired before this listener attached (no-op in
+      // that case — the URL-derived seed already covers it).
       if (event === "PASSWORD_RECOVERY") {
-        isRecoveryEvent = true;
+        markRecovery();
         navigateOnSuccess();
         return;
       }
@@ -113,6 +130,11 @@ export default function AuthCallbackScreen() {
         const tokenHash = params.get("token_hash") || "";
         const type = params.get("type") || "";
         if (tokenHash && type) {
+          // If the URL is a recovery link, mark the flow BEFORE we run
+          // verifyOtp so that whichever event lands first (SIGNED_IN
+          // from the verify call, or PASSWORD_RECOVERY from the auth
+          // subscription) routes the user to ResetPassword.
+          if (type === "recovery") markRecovery();
           const { data: verifyData, error } = await supabase.auth.verifyOtp({
             token_hash: tokenHash,
             type: type as "signup" | "email" | "recovery" | "email_change" | "invite",
@@ -156,7 +178,6 @@ export default function AuthCallbackScreen() {
     return () => {
       cancelled = true;
       authListener?.subscription?.unsubscribe();
-      if (successTimeoutId) clearTimeout(successTimeoutId);
       if (errorTimeoutId) clearTimeout(errorTimeoutId);
       if (timeoutGuardId) clearTimeout(timeoutGuardId);
     };
@@ -168,12 +189,28 @@ export default function AuthCallbackScreen() {
         colors={["#0A2342", "#1A3A5A"]}
         style={styles.gradient}
       >
+        {/* Progress strip only on the recovery path. Signup verification
+            uses the same callback URL but isn't part of the 3-step
+            password-reset journey, so a strip there would be misleading. */}
+        {isRecovery ? (
+          <View style={styles.progressStripWrap}>
+            <AuthProgressStrip step={2} variant="dark" />
+          </View>
+        ) : null}
         <View style={styles.content}>
           {status === "verifying" && (
             <>
               <ActivityIndicator size="large" color="#00C6AE" />
-              <Text style={styles.title}>{t("final_polish.authcallback_verifying_your_email")}</Text>
-              <Text style={styles.subtitle}>{t("final_polish.authcallback_please_wait_a_moment")}</Text>
+              <Text style={styles.title}>
+                {t(
+                  isRecovery
+                    ? "final_polish.authcallback_verifying_reset"
+                    : "final_polish.authcallback_verifying_your_email",
+                )}
+              </Text>
+              <Text style={styles.subtitle}>
+                {t("final_polish.authcallback_please_wait_a_moment")}
+              </Text>
             </>
           )}
 
@@ -182,8 +219,20 @@ export default function AuthCallbackScreen() {
               <View style={styles.iconContainer}>
                 <Ionicons name="checkmark-circle" size={80} color="#00C6AE" />
               </View>
-              <Text style={styles.title}>{t("final_polish.authcallback_email_verified")}</Text>
-              <Text style={styles.subtitle}>{t("final_polish.authcallback_redirecting_to_the_app")}</Text>
+              <Text style={styles.title}>
+                {t(
+                  isRecovery
+                    ? "final_polish.authcallback_reset_verified"
+                    : "final_polish.authcallback_email_verified",
+                )}
+              </Text>
+              <Text style={styles.subtitle}>
+                {t(
+                  isRecovery
+                    ? "final_polish.authcallback_redirecting_to_set_password"
+                    : "final_polish.authcallback_redirecting_to_the_app",
+                )}
+              </Text>
             </>
           )}
 
@@ -218,6 +267,10 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     marginBottom: 20,
+  },
+  progressStripWrap: {
+    paddingTop: 56,
+    paddingHorizontal: 8,
   },
   title: {
     color: "#FFFFFF",

@@ -39,7 +39,9 @@ export default function PositionSwapScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: RouteParams }, "params">>();
   const { t } = useTranslation();
-  const { circleId } = route.params;
+  // Defensive: route.params can be undefined if the caller navigates
+  // without a circleId. Fall back to empty so destructuring never throws.
+  const { circleId } = route.params ?? ({} as RouteParams);
 
   const [activeTab, setActiveTab] = useState<"positions" | "requests" | "history">("positions");
 

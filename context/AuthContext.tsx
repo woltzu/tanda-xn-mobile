@@ -7,13 +7,23 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { Platform } from "react-native";
-import { supabase } from "../lib/supabase";
+import { Alert, AppState, Platform } from "react-native";
+import i18n from "i18next";
+import { supabase, SUPABASE_URL } from "../lib/supabase";
 import { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { eventService } from "../services/EventService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as LocalAuthentication from "expo-local-authentication";
+import * as SecureStore from "expo-secure-store";
 import * as Linking from "expo-linking";
+import { navigationRef } from "../lib/navigation";
+import { showToast } from "../components/Toast";
+import { KYCVerificationEngine } from "../services/KYCVerificationEngine";
+import type {
+  KYCStatus,
+  KYCVerification,
+} from "../services/KYCVerificationEngine";
+import { clearDeferredAction } from "../lib/deferredAction";
 
 // Platform-aware redirect URLs for Supabase Auth emails.
 // Use Linking.createURL() on native so the scheme matches the runtime:
@@ -31,12 +41,30 @@ export const getEmailRedirectUrl = (path: string) => {
   return Linking.createURL(path);
 };
 
+// P0 (kyc-trigger review): minimal projection of kyc_verifications onto
+// the in-memory user. Fetched once on SIGNED_IN/INITIAL_SESSION and
+// refreshable via refreshKyc(). Lives here so the gate can decide
+// synchronously at button-press time without firing a query.
+//
+// `null` covers both "loading" and "no kyc row on file" — KYCGate
+// treats null as "unverified" which is the safe default (block).
+// Once the screen-level hook (useKYCStatus) is available we may
+// migrate this to a discriminated loading/missing/loaded triple,
+// but the simpler nullable keeps the gate logic obvious.
+type KycSummary = {
+  status: KYCStatus;
+  tier: number;
+  completedAt: string | null;
+};
+
 type User = {
   id: string;
   name: string;
   email: string;
   phone?: string;
   xnScore: number;
+  // null until first hydration; replaced by KycSummary or null after.
+  kyc?: KycSummary | null;
 };
 
 type AuthContextType = {
@@ -52,10 +80,44 @@ type AuthContextType = {
   isLocked: boolean;
   biometricsEnabled: boolean;
   biometricsAvailable: boolean;
+  // True iff a refresh token is stashed in the keystore — the LoginScreen
+  // uses this (plus the two booleans above) to decide whether to render
+  // the biometric sign-in button.
+  hasStoredRefreshToken: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  // P2 (logout review): scope controls how broadly the JWT revocation
+  // hits Supabase. 'local' (default) ends only this device's session;
+  // 'global' revokes every refresh token tied to this user — useful
+  // when the user suspects another device is compromised.
+  // Return value flags whether the Supabase network call failed; on
+  // offline, all local cleanup still runs and the caller can surface
+  // a "signed out locally" toast.
+  // Replays the keystore-stored refresh token through Supabase, gated by
+  // the biometric prompt. Returns false on any failure path (no token,
+  // user cancelled, refresh expired) so the LoginScreen can fall back
+  // to password without surfacing a hard error.
+  signInWithBiometrics: () => Promise<boolean>;
+  // Idempotent opt-in: sets biometricsEnabled = true, persists the flag,
+  // and re-stamps the keystore with the current refresh_token so a
+  // first-login opt-in succeeds even if the refresh-token write at
+  // sign-in time was skipped for any reason.
+  enableBiometrics: () => Promise<boolean>;
+  // Has this user been shown the post-login opt-in modal yet? Avoids
+  // re-prompting on every sign-in.
+  hasAskedBiometricOptIn: () => Promise<boolean>;
+  markBiometricOptInAsked: () => Promise<void>;
   signInWithPhone: (phone: string) => Promise<void>;
   verifyOTP: (phone: string, token: string) => Promise<void>;
-  signOut: () => Promise<void>;
+  signOut: (opts?: SignOutOpts) => Promise<SignOutResult>;
+  // P1 (session-persistence review): true when we believe the device
+  // has no working connectivity to Supabase. Drives the OfflineBanner.
+  // Detected via window 'online'/'offline' events on web, AppState
+  // 'change' + a short-timeout HEAD probe on native (no NetInfo dep).
+  isOffline: boolean;
+  // Forces a connectivity probe + supabase.auth.refreshSession() round
+  // trip. Returns true if both succeed (banner can dismiss), false
+  // otherwise. The OfflineBanner's Retry button calls this.
+  retryRefresh: () => Promise<boolean>;
   signUp: (
     email: string,
     password: string,
@@ -63,7 +125,23 @@ type AuthContextType = {
     phone?: string
   ) => Promise<void>;
   updateProfile: (data: { name?: string; phone?: string }) => Promise<void>;
+  // P2 (profile review): kick off Supabase's phone-change flow. Sends
+  // an SMS OTP to the new number. The user is then sent through
+  // OTPScreen with from='profile_edit' which calls verifyPhoneFromProfile.
+  requestPhoneChange: (newPhone: string) => Promise<void>;
+  // P2 (profile review): complete the phone-change flow + flip
+  // profiles.phone_verified = true. Used by OTPScreen for from='profile_edit'.
+  verifyPhoneFromProfile: (phone: string, token: string) => Promise<void>;
+  // P2 (profile review): request a Supabase-managed email change.
+  // Triggers a confirmation link to the new address; auth.users.email is
+  // updated only after the user clicks the link. Until then the new
+  // address sits on auth.users.new_email and the UI shows "Pending".
+  requestEmailChange: (newEmail: string) => Promise<void>;
   updateXnScore: (score: number) => Promise<void>;
+  // P0 (kyc-trigger review): re-hydrate user.kyc after a status change.
+  // Called from KYCHub after a successful flip to approved and from
+  // any screen that needs the freshest projection. No-op if no session.
+  refreshKyc: () => Promise<void>;
   lockApp: () => void;
   unlockWithBiometrics: () => Promise<boolean>;
   unlockWithPassword: (password: string) => Promise<boolean>;
@@ -73,6 +151,125 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const BIOMETRICS_ENABLED_KEY = "@tandaxn_biometrics_enabled";
+// Refresh token stashed in the keystore on every successful password sign-in.
+// requireAuthentication gates retrieval behind the OS biometric prompt.
+const REFRESH_TOKEN_KEY = "tandaxn_refresh_token";
+// Tracks whether we've ever surfaced the post-login biometric opt-in modal
+// to this user. Stored under user.id-suffixed key to scope per-account.
+const BIOMETRIC_OPTIN_ASKED_KEY = "@tandaxn_biometric_optin_asked";
+// Non-secret mirror flag so LoginScreen can render the biometric button
+// without prompting biometric on every app start. Set "true" when we
+// SecureStore.setItemAsync the refresh token; removed when we delete it.
+const HAS_REFRESH_TOKEN_FLAG_KEY = "@tandaxn_has_refresh_token";
+// P0 (legal-docs review): signup checkbox flips this on. Drained on
+// SIGNED_IN — calls record_legal_acceptance RPC for terms_of_service +
+// privacy_policy. The flag covers the email-confirmation path (signUp
+// returns no session, so we can't record yet; we record after the user
+// clicks the verification link and AuthCallback establishes a session).
+const PENDING_SIGNUP_ACCEPTANCE_KEY = "@tandaxn/pending_signup_acceptance";
+
+// ── Sign-out whitelist ───────────────────────────────────────────────────────
+// signOut() purges AsyncStorage of everything except these — user
+// preferences should survive a logout (locale, biometric prefs, the
+// remember-me identifier feeding ForgotPassword pre-fill, etc.), while
+// cached financial state, score data, and the refresh-token flag get
+// dropped along with the JWT.
+//
+// EXACT keys: matched literally. PREFIXES: matched with startsWith(),
+// for namespaces that include a user id suffix (e.g. onboarding state
+// keyed per-user). Per-user keying means preserving them across
+// sign-outs cannot leak between users — different ids, different keys.
+const PRESERVE_ON_SIGNOUT_EXACT: readonly string[] = [
+  "@tandaxn/last_login_identifier",  // remember-me identifier (LoginScreen + ForgotPassword)
+  "@tandaxn_language",               // locale preference
+  "@tandaxn_theme",                  // theme preference
+  "@tandaxn_biometrics_enabled",     // user opt-in to biometrics
+  "@tandaxn_biometric_optin_asked",  // "we already asked" UX flag
+  "@tandaxn_preferences",            // generic prefs blob
+];
+
+const PRESERVE_ON_SIGNOUT_PREFIXES: readonly string[] = [
+  "@tandaxn_currency_",      // currency settings
+  "@tandaxn_onboarding_",    // per-user onboarding flags
+  "@tandaxn_tooltips_shown_", // per-user tooltip-shown flags
+];
+
+const shouldPreserveOnSignout = (key: string): boolean =>
+  PRESERVE_ON_SIGNOUT_EXACT.includes(key) ||
+  PRESERVE_ON_SIGNOUT_PREFIXES.some((p) => key.startsWith(p));
+
+export type SignOutOpts = { scope?: "local" | "global" };
+export type SignOutResult = { offline: boolean };
+
+// ── Temporary session (P2, session-persistence review) ──────────────────────
+// LoginScreen stamps this key with `Date.now() + TEMPORARY_SESSION_DURATION_MS`
+// when the user signs in with "Remember me" unchecked. AuthContext checks it
+// on mount, on app foreground, and via a scheduled setTimeout — when the
+// stamp is in the past, the user is signed out automatically with a toast.
+//
+// Not on the P0-logout whitelist by design: a manual sign-out should clear
+// the stamp (and the multiRemove in AuthContext.signOut does that
+// automatically since the key isn't whitelisted).
+export const SESSION_EXPIRES_AT_KEY = "@tandaxn_session_expires_at";
+export const TEMPORARY_SESSION_DURATION_MS = 60 * 60 * 1000; // 1 hour
+
+// P0 (session-persistence review): module-scope helper invoked by the
+// onAuthStateChange listener when SIGNED_OUT fires WITHOUT the
+// isManualSignOutRef flag set — i.e. Supabase auto-revoked the session
+// (refresh-token expiry, 401 on token refresh). Surfaces an Alert and
+// resets the nav stack to Login. The navigationRef.isReady() guard
+// covers the cold-boot case where the NavigationContainer hasn't
+// mounted yet — there's nowhere to reset to, but the Alert still
+// fires so the user gets the message on the next paint.
+function handleAutoSessionExpiry() {
+  try {
+    Alert.alert(
+      i18n.t("auth.session_expired_title"),
+      i18n.t("auth.session_expired_body"),
+    );
+  } catch (e) {
+    console.warn("[AuthContext] auto-expiry Alert failed", e);
+  }
+  if (navigationRef.isReady()) {
+    navigationRef.reset({
+      index: 0,
+      routes: [{ name: "Login" }],
+    });
+  }
+}
+
+// P0 (legal-docs review): record the new member's acceptance of the
+// active Terms of Service + Privacy Policy via the
+// record_legal_acceptance RPC (migration 178). Fire-and-forget — a
+// failure here MUST NOT break the signup. The screen has already
+// shown its own checkbox-required validation, so the worst case if
+// this never lands is the member is prompted to re-accept once the
+// LegalDocumentsScreen pending banner picks them up later.
+//
+// Called from two places:
+//   1. signUp() itself, when Supabase returned a session immediately
+//      (email-confirmation disabled).
+//   2. the onAuthStateChange SIGNED_IN handler below, draining the
+//      PENDING_SIGNUP_ACCEPTANCE_KEY flag set by signUp() when no
+//      session was returned (email-confirmation enabled path).
+async function recordSignupAcceptances(): Promise<void> {
+  const language = i18n.language || "en";
+  const deviceInfo = `${Platform.OS} ${Platform.Version}`;
+  for (const docType of ["terms_of_service", "privacy_policy"] as const) {
+    try {
+      await supabase.rpc("record_legal_acceptance", {
+        p_document_type: docType,
+        p_language_viewed: language,
+        p_device_info: deviceInfo,
+      });
+    } catch (e) {
+      console.warn(
+        `[AuthContext] record_legal_acceptance(${docType}) failed`,
+        (e as Error)?.message,
+      );
+    }
+  }
+}
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -109,8 +306,61 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLocked, setIsLocked] = useState(false);
+  // P1 (session-persistence review): drives the OfflineBanner. Seeded
+  // optimistically from navigator.onLine on web (when known), false
+  // elsewhere. The listener effects below keep it in sync.
+  const [isOffline, setIsOffline] = useState<boolean>(() => {
+    if (Platform.OS === "web" && typeof navigator !== "undefined") {
+      return navigator.onLine === false;
+    }
+    return false;
+  });
   const [biometricsEnabled, setBiometricsEnabledState] = useState(false);
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
+  const [hasStoredRefreshToken, setHasStoredRefreshToken] = useState(false);
+
+  // P0 (kyc-trigger review): fetch the live verification row for the
+  // given user and project it onto user.kyc. Fire-and-forget — the
+  // catch silently leaves user.kyc as-is so a transient query failure
+  // doesn't accidentally flip a verified user to "unverified" in the
+  // gate. setUser uses the functional form so we never clobber a
+  // concurrent profile mutation (e.g. updateProfile).
+  const fetchAndApplyKyc = useCallback(async (userId: string) => {
+    try {
+      const verification: KYCVerification | null =
+        await KYCVerificationEngine.getVerification(userId);
+      setUser((prev) => {
+        if (!prev || prev.id !== userId) return prev;
+        return {
+          ...prev,
+          kyc: verification
+            ? {
+                status: verification.status,
+                tier: verification.kycTier,
+                completedAt:
+                  verification.status === "approved"
+                    ? (verification as { verifiedAt?: string }).verifiedAt ??
+                      null
+                    : null,
+              }
+            : null,
+        };
+      });
+    } catch (e) {
+      console.warn(
+        "[AuthContext] fetchAndApplyKyc failed",
+        (e as Error)?.message,
+      );
+    }
+  }, []);
+
+  // Exposed on the context so KYCHub can rehydrate immediately after a
+  // status flip without waiting for the realtime subscription inside
+  // useKYCStatus (which fires on a different cadence).
+  const refreshKyc = useCallback(async () => {
+    if (!user?.id) return;
+    await fetchAndApplyKyc(user.id);
+  }, [user?.id, fetchAndApplyKyc]);
 
   // Check biometrics availability and settings
   useEffect(() => {
@@ -124,6 +374,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Check if user has enabled biometrics
         const enabled = await AsyncStorage.getItem(BIOMETRICS_ENABLED_KEY);
         setBiometricsEnabledState(enabled === "true");
+
+        // Mirror flag — does the keystore have a refresh token we can replay
+        // through Supabase? AsyncStorage probe avoids prompting biometric
+        // on every app start; the actual SecureStore read happens later, on
+        // signInWithBiometrics().
+        const hasTokenFlag = await AsyncStorage.getItem(
+          HAS_REFRESH_TOKEN_FLAG_KEY,
+        );
+        setHasStoredRefreshToken(hasTokenFlag === "true");
       } catch (error) {
         console.error("Error checking biometrics:", error);
       }
@@ -131,6 +390,50 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     checkBiometrics();
   }, []);
+
+  // P2 (profile review): on first session for each user, read
+  // profiles.timezone — if null, write the device IANA timezone (e.g.
+  // "America/Los_Angeles"). This is best-effort: failures are
+  // swallowed, and we use a per-user-id Set ref to avoid hammering the
+  // table on every render. The DB itself acts as the "have we done
+  // this?" flag — once a row has a non-null timezone the effect is a
+  // no-op on subsequent loads.
+  const timezoneSetRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const uid = user?.id;
+    if (!uid) return;
+    if (timezoneSetRef.current.has(uid)) return;
+    timezoneSetRef.current.add(uid);
+
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("timezone")
+          .eq("id", uid)
+          .maybeSingle();
+        if (error || !data) return;
+        if (data.timezone) return; // already set, leave it alone
+
+        // Intl is available on all modern RN runtimes (Hermes ≥0.70).
+        // Wrap in try in case a low-end Android build is missing it.
+        let tz: string | null = null;
+        try {
+          tz = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+        } catch {
+          /* no Intl — skip */
+        }
+        if (!tz) return;
+
+        await supabase
+          .from("profiles")
+          .update({ timezone: tz })
+          .eq("id", uid);
+      } catch (e) {
+        console.warn("[AuthContext] auto-set timezone failed", e);
+      }
+    })();
+  }, [user?.id]);
 
   // Handle deep link auth callbacks (email verification, password reset)
   useEffect(() => {
@@ -206,6 +509,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setSession(session);
       setUser(formatUser(session?.user ?? null));
       setIsLoading(false);
+      // P0 (kyc-trigger review): hydrate user.kyc on cold start when a
+      // session already exists. SIGNED_IN won't fire for restored
+      // sessions, so this is the only chance to load kyc for a user
+      // who reopens the app — otherwise the gate stays in its initial
+      // null state until the user navigates to KYCHub.
+      if (session?.user?.id) {
+        void fetchAndApplyKyc(session.user.id);
+      }
     });
 
     // Listen for auth changes
@@ -234,23 +545,253 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         (event === "SIGNED_IN" || event === "INITIAL_SESSION") &&
         session?.user?.id
       ) {
+        // New session started — clear the once-per-session latch so a
+        // future expiry can fire its alert again.
+        autoExpiryHandledRef.current = false;
         if (lastRecordedUserIdRef.current !== session.user.id) {
           lastRecordedUserIdRef.current = session.user.id;
           recordLoginEvent(session.user.id);
         }
+        // P0 (kyc-trigger review): hydrate user.kyc whenever a fresh
+        // session lands. Covers email-confirmation signups, post-OTP
+        // flows, biometric re-auth, and password sign-in. Idempotent
+        // — the fetcher writes through setUser only if the userId
+        // matches, so a concurrent SIGNED_OUT race is harmless.
+        void fetchAndApplyKyc(session.user.id);
+        // P0 (legal-docs review): drain the pending signup-acceptance
+        // flag once we have a real session. Covers the email-confirm
+        // path where signUp() couldn't write the audit row directly.
+        // Removing the key before the RPC call guarantees it doesn't
+        // fire twice if the SIGNED_IN event re-runs.
+        AsyncStorage.getItem(PENDING_SIGNUP_ACCEPTANCE_KEY)
+          .then(async (flag) => {
+            if (flag === "true") {
+              await AsyncStorage.removeItem(PENDING_SIGNUP_ACCEPTANCE_KEY);
+              await recordSignupAcceptances();
+            }
+          })
+          .catch(() => {
+            /* best-effort; the next sign-in will retry */
+          });
       } else if (event === "SIGNED_OUT") {
         lastRecordedUserIdRef.current = null;
+        // P0 (session-persistence review): SIGNED_OUT fires for two
+        // reasons — the user tapped Sign Out, or Supabase auto-revoked
+        // (refresh-token expiry / 401). signOut() raises the manual
+        // flag right before the network call so we can tell the two
+        // apart here. autoExpiryHandledRef gates re-entry within a
+        // single signed-out epoch.
+        if (
+          !isManualSignOutRef.current &&
+          !autoExpiryHandledRef.current
+        ) {
+          autoExpiryHandledRef.current = true;
+          handleAutoSessionExpiry();
+        }
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
+  // P1 (session-persistence review): keep isOffline in sync. Two paths,
+  // one per platform — both gracefully degrade if their primitive isn't
+  // available, leaving isOffline at its initial value (false).
+  useEffect(() => {
+    if (Platform.OS === "web") {
+      if (typeof window === "undefined") return;
+      const onOnline = () => {
+        setIsOffline(false);
+        // When the network returns, eagerly refresh the session so the
+        // banner doesn't have to wait for the user to tap Retry.
+        supabase.auth.refreshSession().catch(() => {
+          /* swallow — retry is up to the user */
+        });
+      };
+      const onOffline = () => setIsOffline(true);
+      window.addEventListener("online", onOnline);
+      window.addEventListener("offline", onOffline);
+      return () => {
+        window.removeEventListener("online", onOnline);
+        window.removeEventListener("offline", onOffline);
+      };
+    }
+
+    // Native path: probe on every AppState transition into "active".
+    // This catches re-foregrounding after a long background where the
+    // refresh token has likely lapsed if the device was offline.
+    const checkAndUpdate = async () => {
+      const ok = await probeConnectivity();
+      setIsOffline(!ok);
+      if (ok) {
+        supabase.auth.refreshSession().catch(() => {
+          /* swallow */
+        });
+      }
+    };
+    // Initial check at mount on native — web's `online` event doesn't
+    // exist there, so the initial-false seed needs explicit confirmation.
+    checkAndUpdate();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") checkAndUpdate();
+    });
+    return () => subscription.remove();
+  }, [probeConnectivity]);
+
+  // P2 (session-persistence review): temporary-session enforcement.
+  // When LoginScreen stamped SESSION_EXPIRES_AT_KEY (the user signed
+  // in with "Remember me" unchecked), this effect:
+  //   1) Checks the stamp on mount and on every transition to an
+  //      authenticated session.
+  //   2) If past expiry → sign the user out + toast + route to Login.
+  //   3) If not yet expired → schedule a precise setTimeout so the
+  //      sign-out fires at the exact moment even if the user keeps
+  //      the app foregrounded the whole hour.
+  //   4) Re-checks on every AppState 'active' transition so a session
+  //      that expired while the app was backgrounded is caught the
+  //      moment the user returns.
+  //
+  // signOut is reached via a ref so the effect doesn't re-subscribe
+  // every render (signOut isn't memoised, and re-subscribing AppState
+  // on every render would churn the listener).
+  const signOutRef = useRef(signOut);
+  signOutRef.current = signOut;
+
+  useEffect(() => {
+    if (!session) return;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+
+    const expire = async () => {
+      // Defensive re-read in case a manual sign-out raced the timer
+      // and already purged the key.
+      try {
+        const raw = await AsyncStorage.getItem(SESSION_EXPIRES_AT_KEY);
+        if (!raw) return;
+        const expAt = parseInt(raw, 10);
+        if (!Number.isFinite(expAt) || expAt > Date.now()) return;
+      } catch {
+        return;
+      }
+      try {
+        showToast(i18n.t("auth.temporary_session_expired_body"), "info");
+      } catch {
+        /* toast unavailable — proceed with sign-out anyway */
+      }
+      try {
+        await signOutRef.current();
+      } catch {
+        /* even on sign-out failure, push to Login below */
+      }
+      if (navigationRef.isReady()) {
+        navigationRef.reset({
+          index: 0,
+          routes: [{ name: "Login" }],
+        });
+      }
+    };
+
+    const check = async () => {
+      let raw: string | null = null;
+      try {
+        raw = await AsyncStorage.getItem(SESSION_EXPIRES_AT_KEY);
+      } catch {
+        return;
+      }
+      if (cancelled || !raw) return;
+      const expiresAt = parseInt(raw, 10);
+      if (!Number.isFinite(expiresAt)) return;
+      const remaining = expiresAt - Date.now();
+      if (remaining <= 0) {
+        expire();
+        return;
+      }
+      // Cancel any existing pending timer before scheduling the next
+      // one (covers re-check after AppState 'active' transitions).
+      if (timerId) clearTimeout(timerId);
+      timerId = setTimeout(() => {
+        if (!cancelled) expire();
+      }, remaining);
+    };
+
+    check();
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") check();
+    });
+
+    return () => {
+      cancelled = true;
+      if (timerId) clearTimeout(timerId);
+      sub.remove();
+    };
+  }, [session]);
+
   // Refs for login-event recording dedup (Stress Signal C).
   // lastRecordedUserIdRef tracks the most recently logged-event user_id
   // for THIS app instance — survives across React strict-mode double-mounts
   // and TOKEN_REFRESHED events. Cleared on SIGNED_OUT.
   const lastRecordedUserIdRef = useRef<string | null>(null);
+
+  // P0 (session-persistence review): distinguishes user-initiated
+  // sign-out from automatic session expiry (refresh-token failure).
+  // signOut() flips this true before calling supabase.auth.signOut so
+  // the onAuthStateChange listener can recognise the resulting
+  // SIGNED_OUT event as ours and skip the "Session expired" alert.
+  const isManualSignOutRef = useRef<boolean>(false);
+  // Latch: once the auto-expiry handler has fired this app instance,
+  // suppress repeats (Supabase can fire SIGNED_OUT more than once if
+  // the refresh path is racing). Reset on next SIGNED_IN.
+  const autoExpiryHandledRef = useRef<boolean>(false);
+
+  // P1 (session-persistence review): lightweight HEAD probe to the
+  // Supabase project URL with a 3-second timeout. Used to detect
+  // connectivity on native (no NetInfo dep) and to verify a Retry tap
+  // before attempting the heavier refreshSession round-trip.
+  // Returns true when the endpoint responded at all (any status,
+  // even 4xx — it just means the network reached Supabase).
+  const probeConnectivity = useCallback(async (): Promise<boolean> => {
+    const ctrl = new AbortController();
+    const timeoutId = setTimeout(() => ctrl.abort(), 3000);
+    try {
+      await fetch(`${SUPABASE_URL}/auth/v1/health`, {
+        method: "HEAD",
+        signal: ctrl.signal,
+      });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }, []);
+
+  // Forces a connectivity probe + refreshSession. Surface for the
+  // OfflineBanner's Retry button. Bumps isOffline state based on the
+  // outcome so the banner can dismiss / persist accordingly.
+  const retryRefresh = useCallback(async (): Promise<boolean> => {
+    const online = await probeConnectivity();
+    if (!online) {
+      setIsOffline(true);
+      return false;
+    }
+    try {
+      const { error } = await supabase.auth.refreshSession();
+      if (error) {
+        // Reach was OK but refresh itself failed (token revoked,
+        // server error). We're not offline — clear the flag — but the
+        // caller should fall through to the sign-in path.
+        setIsOffline(false);
+        return false;
+      }
+      setIsOffline(false);
+      return true;
+    } catch {
+      // refreshSession threw — probably network blip between probe and
+      // refresh call. Leave isOffline true so the banner persists.
+      setIsOffline(true);
+      return false;
+    }
+  }, [probeConnectivity]);
 
   const recordLoginEvent = useCallback(async (userId: string) => {
     try {
@@ -306,36 +847,125 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [biometricsAvailable, biometricsEnabled]);
 
-  // Unlock with password (re-authenticate with Supabase)
+  // Unlock with password — verifies the password by re-signing-in against
+  // Supabase, then ONLY flips the lock flag. Session and user updates are
+  // left to the onAuthStateChange listener (which fires after a successful
+  // signInWithPassword) so we don't race two state-setter chains.
+  //
+  // The session manipulation in the previous version was the source of the
+  // "loops back to Login" bug: setting session in BOTH places caused
+  // React to batch updates in an order that could transiently render
+  // isAuthenticated as false, and because the lock used to be a full
+  // navigator REPLACE (not an overlay), the Stack remounted at "Splash"
+  // and could land the user on the auth stack. The overlay change in
+  // App.tsx makes that path impossible regardless, but this simpler unlock
+  // is also more correct.
   const unlockWithPassword = useCallback(
     async (password: string): Promise<boolean> => {
       if (!user?.email) return false;
-
       try {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: user.email,
           password,
         });
-
-        if (error) {
-          console.error("Password unlock error:", error);
+        if (error || !data.session) {
+          console.warn("Password unlock failed:", error?.message);
           return false;
         }
-
-        if (data.session) {
-          setSession(data.session);
-          setIsLocked(false);
-          return true;
-        }
-
-        return false;
-      } catch (error) {
-        console.error("Password unlock error:", error);
+        // Auth listener will set session/user. We just dismiss the lock.
+        setIsLocked(false);
+        return true;
+      } catch (err: any) {
+        console.error("Password unlock error:", err?.message ?? err);
         return false;
       }
     },
     [user?.email]
   );
+
+  // Sign in via stored refresh token, gated by the biometric prompt.
+  // The OS will surface Face ID / Touch ID before SecureStore returns the
+  // token. Any failure (no token, user cancels, refresh expired) returns
+  // false so the LoginScreen can fall back to password without noise.
+  const signInWithBiometrics = useCallback(async (): Promise<boolean> => {
+    try {
+      const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY, {
+        requireAuthentication: true,
+      });
+      if (!refreshToken) return false;
+
+      const { data, error } = await supabase.auth.refreshSession({
+        refresh_token: refreshToken,
+      });
+      if (error || !data.session) {
+        // Refresh token is stale — clear the mirror flag so the LoginScreen
+        // stops rendering the biometric button until the next successful
+        // password login re-stashes a fresh token.
+        await AsyncStorage.removeItem(HAS_REFRESH_TOKEN_FLAG_KEY);
+        setHasStoredRefreshToken(false);
+        return false;
+      }
+
+      setSession(data.session);
+      setUser(formatUser(data.user));
+      setIsLocked(false);
+      eventService.trackAuth('login', 'success', 'biometric');
+
+      // Re-stash the rotated refresh token (Supabase rotates on refresh).
+      if (data.session.refresh_token) {
+        SecureStore.setItemAsync(
+          REFRESH_TOKEN_KEY,
+          data.session.refresh_token,
+          { requireAuthentication: true },
+        ).catch(() => undefined);
+      }
+      return true;
+    } catch (error: any) {
+      console.warn("Biometric sign-in failed:", error?.message ?? error);
+      return false;
+    }
+  }, []);
+
+  // First-time opt-in: enables the biometric setting and re-stashes the
+  // current session's refresh token in case the post-signIn write was
+  // skipped (e.g., user signed in before biometric was enabled).
+  const enableBiometrics = useCallback(async (): Promise<boolean> => {
+    try {
+      const current = session?.refresh_token;
+      if (!current) return false;
+
+      await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, current, {
+        requireAuthentication: true,
+      });
+      await AsyncStorage.setItem(HAS_REFRESH_TOKEN_FLAG_KEY, "true");
+      await AsyncStorage.setItem(BIOMETRICS_ENABLED_KEY, "true");
+      setHasStoredRefreshToken(true);
+      setBiometricsEnabledState(true);
+      return true;
+    } catch (error: any) {
+      console.error("enableBiometrics failed:", error?.message ?? error);
+      return false;
+    }
+  }, [session]);
+
+  // One-shot prompt control — used by LoginScreen / HomeScreen after the
+  // first password sign-in to surface the opt-in modal only once per user.
+  const hasAskedBiometricOptIn = useCallback(async (): Promise<boolean> => {
+    try {
+      const stamp = await AsyncStorage.getItem(BIOMETRIC_OPTIN_ASKED_KEY);
+      return stamp === "true";
+    } catch {
+      return true; // fail-closed: don't nag on storage errors
+    }
+  }, []);
+
+  const markBiometricOptInAsked = useCallback(async (): Promise<void> => {
+    try {
+      await AsyncStorage.setItem(BIOMETRIC_OPTIN_ASKED_KEY, "true");
+    } catch {
+      /* swallow — best-effort */
+    }
+  }, []);
 
   // Enable/disable biometrics
   const setBiometricsEnabled = useCallback(
@@ -368,6 +998,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(formatUser(data.user));
       setIsLocked(false);
       eventService.trackAuth('login', 'success', 'email');
+
+      // Stash the refresh token in the keystore for biometric re-entry.
+      // requireAuthentication gates retrieval behind the OS biometric prompt
+      // so the token is never returned to JS land without a successful
+      // Face ID / Touch ID match. Fire-and-forget: a keystore write
+      // failure must NOT fail the login itself.
+      if (data.session?.refresh_token) {
+        SecureStore.setItemAsync(
+          REFRESH_TOKEN_KEY,
+          data.session.refresh_token,
+          { requireAuthentication: true },
+        )
+          .then(() =>
+            AsyncStorage.setItem(HAS_REFRESH_TOKEN_FLAG_KEY, "true"),
+          )
+          .then(() => setHasStoredRefreshToken(true))
+          .catch((e) =>
+            console.warn("Failed to stash refresh token:", e?.message ?? e),
+          );
+      }
     } catch (error: any) {
       console.error("Sign in error:", error);
       eventService.trackAuth('login', 'failure', 'email', {
@@ -431,20 +1081,86 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   // Sign out
-  const signOut = async () => {
+  const signOut = async (
+    opts?: SignOutOpts,
+  ): Promise<SignOutResult> => {
     setIsLoading(true);
+    let offline = false;
+    // P0 (session-persistence review): mark this sign-out as
+    // user-initiated BEFORE the network call. The onAuthStateChange
+    // listener checks this ref when SIGNED_OUT fires so it can suppress
+    // the "Session expired" alert for the manual path. Reset in
+    // `finally` regardless of success / failure.
+    isManualSignOutRef.current = true;
     try {
       eventService.trackAuth('logout', 'success');
       // Flush event buffer BEFORE revoking the JWT. Otherwise the next flush
       // hits user_events with a stale token, gets 401, and trips
       // EventService's 5-minute self-pause (which silently drops events).
       await eventService.flush();
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+
+      // P0 (logout review): purge non-preference AsyncStorage keys before
+      // revoking the JWT. The whitelist preserves user settings (locale,
+      // theme, biometric opt-in, remember-me identifier, etc.); everything
+      // else — cached financial state, score data, Supabase JS's own
+      // session-token key — goes here. Best-effort: a getAllKeys/
+      // multiRemove failure is logged but doesn't block sign-out.
+      try {
+        const allKeys = await AsyncStorage.getAllKeys();
+        const toRemove = allKeys.filter((k) => !shouldPreserveOnSignout(k));
+        if (toRemove.length > 0) {
+          await AsyncStorage.multiRemove(toRemove);
+        }
+      } catch (e) {
+        console.warn(
+          "[AuthContext] AsyncStorage cleanup on sign-out failed",
+          e,
+        );
+      }
+
+      // P0 (kyc-trigger review): drop any deferred action so it can't
+      // leak into the next user's session. The blanket multiRemove
+      // above already covers it (the key isn't on the preserve list)
+      // but calling the typed helper here keeps the intent visible
+      // and survives any future change to the whitelist.
+      await clearDeferredAction();
+
+      // P2 (logout review): wrap the network call in its own catch so an
+      // offline failure (e.g. no connectivity, Supabase 5xx) doesn't block
+      // local cleanup. The user always ends up signed out on this device;
+      // the offline flag bubbles up so the screen can surface a toast.
+      try {
+        const { error } = await supabase.auth.signOut({
+          scope: opts?.scope ?? "local",
+        });
+        if (error) throw error;
+      } catch (netErr) {
+        offline = true;
+        console.warn(
+          "[AuthContext] supabase.auth.signOut failed — proceeding with local cleanup",
+          netErr,
+        );
+      }
+
+      // Purge the keystore-stashed refresh token and the mirror flag so the
+      // biometric button stops rendering. Best-effort — don't fail logout
+      // if keystore delete blips.
+      try {
+        await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+      } catch {
+        /* ignore */
+      }
+      try {
+        await AsyncStorage.removeItem(HAS_REFRESH_TOKEN_FLAG_KEY);
+      } catch {
+        /* ignore */
+      }
+      setHasStoredRefreshToken(false);
 
       setSession(null);
       setUser(null);
       setIsLocked(false);
+      return { offline };
     } catch (error: any) {
       console.error("Sign out error:", error);
       eventService.trackAuth('logout', 'failure', undefined, {
@@ -454,6 +1170,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       throw error;
     } finally {
       setIsLoading(false);
+      isManualSignOutRef.current = false;
     }
   };
 
@@ -491,6 +1208,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setSession(data.session);
         setUser(formatUser(data.user));
         setIsLocked(false);
+        // P0 (legal-docs review): session is live → record acceptance
+        // synchronously. Helper swallows its own errors, so signup
+        // still succeeds even if the RPC isn't deployed yet or the
+        // active legal_documents rows aren't populated.
+        void recordSignupAcceptances();
+      } else {
+        // P0 (legal-docs review): no session yet (email confirmation
+        // path). Set the flag so the SIGNED_IN handler can drain it
+        // once AuthCallback establishes the session post-verify.
+        try {
+          await AsyncStorage.setItem(PENDING_SIGNUP_ACCEPTANCE_KEY, "true");
+        } catch (e) {
+          console.warn(
+            "[AuthContext] failed to write pending signup-acceptance flag",
+            (e as Error)?.message,
+          );
+        }
       }
       eventService.trackAuth('signup', 'success', 'email');
     } catch (error: any) {
@@ -505,30 +1239,114 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Update user profile
+  // P2 (profile review): single source of truth. We write only to the
+  // `profiles` table here; migration 167's trg_sync_profile_to_auth
+  // copies full_name → auth.users.raw_user_meta_data and phone →
+  // auth.users.phone. After the write we refresh `user` from
+  // auth.getUser() so consumers (which still read from the formatted
+  // `user`) see the new values without a sign-out / reload.
+  //
+  // Note: we intentionally do NOT route phone changes through
+  // supabase.auth.updateUser({ phone }) here — that would kick off
+  // Supabase's OTP confirmation flow, which is the wrong UX when the
+  // caller is e.g. ProfileScreen's "Save" button for a name change.
+  // Phone *verification* is a separate flow (requestPhoneChange) so
+  // each writer surface can opt in deliberately.
   const updateProfile = async (data: { name?: string; phone?: string }) => {
+    if (!user?.id) throw new Error("Not authenticated");
     setIsLoading(true);
     try {
-      const updates: { data?: Record<string, string>; phone?: string } = {};
+      const updates: Record<string, any> = {};
+      if (data.name !== undefined) updates.full_name = data.name;
+      if (data.phone !== undefined) updates.phone = data.phone || null;
+      if (Object.keys(updates).length === 0) return;
 
-      if (data.name) {
-        updates.data = {
-          name: data.name,
-          full_name: data.name,
-        };
-      }
-
-      if (data.phone) {
-        updates.phone = data.phone;
-      }
-
-      const { data: updatedUser, error } = await supabase.auth.updateUser(updates);
-
+      const { error } = await supabase
+        .from("profiles")
+        .update(updates)
+        .eq("id", user.id);
       if (error) throw error;
 
-      setUser(formatUser(updatedUser.user));
+      // Pull the freshly synced auth.users row so the in-memory `user`
+      // reflects the trigger's write to raw_user_meta_data / phone.
+      const { data: refreshed } = await supabase.auth.getUser();
+      if (refreshed?.user) setUser(formatUser(refreshed.user));
     } catch (error) {
       console.error("Update profile error:", error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // P2 (profile review): kick off the phone-change SMS flow. Supabase
+  // stamps auth.users.phone_change + .phone_change_token and sends an
+  // OTP to the *new* number — the existing phone (if any) stays
+  // active until the OTP succeeds.
+  const requestPhoneChange = async (newPhone: string) => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ phone: newPhone });
+      if (error) throw error;
+    } catch (error: any) {
+      console.error("Request phone change error:", error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // P2 (profile review): completes the SMS OTP issued by
+  // requestPhoneChange and flips profiles.phone_verified = true. After
+  // this returns, the sync trigger has already copied the new phone
+  // into profiles.phone (Supabase's own flow updated auth.users.phone),
+  // so we only need to update the verified flag here.
+  const verifyPhoneFromProfile = async (phone: string, token: string) => {
+    if (!user?.id) throw new Error("Not authenticated");
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        phone,
+        token,
+        type: "phone_change",
+      });
+      if (error) throw error;
+
+      // Mirror auth.users.phone onto profiles + flip phone_verified. We
+      // write phone explicitly so the trigger short-circuit ("nothing
+      // changed") still allows the verified flag through.
+      const { error: profErr } = await supabase
+        .from("profiles")
+        .update({ phone, phone_verified: true })
+        .eq("id", user.id);
+      if (profErr) throw profErr;
+
+      if (data?.user) setUser(formatUser(data.user));
+      eventService.trackAuth("login", "success", "phone_change_verify");
+    } catch (error: any) {
+      console.error("Verify phone from profile error:", error);
+      eventService.trackAuth("login", "failure", "phone_change_verify", {
+        code: error?.code,
+        message: error?.message,
+      });
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // P2 (profile review): triggers a Supabase confirmation email to
+  // newEmail. auth.users.email stays on the current address until the
+  // user clicks the link; auth.users.new_email holds the pending value
+  // (which the UI renders as a "Pending verification" badge). The
+  // confirmation flow lives in AuthCallbackScreen.
+  const requestEmailChange = async (newEmail: string) => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ email: newEmail });
+      if (error) throw error;
+    } catch (error: any) {
+      console.error("Request email change error:", error);
       throw error;
     } finally {
       setIsLoading(false);
@@ -577,11 +1395,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         signOut,
         signUp,
         updateProfile,
+        requestPhoneChange,
+        verifyPhoneFromProfile,
+        requestEmailChange,
         updateXnScore,
+        refreshKyc,
         lockApp,
         unlockWithBiometrics,
         unlockWithPassword,
         setBiometricsEnabled,
+        hasStoredRefreshToken,
+        signInWithBiometrics,
+        enableBiometrics,
+        hasAskedBiometricOptIn,
+        markBiometricOptInAsked,
+        isOffline,
+        retryRefresh,
       }}
     >
       {children}

@@ -36,12 +36,14 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRoute, RouteProp } from "@react-navigation/native";
+import { useRoute, RouteProp, useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { useIsAdmin } from "../hooks/useIsAdmin";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -157,8 +159,42 @@ function statusColor(status: RegionStatus): string {
 
 export default function AdminDashboardScreen() {
   const navigation = useTypedNavigation();
+  const navAny = useNavigation<any>();
   const route = useRoute<AdminDashboardRouteProp>();
   const { t } = useTranslation();
+  // Moderation P0 (2026-06-13): screen-level admin gate. Previously the
+  // header banner promised one and never landed it. We mirror the
+  // AIJobsHealthScreen pattern — fail closed on loading and on
+  // !isAdmin, render a locked frame instead of the dashboard.
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
+  if (adminLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.lockedFrame}>
+          <ActivityIndicator color={TEAL} size="large" />
+          <Text style={styles.lockedText}>{t("admin_dashboard.gate_checking")}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+  if (!isAdmin) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.lockedFrame}>
+          <Ionicons name="lock-closed-outline" size={36} color={RED} />
+          <Text style={styles.lockedTitle}>{t("admin_dashboard.gate_denied_title")}</Text>
+          <Text style={styles.lockedText}>{t("admin_dashboard.gate_denied_body")}</Text>
+          <TouchableOpacity
+            style={styles.lockedBackBtn}
+            onPress={() => navAny.goBack()}
+            accessibilityRole="button"
+          >
+            <Text style={styles.lockedBackText}>{t("admin_dashboard.gate_back")}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const health = route.params?.portfolioHealth ?? DEFAULT_HEALTH;
   const regions = route.params?.regionMetrics ?? DEFAULT_REGIONS;
@@ -499,6 +535,25 @@ function ProfitTile({
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#F5F7FA" },
+  // Moderation P0 — locked-frame styles when useIsAdmin() rejects.
+  lockedFrame: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    gap: 10,
+  },
+  lockedTitle: { fontSize: 16, fontWeight: "700", color: NAVY },
+  lockedText: { fontSize: 13, color: MUTED, textAlign: "center" },
+  lockedBackBtn: {
+    marginTop: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+  },
+  lockedBackText: { fontSize: 13, fontWeight: "700", color: NAVY },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 40 },
 

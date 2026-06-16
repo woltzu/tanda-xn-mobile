@@ -56,8 +56,9 @@ const STATUS_COLORS: Record<TripStatus, { bg: string; text: string }> = {
 };
 
 const formatDateRange = (start: string, end: string): string => {
-  const { t } = useTranslation();
-
+  // Module-level helper — must NOT call hooks here. A stray useTranslation()
+  // here violates Rules of Hooks and crashes the screen with "Invalid hook
+  // call. Hooks can only be called inside the body of a function component."
   try {
     const s = new Date(start);
     const e = new Date(end);
@@ -115,20 +116,24 @@ const TripCard: React.FC<{ trip: Trip; onPress: () => void }> = ({ trip, onPress
   </TouchableOpacity>
 );
 
-const EmptyState: React.FC<{ onCreatePress: () => void }> = ({ onCreatePress }) => (
-  <View style={styles.emptyState}>
-    <Ionicons name="airplane-outline" size={64} color="#CBD5E1" />
-    <Text style={styles.emptyTitle}>{t("final_polish.organizertriplist_no_trips_yet")}</Text>
-    <Text style={styles.emptySubtitle}>{t("final_polish.organizertriplist_create_your_first_trip_and_start_organizing")}</Text>
-    <TouchableOpacity style={styles.emptyCta} activeOpacity={0.7} onPress={onCreatePress}>
-      <Text style={styles.emptyCtaText}>{t("final_polish.organizertriplist_create_a_trip")}</Text>
-    </TouchableOpacity>
-  </View>
-);
+const EmptyState: React.FC<{ onCreatePress: () => void }> = ({ onCreatePress }) => {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.emptyState}>
+      <Ionicons name="airplane-outline" size={64} color="#CBD5E1" />
+      <Text style={styles.emptyTitle}>{t("final_polish.organizertriplist_no_trips_yet")}</Text>
+      <Text style={styles.emptySubtitle}>{t("final_polish.organizertriplist_create_your_first_trip_and_start_organizing")}</Text>
+      <TouchableOpacity style={styles.emptyCta} activeOpacity={0.7} onPress={onCreatePress}>
+        <Text style={styles.emptyCtaText}>{t("final_polish.organizertriplist_create_a_trip")}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
 
 // --- Screen ---
 
 const OrganizerTripListScreen: React.FC = () => {
+  const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const { trips, loading, refresh } = useOrganizerTrips();
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all');

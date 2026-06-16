@@ -80,7 +80,12 @@ export type PaymentContextType = {
   setupConnectedAccount: (returnUrl: string) => Promise<string>;
 
   // Payment method management
-  refreshPaymentMethods: () => Promise<void>;
+  // P2 (payment-methods review): syncRemote=true asks the
+  // sync-stripe-methods Edge Function to first fetch the Stripe
+  // Customer's PaymentMethod list and upsert any rows our DB hasn't
+  // seen yet (cards added on web, dashboard, etc.) before reading the
+  // local table. Default false so the on-focus refresh stays cheap.
+  refreshPaymentMethods: (opts?: { syncRemote?: boolean }) => Promise<void>;
   addPaymentMethodFromToken: (paymentMethodId: string, type: string, details: any) => Promise<void>;
   removePaymentMethod: (paymentMethodId: string) => Promise<void>;
   setDefaultPaymentMethod: (paymentMethodId: string) => Promise<void>;
@@ -105,6 +110,13 @@ export type PaymentContextType = {
 
   // Payment sheet
   presentPaymentSheet: (clientSecret: string) => Promise<{ success: boolean; error?: string }>;
+
+  // P0 (payment-methods review): save a card without charging. Creates a
+  // SetupIntent via the create-setup-intent Edge Function, presents the
+  // Stripe PaymentSheet in setup mode (so the user enters card details
+  // but no money moves), then refreshes the list. Returns
+  // { success, error?, paymentMethodId? } so the caller can toast.
+  setupCardForLater: () => Promise<{ success: boolean; error?: string }>;
 
   // DEV-only smoke test (Path A) — bypasses StripeConnectEngine stubs
   makeTestCharge: (
@@ -212,10 +224,26 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
 
   // ── Refresh payment methods ───────────────────────────────────────────────
 
-  const refreshPaymentMethods = useCallback(async () => {
+  const refreshPaymentMethods = useCallback(async (
+    opts?: { syncRemote?: boolean },
+  ) => {
     if (!user) return;
     setIsLoadingMethods(true);
     try {
+      // P2 (payment-methods review): optional remote sync. Best-effort —
+      // any failure here falls through to a plain local read so the
+      // user still gets *something*. Pull-to-refresh enables this; the
+      // useFocusEffect / realtime path does not.
+      if (opts?.syncRemote) {
+        try {
+          await supabase.functions.invoke('sync-stripe-methods', { body: {} });
+        } catch (syncErr: any) {
+          console.warn(
+            '[PaymentContext] sync-stripe-methods failed (continuing):',
+            syncErr?.message,
+          );
+        }
+      }
       const methods = await StripeConnectEngine.getPaymentMethods(user.id);
       const active = methods.filter((m) => m.status === 'active');
       setPaymentMethods(active.map(mapToSavedMethod));
@@ -226,6 +254,34 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
       setIsLoadingMethods(false);
     }
   }, [user]);
+
+  // P2 (payment-methods review): realtime subscription. Mirrors the
+  // useStripePayments hook's channel pattern (hooks/useStripePayments.ts).
+  // Coalesces every event to a single refresh — payment-method changes
+  // are infrequent, so we don't bother diffing the payload.
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`payment_context_methods:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'stripe_payment_methods',
+          filter: `member_id=eq.${user.id}`,
+        },
+        () => {
+          // Local read only — the webhook is the source-of-truth, so a
+          // remote re-sync here would just churn the cache.
+          refreshPaymentMethods();
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, refreshPaymentMethods]);
 
   // ── Initialize on mount when authenticated ────────────────────────────────
 
@@ -299,16 +355,37 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
   // ── Connected account setup ───────────────────────────────────────────────
 
   const setupConnectedAccount = useCallback(async (returnUrl: string): Promise<string> => {
+    // Stage 1: routes through the create-connect-account Edge Function
+    // (bypassing StripeConnectEngine's stubs). The returnUrl parameter is
+    // preserved for caller compatibility but unused — the EF hardcodes the
+    // tandaxn://linked-accounts deep-link return/refresh URLs.
     if (!user) throw new Error('User not authenticated');
     try {
-      const account = await StripeConnectEngine.createConnectedAccount(user.id, user.email);
-      setConnectedAccountId(account.stripeAccountId);
+      const { data, error } = await supabase.functions.invoke('create-connect-account', {
+        body: {},
+      });
+      if (error) {
+        throw new Error(error.message || 'Failed to start Connect onboarding');
+      }
+      if (!data) {
+        throw new Error('No response from create-connect-account');
+      }
 
-      const onboardingUrl = await StripeConnectEngine.generateOnboardingLink(
-        user.id,
-        returnUrl,
-        returnUrl,
-      );
+      const { onboardingUrl, stripeAccountId, accountStatus } = data as {
+        onboardingUrl: string | null;
+        stripeAccountId: string;
+        accountStatus: 'complete' | 'in_progress' | 'restricted' | 'disabled';
+      };
+
+      setConnectedAccountId(stripeAccountId);
+
+      if (accountStatus === 'complete') {
+        setIsOnboarded(true);
+        throw new Error('Connected account already onboarded.');
+      }
+      if (!onboardingUrl) {
+        throw new Error('Stripe did not return an onboarding URL.');
+      }
       return onboardingUrl;
     } catch (err: any) {
       setPaymentError(err.message);
@@ -463,6 +540,77 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
     }
   }, [initPaymentSheet, stripePresent]);
 
+  // ── Setup a card for future charges (P0, payment-methods review) ──────────
+  // Calls the create-setup-intent EF to get a clientSecret for a SetupIntent
+  // attached to the user's Stripe customer, then uses the PaymentSheet in
+  // setup mode. After success the card lives on the Stripe customer and
+  // appears in stripe_payment_methods once payment_method.attached fires.
+  // We refresh here so the LinkedAccountsScreen list updates without
+  // waiting for the webhook + realtime path.
+
+  const setupCardForLater = useCallback(async (): Promise<{
+    success: boolean;
+    error?: string;
+  }> => {
+    if (!user) return { success: false, error: "Not authenticated" };
+    if (Platform.OS === "web") {
+      // Stripe RN PaymentSheet is native-only — match the pattern used in
+      // makeTestCharge so the caller can show a clean error.
+      return {
+        success: false,
+        error: "Adding a card requires the iOS or Android app.",
+      };
+    }
+    try {
+      // 1. Get the SetupIntent clientSecret from our EF.
+      const { data, error } = await supabase.functions.invoke(
+        "create-setup-intent",
+        { body: {} },
+      );
+      if (error) {
+        return { success: false, error: error.message || "Setup intent failed" };
+      }
+      if (!data?.clientSecret) {
+        return { success: false, error: "No clientSecret returned" };
+      }
+
+      // 2. Initialise the PaymentSheet in setup mode. Note the key is
+      // `setupIntentClientSecret` (not `paymentIntentClientSecret`) — the
+      // RN SDK switches its UI to "save card" wording when this is set.
+      const { error: initError } = await initPaymentSheet({
+        setupIntentClientSecret: data.clientSecret,
+        merchantDisplayName: "TandaXn",
+        allowsDelayedPaymentMethods: false,
+      });
+      if (initError) {
+        const msg = initError.message || "Failed to initialise card setup";
+        setPaymentError(msg);
+        return { success: false, error: msg };
+      }
+
+      // 3. Present.
+      const { error: presentError } = await stripePresent();
+      if (presentError) {
+        if (presentError.code === "Canceled") {
+          return { success: false, error: "Canceled" };
+        }
+        const msg = presentError.message || "Card setup failed";
+        setPaymentError(msg);
+        return { success: false, error: msg };
+      }
+
+      // 4. Refresh — payment_method.attached webhook may already have
+      // landed; even if not, the optimistic refresh keeps the list close.
+      await refreshPaymentMethods();
+      return { success: true };
+    } catch (err: any) {
+      const msg = err?.message ?? "Unexpected card setup error";
+      console.error("[PaymentContext] setupCardForLater failed:", msg);
+      setPaymentError(msg);
+      return { success: false, error: msg };
+    }
+  }, [user, initPaymentSheet, stripePresent, refreshPaymentMethods]);
+
   // ── Test charge (DEV only) — Path A smoke test ────────────────────────────
   // Calls the create-payment-intent Edge Function directly, bypassing
   // StripeConnectEngine's stubs, then presents the Stripe PaymentSheet via
@@ -521,6 +669,7 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
     createContribution,
     createWithdrawal,
     presentPaymentSheet: presentPaymentSheetAction,
+    setupCardForLater,
     makeTestCharge,
     paymentError,
     clearError,

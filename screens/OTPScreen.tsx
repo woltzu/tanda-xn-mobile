@@ -17,6 +17,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
+import { useAuth } from "../context/AuthContext";
 
 type OTPScreenNavigationProp = StackNavigationProp<RootStackParamList, "OTP">;
 type OTPScreenRouteProp = RouteProp<RootStackParamList, "OTP">;
@@ -26,6 +27,15 @@ export default function OTPScreen() {
   const route = useRoute<OTPScreenRouteProp>();
   const { t } = useTranslation();
   const phoneNumber = route.params?.phone || "+1 (555) 123-4567";
+  // `from` tells us which flow originated this screen:
+  //   "login"        — returns directly to MainTabs.
+  //   "signup"       — hands off to OnboardingWelcome.
+  //   "profile_edit" — completes a phone-change started in
+  //                    PersonalInfoScreen and pops back to it.
+  // Undefined falls back to signup-style behavior for backwards compat.
+  const fromFlow: "login" | "signup" | "profile_edit" =
+    route.params?.from ?? "signup";
+  const { verifyOTP, signInWithPhone, verifyPhoneFromProfile } = useAuth();
 
   const [otpCode, setOtpCode] = useState(["", "", "", "", "", ""]);
   const [resendTimer, setResendTimer] = useState(45);
@@ -88,34 +98,60 @@ export default function OTPScreen() {
     }
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     const code = otpCode.join("");
+    if (code.length !== 6) {
+      setError(t("otp.err_invalid_code"));
+      return;
+    }
     setIsVerifying(true);
-
-    setTimeout(() => {
-      setIsVerifying(false);
-      // For demo, accept any 6-digit code
-      if (code.length === 6) {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "MainTabs" }],
-        });
+    setError("");
+    try {
+      // Branch on flow origin.
+      //   profile_edit — different Supabase OTP `type` ('phone_change'
+      //                  vs 'sms'); pop back to PersonalInfoScreen so
+      //                  the user sees the "Verified" badge.
+      //   login        — straight to MainTabs (skip KYC).
+      //   signup       — OnboardingWelcome (defers KYC to first money-action).
+      if (fromFlow === "profile_edit") {
+        await verifyPhoneFromProfile(phoneNumber, code);
+        navigation.goBack();
       } else {
-        setError(t("otp.err_invalid_code"));
-        setOtpCode(["", "", "", "", "", ""]);
-        setIsComplete(false);
-        inputRefs.current[0]?.focus();
+        await verifyOTP(phoneNumber, code);
+        if (fromFlow === "login") {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "MainTabs" }],
+          });
+        } else {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "OnboardingWelcome" as never }],
+          });
+        }
       }
-    }, 1500);
-  };
-
-  const handleResend = () => {
-    if (resendTimer === 0) {
-      setResendTimer(45);
+    } catch (err: any) {
+      setError(err?.message || t("otp.err_invalid_code"));
       setOtpCode(["", "", "", "", "", ""]);
-      setError("");
       setIsComplete(false);
       inputRefs.current[0]?.focus();
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (resendTimer > 0) return;
+    setResendTimer(45);
+    setOtpCode(["", "", "", "", "", ""]);
+    setError("");
+    setIsComplete(false);
+    inputRefs.current[0]?.focus();
+    // Re-request a fresh OTP via Supabase.
+    try {
+      await signInWithPhone(phoneNumber);
+    } catch (err: any) {
+      setError(err?.message || t("otp.err_invalid_code"));
     }
   };
 
@@ -180,6 +216,10 @@ export default function OTPScreen() {
                   keyboardType="number-pad"
                   maxLength={1}
                   selectTextOnFocus={true}
+                  // OTP autofill — Apple inserts the whole code on the first
+                  // focused field that opts in; Android matches via SMS Retriever.
+                  textContentType={idx === 0 ? "oneTimeCode" : "none"}
+                  autoComplete={idx === 0 ? "sms-otp" : "off"}
                 />
               ))}
             </View>

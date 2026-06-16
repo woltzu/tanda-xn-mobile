@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,21 @@ import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "../App";
 import { useWallet } from "../context/WalletContext";
+import { supabase } from "../lib/supabase";
+
+// Local view of the navigation params for this screen. `postId` is added
+// here (rather than in RootStackParamList) because the historical type
+// didn't include it but DreamFeedScreen has always been passing it via
+// `as any`. We rely on `postId` to resolve the dream author's user_id
+// server-side before crediting the wallet.
+type SupportDreamParams = {
+  postId?: string;
+  authorName: string;
+  goalName: string;
+  goalEmoji: string;
+  targetAmount: number;
+  currentBalance: number;
+};
 
 type SupportDreamNavigationProp = StackNavigationProp<RootStackParamList>;
 type SupportDreamRouteProp = RouteProp<RootStackParamList, "SupportDream">;
@@ -59,13 +74,17 @@ export default function SupportDreamScreen() {
 
   const navigation = useNavigation<SupportDreamNavigationProp>();
   const route = useRoute<SupportDreamRouteProp>();
+  // The local SupportDreamParams type captures what DreamFeedScreen
+  // actually passes (including `postId`), which RootStackParamList did
+  // not historically declare.
   const {
+    postId,
     authorName,
     goalName,
     goalEmoji,
     targetAmount,
     currentBalance,
-  } = route.params;
+  } = route.params as unknown as SupportDreamParams;
 
   const { getCurrencyBalance, sendMoney } = useWallet();
 
@@ -73,13 +92,56 @@ export default function SupportDreamScreen() {
   const [selectedMethod, setSelectedMethod] = useState<string>("wallet");
   const [isProcessing, setIsProcessing] = useState(false);
 
+  // Resolve the dream author's `user_id` from feed_posts so we can pass
+  // a real UUID (not a display name) into process_send_money. Without
+  // this, the RPC's recipient lookup falls through, the transfer lands
+  // with `recipient_user_id = NULL`, and the funds never reach the
+  // author. Documented bug fix — see audit notes.
+  const [authorUserId, setAuthorUserId] = useState<string | null>(null);
+  const [authorLookupStatus, setAuthorLookupStatus] = useState<
+    "loading" | "ok" | "missing"
+  >("loading");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!postId) {
+        if (!cancelled) setAuthorLookupStatus("missing");
+        return;
+      }
+      const { data, error } = await supabase
+        .from("feed_posts")
+        .select("user_id")
+        .eq("id", postId)
+        .maybeSingle();
+      if (cancelled) return;
+      const userId = (data as { user_id?: string } | null)?.user_id ?? null;
+      if (error || !userId) {
+        setAuthorLookupStatus("missing");
+        return;
+      }
+      setAuthorUserId(userId);
+      setAuthorLookupStatus("ok");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [postId]);
+
   const amount = parseFloat(amountText) || 0;
   const walletBalance = getCurrencyBalance("USD");
   const hasEnoughBalance = selectedMethod !== "wallet" || walletBalance >= amount;
   const remaining = Math.max(0, targetAmount - currentBalance);
   const progress = targetAmount > 0 ? Math.min(1, currentBalance / targetAmount) : 0;
 
-  const canSubmit = amount > 0 && hasEnoughBalance && !isProcessing;
+  // Author resolution must succeed before any send can proceed — there's
+  // no point posting a transfer that lands in the void.
+  const canSubmit =
+    amount > 0 &&
+    hasEnoughBalance &&
+    !isProcessing &&
+    authorLookupStatus === "ok" &&
+    !!authorUserId;
 
   const handleConfirmPayment = async () => {
     if (amount <= 0) {
@@ -96,15 +158,37 @@ export default function SupportDreamScreen() {
       return;
     }
 
+    if (!authorUserId) {
+      Alert.alert(
+        t("final_polish.supportdream_author_not_found_title"),
+        t("final_polish.supportdream_author_not_found_body"),
+      );
+      return;
+    }
+
     setIsProcessing(true);
 
     try {
-      const transactionId = await sendMoney(
-        amount,
-        authorName,
-        selectedMethod,
-        "USD"
-      );
+      // Map UI methods to the RPC's CHECK constraint ('wallet'|'bank'|
+      // 'mobile'|'cash'). "debit" collapses to "bank" — it's a bank-card
+      // settlement under the hood.
+      const canonicalMethod: "wallet" | "bank" | "mobile" | "cash" =
+        selectedMethod === "wallet"
+          ? "wallet"
+          : selectedMethod === "mobile"
+            ? "mobile"
+            : "bank";
+
+      // recipientIdentifier is now the author's `user_id` (UUID), not the
+      // display name. process_send_money matches recipients by UUID first
+      // and then phone, so this routes the credit into the author's wallet.
+      const transactionId = await sendMoney(amount, authorName, canonicalMethod, {
+        currency: "USD",
+        recipientIdentifier: authorUserId,
+        fundingSource: selectedMethod === "wallet" ? "wallet" : "stripe",
+        feeCents: 0,
+        stripePaymentIntentId: null,
+      });
 
       navigation.navigate("WalletTransactionSuccess", {
         type: "send",
@@ -118,6 +202,7 @@ export default function SupportDreamScreen() {
           : "Mobile Money",
         recipientName: authorName,
         transactionId,
+        currency: "USD",
       });
     } catch (error) {
       Alert.alert(

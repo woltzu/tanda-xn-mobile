@@ -1,8 +1,35 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // Conflict Prediction Hooks — Feature #35
 // ══════════════════════════════════════════════════════════════════════════════
+//
+// ⚠ Architecture note (Conflict P0, 2026-06-12)
+// ──────────────────────────────────────────────────────────────────────────────
+// This module is **Universe A** — the AI/heuristic conflict prediction layer.
+// It reads from:
+//   - conflict_history                   (engine-logged conflict events)
+//   - conflict_prediction_dashboard      (rolled-up dashboard rows)
+//   - circle_formation_flags             (pre-circle friction flags)
+//   - post_formation_monitor             (live monitoring rows)
+// and writes via `ConflictPredictionEngine` (logConflict / resolveConflict /
+// reviewFormationFlag / manualFlagPair).
+//
+// **It does NOT read or write `disputes` or `mediation_cases`.** Those tables
+// belong to **Universe B**, owned by `context/ElderContext.tsx` (member-
+// reported disputes, elder mediation workflow).
+//
+// A member who taps "Report a member" in CircleDetail writes a row to
+// `disputes` — that row is INVISIBLE here. Conversely, an AI-flagged
+// formation issue surfaced here never lands in `disputes` until a human
+// elder turns it into one manually.
+//
+// The two universes will be unified into a single `circle_conflicts` table
+// with a `kind` enum in P2. Until then, treat each module as authoritative
+// for its own table set and DO NOT cross-write. See
+// `docs/architecture/conflict_resolution.md` for the consolidation plan.
+// ──────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   ConflictPredictionEngine,
   type PairScore,
@@ -126,6 +153,35 @@ export function useFormationReview() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Module-level 5-minute caches (P0 — mirrors useAdvanceDashboard /
+// useScoreHub / useUpcomingEvents). Keyed by the natural id each hook
+// already keys its fetch on. `refresh()` busts the cache; `useFocusEffect`
+// re-enters the cheap cached path on screen focus.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CONFLICT_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type MonitorCacheEntry = {
+  circleId: string;
+  monitors: PostFormationMonitor[];
+  fetchedAt: number;
+};
+let monitorCache: MonitorCacheEntry | null = null;
+function bustMonitorCache() {
+  monitorCache = null;
+}
+
+type HistoryCacheEntry = {
+  memberId: string;
+  conflicts: ConflictRecord[];
+  fetchedAt: number;
+};
+let historyCache: HistoryCacheEntry | null = null;
+function bustHistoryCache() {
+  historyCache = null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // 3. usePostFormationMonitor — Watch active monitored pairs for a circle
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -134,13 +190,29 @@ export function usePostFormationMonitor(circleId: string | undefined) {
   const [escalated, setEscalated] = useState<PostFormationMonitor[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetch = useCallback(async () => {
-    if (!circleId) return;
+  const fetchInternal = useCallback(async () => {
+    if (!circleId) {
+      setMonitors([]);
+      setEscalated([]);
+      setLoading(false);
+      return;
+    }
+    if (
+      monitorCache &&
+      monitorCache.circleId === circleId &&
+      Date.now() - monitorCache.fetchedAt < CONFLICT_CACHE_TTL_MS
+    ) {
+      setMonitors(monitorCache.monitors);
+      setEscalated(monitorCache.monitors.filter((m) => m.escalated));
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await ConflictPredictionEngine.getCircleMonitors(circleId);
       setMonitors(data);
-      setEscalated(data.filter(m => m.escalated));
+      setEscalated(data.filter((m) => m.escalated));
+      monitorCache = { circleId, monitors: data, fetchedAt: Date.now() };
     } catch (err) {
       console.error("usePostFormationMonitor error:", err);
     } finally {
@@ -148,14 +220,29 @@ export function usePostFormationMonitor(circleId: string | undefined) {
     }
   }, [circleId]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  // Pull-to-refresh path — busts cache then re-fetches fresh.
+  const refresh = useCallback(async () => {
+    bustMonitorCache();
+    await fetchInternal();
+  }, [fetchInternal]);
+
+  useEffect(() => {
+    fetchInternal();
+  }, [fetchInternal]);
+
+  // Cache-aware refetch on focus. Within TTL this is a no-op state set.
+  useFocusEffect(
+    useCallback(() => {
+      fetchInternal();
+    }, [fetchInternal]),
+  );
 
   const hasEscalations = escalated.length > 0;
   const activeCount = monitors.length;
 
   return {
     monitors, escalated, hasEscalations, activeCount,
-    loading, refresh: fetch,
+    loading, refresh,
   };
 }
 
@@ -167,12 +254,26 @@ export function useConflictHistory(memberId: string | undefined) {
   const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetch = useCallback(async () => {
-    if (!memberId) return;
+  const fetchInternal = useCallback(async () => {
+    if (!memberId) {
+      setConflicts([]);
+      setLoading(false);
+      return;
+    }
+    if (
+      historyCache &&
+      historyCache.memberId === memberId &&
+      Date.now() - historyCache.fetchedAt < CONFLICT_CACHE_TTL_MS
+    ) {
+      setConflicts(historyCache.conflicts);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const data = await ConflictPredictionEngine.getMemberConflicts(memberId);
       setConflicts(data);
+      historyCache = { memberId, conflicts: data, fetchedAt: Date.now() };
     } catch (err) {
       console.error("useConflictHistory error:", err);
     } finally {
@@ -180,7 +281,21 @@ export function useConflictHistory(memberId: string | undefined) {
     }
   }, [memberId]);
 
-  useEffect(() => { fetch(); }, [fetch]);
+  // Pull-to-refresh path — busts cache then re-fetches fresh.
+  const refresh = useCallback(async () => {
+    bustHistoryCache();
+    await fetchInternal();
+  }, [fetchInternal]);
+
+  useEffect(() => {
+    fetchInternal();
+  }, [fetchInternal]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchInternal();
+    }, [fetchInternal]),
+  );
 
   const unresolvedCount = conflicts.filter(c => !c.resolvedAt).length;
   const highSeverityCount = conflicts.filter(
@@ -188,7 +303,7 @@ export function useConflictHistory(memberId: string | undefined) {
   ).length;
 
   return {
-    conflicts, unresolvedCount, highSeverityCount, loading, refresh: fetch,
+    conflicts, unresolvedCount, highSeverityCount, loading, refresh,
   };
 }
 

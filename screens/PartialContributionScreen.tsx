@@ -99,7 +99,10 @@ export default function PartialContributionScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: RouteParams }, "params">>();
   const { t } = useTranslation();
-  const { circleId, cycleId: paramCycleId } = route.params;
+  // Defensive: route.params can be undefined if the caller navigates
+  // without a circleId/cycleId. Fall back to empty so destructuring never throws.
+  const { circleId, cycleId: paramCycleId } =
+    route.params ?? ({} as RouteParams);
   const { user } = useAuth();
 
   const [viewMode, setViewMode] = useState<"activation" | "tracking">("activation");

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
@@ -20,13 +20,28 @@ import { usePayment } from "../context/PaymentContext";
 import { useCurrency, CURRENCIES } from "../context/CurrencyContext";
 import { RateTicker } from "../components/ExchangeRateDisplay";
 import { CurrencySelector } from "../components/CurrencySelector";
+import {
+  useRecentTransfers,
+  formatTransferDate,
+} from "../hooks/useRecentTransfers";
 
 type WalletScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function WalletScreen() {
   const navigation = useNavigation<WalletScreenNavigationProp>();
   const { t } = useTranslation();
-  const { balance, currencies, transactions, addCurrencyWallet } = useWallet();
+  const { balance, currencies, addCurrencyWallet } = useWallet();
+  // Recent Activity now reads from money_transfers via the new hook —
+  // the prior local-AsyncStorage list was missing fresh sends because
+  // it lived on the same state tree that gets reset by the navigation
+  // .reset() out of the success screen. `useFocusEffect` re-runs the
+  // query whenever the user returns to this tab.
+  const { transfers, refetch: refetchTransfers } = useRecentTransfers(10);
+  useFocusEffect(
+    useCallback(() => {
+      refetchTransfers();
+    }, [refetchTransfers]),
+  );
   const { paymentMethods, isOnboarded, isLoadingMethods } = usePayment();
   const { formatCurrency: formatCurrencyAmount, refreshRates, isLoadingRates, lastUpdated, autoRefreshEnabled, setAutoRefreshEnabled } = useCurrency();
   const [showBalance, setShowBalance] = useState(true);
@@ -76,6 +91,32 @@ export default function WalletScreen() {
 
   const activeCurrencies = currencies.filter((c) => c.isActive && c.balance > 0);
   const inactiveCurrencies = currencies.filter((c) => !c.isActive || c.balance === 0);
+
+  // Map RecentTransfer rows from money_transfers → the same Transaction
+  // shape the existing renderer below expects. Sign convention: sent is
+  // negative (red, "−"), received is positive (green, "+").
+  const transferRows: Transaction[] = useMemo(
+    () =>
+      transfers.map((r) => {
+        const dollars = r.amount_cents / 100;
+        const isSent = r.direction === "sent";
+        return {
+          id: r.id,
+          type: isSent ? "sent" : "received",
+          description: isSent
+            ? `To ${r.recipient_external_identifier}`
+            : t("wallet.transfer_received_label", {
+                defaultValue: "Money received",
+              }),
+          amount: isSent ? -dollars : dollars,
+          currency: r.currency,
+          date: formatTransferDate(r.created_at),
+          method: r.method,
+          flag: undefined,
+        };
+      }),
+    [transfers, t],
+  );
 
   const formatCurrency = (amount: number, code: string, symbol?: string) => {
     if (code === "XOF" || code === "XAF" || code === "NGN" || code === "KES" || code === "TZS" || code === "UGX") {
@@ -408,7 +449,7 @@ export default function WalletScreen() {
               </TouchableOpacity>
             </View>
 
-            {transactions.slice(0, 5).map((tx) => {
+            {transferRows.slice(0, 5).map((tx) => {
               const txStyle = getTransactionStyle(tx.type);
               const isPositive = tx.amount > 0;
 
@@ -443,7 +484,7 @@ export default function WalletScreen() {
               );
             })}
 
-            {transactions.length === 0 && (
+            {transferRows.length === 0 && (
               <View style={styles.emptyState}>
                 <Ionicons name="receipt-outline" size={48} color="#D1D5DB" />
                 <Text style={styles.emptyText}>{t("wallet.empty_transactions")}</Text>

@@ -913,7 +913,12 @@ Output the simplified version only, no preamble or explanation.`;
 
   /**
    * Resolve a member's preferred language. Falls back to 'en'.
-   * Same pattern as ExplainableAIEngine.getMemberLanguage.
+   *
+   * Reads profiles.language — the live column established in
+   * migration 177 (CHECK constraint allows en + fr only today).
+   * Older copies of this engine queried profiles.preferred_language,
+   * which never existed in the schema; the silent catch made every
+   * member fall back to English regardless of preference.
    */
   private static async _getMemberLanguage(
     userId: string
@@ -921,12 +926,12 @@ Output the simplified version only, no preamble or explanation.`;
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('preferred_language')
+        .select('language')
         .eq('id', userId)
         .single();
 
-      if (!error && data?.preferred_language) {
-        return data.preferred_language as SupportedLanguage;
+      if (!error && data?.language) {
+        return data.language as SupportedLanguage;
       }
     } catch {
       // Fall through to default

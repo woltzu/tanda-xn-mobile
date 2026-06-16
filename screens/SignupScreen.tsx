@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -9,19 +9,30 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Linking,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useRoute, RouteProp } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
+import PasswordStrengthBar from "../components/PasswordStrengthBar";
+import AuthProgressStrip from "../components/AuthProgressStrip";
 
 type SignupScreenNavigationProp = StackNavigationProp<RootStackParamList, "Signup">;
+type SignupScreenRouteProp = RouteProp<RootStackParamList, "Signup">;
+
+// Keep in sync with LoginScreen.tsx and ForgotPasswordScreen.tsx — all
+// three files read/write this key for the remember-me / pre-fill UX.
+const LAST_IDENTIFIER_KEY = "@tandaxn/last_login_identifier";
 
 export default function SignupScreen() {
   const navigation = useTypedNavigation();
+  const route = useRoute<SignupScreenRouteProp>();
   const { t } = useTranslation();
   const { signUp, isLoading } = useAuth();
 
@@ -30,43 +41,72 @@ export default function SignupScreen() {
     email: "",
     phone: "",
     password: "",
-    confirmPassword: "",
     agreedToTerms: false,
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // P2 (signup review): when Supabase rejects sign-up with
+  // "User already registered", we swap the inline general-error banner
+  // for an actionable card that offers to take the user to Login with
+  // their email pre-filled. Cancel resets to false so they can edit.
+  const [showAlreadyRegistered, setShowAlreadyRegistered] = useState(false);
 
-  const getPasswordStrength = (password: string) => {
-    let strength = 0;
-    if (password.length >= 8) strength++;
-    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength++;
-    if (/\d/.test(password)) strength++;
-    if (/[^a-zA-Z0-9]/.test(password)) strength++;
-    return strength;
+  // Real Terms / Privacy URLs — opened externally so the user keeps
+  // their typed form data while the legal text loads in the browser.
+  const handleOpenTerms = () => {
+    Linking.openURL("https://tandaxn.com/terms").catch(() => {});
+  };
+  const handleOpenPrivacy = () => {
+    Linking.openURL("https://tandaxn.com/privacy").catch(() => {});
   };
 
-  const passwordStrength = getPasswordStrength(formData.password);
-  const passwordsMatch = formData.password && formData.confirmPassword && formData.password === formData.confirmPassword;
-  const passwordsDontMatch = formData.confirmPassword && formData.password !== formData.confirmPassword;
-
-  const getStrengthLabel = () => {
-    if (passwordStrength === 0) return t("signup.strength_weak");
-    if (passwordStrength <= 2) return t("signup.strength_fair");
-    if (passwordStrength === 3) return t("signup.strength_good");
-    return t("signup.strength_strong");
+  // "Sign in" tap on the already-registered banner: stash the email
+  // under LAST_IDENTIFIER_KEY so LoginScreen's existing mount-effect
+  // pre-fills it. Avoids widening the Login route type.
+  const handleGoToLogin = async () => {
+    try {
+      if (formData.email.trim()) {
+        await AsyncStorage.setItem(
+          LAST_IDENTIFIER_KEY,
+          formData.email.trim(),
+        );
+      }
+    } catch {
+      /* pre-fill is best-effort */
+    }
+    navigation.navigate(Routes.Login);
   };
+
+  // Pre-fill email on mount: prefer the navigation param (passed from
+  // LoginScreen when the user already typed an email there) and fall
+  // back to the last-used identifier in AsyncStorage. Phone-format
+  // values are ignored — signup is email-first.
+  useEffect(() => {
+    const fromParam = route.params?.email?.trim();
+    if (fromParam && fromParam.includes("@")) {
+      setFormData((f) => ({ ...f, email: fromParam }));
+      return;
+    }
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(LAST_IDENTIFIER_KEY);
+        if (stored && stored.includes("@")) {
+          setFormData((f) => ({ ...f, email: stored }));
+        }
+      } catch {
+        /* pre-fill is best-effort */
+      }
+    })();
+  }, [route.params?.email]);
 
   const handleSubmit = async () => {
     const newErrors: Record<string, string> = {};
     if (!formData.fullName.trim()) newErrors.fullName = t("signup.err_name_required");
     if (!formData.email.trim()) newErrors.email = t("signup.err_email_required");
-    if (!formData.phone.trim()) newErrors.phone = t("signup.err_phone_required");
+    // P0 (signup review): phone is now optional. Not verified at signup
+    // anyway — collection happens here only as metadata for future
+    // SMS notifications. No blocking validation.
     if (formData.password.length < 8) newErrors.password = t("signup.err_password_min");
-    if (!formData.confirmPassword) newErrors.confirmPassword = t("signup.err_confirm_required");
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = t("signup.err_passwords_no_match");
-    }
     if (!formData.agreedToTerms) newErrors.terms = t("signup.err_terms_required");
 
     // Validate email format
@@ -83,14 +123,24 @@ export default function SignupScreen() {
         // The Interest-First KYC flow (Phase KYC-2) is entered from
         // the Dashboard interest card, not from signup, so the
         // earlier NEEDS_KYC_AFTER_SIGNUP placeholder is gone.
-        navigation.navigate(Routes.EmailVerification, { email: formData.email });
+        navigation.navigate(Routes.EmailVerification, {
+          email: formData.email,
+          flow: "signup",
+        });
       } catch (err: any) {
         // Show specific error messages from Supabase
         let errorMessage = t("signup.err_create_default");
 
         if (err?.message) {
-          if (err.message.includes("User already registered")) {
-            errorMessage = t("signup.err_user_exists");
+          if (
+            err.message.includes("User already registered") ||
+            err?.code === "user_already_exists"
+          ) {
+            // P2: surface the actionable banner instead of a generic
+            // error toast. Bail before the setErrors call below so the
+            // form area stays clean.
+            setShowAlreadyRegistered(true);
+            return;
           } else if (err.message.includes("Invalid email")) {
             errorMessage = t("signup.err_email_format");
           } else if (err.message.includes("Password")) {
@@ -134,9 +184,51 @@ export default function SignupScreen() {
             <Text style={styles.backButtonText}>{t("signup.back")}</Text>
           </TouchableOpacity>
 
+          {/* P1: 3-step progress strip. Pinned above the form title so
+              the user sees where they are in the signup journey from
+              the first paint onward. */}
+          <AuthProgressStrip step={1} flow="signup" />
+
           {/* Header */}
           <Text style={styles.title}>{t("signup.title")}</Text>
           <Text style={styles.subtitle}>{t("signup.subtitle")}</Text>
+
+          {/* P2: already-registered banner. Replaces the inline general
+              error when Supabase says the email's taken — gives the
+              user a direct path to Login instead of dead-ending. */}
+          {showAlreadyRegistered ? (
+            <View style={styles.banner}>
+              <View style={styles.bannerHeader}>
+                <Ionicons name="information-circle" size={20} color="#1E40AF" />
+                <Text style={styles.bannerTitle}>
+                  {t("signup.already_registered_banner_title")}
+                </Text>
+              </View>
+              <Text style={styles.bannerBody}>
+                {t("signup.already_registered_banner_body")}
+              </Text>
+              <View style={styles.bannerActions}>
+                <TouchableOpacity
+                  style={styles.bannerSecondary}
+                  onPress={() => setShowAlreadyRegistered(false)}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.bannerSecondaryText}>
+                    {t("signup.already_registered_cancel")}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.bannerPrimary}
+                  onPress={handleGoToLogin}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.bannerPrimaryText}>
+                    {t("signup.already_registered_sign_in")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
 
           {/* Form */}
           <View style={styles.form}>
@@ -183,9 +275,15 @@ export default function SignupScreen() {
               {errors.email ? <Text style={styles.fieldError}>{errors.email}</Text> : null}
             </View>
 
-            {/* Phone */}
+            {/* Phone — optional. Not verified at signup; collected for
+                future SMS-notification opt-in only. */}
             <View style={styles.inputContainer}>
-              <Text style={styles.label}>{t("signup.label_phone")}</Text>
+              <Text style={styles.label}>
+                {t("signup.label_phone")}{" "}
+                <Text style={styles.optionalTag}>
+                  {t("signup.phone_optional_tag")}
+                </Text>
+              </Text>
               <View style={[styles.inputWrapper, errors.phone ? styles.inputError : null]}>
                 <Ionicons name="call-outline" size={18} color="#666" style={styles.inputIcon} />
                 <TextInput
@@ -225,79 +323,12 @@ export default function SignupScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* Password Strength Indicator */}
-              {formData.password.length > 0 ? (
-                <View style={styles.strengthContainer}>
-                  <View style={styles.strengthHeader}>
-                    <Text style={styles.strengthLabel}>{t("signup.strength_label")}</Text>
-                    <Text style={[
-                      styles.strengthValue,
-                      { color: passwordStrength >= 3 ? "#00C6AE" : "#666" }
-                    ]}>
-                      {getStrengthLabel()}
-                    </Text>
-                  </View>
-                  <View style={styles.strengthBars}>
-                    {[1, 2, 3, 4].map((level) => (
-                      <View
-                        key={level}
-                        style={[
-                          styles.strengthBar,
-                          { backgroundColor: level <= passwordStrength ? "#00C6AE" : "#E0E0E0" },
-                        ]}
-                      />
-                    ))}
-                  </View>
-                </View>
-              ) : null}
+              {/* Strength indicator — shared component (Sign-up P1).
+                  Renders null when password is empty. Same underlying
+                  checks (length / case / digit) drive both the visual
+                  pips and the back-end-of-screen submit logic. */}
+              <PasswordStrengthBar password={formData.password} />
               {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
-            </View>
-
-            {/* Confirm Password */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>{t("signup.label_confirm_password")}</Text>
-              <View style={[
-                styles.inputWrapper,
-                passwordsDontMatch ? styles.inputError : null,
-                passwordsMatch ? styles.inputSuccess : null,
-              ]}>
-                <Ionicons name="lock-closed-outline" size={18} color="#666" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder={t("signup.placeholder_confirm_password")}
-                  placeholderTextColor="#999"
-                  value={formData.confirmPassword}
-                  onChangeText={(text) => updateFormData("confirmPassword", text)}
-                  secureTextEntry={!showConfirmPassword}
-                />
-                {formData.confirmPassword ? (
-                  <View style={styles.matchIndicator}>
-                    <Ionicons
-                      name={passwordsMatch ? "checkmark-circle" : "close-circle"}
-                      size={18}
-                      color={passwordsMatch ? "#00C6AE" : "#FF4444"}
-                    />
-                  </View>
-                ) : null}
-                <TouchableOpacity
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                  style={styles.eyeButton}
-                >
-                  <Ionicons
-                    name={showConfirmPassword ? "eye-outline" : "eye-off-outline"}
-                    size={18}
-                    color="#666"
-                  />
-                </TouchableOpacity>
-              </View>
-              {formData.confirmPassword ? (
-                <Text style={[
-                  styles.matchText,
-                  { color: passwordsMatch ? "#00C6AE" : "#FF4444" }
-                ]}>
-                  {passwordsMatch ? t("signup.passwords_match") : t("signup.passwords_no_match")}
-                </Text>
-              ) : null}
             </View>
 
             {/* Terms Checkbox */}
@@ -316,9 +347,16 @@ export default function SignupScreen() {
               </View>
               <Text style={styles.termsText}>
                 {t("signup.terms_prefix")}
-                <Text style={styles.termsLink}>{t("signup.terms_link")}</Text>
+                {/* Inline tappable links — Text onPress is the React
+                    Native idiom for inline interactivity inside a
+                    paragraph. TouchableOpacity wouldn't flow inline. */}
+                <Text style={styles.termsLink} onPress={handleOpenTerms}>
+                  {t("signup.terms_link")}
+                </Text>
                 {t("signup.terms_and")}
-                <Text style={styles.termsLink}>{t("signup.privacy_link")}</Text>
+                <Text style={styles.termsLink} onPress={handleOpenPrivacy}>
+                  {t("signup.privacy_link")}
+                </Text>
               </Text>
             </TouchableOpacity>
             {errors.terms ? <Text style={styles.fieldError}>{errors.terms}</Text> : null}
@@ -399,6 +437,62 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     gap: 8,
   },
+  // P2 already-registered banner
+  banner: {
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+  },
+  bannerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  bannerTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1E40AF",
+  },
+  bannerBody: {
+    fontSize: 13,
+    color: "#1E3A8A",
+    lineHeight: 19,
+    marginBottom: 14,
+  },
+  bannerActions: {
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "flex-end",
+  },
+  bannerSecondary: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    backgroundColor: "#FFFFFF",
+  },
+  bannerSecondaryText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1E40AF",
+  },
+  bannerPrimary: {
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: "#1E40AF",
+  },
+  bannerPrimaryText: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
   errorText: {
     color: "#DC2626",
     fontSize: 14,
@@ -424,9 +518,6 @@ const styles = StyleSheet.create({
   inputError: {
     borderColor: "#FF4444",
   },
-  inputSuccess: {
-    borderColor: "#00C6AE",
-  },
   inputIcon: {
     marginLeft: 12,
   },
@@ -440,41 +531,15 @@ const styles = StyleSheet.create({
   eyeButton: {
     padding: 12,
   },
-  matchIndicator: {
-    paddingRight: 4,
-  },
   fieldError: {
     color: "#FF4444",
     fontSize: 12,
     marginTop: 4,
   },
-  strengthContainer: {
-    marginTop: 8,
-  },
-  strengthHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  strengthLabel: {
-    fontSize: 11,
-    color: "#666",
-  },
-  strengthValue: {
-    fontSize: 11,
-  },
-  strengthBars: {
-    flexDirection: "row",
-    gap: 4,
-  },
-  strengthBar: {
-    flex: 1,
-    height: 4,
-    borderRadius: 2,
-  },
-  matchText: {
+  optionalTag: {
     fontSize: 12,
-    marginTop: 4,
+    fontWeight: "400",
+    color: "#9CA3AF",
   },
   termsRow: {
     flexDirection: "row",

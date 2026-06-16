@@ -58,6 +58,9 @@ import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import { useAuth } from "../context/AuthContext";
+import { useKYCStatus } from "../hooks/useKYCVerification";
+import { useMemberTier } from "../hooks/useGraduatedEntry";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -186,16 +189,50 @@ export default function VerificationHubScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<VerificationHubRouteProp>();
   const { t } = useTranslation();
+  const { user } = useAuth();
   const params = route.params ?? {};
-  const currentTier = params.currentTier ?? 1;
+
+  // KYC P0 wiring (2026-06-12): replace the prior mock-data fallback
+  // (route params only) with the live engine status from
+  // `kyc_verifications`. `useMemberTier` reads the canonical
+  // member_tier_status table. Route params are kept as a fallback so
+  // legacy deep links that pre-set values still render coherently.
+  const kyc = useKYCStatus(user?.id);
+  const memberTier = useMemberTier(user?.id);
+
+  const liveTier =
+    (memberTier.status?.currentTier as 1 | 2 | 3 | undefined) ??
+    (kyc.kycTier > 0 ? (kyc.kycTier as 1 | 2 | 3) : undefined);
+  const currentTier: 1 | 2 | 3 = liveTier ?? params.currentTier ?? 1;
+
+  // Map engine status → the screen's per-step bucket. We only derive
+  // `identity` from the engine because the KYCVerification engine type
+  // doesn't surface tax_id today (added in migration 151; the engine
+  // type can be widened in a follow-up). email/phone status remains
+  // route-param driven — those signals live in the auth flow.
+  const liveIdentityStatus: StepStatus = kyc.isVerified
+    ? "completed"
+    : kyc.isPending
+      ? "pending"
+      : kyc.isRejected || kyc.isExpired
+        ? "in_progress"
+        : "not_started";
+
   const verificationStatus: Required<VerificationStatus> = {
     email: params.verificationStatus?.email ?? "not_started",
     phone: params.verificationStatus?.phone ?? "not_started",
-    identity: params.verificationStatus?.identity ?? "not_started",
+    identity:
+      params.verificationStatus?.identity ?? liveIdentityStatus,
     taxId: params.verificationStatus?.taxId ?? "not_started",
   };
   const itinStatus = params.itinStatus ?? null;
   const pendingPayout = params.pendingPayout ?? null;
+
+  // Show the engine-backed "Start verification" CTA when the user has
+  // no live KYC record yet, or their last attempt was rejected/expired
+  // and the engine still permits a retry.
+  const showStartVerification =
+    !kyc.isVerified && !kyc.isPending && !!user?.id;
 
   const handleStartStep = (stepId: StepId) => {
     switch (stepId) {
@@ -311,6 +348,31 @@ export default function VerificationHubScreen() {
                 </Text>
               </View>
             </View>
+          )}
+
+          {/* Start verification CTA — engine-backed entry point. Surfaces
+              only when the user has no live KYC record or their last
+              attempt was rejected/expired. */}
+          {showStartVerification && (
+            <TouchableOpacity
+              style={styles.startCta}
+              onPress={() => navigation.navigate(Routes.KYCVerification)}
+              accessibilityRole="button"
+              accessibilityLabel={t("verification_hub.start_cta_label")}
+            >
+              <View style={styles.startCtaIcon}>
+                <Ionicons name="shield-checkmark" size={20} color="#FFFFFF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.startCtaTitle}>
+                  {t("verification_hub.start_cta_title")}
+                </Text>
+                <Text style={styles.startCtaBody}>
+                  {t("verification_hub.start_cta_body")}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
           )}
 
           {/* Verification steps */}
@@ -537,6 +599,34 @@ const styles = StyleSheet.create({
     color: "#3B82F6",
     lineHeight: 18,
     marginTop: 4,
+  },
+
+  startCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: TEAL,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+  },
+  startCtaIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  startCtaTitle: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  startCtaBody: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 12,
+    marginTop: 2,
   },
 
   stepsCard: {

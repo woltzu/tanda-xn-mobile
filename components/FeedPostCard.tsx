@@ -5,11 +5,14 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { FeedPost, FeedPostType } from "../context/FeedContext";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import VideoPlayer from "./VideoPlayer";
+import ReportButton from "./ReportButton";
 
 type FeedPostCardProps = {
   post: FeedPost;
@@ -25,6 +28,11 @@ type FeedPostCardProps = {
   onSave?: (postId: string) => void;
   onXnScorePress?: () => void;
   currentUserId?: string;
+  // Author-only — fires when the user taps "Retry upload" on a post whose
+  // background image upload failed. CreateDreamPostScreen's optimistic
+  // flow registers the local URI in AsyncStorage so the retry can
+  // re-upload without re-picking.
+  onRetryUpload?: (post: FeedPost) => void;
 };
 
 // XnScore tier helper — returns color + short label for trust badge
@@ -79,11 +87,20 @@ export default function FeedPostCard({
   onSave,
   onXnScorePress,
   currentUserId,
+  onRetryUpload,
 }: FeedPostCardProps) {
+  const { t } = useTranslation();
   const config = POST_TYPE_CONFIG[post.type] || POST_TYPE_CONFIG.dream;
   const isAnonymous = post.visibility === "anonymous";
   const isOwnPost = post.userId === currentUserId;
   const displayName = isAnonymous && !isOwnPost ? "Anonymous Member" : post.authorName;
+
+  // Upload-status chrome — author-only. 'pending' shows a spinner pill;
+  // 'failed' shows a tap-to-retry pill.
+  const uploadStatus = post.imageUploadStatus ?? "completed";
+  const showUploadPending = isOwnPost && uploadStatus === "pending";
+  const showUploadFailed =
+    isOwnPost && uploadStatus === "failed" && !!onRetryUpload;
 
   // Extract progress data from metadata
   const meta = post.metadata || {};
@@ -206,6 +223,19 @@ export default function FeedPostCard({
                 </Text>
               </TouchableOpacity>
             )}
+
+            {/* Report — Moderation P0 (2026-06-13). Hidden on own posts
+                by the component's own ownerUserId guard. */}
+            <View style={styles.sideBtn}>
+              <View style={styles.sideBtnCircle}>
+                <ReportButton
+                  kind="content"
+                  contentType="dream_post"
+                  targetId={post.id}
+                  ownerUserId={post.userId}
+                />
+              </View>
+            </View>
           </View>
 
           {/* Bottom overlay: author + caption */}
@@ -328,10 +358,18 @@ export default function FeedPostCard({
           </View>
         </TouchableOpacity>
 
-        {/* Type Badge */}
-        <View style={[styles.typeBadge, { backgroundColor: config.color + "15" }]}>
-          <Text style={styles.typeBadgeEmoji}>{config.emoji}</Text>
-          <Text style={[styles.typeBadgeText, { color: config.color }]}>{config.label}</Text>
+        {/* Type Badge + Report (Moderation, 2026-06-13) */}
+        <View style={styles.headerRight}>
+          <View style={[styles.typeBadge, { backgroundColor: config.color + "15" }]}>
+            <Text style={styles.typeBadgeEmoji}>{config.emoji}</Text>
+            <Text style={[styles.typeBadgeText, { color: config.color }]}>{config.label}</Text>
+          </View>
+          <ReportButton
+            kind="content"
+            contentType="dream_post"
+            targetId={post.id}
+            ownerUserId={post.userId}
+          />
         </View>
       </View>
 
@@ -339,6 +377,19 @@ export default function FeedPostCard({
       <Text style={styles.content} numberOfLines={4}>
         {post.content}
       </Text>
+
+      {/* P2 (migration 159) — hashtag chips. Auto-extracted from content
+          by the feed_posts_extract_hashtags trigger. Tap is a no-op for
+          P2; hashtag-search lands later. */}
+      {post.hashtags && post.hashtags.length > 0 ? (
+        <View style={styles.hashtagsRow}>
+          {post.hashtags.map((tag) => (
+            <View key={tag} style={styles.hashtagChip}>
+              <Text style={styles.hashtagChipText}>#{tag}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {/* Goal Progress Card */}
       {hasGoalProgress && (
@@ -429,6 +480,29 @@ export default function FeedPostCard({
           style={styles.postImage}
           resizeMode="cover"
         />
+      )}
+
+      {/* Upload-status chrome — visible only to the author. */}
+      {showUploadPending && (
+        <View style={styles.uploadPendingPill}>
+          <ActivityIndicator size="small" color={colors.accentTeal} />
+          <Text style={styles.uploadPendingText}>
+            {t("dream_feed.upload_pending")}
+          </Text>
+        </View>
+      )}
+      {showUploadFailed && (
+        <TouchableOpacity
+          style={styles.uploadFailedPill}
+          onPress={() => onRetryUpload?.(post)}
+          accessibilityRole="button"
+          accessibilityLabel={t("dream_feed.upload_retry")}
+        >
+          <Ionicons name="cloud-upload-outline" size={16} color="#DC2626" />
+          <Text style={styles.uploadFailedText}>
+            {t("dream_feed.upload_retry")}
+          </Text>
+        </TouchableOpacity>
       )}
 
       {/* Community Tags */}
@@ -742,6 +816,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: spacing.md,
   },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
   authorRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -817,6 +896,28 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     lineHeight: 20,
     marginBottom: spacing.md,
+  },
+
+  // P2 — hashtag chips
+  hashtagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+  },
+  hashtagChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "#F0FDFB",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  hashtagChipText: {
+    fontSize: 11,
+    color: "#0A2342",
+    fontWeight: "600",
   },
 
   // Progress card
@@ -944,6 +1045,42 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     fontWeight: typography.semibold as any,
     color: colors.accentTeal,
+  },
+  uploadPendingPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    alignSelf: "flex-start",
+    backgroundColor: "#F0FDFB",
+    borderColor: colors.accentTeal,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginBottom: spacing.sm,
+  },
+  uploadPendingText: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold as any,
+    color: colors.accentTeal,
+  },
+  uploadFailedPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    backgroundColor: "#FEE2E2",
+    borderColor: "#DC2626",
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginBottom: spacing.sm,
+  },
+  uploadFailedText: {
+    fontSize: typography.caption,
+    fontWeight: typography.semibold as any,
+    color: "#DC2626",
   },
   locationRow: {
     flexDirection: "row",

@@ -200,7 +200,7 @@ export default function UnlockInterestPromptScreen() {
       <View style={styles.bottomBar}>
         <TouchableOpacity
           style={styles.primaryButton}
-          onPress={() => navigation.navigate(Routes.VerificationOptions)}
+          onPress={() => navigation.navigate(Routes.KYCHub)}
           accessibilityRole="button"
           accessibilityLabel={`Unlock my ${amountLabel}`}
         >

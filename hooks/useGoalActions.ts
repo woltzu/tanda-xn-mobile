@@ -35,6 +35,7 @@ import {
   GoalTransaction,
   GoalWithTransactions,
   SavingsTypeV2,
+  SpendingSuggestion,
   UpdateGoalInput,
 } from "../types/goals";
 
@@ -82,6 +83,7 @@ function mapGoalRow(row: any): Goal {
     achievedAt: row.completed_at ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    roundUpEnabled: row.round_up_enabled ?? undefined,
   };
 }
 
@@ -122,65 +124,60 @@ export function useGoalActions() {
   const { user } = useAuth();
 
   // ── Create ────────────────────────────────────────────────────────────────
+  //
+  // Calls the atomic `create_goal` RPC (migration 143) instead of the prior
+  // 3-roundtrip prep+insert chain. The RPC does the wallet + savings_type
+  // resolution server-side, INSERTs the goal row, and returns the new id +
+  // balance. We then refetch the row so the caller still gets a full
+  // typed Goal (matches the rest of the hook's contract).
   const createGoal = async (
     goalData: CreateGoalInput
   ): Promise<ActionResult<Goal>> => {
     if (!user) return authError();
     try {
-      // Resolve the NOT NULL savings_goal_type_id from the V2 savings_type.
-      const code = SAVINGS_TYPE_TO_CODE[goalData.savingsType ?? "flexible"] ?? "general";
-      const { data: typeRow, error: typeErr } = await supabase
-        .from("savings_goal_types")
-        .select("id")
-        .eq("code", code)
-        .maybeSingle();
-      if (typeErr) return { data: null, error: typeErr };
-      if (!typeRow)
-        return { data: null, error: new Error(`Savings goal type '${code}' not found`) };
-
-      // Resolve the NOT NULL wallet_id for this user.
-      const { data: walletRow, error: walletErr } = await supabase
-        .from("user_wallets")
-        .select("id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
-      if (walletErr) return { data: null, error: walletErr };
-      if (!walletRow)
-        return { data: null, error: new Error("No wallet found for user") };
-
-      const payload = {
-        user_id: user.id,
-        wallet_id: walletRow.id,
-        savings_goal_type_id: typeRow.id,
-        name: goalData.name,
-        emoji: goalData.emoji ?? null,
-        goal_type: goalData.goalType ?? null,
-        category: goalData.category ?? null,
-        savings_type: goalData.savingsType ?? null,
-        target_amount_cents: dollarsToCents(goalData.targetAmount),
-        monthly_contribution_cents:
+      const { data, error } = await supabase.rpc("create_goal", {
+        p_name: goalData.name,
+        p_target_amount_cents:
+          goalData.targetAmount != null
+            ? dollarsToCents(goalData.targetAmount)
+            : null,
+        p_savings_type: goalData.savingsType ?? "flexible",
+        p_emoji: goalData.emoji ?? null,
+        p_category: goalData.category ?? null,
+        p_goal_type: goalData.goalType ?? null,
+        p_target_date: goalData.targetDate ?? null,
+        p_monthly_contribution_cents:
           goalData.monthlyContribution != null
             ? dollarsToCents(goalData.monthlyContribution)
             : null,
-        auto_deposit_enabled: goalData.autoDepositEnabled ?? false,
-        auto_deposit_day: goalData.autoDepositDay ?? null,
-        linked_circle_id: goalData.linkedCircleId ?? null,
-        circle_payout_action: goalData.circlePayoutAction ?? null,
-        circle_payout_percent: goalData.circlePayoutPercent ?? null,
-        locked_until: goalData.lockEndDate ?? null,
-        lock_period_months: goalData.lockPeriodMonths ?? null,
-        target_date: goalData.targetDate ?? null,
-        goal_status: "active",
-      };
-
-      const { data, error } = await supabase
-        .from(GOALS_TABLE)
-        .insert(payload)
-        .select()
-        .single();
+        p_auto_deposit_enabled: goalData.autoDepositEnabled ?? false,
+        p_auto_deposit_day: goalData.autoDepositDay ?? null,
+        p_locked_until: goalData.lockEndDate ?? null,
+        p_lock_period_months: goalData.lockPeriodMonths ?? null,
+        p_linked_circle_id: goalData.linkedCircleId ?? null,
+        p_circle_payout_action: goalData.circlePayoutAction ?? null,
+        p_circle_payout_percent: goalData.circlePayoutPercent ?? null,
+      });
       if (error) return { data: null, error };
-      return { data: mapGoalRow(data), error: null };
+      const row = Array.isArray(data) ? data[0] : data;
+      const newGoalId: string | undefined = row?.goal_id;
+      if (!newGoalId) {
+        return {
+          data: null,
+          error: new Error("create_goal RPC returned no goal_id"),
+        };
+      }
+      // Refetch the full row so the caller gets a complete Goal object with
+      // the saved metadata, timestamps, savings_goal_type_id, etc.
+      const { data: full, error: fetchErr } = await supabase
+        .from(GOALS_TABLE)
+        .select("*")
+        .eq("id", newGoalId)
+        .single();
+      if (fetchErr || !full) {
+        return { data: null, error: fetchErr ?? new Error("goal_fetch_failed") };
+      }
+      return { data: mapGoalRow(full), error: null };
     } catch (error) {
       return { data: null, error };
     }
@@ -435,6 +432,109 @@ export function useGoalActions() {
     return { data: mapGoalRow(data), error: null };
   };
 
+  // ── Goal P2 helpers (migration 155) ────────────────────────────────────────
+
+  // Median target across the caller's past goals. Returns the dollar
+  // amount or null when there's no history yet. Drives the "Usually you
+  // save $X — use that?" chip on GoalCreateExpressScreen.
+  const suggestGoalAmount = async (): Promise<ActionResult<number | null>> => {
+    if (!user) return authError();
+    const { data, error } = await supabase.rpc("suggest_goal_amount");
+    if (error) return { data: null, error };
+    const cents = (data as number | null) ?? null;
+    if (cents === null) return { data: null, error: null };
+    return { data: centsToDollars(cents), error: null };
+  };
+
+  // Per-jar round-up sweep toggle. Lives on user_savings_goals.round_up_enabled
+  // (default true); GoalDetailV2Screen flips it for the Round-up Savings jar
+  // without touching the profile-wide round_up_increment.
+  const setRoundUpEnabled = async (
+    goalId: string,
+    enabled: boolean,
+  ): Promise<ActionResult<Goal>> => {
+    if (!user) return authError();
+    const { error } = await supabase
+      .from(GOALS_TABLE)
+      .update({ round_up_enabled: enabled, updated_at: nowIso() })
+      .eq("id", goalId)
+      .eq("user_id", user.id);
+    if (error) return { data: null, error };
+    return refetchGoalForResult(goalId);
+  };
+
+  // Spending banner — pulled live so a freshly-seeded row appears without
+  // the user reloading the app. Dismissed rows are filtered server-side
+  // via the partial index from migration 155.
+  const fetchSpendingSuggestions = async (): Promise<
+    ActionResult<SpendingSuggestion[]>
+  > => {
+    if (!user) return authError();
+    const { data, error } = await supabase
+      .from("spending_patterns")
+      .select("id, category, monthly_avg_cents, suggested_save_cents, last_computed_at")
+      .eq("user_id", user.id)
+      .is("dismissed_at", null)
+      .order("monthly_avg_cents", { ascending: false })
+      .limit(5);
+    if (error) return { data: null, error };
+    const mapped: SpendingSuggestion[] = (data ?? []).map((r: any) => ({
+      id: r.id,
+      category: r.category,
+      monthlyAvg: centsToDollars(r.monthly_avg_cents),
+      suggestedSave: centsToDollars(r.suggested_save_cents),
+      lastComputedAt: r.last_computed_at,
+    }));
+    return { data: mapped, error: null };
+  };
+
+  const dismissSpendingSuggestion = async (
+    id: string,
+  ): Promise<ActionResult<boolean>> => {
+    if (!user) return authError();
+    const { data, error } = await supabase.rpc("dismiss_spending_pattern", {
+      p_pattern_id: id,
+    });
+    if (error) return { data: null, error };
+    return { data: !!data, error: null };
+  };
+
+  // ── Round-up jar lookup / creation (Send-Money P2) ────────────────────────
+  //
+  // Returns the user's dedicated "Round-up Savings" goal, creating one on
+  // first call. The jar is a flexible goal with no target amount so the
+  // bar never fills — it's a perpetual accumulator. Identified by goal_type
+  // ='round_up' so future bookkeeping can find it without name matching.
+  const ROUND_UP_TYPE = "round_up";
+  const ROUND_UP_NAME = "Round-up Savings";
+  // Goal P2 (2026-06-14): spec calls for the 🪙 coin marker.
+  const ROUND_UP_EMOJI = "🪙";
+
+  const ensureRoundUpGoal = async (): Promise<ActionResult<Goal>> => {
+    if (!user) return authError();
+    // Look up first — most calls land here after the first one created the
+    // jar, so this is a single GET.
+    const { data: existing, error: fetchErr } = await supabase
+      .from(GOALS_TABLE)
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("goal_type", ROUND_UP_TYPE)
+      .neq("goal_status", "closed")
+      .maybeSingle();
+    if (fetchErr) return { data: null, error: fetchErr };
+    if (existing) return { data: mapGoalRow(existing), error: null };
+
+    // Create the jar via the canonical RPC so wallet_id + savings_goal_type_id
+    // are resolved server-side.
+    return createGoal({
+      name: ROUND_UP_NAME,
+      emoji: ROUND_UP_EMOJI,
+      savingsType: "flexible",
+      goalType: ROUND_UP_TYPE,
+      // No targetAmount — the jar accumulates indefinitely.
+    });
+  };
+
   return {
     createGoal,
     fetchGoal,
@@ -445,5 +545,11 @@ export function useGoalActions() {
     unlinkCircle,
     updateGoal,
     deleteGoal,
+    ensureRoundUpGoal,
+    // Goal P2 (migration 155)
+    suggestGoalAmount,
+    setRoundUpEnabled,
+    fetchSpendingSuggestions,
+    dismissSpendingSuggestion,
   };
 }

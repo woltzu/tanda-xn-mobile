@@ -1,4 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+// One-shot per-user flag — once they've agreed to circle terms during a
+// successful join, future joins skip the checkbox and the disclaimer card.
+// Bumping `_v1` is the lever for forcing re-consent if the legal text
+// materially changes.
+const TERMS_ACCEPTED_KEY = "@tandaxn_circle_terms_accepted_v1";
 import {
   View,
   Text,
@@ -79,6 +86,20 @@ export default function JoinCircleConfirmScreen() {
 
   const [isJoining, setIsJoining] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  // Did the user already accept circle terms on a prior join? If yes we
+  // hide the checkbox + disclaimer card and auto-set agreedToTerms so the
+  // Join button is immediately enabled.
+  const [termsPreviouslyAccepted, setTermsPreviouslyAccepted] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem(TERMS_ACCEPTED_KEY)
+      .then((v) => {
+        if (v === "1") {
+          setTermsPreviouslyAccepted(true);
+          setAgreedToTerms(true);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   // Find the circle
   const circle = [...circles, ...browseCircles].find((c) => c.id === circleId);
@@ -163,11 +184,34 @@ export default function JoinCircleConfirmScreen() {
 
     setIsJoining(true);
     try {
-      await joinCircle(circleId);
+      // Forward the circle's invite code to the RPC as a defense-in-depth
+      // check — server validates it matches before allowing the join.
+      await joinCircle(circleId, circle.inviteCode || undefined);
+      // Persist the terms-accepted flag — fire-and-forget so a storage
+      // hiccup never blocks the navigation that the user just earned.
+      AsyncStorage.setItem(TERMS_ACCEPTED_KEY, "1").catch(() => undefined);
       navigation.navigate("JoinCircleSuccess", { circleId });
-    } catch (error) {
+    } catch (error: any) {
+      // Map typed RPC errors thrown by CirclesContext.joinCircle to
+      // specific i18n strings. Default to the generic "failed to join"
+      // for anything we haven't catalogued.
+      const code = (error?.message || "").toLowerCase();
+      let body: string;
+      if (code.includes("circle_full")) {
+        body = t("join_circle_confirm.error_circle_full");
+      } else if (code.includes("min_score_not_met")) {
+        body = t("join_circle_confirm.error_min_score_not_met");
+      } else if (code.includes("invalid_invite_code")) {
+        body = t("join_circle_confirm.error_invalid_invite_code");
+      } else if (code.includes("circle_not_joinable")) {
+        body = t("join_circle_confirm.error_circle_not_joinable");
+      } else if (code.includes("circle_not_found")) {
+        body = t("join_circle_confirm.error_circle_not_found");
+      } else {
+        body = t("join_circle_confirm.alert_failed_join");
+      }
       console.error("Error joining circle:", error);
-      Alert.alert(t("join_circle_confirm.alert_error_title"), t("join_circle_confirm.alert_failed_join"));
+      Alert.alert(t("join_circle_confirm.alert_error_title"), body);
     } finally {
       setIsJoining(false);
     }
@@ -367,20 +411,25 @@ export default function JoinCircleConfirmScreen() {
             </View>
           )}
 
-          {/* Terms Agreement */}
-          <TouchableOpacity
-            style={styles.termsRow}
-            onPress={() => setAgreedToTerms(!agreedToTerms)}
-          >
-            <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
-              {agreedToTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
-            </View>
-            <Text style={styles.termsText}>
-              I agree to the circle rules and understand that I commit to making{" "}
-              {isOneTime ? "a one-time payment" : "regular contributions"} of ${circle.amount}
-              {!isOneTime && ` ${getFrequencyLabel(circle.frequency).toLowerCase()}`}.
-            </Text>
-          </TouchableOpacity>
+          {/* Terms Agreement — skipped after the user has consented once.
+              The user can still review the full terms via the disclaimer
+              card below; this just removes the repeated checkbox tap on
+              every subsequent join. */}
+          {!termsPreviouslyAccepted ? (
+            <TouchableOpacity
+              style={styles.termsRow}
+              onPress={() => setAgreedToTerms(!agreedToTerms)}
+            >
+              <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
+                {agreedToTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+              </View>
+              <Text style={styles.termsText}>
+                I agree to the circle rules and understand that I commit to making{" "}
+                {isOneTime ? "a one-time payment" : "regular contributions"} of ${circle.amount}
+                {!isOneTime && ` ${getFrequencyLabel(circle.frequency).toLowerCase()}`}.
+              </Text>
+            </TouchableOpacity>
+          ) : null}
 
           {/* Disclaimer */}
           <View style={styles.disclaimer}>

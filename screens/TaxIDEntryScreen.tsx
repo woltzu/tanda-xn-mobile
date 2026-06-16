@@ -40,6 +40,7 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -48,6 +49,9 @@ import { useTranslation } from "react-i18next";
 import { kycDraft } from "../lib/kycDraft";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
+import { useProfile } from "../hooks/useProfile";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -88,13 +92,26 @@ export default function TaxIDEntryScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<TaxIDEntryRouteProp>();
   const { t } = useTranslation();
+  const { user } = useAuth();
   const totalInterest = route.params?.totalInterest ?? MOCK_TOTAL_INTEREST;
 
+  const [submitting, setSubmitting] = useState(false);
   const [idType, setIdType] = useState<IdType | null>(null);
   const [legalName, setLegalName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [taxId, setTaxId] = useState("");
   const [confirmTaxId, setConfirmTaxId] = useState("");
+  // P1 (kyc-trigger review): the screen pre-fills legal name + DOB
+  // from the profile when the draft is empty. We surface a small
+  // "pre-filled from your profile" hint when at least one field
+  // actually came from the profile fall-through. Edits clear the
+  // flag so the hint disappears the moment the user takes ownership.
+  const [prefilledFromProfile, setPrefilledFromProfile] = useState(false);
+  // Tracks whether we've already applied the profile-fallback so a
+  // late-arriving profile fetch can't overwrite user edits.
+  const [profileApplied, setProfileApplied] = useState(false);
+
+  const { profile } = useProfile();
 
   // ── KYC draft hydrate ────────────────────────────────────────────────────
   // Restore non-sensitive fields from the persisted draft on mount. The
@@ -113,6 +130,36 @@ export default function TaxIDEntryScreen() {
       cancelled = true;
     };
   }, []);
+
+  // ── Profile pre-fill fallback (P1) ──────────────────────────────
+  // Runs once when the profile lands AND the draft fill above has had
+  // a chance to run. Only fills empty fields so a hydrated draft
+  // value wins over the profile value (the draft is closer to what
+  // the user was last working with). DOB normalises to YYYY-MM-DD —
+  // matches the format the date input expects.
+  useEffect(() => {
+    if (profileApplied || !profile) return;
+    let didPrefill = false;
+    if (!legalName && profile.full_name) {
+      setLegalName(profile.full_name);
+      didPrefill = true;
+    }
+    if (!dateOfBirth && profile.date_of_birth) {
+      // profiles.date_of_birth is a date column → already YYYY-MM-DD
+      // when serialized; slice defensively in case the row carries a
+      // timestamp.
+      const dob = String(profile.date_of_birth).slice(0, 10);
+      if (dob.length === 10) {
+        setDateOfBirth(dob);
+        didPrefill = true;
+      }
+    }
+    if (didPrefill) setPrefilledFromProfile(true);
+    setProfileApplied(true);
+    // Intentional dep list — re-running when legalName/dateOfBirth
+    // change would defeat the "only fill empty fields" rule.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, profileApplied]);
   // ──────────────────────────────────────────────────────────────────────────
 
   const rawTaxId = taxId.replace(/\D/g, "");
@@ -125,28 +172,66 @@ export default function TaxIDEntryScreen() {
     legalName.length >= 2 &&
     dateOfBirth.length === 10;
 
-  const handleContinue = () => {
-    if (!canContinue) return;
+  const handleContinue = async () => {
+    if (!canContinue || submitting) return;
+    if (!user?.id) {
+      Alert.alert(
+        t("tax_id_entry.auth_required_title"),
+        t("tax_id_entry.auth_required_body"),
+      );
+      return;
+    }
+
     // Persist non-sensitive fields to the KYC draft so a user who quits
     // the InterestUnlockedSuccess screen and comes back later can resume
     // with their name/DOB pre-filled. We intentionally do NOT persist
-    // taxId / confirmTaxId — see lib/kycDraft.ts header for the privacy
-    // posture. clear() on InterestUnlockedSuccess wipes this on a real
-    // terminal success.
+    // taxId / confirmTaxId here — see lib/kycDraft.ts header for the
+    // privacy posture. clear() on InterestUnlockedSuccess wipes this on
+    // a real terminal success.
     kycDraft.merge({
       taxIdType: idType as "ssn" | "itin",
       legalName,
       dateOfBirth,
     });
+
+    // KYC P0 wiring (2026-06-12): write the tax ID to the live engine
+    // table `kyc_verifications` instead of AsyncStorage, where it
+    // previously evaporated. We upsert by member_id (the table's
+    // natural key from migration 151's unique index) and set status
+    // to `provider_pending` so the row is in the right state for the
+    // Persona webhook to later flip to `approved` — which fires
+    // `trg_sync_kyc_tier_to_profile` and bumps the user's tier.
+    setSubmitting(true);
+    const { error: dbErr } = await supabase
+      .from("kyc_verifications")
+      .upsert(
+        {
+          member_id: user.id,
+          kyc_type: "persona",
+          provider: "persona",
+          provider_reference_id: "manual_tax_id",
+          tax_id: rawTaxId,
+          status: "provider_pending",
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "member_id" },
+      );
+    setSubmitting(false);
+
+    if (dbErr) {
+      Alert.alert(
+        t("tax_id_entry.save_failed_title"),
+        t("tax_id_entry.save_failed_body"),
+      );
+      return;
+    }
+
     // Interest-First flow (KYC-2.2): a successful tax-ID submission
     // is the final step in the SSN/ITIN paths. Land the user on
     // InterestUnlockedSuccess with the same amount they saw on
-    // UnlockInterestPrompt. isFullAccess: true because tax-ID
-    // verification grants Tier 3.
-    //
-    // Phase KYC-2 / KYC-3 will replace the synchronous navigate with
-    // an actual submitTaxId() context call → backend verification →
-    // success navigation on response.
+    // UnlockInterestPrompt. The actual tier upgrade happens once
+    // the Persona webhook (or admin review) flips status to
+    // 'approved' and `trg_sync_kyc_tier_to_profile` fires.
     navigation.navigate(Routes.InterestUnlockedSuccess, {
       unlockedAmount: totalInterest,
       isFullAccess: true,
@@ -267,13 +352,32 @@ export default function TaxIDEntryScreen() {
 
             {/* Form Fields */}
             <View style={styles.sectionCard}>
+              {/* P1 (kyc-trigger review): "we pre-filled this for you"
+                  hint, only when at least one field came from the
+                  profile fallback above. Dismisses itself the moment
+                  the user edits either field. */}
+              {prefilledFromProfile ? (
+                <View style={styles.prefillHint}>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={14}
+                    color="#1E40AF"
+                  />
+                  <Text style={styles.prefillHintText}>
+                    {t("tax_id_entry.prefill_note")}
+                  </Text>
+                </View>
+              ) : null}
               {/* Legal Name */}
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>{t("tax_id_entry.label_legal_name")}</Text>
                 <TextInput
                   style={styles.input}
                   value={legalName}
-                  onChangeText={setLegalName}
+                  onChangeText={(v) => {
+                    setLegalName(v);
+                    if (prefilledFromProfile) setPrefilledFromProfile(false);
+                  }}
                   placeholder={t("tax_id_entry.placeholder_legal_name")}
                   placeholderTextColor="#9CA3AF"
                   autoComplete="name"
@@ -286,7 +390,10 @@ export default function TaxIDEntryScreen() {
                 <TextInput
                   style={styles.input}
                   value={dateOfBirth}
-                  onChangeText={(v) => setDateOfBirth(formatDate(v))}
+                  onChangeText={(v) => {
+                    setDateOfBirth(formatDate(v));
+                    if (prefilledFromProfile) setPrefilledFromProfile(false);
+                  }}
                   placeholder={t("tax_id_entry.placeholder_dob")}
                   placeholderTextColor="#9CA3AF"
                   keyboardType="number-pad"
@@ -294,13 +401,36 @@ export default function TaxIDEntryScreen() {
                 />
               </View>
 
-              {/* Tax ID */}
+              {/* Tax ID — KYC P1 inline validation: 9-digit format check
+                  surfaces a red border + helper text when the user has
+                  typed digits but not the right count. (?) help icon
+                  fires Alert with privacy explainer. */}
               <View style={styles.field}>
-                <Text style={styles.fieldLabel}>{taxIdLabel}</Text>
+                <View style={styles.fieldLabelRow}>
+                  <Text style={styles.fieldLabel}>{taxIdLabel}</Text>
+                  <TouchableOpacity
+                    onPress={() =>
+                      Alert.alert(
+                        t("tax_id_entry.help_taxid_title"),
+                        t("tax_id_entry.help_taxid_body"),
+                      )
+                    }
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("tax_id_entry.help_taxid_title")}
+                  >
+                    <Ionicons
+                      name="help-circle-outline"
+                      size={16}
+                      color={MUTED}
+                    />
+                  </TouchableOpacity>
+                </View>
                 <TextInput
                   style={[
                     styles.input,
                     { fontFamily: monoFont, letterSpacing: 2 },
+                    !!rawTaxId && rawTaxId.length !== 9 && styles.inputError,
                   ]}
                   value={taxId}
                   onChangeText={(v) => setTaxId(formatTaxId(v))}
@@ -310,6 +440,11 @@ export default function TaxIDEntryScreen() {
                   maxLength={11}
                   secureTextEntry
                 />
+                {!!rawTaxId && rawTaxId.length !== 9 ? (
+                  <Text style={styles.errorText}>
+                    {t("tax_id_entry.error_format")}
+                  </Text>
+                ) : null}
               </View>
 
               {/* Confirm Tax ID */}
@@ -366,7 +501,7 @@ export default function TaxIDEntryScreen() {
             {/* Need Help — for users without SSN/ITIN */}
             <TouchableOpacity
               style={styles.needHelpButton}
-              onPress={() => navigation.navigate(Routes.ITINEducation)}
+              onPress={() => navigation.navigate(Routes.KYCHub)}
               accessibilityRole="button"
               accessibilityLabel="Don't have SSN or ITIN, get help"
             >
@@ -457,7 +592,37 @@ const styles = StyleSheet.create({
     color: NAVY,
     marginBottom: 8,
   },
+  fieldLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
   field: { marginBottom: 16 },
+
+  // P1 (kyc-trigger review): the "pre-filled from profile" hint
+  // banner. Visually distinct from validation errors (info-blue, not
+  // amber/red) so the user reads it as a courtesy note rather than a
+  // problem.
+  prefillHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    marginBottom: 14,
+  },
+  prefillHintText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#1E40AF",
+    fontWeight: "500",
+    lineHeight: 16,
+  },
   fieldNoMargin: {},
 
   input: {

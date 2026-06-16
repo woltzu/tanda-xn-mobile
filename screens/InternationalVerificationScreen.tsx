@@ -119,9 +119,9 @@ export default function InternationalVerificationScreen() {
       internationalIdType: idType,
       hasTaxId,
     });
-    // Phase KYC-2 will read the form state from a KYC context;
-    // for now we just navigate forward.
-    navigation.navigate(Routes.IDVerificationStart);
+    // KYC P1 (2026-06-12): IDVerificationStart folded into KYCDocument
+    // (single-screen front + back + selfie). Route directly.
+    navigation.navigate(Routes.KYCDocument);
   };
 
   return (

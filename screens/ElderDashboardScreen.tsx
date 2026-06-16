@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,12 +6,17 @@ import {
   ScrollView,
   TouchableOpacity,
   SafeAreaView,
+  Modal,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useTranslation } from "react-i18next";
 import { useElder } from "../context/ElderContext";
+
+// Conflict P1 (2026-06-12): first-visit coach mark flag. One-shot.
+const COACH_MARK_KEY = "@tandaxn_elder_dashboard_seen_v1";
 
 type RootStackParamList = {
   ElderDashboard: undefined;
@@ -20,6 +25,8 @@ type RootStackParamList = {
   VouchSystem: undefined;
   MediationCase: undefined;
   ElderTrainingHub: undefined;
+  ConflictCase: { caseId?: string; circleId?: string; circleName?: string } | undefined;
+  ElderOnboarding: undefined;
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -27,6 +34,28 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export default function ElderDashboardScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { t } = useTranslation();
+
+  // Conflict P1 — first-visit coach mark. Loads the one-shot flag on mount
+  // and surfaces a 2-slide modal explaining "what an elder does" and "your
+  // three actions". Reading is synchronous against AsyncStorage, but the
+  // initial state defaults to hidden so we never flash the modal before the
+  // disk read returns.
+  const [coachMarkVisible, setCoachMarkVisible] = useState(false);
+  const [coachMarkSlide, setCoachMarkSlide] = useState<0 | 1>(0);
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(COACH_MARK_KEY).then((v) => {
+      if (!cancelled && v !== "1") setCoachMarkVisible(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const dismissCoachMark = () => {
+    setCoachMarkVisible(false);
+    AsyncStorage.setItem(COACH_MARK_KEY, "1").catch(() => {});
+  };
+
   const {
     isElder,
     elderProfile,
@@ -35,6 +64,8 @@ export default function ElderDashboardScreen() {
     myCases,
     getHonorScoreTier,
     getElderTierInfo,
+    submitRuling,
+    escalateCase,
   } = useElder();
 
   // If not an elder yet, show the become elder CTA
@@ -83,7 +114,7 @@ export default function ElderDashboardScreen() {
             </View>
             <TouchableOpacity
               style={styles.becomeElderButton}
-              onPress={() => navigation.navigate("BecomeElder")}
+              onPress={() => navigation.navigate("ElderOnboarding")}
             >
               <Text style={styles.becomeElderButtonText}>
                 Check Eligibility
@@ -103,6 +134,55 @@ export default function ElderDashboardScreen() {
     (c) => c.status === "assigned" || c.status === "in_progress"
   ).length;
 
+  // P2 (migration 161) — batch resolution mode. When "select" is on,
+  // each active case becomes a checkbox row; the sticky action bar
+  // appears once at least one is selected. Actions loop over the
+  // existing ElderContext primitives.
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchBusy, setBatchBusy] = useState(false);
+  const activeMyCases = myCases.filter(
+    (c) => c.status === "assigned" || c.status === "in_progress" || c.status === "open",
+  );
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setBatchMode(false);
+  };
+  const runBatch = async (action: "resolve" | "warn" | "escalate") => {
+    if (batchBusy || selectedIds.size === 0) return;
+    setBatchBusy(true);
+    try {
+      for (const id of selectedIds) {
+        if (action === "resolve") {
+          await submitRuling(
+            id,
+            t("conflict_p2.batch_resolve_ruling"),
+            t("conflict_p2.batch_resolve_explanation"),
+          );
+        } else if (action === "escalate") {
+          await escalateCase(id, t("conflict_p2.batch_escalate_reason"));
+        } else {
+          // 'warn' has no first-class context method yet — leave a
+          // TODO and just close the selection. The migration-160
+          // moderation_actions table is the future home for elder
+          // warnings.
+          console.warn("[batch] warn action not yet wired for case", id);
+        }
+      }
+      clearSelection();
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -115,7 +195,7 @@ export default function ElderDashboardScreen() {
         <Text style={styles.headerTitle}>{t("elder_dashboard.header_dashboard")}</Text>
         <TouchableOpacity
           style={styles.settingsButton}
-          onPress={() => navigation.navigate("BecomeElder")}
+          onPress={() => navigation.navigate("ElderOnboarding")}
         >
           <Ionicons name="settings-outline" size={22} color="#6B7280" />
         </TouchableOpacity>
@@ -191,7 +271,7 @@ export default function ElderDashboardScreen() {
             {activeCases > 0 && (
               <TouchableOpacity
                 style={styles.actionItem}
-                onPress={() => navigation.navigate("MediationCase")}
+                onPress={() => navigation.navigate("ConflictCase")}
               >
                 <View style={[styles.actionIcon, { backgroundColor: "#FEF3C7" }]}>
                   <Ionicons name="shield-checkmark" size={20} color="#D97706" />
@@ -207,6 +287,79 @@ export default function ElderDashboardScreen() {
             )}
           </View>
         )}
+
+        {/* P2 — Batch resolution mode. Lets an elder pick multiple
+            similar disputes and apply one action over the whole set.
+            Hidden behind a "Select cases" toggle so the dashboard stays
+            calm by default. */}
+        {activeMyCases.length > 0 ? (
+          <View style={styles.batchSection}>
+            <View style={styles.batchHeader}>
+              <Text style={styles.sectionTitle}>
+                {t("conflict_p2.batch_section_title")}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  if (batchMode) clearSelection();
+                  else setBatchMode(true);
+                }}
+                accessibilityRole="button"
+                style={styles.batchToggleBtn}
+              >
+                <Text style={styles.batchToggleText}>
+                  {batchMode
+                    ? t("conflict_p2.batch_toggle_done")
+                    : t("conflict_p2.batch_toggle_select")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.batchList}>
+              {activeMyCases.map((c) => {
+                const checked = selectedIds.has(c.id);
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[
+                      styles.batchRow,
+                      checked && styles.batchRowChecked,
+                    ]}
+                    onPress={() => {
+                      if (batchMode) toggleSelected(c.id);
+                      else
+                        navigation.navigate("ConflictCase", {
+                          caseId: c.id,
+                        } as never);
+                    }}
+                    accessibilityRole={batchMode ? "checkbox" : "button"}
+                    accessibilityState={
+                      batchMode ? { checked } : undefined
+                    }
+                  >
+                    {batchMode ? (
+                      <Ionicons
+                        name={checked ? "checkbox" : "square-outline"}
+                        size={18}
+                        color={checked ? "#00C6AE" : "#9CA3AF"}
+                      />
+                    ) : (
+                      <View style={[styles.actionIcon, { backgroundColor: "#FEF3C7" }]}>
+                        <Ionicons name="shield-checkmark" size={16} color="#D97706" />
+                      </View>
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.batchRowTitle} numberOfLines={1}>
+                        {c.title || c.type}
+                      </Text>
+                      <Text style={styles.batchRowSub} numberOfLines={1}>
+                        {c.circleName ?? ""} · {c.status}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
 
         {/* Quick Actions Grid */}
         <Text style={styles.sectionTitle}>{t("elder_dashboard.section_actions")}</Text>
@@ -239,7 +392,7 @@ export default function ElderDashboardScreen() {
 
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => navigation.navigate("MediationCase")}
+            onPress={() => navigation.navigate("ConflictCase")}
           >
             <View style={[styles.actionCardIcon, { backgroundColor: "#FEF3C7" }]}>
               <Ionicons name="shield-checkmark" size={28} color="#D97706" />
@@ -252,7 +405,7 @@ export default function ElderDashboardScreen() {
 
           <TouchableOpacity
             style={styles.actionCard}
-            onPress={() => navigation.navigate("ElderTrainingHub")}
+            onPress={() => navigation.navigate("ElderOnboarding")}
           >
             <View style={[styles.actionCardIcon, { backgroundColor: "#DBEAFE" }]}>
               <Ionicons name="school" size={28} color="#3B82F6" />
@@ -268,7 +421,7 @@ export default function ElderDashboardScreen() {
         <View style={styles.progressSection}>
           <View style={styles.progressHeader}>
             <Text style={styles.sectionTitle}>{t("elder_dashboard.section_tier")}</Text>
-            <TouchableOpacity onPress={() => navigation.navigate("ElderTrainingHub")}>
+            <TouchableOpacity onPress={() => navigation.navigate("ElderOnboarding")}>
               <Text style={styles.viewAllText}>{t("elder_dashboard.view_details")}</Text>
             </TouchableOpacity>
           </View>
@@ -325,6 +478,124 @@ export default function ElderDashboardScreen() {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      {/* P2 — Sticky batch-action bar. Visible when at least one case
+          is selected. Three primary actions cover the resolve / warn /
+          escalate verbs from the spec. The "warn" path is a TODO
+          (see runBatch) until ElderContext grows a warnMember primitive. */}
+      {batchMode && selectedIds.size > 0 ? (
+        <View style={styles.batchBar}>
+          <Text style={styles.batchBarCount}>
+            {t("conflict_p2.batch_bar_count", { n: selectedIds.size })}
+          </Text>
+          <View style={styles.batchBarActions}>
+            <TouchableOpacity
+              style={styles.batchActionBtnPrimary}
+              disabled={batchBusy}
+              onPress={() => runBatch("resolve")}
+              accessibilityRole="button"
+            >
+              <Text style={styles.batchActionBtnPrimaryText}>
+                {t("conflict_p2.batch_action_resolve")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.batchActionBtnGhost}
+              disabled={batchBusy}
+              onPress={() => runBatch("warn")}
+              accessibilityRole="button"
+            >
+              <Text style={styles.batchActionBtnGhostText}>
+                {t("conflict_p2.batch_action_warn")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.batchActionBtnGhost}
+              disabled={batchBusy}
+              onPress={() => runBatch("escalate")}
+              accessibilityRole="button"
+            >
+              <Text style={styles.batchActionBtnGhostText}>
+                {t("conflict_p2.batch_action_escalate")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : null}
+
+      {/* Conflict P1 — first-visit coach mark. Two slides: what an elder
+          does, then your three actions. AsyncStorage flag keeps it one-shot. */}
+      <Modal
+        visible={coachMarkVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissCoachMark}
+      >
+        <View style={styles.coachOverlay}>
+          <View style={styles.coachCard}>
+            <View style={styles.coachIconWrap}>
+              <Ionicons
+                name={coachMarkSlide === 0 ? "shield-checkmark" : "compass"}
+                size={32}
+                color="#00C6AE"
+              />
+            </View>
+            <Text style={styles.coachTitle}>
+              {t(
+                coachMarkSlide === 0
+                  ? "elder_dashboard.coach_slide1_title"
+                  : "elder_dashboard.coach_slide2_title",
+              )}
+            </Text>
+            <Text style={styles.coachBody}>
+              {t(
+                coachMarkSlide === 0
+                  ? "elder_dashboard.coach_slide1_body"
+                  : "elder_dashboard.coach_slide2_body",
+              )}
+            </Text>
+            <View style={styles.coachDots}>
+              <View
+                style={[
+                  styles.coachDot,
+                  coachMarkSlide === 0 && styles.coachDotActive,
+                ]}
+              />
+              <View
+                style={[
+                  styles.coachDot,
+                  coachMarkSlide === 1 && styles.coachDotActive,
+                ]}
+              />
+            </View>
+            <TouchableOpacity
+              style={styles.coachCta}
+              onPress={() =>
+                coachMarkSlide === 0
+                  ? setCoachMarkSlide(1)
+                  : dismissCoachMark()
+              }
+              accessibilityRole="button"
+            >
+              <Text style={styles.coachCtaText}>
+                {t(
+                  coachMarkSlide === 0
+                    ? "elder_dashboard.coach_next"
+                    : "elder_dashboard.coach_got_it",
+                )}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={dismissCoachMark}
+              accessibilityRole="button"
+            >
+              <Text style={styles.coachSkip}>
+                {t("elder_dashboard.coach_skip")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -531,6 +802,77 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 12,
   },
+  // P2 — Batch resolution styles
+  batchSection: { marginBottom: 20 },
+  batchHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+  },
+  batchToggleBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#0A2342",
+    backgroundColor: "#FFFFFF",
+    marginBottom: 12,
+  },
+  batchToggleText: { fontSize: 12, fontWeight: "700", color: "#0A2342" },
+  batchList: { paddingHorizontal: 20, gap: 8 },
+  batchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+  },
+  batchRowChecked: {
+    borderColor: "#00C6AE",
+    backgroundColor: "#F0FDFB",
+  },
+  batchRowTitle: { fontSize: 13, fontWeight: "700", color: "#1a1a2e" },
+  batchRowSub: { fontSize: 11, color: "#6B7280", marginTop: 2 },
+
+  batchBar: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 16,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: "#0A2342",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 4,
+  },
+  batchBarCount: { color: "#FFFFFF", fontWeight: "700", fontSize: 13 },
+  batchBarActions: { flexDirection: "row", gap: 6 },
+  batchActionBtnPrimary: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#00C6AE",
+  },
+  batchActionBtnPrimaryText: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },
+  batchActionBtnGhost: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.4)",
+  },
+  batchActionBtnGhostText: { color: "#FFFFFF", fontSize: 11, fontWeight: "700" },
   actionsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -635,5 +977,73 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
+  },
+  // Coach-mark overlay (Conflict P1)
+  coachOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(10, 35, 66, 0.7)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  coachCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 24,
+    width: "100%",
+    maxWidth: 360,
+    alignItems: "center",
+  },
+  coachIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#F0FDFB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+  },
+  coachTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  coachBody: {
+    fontSize: 13,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 19,
+    marginBottom: 16,
+  },
+  coachDots: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 16,
+  },
+  coachDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#E5E7EB",
+  },
+  coachDotActive: { backgroundColor: "#00C6AE" },
+  coachCta: {
+    backgroundColor: "#00C6AE",
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  coachCtaText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  coachSkip: {
+    fontSize: 12,
+    color: "#6B7280",
+    textDecorationLine: "underline",
   },
 });

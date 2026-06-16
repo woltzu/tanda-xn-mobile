@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,18 +10,27 @@ import {
   RefreshControl,
   Share,
   Platform,
+  Modal,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
+import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFeed, FeedPost } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
 import { useCircles } from "../context/CirclesContext";
 import { useFilteredFeed, FeedFilter } from "../hooks/useFilteredFeed";
 import FeedPostCard from "../components/FeedPostCard";
 import { showToast } from "../components/Toast";
+import { uploadToBucket } from "../utils/image";
 import { colors, radius, typography, spacing } from "../theme/tokens";
+
+const COACH_MARK_KEY = "@tandaxn_dream_feed_seen_v1";
+const RETRY_URI_KEY_PREFIX = "@tandaxn_dream_post_retry_uri:";
+const FEED_IMAGES_BUCKET = "feed-images";
 
 type DreamFeedNavigationProp = StackNavigationProp<any>;
 
@@ -47,7 +56,86 @@ export default function DreamFeedScreen() {
     toggleSave,
     fetchMorePosts,
     refreshFeed,
+    refetchFeed,
+    updateDreamPostImage,
+    markDreamPostImageFailed,
   } = useFeed();
+
+  // Cache-aware refetch on focus — uses the 5-minute in-memory cache so
+  // tab-switching is cheap. Pull-to-refresh still busts the cache via
+  // refreshFeed.
+  useFocusEffect(
+    useCallback(() => {
+      refetchFeed();
+    }, [refetchFeed]),
+  );
+
+  // ── First-visit coach mark ──────────────────────────────────────────
+  const [coachVisible, setCoachVisible] = useState(false);
+  const [coachSlide, setCoachSlide] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_MARK_KEY);
+        if (!cancelled && seen !== "1") setCoachVisible(true);
+      } catch {
+        /* AsyncStorage failure is non-fatal — skip the modal. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const dismissCoach = () => {
+    setCoachVisible(false);
+    AsyncStorage.setItem(COACH_MARK_KEY, "1").catch(() => {});
+  };
+
+  // ── Retry upload — runs from FeedPostCard's "Retry upload" pill ────
+  const [retryingIds, setRetryingIds] = useState<Set<string>>(new Set());
+  const handleRetryUpload = useCallback(
+    async (post: FeedPost) => {
+      if (!user?.id) return;
+      if (retryingIds.has(post.id)) return;
+      const localUri = await AsyncStorage.getItem(
+        RETRY_URI_KEY_PREFIX + post.id,
+      );
+      if (!localUri) {
+        Alert.alert(
+          t("dream_feed.upload_retry_no_uri_title"),
+          t("dream_feed.upload_retry_no_uri_body"),
+        );
+        return;
+      }
+      setRetryingIds((prev) => new Set(prev).add(post.id));
+      const { publicUrl, error } = await uploadToBucket(
+        localUri,
+        user.id,
+        FEED_IMAGES_BUCKET,
+      );
+      if (error || !publicUrl) {
+        showToast(t("dream_feed.upload_retry_failed"), "error");
+        await markDreamPostImageFailed(post.id);
+      } else {
+        await updateDreamPostImage(post.id, publicUrl);
+        AsyncStorage.removeItem(RETRY_URI_KEY_PREFIX + post.id).catch(() => {});
+        showToast(t("dream_feed.upload_retry_success"), "success");
+      }
+      setRetryingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(post.id);
+        return next;
+      });
+    },
+    [
+      user?.id,
+      retryingIds,
+      updateDreamPostImage,
+      markDreamPostImageFailed,
+      t,
+    ],
+  );
 
   const { networkUserIds } = useCircles();
 
@@ -156,6 +244,7 @@ export default function DreamFeedScreen() {
       onSave={toggleSave}
       onXnScorePress={() => navigation.navigate("XnScoreDashboard" as any)}
       currentUserId={user?.id}
+      onRetryUpload={handleRetryUpload}
     />
   );
 
@@ -192,13 +281,21 @@ export default function DreamFeedScreen() {
     }
 
     if (activeFilter === "trending") {
+      // Two flavors:
+      //   - posts.length === 0  → "feed is empty" (use the body copy)
+      //   - posts.length > 0    → "posts exist but none have likes yet"
+      //                           (use the no-likes copy)
+      const bodyKey =
+        posts.length > 0
+          ? "dream_feed.empty_trending_no_likes_body"
+          : "dream_feed.empty_trending_body";
       return (
         <View style={styles.emptyState}>
           <Text style={styles.emptyEmoji}>{"\u{1F525}"}</Text>
-          <Text style={styles.emptyTitle}>{t("dream_feed.empty_trending_title")}</Text>
-          <Text style={styles.emptySubtitle}>
-            {t("dream_feed.empty_trending_body")}
+          <Text style={styles.emptyTitle}>
+            {t("dream_feed.empty_trending_title")}
           </Text>
+          <Text style={styles.emptySubtitle}>{t(bodyKey)}</Text>
         </View>
       );
     }
@@ -318,6 +415,73 @@ export default function DreamFeedScreen() {
       >
         <Ionicons name="videocam" size={24} color="#FFFFFF" />
       </TouchableOpacity>
+
+      {/* First-visit coach mark — AsyncStorage-gated 2-slide overlay. */}
+      <Modal
+        visible={coachVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissCoach}
+      >
+        <View style={styles.coachBackdrop}>
+          <View style={styles.coachCard}>
+            <Ionicons
+              name={coachSlide === 0 ? "sparkles-outline" : "hand-left-outline"}
+              size={36}
+              color={colors.accentTeal}
+              style={{ marginBottom: 14 }}
+            />
+            <Text style={styles.coachTitle}>
+              {t(`dream_feed.coach_slide${coachSlide + 1}_title`)}
+            </Text>
+            <Text style={styles.coachBody}>
+              {t(`dream_feed.coach_slide${coachSlide + 1}_body`)}
+            </Text>
+            <View style={styles.coachDots}>
+              <View
+                style={[
+                  styles.coachDot,
+                  coachSlide === 0 && styles.coachDotActive,
+                ]}
+              />
+              <View
+                style={[
+                  styles.coachDot,
+                  coachSlide === 1 && styles.coachDotActive,
+                ]}
+              />
+            </View>
+            <View style={styles.coachActions}>
+              <TouchableOpacity
+                onPress={dismissCoach}
+                style={styles.coachSkipBtn}
+                accessibilityRole="button"
+              >
+                <Text style={styles.coachSkipText}>
+                  {t("dream_feed.coach_skip")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  if (coachSlide === 1) {
+                    dismissCoach();
+                  } else {
+                    setCoachSlide(1);
+                  }
+                }}
+                style={styles.coachPrimaryBtn}
+                accessibilityRole="button"
+              >
+                <Text style={styles.coachPrimaryText}>
+                  {coachSlide === 1
+                    ? t("dream_feed.coach_got_it")
+                    : t("dream_feed.coach_next")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -478,5 +642,66 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
     zIndex: 999,
+  },
+
+  // ── Coach mark modal ──────────────────────────────────────────────
+  coachBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  coachCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 18,
+    padding: 24,
+    alignItems: "center",
+  },
+  coachTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  coachBody: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 19,
+    textAlign: "center",
+    marginBottom: 18,
+  },
+  coachDots: { flexDirection: "row", gap: 6, marginBottom: 18 },
+  coachDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.border,
+  },
+  coachDotActive: { backgroundColor: colors.accentTeal, width: 18 },
+  coachActions: { flexDirection: "row", gap: 10, width: "100%" },
+  coachSkipBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: colors.screenBg,
+  },
+  coachSkipText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontWeight: "600",
+  },
+  coachPrimaryBtn: {
+    flex: 2,
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: colors.accentTeal,
+  },
+  coachPrimaryText: {
+    fontSize: 13,
+    color: colors.textWhite,
+    fontWeight: "700",
   },
 });

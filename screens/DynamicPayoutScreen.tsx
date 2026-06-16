@@ -34,7 +34,9 @@ export default function DynamicPayoutScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RouteParams, "DynamicPayout">>();
   const { t } = useTranslation();
-  const { circleId } = route.params;
+  // Defensive: route.params can be undefined if the caller navigates
+  // without a circleId. Fall back to empty so destructuring never throws.
+  const { circleId } = route.params ?? ({} as { circleId: string });
 
   const {
     explanation, loading: expLoading, positionText, componentsByImpact, refetch: refetchExp,

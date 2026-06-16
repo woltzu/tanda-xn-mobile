@@ -108,7 +108,7 @@ export default function RepaymentConfirmScreen() {
   const progressPct = Math.min(100, Math.max(0, repayment.newXnScore));
 
   const handleViewHistory = () =>
-    navigation.navigate(Routes.AdvanceHistory);
+    navigation.navigate(Routes.AdvanceHubV2);
   const handleNewAdvance = () => navigation.navigate(Routes.AdvanceHubV2);
   const handleDone = () => navigation.goBack();
 
