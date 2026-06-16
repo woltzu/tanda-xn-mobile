@@ -42,9 +42,12 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   Modal,
   Pressable,
   Switch,
+  TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -66,6 +69,13 @@ import { supabase } from "../lib/supabase";
 // component remounts and tab switches but resets on app restart —
 // which is the right cadence for daily interest accrual.
 const compoundedGoalIdsThisSession = new Set<string>();
+
+// P2 (Bucket C.3): per-goal "you're ahead" dismiss flag. Stored as the
+// ISO timestamp of the dismissal; banner stays hidden for 7 days.
+const AHEAD_DISMISSED_KEY = (goalId: string) =>
+  `@tandaxn_goal_ahead_dismissed_${goalId}`;
+const AHEAD_DISMISS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const AHEAD_THRESHOLD = 1.1;
 import type {
   Goal as RealGoal,
   GoalMilestone as RealMilestone,
@@ -408,6 +418,21 @@ export default function GoalDetailV2Screen() {
   const [menuVisible, setMenuVisible] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(!!goalId);
 
+  // P2 (Bucket C.3) — ahead-of-schedule banner dismiss state.
+  const [aheadDismissedAt, setAheadDismissedAt] = useState<number | null>(null);
+
+  // P2 (Bucket C.5) — quick-edit target sheet.
+  const [quickEditVisible, setQuickEditVisible] = useState(false);
+  const [quickEditAmount, setQuickEditAmount] = useState<number>(0);
+  const [quickEditSaving, setQuickEditSaving] = useState(false);
+
+  // P2 (Bucket C.4) — animated progress bar.
+  // The Animated.Value lives across the screen's lifetime so successive
+  // refetches (deposits, withdrawals) animate from the prior width
+  // rather than snapping. Width can't use the native driver, so we keep
+  // useNativeDriver=false here.
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
   const loadGoal = useCallback(async () => {
     if (!goalId) return;
     setLoading(true);
@@ -674,6 +699,128 @@ export default function GoalDetailV2Screen() {
     // discoverable; tapping shows a coming-soon toast for now.
     showToast(t("goal_detail.share_coming_soon"), "info");
   };
+
+  // P2 (Bucket C.3) — projection math for the "you're ahead" banner.
+  //
+  // Linear pace = balance / days_since_start. Project forward to
+  // target_date. If the projection clears target × 1.10, surface a
+  // banner suggesting a new target = current target × 1.10 (rounded
+  // to the nearest $100 so the chip reads as a clean number).
+  const aheadProjection = useMemo(() => {
+    if (!goal.target || goal.target <= 0) return null;
+    if (!goal.targetDate) return null;
+    if (realStatus === "completed") return null;
+    const due = new Date(goal.targetDate);
+    if (isNaN(due.getTime())) return null;
+    const today = new Date();
+    const daysUntil = Math.max(
+      0,
+      Math.ceil((due.getTime() - today.getTime()) / 86_400_000),
+    );
+    // Need at least 7 days of history to extrapolate — short windows
+    // are noisy ("user deposited $50 yesterday so they'll have a
+    // million by Friday" is the kind of false positive we want to
+    // skip).
+    if (goal.daysActive < 7) return null;
+    if (daysUntil <= 0) return null;
+    const dailyRate = goal.balance / goal.daysActive;
+    const projected = goal.balance + dailyRate * daysUntil;
+    if (projected <= goal.target * AHEAD_THRESHOLD) return null;
+    // Round suggested target up to nearest $100.
+    const raw = goal.target * 1.1;
+    const suggested = Math.ceil(raw / 100) * 100;
+    return { projected, suggested };
+  }, [
+    goal.balance,
+    goal.target,
+    goal.targetDate,
+    goal.daysActive,
+    realStatus,
+  ]);
+
+  // Load any persisted dismiss timestamp from AsyncStorage on mount.
+  useEffect(() => {
+    let cancelled = false;
+    if (!goal.id) return;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(AHEAD_DISMISSED_KEY(goal.id));
+        if (cancelled) return;
+        const ms = raw ? new Date(raw).getTime() : NaN;
+        setAheadDismissedAt(Number.isFinite(ms) ? ms : null);
+      } catch {
+        if (!cancelled) setAheadDismissedAt(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [goal.id]);
+
+  const showAheadBanner =
+    !!aheadProjection &&
+    (aheadDismissedAt === null ||
+      Date.now() - aheadDismissedAt >= AHEAD_DISMISS_WINDOW_MS);
+
+  const handleDismissAhead = async () => {
+    const now = new Date();
+    setAheadDismissedAt(now.getTime());
+    try {
+      await AsyncStorage.setItem(
+        AHEAD_DISMISSED_KEY(goal.id),
+        now.toISOString(),
+      );
+    } catch {
+      /* best-effort */
+    }
+  };
+
+  // Open the quick-edit sheet pre-filled with the +10% suggestion when
+  // launched from the ahead banner, or with the current target when
+  // launched via long-press on the target breakdown.
+  const openQuickEdit = (prefill: number) => {
+    setQuickEditAmount(Math.round(prefill));
+    setQuickEditVisible(true);
+  };
+
+  const handleQuickEditSave = async () => {
+    if (quickEditAmount <= 0) return;
+    setQuickEditSaving(true);
+    const { error } = await updateGoal(goal.id, {
+      targetAmount: quickEditAmount,
+    });
+    setQuickEditSaving(false);
+    if (error) {
+      Alert.alert(
+        t("goal_detail.quick_edit_failed_title"),
+        (error as { message?: string })?.message ?? t("goal_detail.try_again"),
+      );
+      return;
+    }
+    setQuickEditVisible(false);
+    showToast(t("goal_detail.quick_edit_toast"), "success");
+    loadGoal();
+  };
+
+  // P2 (Bucket C.4) — animate the progress bar to the current value
+  // whenever it changes. The Animated.Value is initialised at 0 (see
+  // ref above), so the first paint after fetch animates from 0 → real
+  // progress. Subsequent refetches (deposits, withdrawals) animate
+  // from the prior progress.
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: goal.progressPercent ?? 0,
+      duration: 600,
+      easing: Easing.out(Easing.cubic),
+      // Width can't use the native driver — keep this on the JS thread.
+      useNativeDriver: false,
+    }).start();
+  }, [goal.progressPercent, progressAnim]);
+  const animatedProgressWidth = progressAnim.interpolate({
+    inputRange: [0, 100],
+    outputRange: ["0%", "100%"],
+    extrapolate: "clamp",
+  });
   // Replaced full-screen navigation with bottom-sheet modals — same
   // atomic RPC paths (transfer_to_goal / transfer_from_goal) under the
   // hood, but one less screen transition per deposit / withdrawal.
@@ -809,26 +956,41 @@ export default function GoalDetailV2Screen() {
                 </Text>
               </View>
               <View style={styles.breakdownDivider} />
-              <View style={styles.breakdownItem}>
+              {/* P2 (Bucket C.5) — long-press the target value to open
+                  the inline quick-edit sheet without leaving Detail.
+                  Tap remains a no-op so users don't accidentally edit
+                  when scrolling. */}
+              <Pressable
+                style={styles.breakdownItem}
+                onLongPress={() => openQuickEdit(goal.target)}
+                delayLongPress={350}
+                accessibilityRole="button"
+                accessibilityLabel={t("goal_detail.quick_edit_a11y")}
+              >
                 <Text style={styles.breakdownLabel}>{t("goal_detail.breakdown_target")}</Text>
                 <Text style={styles.breakdownValue}>
                   ${goal.target.toLocaleString()}
                 </Text>
-              </View>
+              </Pressable>
             </View>
 
-            {/* Progress bar */}
+            {/* P2 (Bucket C.4) — progress bar now animates between
+                values rather than snapping. Animated.View can't host
+                LinearGradient as a child while keeping width animated,
+                so we wrap the gradient in an Animated.View and clip
+                via overflow:hidden on the track. */}
             <View style={styles.progressWrap}>
               <View style={styles.progressTrack}>
-                <LinearGradient
-                  colors={[TEAL, "#00E5CC"]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[
-                    styles.progressFill,
-                    { width: `${goal.progressPercent}%` },
-                  ]}
-                />
+                <Animated.View
+                  style={[styles.progressFillWrap, { width: animatedProgressWidth }]}
+                >
+                  <LinearGradient
+                    colors={[TEAL, "#00E5CC"]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.progressFillGradient}
+                  />
+                </Animated.View>
               </View>
               <View style={styles.progressLabels}>
                 <Text style={styles.progressLabel}>
@@ -844,6 +1006,47 @@ export default function GoalDetailV2Screen() {
 
         {/* ===== CONTENT ===== */}
         <View style={styles.contentWrap}>
+          {/* P2 (Bucket C.3) — ahead-of-schedule nudge. Suggests
+              raising the target by 10% when the linear projection
+              clears target × 1.10. Dismissible for 7 days per goal. */}
+          {showAheadBanner && aheadProjection && (
+            <View style={styles.aheadBanner}>
+              <View style={styles.aheadBannerIcon}>
+                <Ionicons name="trending-up" size={20} color={GREEN} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.aheadBannerTitle}>
+                  {t("goal_detail.ahead_title")}
+                </Text>
+                <Text style={styles.aheadBannerBody}>
+                  {t("goal_detail.ahead_body", {
+                    amount: aheadProjection.suggested.toLocaleString(),
+                  })}
+                </Text>
+                <View style={styles.aheadBannerActions}>
+                  <TouchableOpacity
+                    style={styles.aheadBannerPrimary}
+                    onPress={() => openQuickEdit(aheadProjection.suggested)}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.aheadBannerPrimaryText}>
+                      {t("goal_detail.ahead_cta_raise")}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.aheadBannerGhost}
+                    onPress={handleDismissAhead}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.aheadBannerGhostText}>
+                      {t("goal_detail.ahead_cta_dismiss")}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          )}
+
           {/* Celebration banner — visible only when the goal is completed
               and the user hasn't permanently dismissed via View Celebration
               (AsyncStorage flag) or temporarily via Dismiss (per-session). */}
@@ -1298,6 +1501,113 @@ export default function GoalDetailV2Screen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* P2 (Bucket C.5) — quick-edit target sheet. Same bottom-sheet
+          shape as the options menu. Opens long-press on the target
+          number or from the ahead banner's "Raise target" CTA. */}
+      <Modal
+        visible={quickEditVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setQuickEditVisible(false)}
+      >
+        <Pressable
+          style={styles.menuBackdrop}
+          onPress={() => setQuickEditVisible(false)}
+        >
+          <Pressable style={styles.menuSheet} onPress={() => {}}>
+            <View style={styles.menuHandle} />
+            <Text style={styles.quickEditTitle}>
+              {t("goal_detail.quick_edit_title")}
+            </Text>
+            <Text style={styles.quickEditSub}>
+              {t("goal_detail.quick_edit_sub", {
+                current: goal.target.toLocaleString(),
+              })}
+            </Text>
+
+            <View style={styles.quickEditInputWrap}>
+              <Text style={styles.quickEditCurrency}>$</Text>
+              <TextInput
+                value={String(quickEditAmount)}
+                onChangeText={(s) =>
+                  setQuickEditAmount(Number(s.replace(/[^0-9]/g, "")) || 0)
+                }
+                keyboardType="numeric"
+                style={styles.quickEditInput}
+                editable={!quickEditSaving}
+              />
+            </View>
+
+            {/* Quick chips around the suggested suggestion. The ahead
+                banner already opens with the +10% value pre-filled, but
+                explicit chips keep this useful for the long-press path
+                where the suggestion is just the current target. */}
+            <View style={styles.quickEditChipsRow}>
+              {[1.05, 1.1, 1.25].map((mult) => {
+                const amt = Math.ceil((goal.target * mult) / 100) * 100;
+                const isActive = quickEditAmount === amt;
+                return (
+                  <TouchableOpacity
+                    key={mult}
+                    style={[
+                      styles.quickEditChip,
+                      isActive && styles.quickEditChipActive,
+                    ]}
+                    onPress={() => setQuickEditAmount(amt)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
+                  >
+                    <Text
+                      style={[
+                        styles.quickEditChipText,
+                        isActive && styles.quickEditChipTextActive,
+                      ]}
+                    >
+                      ${amt.toLocaleString()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.quickEditActions}>
+              <TouchableOpacity
+                style={styles.menuCancel}
+                onPress={() => setQuickEditVisible(false)}
+                disabled={quickEditSaving}
+                accessibilityRole="button"
+              >
+                <Text style={styles.menuCancelText}>
+                  {t("goal_detail.cancel")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.quickEditSave,
+                  (quickEditSaving || quickEditAmount <= 0) &&
+                    styles.quickEditSaveDisabled,
+                ]}
+                onPress={handleQuickEditSave}
+                disabled={quickEditSaving || quickEditAmount <= 0}
+                accessibilityRole="button"
+                accessibilityState={{
+                  disabled: quickEditSaving || quickEditAmount <= 0,
+                  busy: quickEditSaving,
+                }}
+              >
+                {quickEditSaving ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.quickEditSaveText}>
+                    {t("goal_detail.quick_edit_button")}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1409,6 +1719,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   progressFill: { height: 10, borderRadius: 5 },
+  // P2 (Bucket C.4) — Animated.View wrapper around the gradient fill.
+  // The wrapper carries the animated width; the gradient inside fills
+  // it to 100% so the animation is one-dimensional.
+  progressFillWrap: { height: 10, borderRadius: 5, overflow: "hidden" },
+  progressFillGradient: { flex: 1, height: 10, borderRadius: 5 },
   progressLabels: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1723,6 +2038,103 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   menuCancelText: { fontSize: 14, fontWeight: "700", color: MUTED },
+
+  // P2 (Bucket C.3) — ahead-of-schedule banner.
+  aheadBanner: {
+    flexDirection: "row",
+    gap: 12,
+    padding: 14,
+    backgroundColor: "#ECFDF5",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    marginBottom: 14,
+  },
+  aheadBannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#D1FAE5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  aheadBannerTitle: { fontSize: 14, fontWeight: "700", color: NAVY, marginBottom: 4 },
+  aheadBannerBody: { fontSize: 12, color: MUTED, marginBottom: 10, lineHeight: 17 },
+  aheadBannerActions: { flexDirection: "row", gap: 8 },
+  aheadBannerPrimary: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: GREEN,
+  },
+  aheadBannerPrimaryText: { fontSize: 12, fontWeight: "700", color: "#FFFFFF" },
+  aheadBannerGhost: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#FFFFFF",
+  },
+  aheadBannerGhostText: { fontSize: 12, fontWeight: "700", color: MUTED },
+
+  // P2 (Bucket C.5) — quick-edit target bottom sheet.
+  quickEditTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: NAVY,
+    marginBottom: 4,
+    paddingHorizontal: 6,
+  },
+  quickEditSub: {
+    fontSize: 12,
+    color: MUTED,
+    marginBottom: 14,
+    paddingHorizontal: 6,
+  },
+  quickEditInputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: "#F5F7FA",
+    marginBottom: 12,
+  },
+  quickEditCurrency: { fontSize: 24, fontWeight: "700", color: NAVY },
+  quickEditInput: {
+    flex: 1,
+    fontSize: 28,
+    fontWeight: "700",
+    color: NAVY,
+    marginLeft: 4,
+    padding: 0,
+  },
+  quickEditChipsRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
+  quickEditChip: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: BORDER,
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  quickEditChipActive: { borderWidth: 2, borderColor: TEAL, backgroundColor: "#F0FDFB" },
+  quickEditChipText: { fontSize: 12, fontWeight: "600", color: MUTED },
+  quickEditChipTextActive: { color: GREEN },
+  quickEditActions: { flexDirection: "row", gap: 10 },
+  quickEditSave: {
+    flex: 2,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: TEAL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickEditSaveDisabled: { backgroundColor: BORDER },
+  quickEditSaveText: { fontSize: 14, fontWeight: "800", color: "#FFFFFF" },
   activityRow: {
     flexDirection: "row",
     alignItems: "center",
