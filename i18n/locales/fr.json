@@ -5687,6 +5687,20 @@
     "category_auto_hint": "Catégorisé automatiquement comme {{category}} d'après votre titre — modifiable à tout moment.",
     "price_suggest_chip": "Des événements similaires coûtent {{amount}} — l'utiliser ?"
   },
+  "score_explainer": {
+    "title": "Comment fonctionnent vos scores",
+    "close": "Fermer",
+    "view_full_cta": "Voir toutes les analyses IA",
+    "no_recent_explanation": "Aucune explication récente pour ce score.",
+    "section_xnscore": "XnScore",
+    "section_honor": "Score d'Honneur",
+    "section_stress": "Score de Stress",
+    "section_mood": "Dérive d'Humeur",
+    "glossary_xnscore": "Votre XnScore (0–100) reflète l'historique de paiement, la complétion, la fiabilité, les dépôts et l'engagement. Plus élevé, mieux c'est.",
+    "glossary_honor": "Le Score d'Honneur (0–100) mesure votre standing communautaire — recommandations, médiation, disputes. Plus élevé, mieux c'est.",
+    "glossary_stress": "Le Score de Stress (0–100) suit les signes de pression financière — retards, ton, baisse de connexions. Plus bas, mieux c'est.",
+    "glossary_mood": "La Dérive d'Humeur (0–100) suit la façon dont vous parlez de vos finances vs. votre baseline. Plus bas signifie stable."
+  },
   "ai_insights_screen": {
     "header_title": "Explications IA",
     "header_subtitle": "Explications en langage clair pour vos métriques de score.",

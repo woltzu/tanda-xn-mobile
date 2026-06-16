@@ -80,9 +80,12 @@ const INSIGHTS: InsightCardConfig[] = [
 // the card automatically picks up the latest matching decision.
 const CARD_DECISION_TYPES: Record<string, DecisionType[]> = {
   xnscore: ["xnscore_increase", "xnscore_decrease"],
-  honor: [],
-  stress: [],
-  mood: [],
+  // Wired in Bucket B (migration 186). The TS DecisionType union doesn't
+  // know about these yet — cast through the union so the screen can read
+  // them without a hooks/useExplainableAI type bump.
+  honor: ["honor_score_change" as DecisionType],
+  stress: ["stress_score_change" as DecisionType],
+  mood: ["mood_drift_change" as DecisionType],
 };
 
 function pickLatestDecisionForCard(

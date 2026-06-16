@@ -5687,6 +5687,20 @@
     "category_auto_hint": "Auto-set as {{category}} based on your title — change it any time.",
     "price_suggest_chip": "Similar events charge {{amount}} — use that?"
   },
+  "score_explainer": {
+    "title": "How your scores work",
+    "close": "Close",
+    "view_full_cta": "View full AI insights",
+    "no_recent_explanation": "No recent explanation for this score yet.",
+    "section_xnscore": "XnScore",
+    "section_honor": "Honor Score",
+    "section_stress": "Stress Score",
+    "section_mood": "Mood Drift",
+    "glossary_xnscore": "Your XnScore (0–100) reflects payment history, completion, reliability, deposits, and engagement. Higher is better.",
+    "glossary_honor": "Honor Score (0–100) measures your community standing through vouching, mediation, and disputes. Higher is better.",
+    "glossary_stress": "Stress Score (0–100) tracks signs of financial pressure — late payments, tone, login drop-off. Lower is better.",
+    "glossary_mood": "Mood Drift (0–100) tracks how you talk about your finances vs. your own baseline. Lower means stable."
+  },
   "ai_insights_screen": {
     "header_title": "AI Insights",
     "header_subtitle": "Plain-language explanations for your scoring metrics.",

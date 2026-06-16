@@ -43,6 +43,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/tokens";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import ScoreExplainerSheet from "../components/ScoreExplainerSheet";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
@@ -348,6 +349,10 @@ type FeatureCardProps = {
   helpTitle?: string;
   helpText?: string;
   helpA11yLabel?: string;
+  // Bucket B (Explainable AI) — when supplied, the (?) icon calls this
+  // instead of firing Alert.alert. Lets the parent route all 4 help
+  // icons to a single unified ScoreExplainerSheet.
+  onHelpPress?: () => void;
   children?: React.ReactNode;
 };
 
@@ -365,6 +370,7 @@ function FeatureCard({
   helpTitle,
   helpText,
   helpA11yLabel,
+  onHelpPress,
   children,
 }: FeatureCardProps) {
   return (
@@ -385,9 +391,13 @@ function FeatureCard({
         <View style={{ flex: 1 }}>
           <View style={styles.titleRow}>
             <Text style={styles.featureTitle}>{title}</Text>
-            {helpText ? (
+            {helpText || onHelpPress ? (
               <TouchableOpacity
-                onPress={() => Alert.alert(helpTitle ?? title, helpText)}
+                onPress={() =>
+                  onHelpPress
+                    ? onHelpPress()
+                    : Alert.alert(helpTitle ?? title, helpText ?? "")
+                }
                 accessibilityRole="button"
                 accessibilityLabel={helpA11yLabel ?? helpTitle ?? title}
                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -849,6 +859,12 @@ export default function ScoreHubScreen() {
   // hand-rolled rule table — replace with an AI-driven recommendation
   // when the engine grows that capability.
   const [actionPlanDismissed, setActionPlanDismissed] = useState<boolean>(false);
+
+  // Bucket B (Explainable AI) — single bottom sheet replaces four
+  // separate Alert.alert popups (one per score card). The XnScore inline
+  // button and each FeatureCard's (?) icon all open the same sheet.
+  const [showExplainer, setShowExplainer] = useState(false);
+  const openExplainer = useCallback(() => setShowExplainer(true), []);
   useEffect(() => {
     let cancelled = false;
     AsyncStorage.getItem(ACTION_PLAN_DISMISSED_KEY).then((v) => {
@@ -1042,12 +1058,7 @@ export default function ScoreHubScreen() {
               {t("score_hub.header_eyebrow")}
             </Text>
             <TouchableOpacity
-              onPress={() =>
-                Alert.alert(
-                  t("score_hub.xnscore_help_title"),
-                  t("score_hub.xnscore_help_text"),
-                )
-              }
+              onPress={openExplainer}
               accessibilityRole="button"
               accessibilityLabel={t("score_hub.xnscore_help_title")}
               hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -1168,6 +1179,7 @@ export default function ScoreHubScreen() {
           description={t("score_hub.honor_description")}
           helpTitle={t("score_hub.honor_help_title")}
           helpText={t("score_hub.honor_help_text")}
+          onHelpPress={openExplainer}
           statusLabel={
             loading && !honorPresent
               ? undefined
@@ -1275,6 +1287,7 @@ export default function ScoreHubScreen() {
           description={t("score_hub.stress_description")}
           helpTitle={t("score_hub.stress_help_title")}
           helpText={t("score_hub.stress_help_text")}
+          onHelpPress={openExplainer}
           statusLabel={
             loading && !stressPresent
               ? undefined
@@ -1416,6 +1429,7 @@ export default function ScoreHubScreen() {
           description={t("score_hub.mood_description")}
           helpTitle={t("score_hub.mood_help_title")}
           helpText={t("score_hub.mood_help_text")}
+          onHelpPress={openExplainer}
           statusLabel={
             loading && !moodPresent
               ? undefined
@@ -1558,6 +1572,21 @@ export default function ScoreHubScreen() {
       <FirstVisitModal
         visible={showFirstVisit}
         onClose={dismissFirstVisit}
+      />
+
+      <ScoreExplainerSheet
+        visible={showExplainer}
+        onClose={() => setShowExplainer(false)}
+        onViewFullInsights={() => {
+          setShowExplainer(false);
+          navigation.navigate(Routes.AIInsights);
+        }}
+        scores={{
+          xnscore: xnScoreValue,
+          honor: honorScoreValue,
+          stress: stressScoreValue,
+          mood: moodScoreValue,
+        }}
       />
     </SafeAreaView>
   );
