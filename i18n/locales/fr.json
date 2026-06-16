@@ -2287,7 +2287,7 @@
     "coach_got_it": "Compris"
   },
   "kyc_tiers_modal": {
-    "title": "Niveaux de compte",
+    "title": "Niveau de vérification",
     "intro": "Chaque niveau débloque plus de TandaXn. Vérifiez votre identité pour monter.",
     "close": "Fermer",
     "dismiss": "Compris",
@@ -4409,7 +4409,7 @@
     "section_reason": "Pourquoi partez-vous ?"
   },
   "screen_headers": {
-    "account_tiers": "Niveaux de compte",
+    "account_tiers": "Niveau de vérification",
     "active_sessions": "Sessions actives",
     "add_recipient": "Ajouter un destinataire",
     "admin_settings": "Paramètres administrateur",
@@ -5219,7 +5219,24 @@
     "label_position_access": "Accès aux positions",
     "tag_limited": "Limité",
     "card_all_tiers": "Tous les paliers",
-    "badge_current": "Actuel"
+    "badge_current": "Actuel",
+    "benefit_next_label": "Prochain ({{tier}}) : {{value}}",
+    "benefit_max_tier_label": "Palier maximal atteint",
+    "benefit_unlimited": "Illimité",
+    "benefit_none": "Aucun",
+    "benefit_n_members": "{{n}} membres",
+    "benefit_per_month": "{{amount}} $/mois",
+    "position_any": "Toutes les positions",
+    "position_middle": "Position centrale uniquement",
+    "position_none": "Restreint"
+  },
+  "demotion": {
+    "title": "Rétrogradé à {{tier}}",
+    "body_with_prev": "Pour retrouver le palier {{previousTier}}, concentrez-vous sur ces actions :",
+    "body_generic": "Voici par où commencer pour remonter :",
+    "reason_label": "Raison",
+    "action_boost_score": "Augmenter le XnScore",
+    "action_complete_circles": "Terminer des cercles"
   },
   "repayment_confirm": {
     "hero_title": "Avance remboursée !",

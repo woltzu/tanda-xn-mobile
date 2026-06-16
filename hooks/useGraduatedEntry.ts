@@ -24,6 +24,60 @@ import {
 
 
 // ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ MODULE-LEVEL TIER CACHE (Bucket B)                                          │
+// └─────────────────────────────────────────────────────────────────────────────┘
+//
+// Every screen that calls useMemberTier() used to refetch + re-subscribe
+// to realtime on its own — switching screens or mounting a hub that
+// rendered two consumers (Dashboard tier card + tier explain sheet)
+// fired two RPCs. Same pattern we used for useAdvanceDashboard: a
+// process-wide Map cache keyed by userId with a 5-min TTL.
+//
+// Cache busts when:
+//   - realtime subscription fires a tier change (handled inline below)
+//   - the tier-change notification trigger fires (caller imports
+//     `bustTierCache` and clears it after handling the notification)
+//   - the user pulls-to-refresh (calls hook.refetch / hook.refresh)
+//
+// TTL is the same 5-min window the dashboard / advance hooks use. Any
+// realtime tier change invalidates instantly via the Supabase subscription
+// in useMemberTier, so a stale read window is bounded by transient
+// network gaps, not by the TTL.
+
+const TIER_CACHE_TTL_MS = 5 * 60 * 1000;
+const tierCache = new Map<string, { data: MemberTierStatus; fetchedAt: number }>();
+
+/**
+ * Clear the cache so the next useMemberTier() mount or refetch lands fresh.
+ * Pass a userId to evict only that entry; omit to clear everything.
+ *
+ * Used by:
+ *   - useMemberTier itself on realtime tier-change events
+ *   - any caller that knows the user's tier has changed (e.g., after
+ *     consuming a `tier_change` notification from the inbox)
+ */
+export function bustTierCache(userId?: string) {
+  if (userId) tierCache.delete(userId);
+  else tierCache.clear();
+}
+
+function readTierCache(userId: string): MemberTierStatus | null {
+  const entry = tierCache.get(userId);
+  if (!entry) return null;
+  if (Date.now() - entry.fetchedAt >= TIER_CACHE_TTL_MS) {
+    tierCache.delete(userId);
+    return null;
+  }
+  return entry.data;
+}
+
+function writeTierCache(userId: string, data: MemberTierStatus | null) {
+  if (!data) return;
+  tierCache.set(userId, { data, fetchedAt: Date.now() });
+}
+
+
+// ┌─────────────────────────────────────────────────────────────────────────────┐
 // │ MEMBER TIER HOOK                                                            │
 // └─────────────────────────────────────────────────────────────────────────────┘
 
@@ -35,18 +89,35 @@ export function useMemberTier(userId?: string) {
   const { user } = useAuth();
   const targetId = userId || user?.id;
 
-  const [status, setStatus] = useState<MemberTierStatus | null>(null);
+  // Seed initial state from the cache if a fresh entry exists. Avoids a
+  // null-flash + skeleton render when switching between screens.
+  const [status, setStatus] = useState<MemberTierStatus | null>(() => {
+    if (!targetId) return null;
+    return readTierCache(targetId);
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStatus = useCallback(async () => {
+  const fetchStatus = useCallback(async (opts?: { force?: boolean }) => {
     if (!targetId) return;
+
+    // Cache hit path. Skip the RPC entirely when the cached entry is fresh
+    // and the caller hasn't requested a forced refresh.
+    if (!opts?.force) {
+      const cached = readTierCache(targetId);
+      if (cached) {
+        setStatus(cached);
+        setLoading(false);
+        return;
+      }
+    }
 
     setLoading(true);
     setError(null);
 
     try {
       const data = await GraduatedEntryEngine.getMemberTierStatus(targetId);
+      writeTierCache(targetId, data);
       setStatus(data);
     } catch (err: any) {
       setError(err.message);
@@ -55,17 +126,31 @@ export function useMemberTier(userId?: string) {
     }
   }, [targetId]);
 
+  /**
+   * Force a refetch from the server. Bypasses the cache. Used by
+   * pull-to-refresh and by any caller that knows the data is stale.
+   */
+  const refresh = useCallback(async () => {
+    if (!targetId) return;
+    bustTierCache(targetId);
+    await fetchStatus({ force: true });
+  }, [targetId, fetchStatus]);
+
   useEffect(() => {
     fetchStatus();
   }, [fetchStatus]);
 
-  // Realtime subscription
+  // Realtime subscription — bust the cache BEFORE refetching so the
+  // refetch path doesn't see the now-stale cached entry.
   useEffect(() => {
     if (!targetId) return;
 
     const subscription = GraduatedEntryEngine.subscribeToTierChanges(
       targetId,
-      () => { fetchStatus(); }
+      () => {
+        bustTierCache(targetId);
+        fetchStatus({ force: true });
+      },
     );
 
     return () => { subscription.unsubscribe(); };
@@ -112,6 +197,7 @@ export function useMemberTier(userId?: string) {
     loading,
     error,
     refetch: fetchStatus,
+    refresh,
   };
 }
 

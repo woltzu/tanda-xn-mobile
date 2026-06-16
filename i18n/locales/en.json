@@ -2287,7 +2287,7 @@
     "coach_got_it": "Got it"
   },
   "kyc_tiers_modal": {
-    "title": "Account tiers",
+    "title": "Verification level",
     "intro": "Each tier unlocks more of TandaXn. Verify your identity to move up.",
     "close": "Close",
     "dismiss": "Got it",
@@ -4409,7 +4409,7 @@
     "section_reason": "Why are you leaving?"
   },
   "screen_headers": {
-    "account_tiers": "Account Levels",
+    "account_tiers": "Verification level",
     "active_sessions": "Active Sessions",
     "add_recipient": "Add Recipient",
     "admin_settings": "Admin Settings",
@@ -5219,7 +5219,24 @@
     "label_position_access": "Position Access",
     "tag_limited": "Limited",
     "card_all_tiers": "All Tiers",
-    "badge_current": "Current"
+    "badge_current": "Current",
+    "benefit_next_label": "Next ({{tier}}): {{value}}",
+    "benefit_max_tier_label": "Top tier reached",
+    "benefit_unlimited": "Unlimited",
+    "benefit_none": "None",
+    "benefit_n_members": "{{n}} members",
+    "benefit_per_month": "${{amount}}/mo",
+    "position_any": "All positions",
+    "position_middle": "Middle only",
+    "position_none": "Restricted"
+  },
+  "demotion": {
+    "title": "Demoted to {{tier}}",
+    "body_with_prev": "To get back to {{previousTier}}, focus on these actions:",
+    "body_generic": "Here's how to start climbing back:",
+    "reason_label": "Reason",
+    "action_boost_score": "Boost XnScore",
+    "action_complete_circles": "Complete circles"
   },
   "repayment_confirm": {
     "hero_title": "Advance Paid Off!",

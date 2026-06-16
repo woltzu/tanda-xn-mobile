@@ -9,7 +9,8 @@ import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { useMemberTier, useTierProgress, useTierLimits } from "../hooks/useGraduatedEntry";
-import { getTierByKeyOrFallback, TIER_CATALOG } from "../lib/tiers";
+import { getTierByKeyOrFallback, getNextTier, TIER_CATALOG } from "../lib/tiers";
+import { Routes } from "../lib/routes";
 
 // Bucket A canonical refactor — the legacy TIER_CONFIG had stale
 // bronze/silver/gold/platinum keys that never existed in the live DB. The
@@ -31,6 +32,7 @@ export default function GraduatedEntryScreen() {
     progressPct,
     isDemoted,
     demotionReason,
+    demotionPathBack,
     loading: tierLoading,
     error: tierError,
     refetch: refetchTier,
@@ -68,6 +70,33 @@ export default function GraduatedEntryScreen() {
 
   const tierConfig = getTierByKeyOrFallback(currentTier);
   const nextTierConfig = getTierByKeyOrFallback(nextTier);
+  // Bucket B P1.2 — benefit comparison. `nextTierForBenefits` is null at
+  // the top of the ladder, which lets the render path show a "Top tier
+  // reached" indicator instead of a misleading "next tier" line.
+  const nextTierForBenefits = getNextTier(currentTier);
+
+  // Formatters that work on raw catalog fields — used to compute the next
+  // tier's value alongside the current one. The current-tier values come
+  // from useTierLimits' pre-formatted strings; for parity we render the
+  // catalog fields ourselves so both columns use the same vocabulary.
+  const formatCircleSize = (size: number | null): string => {
+    if (size === null) return t("graduated_entry.benefit_unlimited");
+    if (size === 0) return t("graduated_entry.benefit_none");
+    return t("graduated_entry.benefit_n_members", { n: size });
+  };
+  const formatContribution = (cents: number | null): string => {
+    if (cents === null) return t("graduated_entry.benefit_unlimited");
+    if (cents === 0) return "$0";
+    return t("graduated_entry.benefit_per_month", {
+      amount: (cents / 100).toLocaleString(),
+    });
+  };
+  const formatPositionAccess = (p: string): string =>
+    p === "any"
+      ? t("graduated_entry.position_any")
+      : p === "middle_only"
+        ? t("graduated_entry.position_middle")
+        : t("graduated_entry.position_none");
 
   if (loading && !tier) {
     return (
@@ -114,6 +143,65 @@ export default function GraduatedEntryScreen() {
           <View style={styles.errorBanner}>
             <Ionicons name="warning" size={16} color="#EF4444" />
             <Text style={styles.errorText}>{tierError}</Text>
+          </View>
+        )}
+
+        {/* Bucket B P1.3 — demotion path-back action card.
+            Renders only for demoted members. Shows what tier they fell to,
+            what to focus on, an optional DB-provided narrative
+            (demotion_path_back), and chip-buttons that route to the
+            specific screens where the recovery work happens. */}
+        {isDemoted && (
+          <View style={[styles.card, styles.demotionCard]}>
+            <View style={styles.demotionHeaderRow}>
+              <Ionicons name="arrow-down-circle" size={20} color="#EF4444" />
+              <Text style={styles.demotionTitle}>
+                {t("demotion.title", { tier: tierConfig.label })}
+              </Text>
+            </View>
+            <Text style={styles.demotionBody}>
+              {tier?.previousTier
+                ? t("demotion.body_with_prev", {
+                    previousTier: getTierByKeyOrFallback(tier.previousTier).label,
+                  })
+                : t("demotion.body_generic")}
+            </Text>
+            {demotionReason ? (
+              <Text style={styles.demotionReason}>
+                {t("demotion.reason_label")}: {demotionReason}
+              </Text>
+            ) : null}
+            {demotionPathBack ? (
+              <Text style={styles.demotionPathBack}>{demotionPathBack}</Text>
+            ) : null}
+            <View style={styles.demotionActionsRow}>
+              <TouchableOpacity
+                style={styles.demotionChip}
+                onPress={() => navigation.navigate(Routes.ScoreHub)}
+                accessibilityRole="button"
+                accessibilityLabel={t("demotion.action_boost_score")}
+              >
+                <Ionicons name="trending-up" size={14} color="#0A2342" />
+                <Text style={styles.demotionChipText}>
+                  {t("demotion.action_boost_score")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.demotionChip}
+                onPress={() => {
+                  const parent = navigation.getParent?.();
+                  if (parent) parent.navigate("Circles");
+                  else navigation.navigate("Circles");
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={t("demotion.action_complete_circles")}
+              >
+                <Ionicons name="people" size={14} color="#0A2342" />
+                <Text style={styles.demotionChipText}>
+                  {t("demotion.action_complete_circles")}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -172,6 +260,21 @@ export default function GraduatedEntryScreen() {
             <View style={styles.limitInfo}>
               <Text style={styles.limitLabel}>{t("graduated_entry.label_max_circle_size")}</Text>
               <Text style={styles.limitValue}>{maxCircleSizeFormatted}</Text>
+              {nextTierForBenefits ? (
+                <View style={styles.limitNextRow}>
+                  <Ionicons name="arrow-up" size={11} color="#10B981" />
+                  <Text style={styles.limitNextText}>
+                    {t("graduated_entry.benefit_next_label", {
+                      tier: nextTierForBenefits.label,
+                      value: formatCircleSize(nextTierForBenefits.maxCircleSize),
+                    })}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.limitMaxTier}>
+                  {t("graduated_entry.benefit_max_tier_label")}
+                </Text>
+              )}
             </View>
           </View>
 
@@ -182,6 +285,21 @@ export default function GraduatedEntryScreen() {
             <View style={styles.limitInfo}>
               <Text style={styles.limitLabel}>{t("graduated_entry.label_max_contribution")}</Text>
               <Text style={styles.limitValue}>{maxContributionFormatted}</Text>
+              {nextTierForBenefits ? (
+                <View style={styles.limitNextRow}>
+                  <Ionicons name="arrow-up" size={11} color="#10B981" />
+                  <Text style={styles.limitNextText}>
+                    {t("graduated_entry.benefit_next_label", {
+                      tier: nextTierForBenefits.label,
+                      value: formatContribution(nextTierForBenefits.maxContributionCents),
+                    })}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.limitMaxTier}>
+                  {t("graduated_entry.benefit_max_tier_label")}
+                </Text>
+              )}
             </View>
           </View>
 
@@ -191,13 +309,24 @@ export default function GraduatedEntryScreen() {
             </View>
             <View style={styles.limitInfo}>
               <Text style={styles.limitLabel}>{t("graduated_entry.label_position_access")}</Text>
-              <Text style={styles.limitValue}>
-                {positionAccess === "any"
-                  ? "All positions"
-                  : positionAccess === "middle_only"
-                  ? "Middle positions only"
-                  : "Restricted"}
-              </Text>
+              <Text style={styles.limitValue}>{formatPositionAccess(positionAccess)}</Text>
+              {nextTierForBenefits ? (
+                nextTierForBenefits.positionAccess !== positionAccess ? (
+                  <View style={styles.limitNextRow}>
+                    <Ionicons name="arrow-up" size={11} color="#10B981" />
+                    <Text style={styles.limitNextText}>
+                      {t("graduated_entry.benefit_next_label", {
+                        tier: nextTierForBenefits.label,
+                        value: formatPositionAccess(nextTierForBenefits.positionAccess),
+                      })}
+                    </Text>
+                  </View>
+                ) : null
+              ) : (
+                <Text style={styles.limitMaxTier}>
+                  {t("graduated_entry.benefit_max_tier_label")}
+                </Text>
+              )}
             </View>
             {positionRestrictions.middleOnly && (
               <View style={styles.restrictionBadge}>
@@ -322,6 +451,36 @@ const styles = StyleSheet.create({
   limitValue: { fontSize: 15, fontWeight: "600", color: "#0A2342", marginTop: 2 },
   restrictionBadge: { backgroundColor: "#F59E0B15", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   restrictionText: { fontSize: 11, color: "#F59E0B", fontWeight: "600" },
+
+  // Bucket B P1.2 — benefit next-tier comparison line
+  limitNextRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
+  limitNextText: { fontSize: 11, color: "#10B981", fontWeight: "600" },
+  limitMaxTier: { fontSize: 11, color: "#8B5CF6", fontWeight: "600", marginTop: 4 },
+
+  // Bucket B P1.3 — demotion path-back card
+  demotionCard: {
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  demotionHeaderRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  demotionTitle: { flex: 1, fontSize: 15, fontWeight: "700", color: "#991B1B" },
+  demotionBody: { fontSize: 13, color: "#0A2342", lineHeight: 19, marginBottom: 6 },
+  demotionReason: { fontSize: 12, color: "#7F1D1D", marginBottom: 6, fontStyle: "italic" },
+  demotionPathBack: { fontSize: 12, color: "#7F1D1D", marginBottom: 10, lineHeight: 18 },
+  demotionActionsRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+  demotionChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  demotionChipText: { fontSize: 12, color: "#0A2342", fontWeight: "700" },
 
   // Action Items
   actionItem: { flexDirection: "row", alignItems: "flex-start", paddingVertical: 10, gap: 10 },
