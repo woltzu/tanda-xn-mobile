@@ -596,6 +596,7 @@
     "header": "Portefeuille",
     "balance_label": "Solde total (équivalent USD)",
     "currency_count": "Sur {{count}} devises",
+    "send": "Envoyer",
     "action_add_funds": "Ajouter des fonds",
     "action_withdraw": "Retirer",
     "remittance_title": "Envoyer de l'argent",

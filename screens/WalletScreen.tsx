@@ -24,6 +24,7 @@ import {
   useRecentTransfers,
   formatTransferDate,
 } from "../hooks/useRecentTransfers";
+import { useKYCGate } from "../components/KYCGate";
 
 type WalletScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -84,10 +85,28 @@ export default function WalletScreen() {
     }
   };
 
-  const rateAlerts = [
-    { id: 1, from: "USD", to: "XOF", target: 620, current: 610, direction: "above", active: true },
-    { id: 2, from: "EUR", to: "XOF", target: 650, current: 656, direction: "below", active: true },
-  ];
+  // P0 (Access Wallet review): gate the inbound + outbound money
+  // surfaces. Add-funds and Remittance both route to KYCHub when the
+  // user is unverified; the deferred-action snapshot sends them back
+  // to the action they wanted after the verification flow completes.
+  // Send-money (DomesticSendMoney) has its own gate at submit time
+  // (added in the KYC trigger review) so we don't double-gate here.
+  const addFundsGate = useKYCGate({ resumeRoute: "AddFunds" });
+  const remittanceGate = useKYCGate({ resumeRoute: "Remittance" });
+
+  const handleSendMoney = () => {
+    navigation.navigate("DomesticSendMoney" as never);
+  };
+  const handleAddFunds = async () => {
+    const passed = await addFundsGate.ensureVerified();
+    if (!passed) return;
+    navigation.navigate("AddFunds");
+  };
+  const handleRemittance = async () => {
+    const passed = await remittanceGate.ensureVerified();
+    if (!passed) return;
+    navigation.navigate("Remittance" as never);
+  };
 
   const activeCurrencies = currencies.filter((c) => c.isActive && c.balance > 0);
   const inactiveCurrencies = currencies.filter((c) => !c.isActive || c.balance === 0);
@@ -223,7 +242,14 @@ export default function WalletScreen() {
               <View style={styles.quickActions}>
                 <TouchableOpacity
                   style={styles.actionButtonPrimary}
-                  onPress={() => navigation.navigate("AddFunds")}
+                  onPress={handleSendMoney}
+                >
+                  <Ionicons name="paper-plane" size={16} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>{t("wallet.send")}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.actionButtonOutline}
+                  onPress={handleAddFunds}
                 >
                   <Ionicons name="add" size={16} color="#FFFFFF" />
                   <Text style={styles.actionButtonText}>{t("wallet.action_add_funds")}</Text>
@@ -242,7 +268,7 @@ export default function WalletScreen() {
           {/* Remittance Banner */}
           <TouchableOpacity
             style={styles.remittanceBanner}
-            onPress={() => navigation.navigate("Remittance" as any)}
+            onPress={handleRemittance}
           >
             <View style={styles.remittanceLeft}>
               <View style={styles.remittanceIcon}>
@@ -309,7 +335,11 @@ export default function WalletScreen() {
             </View>
 
             {activeCurrencies.map((currency) => (
-              <TouchableOpacity key={currency.code} style={styles.currencyCard}>
+              // P0: cards no longer pretend to be tappable — there is no
+              // per-currency detail screen wired up. Render as a plain
+              // View so the chevron + active state don't suggest a
+              // destination that doesn't exist.
+              <View key={currency.code} style={styles.currencyCard}>
                 <View style={styles.currencyLeft}>
                   <View style={styles.flagContainer}>
                     <Text style={styles.flagText}>{currency.flag}</Text>
@@ -330,9 +360,8 @@ export default function WalletScreen() {
                       </Text>
                     ) : null}
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                 </View>
-              </TouchableOpacity>
+              </View>
             ))}
 
             {activeCurrencies.length === 0 && (
@@ -403,50 +432,10 @@ export default function WalletScreen() {
             )}
           </View>
 
-          {/* Rate Alerts */}
-          {rateAlerts.filter((a) => a.active).length > 0 ? (
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>{t("wallet.section_rate_alerts")}</Text>
-                <TouchableOpacity>
-                  <Text style={styles.manageText}>{t("wallet.manage")}</Text>
-                </TouchableOpacity>
-              </View>
-
-              {rateAlerts
-                .filter((a) => a.active)
-                .slice(0, 2)
-                .map((alert) => (
-                  <View key={alert.id} style={styles.alertCard}>
-                    <View style={styles.alertLeft}>
-                      <Ionicons name="notifications" size={18} color="#1565C0" />
-                      <View>
-                        <Text style={styles.alertTitle}>
-                          {alert.from} → {alert.to}
-                        </Text>
-                        <Text style={styles.alertSubtitle}>
-                          {t("wallet.rate_alert_when", {
-                            direction: alert.direction,
-                            target: alert.target.toLocaleString(),
-                          })}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={styles.alertCurrent}>
-                      {t("wallet.rate_alert_now", { value: alert.current.toLocaleString() })}
-                    </Text>
-                  </View>
-                ))}
-            </View>
-          ) : null}
-
           {/* Recent Activity */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{t("wallet.section_recent_activity")}</Text>
-              <TouchableOpacity>
-                <Text style={styles.manageText}>{t("wallet.see_all")}</Text>
-              </TouchableOpacity>
             </View>
 
             {transferRows.slice(0, 5).map((tx) => {

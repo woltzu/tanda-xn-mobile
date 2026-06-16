@@ -596,6 +596,7 @@
     "header": "Wallet",
     "balance_label": "Total Balance (USD equivalent)",
     "currency_count": "Across {{count}} currencies",
+    "send": "Send",
     "action_add_funds": "Add Funds",
     "action_withdraw": "Withdraw",
     "remittance_title": "Send Money",
