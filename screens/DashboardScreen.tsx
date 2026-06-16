@@ -26,7 +26,8 @@ import { useActiveIntervention } from "../hooks/useEarlyIntervention";
 import { useStressIntervention } from "../hooks/useFinancialStressPrediction";
 import { useMoodIntervention } from "../hooks/useContributionMoodDetection";
 import { useMemberTier } from "../hooks/useGraduatedEntry";
-import { getTierByKeyOrFallback, getNextTier } from "../lib/tiers";
+import { getTierByKey, getTierByKeyOrFallback, getNextTier } from "../lib/tiers";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useUserDefaults } from "../hooks/useDefaultCascade";
 import { useLateContributions } from "../hooks/useLateContributions";
 import { useInterest } from "../hooks/useInterest";
@@ -163,6 +164,46 @@ export default function DashboardScreen() {
   // explains the eligibility math (XnScore + account age + circles),
   // shows benefits, and offers a deep-dive link to GraduatedEntryScreen.
   const [showTierExplain, setShowTierExplain] = useState(false);
+
+  // Bucket C P1.1 — tier advancement celebration modal.
+  // Detection: tier.currentTier and tier.previousTier are present on the
+  // MemberTierStatus payload; we compare their tierNumber via the
+  // catalog. If new > prev, it's an advancement. AsyncStorage key
+  // per-tier blocks dupes — dismissed once for "established", the user
+  // never sees that particular celebration again (even on reinstall
+  // the server-side state is unchanged, but the key persists locally).
+  // Demotions are intentionally skipped here — Bucket B's demotion
+  // card on GraduatedEntryScreen handles those.
+  const [showCelebration, setShowCelebration] = useState(false);
+  useEffect(() => {
+    if (!tierStatus?.currentTier || !tierStatus.previousTier) return;
+    const currentDef = getTierByKey(tierStatus.currentTier);
+    const prevDef = getTierByKey(tierStatus.previousTier);
+    if (!currentDef || !prevDef) return;
+    if (currentDef.tierNumber <= prevDef.tierNumber) return; // not advancement
+
+    const key = `@tandaxn_tier_celebration_seen_${tierStatus.currentTier}`;
+    let cancelled = false;
+    AsyncStorage.getItem(key)
+      .then((seen) => {
+        if (!cancelled && seen !== "1") setShowCelebration(true);
+      })
+      .catch(() => {
+        /* AsyncStorage failures shouldn't gate the modal — silently skip. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tierStatus?.currentTier, tierStatus?.previousTier]);
+  const dismissCelebration = useCallback(() => {
+    setShowCelebration(false);
+    if (tierStatus?.currentTier) {
+      AsyncStorage.setItem(
+        `@tandaxn_tier_celebration_seen_${tierStatus.currentTier}`,
+        "1",
+      ).catch(() => {});
+    }
+  }, [tierStatus?.currentTier]);
 
   // Safety net: catch users who landed here without going through
   // SetPassword (e.g. closed the tab between QuickJoin success and the
@@ -1469,6 +1510,112 @@ export default function DashboardScreen() {
         <View style={{ height: 100 }} />
       </ScrollView>
 
+      {/* ========== Bucket C — Tier advancement celebration modal ========== */}
+      <Modal
+        visible={showCelebration && !!tierStatus}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissCelebration}
+      >
+        <TouchableOpacity
+          style={tierCelebrationStyles.backdrop}
+          activeOpacity={1}
+          onPress={dismissCelebration}
+          accessibilityRole="button"
+          accessibilityLabel={t("tier_celebration.cta_dismiss")}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            style={tierCelebrationStyles.card}
+            onPress={() => {}}
+          >
+            <Text style={tierCelebrationStyles.confetti}>🎉</Text>
+            <Text style={tierCelebrationStyles.title}>
+              {t("tier_celebration.title")}
+            </Text>
+            <View
+              style={[
+                tierCelebrationStyles.badgeCircle,
+                { backgroundColor: tierDef.color + "22" },
+              ]}
+            >
+              <Text style={tierCelebrationStyles.badgeEmoji}>
+                {tierDef.icon}
+              </Text>
+            </View>
+            <Text style={[tierCelebrationStyles.tierName, { color: tierDef.color }]}>
+              {tierDef.label}
+            </Text>
+            <Text style={tierCelebrationStyles.subtitle}>
+              {t("tier_celebration.subtitle", { tier: tierDef.label })}
+            </Text>
+
+            <Text style={tierCelebrationStyles.sectionLabel}>
+              {t("tier_celebration.benefits_label")}
+            </Text>
+            <View style={tierCelebrationStyles.benefitsList}>
+              <View style={tierCelebrationStyles.benefitRow}>
+                <Ionicons name="people" size={14} color="#3B82F6" />
+                <Text style={tierCelebrationStyles.benefitText}>
+                  {tierDef.maxCircleSize === null
+                    ? t("tier_celebration.benefit_circle_unlimited")
+                    : t("tier_celebration.benefit_circle_size", {
+                        n: tierDef.maxCircleSize,
+                      })}
+                </Text>
+              </View>
+              <View style={tierCelebrationStyles.benefitRow}>
+                <Ionicons name="cash" size={14} color="#10B981" />
+                <Text style={tierCelebrationStyles.benefitText}>
+                  {tierDef.maxContributionCents === null
+                    ? t("tier_celebration.benefit_contribution_unlimited")
+                    : t("tier_celebration.benefit_contribution", {
+                        amount: (tierDef.maxContributionCents / 100).toLocaleString(),
+                      })}
+                </Text>
+              </View>
+              <View style={tierCelebrationStyles.benefitRow}>
+                <Ionicons name="swap-horizontal" size={14} color="#F59E0B" />
+                <Text style={tierCelebrationStyles.benefitText}>
+                  {tierDef.positionAccess === "any"
+                    ? t("tier_celebration.benefit_position_any")
+                    : tierDef.positionAccess === "middle_only"
+                      ? t("tier_celebration.benefit_position_middle")
+                      : t("tier_celebration.benefit_position_none")}
+                </Text>
+              </View>
+            </View>
+
+            <View style={tierCelebrationStyles.actions}>
+              <TouchableOpacity
+                style={tierCelebrationStyles.secondaryBtn}
+                onPress={dismissCelebration}
+                accessibilityRole="button"
+              >
+                <Text style={tierCelebrationStyles.secondaryText}>
+                  {t("tier_celebration.cta_dismiss")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  tierCelebrationStyles.primaryBtn,
+                  { backgroundColor: tierDef.color },
+                ]}
+                onPress={() => {
+                  dismissCelebration();
+                  navigation.navigate(Routes.GraduatedEntry);
+                }}
+                accessibilityRole="button"
+              >
+                <Text style={tierCelebrationStyles.primaryText}>
+                  {t("tier_celebration.cta_view")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* ========== Bucket A — "Why this tier?" bottom sheet ========== */}
       <Modal
         visible={showTierExplain && !!tierStatus}
@@ -1663,6 +1810,85 @@ const tierExplainStyles = StyleSheet.create({
   progressFill: { height: 8, borderRadius: 4 },
   progressPct: { fontSize: 11, color: "#6B7280", marginTop: 4, textAlign: "right" },
   actions: { flexDirection: "row", gap: 10, marginTop: 22 },
+  secondaryBtn: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: "#F5F7FA",
+  },
+  secondaryText: { fontSize: 13, color: "#6B7280", fontWeight: "600" },
+  primaryBtn: {
+    flex: 2,
+    paddingVertical: 13,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  primaryText: { fontSize: 13, color: "#FFFFFF", fontWeight: "700" },
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Bucket C — Tier advancement celebration modal styles
+// ══════════════════════════════════════════════════════════════════════════════
+
+const tierCelebrationStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  card: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 24,
+    alignItems: "center",
+    width: "100%",
+    maxWidth: 360,
+  },
+  confetti: { fontSize: 44, marginBottom: 4 },
+  title: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#0A2342",
+    marginBottom: 18,
+    textAlign: "center",
+  },
+  badgeCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  badgeEmoji: { fontSize: 34 },
+  tierName: { fontSize: 22, fontWeight: "800", marginBottom: 6 },
+  subtitle: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  sectionLabel: {
+    alignSelf: "flex-start",
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  benefitsList: { width: "100%", marginBottom: 22 },
+  benefitRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 6,
+  },
+  benefitText: { flex: 1, fontSize: 13, color: "#0A2342", fontWeight: "500" },
+  actions: { flexDirection: "row", gap: 10, width: "100%" },
   secondaryBtn: {
     flex: 1,
     paddingVertical: 13,

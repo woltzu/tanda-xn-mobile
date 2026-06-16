@@ -9,8 +9,50 @@ import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import { useMemberTier, useTierProgress, useTierLimits } from "../hooks/useGraduatedEntry";
-import { getTierByKeyOrFallback, getNextTier, TIER_CATALOG } from "../lib/tiers";
+import { getTierByKeyOrFallback, getNextTier, TIER_CATALOG, TierDefinition } from "../lib/tiers";
 import { Routes } from "../lib/routes";
+
+// Bucket C P1.2 — trajectory projection.
+// Two gates between tiers: an XnScore threshold and a minimum account
+// age. We compute the user's score growth rate from xnScore/age and
+// project the days to clear each gate; the result is the larger of
+// the two (a user can be score-eligible early but still need to wait
+// for age, or vice versa).
+//
+// Returns a discriminated union the render path can switch on:
+//   top_tier   — no nextTier (elite); show congrats
+//   ready      — both gates already met; auto-advance should fire next eval
+//   building   — score gap exists but rate is zero/negative; can't project
+//   score_only — only the score gate is open; days = scoreEta
+//   age_only   — only the age gate is open; days = ageGap (deterministic)
+//   both       — both gates open; days = max of the two etas
+type TierProjection =
+  | { kind: "top_tier" }
+  | { kind: "ready" }
+  | { kind: "building" }
+  | { kind: "score_only"; days: number }
+  | { kind: "age_only"; days: number }
+  | { kind: "both"; days: number };
+
+function projectDaysToNextTier(
+  xnScore: number,
+  accountAgeDays: number,
+  nextTier: TierDefinition | null,
+): TierProjection {
+  if (!nextTier) return { kind: "top_tier" };
+  const scoreGap = Math.max(0, nextTier.xnScoreMin - xnScore);
+  const ageGap = Math.max(0, nextTier.minAccountAgeDays - accountAgeDays);
+  if (scoreGap === 0 && ageGap === 0) return { kind: "ready" };
+  if (scoreGap > 0) {
+    if (accountAgeDays <= 0) return { kind: "building" };
+    const rate = xnScore / accountAgeDays;
+    if (rate <= 0) return { kind: "building" };
+    const scoreEta = Math.ceil(scoreGap / rate);
+    if (ageGap > 0) return { kind: "both", days: Math.max(scoreEta, ageGap) };
+    return { kind: "score_only", days: scoreEta };
+  }
+  return { kind: "age_only", days: ageGap };
+}
 
 // Bucket A canonical refactor — the legacy TIER_CONFIG had stale
 // bronze/silver/gold/platinum keys that never existed in the live DB. The
@@ -224,6 +266,45 @@ export default function GraduatedEntryScreen() {
               <View style={[styles.progressBarFill, { width: `${Math.min(progressPct, 100)}%`, backgroundColor: tierConfig.color }]} />
             </View>
             <Text style={styles.progressPct}>{Math.round(progressPct)}% complete</Text>
+
+            {/* Bucket C P1.2 — trajectory projection. Renders below the
+                progress bar. The render path is a switch on the projection
+                kind because the copy is reason-specific (rate-driven vs
+                deterministic age-gap vs already-ready). */}
+            {(() => {
+              const proj = projectDaysToNextTier(xnScore, accountAge, nextTierForBenefits);
+              const nextLabel = nextTierForBenefits?.label ?? "";
+              let label: string | null = null;
+              if (proj.kind === "top_tier") {
+                label = t("tier_projection.top_tier");
+              } else if (proj.kind === "ready") {
+                label = t("tier_projection.ready", { tier: nextLabel });
+              } else if (proj.kind === "building") {
+                label = t("tier_projection.building", { tier: nextLabel });
+              } else if (proj.kind === "score_only") {
+                label = t("tier_projection.score_only", {
+                  tier: nextLabel,
+                  days: proj.days,
+                });
+              } else if (proj.kind === "age_only") {
+                label = t("tier_projection.age_only", {
+                  tier: nextLabel,
+                  days: proj.days,
+                });
+              } else {
+                label = t("tier_projection.both", {
+                  tier: nextLabel,
+                  days: proj.days,
+                });
+              }
+              if (!label) return null;
+              return (
+                <View style={styles.projectionRow}>
+                  <Ionicons name="time-outline" size={12} color="#6B7280" />
+                  <Text style={styles.projectionText}>{label}</Text>
+                </View>
+              );
+            })()}
           </View>
 
           {/* Stats Grid */}
@@ -451,6 +532,21 @@ const styles = StyleSheet.create({
   limitValue: { fontSize: 15, fontWeight: "600", color: "#0A2342", marginTop: 2 },
   restrictionBadge: { backgroundColor: "#F59E0B15", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   restrictionText: { fontSize: 11, color: "#F59E0B", fontWeight: "600" },
+
+  // Bucket C P1.2 — trajectory projection line under the progress bar
+  projectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 6,
+  },
+  projectionText: {
+    flex: 1,
+    fontSize: 11,
+    color: "#6B7280",
+    fontWeight: "500",
+    fontStyle: "italic",
+  },
 
   // Bucket B P1.2 — benefit next-tier comparison line
   limitNextRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },

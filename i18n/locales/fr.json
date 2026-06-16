@@ -5238,6 +5238,28 @@
     "action_boost_score": "Augmenter le XnScore",
     "action_complete_circles": "Terminer des cercles"
   },
+  "tier_celebration": {
+    "title": "🎉 Palier supérieur atteint !",
+    "subtitle": "Vous avez atteint {{tier}}. Voici ce que vous débloquez.",
+    "benefits_label": "Nouveautés",
+    "benefit_circle_size": "Rejoignez des cercles jusqu'à {{n}} membres",
+    "benefit_circle_unlimited": "Rejoignez des cercles de toute taille",
+    "benefit_contribution": "Contribuez jusqu'à {{amount}} $/mois",
+    "benefit_contribution_unlimited": "Contributions illimitées",
+    "benefit_position_any": "Choisissez n'importe quelle position dans la file du cercle",
+    "benefit_position_middle": "Éligible aux positions centrales",
+    "benefit_position_none": "Observateur uniquement — pas d'adhésion aux cercles",
+    "cta_view": "Voir vos nouveaux avantages",
+    "cta_dismiss": "Fermer"
+  },
+  "tier_projection": {
+    "top_tier": "Vous avez atteint le palier maximal — félicitations !",
+    "ready": "Toutes les conditions sont remplies — {{tier}} devrait se débloquer bientôt.",
+    "building": "Continuez à bâtir votre XnScore pour débloquer {{tier}}.",
+    "score_only": "À votre rythme actuel, vous atteindrez {{tier}} dans environ {{days}} jours.",
+    "age_only": "Encore {{days}} jours d'activité pour débloquer {{tier}}.",
+    "both": "Environ {{days}} jours pour atteindre {{tier}} — score et activité combinés."
+  },
   "repayment_confirm": {
     "hero_title": "Avance remboursée !",
     "hero_subtitle": "Votre avance est maintenant fermée",

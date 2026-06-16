@@ -5238,6 +5238,28 @@
     "action_boost_score": "Boost XnScore",
     "action_complete_circles": "Complete circles"
   },
+  "tier_celebration": {
+    "title": "🎉 Tier upgraded!",
+    "subtitle": "You've reached {{tier}}. Here's what you've unlocked.",
+    "benefits_label": "What's new",
+    "benefit_circle_size": "Join circles up to {{n}} members",
+    "benefit_circle_unlimited": "Join circles of any size",
+    "benefit_contribution": "Contribute up to ${{amount}}/month",
+    "benefit_contribution_unlimited": "Contribute unlimited amounts",
+    "benefit_position_any": "Pick any position in the circle queue",
+    "benefit_position_middle": "Eligible for middle positions",
+    "benefit_position_none": "Observer only — cannot join circles",
+    "cta_view": "See your new benefits",
+    "cta_dismiss": "Dismiss"
+  },
+  "tier_projection": {
+    "top_tier": "You've reached the top tier — congratulations!",
+    "ready": "All requirements met — {{tier}} should unlock shortly.",
+    "building": "Keep building your XnScore to unlock {{tier}}.",
+    "score_only": "At your current pace, you'll reach {{tier}} in about {{days}} days.",
+    "age_only": "{{days}} more days of activity to unlock {{tier}}.",
+    "both": "About {{days}} days to {{tier}} — score and activity combined."
+  },
   "repayment_confirm": {
     "hero_title": "Advance Paid Off!",
     "hero_subtitle": "Your advance is now closed",
