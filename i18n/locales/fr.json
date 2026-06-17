@@ -3537,6 +3537,12 @@
     "menu_audit_desc": "Historique d'activité complet"
   },
   "make_contribution": {
+    "insufficient_funds": "Le solde de votre portefeuille ({{balance}} $) est insuffisant. Ajoutez des fonds ou utilisez une carte.",
+    "wallet_low": "Le solde de votre portefeuille est faible. Vous pouvez tout de même payer par carte.",
+    "cycle_info": "Cycle {{cycle}} sur {{total}} · Dû le {{dueDate}}",
+    "cycle_due_today": "Dû aujourd'hui !",
+    "cycle_days_left_one": "Il reste {{count}} jour",
+    "cycle_days_left_other": "Il reste {{count}} jours",
     "not_found_header": "Cercle introuvable",
     "not_found_body": "Ce cercle n'a pas pu être trouvé.",
     "btn_go_back": "Retour",
@@ -3572,6 +3578,9 @@
     "btn_pay_full_instead": "Payer le montant complet à la place"
   },
   "contribution_success": {
+    "title": "Contribution envoyée !",
+    "view_circle": "Voir le cercle",
+    "share": "Partager avec le cercle",
     "error_not_found": "Cercle introuvable",
     "btn_go_home": "Aller à l'accueil",
     "title_success": "Paiement réussi !",

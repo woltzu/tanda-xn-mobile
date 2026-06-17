@@ -194,7 +194,7 @@ export default function ContributionSuccessScreen() {
               },
             ]}
           >
-            <Text style={styles.successTitle}>{t("contribution_success.title_success")}</Text>
+            <Text style={styles.successTitle}>{t("contribution_success.title")}</Text>
             <Text style={styles.successSubtitle}>
               Your contribution has been received
             </Text>
@@ -337,7 +337,7 @@ export default function ContributionSuccessScreen() {
           {/* Share Button */}
           <TouchableOpacity style={styles.shareButton} onPress={handleShareReceipt}>
             <Ionicons name="share-outline" size={18} color="#FFFFFF" />
-            <Text style={styles.shareButtonText}>{t("contribution_success.btn_share_receipt")}</Text>
+            <Text style={styles.shareButtonText}>{t("contribution_success.share")}</Text>
           </TouchableOpacity>
         </ScrollView>
 
@@ -345,7 +345,7 @@ export default function ContributionSuccessScreen() {
         <View style={styles.bottomActions}>
           <TouchableOpacity style={styles.viewCircleButton} onPress={handleViewCircle}>
             <Ionicons name="eye-outline" size={20} color="#059669" />
-            <Text style={styles.viewCircleButtonText}>{t("contribution_success.btn_view_circle")}</Text>
+            <Text style={styles.viewCircleButtonText}>{t("contribution_success.view_circle")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>

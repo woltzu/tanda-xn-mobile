@@ -3537,6 +3537,12 @@
     "menu_audit_desc": "Complete activity history"
   },
   "make_contribution": {
+    "insufficient_funds": "Your wallet balance (${{balance}}) is insufficient. Add funds or use a card.",
+    "wallet_low": "Your wallet balance is low. You can still pay with a card.",
+    "cycle_info": "Cycle {{cycle}} of {{total}} · Due by {{dueDate}}",
+    "cycle_due_today": "Due Today!",
+    "cycle_days_left_one": "{{count}} day left",
+    "cycle_days_left_other": "{{count}} days left",
     "not_found_header": "Circle Not Found",
     "not_found_body": "This circle could not be found.",
     "btn_go_back": "Go Back",
@@ -3572,6 +3578,9 @@
     "btn_pay_full_instead": "Pay Full Amount Instead"
   },
   "contribution_success": {
+    "title": "Contribution sent!",
+    "view_circle": "View circle",
+    "share": "Share with circle",
     "error_not_found": "Circle not found",
     "btn_go_home": "Go Home",
     "title_success": "Payment Successful!",

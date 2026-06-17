@@ -18,6 +18,7 @@ import { useAuth } from "../context/AuthContext";
 import { useXnScore } from "../context/XnScoreContext";
 import { useWallet } from "../context/WalletContext";
 import { usePayment } from "../context/PaymentContext";
+import { invalidateCircleDetailCache } from "../hooks/useCircleDetail";
 import { useCurrency, CURRENCIES } from "../context/CurrencyContext";
 import { CurrencySelector, QuickCurrencyPicker } from "../components/CurrencySelector";
 import { ExchangeRateDisplay, FXRiskWarning } from "../components/ExchangeRateDisplay";
@@ -147,6 +148,20 @@ export default function MakeContributionScreen() {
   // Get wallet balance for selected currency
   const walletBalance = getCurrencyBalance(paymentCurrency);
   const hasEnoughBalance = walletBalance >= paymentAmount;
+  // At least one non-wallet (Stripe) method active? Drives the amber-vs-
+  // red insufficient-balance warning and prevents disabling Contribute
+  // when a card could still cover the payment.
+  const hasCardAlternative = useMemo(
+    () =>
+      (stripePaymentMethods || []).some(
+        (pm: any) => pm.status === "active",
+      ),
+    [stripePaymentMethods],
+  );
+  // Contribute disables only when the wallet is selected AND short. If
+  // the user has a card and picks it, the button re-enables; the warning
+  // becomes amber rather than red.
+  const isWalletBlocked = selectedMethod === "wallet" && !hasEnoughBalance;
 
   // Available currencies from user's wallets
   const availableCurrencies = currencies
@@ -278,6 +293,13 @@ export default function MakeContributionScreen() {
         const isOnTime = daysUntilDue >= 0;
         await processContribution(circleId, isOnTime, isEarly);
 
+        // Bust the View-Circle-Details 30 s cache so when the user
+        // returns from the success screen the balance, contribution
+        // count, and activity feed are immediately fresh — the realtime
+        // INSERT will overlap, but the cache invalidation is the cheap
+        // belt-and-suspenders guarantee.
+        invalidateCircleDetailCache(circleId);
+
         navigation.navigate("ContributionSuccess", {
           circleId,
           amount: isCrossBorder ? paymentAmount : amount,
@@ -319,6 +341,8 @@ export default function MakeContributionScreen() {
         const isEarly = daysUntilDue > 2;
         const isOnTime = daysUntilDue >= 0;
         await processContribution(circleId, isOnTime, isEarly);
+
+        invalidateCircleDetailCache(circleId);
 
         navigation.navigate("ContributionSuccess", {
           circleId,
@@ -442,11 +466,21 @@ export default function MakeContributionScreen() {
             </View>
           )}
 
-          {/* Cycle Info */}
+          {/* Cycle Info — answers "where am I in the schedule?" and
+              "when is this due?" in one card. Uses the circle's
+              memberCount as the total-cycles denominator (rotating
+              circles) and falls back to the existing computed cycle
+              number when circle.currentCycle isn't populated. */}
           {!isOneTime && (
             <View style={styles.cycleCard}>
               <View style={styles.cycleHeader}>
-                <Text style={styles.cycleTitle}>Cycle #{cycleInfo.cycleNumber}</Text>
+                <Text style={styles.cycleTitle}>
+                  {t("make_contribution.cycle_info", {
+                    cycle: circle.currentCycle ?? cycleInfo.cycleNumber,
+                    total: circle.memberCount,
+                    dueDate: formatDate(cycleInfo.dueDate),
+                  })}
+                </Text>
                 <View style={[
                   styles.dueBadge,
                   daysUntilDue <= 2 ? styles.dueBadgeUrgent : null,
@@ -455,15 +489,11 @@ export default function MakeContributionScreen() {
                     styles.dueBadgeText,
                     daysUntilDue <= 2 ? styles.dueBadgeTextUrgent : null,
                   ]}>
-                    {daysUntilDue <= 0 ? "Due Today!" : `${daysUntilDue} days left`}
+                    {daysUntilDue <= 0
+                      ? t("make_contribution.cycle_due_today")
+                      : t("make_contribution.cycle_days_left", { count: daysUntilDue })}
                   </Text>
                 </View>
-              </View>
-              <View style={styles.cycleDetail}>
-                <Ionicons name="calendar-outline" size={16} color="#6B7280" />
-                <Text style={styles.cycleDetailText}>
-                  Due by {formatDate(cycleInfo.dueDate)}
-                </Text>
               </View>
             </View>
           )}
@@ -601,6 +631,41 @@ export default function MakeContributionScreen() {
             </View>
           </View>
 
+          {/* Wallet-balance warning. Two flavors:
+              - Red (insufficient_funds): user has wallet selected AND
+                the balance is short. Disables the Confirm button.
+              - Amber (wallet_low): user has wallet selected, balance is
+                short, but at least one Stripe payment method is also
+                available so the user can switch and still pay. */}
+          {selectedMethod === "wallet" && !hasEnoughBalance ? (
+            <View
+              style={[
+                styles.balanceWarning,
+                hasCardAlternative
+                  ? styles.balanceWarningAmber
+                  : styles.balanceWarningRed,
+              ]}
+            >
+              <Ionicons
+                name={hasCardAlternative ? "alert-circle-outline" : "alert-circle"}
+                size={18}
+                color={hasCardAlternative ? "#92400E" : "#DC2626"}
+              />
+              <Text
+                style={[
+                  styles.balanceWarningText,
+                  { color: hasCardAlternative ? "#92400E" : "#7F1D1D" },
+                ]}
+              >
+                {hasCardAlternative
+                  ? t("make_contribution.wallet_low")
+                  : t("make_contribution.insufficient_funds", {
+                      balance: formatCurrency(walletBalance, paymentCurrency),
+                    })}
+              </Text>
+            </View>
+          ) : null}
+
           {/* Info Note */}
           <View style={styles.infoNote}>
             <Ionicons name="shield-checkmark" size={18} color="#00897B" />
@@ -630,10 +695,10 @@ export default function MakeContributionScreen() {
           <TouchableOpacity
             style={[
               styles.confirmButton,
-              isProcessing && styles.confirmButtonDisabled,
+              (isProcessing || isWalletBlocked) && styles.confirmButtonDisabled,
             ]}
             onPress={handleConfirmPayment}
-            disabled={isProcessing}
+            disabled={isProcessing || isWalletBlocked}
           >
             {isProcessing ? (
               <Text style={styles.confirmButtonText}>{t("make_contribution.btn_processing")}</Text>
@@ -1031,6 +1096,29 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#0A2342",
+  },
+  balanceWarning: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  balanceWarningRed: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FCA5A5",
+  },
+  balanceWarningAmber: {
+    backgroundColor: "#FEF3C7",
+    borderColor: "#F59E0B",
+  },
+  balanceWarningText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
   },
   infoNote: {
     flexDirection: "row",
