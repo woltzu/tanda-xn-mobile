@@ -51,8 +51,12 @@ import CreateCircleStartScreen from "./screens/CreateCircleStartScreen";
 import CreateCircleExpressScreen from "./screens/CreateCircleExpressScreen";
 import QuickCircleScreen from "./screens/QuickCircleScreen";
 import ReferralScreen from "./screens/ReferralScreen";
-import CreateCircleDetailsScreen from "./screens/CreateCircleDetailsScreen";
-import CreateCircleScheduleScreen from "./screens/CreateCircleScheduleScreen";
+// Bucket B (Create-a-circle review): superseded by CreateCircleWizardForm.
+// Imports stay commented (rather than deleted) so the screens are easy to
+// re-enable if the merged form needs a rollback.
+// import CreateCircleDetailsScreen from "./screens/CreateCircleDetailsScreen";
+// import CreateCircleScheduleScreen from "./screens/CreateCircleScheduleScreen";
+import CreateCircleWizardFormScreen from "./screens/CreateCircleWizardFormScreen";
 import CreateCircleInviteScreen from "./screens/CreateCircleInviteScreen";
 import CreateCircleSuccessScreen from "./screens/CreateCircleSuccessScreen";
 import HowCirclesWorkScreen from "./screens/HowCirclesWorkScreen";
@@ -339,6 +343,12 @@ export type RootStackParamList = {
   HostDashboard: { roomId: string };
   CreateCircleDetails: {
     circleType: string;
+  };
+  // Bucket B (Create-a-circle review): merged Details + Schedule.
+  // `draft` carries the typed CircleDraft accumulated from the Start
+  // step. Drops `as any` casts from the wizard's navigation chain.
+  CreateCircleWizardForm: {
+    draft: import("./lib/circleDraft").CircleDraft;
   };
   CreateCircleSchedule: {
     circleType: string;
@@ -846,8 +856,15 @@ function HomeStackScreen() {
       <HomeStack.Screen name="QuickCircle" component={QuickCircleScreen} />
       <HomeStack.Screen name="Referral" component={ReferralScreen} />
       <HomeStack.Screen name="DonationPreferences" component={DonationPreferencesScreen} />
-      <HomeStack.Screen name="CreateCircleDetails" component={CreateCircleDetailsScreen} />
-      <HomeStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} />
+      {/* Bucket B (Create-a-circle review): CreateCircleDetails +
+          CreateCircleSchedule have been superseded by
+          CreateCircleWizardForm. The two old registrations are
+          commented rather than deleted so a rollback is a single line
+          and so accidental navigation calls fail fast at routing time
+          rather than at render. */}
+      {/* <HomeStack.Screen name="CreateCircleDetails" component={CreateCircleDetailsScreen} /> */}
+      {/* <HomeStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} /> */}
+      <HomeStack.Screen name="CreateCircleWizardForm" component={CreateCircleWizardFormScreen} />
       <HomeStack.Screen name="CreateCircleInvite" component={CreateCircleInviteScreen} />
       <HomeStack.Screen name="CreateCircleSuccess" component={CreateCircleSuccessScreen} />
       {/* Conflict Prediction admin/Elder dashboard. Also registered in
@@ -1000,8 +1017,11 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="SubstitutePool" component={SubstitutePoolScreen} />
       <CirclesStack.Screen name="CrossCircleLending" component={CrossCircleLendingScreen} />
       <CirclesStack.Screen name="QuickCircle" component={QuickCircleScreen} />
-      <CirclesStack.Screen name="CreateCircleDetails" component={CreateCircleDetailsScreen} />
-      <CirclesStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} />
+      {/* Bucket B (Create-a-circle review): see HomeStack above for
+          why CreateCircleDetails + CreateCircleSchedule are commented. */}
+      {/* <CirclesStack.Screen name="CreateCircleDetails" component={CreateCircleDetailsScreen} /> */}
+      {/* <CirclesStack.Screen name="CreateCircleSchedule" component={CreateCircleScheduleScreen} /> */}
+      <CirclesStack.Screen name="CreateCircleWizardForm" component={CreateCircleWizardFormScreen} />
       <CirclesStack.Screen name="CreateCircleInvite" component={CreateCircleInviteScreen} />
       <CirclesStack.Screen name="CreateCircleSuccess" component={CreateCircleSuccessScreen} />
       <CirclesStack.Screen name="HowCirclesWork" component={HowCirclesWorkScreen} />

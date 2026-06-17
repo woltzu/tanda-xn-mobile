@@ -81,7 +81,12 @@ export const Routes = {
   ContributionSuccess: "ContributionSuccess",
   CreateCircleDetails: "CreateCircleDetails",
   CreateCircleInvite: "CreateCircleInvite",
+  // Bucket B (Create-a-circle review): CreateCircleSchedule has been
+  // superseded by CreateCircleWizardForm. The constant is kept so
+  // legacy navigation calls don't fail at the type level until the
+  // dead Schedule screen file is deleted in a follow-up cleanup.
   CreateCircleSchedule: "CreateCircleSchedule",
+  CreateCircleWizardForm: "CreateCircleWizardForm",
   CreateCircleExpress: "CreateCircleExpress",
   CreateCircleStart: "CreateCircleStart",
   CreateCircleSuccess: "CreateCircleSuccess",

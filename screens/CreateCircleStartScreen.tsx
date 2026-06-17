@@ -15,7 +15,7 @@ import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
 import { useFormDraft } from "../hooks/useFormDraft";
-import { CircleDraft, CIRCLE_DRAFT_KEY } from "../lib/circleDraft";
+import { CircleDraft, CIRCLE_DRAFT_KEY, type CircleType } from "../lib/circleDraft";
 
 type CreateCircleStartNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -121,9 +121,11 @@ export default function CreateCircleStartScreen() {
   const handleRestoreDraft = () => {
     const d = restoreDraft();
     if (d) {
-      // Restore always re-enters at the first data-entry step; the saved
-      // fields ride along as params so each downstream step can pre-fill.
-      navigation.navigate("CreateCircleDetails", { ...d });
+      // Bucket B (Create-a-circle review): route to the merged
+      // WizardForm screen with the typed draft instead of the old
+      // CreateCircleDetails step. The form rehydrates from the draft's
+      // accumulated fields on mount.
+      navigation.navigate("CreateCircleWizardForm", { draft: d });
     }
     setBannerDismissed(true);
   };
@@ -139,8 +141,12 @@ export default function CreateCircleStartScreen() {
         // Travel type → Trip Organizer wizard (4 steps)
         navigation.navigate("CreateTripWizard" as any, {});
       } else {
-        // All other types → existing circle details flow
-        navigation.navigate("CreateCircleDetails", { circleType: selectedType });
+        // Bucket B — all other types route through the merged
+        // WizardForm screen with a typed draft. Replaces the old
+        // CreateCircleDetails → CreateCircleSchedule two-hop chain.
+        navigation.navigate("CreateCircleWizardForm", {
+          draft: { circleType: selectedType as CircleType },
+        });
       }
     }
   };
@@ -148,7 +154,9 @@ export default function CreateCircleStartScreen() {
   const handleBasicCircleFallback = () => {
     // Escape hatch: user picked Travel but wants a basic savings circle instead
     if (canCreate) {
-      navigation.navigate("CreateCircleDetails", { circleType: "goal" });
+      navigation.navigate("CreateCircleWizardForm", {
+        draft: { circleType: "goal" },
+      });
     }
   };
 

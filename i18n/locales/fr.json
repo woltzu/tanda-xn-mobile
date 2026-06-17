@@ -2966,6 +2966,26 @@
     "payout_preview_random": "Ordre aléatoire — les positions seront attribuées au démarrage du cercle.",
     "payout_preview_manual": "Ordre manuel — vous attribuerez les positions après l'arrivée des membres."
   },
+  "create_circle_wizard": {
+    "header_title": "Configurez votre cercle",
+    "header_subtitle": "Les bases, le calendrier et les détails selon le type de cercle",
+    "section_basics": "Bases",
+    "section_schedule": "Calendrier",
+    "section_beneficiary": "Bénéficiaire",
+    "section_goal": "Objectif",
+    "section_emergency": "Communauté",
+    "label_beneficiary_name": "Nom du bénéficiaire",
+    "placeholder_beneficiary_name": "Qui recevra les fonds",
+    "label_beneficiary_reason": "Motif",
+    "placeholder_beneficiary_reason": "Courte note sur l'utilisation des fonds",
+    "label_beneficiary_phone": "Téléphone du bénéficiaire (facultatif)",
+    "label_total_cycles": "Nombre de cycles",
+    "help_total_cycles": "Combien de cycles de contribution le cercle doit-il durer.",
+    "label_community_id": "ID de la communauté",
+    "placeholder_community_id": "Communauté liée",
+    "help_community_id": "Facultatif — relie ce cercle à une communauté dont vous êtes membre.",
+    "next_btn": "Suivant"
+  },
   "member_invite_sheet": {
     "title": "Ajouter des membres",
     "close": "Fermer",

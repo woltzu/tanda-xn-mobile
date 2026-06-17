@@ -2966,6 +2966,26 @@
     "payout_preview_random": "Random order — positions will be assigned when the circle starts.",
     "payout_preview_manual": "Manual order — you'll assign positions after members join."
   },
+  "create_circle_wizard": {
+    "header_title": "Set up your circle",
+    "header_subtitle": "Basics, schedule, and the details that match your circle type",
+    "section_basics": "Basics",
+    "section_schedule": "Schedule",
+    "section_beneficiary": "Beneficiary",
+    "section_goal": "Goal",
+    "section_emergency": "Community",
+    "label_beneficiary_name": "Recipient name",
+    "placeholder_beneficiary_name": "Who will receive the funds",
+    "label_beneficiary_reason": "Reason",
+    "placeholder_beneficiary_reason": "Short note about what the funds are for",
+    "label_beneficiary_phone": "Recipient phone (optional)",
+    "label_total_cycles": "Number of cycles",
+    "help_total_cycles": "How many contribution cycles the circle should run for.",
+    "label_community_id": "Community ID",
+    "placeholder_community_id": "Linked community",
+    "help_community_id": "Optional — links this circle to a community you're part of.",
+    "next_btn": "Next"
+  },
   "member_invite_sheet": {
     "title": "Add members",
     "close": "Close",
