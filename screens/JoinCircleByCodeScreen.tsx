@@ -13,20 +13,25 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 
 type JoinCircleByCodeNavigationProp = StackNavigationProp<RootStackParamList>;
+type JoinCircleByCodeRouteProp = RouteProp<RootStackParamList, "JoinCircleByCode">;
 
 export default function JoinCircleByCodeScreen() {
   const navigation = useNavigation<JoinCircleByCodeNavigationProp>();
+  const route = useRoute<JoinCircleByCodeRouteProp>();
   const { t } = useTranslation();
   const { browseCircles, findCircleByInviteCode, circles } = useCircles();
 
-  const [inviteCode, setInviteCode] = useState("");
+  // Pre-fill from route param when navigated from a deep-link dispatcher
+  // (QuickJoinScreen's authed-user redirect). Falls back to empty string.
+  const initialCode = (route.params?.code ?? "").toUpperCase();
+  const [inviteCode, setInviteCode] = useState(initialCode);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -173,25 +178,6 @@ export default function JoinCircleByCodeScreen() {
             <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
           </TouchableOpacity>
 
-          {/* Example Codes for Testing */}
-          <View style={styles.exampleSection}>
-            <Text style={styles.exampleTitle}>{t("join_by_code.example_title")}</Text>
-            <Text style={styles.exampleSubtitle}>
-              For testing, use any of these invite codes:
-            </Text>
-            <View style={styles.codeChips}>
-              {["TANDA2024", "FAMILY123", "SAVE2025", "GOAL100"].map((code) => (
-                <TouchableOpacity
-                  key={code}
-                  style={styles.codeChip}
-                  onPress={() => setInviteCode(code)}
-                >
-                  <Text style={styles.codeChipText}>{code}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
           {/* How It Works */}
           <View style={styles.infoCard}>
             <Text style={styles.infoTitle}>{t("join_by_code.info_title")}</Text>
@@ -224,7 +210,14 @@ export default function JoinCircleByCodeScreen() {
           {/* Browse Public Circles */}
           <TouchableOpacity
             style={styles.browseButton}
-            onPress={() => navigation.navigate("MainTabs")}
+            onPress={() =>
+              // Drop the user onto the Circles tab specifically so the
+              // browse list is the visible surface — earlier this just
+              // routed to MainTabs (default tab = Home).
+              navigation.navigate("MainTabs", {
+                screen: "Circles",
+              } as never)
+            }
           >
             <Ionicons name="search-outline" size={18} color="#00C6AE" />
             <Text style={styles.browseButtonText}>
@@ -369,44 +362,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6B7280",
     marginTop: 2,
-  },
-  exampleSection: {
-    backgroundColor: "#FFFBEB",
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#FDE68A",
-  },
-  exampleTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#92400E",
-    marginBottom: 4,
-  },
-  exampleSubtitle: {
-    fontSize: 12,
-    color: "#B45309",
-    marginBottom: 12,
-  },
-  codeChips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  codeChip: {
-    backgroundColor: "#FFFFFF",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#F59E0B",
-  },
-  codeChipText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#D97706",
-    letterSpacing: 0.5,
   },
   infoCard: {
     backgroundColor: "#FFFFFF",

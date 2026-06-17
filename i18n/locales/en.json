@@ -5789,6 +5789,7 @@
     "honor_explanation": "Your reputation is strong across Community, Character, and Expertise pillars."
   },
   "circles_screen": {
+    "recommended_entry": "Recommended for you",
     "placeholder_alert_body": "This feature will be available soon.",
     "header_eyebrow": "YOUR CIRCLES",
     "header_summary_one": "You're in {{count}} circle",

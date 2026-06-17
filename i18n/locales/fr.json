@@ -5789,6 +5789,7 @@
     "honor_explanation": "Votre réputation est solide dans les piliers Communauté, Caractère et Expertise."
   },
   "circles_screen": {
+    "recommended_entry": "Recommandé pour vous",
     "placeholder_alert_body": "Cette fonctionnalité sera bientôt disponible.",
     "header_eyebrow": "VOS CERCLES",
     "header_summary_one": "Vous êtes dans {{count}} cercle",

@@ -265,6 +265,30 @@ export default function QuickJoinScreen() {
         });
         setMode("logged_in");
         console.log("[QuickJoin] logged-in mode activated");
+
+        // Authed-user dispatcher: route to the standard in-app join flow
+        // (JoinCircleByCode → JoinCircleConfirm → JoinCircleSuccess) with
+        // the invite code pre-filled. Consolidates onto a single
+        // `joinCircle` RPC path instead of the SECURITY DEFINER pair
+        // (create_pending_join + complete_circle_join) that QuickJoin
+        // uses for the public/unauth flow. The Welcome-Back UI below is
+        // kept as a defensive fallback if navigation can't reach the
+        // CirclesStack (e.g., a deep-link target that hasn't mounted
+        // MainTabs yet).
+        try {
+          navigation.navigate(
+            "MainTabs" as never,
+            {
+              screen: "Circles",
+              params: {
+                screen: "JoinCircleByCode",
+                params: { code: inviteCode },
+              },
+            } as never,
+          );
+        } catch (navErr) {
+          console.warn("[QuickJoin] dispatcher navigate failed; staying on Welcome Back", navErr);
+        }
       } catch (err) {
         console.warn("[QuickJoin] detectAuthState error", err);
         // Defensive fallback: never trap the user — show the new-user form

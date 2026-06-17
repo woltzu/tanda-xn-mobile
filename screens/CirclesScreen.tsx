@@ -124,7 +124,7 @@ export default function CirclesScreen() {
       <TouchableOpacity
         style={[styles.circleCard, featured ? styles.circleCardFeatured : null]}
         activeOpacity={0.7}
-        onPress={() => navigation.navigate("CircleDetail", { circleId: originalId || circle.id })}
+        onPress={() => navigation.navigate("JoinCircleConfirm", { circleId: originalId || circle.id })}
       >
         {/* Verified Badge */}
         {circle.verified ? (
@@ -260,6 +260,26 @@ export default function CirclesScreen() {
               )}
             </TouchableOpacity>
           </View>
+
+          {/* Recommended-for-you entry — only on browse tab.
+              DiscoverCircles is otherwise orphaned (no other navigate
+              call sites). Surfaces the ML-driven recommendations to a
+              user who's actively in browse mode. */}
+          {activeTab === "browse" && (
+            <TouchableOpacity
+              style={styles.recommendedEntry}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate("DiscoverCircles")}
+              accessibilityRole="button"
+              accessibilityLabel={t("circles_screen.recommended_entry")}
+            >
+              <Ionicons name="sparkles" size={14} color="#0A2342" />
+              <Text style={styles.recommendedEntryText}>
+                {t("circles_screen.recommended_entry")}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color="#0A2342" />
+            </TouchableOpacity>
+          )}
 
           {/* Search - only show for browse tab */}
           {activeTab === "browse" && (
@@ -526,6 +546,22 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.1)",
     borderRadius: 10,
     padding: 10,
+  },
+  recommendedEntry: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  recommendedEntryText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0A2342",
   },
   searchContainer: {
     position: "relative",

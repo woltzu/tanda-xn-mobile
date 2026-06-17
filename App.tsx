@@ -502,8 +502,9 @@ export type RootStackParamList = {
     | { caseId?: string; circleId?: string; circleName?: string }
     | undefined;
   ElderOnboarding: undefined;
-  // Join Circle by Code Flow
-  JoinCircleByCode: undefined;
+  // Join Circle by Code Flow. Optional `code` lets a dispatcher (e.g.
+  // QuickJoinScreen for authed users) pre-fill the input.
+  JoinCircleByCode: { code?: string } | undefined;
   QRScanner: undefined;
   QRCodeDisplay: { circleId: string };
   // Settings Flow

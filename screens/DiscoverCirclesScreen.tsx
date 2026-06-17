@@ -181,12 +181,13 @@ export default function DiscoverCirclesScreen() {
 
   const handleCardPress = useCallback(
     (match: CircleMatch, idx: number) => {
-      // We don't have a unified circle-detail screen wired into HomeStack
-      // for matched (non-owned) circles. For now, log the click as
-      // "applied" intent so the ML pipeline records the funnel.
+      // Log "applied" intent for the ML funnel, then navigate to the
+      // shared Join Confirm screen so the recommendation actually leads
+      // to a join.
       logInteraction(match, "applied", idx);
+      navigation.navigate("JoinCircleConfirm", { circleId: match.circle.id });
     },
-    [logInteraction]
+    [logInteraction, navigation]
   );
 
   const visibleRecommendations = recommendations.filter(
