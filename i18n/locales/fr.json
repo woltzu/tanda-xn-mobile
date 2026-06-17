@@ -5883,6 +5883,8 @@
     "header_profile_complete_profile": "Complétez votre profil",
     "profile_icon_coach": "Touchez pour gérer votre profil, votre KYC et vos paramètres.",
     "header_notifications_a11y": "Ouvrir les notifications",
+    "header_notifications_security_alert": "Alerte de sécurité",
+    "header_notifications_unread_count": "{{count}} non lus",
     "verify_banner_title": "Vérifiez pour envoyer de l'argent",
     "verify_banner_body": "Une vérification d'identité rapide débloque l'envoi et la réception — 2 minutes.",
     "verify_banner_cta": "Vérifier",

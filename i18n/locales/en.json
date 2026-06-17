@@ -5883,6 +5883,8 @@
     "header_profile_complete_profile": "Complete your profile",
     "profile_icon_coach": "Tap to manage your profile, KYC, and settings.",
     "header_notifications_a11y": "Open notifications",
+    "header_notifications_security_alert": "Security alert",
+    "header_notifications_unread_count": "{{count}} unread",
     "verify_banner_title": "Verify to send money",
     "verify_banner_body": "Quick ID check unlocks sending and receiving — takes 2 minutes.",
     "verify_banner_cta": "Verify",

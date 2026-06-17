@@ -30,6 +30,7 @@ import { useCircleNetBalance } from "../hooks/useCircleNetBalance";
 import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
 import { useScoreHubBadge } from "../hooks/useScoreHubBadge";
 import { useProfileIconBadge } from "../hooks/useProfileIconBadge";
+import { useNotificationsBadge } from "../hooks/useNotificationsBadge";
 import { useProfile } from "../hooks/useProfile";
 import { useEventTracker } from "../hooks/useEventTracker";
 
@@ -396,6 +397,12 @@ export default function HomeScreen() {
   // an AI insight notification is unread. Pure read of cache + already-
   // mounted NotificationContext — no extra RPC.
   const scoreHubBadge = useScoreHubBadge();
+  // Open notifications Bucket A — entry-point signal for the bell.
+  // Reads from the already-mounted NotificationContext (no new RPC,
+  // realtime subscription is shared). Critical when any unread
+  // security-category notification exists; attention when any other
+  // unread; none otherwise.
+  const notificationsBadge = useNotificationsBadge();
 
   // ────────────────────────────────────────────────────────────────────
   // Open profile Bucket A — entry-point signal.
@@ -893,14 +900,46 @@ export default function HomeScreen() {
             onPress={handleOpenNotifications}
             style={[styles.topBarIconBtn, { marginRight: 8 }]}
             accessibilityRole="button"
-            accessibilityLabel={t("home_screen.header_notifications_a11y")}
+            accessibilityLabel={(() => {
+              const base = t("home_screen.header_notifications_a11y");
+              // Priority — critical wins over attention. Same single-
+              // suffix convention as the Profile and Score Hub icons
+              // to keep screen-reader labels short.
+              if (notificationsBadge.urgency === "critical") {
+                return `${base}, ${t(
+                  "home_screen.header_notifications_security_alert",
+                )}`;
+              }
+              if (
+                notificationsBadge.urgency === "attention" &&
+                notificationsBadge.unreadCount > 0
+              ) {
+                return `${base}, ${t(
+                  "home_screen.header_notifications_unread_count",
+                  { count: notificationsBadge.unreadCount },
+                )}`;
+              }
+              return base;
+            })()}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons
-              name="notifications-outline"
-              size={20}
-              color={colors.primaryNavy}
-            />
+            <View style={styles.notificationsIconWrap}>
+              <Ionicons
+                name="notifications-outline"
+                size={20}
+                color={colors.primaryNavy}
+              />
+              {notificationsBadge.urgency !== "none" ? (
+                <View
+                  style={[
+                    styles.notificationsBadge,
+                    notificationsBadge.urgency === "critical"
+                      ? styles.notificationsBadgeCritical
+                      : styles.notificationsBadgeAttention,
+                  ]}
+                />
+              ) : null}
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1948,6 +1987,31 @@ const styles = StyleSheet.create({
     backgroundColor: "#EF4444",
   },
   profileBadgeAttention: {
+    backgroundColor: "#F59E0B",
+  },
+  // ----- Open notifications Bucket A — bell icon badge -----
+  // Same dimensions and slot offset as the Score Hub and Profile
+  // badges. Styles are duplicated rather than shared so a future tweak
+  // to one badge doesn't accidentally drag the other two along.
+  notificationsIconWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notificationsBadge: {
+    position: "absolute",
+    top: -2,
+    right: -3,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: colors.cardBg,
+  },
+  notificationsBadgeCritical: {
+    backgroundColor: "#EF4444",
+  },
+  notificationsBadgeAttention: {
     backgroundColor: "#F59E0B",
   },
   // ----- Open profile Bucket C — first-launch coach mark tooltip -----
