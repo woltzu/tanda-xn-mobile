@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
@@ -100,7 +100,13 @@ export default function MakeContributionScreen() {
   const { user } = useAuth();
   const { processContribution } = useXnScore();
   const { currencies, getCurrencyBalance, makeContribution } = useWallet();
-  const { paymentMethods: stripePaymentMethods, createContribution, presentPaymentSheet, isStripeReady } = usePayment();
+  const {
+    paymentMethods: stripePaymentMethods,
+    createContribution,
+    presentPaymentSheet,
+    isStripeReady,
+    refreshPaymentMethods,
+  } = usePayment();
   const { primaryCurrency, convert, getExchangeRate, formatCurrency } = useCurrency();
 
   const [selectedMethod, setSelectedMethod] = useState<string>("wallet");
@@ -108,6 +114,22 @@ export default function MakeContributionScreen() {
   const [paymentCurrency, setPaymentCurrency] = useState<string>(primaryCurrency);
   const [showCurrencyOptions, setShowCurrencyOptions] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  // Re-sync the payment-methods list whenever this screen comes back
+  // into focus — covers the case where the user tapped "Add a card",
+  // went to LinkedAccounts, added one, and returned. syncRemote stays
+  // false to avoid spamming Stripe; the local realtime channel in
+  // PaymentContext + the cached list handle freshness.
+  // B.5 note: the View-Circle-Details `useCircleDetail` hook caches
+  // *members + activities*, not circle metadata. Circle data lives in
+  // CirclesContext, which is already shared across the app and busted
+  // post-success via invalidateCircleDetailCache (Bucket A). So the
+  // "30 s cache for contribution data" item is N/A here.
+  useFocusEffect(
+    useCallback(() => {
+      refreshPaymentMethods({ syncRemote: false }).catch(() => undefined);
+    }, [refreshPaymentMethods])
+  );
 
   // Merge wallet option with saved Stripe payment methods
   const paymentMethods: PaymentMethod[] = useMemo(() => {
@@ -136,14 +158,27 @@ export default function MakeContributionScreen() {
     return getExchangeRate(paymentCurrency, circleCurrency);
   }, [paymentCurrency, circleCurrency, isCrossBorder]);
 
-  // Calculate amount in payment currency
-  const circleAmount = circle?.amount || 0;
+  // Partial-contribution support. Gated on a per-circle flag; the
+  // backend hasn't shipped this column yet, so the gate is currently
+  // always false in prod and the UI is inert. When the column lands as
+  // `allowPartialContributions` (or similar) on the Circle type, the
+  // chip row renders above the amount card and `customAmount` becomes
+  // the source of truth for what the user pays. The existing
+  // PartialContribution route (50/25/25 schedule) is a separate flow
+  // and unaffected by this.
+  const allowsPartial =
+    !!(circle as any)?.allowPartialContributions && !!circle && !circle.beneficiaryName;
+  const fullCircleAmount = circle?.amount || 0;
+  const [customAmount, setCustomAmount] = useState<number | null>(null);
+  const partialChips = [0.25, 0.5, 0.75, 1.0];
+
+  // Calculate amount in payment currency. `effectiveCircleAmount` is
+  // either the full amount or the partial slice the user picked.
+  const effectiveCircleAmount = customAmount ?? fullCircleAmount;
   const paymentAmount = useMemo(() => {
-    if (!isCrossBorder) return circleAmount;
-    // Convert from circle currency to payment currency
-    const reverseRate = getExchangeRate(circleCurrency, paymentCurrency);
-    return convert(circleAmount, circleCurrency, paymentCurrency);
-  }, [circleAmount, circleCurrency, paymentCurrency, isCrossBorder]);
+    if (!isCrossBorder) return effectiveCircleAmount;
+    return convert(effectiveCircleAmount, circleCurrency, paymentCurrency);
+  }, [effectiveCircleAmount, circleCurrency, paymentCurrency, isCrossBorder]);
 
   // Get wallet balance for selected currency
   const walletBalance = getCurrencyBalance(paymentCurrency);
@@ -194,7 +229,11 @@ export default function MakeContributionScreen() {
     );
   }
 
-  const amount = circle.amount;
+  // For non-cross-border flows, `amount` is what we hand the success
+  // screen. Use the partial slice when the user chose one, so the
+  // success screen reflects the actual paid amount instead of the
+  // full cycle amount.
+  const amount = effectiveCircleAmount;
   const hasBeneficiary = circle.beneficiaryName;
   const isOneTime = circle.frequency === "one-time";
 
@@ -399,11 +438,54 @@ export default function MakeContributionScreen() {
           <View style={styles.amountCard}>
             <Text style={styles.amountLabel}>{t("make_contribution.amount_label")}</Text>
             <Text style={styles.amountValue}>
-              {circleCurrencyInfo?.symbol}{formatCurrency(amount, circleCurrency)}
+              {circleCurrencyInfo?.symbol}{formatCurrency(effectiveCircleAmount, circleCurrency)}
             </Text>
             <Text style={styles.amountSubtext}>
               {isOneTime ? "One-time contribution" : `${getFrequencyLabel(circle.frequency)} contribution`}
             </Text>
+
+            {/* Partial-amount quick chips — only rendered when the
+                circle's `allowPartialContributions` flag is set. Tapping
+                a chip seeds customAmount which drives every downstream
+                derived value (paymentAmount, wallet check, FX). 100 % is
+                the default reset path. */}
+            {allowsPartial ? (
+              <View style={styles.partialChipsRow}>
+                {partialChips.map((pct) => {
+                  const sliceAmount = Math.round(fullCircleAmount * pct * 100) / 100;
+                  const isActive =
+                    (customAmount ?? fullCircleAmount) === sliceAmount;
+                  return (
+                    <TouchableOpacity
+                      key={pct}
+                      style={[
+                        styles.partialChip,
+                        isActive && styles.partialChipActive,
+                      ]}
+                      onPress={() =>
+                        setCustomAmount(pct === 1 ? null : sliceAmount)
+                      }
+                      accessibilityRole="button"
+                    >
+                      <Text
+                        style={[
+                          styles.partialChipText,
+                          isActive && styles.partialChipTextActive,
+                        ]}
+                      >
+                        {Math.round(pct * 100)}%
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : (
+              <Text style={styles.fixedAmountHint}>
+                {t("make_contribution.fixed_amount_hint", {
+                  amount: formatCurrency(fullCircleAmount, circleCurrency),
+                })}
+              </Text>
+            )}
           </View>
 
           {/* Currency Selection for Cross-Border */}
@@ -526,6 +608,10 @@ export default function MakeContributionScreen() {
           <View style={styles.paymentSection}>
             <Text style={styles.sectionTitle}>{t("make_contribution.section_payment_method")}</Text>
 
+            {/* "Add a card" is rendered AFTER the map so it always sits
+                below whatever cards the user already has. Drops the user
+                onto LinkedAccounts; useFocusEffect below picks up the new
+                card on return. */}
             {paymentMethods.map((method) => {
               const isSelected = selectedMethod === method.id;
               const isWallet = method.id === "wallet";
@@ -584,6 +670,18 @@ export default function MakeContributionScreen() {
                 </TouchableOpacity>
               );
             })}
+
+            <TouchableOpacity
+              style={styles.addCardLink}
+              onPress={() => navigation.navigate("LinkedAccounts")}
+              accessibilityRole="button"
+              accessibilityLabel={t("make_contribution.add_card")}
+            >
+              <Ionicons name="add-circle-outline" size={18} color="#00C6AE" />
+              <Text style={styles.addCardLinkText}>
+                {t("make_contribution.add_card")}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Payment Summary */}
@@ -1096,6 +1194,51 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#0A2342",
+  },
+  partialChipsRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+  },
+  partialChip: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#F5F7FA",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  partialChipActive: {
+    backgroundColor: "#0A2342",
+    borderColor: "#0A2342",
+  },
+  partialChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0A2342",
+  },
+  partialChipTextActive: {
+    color: "#FFFFFF",
+  },
+  fixedAmountHint: {
+    fontSize: 12,
+    color: "#6B7280",
+    textAlign: "center",
+    marginTop: 8,
+  },
+  addCardLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  addCardLinkText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#00C6AE",
   },
   balanceWarning: {
     flexDirection: "row",

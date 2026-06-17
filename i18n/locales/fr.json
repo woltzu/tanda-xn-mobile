@@ -3539,6 +3539,8 @@
   "make_contribution": {
     "insufficient_funds": "Le solde de votre portefeuille ({{balance}} $) est insuffisant. Ajoutez des fonds ou utilisez une carte.",
     "wallet_low": "Le solde de votre portefeuille est faible. Vous pouvez tout de même payer par carte.",
+    "fixed_amount_hint": "Votre contribution pour ce cycle est fixée à {{amount}} $.",
+    "add_card": "Ajouter une carte",
     "cycle_info": "Cycle {{cycle}} sur {{total}} · Dû le {{dueDate}}",
     "cycle_due_today": "Dû aujourd'hui !",
     "cycle_days_left_one": "Il reste {{count}} jour",

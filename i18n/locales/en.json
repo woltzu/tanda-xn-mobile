@@ -3539,6 +3539,8 @@
   "make_contribution": {
     "insufficient_funds": "Your wallet balance (${{balance}}) is insufficient. Add funds or use a card.",
     "wallet_low": "Your wallet balance is low. You can still pay with a card.",
+    "fixed_amount_hint": "Your contribution for this cycle is fixed at ${{amount}}.",
+    "add_card": "Add a card",
     "cycle_info": "Cycle {{cycle}} of {{total}} · Due by {{dueDate}}",
     "cycle_due_today": "Due Today!",
     "cycle_days_left_one": "{{count}} day left",
