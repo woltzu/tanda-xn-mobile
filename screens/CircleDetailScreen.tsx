@@ -13,6 +13,7 @@ import {
   Platform,
   Animated,
   RefreshControl,
+  FlatList,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
@@ -30,6 +31,7 @@ import { useCircleHealth } from "../hooks/useCircleHealth";
 import { useCircleAutopayConfig } from "../hooks/useCircleAutopay";
 import { useCircleAutopaySuggestion } from "../hooks/useCircleAutopaySuggestion";
 import { useCircleNotificationMute } from "../hooks/useCircleNotificationMute";
+import { useCircleDetail } from "../hooks/useCircleDetail";
 import MuteCircleSheet from "../components/MuteCircleSheet";
 import { showToast } from "../components/Toast";
 import { supabase } from "../lib/supabase";
@@ -106,7 +108,18 @@ export default function CircleDetailScreen() {
   const route = useRoute<CircleDetailRouteProp>();
   const { t } = useTranslation();
   const { circleId } = route.params;
-  const { circles, browseCircles, myCircles, getCircleMembers, getCircleActivities, refreshCircles } = useCircles();
+  const { circles, browseCircles, myCircles } = useCircles();
+  // Aggregate members + activities + 30 s cache lives in this hook; the
+  // refresh() handle below covers pull-to-refresh, realtime events, and
+  // future "I just contributed, bust the cache" callers.
+  const {
+    members,
+    activities,
+    isLoadingMembers,
+    isLoadingActivities,
+    fetchData,
+    refresh,
+  } = useCircleDetail(circleId);
   const { user } = useAuth();
   // Phase 1 of Circle Contribution Autopay — drives the "Autopay
   // enabled" badge below. Single network call, 60-s cached in the
@@ -153,10 +166,6 @@ export default function CircleDetailScreen() {
 
   const [activeTab, setActiveTab] = useState<"overview" | "members" | "activity">("overview");
   const [showMenu, setShowMenu] = useState(false);
-  const [members, setMembers] = useState<CircleMember[]>([]);
-  const [activities, setActivities] = useState<CircleActivity[]>([]);
-  const [isLoadingMembers, setIsLoadingMembers] = useState(true);
-  const [isLoadingActivities, setIsLoadingActivities] = useState(true);
 
   // P2 (first-launch review): when the user lands on a circle detail
   // for the very first time after their initial circle join (myCircles
@@ -245,62 +254,34 @@ export default function CircleDetailScreen() {
   // Find the circle in all available sources: user circles, my circles, or browse circles
   const circle = [...circles, ...myCircles, ...browseCircles].find((c) => c.id === circleId);
 
-  // Single source for the focus-refresh, pull-to-refresh, and realtime
-  // handlers. `showSpinner` skips the per-tab spinners for realtime/
-  // pull-to-refresh refreshes — the user already knows the screen is
-  // live and the spinners look like a regression on every event.
-  const fetchData = React.useCallback(
-    async (showSpinner: boolean = true) => {
-      if (!circleId) return;
-      if (showSpinner) {
-        setIsLoadingMembers(true);
-        setIsLoadingActivities(true);
-      }
-      try {
-        const [fetchedMembers, fetchedActivities] = await Promise.all([
-          getCircleMembers(circleId),
-          getCircleActivities(circleId),
-        ]);
-        setMembers(fetchedMembers);
-        setActivities(fetchedActivities);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        if (showSpinner) {
-          setIsLoadingMembers(false);
-          setIsLoadingActivities(false);
-        }
-      }
-    },
-    [circleId, getCircleMembers, getCircleActivities]
-  );
-
-  // Fetch members and activities when screen is focused or circleId changes
+  // Fetch members and activities when screen is focused or circleId changes.
+  // `fetchData()` is cache-aware so re-focuses inside the 30 s TTL don't
+  // refire the round-trips.
   useFocusEffect(
     React.useCallback(() => {
-      fetchData(true);
-      // Also refresh circles to get updated member count
-      refreshCircles();
-    }, [fetchData, refreshCircles])
+      fetchData({ showSpinner: true });
+    }, [fetchData])
   );
 
-  // Pull-to-refresh state
+  // Pull-to-refresh — busts the cache and re-runs the aggregate fetch +
+  // refreshCircles via the hook.
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([fetchData(false), refreshCircles()]);
+      await refresh({ skipSpinner: true });
     } finally {
       setRefreshing(false);
     }
-  }, [fetchData, refreshCircles]);
+  }, [refresh]);
 
   // Realtime subscriptions: keep the screen in sync without forcing the
-  // user to leave + return. INSERTs into `contributions` for this
-  // circle re-pull the activity feed and bust the member-count cache.
-  // INSERT/DELETE on `circle_members` re-pull the roster. The channels
-  // are torn down on unmount/circle change so a navigated-back-to
-  // session doesn't accumulate them.
+  // user to leave + return. Both handlers call refresh() which busts the
+  // 30 s cache and re-runs members + activities + circle row in parallel
+  // — that's the canonical sync path so the cache stays consistent across
+  // focuses, refreshes, and live events. Channels are torn down on
+  // unmount/circle change so a navigated-back-to session doesn't
+  // accumulate them.
   useEffect(() => {
     if (!circleId) return;
     const contribChannel = supabase
@@ -314,8 +295,7 @@ export default function CircleDetailScreen() {
           filter: `circle_id=eq.${circleId}`,
         },
         () => {
-          fetchData(false);
-          refreshCircles();
+          refresh({ skipSpinner: true });
         }
       )
       .subscribe();
@@ -331,8 +311,7 @@ export default function CircleDetailScreen() {
           filter: `circle_id=eq.${circleId}`,
         },
         () => {
-          fetchData(false);
-          refreshCircles();
+          refresh({ skipSpinner: true });
         }
       )
       .subscribe();
@@ -341,7 +320,7 @@ export default function CircleDetailScreen() {
       supabase.removeChannel(contribChannel);
       supabase.removeChannel(membersChannel);
     };
-  }, [circleId, fetchData, refreshCircles]);
+  }, [circleId, refresh]);
 
   if (!circle) {
     return (
@@ -581,6 +560,23 @@ export default function CircleDetailScreen() {
     navigation.navigate("AuditTrail" as any, { circleName: circle.name, circleId });
   };
 
+  // Method-specific help body for the (?) icon next to the rotation
+  // method label. Same vocabulary as the Create-circle wizard so
+  // returning users see consistent copy.
+  const showRotationHelp = (method: string) => {
+    const bodyKey =
+      method === "xnscore"
+        ? "circle_detail.help_rotation_xnscore_body"
+        : method === "manual"
+        ? "circle_detail.help_rotation_manual_body"
+        : method === "random"
+        ? "circle_detail.help_rotation_random_body"
+        : method === "beneficiary"
+        ? "circle_detail.help_rotation_beneficiary_body"
+        : "circle_detail.help_rotation_generic_body";
+    Alert.alert(t("circle_detail.help_rotation_title"), t(bodyKey));
+  };
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString("en-US", {
@@ -643,6 +639,133 @@ export default function CircleDetailScreen() {
           </Text>
           <Ionicons name="chevron-forward" size={18} color="#0A2342" />
         </TouchableOpacity>
+      ) : null}
+
+      {/* Hero CTA — large primary Contribute button. Pairs with the
+          hero-next-contribution card above so the answer to "what do I
+          do?" is one tap away without scrolling. The sticky bottom-bar
+          Contribute remains as the redundant safety net for users who
+          scroll past this. */}
+      {isMember ? (
+        <TouchableOpacity
+          style={styles.contributeHeroCta}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate("MakeContribution", { circleId })}
+          accessibilityRole="button"
+        >
+          <Ionicons name="wallet" size={22} color="#FFFFFF" />
+          <Text style={styles.contributeHeroCtaText}>
+            {t("circle_detail.contribute_now_cta", { amount: circle.amount })}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+
+      {/* Hero strip — promotes the two highest-stakes facts (next
+          payout date + your payout position) above the Circle Details
+          card where they used to be buried. Only renders when both
+          would be meaningful: rotating circles, member view. */}
+      {isMember && !isOneTime && !hasBeneficiary ? (
+        <View style={styles.heroStripRow}>
+          <View style={styles.heroStripChip}>
+            <Ionicons name="cash-outline" size={14} color="#00897B" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.heroStripLabel}>
+                {t("circle_detail.hero_next_payout")}
+              </Text>
+              <Text style={styles.heroStripValue}>
+                {formatDate(getNextPayoutDate().toISOString())}
+              </Text>
+            </View>
+          </View>
+          {circle.myPosition ? (
+            <View style={styles.heroStripChip}>
+              <Ionicons name="trophy-outline" size={14} color="#92400E" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.heroStripLabel}>
+                  {t("circle_detail.hero_your_position")}
+                </Text>
+                <Text style={styles.heroStripValue}>
+                  {t("circle_detail.position_format", {
+                    position: circle.myPosition,
+                    total: circle.memberCount,
+                  })}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* Compact icon strip — Invite · Chat · Autopay · Mute. Demoted
+          from the equal-weight 5-button Quick Actions card; Contribute
+          now lives as the hero CTA above. */}
+      {isMember ? (
+        <View style={styles.iconActionsRow}>
+          <TouchableOpacity
+            style={styles.iconActionBtn}
+            onPress={handleInviteMembers}
+            accessibilityRole="button"
+            accessibilityLabel={t("circle_detail.action_invite_members")}
+          >
+            <View style={[styles.iconActionIcon, { backgroundColor: "#EEF2FF" }]}>
+              <Ionicons name="share-social-outline" size={18} color="#6366F1" />
+            </View>
+            <Text style={styles.iconActionLabel} numberOfLines={1}>
+              {t("circle_detail.action_invite_members_short")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconActionBtn}
+            onPress={handleGroupChat}
+            accessibilityRole="button"
+            accessibilityLabel={t("circle_detail.action_group_chat")}
+          >
+            <View style={[styles.iconActionIcon, { backgroundColor: "#FEF3C7" }]}>
+              <Ionicons name="chatbubbles-outline" size={18} color="#D97706" />
+            </View>
+            <Text style={styles.iconActionLabel} numberOfLines={1}>
+              {t("circle_detail.action_group_chat_short")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconActionBtn}
+            onPress={() => navigation.navigate("CircleAutopaySetup", { circleId })}
+            accessibilityRole="button"
+            accessibilityLabel={t("circle_detail.action_set_up_autopay")}
+          >
+            <View style={[styles.iconActionIcon, { backgroundColor: "#ECFDF5" }]}>
+              <Ionicons name="repeat-outline" size={18} color="#047857" />
+            </View>
+            <Text style={styles.iconActionLabel} numberOfLines={1}>
+              {t("circle_detail.action_set_up_autopay_short")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconActionBtn}
+            onPress={() => setMuteSheetOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t(
+              circleMuted
+                ? "circle_detail.action_unmute_circle"
+                : "circle_detail.action_mute_circle",
+            )}
+          >
+            <View style={[styles.iconActionIcon, { backgroundColor: "#F3F4F6" }]}>
+              <Ionicons
+                name={circleMuted ? "notifications-off" : "notifications-outline"}
+                size={18}
+                color={circleMuted ? "#92400E" : "#0A2342"}
+              />
+            </View>
+            <Text style={styles.iconActionLabel} numberOfLines={1}>
+              {t(
+                circleMuted
+                  ? "circle_detail.action_unmute_short"
+                  : "circle_detail.action_mute_short",
+              )}
+            </Text>
+          </TouchableOpacity>
+        </View>
       ) : null}
 
       {/* Phase 2 (circle autopay) — missed-contribution banner. Sits
@@ -1175,6 +1298,19 @@ export default function CircleDetailScreen() {
             </View>
             <Text style={styles.detailLabel}>{t("circle_detail.detail_payout_order")}</Text>
             <Text style={styles.detailValue}>{getRotationMethodLabel(circle.rotationMethod)}</Text>
+            <TouchableOpacity
+              onPress={() => showRotationHelp(circle.rotationMethod)}
+              accessibilityRole="button"
+              accessibilityLabel={t("circle_detail.help_rotation_title")}
+              hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+            >
+              <Ionicons
+                name="help-circle-outline"
+                size={16}
+                color="#6B7280"
+                style={{ marginLeft: 6 }}
+              />
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1188,110 +1324,79 @@ export default function CircleDetailScreen() {
           </Text>
         </View>
 
-        {!isOneTime && (
-          <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
-              <Ionicons name="cash-outline" size={18} color="#6B7280" />
-            </View>
-            <Text style={styles.detailLabel}>{t("circle_detail.detail_next_payout")}</Text>
-            <Text style={[styles.detailValue, { color: "#00C6AE" }]}>
-              {formatDate(getNextPayoutDate().toISOString())}
-            </Text>
-          </View>
-        )}
-
-        {circle.myPosition && !isOneTime && !hasBeneficiary && (
-          <View style={styles.detailRow}>
-            <View style={styles.detailIcon}>
-              <Ionicons name="trophy-outline" size={18} color="#6B7280" />
-            </View>
-            <Text style={styles.detailLabel}>{t("circle_detail.detail_your_position")}</Text>
-            <Text style={[styles.detailValue, { color: "#00C6AE", fontWeight: "700" }]}>
-              #{circle.myPosition}
-            </Text>
-          </View>
-        )}
-      </View>
-
-      {/* Quick Actions */}
-      <View style={styles.actionsCard}>
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => navigation.navigate("MakeContribution", { circleId })}
-        >
-          <View style={[styles.actionIcon, { backgroundColor: "#F0FDFB" }]}>
-            <Ionicons name="wallet-outline" size={22} color="#00C6AE" />
-          </View>
-          <Text style={styles.actionText}>{t("circle_detail.action_make_payment")}</Text>
-          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={handleInviteMembers}
-        >
-          <View style={[styles.actionIcon, { backgroundColor: "#EEF2FF" }]}>
-            <Ionicons name="share-social-outline" size={22} color="#6366F1" />
-          </View>
-          <Text style={styles.actionText}>{t("circle_detail.action_invite_members")}</Text>
-          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={handleGroupChat}
-        >
-          <View style={[styles.actionIcon, { backgroundColor: "#FEF3C7" }]}>
-            <Ionicons name="chatbubbles-outline" size={22} color="#D97706" />
-          </View>
-          <Text style={styles.actionText}>{t("circle_detail.action_group_chat")}</Text>
-          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-        </TouchableOpacity>
-
-        {/* Circle Contribution Autopay — Phase 0 (2026-06-15). Routes
-            to CircleAutopaySetup with the circle pre-selected so the
-            picker is hidden. */}
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() =>
-            navigation.navigate("CircleAutopaySetup", { circleId })
-          }
-        >
-          <View style={[styles.actionIcon, { backgroundColor: "#ECFDF5" }]}>
-            <Ionicons name="repeat-outline" size={22} color="#047857" />
-          </View>
-          <Text style={styles.actionText}>
-            {t("circle_detail.action_set_up_autopay")}
-          </Text>
-          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-        </TouchableOpacity>
-
-        {/* Phase 2 (notification-prefs review) — mute / unmute circle
-            notifications. Triggers a bottom-sheet picker; the saved
-            state drives the small "Muted" pill near the circle name. */}
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => setMuteSheetOpen(true)}
-        >
-          <View style={[styles.actionIcon, { backgroundColor: "#F3F4F6" }]}>
-            <Ionicons
-              name={circleMuted ? "notifications-off" : "notifications-outline"}
-              size={22}
-              color={circleMuted ? "#92400E" : "#0A2342"}
-            />
-          </View>
-          <Text style={styles.actionText}>
-            {t(
-              circleMuted
-                ? "circle_detail.action_unmute_circle"
-                : "circle_detail.action_mute_circle",
-            )}
-          </Text>
-          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-        </TouchableOpacity>
+        {/* Next-payout date and Your Position used to live here as
+            rows. Promoted to the hero strip above so they're not
+            buried inside the details card. The Details card now holds
+            the static metadata only. */}
       </View>
     </View>
   );
+
+  const renderMemberRow = ({ item: member }: { item: CircleMember }) => {
+    const memberIsAdmin = member.role === "creator" || member.role === "admin";
+    const memberIsElder = member.role === "elder";
+    const isMe = member.isCurrentUser;
+
+    return (
+      <View style={[styles.memberCard, isMe && styles.memberCardMe]}>
+        <View style={styles.memberAvatar}>
+          <Text style={styles.memberAvatarText}>
+            {member.name.charAt(0).toUpperCase()}
+          </Text>
+          {memberIsAdmin && (
+            <View style={styles.adminBadge}>
+              <Ionicons name="star" size={10} color="#FFFFFF" />
+            </View>
+          )}
+        </View>
+
+        <View style={styles.memberInfo}>
+          <View style={styles.memberNameRow}>
+            <Text style={styles.memberName}>{member.name}</Text>
+            {isMe && (
+              <View style={styles.mePill}>
+                <Text style={styles.mePillText}>
+                  {t("circle_detail.member_badge_me")}
+                </Text>
+              </View>
+            )}
+            {memberIsAdmin && (
+              <View style={styles.adminTag}>
+                <Text style={styles.adminTagText}>
+                  {member.role === "creator" ? "Creator" : "Admin"}
+                </Text>
+              </View>
+            )}
+            {memberIsElder && (
+              <View style={[styles.adminTag, { backgroundColor: "#EEF2FF" }]}>
+                <Text style={[styles.adminTagText, { color: "#6366F1" }]}>{t("circle_detail.tag_elder")}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.memberPhone}>{member.phone || member.email || t("circle_detail.member_no_contact")}</Text>
+        </View>
+
+        <View style={styles.memberRight}>
+          <View style={styles.xnScoreBadge}>
+            <Text style={styles.xnScoreText}>{member.xnScore}</Text>
+          </View>
+          {!hasBeneficiary && !isOneTime && member.position > 0 && (
+            <Text style={styles.positionText}>
+              {t("circle_detail.position_format", {
+                position: member.position,
+                total: circle.memberCount,
+              })}
+            </Text>
+          )}
+          {member.hasPaid ? (
+            <Ionicons name="checkmark-circle" size={20} color="#00C6AE" />
+          ) : (
+            <Ionicons name="time-outline" size={20} color="#D97706" />
+          )}
+        </View>
+      </View>
+    );
+  };
 
   const renderMembersTab = () => (
     <View style={styles.tabContent}>
@@ -1310,60 +1415,15 @@ export default function CircleDetailScreen() {
           <Text style={styles.emptyMembersText}>{t("circle_detail.empty_no_members")}</Text>
         </View>
       ) : (
-        members.map((member) => {
-          const isAdmin = member.role === "creator" || member.role === "admin";
-          const isElder = member.role === "elder";
-
-          return (
-            <View key={member.id} style={styles.memberCard}>
-              <View style={styles.memberAvatar}>
-                <Text style={styles.memberAvatarText}>
-                  {member.name.charAt(0).toUpperCase()}
-                </Text>
-                {isAdmin && (
-                  <View style={styles.adminBadge}>
-                    <Ionicons name="star" size={10} color="#FFFFFF" />
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.memberInfo}>
-                <View style={styles.memberNameRow}>
-                  <Text style={styles.memberName}>
-                    {member.isCurrentUser ? "You" : member.name}
-                  </Text>
-                  {isAdmin && (
-                    <View style={styles.adminTag}>
-                      <Text style={styles.adminTagText}>
-                        {member.role === "creator" ? "Creator" : "Admin"}
-                      </Text>
-                    </View>
-                  )}
-                  {isElder && (
-                    <View style={[styles.adminTag, { backgroundColor: "#EEF2FF" }]}>
-                      <Text style={[styles.adminTagText, { color: "#6366F1" }]}>{t("circle_detail.tag_elder")}</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={styles.memberPhone}>{member.phone || member.email || "No contact info"}</Text>
-              </View>
-
-              <View style={styles.memberRight}>
-                <View style={styles.xnScoreBadge}>
-                  <Text style={styles.xnScoreText}>{member.xnScore}</Text>
-                </View>
-                {!hasBeneficiary && !isOneTime && member.position > 0 && (
-                  <Text style={styles.positionText}>#{member.position}</Text>
-                )}
-                {member.hasPaid ? (
-                  <Ionicons name="checkmark-circle" size={20} color="#00C6AE" />
-                ) : (
-                  <Ionicons name="time-outline" size={20} color="#D97706" />
-                )}
-              </View>
-            </View>
-          );
-        })
+        // FlatList inside the outer ScrollView — scrollEnabled={false}
+        // defers scroll to the parent and avoids the nested-virtualized-
+        // list warning. keyExtractor uses member.id to stabilize re-orders.
+        <FlatList
+          data={members}
+          keyExtractor={(m) => m.id}
+          renderItem={renderMemberRow}
+          scrollEnabled={false}
+        />
       )}
     </View>
   );
@@ -2102,6 +2162,100 @@ const styles = StyleSheet.create({
     color: "#0A2342",
     fontWeight: "600",
     lineHeight: 18,
+  },
+  contributeHeroCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: "#00C6AE",
+    marginBottom: 16,
+    shadowColor: "#00C6AE",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  contributeHeroCtaText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  heroStripRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  heroStripChip: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  heroStripLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  heroStripValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginTop: 2,
+  },
+  iconActionsRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: 16,
+  },
+  iconActionBtn: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  iconActionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconActionLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#0A2342",
+    textAlign: "center",
+  },
+  memberCardMe: {
+    backgroundColor: "#F0FDFB",
+    borderColor: "#00C6AE",
+  },
+  mePill: {
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: "#00C6AE",
+  },
+  mePillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
   },
   suggestionBanner: {
     flexDirection: "row",
