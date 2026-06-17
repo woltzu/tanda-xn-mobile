@@ -18,6 +18,7 @@ import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
 import { useFormDraft } from "../hooks/useFormDraft";
+import { useEventTracker } from "../hooks/useEventTracker";
 import { CircleDraft, CIRCLE_DRAFT_KEY } from "../lib/circleDraft";
 import { supabase } from "../lib/supabase";
 import { useCircleFormationCheck } from "../hooks/useConflictPrediction";
@@ -50,6 +51,11 @@ export default function CreateCircleSuccessScreen() {
   const { t } = useTranslation();
   const { createCircle } = useCircles();
   const { user } = useAuth();
+  // Bucket C — telemetry for the advanced wizard path. Fires once on
+  // successful RPC return (gated by circleSavedRef just below). Matches
+  // the Express screen's completed event so dashboards can compare
+  // express vs. advanced completion rates 1:1.
+  const { track } = useEventTracker();
   const circleSavedRef = useRef(false);
   const preflightStartedRef = useRef(false);
   const [createdCircleId, setCreatedCircleId] = useState<string | null>(null);
@@ -333,6 +339,23 @@ export default function CreateCircleSuccessScreen() {
       // the invite-code display reads from the server-set value.
       setCreatedCircleId(newCircle.id);
       setCreatedCircle({ inviteCode: newCircle.inviteCode });
+      // Bucket C — telemetry. Fires on successful RPC return (mirrors
+      // the Express screen's `completed` event so funnel comparisons
+      // line up). hadReuse is hard-false on the advanced path —
+      // the wizard doesn't expose a reuse chip.
+      track({
+        eventType: "circle_create_completed",
+        eventCategory: "savings",
+        eventAction: "completed",
+        eventLabel: "advanced",
+        eventValue: {
+          path: "advanced",
+          type: newCircle.type,
+          had_reuse: false,
+          member_count: memberCount,
+          rotation_method: rotationMethod,
+        },
+      });
       // Created successfully — clear the saved wizard draft so it won't
       // reappear next time. Inside the try, after success only: a failed
       // createCircle (catch below) leaves the draft intact for retry.

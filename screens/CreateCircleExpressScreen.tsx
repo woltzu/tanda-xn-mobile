@@ -15,7 +15,7 @@
 // smart default and is tucked behind the "Advanced ▾" expander.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -45,6 +45,7 @@ import {
   formatDateForPreview,
 } from "../lib/circleSchedule";
 import { showToast } from "../components/Toast";
+import { useEventTracker } from "../hooks/useEventTracker";
 import MemberInviteSheet, {
   InvitedContact,
 } from "../components/MemberInviteSheet";
@@ -111,6 +112,24 @@ export default function CreateCircleExpressScreen() {
   // Bucket A — read xnScore for the payout-order preview text inside
   // the Advanced expander. AuthContext exposes this on the user object.
   const { user } = useAuth();
+  // Bucket C — telemetry. circle_create.express_opened fires once
+  // per mount (gated by a ref so React StrictMode double-mounts and
+  // unrelated re-renders don't double-count). circle_create.completed
+  // fires inside handleCreate on a successful RPC. hadReuseRef records
+  // whether the reuse chip was tapped during this session so completed
+  // metadata is accurate.
+  const { track } = useEventTracker();
+  const expressOpenedRef = useRef(false);
+  const hadReuseRef = useRef(false);
+  useEffect(() => {
+    if (expressOpenedRef.current) return;
+    expressOpenedRef.current = true;
+    track({
+      eventType: "circle_create_express_opened",
+      eventCategory: "savings",
+      eventAction: "express_opened",
+    });
+  }, [track]);
 
   // ── Smart defaults from the user's most recent circle ────────────────────
   // If they've created/joined before, copy amount + frequency + memberCount
@@ -157,7 +176,11 @@ export default function CreateCircleExpressScreen() {
   const [amount, setAmount] = useState(String(seedAmount));
   const [memberCount, setMemberCount] = useState(seedMemberCount);
   const [showCustomCount, setShowCustomCount] = useState(
-    !QUICK_MEMBER_COUNTS.includes(seedMemberCount as any),
+    // QUICK_MEMBER_COUNTS is a readonly tuple of literals; .includes()
+    // is narrowed to that union, so a plain number doesn't satisfy it.
+    // Casting to the tuple's element union is the typed equivalent of
+    // the prior `as any`.
+    !(QUICK_MEMBER_COUNTS as readonly number[]).includes(seedMemberCount),
   );
   const [customCountText, setCustomCountText] = useState(
     showCustomCount ? String(seedMemberCount) : "",
@@ -262,8 +285,8 @@ export default function CreateCircleExpressScreen() {
     setMemberCount(lastCircle.memberCount);
     // Keep the chip selection in sync. If the last circle's count isn't
     // one of the quick chips, switch to custom mode and seed the text.
-    const isQuick = QUICK_MEMBER_COUNTS.includes(
-      lastCircle.memberCount as any,
+    const isQuick = (QUICK_MEMBER_COUNTS as readonly number[]).includes(
+      lastCircle.memberCount,
     );
     setShowCustomCount(!isQuick);
     setCustomCountText(isQuick ? "" : String(lastCircle.memberCount));
@@ -280,6 +303,16 @@ export default function CreateCircleExpressScreen() {
       t("create_circle_express.reuse_toast", { count: 5 }),
       "success",
     );
+    // Bucket C — telemetry. Stamps hadReuseRef so the eventual
+    // completed event metadata reflects that this circle was created
+    // from a reused setup.
+    hadReuseRef.current = true;
+    track({
+      eventType: "circle_create_reuse_chip_tapped",
+      eventCategory: "savings",
+      eventAction: "reuse_chip_tapped",
+      eventLabel: lastCircle.id,
+    });
   };
 
   // Bucket A — rotation method help. Single Alert so the user sees the
@@ -339,6 +372,23 @@ export default function CreateCircleExpressScreen() {
         })),
         createdBy: "", // overwritten server-side by auth.uid()
         emoji: "🔄",
+      });
+
+      // Bucket C — telemetry. Fires only on successful RPC return so
+      // dashboards can compute a per-path completion rate against the
+      // express_opened counter.
+      track({
+        eventType: "circle_create_completed",
+        eventCategory: "savings",
+        eventAction: "completed",
+        eventLabel: "express",
+        eventValue: {
+          path: "express",
+          type: newCircle.type,
+          had_reuse: hadReuseRef.current,
+          member_count: memberCount,
+          rotation_method: rotationMethod,
+        },
       });
 
       // Prefer `replace` so the user's back button goes to the Circles

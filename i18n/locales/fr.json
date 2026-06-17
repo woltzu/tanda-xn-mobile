@@ -2984,7 +2984,10 @@
     "label_community_id": "ID de la communauté",
     "placeholder_community_id": "Communauté liée",
     "help_community_id": "Facultatif — relie ce cercle à une communauté dont vous êtes membre.",
-    "next_btn": "Suivant"
+    "next_btn": "Suivant",
+    "advanced_explainer_title": "Ce que vous offre le mode Avancé",
+    "advanced_explainer_body": "Le mode Avancé débloque 5 autres types de cercles (Voyage, Soutien familial, Bénéficiaire, Objectif, Urgence) et des contrôles par cycle. Vous pouvez toujours revenir à l'Express depuis l'onglet Cercles.",
+    "advanced_explainer_btn": "Compris"
   },
   "member_invite_sheet": {
     "title": "Ajouter des membres",

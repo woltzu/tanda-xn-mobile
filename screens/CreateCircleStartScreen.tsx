@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -16,11 +16,27 @@ import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
 import { useFormDraft } from "../hooks/useFormDraft";
 import { CircleDraft, CIRCLE_DRAFT_KEY, type CircleType } from "../lib/circleDraft";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 type CreateCircleStartNavigationProp = StackNavigationProp<RootStackParamList>;
 
+// Bucket C — typed catalogue shape so the JSX below doesn't need
+// `type.isTravel` etc. The `isTravel` and `isNew` props are
+// optional flags only set on the travel entry; without the type
+// TypeScript infers a narrower row shape from the first item.
+type CircleTypeOption = {
+  id: string;
+  nameKey: string;
+  emoji: string;
+  descKey: string;
+  featureKeys: string[];
+  popular: boolean;
+  isNew?: boolean;
+  isTravel?: boolean;
+};
+
 // i18n: nameKey/descKey/featureKeys resolved per-render via t() at call site.
-const circleTypes = [
+const circleTypes: CircleTypeOption[] = [
   {
     id: "traditional",
     nameKey: "create_circle_start.type_traditional_name",
@@ -107,6 +123,21 @@ export default function CreateCircleStartScreen() {
   const minScoreRequired = 60;
   const canCreate = userXnScore >= minScoreRequired;
 
+  // Bucket C — telemetry. circle_create.advanced_opened fires once
+  // per mount (the Start screen IS the Advanced wizard entry). Ref-
+  // guarded so re-renders don't double-emit.
+  const { track } = useEventTracker();
+  const advancedOpenedRef = useRef(false);
+  useEffect(() => {
+    if (advancedOpenedRef.current) return;
+    advancedOpenedRef.current = true;
+    track({
+      eventType: "circle_create_advanced_opened",
+      eventCategory: "savings",
+      eventAction: "advanced_opened",
+    });
+  }, [track]);
+
   const isTravelSelected = selectedType === "travel";
 
   // Cross-step draft (shared key). This screen only READS the draft to offer
@@ -138,8 +169,12 @@ export default function CreateCircleStartScreen() {
   const handleContinue = () => {
     if (selectedType && canCreate) {
       if (isTravelSelected) {
-        // Travel type → Trip Organizer wizard (4 steps)
-        navigation.navigate("CreateTripWizard" as any, {});
+        // Travel type → Trip Organizer wizard (4 steps). The cast
+        // remains because CreateTripWizard is registered in a different
+        // navigator (TripStack) and isn't typed in the circle-creation
+        // RootStackParamList. Out of scope for the circle-create
+        // typing sweep; would need a cross-stack types refactor.
+        navigation.navigate("CreateTripWizard" as never, {});
       } else {
         // Bucket B — all other types route through the merged
         // WizardForm screen with a typed draft. Replaces the old
@@ -246,7 +281,7 @@ export default function CreateCircleStartScreen() {
                 style={[
                   styles.typeButton,
                   selectedType === type.id && styles.typeButtonSelected,
-                  selectedType === type.id && (type as any).isTravel && styles.typeButtonTravelSelected,
+                  selectedType === type.id && type.isTravel && styles.typeButtonTravelSelected,
                   !canCreate && styles.typeButtonDisabled,
                 ]}
                 onPress={() => canCreate && setSelectedType(type.id)}
@@ -257,7 +292,7 @@ export default function CreateCircleStartScreen() {
                     <Text style={styles.popularBadgeText}>{t("create_circle_start.badge_popular")}</Text>
                   </View>
                 )}
-                {(type as any).isNew && (
+                {type.isNew && (
                   <View style={[styles.popularBadge, { backgroundColor: "#E8A842" }]}>
                     <Text style={styles.popularBadgeText}>{t("create_circle_start.badge_new")}</Text>
                   </View>
@@ -268,7 +303,7 @@ export default function CreateCircleStartScreen() {
                     style={[
                       styles.typeIconContainer,
                       selectedType === type.id && styles.typeIconContainerSelected,
-                      selectedType === type.id && (type as any).isTravel && styles.typeIconContainerTravel,
+                      selectedType === type.id && type.isTravel && styles.typeIconContainerTravel,
                     ]}
                   >
                     <Text style={styles.typeEmoji}>{type.emoji}</Text>
@@ -285,7 +320,7 @@ export default function CreateCircleStartScreen() {
                           style={[
                             styles.featureBadge,
                             selectedType === type.id && styles.featureBadgeSelected,
-                            selectedType === type.id && (type as any).isTravel && styles.featureBadgeTravel,
+                            selectedType === type.id && type.isTravel && styles.featureBadgeTravel,
                           ]}
                         >
                           <Text
@@ -304,7 +339,7 @@ export default function CreateCircleStartScreen() {
                   {selectedType === type.id && (
                     <View style={[
                       styles.checkCircle,
-                      (type as any).isTravel && { backgroundColor: "#E8A842" },
+                      type.isTravel && { backgroundColor: "#E8A842" },
                     ]}>
                       <Ionicons name="checkmark" size={14} color="#FFFFFF" />
                     </View>

@@ -36,7 +36,10 @@ import {
   Platform,
   SafeAreaView,
   Alert,
+  Modal,
+  Pressable,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -124,6 +127,32 @@ export default function CreateCircleWizardFormScreen() {
   const { draft, saveDraft } = useFormDraft<CircleDraft>(CIRCLE_DRAFT_KEY, {
     circleType,
   });
+
+  // Bucket C — first-visit explainer. One-shot modal that explains what
+  // the Advanced wizard adds over Express. Gated by AsyncStorage so it
+  // only ever fires once per install. AsyncStorage failures fall through
+  // silently — worst case the user just doesn't see the explainer this
+  // session, no functional impact.
+  const ADVANCED_FIRST_SEEN_KEY = "@tandaxn_advanced_first_seen";
+  const [showAdvancedExplainer, setShowAdvancedExplainer] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(ADVANCED_FIRST_SEEN_KEY)
+      .then((v) => {
+        if (cancelled) return;
+        if (!v) setShowAdvancedExplainer(true);
+      })
+      .catch(() => {
+        // ignore — no nag on storage failure
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const dismissAdvancedExplainer = () => {
+    setShowAdvancedExplainer(false);
+    AsyncStorage.setItem(ADVANCED_FIRST_SEEN_KEY, "1").catch(() => undefined);
+  };
 
   // ── Form state — Basics ─────────────────────────────────────────────
   const [name, setName] = useState<string>(incoming.name ?? "");
@@ -707,6 +736,42 @@ export default function CreateCircleWizardFormScreen() {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Bucket C — first-visit explainer modal. Single slide + "Got
+          it" button. Dismiss writes the AsyncStorage flag so it never
+          shows again. */}
+      <Modal
+        visible={showAdvancedExplainer}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissAdvancedExplainer}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Ionicons
+              name="compass-outline"
+              size={36}
+              color="#00C6AE"
+              style={styles.modalIcon}
+            />
+            <Text style={styles.modalTitle}>
+              {t("create_circle_wizard.advanced_explainer_title")}
+            </Text>
+            <Text style={styles.modalBody}>
+              {t("create_circle_wizard.advanced_explainer_body")}
+            </Text>
+            <Pressable
+              onPress={dismissAdvancedExplainer}
+              style={styles.modalBtn}
+              accessibilityRole="button"
+            >
+              <Text style={styles.modalBtnText}>
+                {t("create_circle_wizard.advanced_explainer_btn")}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -840,4 +905,40 @@ const styles = StyleSheet.create({
   },
   nextBtnDisabled: { backgroundColor: "#9CA3AF" },
   nextBtnText: { fontSize: 15, fontWeight: "700", color: "#FFFFFF" },
+  // ----- Bucket C — first-visit explainer modal -----
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 24,
+    alignItems: "center",
+  },
+  modalIcon: { marginBottom: 12 },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  modalBody: {
+    fontSize: 13,
+    color: "#374151",
+    lineHeight: 19,
+    textAlign: "center",
+    marginBottom: 18,
+  },
+  modalBtn: {
+    width: "100%",
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: "center",
+    backgroundColor: "#00C6AE",
+  },
+  modalBtnText: { fontSize: 13, color: "#FFFFFF", fontWeight: "700" },
 });

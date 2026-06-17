@@ -2984,7 +2984,10 @@
     "label_community_id": "Community ID",
     "placeholder_community_id": "Linked community",
     "help_community_id": "Optional — links this circle to a community you're part of.",
-    "next_btn": "Next"
+    "next_btn": "Next",
+    "advanced_explainer_title": "What Advanced gives you",
+    "advanced_explainer_body": "Advanced unlocks 5 more circle types (Travel, Family Support, Beneficiary, Goal, Emergency) and per-cycle controls. You can always switch back to Express from the Circles tab.",
+    "advanced_explainer_btn": "Got it"
   },
   "member_invite_sheet": {
     "title": "Add members",
