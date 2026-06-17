@@ -4593,7 +4593,21 @@
   },
   "notifications_inbox": {
     "loading": "Chargement des notifications...",
-    "btn_mark_all_read": "Tout marquer comme lu"
+    "btn_mark_all_read": "Tout marquer comme lu",
+    "filter_all": "Tout",
+    "filter_unread": "Non lus",
+    "filter_unread_with_count": "Non lus ({{count}})",
+    "empty_title_all": "Aucune notification",
+    "empty_title_unread": "Aucune notification non lue",
+    "empty_body_all": "Lorsque vous aurez de nouvelles activités, elles apparaîtront ici.",
+    "empty_body_unread": "Tout est à jour !",
+    "time_just_now": "À l'instant",
+    "time_minutes_ago_one": "il y a {{count}} m",
+    "time_minutes_ago_other": "il y a {{count}} m",
+    "time_hours_ago_one": "il y a {{count}} h",
+    "time_hours_ago_other": "il y a {{count}} h",
+    "time_days_ago_one": "il y a {{count}} j",
+    "time_days_ago_other": "il y a {{count}} j"
   },
   "group_chat": {
     "alert_could_not_send_title": "Impossible d'envoyer",

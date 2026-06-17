@@ -4593,7 +4593,21 @@
   },
   "notifications_inbox": {
     "loading": "Loading notifications...",
-    "btn_mark_all_read": "Mark all as read"
+    "btn_mark_all_read": "Mark all as read",
+    "filter_all": "All",
+    "filter_unread": "Unread",
+    "filter_unread_with_count": "Unread ({{count}})",
+    "empty_title_all": "No notifications yet",
+    "empty_title_unread": "No unread notifications",
+    "empty_body_all": "When you have new activity, it will appear here.",
+    "empty_body_unread": "You're all caught up!",
+    "time_just_now": "Just now",
+    "time_minutes_ago_one": "{{count}}m ago",
+    "time_minutes_ago_other": "{{count}}m ago",
+    "time_hours_ago_one": "{{count}}h ago",
+    "time_hours_ago_other": "{{count}}h ago",
+    "time_days_ago_one": "{{count}}d ago",
+    "time_days_ago_other": "{{count}}d ago"
   },
   "group_chat": {
     "alert_could_not_send_title": "Could not send",
