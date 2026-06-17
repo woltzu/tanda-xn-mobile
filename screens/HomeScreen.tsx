@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,9 @@ import {
   Pressable,
   SafeAreaView,
   StatusBar,
+  Animated,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTranslation } from "react-i18next";
@@ -26,6 +28,7 @@ import { useCircles, type Circle } from "../context/CirclesContext";
 import { useCircleNetBalance } from "../hooks/useCircleNetBalance";
 import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
 import { useScoreHubBadge } from "../hooks/useScoreHubBadge";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 // ==========================================================================
 // Mock data shrinking. Wallet balance comes from useWallet(), goals balance
@@ -390,6 +393,111 @@ export default function HomeScreen() {
   // an AI insight notification is unread. Pure read of cache + already-
   // mounted NotificationContext — no extra RPC.
   const scoreHubBadge = useScoreHubBadge();
+
+  // ────────────────────────────────────────────────────────────────────
+  // Bucket C — first-launch coach mark on the Score Hub icon.
+  // ────────────────────────────────────────────────────────────────────
+  // One-shot animated pulse (scale 1 → 1.06 → 1) + tooltip beneath the
+  // icon. AsyncStorage flag means this never fires twice for the same
+  // user. Mirrors the Contribute-button pulse pattern from
+  // CircleDetailScreen task #239 for visual consistency. Auto-clears
+  // after 4 s; a tap on the icon OR tooltip dismisses immediately.
+  const COACH_FLAG_KEY = "@tandaxn_score_hub_icon_seen_v1";
+  const [showCoach, setShowCoach] = useState(false);
+  const coachPulseAnim = useRef(new Animated.Value(1)).current;
+  const coachTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_FLAG_KEY);
+        if (cancelled || seen) return;
+        await AsyncStorage.setItem(COACH_FLAG_KEY, "1");
+        if (!cancelled) setShowCoach(true);
+      } catch {
+        // Best-effort — a failure means the user just doesn't get the
+        // coach mark this session; no functional impact.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showCoach) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(coachPulseAnim, {
+          toValue: 1.06,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(coachPulseAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    coachTimerRef.current = setTimeout(() => {
+      setShowCoach(false);
+    }, 4000);
+    return () => {
+      loop.stop();
+      if (coachTimerRef.current) {
+        clearTimeout(coachTimerRef.current);
+        coachTimerRef.current = null;
+      }
+    };
+  }, [showCoach, coachPulseAnim]);
+
+  const dismissCoach = useCallback(() => {
+    if (coachTimerRef.current) {
+      clearTimeout(coachTimerRef.current);
+      coachTimerRef.current = null;
+    }
+    setShowCoach(false);
+  }, []);
+
+  // ────────────────────────────────────────────────────────────────────
+  // Bucket C — telemetry: log every transition of the icon-badge
+  // urgency. Fires once per distinct value (the ref prevents same-value
+  // re-emits on unrelated re-renders).
+  // ────────────────────────────────────────────────────────────────────
+  const { track } = useEventTracker();
+  const lastBadgeUrgencyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (scoreHubBadge.urgency === "none") {
+      // Reset so a return-to-attention later still emits.
+      lastBadgeUrgencyRef.current = null;
+      return;
+    }
+    if (lastBadgeUrgencyRef.current === scoreHubBadge.urgency) return;
+    lastBadgeUrgencyRef.current = scoreHubBadge.urgency;
+    track({
+      eventType: "score_hub_icon_badge_visible",
+      eventCategory: "score",
+      eventAction: "icon_badge_visible",
+      eventLabel: scoreHubBadge.urgency,
+      eventValue: {
+        has_urgent_alert: scoreHubBadge.hasUrgentAlert,
+        has_unread_insight: scoreHubBadge.hasUnreadInsight,
+        has_updated_since_last_visit:
+          scoreHubBadge.hasUpdatedSinceLastVisit,
+        unread_insight_count: scoreHubBadge.unreadInsightCount,
+      },
+    });
+  }, [
+    scoreHubBadge.urgency,
+    scoreHubBadge.hasUrgentAlert,
+    scoreHubBadge.hasUnreadInsight,
+    scoreHubBadge.hasUpdatedSinceLastVisit,
+    scoreHubBadge.unreadInsightCount,
+    track,
+  ]);
   const activeAdvances = useMemo(
     () => advanceDashboard?.active_advances ?? [],
     [advanceDashboard],
@@ -601,14 +709,21 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={handleOpenScoreHub}
+            onPress={() => {
+              dismissCoach();
+              handleOpenScoreHub();
+            }}
             style={styles.topBarIconBtn}
             accessibilityRole="button"
             accessibilityLabel={(() => {
               const base = t("home_screen.header_score_hub_a11y");
-              // Critical OR moderate alert → "attention needed" suffix.
-              // Unread insight is only spoken when there's no harder
-              // signal, to keep the label short for screen readers.
+              // Priority order on a11y suffix:
+              //   1. Critical or moderate alert  → "attention needed"
+              //   2. Unread AI insight           → "new insight available"
+              //   3. Updated since last visit    → "updated since last
+              //      visit" (Bucket C — the gentlest of the three; only
+              //      announced when nothing harder is present)
+              // Screen readers only get one suffix to keep the label short.
               if (scoreHubBadge.hasUrgentAlert) {
                 return `${base}, ${t(
                   "home_screen.header_score_hub_attention_needed",
@@ -619,11 +734,25 @@ export default function HomeScreen() {
                   "home_screen.header_score_hub_new_insight",
                 )}`;
               }
+              if (scoreHubBadge.hasUpdatedSinceLastVisit) {
+                return `${base}, ${t(
+                  "home_screen.header_score_hub_updated",
+                )}`;
+              }
               return base;
             })()}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <View style={styles.scoreHubIconWrap}>
+            <Animated.View
+              style={[
+                styles.scoreHubIconWrap,
+                {
+                  transform: [
+                    { scale: showCoach ? coachPulseAnim : 1 },
+                  ],
+                },
+              ]}
+            >
               {/* Bucket A — switched from stats-chart-outline to
                   pulse-outline so the icon visually echoes the stress
                   card and reads as a live signal rather than a static
@@ -643,8 +772,28 @@ export default function HomeScreen() {
                   ]}
                 />
               ) : null}
-            </View>
+            </Animated.View>
           </TouchableOpacity>
+
+          {/* Bucket C — first-launch coach mark tooltip. Anchored to the
+              right edge of the top bar so it tracks the Score Hub icon
+              regardless of which other top-bar buttons are showing.
+              Tap-anywhere on the card to dismiss; the icon's onPress
+              also dismisses (see above). Auto-clears after 4 s via the
+              setTimeout in the effect that started the pulse. */}
+          {showCoach ? (
+            <Pressable
+              onPress={dismissCoach}
+              style={styles.scoreHubCoachTooltip}
+              accessibilityRole="alert"
+              accessibilityLabel={t("home_screen.score_hub_icon_coach")}
+            >
+              <View style={styles.scoreHubCoachArrow} />
+              <Text style={styles.scoreHubCoachText}>
+                {t("home_screen.score_hub_icon_coach")}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {/* ===== MAIN BALANCE CARD ===== */}
@@ -1571,6 +1720,44 @@ const styles = StyleSheet.create({
   },
   scoreHubBadgeAttention: {
     backgroundColor: "#F59E0B",
+  },
+  // ----- Bucket C — first-launch coach mark tooltip -----
+  // Absolute positioning relative to the topBar parent. Anchored to
+  // the right edge of the bar so it tracks the Score Hub icon, which
+  // is the rightmost item. The triangle (scoreHubCoachArrow) is a
+  // rotated 8px square punching out of the top edge so the card
+  // visually points at the icon. Higher z-index than the rest of the
+  // top-bar contents so it never gets clipped by an adjacent button.
+  scoreHubCoachTooltip: {
+    position: "absolute",
+    top: 44,
+    right: 0,
+    maxWidth: 240,
+    backgroundColor: colors.primaryNavy,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 5,
+    zIndex: 10,
+  },
+  scoreHubCoachArrow: {
+    position: "absolute",
+    top: -4,
+    right: 14,
+    width: 8,
+    height: 8,
+    backgroundColor: colors.primaryNavy,
+    transform: [{ rotate: "45deg" }],
+  },
+  scoreHubCoachText: {
+    fontSize: 12,
+    color: colors.textWhite,
+    lineHeight: 16,
+    fontWeight: "500",
   },
 
   // ----- Balance card -----

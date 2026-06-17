@@ -45,6 +45,8 @@ import { useAuth } from "../context/AuthContext";
 import { useNotifications } from "../context/NotificationContext";
 import {
   getCachedScoreBundle,
+  getLastVisitAt,
+  loadLastVisitAt,
   subscribeToScoreCache,
 } from "../lib/scoreCache";
 
@@ -53,6 +55,11 @@ export type ScoreHubUrgency = "critical" | "attention" | "none";
 export type ScoreHubBadge = {
   hasUrgentAlert: boolean;
   hasUnreadInsight: boolean;
+  // Bucket C — bundle.last_updated is newer than the persisted
+  // @tandaxn_score_hub_last_visit_at timestamp. Drives the same amber
+  // slot as moderate-attention (no separate visual). Stays false until
+  // the user has visited the hub at least once.
+  hasUpdatedSinceLastVisit: boolean;
   urgency: ScoreHubUrgency;
   unreadInsightCount: number;
 };
@@ -71,12 +78,22 @@ export function useScoreHubBadge(): ScoreHubBadge {
   // Bump a counter when the cache mutates so the memo below recomputes.
   // We don't store the bundle in state because the cache itself is the
   // source of truth and may evict on TTL — we want to re-read it on
-  // every notification batch too.
+  // every notification batch too. The same subscribe channel also
+  // notifies when setLastVisitAt runs, so the "updated since" signal
+  // clears the moment the user finishes viewing ScoreHubScreen.
   const [cacheVersion, setCacheVersion] = useState(0);
   useEffect(() => {
     return subscribeToScoreCache(() => {
       setCacheVersion((v) => v + 1);
     });
+  }, []);
+
+  // Kick a one-time async read of the persisted last_visit_at on mount.
+  // loadLastVisitAt is idempotent + notifies via subscribeToScoreCache
+  // when it lands, so the memo below sees the real value on the next
+  // render. We don't await it — first render returns hasUpdated=false.
+  useEffect(() => {
+    loadLastVisitAt();
   }, []);
 
   return useMemo<ScoreHubBadge>(() => {
@@ -106,16 +123,37 @@ export function useScoreHubBadge(): ScoreHubBadge {
 
     const hasUrgentAlert = isCritical || hasModerateAlert;
 
+    // ── "Updated since you last looked" (Bucket C) ──
+    // Only fires when:
+    //   (a) the user has visited the hub before (lastVisitAt != null)
+    //   (b) the cache holds a bundle with a last_updated timestamp
+    //   (c) bundle.last_updated > lastVisitAt
+    // A brand-new user with no prior visit doesn't get this signal —
+    // they have no frame of reference for "since last looked".
+    const lastVisitAt = getLastVisitAt();
+    let hasUpdatedSinceLastVisit = false;
+    if (lastVisitAt != null && bundle?.last_updated) {
+      const updatedAtMs = new Date(bundle.last_updated).getTime();
+      if (Number.isFinite(updatedAtMs) && updatedAtMs > lastVisitAt) {
+        hasUpdatedSinceLastVisit = true;
+      }
+    }
+
     let urgency: ScoreHubUrgency = "none";
     if (isCritical) {
       urgency = "critical";
-    } else if (hasModerateAlert || hasUnreadInsight) {
+    } else if (
+      hasModerateAlert ||
+      hasUnreadInsight ||
+      hasUpdatedSinceLastVisit
+    ) {
       urgency = "attention";
     }
 
     return {
       hasUrgentAlert,
       hasUnreadInsight,
+      hasUpdatedSinceLastVisit,
       urgency,
       unreadInsightCount,
     };

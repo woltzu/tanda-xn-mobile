@@ -19,7 +19,15 @@
 // only update when its other deps (auth user, notifications) churn — a
 // real ScoreHubScreen → realtime update → bundle change would not show on
 // HomeScreen until the next focus.
+//
+// Bucket C also stashes a `last_visit_at` timestamp here. ScoreHubScreen
+// stamps it on focus; the badge hook compares it to `bundle.last_updated`
+// to drive an "updated since you last looked" amber dot. Persisted in
+// AsyncStorage so the comparison survives app restarts; the in-memory
+// mirror keeps the read sync for the hook's render path.
 // ══════════════════════════════════════════════════════════════════════════════
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type StressStatus = "green" | "yellow" | "orange" | "red";
 export type StressTrend = "improving" | "stable" | "worsening";
@@ -128,10 +136,85 @@ export function clearScoreCache(): void {
  * useScoreHubBadge so HomeScreen's icon dot reacts to score changes the
  * moment ScoreHubScreen's realtime/refetch path writes them — no extra
  * RPC, no focus event needed.
+ *
+ * Also fires on `setLastVisitAt`, so the same hook recomputes when the
+ * user finishes browsing ScoreHubScreen and the "updated since" signal
+ * needs to clear.
  */
 export function subscribeToScoreCache(listener: () => void): () => void {
   _listeners.add(listener);
   return () => {
     _listeners.delete(listener);
   };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Bucket C — "Updated since you last looked" timestamp.
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// Storage layout:
+//   AsyncStorage @tandaxn_score_hub_last_visit_at = "<unix-ms>"
+//   _lastVisitAt = number | null  (in-memory mirror so the badge hook
+//                                  can read it synchronously on render)
+//
+// Lifecycle:
+//   • App start / cold load → useScoreHubBadge calls loadLastVisitAt(),
+//     async-reads AsyncStorage once, populates _lastVisitAt, notifies.
+//   • User opens ScoreHubScreen → setLastVisitAt(Date.now()) runs on
+//     focus, writes AsyncStorage + updates _lastVisitAt + notifies the
+//     same subscribe channel as the score cache.
+//   • Badge hook re-evaluates whenever notified.
+//
+// A null _lastVisitAt means "never visited" — the badge stays quiet
+// rather than firing on every fresh score (a brand-new user shouldn't
+// see "updated since you last looked" before they've looked once).
+// ══════════════════════════════════════════════════════════════════════════════
+
+export const LAST_VISIT_STORAGE_KEY = "@tandaxn_score_hub_last_visit_at";
+
+let _lastVisitAt: number | null = null;
+let _lastVisitLoaded = false;
+
+export function getLastVisitAt(): number | null {
+  return _lastVisitAt;
+}
+
+/**
+ * Loads the persisted timestamp into the in-memory mirror. Safe to call
+ * multiple times; subsequent calls are no-ops. Returns the resolved
+ * value so callers can act on the first-load value if needed.
+ */
+export async function loadLastVisitAt(): Promise<number | null> {
+  if (_lastVisitLoaded) return _lastVisitAt;
+  try {
+    const raw = await AsyncStorage.getItem(LAST_VISIT_STORAGE_KEY);
+    const parsed = raw ? parseInt(raw, 10) : NaN;
+    _lastVisitAt = Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    _lastVisitAt = null;
+  } finally {
+    _lastVisitLoaded = true;
+    // Notify even on first load so the badge hook computes against the
+    // real value rather than its initial `null` state.
+    _notify();
+  }
+  return _lastVisitAt;
+}
+
+/**
+ * Stamps "now" (or a caller-supplied ms) into AsyncStorage and the
+ * in-memory mirror, then notifies subscribers. Called by ScoreHubScreen
+ * on focus.
+ */
+export async function setLastVisitAt(ms: number = Date.now()): Promise<void> {
+  _lastVisitAt = ms;
+  _lastVisitLoaded = true;
+  try {
+    await AsyncStorage.setItem(LAST_VISIT_STORAGE_KEY, String(ms));
+  } catch {
+    // Best-effort — the in-memory value is still updated so the rest
+    // of the session reflects the visit. Next app start will fall back
+    // to the previous persisted value (or null).
+  }
+  _notify();
 }

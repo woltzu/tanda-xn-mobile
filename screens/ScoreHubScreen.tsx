@@ -57,7 +57,9 @@ import {
   getCachedScoreBundle,
   setCachedScoreBundle,
   clearScoreCache,
+  setLastVisitAt,
 } from "../lib/scoreCache";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 // ==========================================================================
 // 5-minute in-memory cache keyed by userId. Now lives in lib/scoreCache.ts
@@ -753,10 +755,32 @@ export default function ScoreHubScreen() {
     }
   }, [userId]);
 
+  // Bucket C — telemetry channel. Bound by useEventTracker to the
+  // current user; emits `screen_view → ScoreHub` via the existing
+  // EventService pipeline (no console.log fallback needed). The
+  // EventService self-deduplicates same-screen views, so the focus
+  // refetch loop doesn't double-fire.
+  const { trackScreenView, track } = useEventTracker();
+
   useFocusEffect(
     useCallback(() => {
       loadScores();
-    }, [loadScores]),
+      // Bucket C — stamp the visit timestamp into AsyncStorage on every
+      // focus. The badge hook on HomeScreen reads it back to clear the
+      // "updated since you last looked" amber dot. Stamping on focus
+      // (not just initial mount) covers users who navigate away and
+      // back without unmounting the screen.
+      setLastVisitAt().catch(() => {});
+      trackScreenView("ScoreHub", {
+        has_bundle: getCachedScoreBundle(userId ?? "") != null,
+      });
+      track({
+        eventType: "score_hub_opened",
+        eventCategory: "score",
+        eventAction: "opened",
+        eventLabel: userId ?? undefined,
+      });
+    }, [loadScores, trackScreenView, track, userId]),
   );
 
   // ── Bucket B — pull-to-refresh ────────────────────────────────────────
