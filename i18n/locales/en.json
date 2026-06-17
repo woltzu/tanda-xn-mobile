@@ -3722,6 +3722,7 @@
   },
   "join_by_code": {
     "subtitle": "Enter an invite code or paste a link to join a savings circle",
+    "use_copied_code": "Use copied code: {{code}}",
     "qr_subtitle": "Scan a QR code to join instantly",
     "how_it_works_step_1": "Ask a friend or family member who is already in a circle",
     "how_it_works_step_2": "They can share the invite code or link from the circle settings",
@@ -4719,7 +4720,8 @@
     "error_load": "Couldn't load recommendations",
     "btn_try_again": "Try again",
     "empty_text": "No recommendations yet",
-    "btn_refresh": "Refresh"
+    "btn_refresh": "Refresh",
+    "btn_dismiss": "Dismiss"
   },
   "book_service_v2": {
     "alert_error_title": "Error",

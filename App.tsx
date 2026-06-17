@@ -401,9 +401,12 @@ export type RootStackParamList = {
   };
   HowCirclesWork: undefined;
   CircleDetail: { circleId: string };
-  // Join Circle Flow
-  JoinCircleConfirm: { circleId: string };
-  JoinCircleSuccess: { circleId: string };
+  // Join Circle Flow. `source` is telemetry metadata identifying where
+  // the user entered the flow from — populated by each navigate call
+  // site (browse, code, recommended, feed, detail, community,
+  // dashboard, deep_link). Treated as an opaque label by the screen.
+  JoinCircleConfirm: { circleId: string; source?: string };
+  JoinCircleSuccess: { circleId: string; source?: string };
   // Contribution Flow
   SelectCircleContribution: undefined;
   MakeContribution: { circleId: string };

@@ -121,6 +121,7 @@ export default function PostDetailScreen() {
     if (m.circleId || m.circleName) {
       navigation.navigate("JoinCircleConfirm", {
         circleId: m.circleId || p.relatedId,
+        source: "feed",
       });
     } else if (m.goalName) {
       navigation.navigate("SupportDream" as any, {

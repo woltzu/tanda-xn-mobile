@@ -41,6 +41,7 @@ import type { CircleMatch } from "../services/CircleMatchingService";
 import { CircleRecommendationCard } from "../components/CircleRecommendationCard";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -76,6 +77,21 @@ export default function DiscoverCirclesScreen() {
   // Prevents the same recommendation card from logging "viewed" 30 times
   // as the user scrolls or RN strict-mode double-mounts.
   const viewedRef = useRef<Set<string>>(new Set());
+
+  // Screen-level "I opened Discover" telemetry — distinct from the
+  // per-card "viewed" event above. Ref-guarded so StrictMode double-
+  // mount doesn't double-emit.
+  const { track } = useEventTracker();
+  const screenViewedRef = useRef(false);
+  useEffect(() => {
+    if (screenViewedRef.current) return;
+    screenViewedRef.current = true;
+    track({
+      eventType: "discover_circles_viewed",
+      eventCategory: "savings",
+      eventAction: "viewed",
+    });
+  }, [track]);
   const [refreshing, setRefreshing] = useState(false);
   // Local dismissal so users can hide cards immediately without waiting
   // for a re-fetch. We still log the action; the next refresh would
@@ -160,13 +176,6 @@ export default function DiscoverCirclesScreen() {
     }
   }, [refreshRecommendations]);
 
-  const handleSave = useCallback(
-    (match: CircleMatch, idx: number) => {
-      logInteraction(match, "saved", idx);
-    },
-    [logInteraction]
-  );
-
   const handleDismiss = useCallback(
     (match: CircleMatch, idx: number) => {
       logInteraction(match, "dismissed", idx);
@@ -185,7 +194,10 @@ export default function DiscoverCirclesScreen() {
       // shared Join Confirm screen so the recommendation actually leads
       // to a join.
       logInteraction(match, "applied", idx);
-      navigation.navigate("JoinCircleConfirm", { circleId: match.circle.id });
+      navigation.navigate("JoinCircleConfirm", {
+        circleId: match.circle.id,
+        source: "recommended",
+      });
     },
     [logInteraction, navigation]
   );
@@ -271,22 +283,13 @@ export default function DiscoverCirclesScreen() {
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={styles.actionBtnSecondary}
-                onPress={() => handleSave(match, idx)}
-                accessibilityRole="button"
-                accessibilityLabel={`Save ${match.circle.name}`}
-              >
-                <Ionicons name="bookmark-outline" size={14} color={NAVY} />
-                <Text style={styles.actionBtnSecondaryText}>{t("final_polish.discovercircles_save")}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionBtnSecondary}
                 onPress={() => handleDismiss(match, idx)}
                 accessibilityRole="button"
                 accessibilityLabel={`Dismiss ${match.circle.name}`}
               >
                 <Ionicons name="close-outline" size={14} color={MUTED} />
                 <Text style={[styles.actionBtnSecondaryText, { color: MUTED }]}>
-                  Dismiss
+                  {t("discover_circles.btn_dismiss")}
                 </Text>
               </TouchableOpacity>
             </View>

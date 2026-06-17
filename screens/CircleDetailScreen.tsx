@@ -1505,7 +1505,7 @@ export default function CircleDetailScreen() {
         ) : (
           <TouchableOpacity
             style={[styles.payButton, isFull && styles.payButtonDisabled]}
-            onPress={() => !isFull && navigation.navigate("JoinCircleConfirm", { circleId })}
+            onPress={() => !isFull && navigation.navigate("JoinCircleConfirm", { circleId, source: "detail" })}
             disabled={isFull}
           >
             <Ionicons name="people" size={20} color="#FFFFFF" />

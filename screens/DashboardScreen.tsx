@@ -1190,6 +1190,7 @@ export default function DashboardScreen() {
                           navigation.navigate("JoinCircleConfirm" as any, {
                             circleId: c.id,
                             inviteCode: c.invite_code,
+                            source: "dashboard",
                           })
                         }
                         accessibilityRole="button"

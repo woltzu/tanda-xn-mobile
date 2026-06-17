@@ -124,7 +124,12 @@ export default function CirclesScreen() {
       <TouchableOpacity
         style={[styles.circleCard, featured ? styles.circleCardFeatured : null]}
         activeOpacity={0.7}
-        onPress={() => navigation.navigate("JoinCircleConfirm", { circleId: originalId || circle.id })}
+        onPress={() =>
+          navigation.navigate("JoinCircleConfirm", {
+            circleId: originalId || circle.id,
+            source: "browse",
+          })
+        }
       >
         {/* Verified Badge */}
         {circle.verified ? (

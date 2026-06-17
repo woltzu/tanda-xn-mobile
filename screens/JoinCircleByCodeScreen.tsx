@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import * as ExpoClipboard from "expo-clipboard";
 import {
   View,
   Text,
@@ -18,6 +19,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 type JoinCircleByCodeNavigationProp = StackNavigationProp<RootStackParamList>;
 type JoinCircleByCodeRouteProp = RouteProp<RootStackParamList, "JoinCircleByCode">;
@@ -27,6 +29,7 @@ export default function JoinCircleByCodeScreen() {
   const route = useRoute<JoinCircleByCodeRouteProp>();
   const { t } = useTranslation();
   const { browseCircles, findCircleByInviteCode, circles } = useCircles();
+  const { track } = useEventTracker();
 
   // Pre-fill from route param when navigated from a deep-link dispatcher
   // (QuickJoinScreen's authed-user redirect). Falls back to empty string.
@@ -34,6 +37,41 @@ export default function JoinCircleByCodeScreen() {
   const [inviteCode, setInviteCode] = useState(initialCode);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Clipboard auto-peek: on first mount, if the input is empty and the
+  // clipboard looks like an invite code, surface a chip the user can
+  // tap to fill the input. Web rejects clipboard reads without a user
+  // gesture — the catch swallows that so we don't error-log on those
+  // browsers. The pattern is intentionally broader than the 8-char
+  // server-generated codes (gen_invite_code, migration 141) so it
+  // tolerates organizer-supplied vanity codes from legacy circles.
+  const INVITE_CODE_PATTERN = /^[A-Z0-9]{4,12}$/;
+  const peekedRef = useRef(false);
+  const [clipboardCode, setClipboardCode] = useState<string | null>(null);
+  useEffect(() => {
+    if (peekedRef.current) return;
+    peekedRef.current = true;
+    if (initialCode) return;
+    ExpoClipboard.getStringAsync()
+      .then((raw) => {
+        const candidate = (raw ?? "").trim().toUpperCase();
+        if (INVITE_CODE_PATTERN.test(candidate)) {
+          setClipboardCode(candidate);
+        }
+      })
+      .catch(() => undefined);
+    // mount-only — eslint can't see the ref guard
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const acceptClipboardCode = () => {
+    if (!clipboardCode) return;
+    setInviteCode(clipboardCode);
+    setError(null);
+    setClipboardCode(null);
+  };
+
+  const dismissClipboardChip = () => setClipboardCode(null);
 
   // Extract a clean code from various accepted input forms — bare codes,
   // ?code= URL params, tandaxn:// deep links, and txn.io short links.
@@ -74,12 +112,18 @@ export default function JoinCircleByCodeScreen() {
       const circleId = await findCircleByCode(cleanCode);
 
       if (circleId) {
-        navigation.navigate("JoinCircleConfirm", { circleId });
+        navigation.navigate("JoinCircleConfirm", { circleId, source: "code" });
       } else {
         // Exact match failed — no partial fallback. Surface the typed
         // error key so the user gets a localized "Invite code not found"
         // hint instead of an interpolated raw code.
         setError(t("join_by_code.error_invite_code_not_found"));
+        track({
+          eventType: "join_circle_code_search_failed",
+          eventCategory: "savings",
+          eventAction: "code_search_failed",
+          eventValue: { code: cleanCode },
+        });
       }
     } catch (err) {
       console.error("Error finding circle:", err);
@@ -132,6 +176,31 @@ export default function JoinCircleByCodeScreen() {
 
         {/* Content */}
         <View style={styles.content}>
+          {/* Clipboard auto-peek chip — surfaced only when the input
+              is empty AND the clipboard looks like a code. */}
+          {clipboardCode && !inviteCode ? (
+            <View style={styles.clipboardChipRow}>
+              <TouchableOpacity
+                style={styles.clipboardChip}
+                onPress={acceptClipboardCode}
+                accessibilityRole="button"
+                accessibilityLabel={t("join_by_code.use_copied_code", { code: clipboardCode })}
+              >
+                <Ionicons name="clipboard" size={14} color="#00C6AE" />
+                <Text style={styles.clipboardChipText}>
+                  {t("join_by_code.use_copied_code", { code: clipboardCode })}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={dismissClipboardChip}
+                style={styles.clipboardChipDismiss}
+                accessibilityRole="button"
+              >
+                <Ionicons name="close" size={14} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
           {/* Code Input Section */}
           <View style={styles.inputSection}>
             <Text style={styles.inputLabel}>{t("join_by_code.label_invite_code")}</Text>
@@ -284,6 +353,31 @@ const styles = StyleSheet.create({
   content: {
     padding: 20,
     paddingBottom: 120,
+  },
+  clipboardChipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 14,
+  },
+  clipboardChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "#F0FDFB",
+    borderWidth: 1,
+    borderColor: "#00C6AE",
+  },
+  clipboardChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0A2342",
+  },
+  clipboardChipDismiss: {
+    padding: 6,
   },
   inputSection: {
     marginBottom: 20,

@@ -3722,6 +3722,7 @@
   },
   "join_by_code": {
     "subtitle": "Saisissez un code d'invitation ou collez un lien pour rejoindre un cercle d'épargne",
+    "use_copied_code": "Utiliser le code copié : {{code}}",
     "qr_subtitle": "Scannez un code QR pour rejoindre instantanément",
     "how_it_works_step_1": "Demandez à un ami ou à un proche déjà membre d'un cercle",
     "how_it_works_step_2": "Il peut partager le code d'invitation ou le lien depuis les paramètres du cercle",
@@ -4719,7 +4720,8 @@
     "error_load": "Impossible de charger les recommandations",
     "btn_try_again": "Réessayer",
     "empty_text": "Aucune recommandation pour le moment",
-    "btn_refresh": "Actualiser"
+    "btn_refresh": "Actualiser",
+    "btn_dismiss": "Ignorer"
   },
   "book_service_v2": {
     "alert_error_title": "Erreur",

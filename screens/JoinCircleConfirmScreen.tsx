@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // One-shot per-user flag — once they've agreed to circle terms during a
@@ -22,6 +22,7 @@ import { useTranslation, Trans } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 type JoinCircleConfirmNavigationProp = StackNavigationProp<RootStackParamList>;
 type JoinCircleConfirmRouteProp = RouteProp<RootStackParamList, "JoinCircleConfirm">;
@@ -81,12 +82,26 @@ export default function JoinCircleConfirmScreen() {
   const route = useRoute<JoinCircleConfirmRouteProp>();
   const { t } = useTranslation();
   const { circleId } = route.params;
+  const source = route.params?.source ?? "unknown";
   // myCircles is included so a member following a stale deep-link or
   // back-navigating after a successful join still resolves the circle
   // instead of hitting the "Not found" branch. Symmetric with
   // JoinCircleSuccessScreen which already merges all three lists.
   const { circles, myCircles, browseCircles, joinCircle } = useCircles();
   const { user } = useAuth();
+  const { track } = useEventTracker();
+  const entryTrackedRef = useRef(false);
+  useEffect(() => {
+    if (entryTrackedRef.current) return;
+    entryTrackedRef.current = true;
+    track({
+      eventType: "join_circle_entry",
+      eventCategory: "savings",
+      eventAction: "entry",
+      eventLabel: source,
+      eventValue: { circleId, source },
+    });
+  }, [track, circleId, source]);
 
   const [isJoining, setIsJoining] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -199,7 +214,14 @@ export default function JoinCircleConfirmScreen() {
       // Persist the terms-accepted flag — fire-and-forget so a storage
       // hiccup never blocks the navigation that the user just earned.
       AsyncStorage.setItem(TERMS_ACCEPTED_KEY, "1").catch(() => undefined);
-      navigation.navigate("JoinCircleSuccess", { circleId });
+      track({
+        eventType: "join_circle_completed",
+        eventCategory: "savings",
+        eventAction: "completed",
+        eventLabel: source,
+        eventValue: { circleId, source },
+      });
+      navigation.navigate("JoinCircleSuccess", { circleId, source });
     } catch (error: any) {
       // Map typed RPC errors thrown by CirclesContext.joinCircle to
       // specific i18n strings. Default to the generic "failed to join"

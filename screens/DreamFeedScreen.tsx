@@ -208,6 +208,7 @@ export default function DreamFeedScreen() {
       // Navigate to join the circle
       navigation.navigate("JoinCircleConfirm" as any, {
         circleId: meta.circleId || post.relatedId,
+        source: "feed",
       });
     } else if (meta.goalName) {
       // Navigate to support the dream
