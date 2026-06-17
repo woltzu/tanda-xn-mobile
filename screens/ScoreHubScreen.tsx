@@ -34,6 +34,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -433,12 +434,17 @@ function DirectionBadge({
 }
 
 // ==========================================================================
-// FirstVisitModal — two slides explaining what the hub is. Closed by the
-// user or auto-dismissed after they tap "Got it". Caller persists the
-// AsyncStorage flag on dismiss so it never shows again.
+// FirstVisitModal — Bucket B single-slide explainer. One screen with a
+// 2×2 tile grid of the four scores + a single body line + a single
+// "Got it" button. Caller persists the AsyncStorage flag on dismiss so
+// it never shows again.
 // ==========================================================================
 
-const FIRST_VISIT_KEY = "@tandaxn_score_hub_seen_v1";
+// Bumped v1 → v2 in Bucket B when the 2-slide explainer collapsed to a
+// single slide. Re-using the same key would have kept v1-dismissed
+// users from ever seeing the new copy; bumping shows them the new
+// shorter explainer exactly once.
+const FIRST_VISIT_KEY = "@tandaxn_score_hub_seen_v2";
 // P2 — 7-day dismissal flag for the action-plan card. Stores the
 // dismissal timestamp; re-shows automatically a week later.
 const ACTION_PLAN_DISMISSED_KEY = "@tandaxn_score_hub_action_plan_dismissed_v1";
@@ -625,6 +631,25 @@ const sparklineStyles = StyleSheet.create({
   },
 });
 
+// Bucket B — single-slide explainer. The 2-slide version sat on a
+// spinner half the time and cost 3 taps before the user saw any
+// scores. New shape:
+//   • Title + 2×2 tile grid (one per score family with its icon/colour)
+//   • One body line lifted from the existing slide2_body key
+//   • Single "Got it" button (no Skip, no Next, no dots)
+// Storage key bumped from _v1 to _v2 so existing users see the new
+// shorter explainer once.
+const FIRST_VISIT_TILES: Array<{
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  labelKey: string;
+}> = [
+  { icon: "trophy-outline", color: colors.accentTeal, labelKey: "score_hub.header_xnscore_label" },
+  { icon: "ribbon-outline", color: "#7C3AED", labelKey: "score_hub.honor_title" },
+  { icon: "pulse-outline", color: "#EF4444", labelKey: "score_hub.stress_title" },
+  { icon: "happy-outline", color: "#F97316", labelKey: "score_hub.mood_title" },
+];
+
 function FirstVisitModal({
   visible,
   onClose,
@@ -633,16 +658,6 @@ function FirstVisitModal({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const [slide, setSlide] = useState(0);
-  const isLast = slide === 1;
-
-  const goNext = () => {
-    if (isLast) {
-      onClose();
-    } else {
-      setSlide(1);
-    }
-  };
 
   return (
     <Modal
@@ -654,55 +669,46 @@ function FirstVisitModal({
       <View style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
           <Ionicons
-            name={slide === 0 ? "compass-outline" : "bulb-outline"}
-            size={36}
+            name="compass-outline"
+            size={32}
             color={colors.accentTeal}
             style={styles.modalIcon}
           />
           <Text style={styles.modalTitle}>
-            {t(`score_hub.first_visit_slide${slide + 1}_title`)}
+            {t("score_hub.first_visit_slide1_title")}
           </Text>
+
+          <View style={styles.modalTileGrid}>
+            {FIRST_VISIT_TILES.map((tile) => (
+              <View key={tile.labelKey} style={styles.modalTile}>
+                <View
+                  style={[
+                    styles.modalTileIconBox,
+                    { backgroundColor: `${tile.color}1A` },
+                  ]}
+                >
+                  <Ionicons name={tile.icon} size={20} color={tile.color} />
+                </View>
+                <Text style={styles.modalTileLabel} numberOfLines={1}>
+                  {t(tile.labelKey)}
+                </Text>
+              </View>
+            ))}
+          </View>
+
           <Text style={styles.modalBody}>
-            {t(`score_hub.first_visit_slide${slide + 1}_body`)}
+            {t("score_hub.first_visit_slide2_body")}
           </Text>
 
-          <View style={styles.modalDots}>
-            <View
-              style={[
-                styles.modalDot,
-                slide === 0 && styles.modalDotActive,
-              ]}
-            />
-            <View
-              style={[
-                styles.modalDot,
-                slide === 1 && styles.modalDotActive,
-              ]}
-            />
-          </View>
-
-          <View style={styles.modalActions}>
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.modalSkipBtn}
-              accessibilityRole="button"
-            >
-              <Text style={styles.modalSkipText}>
-                {t("score_hub.first_visit_skip")}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={goNext}
-              style={styles.modalPrimaryBtn}
-              accessibilityRole="button"
-            >
-              <Text style={styles.modalPrimaryText}>
-                {isLast
-                  ? t("score_hub.first_visit_got_it")
-                  : t("score_hub.first_visit_next")}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={onClose}
+            style={styles.modalPrimaryBtn}
+            accessibilityRole="button"
+          >
+            <Text style={styles.modalPrimaryText}>
+              {t("score_hub.first_visit_got_it")}
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -752,6 +758,24 @@ export default function ScoreHubScreen() {
       loadScores();
     }, [loadScores]),
   );
+
+  // ── Bucket B — pull-to-refresh ────────────────────────────────────────
+  // A user who just contributed and expects stress to drop had no manual
+  // refresh path other than switching tabs and coming back. This wires
+  // the canonical RefreshControl pattern: clear the shared cache, then
+  // re-fetch via the same loadScores path. The spinner state is local
+  // (decoupled from `loading`) so the per-card skeletons don't reappear
+  // while the user pulls — only the pull-indicator does.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      clearScoreCache();
+      await loadScores();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadScores]);
 
   // ── First-visit explainer modal ───────────────────────────────────────
   const [showFirstVisit, setShowFirstVisit] = useState(false);
@@ -830,7 +854,14 @@ export default function ScoreHubScreen() {
     };
   }, []);
   const actionPlan = bundle ? pickActionPlan(bundle, t) : null;
-  const showActionPlan = !actionPlanDismissed && actionPlan !== null;
+  // Bucket B — when a Hero alert is up, the Action Plan card is almost
+  // always restating the same worst-score story one slot lower. Suppress
+  // it when the hero is showing so the user sees one focused CTA instead
+  // of two near-duplicates. Action Plan still surfaces when the hero is
+  // null but the next-tier rule (e.g. xnscore < 60 with no red flags)
+  // catches something.
+  const showActionPlan =
+    !actionPlanDismissed && actionPlan !== null && heroAlert == null;
   const dismissActionPlan = () => {
     setActionPlanDismissed(true);
     AsyncStorage.setItem(ACTION_PLAN_DISMISSED_KEY, String(Date.now())).catch(
@@ -876,6 +907,14 @@ export default function ScoreHubScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.accentTeal}
+            colors={[colors.accentTeal]}
+          />
+        }
       >
         {/* ===== HERO ALERT (priority) ===== */}
         {heroAlert ? (
@@ -1519,8 +1558,12 @@ export default function ScoreHubScreen() {
         </FeatureCard>
       </ScrollView>
 
+      {/* Bucket B — gate on `bundle && !loading` so the explainer only
+          overlays meaningful content, never the initial spinner. The
+          AsyncStorage check still drives `showFirstVisit`; the render-
+          time gate just delays the visual until scores are present. */}
       <FirstVisitModal
-        visible={showFirstVisit}
+        visible={showFirstVisit && bundle != null && !loading}
         onClose={dismissFirstVisit}
       />
 
@@ -2060,12 +2103,12 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: "center",
   },
-  modalIcon: { marginBottom: 14 },
+  modalIcon: { marginBottom: 12 },
   modalTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: colors.textPrimary,
-    marginBottom: 10,
+    marginBottom: 14,
     textAlign: "center",
   },
   modalBody: {
@@ -2075,40 +2118,40 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 18,
   },
-  modalDots: {
+  // ----- Bucket B — single-slide tile grid -----
+  modalTileGrid: {
     flexDirection: "row",
-    gap: 6,
-    marginBottom: 18,
-  },
-  modalDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.border,
-  },
-  modalDotActive: {
-    backgroundColor: colors.accentTeal,
-    width: 18,
-  },
-  modalActions: {
-    flexDirection: "row",
-    gap: 10,
+    flexWrap: "wrap",
+    justifyContent: "space-between",
     width: "100%",
+    marginBottom: 16,
+    rowGap: 10,
   },
-  modalSkipBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: "center",
+  modalTile: {
+    width: "48%",
     backgroundColor: colors.screenBg,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  modalSkipText: {
-    fontSize: 13,
-    color: colors.textSecondary,
+  modalTileIconBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalTileLabel: {
+    fontSize: 12,
     fontWeight: "600",
+    color: colors.textPrimary,
+    flex: 1,
   },
   modalPrimaryBtn: {
-    flex: 2,
+    width: "100%",
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: "center",
