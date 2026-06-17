@@ -5871,6 +5871,8 @@
     "xn_score_label": "XnScore™",
     "credit_view_full_report": "Voir le rapport complet",
     "header_score_hub_a11y": "Ouvrir le Centre de score",
+    "header_score_hub_attention_needed": "attention requise",
+    "header_score_hub_new_insight": "nouvelle information disponible",
     "header_profile_a11y": "Ouvrir le profil",
     "header_notifications_a11y": "Ouvrir les notifications",
     "verify_banner_title": "Vérifiez pour envoyer de l'argent",

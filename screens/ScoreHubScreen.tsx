@@ -46,76 +46,29 @@ import { Routes } from "../lib/routes";
 import ScoreExplainerSheet from "../components/ScoreExplainerSheet";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import {
+  type ScoreBundle,
+  type StressStatus,
+  type StressTrend,
+  type MoodTier,
+  type MoodTrend,
+  type HonorTier,
+  getCachedScoreBundle,
+  setCachedScoreBundle,
+  clearScoreCache,
+} from "../lib/scoreCache";
 
 // ==========================================================================
-// Types — match the RPC return shape from migration 144.
+// 5-minute in-memory cache keyed by userId. Now lives in lib/scoreCache.ts
+// so HomeScreen's badge hook can read it without touching the network.
+// useFocusEffect still calls loadScores; getCachedScoreBundle shortcuts
+// the RPC when the entry is fresh and matches the current user.
 // ==========================================================================
-
-type StressStatus = "green" | "yellow" | "orange" | "red";
-type StressTrend = "improving" | "stable" | "worsening";
-type MoodTier = "stable" | "drifting" | "disengaging" | "at_risk";
-type MoodTrend = StressTrend;
-type HonorTier =
-  | "Novice"
-  | "Trusted"
-  | "Respected"
-  | "Elder"
-  | "Grand Elder";
-
-type ScoreBundle = {
-  xnscore: number | null;
-  xnscore_tier: string | null;
-  xnscore_delta: number | null;
-  // P2 (migration 156)
-  xnscore_previous: number | null;
-  xnscore_7d_ago: number | null;
-  xnscore_percentile: number | null;
-
-  honor_score: number | null;
-  honor_tier: string | null;
-  honor_delta: number | null;
-  honor_previous: number | null;
-  honor_7d_ago: number | null;
-  honor_percentile: number | null;
-
-  stress_score: number | null;
-  stress_status: StressStatus | null;
-  stress_trend: StressTrend | null;
-  stress_top_signal: string | null;
-  stress_delta: number | null;
-  stress_previous: number | null;
-  stress_7d_ago: number | null;
-  stress_percentile: number | null;
-
-  mood_score: number | null;
-  mood_tier: MoodTier | null;
-  mood_trend: MoodTrend | null;
-  mood_delta: number | null;
-  mood_previous: number | null;
-  mood_7d_ago: number | null;
-  mood_percentile: number | null;
-
-  last_updated: string | null;
-};
-
-// ==========================================================================
-// 5-minute in-memory cache keyed by userId. Survives navigation within the
-// app (the screen unmounts when the tab is switched) so hopping in and out
-// of the hub doesn't re-fetch. useFocusEffect still calls loadScores but
-// the cache shortcuts the network when fresh.
-// ==========================================================================
-
-const CACHE_TTL_MS = 5 * 60 * 1000;
-let scoreCache: { userId: string; data: ScoreBundle; fetchedAt: number } | null = null;
 
 async function fetchScoreBundle(userId: string): Promise<ScoreBundle> {
-  if (
-    scoreCache &&
-    scoreCache.userId === userId &&
-    Date.now() - scoreCache.fetchedAt < CACHE_TTL_MS
-  ) {
-    return scoreCache.data;
-  }
+  const cached = getCachedScoreBundle(userId);
+  if (cached) return cached;
+
   const { data, error } = await supabase.rpc("get_user_scores", {
     p_user_id: userId,
   });
@@ -151,7 +104,7 @@ async function fetchScoreBundle(userId: string): Promise<ScoreBundle> {
     mood_percentile: null,
     last_updated: null,
   };
-  scoreCache = { userId, data: bundle, fetchedAt: Date.now() };
+  setCachedScoreBundle(userId, bundle);
   return bundle;
 }
 
@@ -768,7 +721,7 @@ export default function ScoreHubScreen() {
 
   // ── Batched RPC fetch ─────────────────────────────────────────────────
   const [bundle, setBundle] = useState<ScoreBundle | null>(
-    scoreCache && scoreCache.userId === userId ? scoreCache.data : null,
+    userId ? getCachedScoreBundle(userId) : null,
   );
   const [loading, setLoading] = useState<boolean>(bundle == null);
   const [error, setError] = useState<string | null>(null);
@@ -782,10 +735,7 @@ export default function ScoreHubScreen() {
       setError(null);
       // Only spin if we have nothing to show — keeps the screen quiet on
       // focus-refetches where the cache may already have data.
-      const haveCached =
-        scoreCache && scoreCache.userId === userId
-          ? scoreCache.data
-          : null;
+      const haveCached = getCachedScoreBundle(userId);
       if (!haveCached) setLoading(true);
       const data = await fetchScoreBundle(userId);
       setBundle(data);
@@ -1033,7 +983,7 @@ export default function ScoreHubScreen() {
             </Text>
             <TouchableOpacity
               onPress={() => {
-                scoreCache = null;
+                clearScoreCache();
                 loadScores();
               }}
               accessibilityRole="button"
@@ -1213,7 +1163,7 @@ export default function ScoreHubScreen() {
               </Text>
               <TouchableOpacity
                 onPress={() => {
-                  scoreCache = null;
+                  clearScoreCache();
                   loadScores();
                 }}
                 accessibilityRole="button"
@@ -1317,7 +1267,7 @@ export default function ScoreHubScreen() {
               </Text>
               <TouchableOpacity
                 onPress={() => {
-                  scoreCache = null;
+                  clearScoreCache();
                   loadScores();
                 }}
                 accessibilityRole="button"
@@ -1459,7 +1409,7 @@ export default function ScoreHubScreen() {
               </Text>
               <TouchableOpacity
                 onPress={() => {
-                  scoreCache = null;
+                  clearScoreCache();
                   loadScores();
                 }}
                 accessibilityRole="button"

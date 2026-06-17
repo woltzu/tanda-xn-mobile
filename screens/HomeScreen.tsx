@@ -25,6 +25,7 @@ import type { Goal } from "../types/goals";
 import { useCircles, type Circle } from "../context/CirclesContext";
 import { useCircleNetBalance } from "../hooks/useCircleNetBalance";
 import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
+import { useScoreHubBadge } from "../hooks/useScoreHubBadge";
 
 // ==========================================================================
 // Mock data shrinking. Wallet balance comes from useWallet(), goals balance
@@ -384,6 +385,11 @@ export default function HomeScreen() {
   // double-counting it as a liability would understate the user's
   // working capital.
   const { data: advanceDashboard } = useAdvanceDashboard();
+  // Bucket A — Open Score Hub entry signal. Drives the colored dot on
+  // the top-bar Score Hub icon when stress is red, mood is at risk, or
+  // an AI insight notification is unread. Pure read of cache + already-
+  // mounted NotificationContext — no extra RPC.
+  const scoreHubBadge = useScoreHubBadge();
   const activeAdvances = useMemo(
     () => advanceDashboard?.active_advances ?? [],
     [advanceDashboard],
@@ -598,14 +604,46 @@ export default function HomeScreen() {
             onPress={handleOpenScoreHub}
             style={styles.topBarIconBtn}
             accessibilityRole="button"
-            accessibilityLabel={t("home_screen.header_score_hub_a11y")}
+            accessibilityLabel={(() => {
+              const base = t("home_screen.header_score_hub_a11y");
+              // Critical OR moderate alert → "attention needed" suffix.
+              // Unread insight is only spoken when there's no harder
+              // signal, to keep the label short for screen readers.
+              if (scoreHubBadge.hasUrgentAlert) {
+                return `${base}, ${t(
+                  "home_screen.header_score_hub_attention_needed",
+                )}`;
+              }
+              if (scoreHubBadge.hasUnreadInsight) {
+                return `${base}, ${t(
+                  "home_screen.header_score_hub_new_insight",
+                )}`;
+              }
+              return base;
+            })()}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons
-              name="stats-chart-outline"
-              size={22}
-              color={colors.primaryNavy}
-            />
+            <View style={styles.scoreHubIconWrap}>
+              {/* Bucket A — switched from stats-chart-outline to
+                  pulse-outline so the icon visually echoes the stress
+                  card and reads as a live signal rather than a static
+                  chart. */}
+              <Ionicons
+                name="pulse-outline"
+                size={22}
+                color={colors.primaryNavy}
+              />
+              {scoreHubBadge.urgency !== "none" ? (
+                <View
+                  style={[
+                    styles.scoreHubBadge,
+                    scoreHubBadge.urgency === "critical"
+                      ? styles.scoreHubBadgeCritical
+                      : styles.scoreHubBadgeAttention,
+                  ]}
+                />
+              ) : null}
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -1505,6 +1543,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  // ----- Bucket A — Score Hub icon badge -----
+  // Wrap exists only so the badge can position itself relative to the
+  // glyph (not the surrounding button chrome). Same trick used by the
+  // notification-bell icons elsewhere — keeps the dot anchored to the
+  // visual icon, not the touch target.
+  scoreHubIconWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scoreHubBadge: {
+    position: "absolute",
+    top: -2,
+    right: -3,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    // Match the button's background so the badge "punches out" against
+    // the chip, not the page bg — looks clean on both light and dark.
+    borderColor: colors.cardBg,
+  },
+  scoreHubBadgeCritical: {
+    backgroundColor: "#EF4444",
+  },
+  scoreHubBadgeAttention: {
+    backgroundColor: "#F59E0B",
   },
 
   // ----- Balance card -----
