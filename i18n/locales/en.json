@@ -4607,7 +4607,12 @@
     "time_hours_ago_one": "{{count}}h ago",
     "time_hours_ago_other": "{{count}}h ago",
     "time_days_ago_one": "{{count}}d ago",
-    "time_days_ago_other": "{{count}}d ago"
+    "time_days_ago_other": "{{count}}d ago",
+    "section_today": "Today",
+    "section_this_week": "This week",
+    "section_earlier": "Earlier",
+    "swipe_dismiss": "Dismiss",
+    "dismissed_toast": "Notification dismissed"
   },
   "group_chat": {
     "alert_could_not_send_title": "Could not send",
@@ -5899,6 +5904,7 @@
     "header_notifications_a11y": "Open notifications",
     "header_notifications_security_alert": "Security alert",
     "header_notifications_unread_count": "{{count}} unread",
+    "notifications_icon_coach": "See your latest updates here.",
     "verify_banner_title": "Verify to send money",
     "verify_banner_body": "Quick ID check unlocks sending and receiving — takes 2 minutes.",
     "verify_banner_cta": "Verify",

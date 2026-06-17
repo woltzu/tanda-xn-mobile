@@ -3,12 +3,13 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  SectionList,
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
   Linking,
 } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
 import * as ExpoLinking from "expo-linking";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -21,6 +22,8 @@ import {
   Notification as NotificationType,
 } from "../context/NotificationContext";
 import { Routes } from "../lib/routes";
+import { useEventTracker } from "../hooks/useEventTracker";
+import { showToast } from "../components/Toast";
 
 type NotificationsInboxNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -77,7 +80,12 @@ export default function NotificationsInboxScreen() {
     fetchNotifications,
     markAsRead,
     markAllAsRead,
+    deleteNotification,
   } = useNotifications();
+  // Bucket C — telemetry channel. EventService self-dedupes consecutive
+  // same-screen views, so the focus loop below doesn't double-fire if
+  // the user briefly leaves and comes back to the same instance.
+  const { trackScreenView, track } = useEventTracker();
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread">("all");
 
@@ -85,6 +93,55 @@ export default function NotificationsInboxScreen() {
     filter === "unread"
       ? notifications.filter((n) => !n.read)
       : notifications;
+
+  // Bucket C — group the filtered list into Today / This week /
+  // Earlier sections. Empty sections are omitted so a quiet user
+  // doesn't see three empty headers stacked. "Today" = since the
+  // start of the local calendar day. "This week" = within the last
+  // 7 × 24 h before that boundary. "Earlier" = everything older.
+  const sections = (() => {
+    if (filteredNotifications.length === 0) return [];
+    const now = new Date();
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    ).getTime();
+    const weekAgo = startOfToday - 7 * 24 * 60 * 60 * 1000;
+    const today: NotificationType[] = [];
+    const thisWeek: NotificationType[] = [];
+    const earlier: NotificationType[] = [];
+    for (const n of filteredNotifications) {
+      const ts = new Date(n.created_at).getTime();
+      if (ts >= startOfToday) today.push(n);
+      else if (ts >= weekAgo) thisWeek.push(n);
+      else earlier.push(n);
+    }
+    const out: Array<{
+      key: "today" | "this_week" | "earlier";
+      title: string;
+      data: NotificationType[];
+    }> = [];
+    if (today.length > 0)
+      out.push({
+        key: "today",
+        title: t("notifications_inbox.section_today"),
+        data: today,
+      });
+    if (thisWeek.length > 0)
+      out.push({
+        key: "this_week",
+        title: t("notifications_inbox.section_this_week"),
+        data: thisWeek,
+      });
+    if (earlier.length > 0)
+      out.push({
+        key: "earlier",
+        title: t("notifications_inbox.section_earlier"),
+        data: earlier,
+      });
+    return out;
+  })();
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -98,10 +155,20 @@ export default function NotificationsInboxScreen() {
   // tap into a Circle detail screen that marks the notification read)
   // don't propagate back unless the user pulls or re-mounts. Focus
   // refetch closes that gap.
+  //
+  // Bucket C — also emits screen_view + notifications_opened on every
+  // focus. Lets us measure whether the bell badge actually drives
+  // engagement and how often users return to clear inbox.
   useFocusEffect(
     useCallback(() => {
       fetchNotifications();
-    }, [fetchNotifications]),
+      trackScreenView("Notifications");
+      track({
+        eventType: "notifications_opened",
+        eventCategory: "system",
+        eventAction: "opened",
+      });
+    }, [fetchNotifications, trackScreenView, track]),
   );
 
   const handleNotificationPress = useCallback(
@@ -270,19 +337,19 @@ export default function NotificationsInboxScreen() {
         </View>
       </LinearGradient>
 
-      {/* Bucket B — FlatList swap. Replaces the ScrollView + .map()
-          pattern: virtualised rendering, native keyExtractor, sticky
-          ListHeader for Mark-all-read, ListEmpty for the empty state,
-          contentContainerStyle for padding. The card body lives in
-          the inline renderItem; the dead "View" button + its styles
-          (actionButton/actionButtonText) were dropped — the whole
-          card is tappable. */}
-      <FlatList
+      {/* Bucket C — SectionList replaces the flat FlatList.
+          renderSectionHeader stamps Today / This week / Earlier.
+          Each row is wrapped in a Swipeable that reveals a Dismiss
+          action; tapping it calls deleteNotification + shows a
+          confirmation toast. RefreshControl, ListHeader (Mark-all-
+          read), and ListEmpty stay where they were. */}
+      <SectionList
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
-        data={filteredNotifications}
+        sections={sections}
         keyExtractor={(notification) => notification.id}
         showsVerticalScrollIndicator={false}
+        stickySectionHeadersEnabled={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -314,40 +381,68 @@ export default function NotificationsInboxScreen() {
             </Text>
           </View>
         }
+        renderSectionHeader={({ section }) => (
+          <Text style={styles.sectionHeader}>{section.title}</Text>
+        )}
         renderItem={({ item: notification }) => {
           const iconStyle = getNotificationIcon(
             notification.type || notification.category || "system",
           );
-          return (
+          // Bucket C — swipe-left reveals a Dismiss action. Tap calls
+          // deleteNotification (already in NotificationContext) +
+          // toasts. The row removes itself when state updates because
+          // the deletion drops the item from `notifications`.
+          const renderRightActions = () => (
             <TouchableOpacity
-              style={[
-                styles.notificationCard,
-                !notification.read && styles.notificationCardUnread,
-              ]}
-              onPress={() => handleNotificationPress(notification)}
+              style={styles.swipeDismissAction}
+              onPress={() => {
+                deleteNotification(notification.id);
+                showToast(t("notifications_inbox.dismissed_toast"), "info");
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={t("notifications_inbox.swipe_dismiss")}
             >
-              <View
-                style={[styles.notificationIcon, { backgroundColor: iconStyle.bg }]}
-              >
-                <Ionicons
-                  name={iconStyle.name as any}
-                  size={22}
-                  color={iconStyle.color}
-                />
-              </View>
-              <View style={styles.notificationContent}>
-                <View style={styles.notificationHeader}>
-                  <Text style={styles.notificationTitle}>{notification.title}</Text>
-                  {!notification.read && <View style={styles.unreadDot} />}
-                </View>
-                <Text style={styles.notificationMessage}>{notification.body}</Text>
-                <View style={styles.notificationFooter}>
-                  <Text style={styles.notificationTime}>
-                    {formatNotificationTime(notification.created_at, t)}
-                  </Text>
-                </View>
-              </View>
+              <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.swipeDismissText}>
+                {t("notifications_inbox.swipe_dismiss")}
+              </Text>
             </TouchableOpacity>
+          );
+          return (
+            <Swipeable
+              renderRightActions={renderRightActions}
+              overshootRight={false}
+            >
+              <TouchableOpacity
+                style={[
+                  styles.notificationCard,
+                  !notification.read && styles.notificationCardUnread,
+                ]}
+                onPress={() => handleNotificationPress(notification)}
+              >
+                <View
+                  style={[styles.notificationIcon, { backgroundColor: iconStyle.bg }]}
+                >
+                  <Ionicons
+                    name={iconStyle.name as any}
+                    size={22}
+                    color={iconStyle.color}
+                  />
+                </View>
+                <View style={styles.notificationContent}>
+                  <View style={styles.notificationHeader}>
+                    <Text style={styles.notificationTitle}>{notification.title}</Text>
+                    {!notification.read && <View style={styles.unreadDot} />}
+                  </View>
+                  <Text style={styles.notificationMessage}>{notification.body}</Text>
+                  <View style={styles.notificationFooter}>
+                    <Text style={styles.notificationTime}>
+                      {formatNotificationTime(notification.created_at, t)}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </Swipeable>
           );
         }}
       />
@@ -504,6 +599,32 @@ const styles = StyleSheet.create({
   notificationTime: {
     fontSize: 12,
     color: "#9CA3AF",
+  },
+  // ----- Bucket C — section headers + swipe-to-dismiss action -----
+  sectionHeader: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 2,
+  },
+  swipeDismissAction: {
+    width: 88,
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EF4444",
+    borderRadius: 14,
+    marginBottom: 10,
+    gap: 4,
+  },
+  swipeDismissText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
   },
   emptyState: {
     flex: 1,

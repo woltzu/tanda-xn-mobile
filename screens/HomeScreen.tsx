@@ -560,6 +560,75 @@ export default function HomeScreen() {
   }, []);
 
   // ────────────────────────────────────────────────────────────────────
+  // Open notifications Bucket C — first-launch coach mark on the bell.
+  // ────────────────────────────────────────────────────────────────────
+  // Third symmetric coach mark, completing the top-bar trio. Same pulse
+  // curve and 4 s auto-dismiss as the Profile and Score Hub coach
+  // marks. Tooltip anchors below the bell, offset right so it sits
+  // under the icon (the bell is just left of the Score Hub icon in
+  // the topBar).
+  const NOTIF_COACH_FLAG_KEY = "@tandaxn_notifications_icon_seen_v1";
+  const [showNotifCoach, setShowNotifCoach] = useState(false);
+  const notifCoachPulseAnim = useRef(new Animated.Value(1)).current;
+  const notifCoachTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(NOTIF_COACH_FLAG_KEY);
+        if (cancelled || seen) return;
+        await AsyncStorage.setItem(NOTIF_COACH_FLAG_KEY, "1");
+        if (!cancelled) setShowNotifCoach(true);
+      } catch {
+        // Best-effort — no functional impact if AsyncStorage fails.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showNotifCoach) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(notifCoachPulseAnim, {
+          toValue: 1.06,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(notifCoachPulseAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    notifCoachTimerRef.current = setTimeout(() => {
+      setShowNotifCoach(false);
+    }, 4000);
+    return () => {
+      loop.stop();
+      if (notifCoachTimerRef.current) {
+        clearTimeout(notifCoachTimerRef.current);
+        notifCoachTimerRef.current = null;
+      }
+    };
+  }, [showNotifCoach, notifCoachPulseAnim]);
+
+  const dismissNotifCoach = useCallback(() => {
+    if (notifCoachTimerRef.current) {
+      clearTimeout(notifCoachTimerRef.current);
+      notifCoachTimerRef.current = null;
+    }
+    setShowNotifCoach(false);
+  }, []);
+
+  // ────────────────────────────────────────────────────────────────────
   // Bucket C — telemetry: log every transition of the icon-badge
   // urgency. Fires once per distinct value (the ref prevents same-value
   // re-emits on unrelated re-renders).
@@ -623,6 +692,37 @@ export default function HomeScreen() {
     profileIconBadge.urgency,
     profileIconBadge.isCritical,
     profileIconBadge.hasAttention,
+    track,
+  ]);
+
+  // Open notifications Bucket C — telemetry for the bell icon badge.
+  // Third icon in the trio; same guard pattern. eventCategory is
+  // 'system' since NotificationContext is the operational surface;
+  // we want this distinct from the profile (settings) and score
+  // (score) labels so dashboards can break out engagement per icon.
+  const lastNotifBadgeUrgencyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (notificationsBadge.urgency === "none") {
+      lastNotifBadgeUrgencyRef.current = null;
+      return;
+    }
+    if (lastNotifBadgeUrgencyRef.current === notificationsBadge.urgency)
+      return;
+    lastNotifBadgeUrgencyRef.current = notificationsBadge.urgency;
+    track({
+      eventType: "notifications_icon_badge_visible",
+      eventCategory: "system",
+      eventAction: "icon_badge_visible",
+      eventLabel: notificationsBadge.urgency,
+      eventValue: {
+        unread_count: notificationsBadge.unreadCount,
+        critical_count: notificationsBadge.criticalCount,
+      },
+    });
+  }, [
+    notificationsBadge.urgency,
+    notificationsBadge.unreadCount,
+    notificationsBadge.criticalCount,
     track,
   ]);
 
@@ -897,7 +997,13 @@ export default function HomeScreen() {
           <View style={{ flex: 1 }} />
 
           <TouchableOpacity
-            onPress={handleOpenNotifications}
+            onPress={() => {
+              // Bucket C — dismiss the coach mark immediately on tap
+              // so it doesn't linger over the inbox screen the user
+              // is about to land on.
+              dismissNotifCoach();
+              handleOpenNotifications();
+            }}
             style={[styles.topBarIconBtn, { marginRight: 8 }]}
             accessibilityRole="button"
             accessibilityLabel={(() => {
@@ -923,7 +1029,16 @@ export default function HomeScreen() {
             })()}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <View style={styles.notificationsIconWrap}>
+            <Animated.View
+              style={[
+                styles.notificationsIconWrap,
+                {
+                  transform: [
+                    { scale: showNotifCoach ? notifCoachPulseAnim : 1 },
+                  ],
+                },
+              ]}
+            >
               <Ionicons
                 name="notifications-outline"
                 size={20}
@@ -939,8 +1054,28 @@ export default function HomeScreen() {
                   ]}
                 />
               ) : null}
-            </View>
+            </Animated.View>
           </TouchableOpacity>
+
+          {/* Open notifications Bucket C — first-launch coach mark
+              tooltip. The bell sits between Profile (left) and Score
+              Hub (right) in the topBar. Anchored to the right side of
+              the topBar with an offset that puts the tooltip under
+              the bell rather than under the Score Hub icon. Tap-
+              anywhere on the card to dismiss; auto-clears after 4 s. */}
+          {showNotifCoach ? (
+            <Pressable
+              onPress={dismissNotifCoach}
+              style={styles.notifCoachTooltip}
+              accessibilityRole="alert"
+              accessibilityLabel={t("home_screen.notifications_icon_coach")}
+            >
+              <View style={styles.notifCoachArrow} />
+              <Text style={styles.notifCoachText}>
+                {t("home_screen.notifications_icon_coach")}
+              </Text>
+            </Pressable>
+          ) : null}
 
           <TouchableOpacity
             onPress={() => {
@@ -2013,6 +2148,42 @@ const styles = StyleSheet.create({
   },
   notificationsBadgeAttention: {
     backgroundColor: "#F59E0B",
+  },
+  // ----- Open notifications Bucket C — bell coach mark tooltip -----
+  // Anchored relative to the topBar's right edge. The bell sits ~52 px
+  // in from the right (Score Hub button 36 px + bell marginRight 8 px
+  // + a few px of breathing room). The arrow is offset so it points up
+  // at the bell, not the Score Hub button next to it.
+  notifCoachTooltip: {
+    position: "absolute",
+    top: 44,
+    right: 18,
+    maxWidth: 240,
+    backgroundColor: colors.primaryNavy,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 5,
+    zIndex: 10,
+  },
+  notifCoachArrow: {
+    position: "absolute",
+    top: -4,
+    right: 30,
+    width: 8,
+    height: 8,
+    backgroundColor: colors.primaryNavy,
+    transform: [{ rotate: "45deg" }],
+  },
+  notifCoachText: {
+    fontSize: 12,
+    color: colors.textWhite,
+    lineHeight: 16,
+    fontWeight: "500",
   },
   // ----- Open profile Bucket C — first-launch coach mark tooltip -----
   // Mirror of scoreHubCoachTooltip but anchored to the LEFT edge of the

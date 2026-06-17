@@ -4607,7 +4607,12 @@
     "time_hours_ago_one": "il y a {{count}} h",
     "time_hours_ago_other": "il y a {{count}} h",
     "time_days_ago_one": "il y a {{count}} j",
-    "time_days_ago_other": "il y a {{count}} j"
+    "time_days_ago_other": "il y a {{count}} j",
+    "section_today": "Aujourd'hui",
+    "section_this_week": "Cette semaine",
+    "section_earlier": "Plus tôt",
+    "swipe_dismiss": "Supprimer",
+    "dismissed_toast": "Notification supprimée"
   },
   "group_chat": {
     "alert_could_not_send_title": "Impossible d'envoyer",
@@ -5899,6 +5904,7 @@
     "header_notifications_a11y": "Ouvrir les notifications",
     "header_notifications_security_alert": "Alerte de sécurité",
     "header_notifications_unread_count": "{{count}} non lus",
+    "notifications_icon_coach": "Retrouvez vos dernières mises à jour ici.",
     "verify_banner_title": "Vérifiez pour envoyer de l'argent",
     "verify_banner_body": "Une vérification d'identité rapide débloque l'envoi et la réception — 2 minutes.",
     "verify_banner_cta": "Vérifier",
