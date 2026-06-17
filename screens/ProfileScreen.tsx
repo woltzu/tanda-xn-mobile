@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Image,
   TextInput,
+  RefreshControl,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -24,7 +25,7 @@ import { useIsAdmin } from "../hooks/useIsAdmin";
 import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
 import { supabase } from "../lib/supabase";
 import { showToast } from "../components/Toast";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
@@ -38,9 +39,14 @@ export default function ProfileScreen() {
   // P1 (profile review): central fetch with 60 s cache. Replaces the
   // ad-hoc supabase.from('profiles').select(...) round-trip the screen
   // used to run on every mount.
-  const { profile, refetch: refetchProfile } = useProfile();
-  const { score, level } = useXnScore();
-  const { balance: walletBalance } = useWallet();
+  // Open profile Bucket B — pull `loading` so the "Complete your
+  // profile" banner can stay hidden while the cache populates, and
+  // pull each context's refresh method so pull-to-refresh fans out
+  // in parallel.
+  const { profile, loading: profileLoading, refetch: refetchProfile } =
+    useProfile();
+  const { score, refreshScore } = useXnScore();
+  const { balance: walletBalance, refreshWallet } = useWallet();
   // Moderation P0 (2026-06-13): platform-admin tools section. Hidden for
   // non-admins; surfaces both the moderation queue and the AI ops health
   // monitor (previously dev-only). Source of truth is admin_users via
@@ -70,6 +76,57 @@ export default function ProfileScreen() {
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState<string>("");
   const avatarUrl = profile?.avatar_url ?? null;
+
+  // ──────────────────────────────────────────────────────────────────
+  // Open profile Bucket B — pull-to-refresh + focus refetch.
+  // ──────────────────────────────────────────────────────────────────
+  // Focus refetch: after editing avatar / name / country in
+  // PersonalInfoScreen, the user navigates back here. Without this the
+  // useProfile cache could be stale for up to 60s; refetch on focus
+  // makes the change land instantly.
+  useFocusEffect(
+    useCallback(() => {
+      refetchProfile();
+    }, [refetchProfile]),
+  );
+
+  // Pull-to-refresh: fans out the three context refetches in parallel.
+  // Local refreshing state (decoupled from any of the contexts' own
+  // loading flags) drives the indicator alone — the per-card loading
+  // surfaces inside the menu don't reappear during the pull.
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.allSettled([
+        refetchProfile(),
+        refreshScore(),
+        refreshWallet(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetchProfile, refreshScore, refreshWallet]);
+
+  // Open profile Bucket B — required-fields completeness signal.
+  // Drives the "Complete your profile" banner below the header.
+  // Optional date_of_birth is excluded for P0 (it's required for KYC
+  // separately; surfacing it here would double-prompt).
+  const PROFILE_REQUIRED_FIELDS: Array<keyof NonNullable<typeof profile>> = [
+    "avatar_url",
+    "full_name",
+    "country",
+    "phone",
+  ];
+  const completedCount = profile
+    ? PROFILE_REQUIRED_FIELDS.filter((k) => {
+        const v = profile[k];
+        return typeof v === "string" ? v.trim().length > 0 : v != null;
+      }).length
+    : 0;
+  const totalCount = PROFILE_REQUIRED_FIELDS.length;
+  const showCompletionBanner =
+    !profileLoading && profile !== null && completedCount < totalCount;
   // Sync the locally-cached round-up state from the central profile
   // hook. We keep the local state so the round-up modal can update
   // optimistically before refetch lands.
@@ -334,7 +391,17 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#00C6AE"
+            colors={["#00C6AE"]}
+          />
+        }
+      >
         {/* Header */}
         <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
           <Text style={styles.headerTitle}>{t("profile.header")}</Text>
@@ -398,27 +465,64 @@ export default function ProfileScreen() {
             )}
             <Text style={styles.userEmail}>{user?.email || ""}</Text>
 
-            {/* XnScore Badge */}
+            {/* Open profile Bucket B.4 — slim XnScore row replaces the
+                badge + "View details" button. Score Hub is now the
+                canonical destination for scoring, so this routes there
+                instead of XnScoreDashboard. Removes the duplicate
+                entry point (Home's pulse icon also navigates to
+                ScoreHub). */}
             <TouchableOpacity
-              style={styles.xnScoreContainer}
-              onPress={() => navigation.navigate("XnScoreDashboard")}
+              onPress={() => navigation.navigate("ScoreHub")}
+              style={styles.xnScoreSlimRow}
+              accessibilityRole="button"
+              accessibilityLabel={`${t("profile.xn_score_label")} ${score}`}
             >
-              <View style={styles.xnScoreBadge}>
-                <Ionicons
-                  name={level.icon as keyof typeof Ionicons.glyphMap}
-                  size={16}
-                  color={level.color}
-                />
-                <Text style={styles.xnScoreValue}>{score}</Text>
-                <Text style={styles.xnScoreLabel}>{t("profile.xn_score_label")}</Text>
-              </View>
-              <View style={styles.improveButton}>
-                <Text style={styles.improveButtonText}>{t("profile.view_details")}</Text>
-                <Ionicons name="chevron-forward" size={14} color="#00C6AE" />
-              </View>
+              <Text style={styles.xnScoreSlimText}>
+                {t("profile.xn_score_label")}: {score}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
         </LinearGradient>
+
+        {/* Open profile Bucket B.3 — Complete-your-profile banner.
+            Non-dismissible per P0 spec; reappears every visit until all
+            required fields are filled. Gated on !profileLoading and on
+            a non-null profile so the banner doesn't flash during the
+            first 60s cache populate. */}
+        {showCompletionBanner ? (
+          <TouchableOpacity
+            style={styles.completionBanner}
+            onPress={() => navigation.navigate("PersonalInfo")}
+            accessibilityRole="button"
+            accessibilityLabel={t("profile.complete_banner_cta")}
+          >
+            <View style={styles.completionBannerIcon}>
+              <Ionicons
+                name="person-circle-outline"
+                size={22}
+                color="#0A2342"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.completionBannerTitle}>
+                {t("profile.complete_banner_title")}
+              </Text>
+              <Text style={styles.completionBannerBody}>
+                {t("profile.complete_banner_body", {
+                  completed: completedCount,
+                  total: totalCount,
+                })}
+              </Text>
+            </View>
+            <View style={styles.completionBannerCta}>
+              <Text style={styles.completionBannerCtaText}>
+                {t("profile.complete_banner_cta")}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color="#0A2342" />
+            </View>
+          </TouchableOpacity>
+        ) : null}
 
         {/* Menu Sections */}
         <View style={styles.content}>
@@ -626,40 +730,74 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.7)",
     marginBottom: 20,
   },
-  xnScoreContainer: {
+  // ----- Open profile Bucket B.4 — slim XnScore row -----
+  // Replaces the old xnScoreContainer + xnScoreBadge + improveButton
+  // cluster with a single tappable row that routes to ScoreHub.
+  xnScoreSlimRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
-  },
-  xnScoreBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0,198,174,0.2)",
-    borderWidth: 1,
-    borderColor: "rgba(0,198,174,0.4)",
-    borderRadius: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    justifyContent: "center",
     gap: 6,
+    marginTop: 4,
+    paddingVertical: 6,
   },
-  xnScoreValue: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#00C6AE",
-  },
-  xnScoreLabel: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.7)",
-  },
-  improveButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  improveButtonText: {
+  xnScoreSlimText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#00C6AE",
+    color: "rgba(255,255,255,0.92)",
+  },
+  // ----- Open profile Bucket B.3 — Complete-your-profile banner -----
+  // Lives between the navy LinearGradient header and the white content
+  // section. Tap routes to PersonalInfoScreen so the user can fill in
+  // whatever's missing. Non-dismissible per P0 spec — disappears
+  // automatically once completedCount === totalCount.
+  completionBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginHorizontal: 20,
+    marginTop: -10,
+    marginBottom: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: "#FFF7E6",
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: "#F59E0B",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  completionBannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(10,35,66,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  completionBannerTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 2,
+  },
+  completionBannerBody: {
+    fontSize: 12,
+    color: "#374151",
+    lineHeight: 16,
+  },
+  completionBannerCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+  },
+  completionBannerCtaText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0A2342",
   },
   content: {
     padding: 20,
