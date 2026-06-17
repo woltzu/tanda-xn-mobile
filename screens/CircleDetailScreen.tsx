@@ -32,6 +32,7 @@ import { useCircleAutopayConfig } from "../hooks/useCircleAutopay";
 import { useCircleAutopaySuggestion } from "../hooks/useCircleAutopaySuggestion";
 import { useCircleNotificationMute } from "../hooks/useCircleNotificationMute";
 import { useCircleDetail } from "../hooks/useCircleDetail";
+import { useEventTracker } from "../hooks/useEventTracker";
 import MuteCircleSheet from "../components/MuteCircleSheet";
 import { showToast } from "../components/Toast";
 import { supabase } from "../lib/supabase";
@@ -166,6 +167,69 @@ export default function CircleDetailScreen() {
 
   const [activeTab, setActiveTab] = useState<"overview" | "members" | "activity">("overview");
   const [showMenu, setShowMenu] = useState(false);
+  const [showAllActivities, setShowAllActivities] = useState(false);
+
+  // First-visit coach mark on the Contribute hero. Per-user one-shot
+  // gated by AsyncStorage; auto-dismisses after 4 s or on tap of the
+  // tooltip / CTA. Ref-guarded so StrictMode double-mount doesn't
+  // re-trigger it after the user has already seen it within this
+  // session.
+  const HERO_COACH_KEY = "@tandaxn_circle_detail_hero_seen_v1";
+  const [showHeroCoach, setShowHeroCoach] = useState(false);
+  const heroCoachChecked = useRef(false);
+  useEffect(() => {
+    if (heroCoachChecked.current) return;
+    heroCoachChecked.current = true;
+    let cancelled = false;
+    AsyncStorage.getItem(HERO_COACH_KEY)
+      .then((v) => {
+        if (cancelled || v) return;
+        setShowHeroCoach(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  useEffect(() => {
+    if (!showHeroCoach) return;
+    const tid = setTimeout(() => dismissHeroCoach(), 4000);
+    return () => clearTimeout(tid);
+    // dismissHeroCoach is stable; intentionally omitted from deps to avoid
+    // resetting the timer on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showHeroCoach]);
+  const dismissHeroCoach = () => {
+    setShowHeroCoach(false);
+    AsyncStorage.setItem(HERO_COACH_KEY, "1").catch(() => undefined);
+  };
+
+  // Telemetry. The `opened` event is ref-guarded so React StrictMode
+  // double-mounts don't double-emit. Tab switches and Contribute taps
+  // fire on every interaction. Realtime events fire from inside the
+  // channel callbacks below.
+  const { track } = useEventTracker();
+  const openedTrackedRef = useRef(false);
+  const trackTabSwitch = (tab: "overview" | "members" | "activity") => {
+    if (tab === activeTab) return;
+    track({
+      eventType: "circle_detail_tab_switched",
+      eventCategory: "savings",
+      eventAction: "tab_switched",
+      eventLabel: tab,
+      eventValue: { circleId, tabName: tab },
+    });
+    setActiveTab(tab);
+  };
+  const trackContributeTap = (origin: "hero" | "bottom_bar") => {
+    track({
+      eventType: "circle_detail_contribute_tapped",
+      eventCategory: "savings",
+      eventAction: "contribute_tapped",
+      eventLabel: origin,
+      eventValue: { circleId, origin },
+    });
+  };
 
   // P2 (first-launch review): when the user lands on a circle detail
   // for the very first time after their initial circle join (myCircles
@@ -287,6 +351,8 @@ export default function CircleDetailScreen() {
     const contribChannel = supabase
       .channel(`circle-detail:contributions:${circleId}`)
       .on(
+        // supabase-js v2 narrows postgres_changes via a string-literal
+        // overload that the channel-builder type doesn't expose, hence the cast.
         "postgres_changes" as any,
         {
           event: "INSERT",
@@ -294,7 +360,18 @@ export default function CircleDetailScreen() {
           table: "contributions",
           filter: `circle_id=eq.${circleId}`,
         },
-        () => {
+        (payload: { eventType?: string }) => {
+          track({
+            eventType: "circle_detail_realtime_event_received",
+            eventCategory: "savings",
+            eventAction: "realtime_event_received",
+            eventLabel: "contributions",
+            eventValue: {
+              circleId,
+              table: "contributions",
+              event: payload?.eventType ?? "INSERT",
+            },
+          });
           refresh({ skipSpinner: true });
         }
       )
@@ -303,6 +380,8 @@ export default function CircleDetailScreen() {
     const membersChannel = supabase
       .channel(`circle-detail:members:${circleId}`)
       .on(
+        // supabase-js v2 narrows postgres_changes via a string-literal
+        // overload that the channel-builder type doesn't expose, hence the cast.
         "postgres_changes" as any,
         {
           event: "*", // INSERT or DELETE
@@ -310,7 +389,18 @@ export default function CircleDetailScreen() {
           table: "circle_members",
           filter: `circle_id=eq.${circleId}`,
         },
-        () => {
+        (payload: { eventType?: string }) => {
+          track({
+            eventType: "circle_detail_realtime_event_received",
+            eventCategory: "savings",
+            eventAction: "realtime_event_received",
+            eventLabel: "circle_members",
+            eventValue: {
+              circleId,
+              table: "circle_members",
+              event: payload?.eventType ?? "*",
+            },
+          });
           refresh({ skipSpinner: true });
         }
       )
@@ -320,7 +410,7 @@ export default function CircleDetailScreen() {
       supabase.removeChannel(contribChannel);
       supabase.removeChannel(membersChannel);
     };
-  }, [circleId, refresh]);
+  }, [circleId, refresh, track]);
 
   if (!circle) {
     return (
@@ -398,12 +488,12 @@ export default function CircleDetailScreen() {
 
   const handleCircleSettings = () => {
     setShowMenu(false);
-    navigation.navigate("AdminSettings" as any, { circleName: circle?.name || "", circleId });
+    navigation.navigate("AdminSettings", { circleName: circle?.name || "", circleId });
   };
 
   const handleLeaveCircle = () => {
     setShowMenu(false);
-    navigation.navigate("LeaveCircle" as any, {
+    navigation.navigate("LeaveCircle", {
       circleName: circle.name,
       circleId,
       memberPosition: circle.myPosition || 1,
@@ -420,7 +510,7 @@ export default function CircleDetailScreen() {
   // ready. This menu item makes the lifecycle reachable.
   const handleSwapPosition = () => {
     setShowMenu(false);
-    navigation.navigate("PositionSwap" as any, { circleId });
+    navigation.navigate("PositionSwap", { circleId });
   };
 
   // Determine user's role in this circle
@@ -439,6 +529,21 @@ export default function CircleDetailScreen() {
   const userRole = getUserRole();
   const isAdmin = userRole === "admin";
   const isElder = userRole === "elder";
+
+  // `opened` telemetry. Waits for the role to be derivable from the
+  // current members list so the role label is accurate; until then we
+  // re-render and fire once.
+  useEffect(() => {
+    if (openedTrackedRef.current) return;
+    openedTrackedRef.current = true;
+    track({
+      eventType: "circle_detail_opened",
+      eventCategory: "savings",
+      eventAction: "opened",
+      eventLabel: userRole,
+      eventValue: { circleId, role: userRole },
+    });
+  }, [track, circleId, userRole]);
 
   // === ALL USERS Menu Handlers ===
   const handleViewCircleRules = () => {
@@ -472,18 +577,18 @@ export default function CircleDetailScreen() {
 
   const handleHelpSupport = () => {
     setShowMenu(false);
-    navigation.navigate("HelpCenter" as any);
+    navigation.navigate("HelpCenter");
   };
 
   const handleReportIssue = () => {
     setShowMenu(false);
-    navigation.navigate("ReportIssue" as any, { circleName: circle.name, circleId });
+    navigation.navigate("ReportIssue", { circleName: circle.name, circleId });
   };
 
   // === REGULAR MEMBER Menu Handlers ===
   const handlePaymentHistory = () => {
     setShowMenu(false);
-    navigation.navigate("PaymentHistory" as any, { circleId });
+    navigation.navigate("PaymentHistory", { circleId });
   };
 
   const handlePaymentReminders = () => {
@@ -495,7 +600,7 @@ export default function CircleDetailScreen() {
         { text: t("circle_detail.alert_reminder_1d"), onPress: () => Alert.alert(t("circle_detail.alert_reminder_set_title"), t("circle_detail.alert_reminder_1d_body")) },
         { text: t("circle_detail.alert_reminder_3d"), onPress: () => Alert.alert(t("circle_detail.alert_reminder_set_title"), t("circle_detail.alert_reminder_3d_body")) },
         { text: t("circle_detail.alert_reminder_1w"), onPress: () => Alert.alert(t("circle_detail.alert_reminder_set_title"), t("circle_detail.alert_reminder_1w_body")) },
-        { text: "Manage All", onPress: () => navigation.navigate("NotificationPrefs" as any) },
+        { text: "Manage All", onPress: () => navigation.navigate("NotificationPrefs") },
         { text: "Cancel", style: "cancel" },
       ]
     );
@@ -504,12 +609,12 @@ export default function CircleDetailScreen() {
   // === ADMIN Menu Handlers ===
   const handleManageMembers = () => {
     setShowMenu(false);
-    navigation.navigate("ManageMembers" as any, { circleName: circle.name, circleId });
+    navigation.navigate("ManageMembers", { circleName: circle.name, circleId });
   };
 
   const handlePauseCircle = () => {
     setShowMenu(false);
-    navigation.navigate("PauseCircle" as any, {
+    navigation.navigate("PauseCircle", {
       circleName: circle.name,
       circleId,
       currentCycle: circle.currentCycle || 1,
@@ -520,7 +625,7 @@ export default function CircleDetailScreen() {
 
   const handleCloseCircle = () => {
     setShowMenu(false);
-    navigation.navigate("CloseCircle" as any, {
+    navigation.navigate("CloseCircle", {
       circleName: circle.name,
       circleId,
       currentCycle: circle.currentCycle || 1,
@@ -533,18 +638,18 @@ export default function CircleDetailScreen() {
 
   const handleExportData = () => {
     setShowMenu(false);
-    navigation.navigate("ExportData" as any, { circleName: circle.name, circleId });
+    navigation.navigate("ExportData", { circleName: circle.name, circleId });
   };
 
   const handleAdminSettings = () => {
     setShowMenu(false);
-    navigation.navigate("AdminSettings" as any, { circleName: circle.name, circleId });
+    navigation.navigate("AdminSettings", { circleName: circle.name, circleId });
   };
 
   // === ELDER Menu Handlers ===
   const handleOversightDashboard = () => {
     setShowMenu(false);
-    navigation.navigate("OversightDashboard" as any, { circleName: circle.name, circleId });
+    navigation.navigate("OversightDashboard", { circleName: circle.name, circleId });
   };
 
   const handleMediationTools = () => {
@@ -552,12 +657,12 @@ export default function CircleDetailScreen() {
     // Conflict P1 (2026-06-12): MediationTools is now an alias for the merged
     // ConflictCaseScreen — but route by the canonical name so callers can
     // find the navigation target without crossing the alias.
-    navigation.navigate("ConflictCase" as any, { circleName: circle.name, circleId });
+    navigation.navigate("ConflictCase", { circleName: circle.name, circleId });
   };
 
   const handleAuditTrail = () => {
     setShowMenu(false);
-    navigation.navigate("AuditTrail" as any, { circleName: circle.name, circleId });
+    navigation.navigate("AuditTrail", { circleName: circle.name, circleId });
   };
 
   // Method-specific help body for the (?) icon next to the rotation
@@ -618,27 +723,57 @@ export default function CircleDetailScreen() {
       {/* Next-contribution hero — answers "when do I owe money?" up
           front. Only meaningful for members of a recurring circle; one-
           time and beneficiary circles already surface the relevant
-          info in their dedicated cards. */}
+          info in their dedicated cards.
+
+          "Your turn" variant: when the member's position matches the
+          current cycle, they're about to *receive* the payout — swap
+          the copy and accent so the screen leads with the celebration
+          instead of the contribution prompt. */}
       {isMember && !isOneTime ? (
-        <TouchableOpacity
-          style={styles.heroNextCard}
-          activeOpacity={0.85}
-          onPress={() => navigation.navigate("MakeContribution", { circleId })}
-          accessibilityRole="button"
-        >
-          <View style={styles.heroNextIcon}>
-            <Ionicons name="calendar" size={22} color="#0A2342" />
-          </View>
-          <Text style={styles.heroNextText}>
-            {t("circle_detail.hero_next_contribution", {
-              amount: circle.amount,
-              date: formatDate(getNextPayoutDate().toISOString()),
-              cycle: circle.currentCycle ?? 1,
-              total: circle.memberCount,
-            })}
-          </Text>
-          <Ionicons name="chevron-forward" size={18} color="#0A2342" />
-        </TouchableOpacity>
+        (() => {
+          const isYourTurn =
+            !!circle.myPosition &&
+            circle.myPosition === (circle.currentCycle ?? 1) &&
+            !hasBeneficiary;
+          return (
+            <TouchableOpacity
+              style={[styles.heroNextCard, isYourTurn && styles.heroNextCardYourTurn]}
+              activeOpacity={0.85}
+              onPress={() => {
+                trackContributeTap("hero");
+                navigation.navigate("MakeContribution", { circleId });
+              }}
+              accessibilityRole="button"
+            >
+              <View
+                style={[
+                  styles.heroNextIcon,
+                  isYourTurn && { backgroundColor: "rgba(245,158,11,0.18)" },
+                ]}
+              >
+                <Ionicons
+                  name={isYourTurn ? "trophy" : "calendar"}
+                  size={22}
+                  color={isYourTurn ? "#92400E" : "#0A2342"}
+                />
+              </View>
+              <Text style={styles.heroNextText}>
+                {isYourTurn
+                  ? t("circle_detail.hero_your_turn", {
+                      amount: circle.amount * circle.memberCount,
+                      date: formatDate(getNextPayoutDate().toISOString()),
+                    })
+                  : t("circle_detail.hero_next_contribution", {
+                      amount: circle.amount,
+                      date: formatDate(getNextPayoutDate().toISOString()),
+                      cycle: circle.currentCycle ?? 1,
+                      total: circle.memberCount,
+                    })}
+              </Text>
+              <Ionicons name="chevron-forward" size={18} color="#0A2342" />
+            </TouchableOpacity>
+          );
+        })()
       ) : null}
 
       {/* Hero CTA — large primary Contribute button. Pairs with the
@@ -647,17 +782,38 @@ export default function CircleDetailScreen() {
           Contribute remains as the redundant safety net for users who
           scroll past this. */}
       {isMember ? (
-        <TouchableOpacity
-          style={styles.contributeHeroCta}
-          activeOpacity={0.85}
-          onPress={() => navigation.navigate("MakeContribution", { circleId })}
-          accessibilityRole="button"
-        >
-          <Ionicons name="wallet" size={22} color="#FFFFFF" />
-          <Text style={styles.contributeHeroCtaText}>
-            {t("circle_detail.contribute_now_cta", { amount: circle.amount })}
-          </Text>
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity
+            style={styles.contributeHeroCta}
+            activeOpacity={0.85}
+            onPress={() => {
+              if (showHeroCoach) dismissHeroCoach();
+              trackContributeTap("hero");
+              navigation.navigate("MakeContribution", { circleId });
+            }}
+            accessibilityRole="button"
+          >
+            <Ionicons name="wallet" size={22} color="#FFFFFF" />
+            <Text style={styles.contributeHeroCtaText}>
+              {t("circle_detail.contribute_now_cta", { amount: circle.amount })}
+            </Text>
+          </TouchableOpacity>
+
+          {showHeroCoach ? (
+            <TouchableOpacity
+              style={styles.heroCoachTip}
+              onPress={dismissHeroCoach}
+              accessibilityRole="button"
+              accessibilityLabel={t("circle_detail.coach_hero_tip")}
+            >
+              <Ionicons name="arrow-up" size={14} color="#0A2342" />
+              <Text style={styles.heroCoachTipText}>
+                {t("circle_detail.coach_hero_tip")}
+              </Text>
+              <Ionicons name="close" size={14} color="#6B7280" />
+            </TouchableOpacity>
+          ) : null}
+        </>
       ) : null}
 
       {/* Hero strip — promotes the two highest-stakes facts (next
@@ -1466,7 +1622,20 @@ export default function CircleDetailScreen() {
     }
   };
 
-  const renderActivityTab = () => (
+  const renderActivityTab = () => {
+    // Collapse to the last 7 days by default; tapping "Show earlier"
+    // reveals the full list. Activity feeds on old circles can be long
+    // (one row per contribution × member-count × cycles), so showing
+    // the recent slice up front keeps the scroll length reasonable.
+    const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+    const cutoffMs = Date.now() - SEVEN_DAYS_MS;
+    const recentActivities = activities.filter(
+      (a) => new Date(a.timestamp).getTime() >= cutoffMs,
+    );
+    const earlierCount = activities.length - recentActivities.length;
+    const visibleActivities = showAllActivities ? activities : recentActivities;
+
+    return (
     <View style={styles.tabContent}>
       <Text style={styles.sectionTitle}>{t("circle_detail.section_recent_activity")}</Text>
 
@@ -1484,7 +1653,7 @@ export default function CircleDetailScreen() {
           </Text>
         </View>
       ) : (
-        activities.map((activity) => {
+        visibleActivities.map((activity) => {
           const colors = getActivityColor(activity.type);
           return (
             <View key={activity.id} style={styles.activityItem}>
@@ -1531,8 +1700,24 @@ export default function CircleDetailScreen() {
           );
         })
       )}
+
+      {/* Expander — only render when there are older events outside
+          the 7-day window and we haven't already revealed them. */}
+      {!showAllActivities && earlierCount > 0 ? (
+        <TouchableOpacity
+          style={styles.showEarlierBtn}
+          onPress={() => setShowAllActivities(true)}
+          accessibilityRole="button"
+        >
+          <Ionicons name="chevron-down" size={14} color="#0A2342" />
+          <Text style={styles.showEarlierText}>
+            {t("circle_detail.activity_show_earlier", { count: earlierCount })}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
-  );
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -1615,7 +1800,7 @@ export default function CircleDetailScreen() {
               <TouchableOpacity
                 key={tab}
                 style={[styles.tab, activeTab === tab && styles.tabActive]}
-                onPress={() => setActiveTab(tab)}
+                onPress={() => trackTabSwitch(tab)}
               >
                 <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -1651,6 +1836,7 @@ export default function CircleDetailScreen() {
                 // Tapping Contribute clears the pulse immediately —
                 // user has acknowledged the affordance.
                 if (shouldPulse) setShouldPulse(false);
+                trackContributeTap("bottom_bar");
                 navigation.navigate("MakeContribution", { circleId });
               }}
             >
@@ -1675,7 +1861,7 @@ export default function CircleDetailScreen() {
       {/* Floating Help Button */}
       <TouchableOpacity
         style={styles.floatingHelp}
-        onPress={() => navigation.navigate("HelpCenter" as any)}
+        onPress={() => navigation.navigate("HelpCenter")}
       >
         <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
         <Text style={styles.floatingHelpText}>{t("final_polish.circledetail_help")}</Text>
@@ -1746,7 +1932,7 @@ export default function CircleDetailScreen() {
 
                 <TouchableOpacity style={styles.menuItem} onPress={() => {
                   setShowMenu(false);
-                  navigation.navigate("QRCodeDisplay" as any, { circleId });
+                  navigation.navigate("QRCodeDisplay", { circleId });
                 }}>
                   <View style={[styles.menuItemIcon, { backgroundColor: "#F0FDFB" }]}>
                     <Ionicons name="qr-code-outline" size={20} color="#00C6AE" />
@@ -2163,6 +2349,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     lineHeight: 18,
   },
+  heroNextCardYourTurn: {
+    backgroundColor: "#FEF3C7",
+    borderColor: "#F59E0B",
+  },
   contributeHeroCta: {
     flexDirection: "row",
     alignItems: "center",
@@ -2183,6 +2373,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "700",
     color: "#FFFFFF",
+  },
+  heroCoachTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+    alignSelf: "center",
+    marginTop: -8,
+    marginBottom: 16,
+  },
+  heroCoachTipText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#0A2342",
   },
   heroStripRow: {
     flexDirection: "row",
@@ -2256,6 +2466,19 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
     letterSpacing: 0.3,
+  },
+  showEarlierBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    marginTop: 4,
+  },
+  showEarlierText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#0A2342",
   },
   suggestionBanner: {
     flexDirection: "row",

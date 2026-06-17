@@ -3424,6 +3424,10 @@
   },
   "circle_detail": {
     "hero_next_contribution": "Votre prochaine contribution : {{amount}} $ due le {{date}} · Cycle {{cycle}} sur {{total}}",
+    "hero_your_turn": "🎉 C'est votre tour ! Vous recevrez {{amount}} $ le {{date}}.",
+    "coach_hero_tip": "Touchez Contribuer pour effectuer votre prochain paiement.",
+    "activity_show_earlier_one": "Afficher plus ancien ({{count}} événement)",
+    "activity_show_earlier_other": "Afficher plus anciens ({{count}} événements)",
     "hero_next_payout": "Prochain paiement",
     "hero_your_position": "Votre position",
     "contribute_now_cta": "Contribuer {{amount}} $ maintenant",
