@@ -18,7 +18,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { useTranslation } from "react-i18next";
+import { useTranslation, Trans } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
@@ -81,7 +81,11 @@ export default function JoinCircleConfirmScreen() {
   const route = useRoute<JoinCircleConfirmRouteProp>();
   const { t } = useTranslation();
   const { circleId } = route.params;
-  const { circles, browseCircles, joinCircle } = useCircles();
+  // myCircles is included so a member following a stale deep-link or
+  // back-navigating after a successful join still resolves the circle
+  // instead of hitting the "Not found" branch. Symmetric with
+  // JoinCircleSuccessScreen which already merges all three lists.
+  const { circles, myCircles, browseCircles, joinCircle } = useCircles();
   const { user } = useAuth();
 
   const [isJoining, setIsJoining] = useState(false);
@@ -101,8 +105,10 @@ export default function JoinCircleConfirmScreen() {
       .catch(() => undefined);
   }, []);
 
-  // Find the circle
-  const circle = [...circles, ...browseCircles].find((c) => c.id === circleId);
+  // Find the circle. Search myCircles last so a freshly-joined entry
+  // doesn't shadow the canonical row from `circles`/`browseCircles` if
+  // they differ in a field briefly during reconciliation.
+  const circle = [...circles, ...browseCircles, ...myCircles].find((c) => c.id === circleId);
 
   if (!circle) {
     return (
@@ -140,9 +146,12 @@ export default function JoinCircleConfirmScreen() {
   const hasBeneficiary = circle.beneficiaryName;
   const isOneTime = circle.frequency === "one-time";
 
+  // Locale-aware date format. `undefined` lets the OS pick its locale,
+  // matching what the rest of the app does and respecting French /
+  // English app-language switches.
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString("en-US", {
+    return date.toLocaleDateString(undefined, {
       weekday: "short",
       month: "short",
       day: "numeric",
@@ -262,8 +271,22 @@ export default function JoinCircleConfirmScreen() {
               <View style={styles.scoreWarningContent}>
                 <Text style={styles.scoreWarningTitle}>{t("join_circle_confirm.score_warning_title")}</Text>
                 <Text style={styles.scoreWarningText}>
-                  This circle requires a minimum XnScore of {minScore}. Your current score is {userXnScore}.
+                  {t("join_circle_confirm.score_warning_body", {
+                    min: minScore,
+                    current: userXnScore,
+                  })}
                 </Text>
+                <TouchableOpacity
+                  style={styles.raiseScoreBtn}
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate("ScoreHub" as never)}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.raiseScoreText}>
+                    {t("join_circle_confirm.raise_score_link")}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={14} color="#92400E" />
+                </TouchableOpacity>
               </View>
             </View>
           )}
@@ -299,8 +322,11 @@ export default function JoinCircleConfirmScreen() {
             </View>
           </View>
 
-          {/* Position Info - For rotating circles */}
-          {!hasBeneficiary && !isOneTime && (
+          {/* Position Info — only meaningful when the organizer set
+              positions manually. For xnscore / random / anything else,
+              position is computed at circle start, so showing a # here
+              would be misleading. */}
+          {!hasBeneficiary && !isOneTime && circle.rotationMethod === "manual" && (
             <View style={styles.positionCard}>
               <View style={styles.positionIcon}>
                 <Ionicons name="trophy" size={24} color="#F59E0B" />
@@ -309,9 +335,19 @@ export default function JoinCircleConfirmScreen() {
                 <Text style={styles.positionLabel}>{t("join_circle_confirm.label_payout_position")}</Text>
                 <Text style={styles.positionNumber}>#{yourPosition}</Text>
                 <Text style={styles.positionSubtext}>
-                  Based on {getRotationMethodLabel(circle.rotationMethod).toLowerCase()}
+                  {t("join_circle_confirm.position_based_on", {
+                    method: getRotationMethodLabel(circle.rotationMethod).toLowerCase(),
+                  })}
                 </Text>
               </View>
+            </View>
+          )}
+          {!hasBeneficiary && !isOneTime && circle.rotationMethod !== "manual" && (
+            <View style={styles.positionTbdCard}>
+              <Ionicons name="time-outline" size={20} color="#0A2342" />
+              <Text style={styles.positionTbdText}>
+                {t("join_circle_confirm.position_assigned_at_start")}
+              </Text>
             </View>
           )}
 
@@ -359,7 +395,7 @@ export default function JoinCircleConfirmScreen() {
               <Text style={styles.detailValue}>
                 {circle.currentMembers}/{circle.memberCount}
                 <Text style={{ color: spotsLeft <= 2 ? "#DC2626" : "#00C6AE" }}>
-                  {" "}({spotsLeft} spots left)
+                  {" "}({t("join_circle_confirm.spots_left", { count: spotsLeft })})
                 </Text>
               </Text>
             </View>
@@ -380,7 +416,9 @@ export default function JoinCircleConfirmScreen() {
               </View>
               <Text style={styles.detailLabel}>{t("join_circle_confirm.detail_grace_period")}</Text>
               <Text style={styles.detailValue}>
-                {circle.gracePeriodDays === 0 ? "None" : `${circle.gracePeriodDays} day${circle.gracePeriodDays > 1 ? "s" : ""}`}
+                {circle.gracePeriodDays === 0
+                  ? t("join_circle_confirm.grace_period_none")
+                  : t("join_circle_confirm.grace_period_days", { count: circle.gracePeriodDays })}
               </Text>
             </View>
 
@@ -402,19 +440,28 @@ export default function JoinCircleConfirmScreen() {
               <View style={styles.firstContributionContent}>
                 <Text style={styles.firstContributionTitle}>{t("join_circle_confirm.first_contribution_title")}</Text>
                 <Text style={styles.firstContributionText}>
-                  Due on <Text style={styles.boldText}>{formatDate(getFirstContributionDate().toISOString())}</Text>
+                  <Trans
+                    i18nKey="join_circle_confirm.first_contribution_due_on"
+                    values={{ date: formatDate(getFirstContributionDate().toISOString()) }}
+                    components={{ b: <Text style={styles.boldText} /> }}
+                  />
                 </Text>
                 <Text style={styles.firstContributionAmount}>
-                  Amount: <Text style={styles.boldText}>${circle.amount}</Text>
+                  <Trans
+                    i18nKey="join_circle_confirm.first_contribution_amount"
+                    values={{ amount: `$${circle.amount}` }}
+                    components={{ b: <Text style={styles.boldText} /> }}
+                  />
                 </Text>
               </View>
             </View>
           )}
 
-          {/* Terms Agreement — skipped after the user has consented once.
-              The user can still review the full terms via the disclaimer
-              card below; this just removes the repeated checkbox tap on
-              every subsequent join. */}
+          {/* Terms Agreement — the only consent surface. AsyncStorage
+              suppresses the checkbox after the first accepted join so
+              we don't ask twice. The old always-on disclaimer card
+              underneath has been removed; the checkbox label below
+              already states the commitment. */}
           {!termsPreviouslyAccepted ? (
             <TouchableOpacity
               style={styles.termsRow}
@@ -424,20 +471,18 @@ export default function JoinCircleConfirmScreen() {
                 {agreedToTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
               </View>
               <Text style={styles.termsText}>
-                I agree to the circle rules and understand that I commit to making{" "}
-                {isOneTime ? "a one-time payment" : "regular contributions"} of ${circle.amount}
-                {!isOneTime && ` ${getFrequencyLabel(circle.frequency).toLowerCase()}`}.
+                {t(
+                  isOneTime
+                    ? "join_circle_confirm.terms_one_time"
+                    : "join_circle_confirm.terms_recurring",
+                  {
+                    amount: `$${circle.amount}`,
+                    frequency: getFrequencyLabel(circle.frequency).toLowerCase(),
+                  },
+                )}
               </Text>
             </TouchableOpacity>
           ) : null}
-
-          {/* Disclaimer */}
-          <View style={styles.disclaimer}>
-            <Ionicons name="shield-checkmark-outline" size={16} color="#6B7280" />
-            <Text style={styles.disclaimerText}>
-              By joining, you agree to honor your commitment to other members. Failure to contribute may affect your XnScore and standing in the community.
-            </Text>
-          </View>
         </View>
       </ScrollView>
 
@@ -794,19 +839,32 @@ const styles = StyleSheet.create({
     color: "#4B5563",
     lineHeight: 18,
   },
-  disclaimer: {
+  positionTbdCard: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
+    alignItems: "center",
+    gap: 10,
     backgroundColor: "#F5F7FA",
-    borderRadius: 10,
-    padding: 12,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
   },
-  disclaimerText: {
+  positionTbdText: {
     flex: 1,
-    fontSize: 11,
-    color: "#6B7280",
-    lineHeight: 16,
+    fontSize: 13,
+    color: "#0A2342",
+    lineHeight: 18,
+  },
+  raiseScoreBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 8,
+    alignSelf: "flex-start",
+  },
+  raiseScoreText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#92400E",
   },
   bottomBar: {
     position: "absolute",

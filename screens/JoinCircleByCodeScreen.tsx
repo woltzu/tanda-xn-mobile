@@ -126,7 +126,7 @@ export default function JoinCircleByCodeScreen() {
           </View>
 
           <Text style={styles.headerSubtitle}>
-            Enter an invite code or paste a link to join a savings circle
+            {t("join_by_code.subtitle")}
           </Text>
         </LinearGradient>
 
@@ -172,7 +172,7 @@ export default function JoinCircleByCodeScreen() {
             <View style={styles.qrContent}>
               <Text style={styles.qrTitle}>{t("join_by_code.qr_title")}</Text>
               <Text style={styles.qrSubtitle}>
-                Scan a QR code to join instantly
+                {t("join_by_code.qr_subtitle")}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
@@ -185,25 +185,19 @@ export default function JoinCircleByCodeScreen() {
               <View style={styles.stepNumber}>
                 <Text style={styles.stepNumberText}>1</Text>
               </View>
-              <Text style={styles.stepText}>
-                Ask a friend or family member who is already in a circle
-              </Text>
+              <Text style={styles.stepText}>{t("join_by_code.how_it_works_step_1")}</Text>
             </View>
             <View style={styles.infoStep}>
               <View style={styles.stepNumber}>
                 <Text style={styles.stepNumberText}>2</Text>
               </View>
-              <Text style={styles.stepText}>
-                They can share the invite code or link from the circle settings
-              </Text>
+              <Text style={styles.stepText}>{t("join_by_code.how_it_works_step_2")}</Text>
             </View>
             <View style={styles.infoStep}>
               <View style={styles.stepNumber}>
                 <Text style={styles.stepNumberText}>3</Text>
               </View>
-              <Text style={styles.stepText}>
-                Enter the code here or tap the link to join automatically
-              </Text>
+              <Text style={styles.stepText}>{t("join_by_code.how_it_works_step_3")}</Text>
             </View>
           </View>
 
@@ -221,7 +215,7 @@ export default function JoinCircleByCodeScreen() {
           >
             <Ionicons name="search-outline" size={18} color="#00C6AE" />
             <Text style={styles.browseButtonText}>
-              Or browse public circles instead
+              {t("join_by_code.browse_fallback")}
             </Text>
           </TouchableOpacity>
         </View>
