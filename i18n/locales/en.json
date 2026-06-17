@@ -3423,6 +3423,7 @@
     "btn_share_dream": "Share Your Dream"
   },
   "circle_detail": {
+    "hero_next_contribution": "Your next contribution: ${{amount}} due {{date}} · Cycle {{cycle}} of {{total}}",
     "tab_timeline": "Timeline",
     "tab_voting": "Voting",
     "not_found_header": "Circle Not Found",

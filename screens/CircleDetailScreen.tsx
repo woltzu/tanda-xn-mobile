@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Platform,
   Animated,
+  RefreshControl,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
@@ -31,6 +32,7 @@ import { useCircleAutopaySuggestion } from "../hooks/useCircleAutopaySuggestion"
 import { useCircleNotificationMute } from "../hooks/useCircleNotificationMute";
 import MuteCircleSheet from "../components/MuteCircleSheet";
 import { showToast } from "../components/Toast";
+import { supabase } from "../lib/supabase";
 
 type CircleDetailNavigationProp = StackNavigationProp<RootStackParamList>;
 type CircleDetailRouteProp = RouteProp<RootStackParamList, "CircleDetail">;
@@ -243,33 +245,103 @@ export default function CircleDetailScreen() {
   // Find the circle in all available sources: user circles, my circles, or browse circles
   const circle = [...circles, ...myCircles, ...browseCircles].find((c) => c.id === circleId);
 
-  // Fetch members and activities when screen is focused or circleId changes
-  useFocusEffect(
-    React.useCallback(() => {
-      const fetchData = async () => {
-        if (!circleId) return;
+  // Single source for the focus-refresh, pull-to-refresh, and realtime
+  // handlers. `showSpinner` skips the per-tab spinners for realtime/
+  // pull-to-refresh refreshes — the user already knows the screen is
+  // live and the spinners look like a regression on every event.
+  const fetchData = React.useCallback(
+    async (showSpinner: boolean = true) => {
+      if (!circleId) return;
+      if (showSpinner) {
         setIsLoadingMembers(true);
         setIsLoadingActivities(true);
-        try {
-          const [fetchedMembers, fetchedActivities] = await Promise.all([
-            getCircleMembers(circleId),
-            getCircleActivities(circleId),
-          ]);
-          setMembers(fetchedMembers);
-          setActivities(fetchedActivities);
-        } catch (error) {
-          console.error("Error fetching data:", error);
-        } finally {
+      }
+      try {
+        const [fetchedMembers, fetchedActivities] = await Promise.all([
+          getCircleMembers(circleId),
+          getCircleActivities(circleId),
+        ]);
+        setMembers(fetchedMembers);
+        setActivities(fetchedActivities);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      } finally {
+        if (showSpinner) {
           setIsLoadingMembers(false);
           setIsLoadingActivities(false);
         }
-      };
+      }
+    },
+    [circleId, getCircleMembers, getCircleActivities]
+  );
 
-      fetchData();
+  // Fetch members and activities when screen is focused or circleId changes
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchData(true);
       // Also refresh circles to get updated member count
       refreshCircles();
-    }, [circleId])
+    }, [fetchData, refreshCircles])
   );
+
+  // Pull-to-refresh state
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([fetchData(false), refreshCircles()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchData, refreshCircles]);
+
+  // Realtime subscriptions: keep the screen in sync without forcing the
+  // user to leave + return. INSERTs into `contributions` for this
+  // circle re-pull the activity feed and bust the member-count cache.
+  // INSERT/DELETE on `circle_members` re-pull the roster. The channels
+  // are torn down on unmount/circle change so a navigated-back-to
+  // session doesn't accumulate them.
+  useEffect(() => {
+    if (!circleId) return;
+    const contribChannel = supabase
+      .channel(`circle-detail:contributions:${circleId}`)
+      .on(
+        "postgres_changes" as any,
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "contributions",
+          filter: `circle_id=eq.${circleId}`,
+        },
+        () => {
+          fetchData(false);
+          refreshCircles();
+        }
+      )
+      .subscribe();
+
+    const membersChannel = supabase
+      .channel(`circle-detail:members:${circleId}`)
+      .on(
+        "postgres_changes" as any,
+        {
+          event: "*", // INSERT or DELETE
+          schema: "public",
+          table: "circle_members",
+          filter: `circle_id=eq.${circleId}`,
+        },
+        () => {
+          fetchData(false);
+          refreshCircles();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(contribChannel);
+      supabase.removeChannel(membersChannel);
+    };
+  }, [circleId, fetchData, refreshCircles]);
 
   if (!circle) {
     return (
@@ -343,19 +415,6 @@ export default function CircleDetailScreen() {
 
   const handleGroupChat = () => {
     navigation.navigate("GroupChat", { circleId: circle.id, circleName: circle.name });
-  };
-
-  const handleEditCircle = () => {
-    setShowMenu(false);
-    Alert.alert(
-      "Edit Circle",
-      "What would you like to edit?",
-      [
-        { text: t("circle_detail.alert_change_name_title"), onPress: () => Alert.alert(t("circle_detail.alert_coming_soon_title"), t("circle_detail.alert_coming_soon_name")) },
-        { text: t("circle_detail.alert_change_emoji_title"), onPress: () => Alert.alert(t("circle_detail.alert_coming_soon_title"), t("circle_detail.alert_coming_soon_emoji")) },
-        { text: "Cancel", style: "cancel" },
-      ]
-    );
   };
 
   const handleCircleSettings = () => {
@@ -560,9 +619,35 @@ export default function CircleDetailScreen() {
 
   const renderOverviewTab = () => (
     <View style={styles.tabContent}>
+      {/* Next-contribution hero — answers "when do I owe money?" up
+          front. Only meaningful for members of a recurring circle; one-
+          time and beneficiary circles already surface the relevant
+          info in their dedicated cards. */}
+      {isMember && !isOneTime ? (
+        <TouchableOpacity
+          style={styles.heroNextCard}
+          activeOpacity={0.85}
+          onPress={() => navigation.navigate("MakeContribution", { circleId })}
+          accessibilityRole="button"
+        >
+          <View style={styles.heroNextIcon}>
+            <Ionicons name="calendar" size={22} color="#0A2342" />
+          </View>
+          <Text style={styles.heroNextText}>
+            {t("circle_detail.hero_next_contribution", {
+              amount: circle.amount,
+              date: formatDate(getNextPayoutDate().toISOString()),
+              cycle: circle.currentCycle ?? 1,
+              total: circle.memberCount,
+            })}
+          </Text>
+          <Ionicons name="chevron-forward" size={18} color="#0A2342" />
+        </TouchableOpacity>
+      ) : null}
+
       {/* Phase 2 (circle autopay) — missed-contribution banner. Sits
-          at the top of Overview so it's the first thing users see
-          when returning to the circle after missing a cycle. */}
+          near the top of Overview so it's one of the first things users
+          see when returning to the circle after missing a cycle. */}
       {showAutopaySuggestion && (
         <View style={styles.suggestionBanner}>
           <Ionicons name="alert-circle" size={20} color="#92400E" />
@@ -1391,7 +1476,17 @@ export default function CircleDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#00C6AE"
+            colors={["#00C6AE"]}
+          />
+        }
+      >
         {/* Header */}
         <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
           <View style={styles.headerTop}>
@@ -1402,6 +1497,30 @@ export default function CircleDetailScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View style={styles.headerActions}>
+              {/* Timeline + Voting were rendered as inline tabs but
+                  actually navigated away to other screens — confusing
+                  and broke back-stack expectations. Promoted to header
+                  icon buttons so the tab bar holds only true panes. */}
+              <TouchableOpacity
+                style={styles.headerActionButton}
+                onPress={() =>
+                  navigation.navigate(Routes.CycleTimeline as never, { circleId } as never)
+                }
+                accessibilityRole="button"
+                accessibilityLabel={t("circle_detail.tab_timeline")}
+              >
+                <Ionicons name="time-outline" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.headerActionButton}
+                onPress={() =>
+                  navigation.navigate(Routes.CircleVoting as never, { circleId } as never)
+                }
+                accessibilityRole="button"
+                accessibilityLabel={t("circle_detail.tab_voting")}
+              >
+                <Ionicons name="reader-outline" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.headerActionButton}
                 onPress={() => setShowMenu(true)}
@@ -1428,8 +1547,9 @@ export default function CircleDetailScreen() {
             )}
           </View>
 
-          {/* Tabs — first 3 switch inline content; Timeline + Voting navigate
-              to dedicated screens (CycleTimeline / CircleVoting). */}
+          {/* Tabs — all three switch inline panes. Timeline + Voting
+              moved to header icon buttons above (they navigated away,
+              not switched panes). */}
           <View style={styles.tabsContainer}>
             {(["overview", "members", "activity"] as const).map((tab) => (
               <TouchableOpacity
@@ -1442,30 +1562,6 @@ export default function CircleDetailScreen() {
                 </Text>
               </TouchableOpacity>
             ))}
-
-            <TouchableOpacity
-              style={styles.tab}
-              onPress={() =>
-                navigation.navigate(Routes.CycleTimeline as never, { circleId } as never)
-              }
-              accessibilityRole="button"
-            >
-              <Text style={styles.tabText}>
-                {t("circle_detail.tab_timeline")}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.tab}
-              onPress={() =>
-                navigation.navigate(Routes.CircleVoting as never, { circleId } as never)
-              }
-              accessibilityRole="button"
-            >
-              <Text style={styles.tabText}>
-                {t("circle_detail.tab_voting")}
-              </Text>
-            </TouchableOpacity>
           </View>
         </LinearGradient>
 
@@ -1689,16 +1785,10 @@ export default function CircleDetailScreen() {
                     </View>
                   </View>
 
-                  <TouchableOpacity style={styles.menuItem} onPress={handleEditCircle}>
-                    <View style={[styles.menuItemIcon, { backgroundColor: "#FEF3C7" }]}>
-                      <Ionicons name="create-outline" size={20} color="#D97706" />
-                    </View>
-                    <View style={styles.menuItemContent}>
-                      <Text style={styles.menuItemText}>{t("circle_detail.menu_edit_details")}</Text>
-                      <Text style={styles.menuItemDesc}>Name, emoji & description</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
-                  </TouchableOpacity>
+                  {/* "Edit Details" was a "Coming soon" Alert stub. Hidden
+                      until name + emoji editing is actually wired —
+                      shipping a row that only opens an alert reads as
+                      broken even when the underlying intent is "later". */}
 
                   <TouchableOpacity style={styles.menuItem} onPress={handleManageMembers}>
                     <View style={[styles.menuItemIcon, { backgroundColor: "#EEF2FF" }]}>
@@ -1987,6 +2077,32 @@ const styles = StyleSheet.create({
   mutedBadgeText: { color: "#1F2937" },
 
   // Phase 2 — missed-contribution suggestion banner.
+  heroNextCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    backgroundColor: "#F0FDFB",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#00C6AE",
+    marginBottom: 16,
+  },
+  heroNextIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,198,174,0.15)",
+  },
+  heroNextText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#0A2342",
+    fontWeight: "600",
+    lineHeight: 18,
+  },
   suggestionBanner: {
     flexDirection: "row",
     gap: 12,
