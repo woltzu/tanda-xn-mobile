@@ -485,6 +485,74 @@ export default function HomeScreen() {
   }, []);
 
   // ────────────────────────────────────────────────────────────────────
+  // Open profile Bucket C — first-launch coach mark on the Profile icon.
+  // ────────────────────────────────────────────────────────────────────
+  // Symmetric to the Score Hub coach mark above: same pulse curve, same
+  // 4 s auto-dismiss, separate AsyncStorage gate so the two icons can
+  // teach themselves independently. Tooltip anchors LEFT instead of
+  // RIGHT because the Profile icon sits on the left edge of the topBar.
+  const PROFILE_COACH_FLAG_KEY = "@tandaxn_profile_icon_seen_v1";
+  const [showProfileCoach, setShowProfileCoach] = useState(false);
+  const profileCoachPulseAnim = useRef(new Animated.Value(1)).current;
+  const profileCoachTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(PROFILE_COACH_FLAG_KEY);
+        if (cancelled || seen) return;
+        await AsyncStorage.setItem(PROFILE_COACH_FLAG_KEY, "1");
+        if (!cancelled) setShowProfileCoach(true);
+      } catch {
+        // Best-effort — no functional impact if AsyncStorage fails.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showProfileCoach) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(profileCoachPulseAnim, {
+          toValue: 1.06,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(profileCoachPulseAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    profileCoachTimerRef.current = setTimeout(() => {
+      setShowProfileCoach(false);
+    }, 4000);
+    return () => {
+      loop.stop();
+      if (profileCoachTimerRef.current) {
+        clearTimeout(profileCoachTimerRef.current);
+        profileCoachTimerRef.current = null;
+      }
+    };
+  }, [showProfileCoach, profileCoachPulseAnim]);
+
+  const dismissProfileCoach = useCallback(() => {
+    if (profileCoachTimerRef.current) {
+      clearTimeout(profileCoachTimerRef.current);
+      profileCoachTimerRef.current = null;
+    }
+    setShowProfileCoach(false);
+  }, []);
+
+  // ────────────────────────────────────────────────────────────────────
   // Bucket C — telemetry: log every transition of the icon-badge
   // urgency. Fires once per distinct value (the ref prevents same-value
   // re-emits on unrelated re-renders).
@@ -520,6 +588,37 @@ export default function HomeScreen() {
     scoreHubBadge.unreadInsightCount,
     track,
   ]);
+
+  // Open profile Bucket C — telemetry for the Profile icon badge.
+  // Same pattern as the Score Hub badge above: ref-guarded so only
+  // distinct urgency transitions emit, and resets on 'none' so a
+  // later return-to-attention also fires.
+  const lastProfileBadgeUrgencyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (profileIconBadge.urgency === "none") {
+      lastProfileBadgeUrgencyRef.current = null;
+      return;
+    }
+    if (lastProfileBadgeUrgencyRef.current === profileIconBadge.urgency)
+      return;
+    lastProfileBadgeUrgencyRef.current = profileIconBadge.urgency;
+    track({
+      eventType: "profile_icon_badge_visible",
+      eventCategory: "settings",
+      eventAction: "icon_badge_visible",
+      eventLabel: profileIconBadge.urgency,
+      eventValue: {
+        is_critical: profileIconBadge.isCritical,
+        has_attention: profileIconBadge.hasAttention,
+      },
+    });
+  }, [
+    profileIconBadge.urgency,
+    profileIconBadge.isCritical,
+    profileIconBadge.hasAttention,
+    track,
+  ]);
+
   const activeAdvances = useMemo(
     () => advanceDashboard?.active_advances ?? [],
     [advanceDashboard],
@@ -701,7 +800,13 @@ export default function HomeScreen() {
             old DashboardScreen exposed in its avatar/bell pair. */}
         <View style={styles.topBar}>
           <TouchableOpacity
-            onPress={handleOpenProfile}
+            onPress={() => {
+              // Open profile Bucket C — tap dismisses the coach mark
+              // immediately so it doesn't linger over the Profile
+              // screen the user is about to land on.
+              dismissProfileCoach();
+              handleOpenProfile();
+            }}
             style={styles.topBarIconBtn}
             accessibilityRole="button"
             accessibilityLabel={(() => {
@@ -723,7 +828,16 @@ export default function HomeScreen() {
             })()}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <View style={styles.profileIconWrap}>
+            <Animated.View
+              style={[
+                styles.profileIconWrap,
+                {
+                  transform: [
+                    { scale: showProfileCoach ? profileCoachPulseAnim : 1 },
+                  ],
+                },
+              ]}
+            >
               {/* Open profile Bucket A — render the real avatar when
                   useProfile has it. Falls back to person-circle-outline
                   when the URL is null/missing OR the Image fails to
@@ -751,8 +865,27 @@ export default function HomeScreen() {
                   ]}
                 />
               ) : null}
-            </View>
+            </Animated.View>
           </TouchableOpacity>
+
+          {/* Open profile Bucket C — first-launch coach mark tooltip.
+              Anchored LEFT (Profile icon sits on the left edge of the
+              topBar), mirroring the Score Hub tooltip which anchors
+              right. Tap-anywhere on the card to dismiss; the icon's
+              onPress dismisses too. Auto-clears after 4 s. */}
+          {showProfileCoach ? (
+            <Pressable
+              onPress={dismissProfileCoach}
+              style={styles.profileCoachTooltip}
+              accessibilityRole="alert"
+              accessibilityLabel={t("home_screen.profile_icon_coach")}
+            >
+              <View style={styles.profileCoachArrow} />
+              <Text style={styles.profileCoachText}>
+                {t("home_screen.profile_icon_coach")}
+              </Text>
+            </Pressable>
+          ) : null}
 
           <View style={{ flex: 1 }} />
 
@@ -1816,6 +1949,41 @@ const styles = StyleSheet.create({
   },
   profileBadgeAttention: {
     backgroundColor: "#F59E0B",
+  },
+  // ----- Open profile Bucket C — first-launch coach mark tooltip -----
+  // Mirror of scoreHubCoachTooltip but anchored to the LEFT edge of the
+  // topBar instead of the right. Same visual treatment so the two
+  // tooltips read as one design language.
+  profileCoachTooltip: {
+    position: "absolute",
+    top: 44,
+    left: 0,
+    maxWidth: 240,
+    backgroundColor: colors.primaryNavy,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 5,
+    zIndex: 10,
+  },
+  profileCoachArrow: {
+    position: "absolute",
+    top: -4,
+    left: 14,
+    width: 8,
+    height: 8,
+    backgroundColor: colors.primaryNavy,
+    transform: [{ rotate: "45deg" }],
+  },
+  profileCoachText: {
+    fontSize: 12,
+    color: colors.textWhite,
+    lineHeight: 16,
+    fontWeight: "500",
   },
   // ----- Bucket C — first-launch coach mark tooltip -----
   // Absolute positioning relative to the topBar parent. Anchored to

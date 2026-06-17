@@ -27,6 +27,7 @@ import { supabase } from "../lib/supabase";
 import { showToast } from "../components/Toast";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { useEventTracker } from "../hooks/useEventTracker";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 
@@ -84,10 +85,22 @@ export default function ProfileScreen() {
   // PersonalInfoScreen, the user navigates back here. Without this the
   // useProfile cache could be stale for up to 60s; refetch on focus
   // makes the change land instantly.
+  //
+  // Bucket C — also emit telemetry on every focus. trackScreenView
+  // self-dedupes consecutive same-screen views inside EventService, so
+  // navigation A→Profile→A→Profile counts as two opens (correct), but
+  // a focus loop on the same screen mount doesn't double-fire.
+  const { trackScreenView, track } = useEventTracker();
   useFocusEffect(
     useCallback(() => {
       refetchProfile();
-    }, [refetchProfile]),
+      trackScreenView("Profile");
+      track({
+        eventType: "profile_opened",
+        eventCategory: "settings",
+        eventAction: "opened",
+      });
+    }, [refetchProfile, trackScreenView, track]),
   );
 
   // Pull-to-refresh: fans out the three context refetches in parallel.
