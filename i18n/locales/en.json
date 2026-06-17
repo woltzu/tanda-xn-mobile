@@ -2954,7 +2954,17 @@
     "intro_title": "What's a circle?",
     "intro_body": "A circle is a group where everyone contributes a fixed amount on a schedule, and members take turns receiving the whole pot.",
     "intro_steps": "You'll set the amount, frequency, and invite members. The first contribution lands on the start date.",
-    "intro_btn": "Got it"
+    "intro_btn": "Got it",
+    "reuse_chip": "Reuse {{name}}'s setup",
+    "reuse_toast": "Reused {{count}} settings",
+    "cycle_dates_label": "Cycle dates",
+    "cycle_date_format": "Cycle {{cycle}}: {{date}}",
+    "cycle_more": "+{{count}} more",
+    "payout_help_title": "Payout order",
+    "payout_help_body": "XnScore: members with the highest XnScore go first.\nRandom: positions are shuffled when the circle starts.\nManual: you assign positions after members accept.",
+    "payout_preview_xnscore": "Position determined by XnScore. Your score: {{score}}.",
+    "payout_preview_random": "Random order — positions will be assigned when the circle starts.",
+    "payout_preview_manual": "Manual order — you'll assign positions after members join."
   },
   "member_invite_sheet": {
     "title": "Add members",

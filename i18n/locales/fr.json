@@ -2954,7 +2954,17 @@
     "intro_title": "Qu'est-ce qu'un cercle ?",
     "intro_body": "Un cercle est un groupe où chacun contribue un montant fixe selon un calendrier, et les membres reçoivent à tour de rôle la totalité de la cagnotte.",
     "intro_steps": "Vous définirez le montant, la fréquence et inviterez des membres. La première contribution a lieu à la date de début.",
-    "intro_btn": "Compris"
+    "intro_btn": "Compris",
+    "reuse_chip": "Réutiliser la configuration de {{name}}",
+    "reuse_toast": "{{count}} paramètres réutilisés",
+    "cycle_dates_label": "Dates des cycles",
+    "cycle_date_format": "Cycle {{cycle}} : {{date}}",
+    "cycle_more": "+{{count}} de plus",
+    "payout_help_title": "Ordre des paiements",
+    "payout_help_body": "XnScore : les membres au score le plus élevé passent en premier.\nAléatoire : l'ordre est tiré au sort au démarrage du cercle.\nManuel : vous attribuez les positions après l'acceptation des membres.",
+    "payout_preview_xnscore": "Position déterminée par le XnScore. Votre score : {{score}}.",
+    "payout_preview_random": "Ordre aléatoire — les positions seront attribuées au démarrage du cercle.",
+    "payout_preview_manual": "Ordre manuel — vous attribuerez les positions après l'arrivée des membres."
   },
   "member_invite_sheet": {
     "title": "Ajouter des membres",

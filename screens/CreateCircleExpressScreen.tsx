@@ -29,6 +29,7 @@ import {
   SafeAreaView,
   Modal,
   Pressable,
+  Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -38,6 +39,12 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useCircles } from "../context/CirclesContext";
+import { useAuth } from "../context/AuthContext";
+import {
+  computeCycleDates,
+  formatDateForPreview,
+} from "../lib/circleSchedule";
+import { showToast } from "../components/Toast";
 import MemberInviteSheet, {
   InvitedContact,
 } from "../components/MemberInviteSheet";
@@ -101,6 +108,9 @@ export default function CreateCircleExpressScreen() {
   const { t } = useTranslation();
   const navigation = useTypedNavigation();
   const { myCircles, createCircle, networkUserIds } = useCircles();
+  // Bucket A — read xnScore for the payout-order preview text inside
+  // the Advanced expander. AuthContext exposes this on the user object.
+  const { user } = useAuth();
 
   // ── Smart defaults from the user's most recent circle ────────────────────
   // If they've created/joined before, copy amount + frequency + memberCount
@@ -237,6 +247,68 @@ export default function CreateCircleExpressScreen() {
     navigation.navigate(Routes.CreateCircleStart);
   };
 
+  // ── Bucket A — "Reuse {lastCircle.name}'s setup" 1-tap handler. ─────────
+  // Express already SEEDS each field from lastCircle on first render via
+  // useState initialisers, so on a cold open the form is mostly pre-
+  // filled. But if the user has touched ANY of these fields and then
+  // wants to start over from the previous setup, this chip restores all
+  // five reusable settings in one tap. The chip is hidden when
+  // lastCircle is null (new user) so it never sits empty.
+  const handleReuseLastSetup = () => {
+    if (!lastCircle) return;
+    // Suggested name (not the previous one verbatim — would duplicate).
+    setName(nameSuggestion);
+    setAmount(String(lastCircle.amount));
+    setMemberCount(lastCircle.memberCount);
+    // Keep the chip selection in sync. If the last circle's count isn't
+    // one of the quick chips, switch to custom mode and seed the text.
+    const isQuick = QUICK_MEMBER_COUNTS.includes(
+      lastCircle.memberCount as any,
+    );
+    setShowCustomCount(!isQuick);
+    setCustomCountText(isQuick ? "" : String(lastCircle.memberCount));
+    // Frequency, rotation, grace come straight from the last circle.
+    // startDate gets the smart-default for the inherited frequency
+    // unless the user has touched it (preserves an explicit choice).
+    setFrequency(seedFrequency);
+    if (!startDateTouched) setStartDate(nextStartDateFor(seedFrequency));
+    setRotationMethod(seedRotation);
+    setGracePeriodDays(seedGrace);
+    // Five settings were just restored (amount, memberCount, frequency,
+    // rotation, grace). Name is "suggested only" — not counted.
+    showToast(
+      t("create_circle_express.reuse_toast", { count: 5 }),
+      "success",
+    );
+  };
+
+  // Bucket A — rotation method help. Single Alert so the user sees the
+  // three options in one place. Matches the (?) help-icon pattern from
+  // Score Hub FeatureCard.
+  const handleShowRotationHelp = () => {
+    Alert.alert(
+      t("create_circle_express.payout_help_title"),
+      t("create_circle_express.payout_help_body"),
+    );
+  };
+
+  // Bucket A — live cycle-date preview. Recomputes on every render of
+  // the form state that feeds it (frequency, startDate, memberCount).
+  // Cheap — just date arithmetic in the helper. We slice to the first
+  // 3 here so the chip strip stays on one line; the "+ N more" footer
+  // exposes the remainder.
+  const cycleDates = useMemo(
+    () =>
+      computeCycleDates({
+        startDate,
+        frequency,
+        memberCount,
+      }),
+    [startDate, frequency, memberCount],
+  );
+  const previewCycles = cycleDates.slice(0, 3);
+  const remainingCycles = Math.max(0, cycleDates.length - previewCycles.length);
+
   // ── Validation ──────────────────────────────────────────────────────────
   const numericAmount = parseFloat(amount) || 0;
   const isValid =
@@ -325,6 +397,29 @@ export default function CreateCircleExpressScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Bucket A — Reuse-last-setup chip. Visible only when the
+              user has a previous circle to base the new one on. One
+              tap restores amount/memberCount/frequency/rotation/grace
+              and seeds a "{prev} 2" name suggestion. */}
+          {lastCircle ? (
+            <TouchableOpacity
+              onPress={handleReuseLastSetup}
+              style={styles.reuseChip}
+              accessibilityRole="button"
+              accessibilityLabel={t("create_circle_express.reuse_chip", {
+                name: lastCircle.name,
+              })}
+            >
+              <Ionicons name="copy-outline" size={16} color="#00C6AE" />
+              <Text style={styles.reuseChipText}>
+                {t("create_circle_express.reuse_chip", {
+                  name: lastCircle.name,
+                })}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color="#00C6AE" />
+            </TouchableOpacity>
+          ) : null}
+
           {/* ── Name ───────────────────────────────────────────────────── */}
           <View style={styles.field}>
             <Text style={styles.label}>
@@ -478,6 +573,41 @@ export default function CreateCircleExpressScreen() {
             ) : null}
           </View>
 
+          {/* Bucket A — Live cycle-date preview. Shows the first 3
+              cycles + "+ N more" so the user sees the consequence of
+              their frequency + start date + member count picks before
+              hitting Create. Visible whether Advanced is collapsed or
+              not, because the dates are exactly what the user is
+              committing to. */}
+          {previewCycles.length > 0 ? (
+            <View style={styles.field}>
+              <Text style={styles.label}>
+                {t("create_circle_express.cycle_dates_label")}
+              </Text>
+              <View style={styles.cyclePreviewRow}>
+                {previewCycles.map((d, i) => (
+                  <View key={i} style={styles.cycleChip}>
+                    <Text style={styles.cycleChipText}>
+                      {t("create_circle_express.cycle_date_format", {
+                        cycle: i + 1,
+                        date: formatDateForPreview(d),
+                      })}
+                    </Text>
+                  </View>
+                ))}
+                {remainingCycles > 0 ? (
+                  <View style={[styles.cycleChip, styles.cycleChipMore]}>
+                    <Text style={styles.cycleChipMoreText}>
+                      {t("create_circle_express.cycle_more", {
+                        count: remainingCycles,
+                      })}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          ) : null}
+
           {/* ── Add members ────────────────────────────────────────────── */}
           <View style={styles.field}>
             <Text style={styles.label}>
@@ -610,9 +740,29 @@ export default function CreateCircleExpressScreen() {
 
               {/* Rotation method */}
               <View style={styles.field}>
-                <Text style={styles.label}>
-                  {t("create_circle_express.label_rotation")}
-                </Text>
+                {/* Bucket A — (?) help icon next to the rotation label
+                    opens a single Alert explaining all three options.
+                    Same pattern Score Hub uses for its score-family
+                    explainers. */}
+                <View style={styles.labelRow}>
+                  <Text style={styles.label}>
+                    {t("create_circle_express.label_rotation")}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={handleShowRotationHelp}
+                    accessibilityRole="button"
+                    accessibilityLabel={t(
+                      "create_circle_express.payout_help_title",
+                    )}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Ionicons
+                      name="help-circle-outline"
+                      size={16}
+                      color="#6B7280"
+                    />
+                  </TouchableOpacity>
+                </View>
                 <View style={styles.chipRow}>
                   {(["xnscore", "random", "manual"] as Rotation[]).map((r) => {
                     const isSel = rotationMethod === r;
@@ -634,6 +784,19 @@ export default function CreateCircleExpressScreen() {
                     );
                   })}
                 </View>
+                {/* Bucket A — Payout-order preview. Tells the user
+                    what their pick means for cycle 1. The xnscore
+                    branch includes the user's actual XnScore so the
+                    "highest goes first" rule becomes concrete. */}
+                <Text style={styles.payoutPreview}>
+                  {rotationMethod === "xnscore"
+                    ? t("create_circle_express.payout_preview_xnscore", {
+                        score: user?.xnScore ?? 0,
+                      })
+                    : rotationMethod === "random"
+                      ? t("create_circle_express.payout_preview_random")
+                      : t("create_circle_express.payout_preview_manual")}
+                </Text>
               </View>
 
               {/* Grace period */}
@@ -796,12 +959,78 @@ const styles = StyleSheet.create({
     color: "#0A2342",
     marginBottom: 8,
   },
+  // ----- Bucket A — label row (label + help icon) -----
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
   required: { color: "#DC2626" },
   helpText: {
     fontSize: 11,
     color: "#6B7280",
     marginTop: 6,
     fontStyle: "italic",
+  },
+  // ----- Bucket A — Reuse-last-setup chip -----
+  // Sits above the Name field, tinted accentTeal so it reads as a
+  // one-tap shortcut rather than a section header.
+  reuseChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: "#F0FDFB",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    marginBottom: 18,
+  },
+  reuseChipText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0A2342",
+    flex: 1,
+  },
+  // ----- Bucket A — Live cycle-date preview -----
+  cyclePreviewRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  cycleChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: "#EEF2FF",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+  },
+  cycleChipText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#4F46E5",
+  },
+  cycleChipMore: {
+    backgroundColor: "#F3F4F6",
+    borderColor: "#E5E7EB",
+  },
+  cycleChipMoreText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+  // ----- Bucket A — Payout-order preview text -----
+  // Plain, italicised line beneath the rotation chips. Italic matches
+  // the helpText pattern already in the form (member-math hint).
+  payoutPreview: {
+    fontSize: 12,
+    color: "#374151",
+    fontStyle: "italic",
+    marginTop: 10,
+    lineHeight: 17,
   },
 
   input: {
