@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
   Text,
@@ -19,6 +20,7 @@ import { useXnScore } from "../context/XnScoreContext";
 import { useWallet } from "../context/WalletContext";
 import { usePayment } from "../context/PaymentContext";
 import { invalidateCircleDetailCache } from "../hooks/useCircleDetail";
+import { useEventTracker } from "../hooks/useEventTracker";
 import { useCurrency, CURRENCIES } from "../context/CurrencyContext";
 import { CurrencySelector, QuickCurrencyPicker } from "../components/CurrencySelector";
 import { ExchangeRateDisplay, FXRiskWarning } from "../components/ExchangeRateDisplay";
@@ -115,6 +117,21 @@ export default function MakeContributionScreen() {
   const [showCurrencyOptions, setShowCurrencyOptions] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
+  // Has the user manually changed the payment method this session?
+  // If so, the auto-selector below stops overriding their choice when
+  // the amount changes (e.g. tapping a partial chip).
+  const userPickedMethodRef = useRef(false);
+  // AsyncStorage keys — kept at module-scope-ish for the cache busts.
+  const LAST_METHOD_KEY = "@tandaxn_last_used_payment_method";
+  const lastPartialKey = `@tandaxn_last_contribution_amount_${circleId}`;
+  const COACH_KEY = "@tandaxn_make_contribution_coach_seen_v1";
+
+  // Telemetry tracker. opened event is ref-guarded so StrictMode double-
+  // mount doesn't double-emit; the other events fire on their natural
+  // interaction triggers.
+  const { track } = useEventTracker();
+  const openedTrackedRef = useRef(false);
+
   // Re-sync the payment-methods list whenever this screen comes back
   // into focus — covers the case where the user tapped "Add a card",
   // went to LinkedAccounts, added one, and returned. syncRemote stays
@@ -130,6 +147,71 @@ export default function MakeContributionScreen() {
       refreshPaymentMethods({ syncRemote: false }).catch(() => undefined);
     }, [refreshPaymentMethods])
   );
+
+  // First-visit coach mark. AsyncStorage-gated per user. Auto-dismiss
+  // after 4 s. The interaction with the Confirm button (handleConfirm
+  // Payment) also clears the tip — see the wrapped onPress below.
+  const [showCoach, setShowCoach] = useState(false);
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    coachCheckedRef.current = true;
+    let cancelled = false;
+    AsyncStorage.getItem(COACH_KEY)
+      .then((v) => {
+        if (!cancelled && !v) setShowCoach(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  useEffect(() => {
+    if (!showCoach) return;
+    const tid = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(tid);
+    // dismissCoach is stable in practice; omit from deps to avoid restarting the timer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCoach]);
+  const dismissCoach = () => {
+    setShowCoach(false);
+    AsyncStorage.setItem(COACH_KEY, "1").catch(() => undefined);
+  };
+
+  // C.2 — Hydrate the partial amount from the user's last contribution
+  // to this circle, when partial contributions are allowed. Skipped
+  // silently if the flag is off, the circle isn't found, or no prior
+  // value was saved.
+  const partialHydratedRef = useRef(false);
+  useEffect(() => {
+    if (partialHydratedRef.current) return;
+    if (!circle) return;
+    const allows =
+      !!(circle as any)?.allowPartialContributions && !circle.beneficiaryName;
+    if (!allows) {
+      partialHydratedRef.current = true;
+      return;
+    }
+    partialHydratedRef.current = true;
+    let cancelled = false;
+    AsyncStorage.getItem(lastPartialKey)
+      .then((raw) => {
+        if (cancelled || !raw) return;
+        const parsed = Number(raw);
+        const full = circle.amount || 0;
+        if (Number.isFinite(parsed) && parsed > 0 && parsed <= full) {
+          // 100 % stays as null (the "no override" state) so the chip
+          // for 100 % stays the visible active default.
+          setCustomAmount(parsed === full ? null : parsed);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // We only hydrate once per mount; circle.id is stable for the screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [circle?.id]);
 
   // Merge wallet option with saved Stripe payment methods
   const paymentMethods: PaymentMethod[] = useMemo(() => {
@@ -158,6 +240,54 @@ export default function MakeContributionScreen() {
     return getExchangeRate(paymentCurrency, circleCurrency);
   }, [paymentCurrency, circleCurrency, isCrossBorder]);
 
+  // C.1 — Auto-select the best payment method on mount and whenever
+  // the wallet's covered-status changes (e.g. user picked a smaller
+  // partial chip). Manual user picks win — `userPickedMethodRef`
+  // freezes the auto-selector after the first user-driven setSelectedMethod.
+  // Wallet > last-used card > wallet fallback. The wallet fallback
+  // path intentionally re-selects wallet even when it's short — the
+  // insufficient-funds warning chip surfaces the issue.
+  useEffect(() => {
+    if (userPickedMethodRef.current) return;
+    // `hasEnoughBalance` and `stripePaymentMethods` referenced here are
+    // closed over the most recent render — the dep array re-runs the
+    // effect when either changes.
+    let cancelled = false;
+    (async () => {
+      if (hasEnoughBalance) {
+        if (!cancelled) setSelectedMethod("wallet");
+        return;
+      }
+      const activeCards = (stripePaymentMethods || []).filter(
+        (pm: any) => pm.status === "active",
+      );
+      if (activeCards.length === 0) {
+        if (!cancelled) setSelectedMethod("wallet");
+        return;
+      }
+      try {
+        const lastId = await AsyncStorage.getItem(LAST_METHOD_KEY);
+        if (cancelled) return;
+        const lastStillActive = lastId
+          ? activeCards.find((pm: any) =>
+              (pm.stripePaymentMethodId || pm.id) === lastId,
+            )
+          : null;
+        const pick = lastStillActive ?? activeCards[0];
+        setSelectedMethod(pick.stripePaymentMethodId || pick.id);
+      } catch {
+        if (!cancelled) {
+          setSelectedMethod(
+            activeCards[0].stripePaymentMethodId || activeCards[0].id,
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasEnoughBalance, stripePaymentMethods]);
+
   // Partial-contribution support. Gated on a per-circle flag; the
   // backend hasn't shipped this column yet, so the gate is currently
   // always false in prod and the UI is inert. When the column lands as
@@ -175,6 +305,67 @@ export default function MakeContributionScreen() {
   // Calculate amount in payment currency. `effectiveCircleAmount` is
   // either the full amount or the partial slice the user picked.
   const effectiveCircleAmount = customAmount ?? fullCircleAmount;
+
+  // `opened` telemetry — ref-guarded against StrictMode double-mount.
+  // Fires once per real screen open; circle metadata may be present
+  // immediately (cached) or arrive on a later render.
+  useEffect(() => {
+    if (openedTrackedRef.current) return;
+    if (!circle) return;
+    openedTrackedRef.current = true;
+    track({
+      eventType: "contribution_opened",
+      eventCategory: "savings",
+      eventAction: "opened",
+      eventLabel: circleId,
+      eventValue: {
+        circleId,
+        amount: fullCircleAmount,
+        hasPartial: allowsPartial,
+      },
+    });
+  }, [track, circle, circleId, fullCircleAmount, allowsPartial]);
+
+  // Wrapper around setSelectedMethod that flags user-driven selection
+  // (suppresses the auto-selector on subsequent amount changes) and
+  // emits the `payment_method_selected` event.
+  const onUserPickMethod = (methodId: string) => {
+    userPickedMethodRef.current = true;
+    const isWallet = methodId === "wallet";
+    track({
+      eventType: "contribution_payment_method_selected",
+      eventCategory: "savings",
+      eventAction: "payment_method_selected",
+      eventLabel: isWallet ? "wallet" : "card",
+      eventValue: {
+        circleId,
+        methodId,
+        type: isWallet ? "wallet" : "card",
+      },
+    });
+    setSelectedMethod(methodId);
+  };
+
+  // `partial_used` telemetry — fires on each chip tap that selects a
+  // non-100 % slice.
+  const onPickPartialChip = (pct: number) => {
+    const sliceAmount =
+      pct === 1 ? null : Math.round(fullCircleAmount * pct * 100) / 100;
+    setCustomAmount(sliceAmount);
+    if (pct !== 1) {
+      track({
+        eventType: "contribution_partial_used",
+        eventCategory: "savings",
+        eventAction: "partial_used",
+        eventLabel: `${Math.round(pct * 100)}%`,
+        eventValue: {
+          circleId,
+          percentage: Math.round(pct * 100),
+          amount: sliceAmount,
+        },
+      });
+    }
+  };
   const paymentAmount = useMemo(() => {
     if (!isCrossBorder) return effectiveCircleAmount;
     return convert(effectiveCircleAmount, circleCurrency, paymentCurrency);
@@ -339,6 +530,29 @@ export default function MakeContributionScreen() {
         // belt-and-suspenders guarantee.
         invalidateCircleDetailCache(circleId);
 
+        // Persist last-used method + last partial amount so the next
+        // visit can pre-select them. Fire-and-forget — never blocks the
+        // navigation the user just earned.
+        AsyncStorage.setItem(LAST_METHOD_KEY, "wallet").catch(() => undefined);
+        if (allowsPartial) {
+          AsyncStorage.setItem(
+            lastPartialKey,
+            String(effectiveCircleAmount),
+          ).catch(() => undefined);
+        }
+        track({
+          eventType: "contribution_completed",
+          eventCategory: "savings",
+          eventAction: "completed",
+          eventLabel: "wallet",
+          eventValue: {
+            circleId,
+            amount: effectiveCircleAmount,
+            paymentMethodType: "wallet",
+            wasPartial: customAmount !== null,
+          },
+        });
+
         navigation.navigate("ContributionSuccess", {
           circleId,
           amount: isCrossBorder ? paymentAmount : amount,
@@ -382,6 +596,30 @@ export default function MakeContributionScreen() {
         await processContribution(circleId, isOnTime, isEarly);
 
         invalidateCircleDetailCache(circleId);
+
+        // Persist last-used method (the actual Stripe id) + last
+        // partial amount for the auto-selector / pre-fill on next visit.
+        AsyncStorage.setItem(LAST_METHOD_KEY, selectedMethod).catch(
+          () => undefined,
+        );
+        if (allowsPartial) {
+          AsyncStorage.setItem(
+            lastPartialKey,
+            String(effectiveCircleAmount),
+          ).catch(() => undefined);
+        }
+        track({
+          eventType: "contribution_completed",
+          eventCategory: "savings",
+          eventAction: "completed",
+          eventLabel: "card",
+          eventValue: {
+            circleId,
+            amount: effectiveCircleAmount,
+            paymentMethodType: "card",
+            wasPartial: customAmount !== null,
+          },
+        });
 
         navigation.navigate("ContributionSuccess", {
           circleId,
@@ -462,9 +700,7 @@ export default function MakeContributionScreen() {
                         styles.partialChip,
                         isActive && styles.partialChipActive,
                       ]}
-                      onPress={() =>
-                        setCustomAmount(pct === 1 ? null : sliceAmount)
-                      }
+                      onPress={() => onPickPartialChip(pct)}
                       accessibilityRole="button"
                     >
                       <Text
@@ -625,7 +861,7 @@ export default function MakeContributionScreen() {
                     isSelected && styles.paymentMethodCardSelected,
                     insufficientBalance && styles.paymentMethodCardWarning,
                   ]}
-                  onPress={() => setSelectedMethod(method.id)}
+                  onPress={() => onUserPickMethod(method.id)}
                   disabled={!method.available}
                 >
                   <View style={[
@@ -777,6 +1013,23 @@ export default function MakeContributionScreen() {
 
       {/* Bottom Action */}
       <View style={styles.bottomBar}>
+        {/* First-visit coach mark — points down at the Confirm button.
+            AsyncStorage-gated so it only ever shows once per user.
+            Tapping either the tip or the Confirm button dismisses it. */}
+        {showCoach ? (
+          <TouchableOpacity
+            style={styles.coachTip}
+            onPress={dismissCoach}
+            accessibilityRole="button"
+            accessibilityLabel={t("make_contribution.coach_tip")}
+          >
+            <Ionicons name="arrow-down" size={14} color="#0A2342" />
+            <Text style={styles.coachTipText}>
+              {t("make_contribution.coach_tip")}
+            </Text>
+            <Ionicons name="close" size={14} color="#6B7280" />
+          </TouchableOpacity>
+        ) : null}
         <View style={styles.bottomBarRow}>
           <View style={styles.bottomSummary}>
             <Text style={styles.bottomLabel}>{t("make_contribution.bottom_total_amount")}</Text>
@@ -795,7 +1048,10 @@ export default function MakeContributionScreen() {
               styles.confirmButton,
               (isProcessing || isWalletBlocked) && styles.confirmButtonDisabled,
             ]}
-            onPress={handleConfirmPayment}
+            onPress={() => {
+              if (showCoach) dismissCoach();
+              handleConfirmPayment();
+            }}
             disabled={isProcessing || isWalletBlocked}
           >
             {isProcessing ? (
@@ -1239,6 +1495,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#00C6AE",
+  },
+  coachTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+    alignSelf: "center",
+    marginBottom: 8,
+  },
+  coachTipText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#0A2342",
   },
   balanceWarning: {
     flexDirection: "row",
