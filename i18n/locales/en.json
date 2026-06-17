@@ -5876,6 +5876,8 @@
     "header_score_hub_updated": "updated since last visit",
     "score_hub_icon_coach": "Your XnScore + 3 wellbeing scores live here.",
     "header_profile_a11y": "Open profile",
+    "header_profile_kyc_action": "KYC action needed",
+    "header_profile_complete_profile": "Complete your profile",
     "header_notifications_a11y": "Open notifications",
     "verify_banner_title": "Verify to send money",
     "verify_banner_body": "Quick ID check unlocks sending and receiving — takes 2 minutes.",

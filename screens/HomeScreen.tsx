@@ -10,6 +10,7 @@ import {
   SafeAreaView,
   StatusBar,
   Animated,
+  Image,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -28,6 +29,8 @@ import { useCircles, type Circle } from "../context/CirclesContext";
 import { useCircleNetBalance } from "../hooks/useCircleNetBalance";
 import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
 import { useScoreHubBadge } from "../hooks/useScoreHubBadge";
+import { useProfileIconBadge } from "../hooks/useProfileIconBadge";
+import { useProfile } from "../hooks/useProfile";
 import { useEventTracker } from "../hooks/useEventTracker";
 
 // ==========================================================================
@@ -395,6 +398,25 @@ export default function HomeScreen() {
   const scoreHubBadge = useScoreHubBadge();
 
   // ────────────────────────────────────────────────────────────────────
+  // Open profile Bucket A — entry-point signal.
+  // ────────────────────────────────────────────────────────────────────
+  // useProfile shares its 60-second cache with ProfileScreen and
+  // PersonalInfoScreen, so mounting it here costs nothing in extra
+  // round-trips. We need `profile.avatar_url` for the real-avatar
+  // render, and useProfileIconBadge re-reads the same shape to decide
+  // critical/attention/none.
+  const { profile: profileForIcon } = useProfile();
+  const profileIconBadge = useProfileIconBadge();
+  // Track Image load failures so the icon falls back to the
+  // person-circle-outline glyph rather than rendering a broken square.
+  // Reset to false whenever the URL changes — a successful re-upload
+  // should get another chance to render.
+  const [avatarLoadErrored, setAvatarLoadErrored] = useState(false);
+  useEffect(() => {
+    setAvatarLoadErrored(false);
+  }, [profileForIcon?.avatar_url]);
+
+  // ────────────────────────────────────────────────────────────────────
   // Bucket C — first-launch coach mark on the Score Hub icon.
   // ────────────────────────────────────────────────────────────────────
   // One-shot animated pulse (scale 1 → 1.06 → 1) + tooltip beneath the
@@ -682,14 +704,54 @@ export default function HomeScreen() {
             onPress={handleOpenProfile}
             style={styles.topBarIconBtn}
             accessibilityRole="button"
-            accessibilityLabel={t("home_screen.header_profile_a11y")}
+            accessibilityLabel={(() => {
+              const base = t("home_screen.header_profile_a11y");
+              // Priority — critical wins over attention. Same single-
+              // suffix convention as the Score Hub icon to keep screen-
+              // reader labels short.
+              if (profileIconBadge.urgency === "critical") {
+                return `${base}, ${t(
+                  "home_screen.header_profile_kyc_action",
+                )}`;
+              }
+              if (profileIconBadge.urgency === "attention") {
+                return `${base}, ${t(
+                  "home_screen.header_profile_complete_profile",
+                )}`;
+              }
+              return base;
+            })()}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Ionicons
-              name="person-circle-outline"
-              size={24}
-              color={colors.primaryNavy}
-            />
+            <View style={styles.profileIconWrap}>
+              {/* Open profile Bucket A — render the real avatar when
+                  useProfile has it. Falls back to person-circle-outline
+                  when the URL is null/missing OR the Image fails to
+                  load (handled by avatarLoadErrored). */}
+              {profileForIcon?.avatar_url && !avatarLoadErrored ? (
+                <Image
+                  source={{ uri: profileForIcon.avatar_url }}
+                  style={styles.profileAvatarImage}
+                  onError={() => setAvatarLoadErrored(true)}
+                />
+              ) : (
+                <Ionicons
+                  name="person-circle-outline"
+                  size={24}
+                  color={colors.primaryNavy}
+                />
+              )}
+              {profileIconBadge.urgency !== "none" ? (
+                <View
+                  style={[
+                    styles.profileBadge,
+                    profileIconBadge.urgency === "critical"
+                      ? styles.profileBadgeCritical
+                      : styles.profileBadgeAttention,
+                  ]}
+                />
+              ) : null}
+            </View>
           </TouchableOpacity>
 
           <View style={{ flex: 1 }} />
@@ -1719,6 +1781,40 @@ const styles = StyleSheet.create({
     backgroundColor: "#EF4444",
   },
   scoreHubBadgeAttention: {
+    backgroundColor: "#F59E0B",
+  },
+  // ----- Open profile Bucket A — Profile icon avatar + badge -----
+  // Mirror of scoreHubIconWrap/scoreHubBadge so the two top-bar icons
+  // share dimensions and badge slot. Styles are duplicated rather than
+  // shared so a future change to one badge doesn't accidentally drag
+  // the other along.
+  profileIconWrap: {
+    position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  profileAvatarImage: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.screenBg,
+  },
+  profileBadge: {
+    position: "absolute",
+    top: -2,
+    right: -3,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: colors.cardBg,
+  },
+  profileBadgeCritical: {
+    backgroundColor: "#EF4444",
+  },
+  profileBadgeAttention: {
     backgroundColor: "#F59E0B",
   },
   // ----- Bucket C — first-launch coach mark tooltip -----
