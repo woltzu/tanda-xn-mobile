@@ -27,6 +27,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 type PayoutReceivedNavProp = StackNavigationProp<RootStackParamList>;
 type PayoutReceivedRouteProp = RouteProp<RootStackParamList, "PayoutReceived">;
@@ -39,10 +40,16 @@ export default function PayoutReceivedScreen() {
   const { t } = useTranslation();
   const { payoutId, circleId, amount, currency } = route.params;
   const { circles, myCircles, browseCircles } = useCircles();
+  const { track } = useEventTracker();
 
   const scale = useRef(new Animated.Value(0.85)).current;
   const fade = useRef(new Animated.Value(0)).current;
   const dismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Distinguishes auto-dismiss (timer fired) from explicit user
+  // dismiss (close button / outside-tap / route to wallet/circle) in
+  // telemetry. We only want one dismiss event per modal lifetime.
+  const dismissTrackedRef = useRef(false);
+  const openTrackedRef = useRef(false);
 
   const circle = [...circles, ...myCircles, ...browseCircles].find(
     (c) => c.id === circleId,
@@ -53,6 +60,20 @@ export default function PayoutReceivedScreen() {
   const amountDisplay = `${symbol}${amount.toFixed(2)}${suffix}`;
 
   useEffect(() => {
+    // Fire the `received_screen_opened` event once per mount. The
+    // realtime/push-tap upstream may also fire `notification_received`
+    // — those two events together let analytics dedupe the funnel.
+    if (!openTrackedRef.current) {
+      openTrackedRef.current = true;
+      track({
+        eventType: "payout_received_screen_opened",
+        eventCategory: "savings",
+        eventAction: "received_screen_opened",
+        eventLabel: circleId,
+        eventValue: { circleId, amount, payoutId },
+      });
+    }
+
     Animated.parallel([
       Animated.spring(scale, {
         toValue: 1,
@@ -68,7 +89,10 @@ export default function PayoutReceivedScreen() {
     ]).start();
 
     dismissRef.current = setTimeout(() => {
-      handleDismiss();
+      // Mark this as "auto" so the dismiss event distinguishes timer
+      // from user gesture.
+      trackDismiss("auto");
+      doDismiss();
     }, AUTO_DISMISS_MS);
 
     return () => {
@@ -79,6 +103,25 @@ export default function PayoutReceivedScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const trackDismiss = (reason: "auto" | "close" | "view_wallet" | "view_circle") => {
+    if (dismissTrackedRef.current) return;
+    dismissTrackedRef.current = true;
+    track({
+      eventType: "payout_received_screen_dismissed",
+      eventCategory: "savings",
+      eventAction: "received_screen_dismissed",
+      eventLabel: reason,
+      eventValue: { circleId, amount, payoutId, reason },
+    });
+  };
+
+  const doDismiss = () => {
+    cancelDismissTimer();
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  };
+
   const cancelDismissTimer = () => {
     if (dismissRef.current) {
       clearTimeout(dismissRef.current);
@@ -87,13 +130,12 @@ export default function PayoutReceivedScreen() {
   };
 
   const handleDismiss = () => {
-    cancelDismissTimer();
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    }
+    trackDismiss("close");
+    doDismiss();
   };
 
   const handleViewWallet = () => {
+    trackDismiss("view_wallet");
     cancelDismissTimer();
     // Wallet is the user's hub for the freshly-credited balance.
     // navigate (not replace) so back returns to whatever surface they
@@ -102,6 +144,7 @@ export default function PayoutReceivedScreen() {
   };
 
   const handleViewCircle = () => {
+    trackDismiss("view_circle");
     cancelDismissTimer();
     navigation.replace("CircleDetail", { circleId });
   };

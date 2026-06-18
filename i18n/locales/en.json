@@ -2,6 +2,8 @@
   "payout": {
     "notification_title": "Payout received!",
     "notification_body": "You received ${{amount}} from {{circle_name}}.",
+    "reminder_title": "Your payout arrives tomorrow!",
+    "reminder_body": "You'll receive ${{amount}} from {{circle_name}}.",
     "received_title": "🎉 Payout received!",
     "received_amount": "Amount",
     "received_from": "From",
@@ -635,6 +637,7 @@
     "section_rate_alerts": "Rate Alerts",
     "rate_alert_when": "Alert when {{direction}} {{target}}",
     "rate_alert_now": "Now: {{value}}",
+    "payout_coach_tip": "This is your payout from {{circle_name}}. Withdraw or save it.",
     "section_recent_activity": "Recent Activity",
     "see_all": "See All",
     "empty_transactions": "No transactions yet",

@@ -23,9 +23,11 @@ import { useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { navigationRef } from "../lib/navigation";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 export default function PayoutListener() {
   const { user } = useAuth();
+  const { track } = useEventTracker();
 
   useEffect(() => {
     if (!user?.id) return;
@@ -53,10 +55,22 @@ export default function PayoutListener() {
           // user-perceptible side, and the user can find the row in
           // the activity feed.
           if (!navigationRef.isReady()) return;
+          const amountNumeric = Number(row.amount ?? 0);
+          track({
+            eventType: "payout_notification_received",
+            eventCategory: "savings",
+            eventAction: "notification_received",
+            eventLabel: "realtime",
+            eventValue: {
+              circleId: String(row.circle_id),
+              amount: amountNumeric,
+              source: "realtime",
+            },
+          });
           navigationRef.navigate("PayoutReceived", {
             payoutId: String(row.id),
             circleId: String(row.circle_id),
-            amount: Number(row.amount ?? 0),
+            amount: amountNumeric,
             currency: row.currency ?? "USD",
           });
         },
@@ -66,7 +80,7 @@ export default function PayoutListener() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [user?.id, track]);
 
   return null;
 }

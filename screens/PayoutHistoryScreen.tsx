@@ -7,7 +7,7 @@
 // corresponding CircleDetail.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -24,6 +24,7 @@ import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { usePayouts } from "../hooks/usePayouts";
 import type { Payout } from "../services/PayoutService";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 type Nav = StackNavigationProp<RootStackParamList>;
 
@@ -51,10 +52,20 @@ export default function PayoutHistoryScreen() {
   const navigation = useNavigation<Nav>();
   const { t } = useTranslation();
   const { payouts, isLoading, loadUserPayouts } = usePayouts();
+  const { track } = useEventTracker();
+  const openedTrackedRef = useRef(false);
 
   useEffect(() => {
+    if (!openedTrackedRef.current) {
+      openedTrackedRef.current = true;
+      track({
+        eventType: "payout_history_opened",
+        eventCategory: "savings",
+        eventAction: "history_opened",
+      });
+    }
     loadUserPayouts().catch(() => undefined);
-  }, [loadUserPayouts]);
+  }, [loadUserPayouts, track]);
 
   // Group by circle; sort each group by date desc; sort groups by the
   // most-recent payout in each group (so the "freshest" circle is on top).

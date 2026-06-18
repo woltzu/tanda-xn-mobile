@@ -30,10 +30,17 @@ import {
 import { useKYCGate } from "../components/KYCGate";
 import { useGoalActions } from "../hooks/useGoalActions";
 import { useCircleNetBalance } from "../hooks/useCircleNetBalance";
+import { useAuth } from "../context/AuthContext";
+import { useCircles } from "../context/CirclesContext";
+import { supabase } from "../lib/supabase";
 
 // P1 coach-mark gate. v1 because we expect the screen layout to keep
 // drifting — a future redesign can bump this to v2 to re-show the tour.
 const WALLET_COACH_SEEN_KEY = "@tandaxn_wallet_coach_seen_v1";
+// Bucket C of the receive-payout review — distinct gate so the
+// payout-specific tip only fires after the user actually has a payout
+// to point at.
+const WALLET_PAYOUT_COACH_KEY = "@tandaxn_wallet_payout_coach_seen_v1";
 
 type WalletScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -184,6 +191,56 @@ export default function WalletScreen() {
     } catch {
       /* best-effort */
     }
+  };
+
+  // Payout-specific coach mark. Only fires when (a) the user has at
+  // least one completed circle_payouts row AND (b) they haven't seen
+  // the tip yet. Auto-dismiss after 4 s or on tap. The lookup query is
+  // bounded to limit(1) so it's cheap.
+  const { user } = useAuth();
+  const { myCircles } = useCircles();
+  const [payoutCoachVisible, setPayoutCoachVisible] = useState(false);
+  const [payoutCoachCircleName, setPayoutCoachCircleName] = useState<string>("");
+  const payoutCoachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (payoutCoachCheckedRef.current) return;
+    if (!user?.id) return;
+    payoutCoachCheckedRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(WALLET_PAYOUT_COACH_KEY);
+        if (cancelled || seen) return;
+        const { data, error } = await supabase
+          .from("circle_payouts")
+          .select("id, circle_id")
+          .eq("recipient_id", user.id)
+          .eq("status", "completed")
+          .order("actual_date", { ascending: false })
+          .limit(1);
+        if (cancelled || error || !data || data.length === 0) return;
+        const row = data[0] as { id: string; circle_id: string };
+        const matchingCircle = myCircles.find((c) => c.id === row.circle_id);
+        setPayoutCoachCircleName(matchingCircle?.name ?? "");
+        setPayoutCoachVisible(true);
+      } catch {
+        /* best-effort */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, myCircles]);
+  useEffect(() => {
+    if (!payoutCoachVisible) return;
+    const tid = setTimeout(() => dismissPayoutCoach(), 4000);
+    return () => clearTimeout(tid);
+    // dismissPayoutCoach is stable; intentionally omitted from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payoutCoachVisible]);
+  const dismissPayoutCoach = () => {
+    setPayoutCoachVisible(false);
+    AsyncStorage.setItem(WALLET_PAYOUT_COACH_KEY, "1").catch(() => undefined);
   };
   const handleCoachNext = () => {
     if (coachStep >= 2) {
@@ -635,6 +692,28 @@ export default function WalletScreen() {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{t("wallet.section_recent_activity")}</Text>
             </View>
+
+            {/* Payout-specific coach mark. Surfaces once after the user
+                receives their first payout. Tap dismisses; otherwise
+                auto-fades after 4 s (handled in the useEffect). */}
+            {payoutCoachVisible ? (
+              <TouchableOpacity
+                style={styles.payoutCoachTip}
+                onPress={dismissPayoutCoach}
+                accessibilityRole="button"
+                accessibilityLabel={t("wallet.payout_coach_tip", {
+                  circle_name: payoutCoachCircleName || "your circle",
+                })}
+              >
+                <Ionicons name="information-circle" size={16} color="#065F46" />
+                <Text style={styles.payoutCoachTipText}>
+                  {t("wallet.payout_coach_tip", {
+                    circle_name: payoutCoachCircleName || "your circle",
+                  })}
+                </Text>
+                <Ionicons name="close" size={14} color="#6B7280" />
+              </TouchableOpacity>
+            ) : null}
 
             {/* P1.2 skeleton loader. Three placeholder rows fill the
                 space while the first useRecentTransfers fetch is in
@@ -1152,6 +1231,24 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: "center",
     paddingVertical: 32,
+  },
+  payoutCoachTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    marginBottom: 12,
+  },
+  payoutCoachTipText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#065F46",
   },
   payoutHistoryRow: {
     flexDirection: "row",
