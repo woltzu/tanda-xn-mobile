@@ -4447,7 +4447,10 @@
     "request_pill": "Demander",
     "awaiting_target_label": "En attente de la réponse de {{name}}",
     "awaiting_elder_label": "En attente d'approbation des Aînés",
-    "awaiting_cooling_off_label": "Période de réflexion en cours"
+    "awaiting_cooling_off_label": "Période de réflexion en cours",
+    "skip_cooling_off": "Ignorer la période de réflexion",
+    "skip_cooling_off_hint": "Les deux parties doivent accepter d'ignorer la période de réflexion.",
+    "coach_tab_tip": "Touchez ici quand quelqu'un veut échanger avec vous."
   },
   "swap": {
     "notification_title_pending_target": "Nouvelle demande d'échange",

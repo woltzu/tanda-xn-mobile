@@ -13,6 +13,8 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
+  Switch,
+  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -26,8 +28,19 @@ import {
   useSwapActions,
   useSwapHistory,
 } from "../hooks/usePositionSwap";
+import {
+  usePositionSwapDashboard,
+  invalidatePositionSwapDashboardCache,
+} from "../hooks/usePositionSwapDashboard";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import { useEventTracker } from "../hooks/useEventTracker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+// Bucket C of the position-swap review — one-shot coach mark pointing at
+// the middle "Requests" tab on first visit. Bump to v2 if the tab strip
+// gets restructured.
+const SWAP_TAB_COACH_KEY = "@tandaxn_position_swap_tab_coach_seen_v1";
 
 const COLORS = {
   navy: "#0A2342",
@@ -114,14 +127,21 @@ function SwapRequestSheet({
   requireElderApproval: boolean;
   loading: boolean;
   onCancel: () => void;
-  onConfirm: (reason: string) => void;
+  onConfirm: (reason: string, fastTrack: boolean) => void;
 }) {
   const { t } = useTranslation();
   const [reason, setReason] = useState("");
-  // Reset the reason field every time the sheet is opened for a new target
-  // so the previous attempt's text doesn't leak across requests.
+  const [fastTrack, setFastTrack] = useState(false);
+  const [hintVisible, setHintVisible] = useState(false);
+  // Reset the reason field + fast-track toggle every time the sheet is
+  // opened for a new target so previous attempts don't leak across
+  // requests.
   useEffect(() => {
-    if (!visible) setReason("");
+    if (!visible) {
+      setReason("");
+      setFastTrack(false);
+      setHintVisible(false);
+    }
   }, [visible]);
 
   if (!target) return null;
@@ -168,6 +188,39 @@ function SwapRequestSheet({
               maxLength={280}
             />
 
+            {/* Skip cooling-off opt-in. Off by default — keeps the
+                anti-coercion default intact unless the user explicitly
+                opts in. Info icon toggles a short hint inline. */}
+            <View style={styles.fastTrackRow}>
+              <View style={styles.fastTrackLabelGroup}>
+                <Text style={styles.fastTrackLabel}>
+                  {t("position_swap.skip_cooling_off")}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setHintVisible((v) => !v)}
+                  hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("position_swap.skip_cooling_off_hint")}
+                >
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={16}
+                    color={COLORS.muted}
+                  />
+                </TouchableOpacity>
+              </View>
+              <Switch
+                value={fastTrack}
+                onValueChange={setFastTrack}
+                trackColor={{ false: "#E5E7EB", true: COLORS.teal }}
+              />
+            </View>
+            {hintVisible ? (
+              <Text style={styles.fastTrackHint}>
+                {t("position_swap.skip_cooling_off_hint")}
+              </Text>
+            ) : null}
+
             <View style={styles.sheetActions}>
               <TouchableOpacity
                 style={[styles.sheetBtn, styles.sheetBtnSecondary]}
@@ -180,7 +233,7 @@ function SwapRequestSheet({
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.sheetBtn, styles.sheetBtnPrimary]}
-                onPress={() => onConfirm(reason.trim())}
+                onPress={() => onConfirm(reason.trim(), fastTrack)}
                 disabled={loading}
               >
                 {loading ? (
@@ -253,6 +306,7 @@ export default function PositionSwapScreen() {
   const route = useRoute<RouteProp<{ params: RouteParams }, "params">>();
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { track } = useEventTracker();
   // Defensive: route.params can be undefined if the caller navigates
   // without a circleId. Fall back to empty so destructuring never throws.
   const { circleId } = route.params ?? ({} as RouteParams);
@@ -277,9 +331,54 @@ export default function PositionSwapScreen() {
     return () => clearInterval(id);
   }, []);
 
+  // First-visit coach mark — small tooltip pointing at the middle Requests
+  // tab. AsyncStorage-gated so it shows only once per device/install. Fades
+  // in on mount, auto-dismisses after 4s, or dismisses on tap.
+  const [tabCoachVisible, setTabCoachVisible] = useState(false);
+  const tabCoachOpacity = useRef(new Animated.Value(0)).current;
+  const tabCoachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (tabCoachCheckedRef.current) return;
+    tabCoachCheckedRef.current = true;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(SWAP_TAB_COACH_KEY);
+        if (seen) return;
+        setTabCoachVisible(true);
+        Animated.timing(tabCoachOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+      } catch {
+        // AsyncStorage failure → just don't show the coach. Not worth
+        // alerting on.
+      }
+    })();
+  }, [tabCoachOpacity]);
+  const dismissTabCoach = useCallback(() => {
+    Animated.timing(tabCoachOpacity, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setTabCoachVisible(false));
+    AsyncStorage.setItem(SWAP_TAB_COACH_KEY, "1").catch(() => undefined);
+  }, [tabCoachOpacity]);
+  useEffect(() => {
+    if (!tabCoachVisible) return;
+    const tid = setTimeout(() => dismissTabCoach(), 4000);
+    return () => clearTimeout(tid);
+  }, [tabCoachVisible, dismissTabCoach]);
+
+  // Bucket C — single aggregate RPC owns the read path once migration 191
+  // is applied. Until then `dashboard.available` is false and the legacy
+  // per-resource hooks below take over. Both paths are wired so the user
+  // doesn't see a difference either way.
+  const dashboard = usePositionSwapDashboard(circleId);
+
   const {
-    members,
-    currentPosition,
+    members: legacyMembers,
+    currentPosition: legacyPosition,
     loading: membersLoading,
     refetch: refetchMembers,
   } = useCircleMembersForSwap(circleId);
@@ -290,22 +389,40 @@ export default function PositionSwapScreen() {
   const requireElderApproval = swapConfig?.require_elder_approval === true;
 
   const {
-    requests: myRequests,
+    requests: legacyMyRequests,
     loading: myReqLoading,
     refetch: refetchMyRequests,
   } = useMySwapRequests();
 
   const {
-    requests: pendingRequests,
+    requests: legacyPendingRequests,
     loading: pendingLoading,
     refetch: refetchPending,
   } = usePendingSwapRequests();
 
   const {
-    history,
+    history: legacyHistory,
     loading: historyLoading,
     refetch: refetchHistory,
   } = useSwapHistory();
+
+  // Resolve the working set: dashboard wins when the RPC is live; otherwise
+  // the legacy hooks' data flows through unchanged.
+  const members = dashboard.available
+    ? dashboard.data?.members ?? []
+    : legacyMembers;
+  const currentPosition = dashboard.available
+    ? dashboard.data?.myPosition ?? null
+    : legacyPosition;
+  const myRequests = dashboard.available
+    ? dashboard.data?.myRequests ?? []
+    : legacyMyRequests;
+  const pendingRequests = dashboard.available
+    ? dashboard.data?.pendingRequests ?? []
+    : legacyPendingRequests;
+  const history = dashboard.available
+    ? dashboard.data?.history ?? []
+    : legacyHistory;
 
   const {
     createSwapRequest,
@@ -314,14 +431,24 @@ export default function PositionSwapScreen() {
     error: actionError,
   } = useSwapActions();
 
-  const loading = membersLoading || pendingLoading || historyLoading;
+  const loading =
+    (dashboard.available ? dashboard.isLoading : membersLoading) ||
+    pendingLoading ||
+    historyLoading;
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([refetchMembers(), refetchMyRequests(), refetchPending(), refetchHistory()]);
+    if (circleId) invalidatePositionSwapDashboardCache(circleId);
+    await Promise.all([
+      dashboard.refetch({ bypassCache: true }),
+      refetchMembers(),
+      refetchMyRequests(),
+      refetchPending(),
+      refetchHistory(),
+    ]);
     setRefreshing(false);
-  }, [refetchMembers, refetchMyRequests, refetchPending, refetchHistory]);
+  }, [circleId, dashboard, refetchMembers, refetchMyRequests, refetchPending, refetchHistory]);
 
   // Realtime — refetch all swap state when ANY row I'm part of changes
   // (as requester OR as target). The existing usePendingSwapRequests
@@ -332,6 +459,10 @@ export default function PositionSwapScreen() {
   useEffect(() => {
     if (!user?.id) return;
     const onChange = () => {
+      // Realtime invalidates the aggregate cache so the next refetch goes
+      // to the wire instead of returning a stale snapshot.
+      if (circleId) invalidatePositionSwapDashboardCache(circleId);
+      void dashboard.refetch({ bypassCache: true });
       void refetchMembers();
       void refetchMyRequests();
       void refetchPending();
@@ -370,7 +501,15 @@ export default function PositionSwapScreen() {
       supabase.removeChannel(requesterChannel);
       supabase.removeChannel(targetChannel);
     };
-  }, [user?.id, refetchMembers, refetchMyRequests, refetchPending, refetchHistory]);
+  }, [
+    user?.id,
+    circleId,
+    dashboard,
+    refetchMembers,
+    refetchMyRequests,
+    refetchPending,
+    refetchHistory,
+  ]);
 
   // Opens the swap-request bottom sheet. The actual RPC is fired from the
   // sheet's Confirm button via handleConfirmRequest below so the user can
@@ -384,16 +523,35 @@ export default function PositionSwapScreen() {
     setRequestTarget(member);
   };
 
-  const handleConfirmRequest = async (reason: string) => {
+  const handleConfirmRequest = async (reason: string, fastTrack: boolean) => {
     if (!requestTarget) return;
     const targetUserId = requestTarget.user_id;
-    const result = await createSwapRequest(circleId, targetUserId, reason || undefined);
+    const result = await createSwapRequest(
+      circleId,
+      targetUserId,
+      reason || undefined,
+      fastTrack,
+    );
     setRequestTarget(null);
     if (result) {
+      track({
+        eventType: "swap.requested",
+        eventCategory: "savings",
+        eventAction: "swap_requested",
+        eventLabel: "requester",
+        eventValue: {
+          circleId,
+          targetUserId,
+          role: "requester",
+          fastTrack,
+        },
+      });
+      if (circleId) invalidatePositionSwapDashboardCache(circleId);
       Alert.alert(
         t("position_swap.alert_success_title"),
         t("position_swap.alert_swap_sent"),
       );
+      void dashboard.refetch({ bypassCache: true });
       refetchMyRequests();
     } else if (actionError) {
       Alert.alert(t("position_swap.alert_error_title"), actionError);
@@ -403,7 +561,21 @@ export default function PositionSwapScreen() {
   const handleRespondToSwap = async (requestId: string, accept: boolean) => {
     const success = await respondToSwapRequest(requestId, accept);
     if (success) {
-      Alert.alert(t("position_swap.alert_success_title"), accept ? t("position_swap.alert_swap_accepted") : t("position_swap.alert_swap_declined"));
+      track({
+        eventType: accept ? "swap.accepted" : "swap.rejected",
+        eventCategory: "savings",
+        eventAction: accept ? "swap_accepted" : "swap_rejected",
+        eventLabel: "target",
+        eventValue: { circleId, requestId, role: "target" },
+      });
+      if (circleId) invalidatePositionSwapDashboardCache(circleId);
+      Alert.alert(
+        t("position_swap.alert_success_title"),
+        accept
+          ? t("position_swap.alert_swap_accepted")
+          : t("position_swap.alert_swap_declined"),
+      );
+      void dashboard.refetch({ bypassCache: true });
       refetchPending();
       refetchMembers();
     }
@@ -461,23 +633,43 @@ export default function PositionSwapScreen() {
           </View>
         </View>
 
-        {/* Tabs */}
-        <View style={styles.tabBar}>
-          {(["positions", "requests", "history"] as const).map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tabItem, activeTab === tab && styles.tabItemActive]}
-              onPress={() => setActiveTab(tab)}
+        {/* Tabs (wrapped so the coach tooltip can float above) */}
+        <View style={styles.tabBarWrap}>
+          <View style={styles.tabBar}>
+            {(["positions", "requests", "history"] as const).map((tab) => (
+              <TouchableOpacity
+                key={tab}
+                style={[styles.tabItem, activeTab === tab && styles.tabItemActive]}
+                onPress={() => setActiveTab(tab)}
+              >
+                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                  {tab === "positions"
+                    ? "Positions"
+                    : tab === "requests"
+                    ? `Requests (${pendingRequests.length})`
+                    : "History"}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {tabCoachVisible ? (
+            <Animated.View
+              style={[styles.tabCoachWrap, { opacity: tabCoachOpacity }]}
+              pointerEvents="box-none"
             >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                {tab === "positions"
-                  ? "Positions"
-                  : tab === "requests"
-                  ? `Requests (${pendingRequests.length})`
-                  : "History"}
-              </Text>
-            </TouchableOpacity>
-          ))}
+              <Pressable
+                onPress={dismissTabCoach}
+                style={styles.tabCoachTip}
+                accessibilityRole="button"
+                accessibilityLabel={t("position_swap.coach_tab_tip")}
+              >
+                <Text style={styles.tabCoachText}>
+                  {t("position_swap.coach_tab_tip")}
+                </Text>
+              </Pressable>
+              <View style={styles.tabCoachArrow} />
+            </Animated.View>
+          ) : null}
         </View>
 
         {/* POSITIONS TAB */}
@@ -1005,5 +1197,68 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#374151",
     lineHeight: 20,
+  },
+
+  // ─── Fast-track (skip cooling-off) row ───────────────────────────────
+  fastTrackRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: 4,
+  },
+  fastTrackLabelGroup: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  fastTrackLabel: { fontSize: 14, fontWeight: "600", color: COLORS.navy },
+  fastTrackHint: {
+    fontSize: 12,
+    color: COLORS.muted,
+    paddingHorizontal: 12,
+    marginTop: 6,
+    marginBottom: 12,
+    lineHeight: 16,
+  },
+
+  // ─── Tab strip coach mark ────────────────────────────────────────────
+  tabBarWrap: { position: "relative" },
+  tabCoachWrap: {
+    position: "absolute",
+    top: -56,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  tabCoachTip: {
+    maxWidth: 260,
+    backgroundColor: COLORS.navy,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  tabCoachText: { color: "#FFF", fontSize: 12, fontWeight: "700", textAlign: "center" },
+  tabCoachArrow: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 6,
+    borderRightWidth: 6,
+    borderTopWidth: 6,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: COLORS.navy,
+    marginTop: -1,
   },
 });

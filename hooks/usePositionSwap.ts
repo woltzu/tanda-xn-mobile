@@ -317,7 +317,8 @@ export function useSwapActions() {
   const createSwapRequest = async (
     circleId: string,
     targetUserId: string,
-    reason?: string
+    reason?: string,
+    fastTrack?: boolean
   ): Promise<string | null> => {
     setLoading(true);
     setError(null);
@@ -326,7 +327,8 @@ export function useSwapActions() {
       const requestId = await PositionSwapEngine.createSwapRequest(
         circleId,
         targetUserId,
-        reason
+        reason,
+        fastTrack
       );
       return requestId;
     } catch (err: any) {

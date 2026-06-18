@@ -4447,7 +4447,10 @@
     "request_pill": "Request swap",
     "awaiting_target_label": "Waiting for {{name}} to respond",
     "awaiting_elder_label": "Awaiting Elder approval",
-    "awaiting_cooling_off_label": "Cooling-off in progress"
+    "awaiting_cooling_off_label": "Cooling-off in progress",
+    "skip_cooling_off": "Skip cooling-off period",
+    "skip_cooling_off_hint": "Both parties must agree to skip the cooling-off period.",
+    "coach_tab_tip": "Tap here when someone wants to swap with you."
   },
   "swap": {
     "notification_title_pending_target": "New swap request",

@@ -295,16 +295,22 @@ export class PositionSwapEngine {
   static async createSwapRequest(
     circleId: string,
     targetUserId: string,
-    reason?: string
+    reason?: string,
+    fastTrack?: boolean
   ): Promise<string> {
     const userId = (await supabase.auth.getUser()).data.user?.id;
     if (!userId) throw new Error('Not authenticated');
 
+    // Bucket C of position-swap review (migration 192): `p_fast_track`
+    // stores `metadata.fast_track = true`, which `respond_to_swap_request`
+    // reads on accept to zero out the cooling-off window. Until 192 is
+    // applied, the DB function silently ignores the extra arg.
     const { data, error } = await supabase.rpc('create_swap_request', {
       p_circle_id: circleId,
       p_requester_id: userId,
       p_target_id: targetUserId,
-      p_reason: reason || null
+      p_reason: reason || null,
+      p_fast_track: fastTrack === true
     });
 
     if (error) throw error;
