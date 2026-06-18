@@ -705,6 +705,23 @@ export default function WalletScreen() {
               </View>
             )}
           </View>
+
+          {/* Payout history row — entry into the dedicated
+              PayoutHistoryScreen (Bucket B of receive-payout review). */}
+          <TouchableOpacity
+            style={styles.payoutHistoryRow}
+            onPress={() => navigation.navigate("PayoutHistory")}
+            accessibilityRole="button"
+            accessibilityLabel={t("payout_history.entry")}
+          >
+            <View style={styles.payoutHistoryIcon}>
+              <Ionicons name="cash-outline" size={20} color="#059669" />
+            </View>
+            <Text style={styles.payoutHistoryText}>
+              {t("payout_history.entry")}
+            </Text>
+            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -1135,6 +1152,31 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: "center",
     paddingVertical: 32,
+  },
+  payoutHistoryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  payoutHistoryIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#ECFDF5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  payoutHistoryText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#0A2342",
   },
   emptyText: {
     fontSize: 14,

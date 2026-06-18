@@ -731,45 +731,81 @@ export default function CircleDetailScreen() {
           instead of the contribution prompt. */}
       {isMember && !isOneTime ? (
         (() => {
+          // Priority order: payout-received (24h after) > your-turn >
+          // next-contribution. The first two are time-limited celebration
+          // states; the third is the default daily prompt.
+          const latestUserPayout = activities
+            .filter((a) => a.type === "payout" && a.isCurrentUser)
+            .sort(
+              (a, b) =>
+                new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+            )[0];
+          const payoutWithin24h =
+            !!latestUserPayout &&
+            Date.now() - new Date(latestUserPayout.timestamp).getTime() <
+              24 * 60 * 60 * 1000;
           const isYourTurn =
+            !payoutWithin24h &&
             !!circle.myPosition &&
             circle.myPosition === (circle.currentCycle ?? 1) &&
             !hasBeneficiary;
+
+          let label: string;
+          let iconName: "trophy" | "calendar" | "checkmark-circle";
+          let iconColor: string;
+          let iconBg: string;
+          let cardExtraStyle = undefined as any;
+
+          if (payoutWithin24h) {
+            label = t("circle_detail.hero_payout_received", {
+              amount: latestUserPayout!.amount ?? 0,
+              date: formatDate(latestUserPayout!.timestamp),
+            });
+            iconName = "checkmark-circle";
+            iconColor = "#065F46";
+            iconBg = "rgba(5,150,105,0.18)";
+            cardExtraStyle = styles.heroNextCardReceived;
+          } else if (isYourTurn) {
+            label = t("circle_detail.hero_your_turn", {
+              amount: circle.amount * circle.memberCount,
+              date: formatDate(getNextPayoutDate().toISOString()),
+            });
+            iconName = "trophy";
+            iconColor = "#92400E";
+            iconBg = "rgba(245,158,11,0.18)";
+            cardExtraStyle = styles.heroNextCardYourTurn;
+          } else {
+            label = t("circle_detail.hero_next_contribution", {
+              amount: circle.amount,
+              date: formatDate(getNextPayoutDate().toISOString()),
+              cycle: circle.currentCycle ?? 1,
+              total: circle.memberCount,
+            });
+            iconName = "calendar";
+            iconColor = "#0A2342";
+            iconBg = "rgba(0,198,174,0.15)";
+          }
+
           return (
             <TouchableOpacity
-              style={[styles.heroNextCard, isYourTurn && styles.heroNextCardYourTurn]}
+              style={[styles.heroNextCard, cardExtraStyle]}
               activeOpacity={0.85}
               onPress={() => {
+                if (payoutWithin24h) {
+                  // Post-payout card routes to the user's wallet —
+                  // the contribution prompt isn't relevant for 24 h.
+                  navigation.navigate("WalletMain" as never);
+                  return;
+                }
                 trackContributeTap("hero");
                 navigation.navigate("MakeContribution", { circleId });
               }}
               accessibilityRole="button"
             >
-              <View
-                style={[
-                  styles.heroNextIcon,
-                  isYourTurn && { backgroundColor: "rgba(245,158,11,0.18)" },
-                ]}
-              >
-                <Ionicons
-                  name={isYourTurn ? "trophy" : "calendar"}
-                  size={22}
-                  color={isYourTurn ? "#92400E" : "#0A2342"}
-                />
+              <View style={[styles.heroNextIcon, { backgroundColor: iconBg }]}>
+                <Ionicons name={iconName} size={22} color={iconColor} />
               </View>
-              <Text style={styles.heroNextText}>
-                {isYourTurn
-                  ? t("circle_detail.hero_your_turn", {
-                      amount: circle.amount * circle.memberCount,
-                      date: formatDate(getNextPayoutDate().toISOString()),
-                    })
-                  : t("circle_detail.hero_next_contribution", {
-                      amount: circle.amount,
-                      date: formatDate(getNextPayoutDate().toISOString()),
-                      cycle: circle.currentCycle ?? 1,
-                      total: circle.memberCount,
-                    })}
-              </Text>
+              <Text style={styles.heroNextText}>{label}</Text>
               <Ionicons name="chevron-forward" size={18} color="#0A2342" />
             </TouchableOpacity>
           );
@@ -850,6 +886,40 @@ export default function CircleDetailScreen() {
             </View>
           ) : null}
         </View>
+      ) : null}
+
+      {/* "Your payout in N cycles" countdown chip. Only when:
+            - user is a rotating-circle member with a known position
+            - they're NOT the current payer (the hero already says "your turn")
+            - their position is later in the rotation than the current cycle
+          Estimated date = today + (cycleSpan × frequencyMs). frequencyMs
+          uses the same period table as getNextPayoutDate. */}
+      {isMember && !isOneTime && !hasBeneficiary && circle.myPosition ? (
+        (() => {
+          const currentCycle = circle.currentCycle ?? 1;
+          const cyclesAway = circle.myPosition - currentCycle;
+          if (cyclesAway <= 0) return null;
+          const periodMs =
+            circle.frequency === "daily"
+              ? 24 * 60 * 60 * 1000
+              : circle.frequency === "weekly"
+              ? 7 * 24 * 60 * 60 * 1000
+              : circle.frequency === "biweekly"
+              ? 14 * 24 * 60 * 60 * 1000
+              : 30 * 24 * 60 * 60 * 1000;
+          const eta = new Date(Date.now() + cyclesAway * periodMs);
+          return (
+            <View style={styles.payoutCountdownChip}>
+              <Ionicons name="time-outline" size={14} color="#0A2342" />
+              <Text style={styles.payoutCountdownText}>
+                {t("circle_detail.payout_in_cycles", {
+                  cycles: cyclesAway,
+                  date: formatDate(eta.toISOString()),
+                })}
+              </Text>
+            </View>
+          );
+        })()
       ) : null}
 
       {/* Compact icon strip — Invite · Chat · Autopay · Mute. Demoted
@@ -1673,10 +1743,21 @@ export default function CircleDetailScreen() {
                     </>
                   )}
                   {activity.type === "payout" && (
-                    <>
-                      <Text style={styles.activityBold}>{activity.userName}</Text> received payout of{" "}
-                      <Text style={styles.activityBold}>${activity.amount?.toLocaleString()}</Text>
-                    </>
+                    activity.isCurrentUser ? (
+                      <Text style={[styles.activityBold, { color: "#059669" }]}>
+                        {t("circle_detail.activity_you_received", {
+                          amount: activity.amount?.toLocaleString() ?? "0",
+                        })}
+                      </Text>
+                    ) : (
+                      <Text>
+                        <Text style={styles.activityBold}>{activity.userName}</Text>
+                        {" "}
+                        {t("circle_detail.activity_received", {
+                          amount: activity.amount?.toLocaleString() ?? "0",
+                        })}
+                      </Text>
+                    )
                   )}
                   {activity.type === "joined" && (
                     <>
@@ -2352,6 +2433,28 @@ const styles = StyleSheet.create({
   heroNextCardYourTurn: {
     backgroundColor: "#FEF3C7",
     borderColor: "#F59E0B",
+  },
+  heroNextCardReceived: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "#059669",
+  },
+  payoutCountdownChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    backgroundColor: "#F5F7FA",
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  payoutCountdownText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#0A2342",
   },
   contributeHeroCta: {
     flexDirection: "row",

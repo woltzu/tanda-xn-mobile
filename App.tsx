@@ -28,6 +28,7 @@ import { WalletProvider } from "./context/WalletContext";
 import { CurrencyProvider } from "./context/CurrencyContext";
 import SplashScreen from "./screens/SplashScreen";
 import PayoutReceivedScreen from "./screens/PayoutReceivedScreen";
+import PayoutHistoryScreen from "./screens/PayoutHistoryScreen";
 import PayoutListener from "./components/PayoutListener";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import LoginScreen from "./screens/LoginScreen";
@@ -418,6 +419,7 @@ export type RootStackParamList = {
     amount: number;
     currency?: string;
   };
+  PayoutHistory: undefined;
   // Contribution Flow
   SelectCircleContribution: undefined;
   MakeContribution: { circleId: string };
@@ -1422,6 +1424,7 @@ function AppContent() {
               animation: "fade",
             }}
           />
+          <Stack.Screen name="PayoutHistory" component={PayoutHistoryScreen} />
           {/* Deep Link Invite Screens */}
           <Stack.Screen name="CircleInvite" component={CircleInviteScreen} />
           {/* Public frictionless join — reachable unauthenticated at /join/:inviteCode */}

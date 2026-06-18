@@ -8,6 +8,12 @@
     "received_view_wallet": "Voir le portefeuille",
     "received_view_circle": "Voir le cercle"
   },
+  "payout_history": {
+    "title": "Historique des paiements",
+    "entry": "Historique des paiements",
+    "empty": "Aucun paiement pour le moment.",
+    "cycle_label": "Cycle {{cycle}}"
+  },
   "first_launch": {
     "step_label_1": "Étape 1 sur 3 — Vérifiez votre e-mail",
     "step_label_2": "Étape 2 sur 3 — Rejoignez un cercle pour épargner entre proches",
@@ -3434,6 +3440,11 @@
   "circle_detail": {
     "hero_next_contribution": "Votre prochaine contribution : {{amount}} $ due le {{date}} · Cycle {{cycle}} sur {{total}}",
     "hero_your_turn": "🎉 C'est votre tour ! Vous recevrez {{amount}} $ le {{date}}.",
+    "hero_payout_received": "✅ Paiement reçu : {{amount}} $ le {{date}}",
+    "payout_in_cycles_one": "Votre paiement dans {{cycles}} cycle · ~{{date}}",
+    "payout_in_cycles_other": "Votre paiement dans {{cycles}} cycles · ~{{date}}",
+    "activity_you_received": "Vous avez reçu {{amount}} $",
+    "activity_received": "a reçu {{amount}} $",
     "coach_hero_tip": "Touchez Contribuer pour effectuer votre prochain paiement.",
     "activity_show_earlier_one": "Afficher plus ancien ({{count}} événement)",
     "activity_show_earlier_other": "Afficher plus anciens ({{count}} événements)",
