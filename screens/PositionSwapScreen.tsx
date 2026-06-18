@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -14,11 +14,14 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import {
   useCircleMembersForSwap,
+  useCoolingOffStatus,
   useMySwapRequests,
   usePendingSwapRequests,
   useSwapActions,
   useSwapHistory,
 } from "../hooks/usePositionSwap";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
 
 const COLORS = {
   navy: "#0A2342",
@@ -35,10 +38,59 @@ const COLORS = {
 
 type RouteParams = { circleId: string };
 
+// ─── Pending-confirmation card ──────────────────────────────────────────────
+// Rendered for outgoing swap requests where the target has accepted and we
+// (the requester) are now in the cooling-off window before being able to
+// confirm. The chip is driven by `useCoolingOffStatus` which ticks every
+// 60s; when the period ends, the chip turns green ("Ready to confirm").
+function PendingConfirmationCard({ request }: { request: any }) {
+  const { t } = useTranslation();
+  const { isComplete, timeRemaining } = useCoolingOffStatus(
+    request.cooling_off_ends_at ?? null
+  );
+  const targetName: string = request.target_name ?? t("position_swap.fallback_member");
+  return (
+    <View style={styles.card}>
+      <View style={styles.requestHeader}>
+        <Ionicons name="hourglass-outline" size={20} color={COLORS.teal} />
+        <Text style={styles.requestTitle}>
+          {t("position_swap.pending_confirmation_title", { name: targetName })}
+        </Text>
+      </View>
+      <Text style={styles.requestDetail}>
+        Position #{request.requester_position} ↔ Position #{request.target_position}
+      </Text>
+      <View
+        style={[
+          styles.coolingChip,
+          isComplete ? styles.coolingChipReady : styles.coolingChipWaiting,
+        ]}
+      >
+        <Ionicons
+          name={isComplete ? "checkmark-circle" : "time-outline"}
+          size={14}
+          color={isComplete ? "#065F46" : "#92400E"}
+        />
+        <Text
+          style={[
+            styles.coolingChipText,
+            { color: isComplete ? "#065F46" : "#92400E" },
+          ]}
+        >
+          {isComplete
+            ? t("position_swap.ready_to_confirm")
+            : t("position_swap.ready_in", { time: timeRemaining ?? "--" })}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export default function PositionSwapScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: RouteParams }, "params">>();
   const { t } = useTranslation();
+  const { user } = useAuth();
   // Defensive: route.params can be undefined if the caller navigates
   // without a circleId. Fall back to empty so destructuring never throws.
   const { circleId } = route.params ?? ({} as RouteParams);
@@ -85,6 +137,55 @@ export default function PositionSwapScreen() {
     await Promise.all([refetchMembers(), refetchMyRequests(), refetchPending(), refetchHistory()]);
     setRefreshing(false);
   }, [refetchMembers, refetchMyRequests, refetchPending, refetchHistory]);
+
+  // Realtime — refetch all swap state when ANY row I'm part of changes
+  // (as requester OR as target). The existing usePendingSwapRequests
+  // hook subscribes to target-side INSERTs, but a swap I created moves
+  // through `pending_target → pending_confirmation → completed` without
+  // me being the target — so without these two channels, my own outgoing
+  // requests would only update on pull-to-refresh.
+  useEffect(() => {
+    if (!user?.id) return;
+    const onChange = () => {
+      void refetchMembers();
+      void refetchMyRequests();
+      void refetchPending();
+      void refetchHistory();
+    };
+    const requesterChannel = supabase
+      .channel(`swap-requester:${user.id}`)
+      .on(
+        // supabase-js v2 narrows postgres_changes via a string-literal
+        // overload the channel-builder type doesn't expose; cast matches
+        // the PayoutListener pattern.
+        "postgres_changes" as any,
+        {
+          event: "*",
+          schema: "public",
+          table: "position_swap_requests",
+          filter: `requester_user_id=eq.${user.id}`,
+        },
+        onChange
+      )
+      .subscribe();
+    const targetChannel = supabase
+      .channel(`swap-target:${user.id}`)
+      .on(
+        "postgres_changes" as any,
+        {
+          event: "*",
+          schema: "public",
+          table: "position_swap_requests",
+          filter: `target_user_id=eq.${user.id}`,
+        },
+        onChange
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(requesterChannel);
+      supabase.removeChannel(targetChannel);
+    };
+  }, [user?.id, refetchMembers, refetchMyRequests, refetchPending, refetchHistory]);
 
   const handleRequestSwap = (targetUserId: string, targetName: string) => {
     Alert.alert(
@@ -245,6 +346,14 @@ export default function PositionSwapScreen() {
         {/* REQUESTS TAB */}
         {activeTab === "requests" && (
           <>
+            {/* Outgoing requests in pending_confirmation — cooling-off chip
+                ticks every 60s and turns green when the wait is over. */}
+            {myRequests
+              .filter((r: any) => r.swap_status === "pending_confirmation")
+              .map((r: any) => (
+                <PendingConfirmationCard key={r.id} request={r} />
+              ))}
+
             <Text style={styles.sectionTitle}>{t("position_swap.section_requests")}</Text>
 
             {pendingRequests.length === 0 ? (
@@ -432,4 +541,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   historyTitle: { fontSize: 14, fontWeight: "600", color: COLORS.navy },
+  coolingChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginTop: 4,
+  },
+  coolingChipWaiting: { backgroundColor: "#FEF3C7" },
+  coolingChipReady: { backgroundColor: "#D1FAE5" },
+  coolingChipText: { fontSize: 12, fontWeight: "700" },
 });

@@ -4423,7 +4423,25 @@
     "btn_accept": "Accept Swap",
     "btn_decline": "Decline",
     "section_history": "Swap History",
-    "empty_history": "No Swap History"
+    "empty_history": "No Swap History",
+    "ready_in": "Ready in {{time}}",
+    "ready_to_confirm": "Ready to confirm",
+    "pending_confirmation_title": "Confirm swap with {{name}}",
+    "fallback_member": "a member"
+  },
+  "swap": {
+    "notification_title_pending_target": "New swap request",
+    "notification_body_pending_target": "{{requester}} wants to swap positions with you in {{circle}}.",
+    "notification_title_pending_confirmation": "Swap ready to confirm",
+    "notification_body_pending_confirmation": "Your swap with {{target}} is ready to confirm.",
+    "notification_title_pending_elder_approval": "Swap awaiting Elder approval",
+    "notification_body_pending_elder_approval": "{{requester}} ↔ {{target}} swap in {{circle}} is awaiting your approval.",
+    "notification_title_completed": "Swap completed",
+    "notification_body_completed": "Your position swap in {{circle}} is complete. You are now in Position {{position}}.",
+    "notification_title_rejected": "Swap request declined",
+    "notification_body_rejected": "{{target}} declined your swap request in {{circle}}.",
+    "notification_title_expired": "Swap request expired",
+    "notification_body_expired": "Your swap request in {{circle}} expired without a response."
   },
   "pause_circle": {
     "header_title": "Pause Circle",

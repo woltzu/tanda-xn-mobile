@@ -4423,7 +4423,25 @@
     "btn_accept": "Accepter l'échange",
     "btn_decline": "Décliner",
     "section_history": "Historique d'échanges",
-    "empty_history": "Aucun historique d'échange"
+    "empty_history": "Aucun historique d'échange",
+    "ready_in": "Prêt dans {{time}}",
+    "ready_to_confirm": "Prêt à confirmer",
+    "pending_confirmation_title": "Confirmer l'échange avec {{name}}",
+    "fallback_member": "un membre"
+  },
+  "swap": {
+    "notification_title_pending_target": "Nouvelle demande d'échange",
+    "notification_body_pending_target": "{{requester}} veut échanger sa position avec la vôtre dans {{circle}}.",
+    "notification_title_pending_confirmation": "Échange prêt à confirmer",
+    "notification_body_pending_confirmation": "Votre échange avec {{target}} est prêt à être confirmé.",
+    "notification_title_pending_elder_approval": "Échange en attente d'approbation des Aînés",
+    "notification_body_pending_elder_approval": "L'échange {{requester}} ↔ {{target}} dans {{circle}} attend votre approbation.",
+    "notification_title_completed": "Échange terminé",
+    "notification_body_completed": "Votre échange de position dans {{circle}} est terminé. Vous êtes maintenant à la Position {{position}}.",
+    "notification_title_rejected": "Demande d'échange refusée",
+    "notification_body_rejected": "{{target}} a refusé votre demande d'échange dans {{circle}}.",
+    "notification_title_expired": "Demande d'échange expirée",
+    "notification_body_expired": "Votre demande d'échange dans {{circle}} a expiré sans réponse."
   },
   "pause_circle": {
     "header_title": "Mettre en pause le cercle",

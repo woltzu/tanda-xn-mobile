@@ -677,16 +677,21 @@ export class PositionSwapService {
   }
 
   private async sendSwapNotification(
-    userId: string,
-    notification: {
+    _userId: string,
+    _notification: {
       type: string;
       title: string;
       body: string;
       data: any;
     }
   ): Promise<void> {
-    // Would integrate with notification service
-    console.log(`[Swap Notification] User: ${userId}`, notification);
+    // No-op. As of migration 190 (`notify_swap_status_change`) every
+    // notification-worthy `position_swap_requests` state change is
+    // dispatched by an AFTER INSERT/UPDATE trigger on the DB side, which
+    // resolves recipients (target / requester / elders / both) and writes
+    // a notifications row directly. This method is kept as a stub only so
+    // existing callers in this legacy service compile; the live screen
+    // uses PositionSwapEngine RPCs, which fire the trigger.
   }
 
   private transformSwapRequest(
