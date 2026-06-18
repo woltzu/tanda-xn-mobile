@@ -10,7 +10,7 @@
 // Confirmation pane appears in place of step 3 once the insert succeeds.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -30,6 +30,7 @@ import { useTranslation } from "react-i18next";
 import {
   ProviderCategory,
   useProviderApplication,
+  useProviderDashboard,
 } from "../hooks/useProviders";
 
 const CATEGORIES: ProviderCategory[] = [
@@ -49,6 +50,15 @@ export default function ProviderApplicationScreen() {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const { submit, submitting } = useProviderApplication();
+  // Phase 1C — if the caller is already a provider, this screen is no
+  // longer the right destination. Replace the route immediately so the
+  // wizard never paints and the back-stack lands on the dashboard.
+  const { isProvider, loading: dashboardLoading } = useProviderDashboard();
+  useEffect(() => {
+    if (!dashboardLoading && isProvider) {
+      navigation.replace("ProviderDashboard");
+    }
+  }, [dashboardLoading, isProvider, navigation]);
 
   const [step, setStep] = useState<Step>(1);
 

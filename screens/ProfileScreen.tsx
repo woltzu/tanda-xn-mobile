@@ -347,11 +347,7 @@ export default function ProfileScreen() {
           ? {
               icon: "speedometer-outline",
               label: t("profile.item_provider_dashboard"),
-              onPress: () =>
-                Alert.alert(
-                  t("profile.provider_dashboard_pending_title"),
-                  t("profile.provider_dashboard_pending_body"),
-                ),
+              onPress: () => navigation.navigate("ProviderDashboard"),
             }
           : {
               icon: "add-circle-outline",

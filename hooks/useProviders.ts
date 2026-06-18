@@ -283,12 +283,35 @@ export function useProviderApplication() {
 
 // ─── useProviderDashboard ───────────────────────────────────────────────────
 // Returns the caller's OWN provider row (if any), plus their verification
-// steps and active goal links. RLS does the gating — anonymous calls return
+// steps, active goal links, recent provider_payment wallet transactions,
+// and a derived total_earned. RLS does the gating — anonymous calls return
 // null without error.
+export type ProviderJob = {
+  id: string;
+  goal_id: string;
+  goal_name: string;
+  status: string;
+  total_amount_cents: number;
+  paid_amount_cents: number;
+  updated_at: string;
+};
+
+export type ProviderEarning = {
+  id: string;
+  amount_cents: number;
+  goal_id: string | null;
+  goal_name: string | null;
+  payer_name: string | null;
+  created_at: string;
+};
+
 export function useProviderDashboard() {
   const { user } = useAuth();
   const [provider, setProvider] = useState<Provider | null>(null);
   const [steps, setSteps] = useState<ProviderVerificationStep[]>([]);
+  const [jobs, setJobs] = useState<ProviderJob[]>([]);
+  const [earnings, setEarnings] = useState<ProviderEarning[]>([]);
+  const [totalEarnedCents, setTotalEarnedCents] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -296,6 +319,9 @@ export function useProviderDashboard() {
     if (!user?.id) {
       setProvider(null);
       setSteps([]);
+      setJobs([]);
+      setEarnings([]);
+      setTotalEarnedCents(0);
       return;
     }
     setLoading(true);
@@ -308,15 +334,64 @@ export function useProviderDashboard() {
         .maybeSingle();
       if (err) throw err;
       setProvider((prov as Provider) ?? null);
-      if (prov) {
-        const { data: stepRows } = await supabase
+      if (!prov) {
+        setSteps([]);
+        setJobs([]);
+        setEarnings([]);
+        setTotalEarnedCents(0);
+        return;
+      }
+
+      // Three queries in parallel: verification steps, jobs (with goal
+      // names), and provider_payment wallet history (the earnings feed).
+      const [stepsRes, jobsRes, walletRes] = await Promise.all([
+        supabase
           .from("provider_verification_steps")
           .select("*")
-          .eq("provider_id", prov.id);
-        setSteps((stepRows ?? []) as ProviderVerificationStep[]);
-      } else {
-        setSteps([]);
-      }
+          .eq("provider_id", prov.id),
+        supabase
+          .from("goal_provider_links")
+          .select(
+            "id, goal_id, status, total_amount_cents, paid_amount_cents, updated_at, goal:user_savings_goals!goal_id(name)",
+          )
+          .eq("provider_id", prov.id)
+          .order("updated_at", { ascending: false }),
+        supabase
+          .from("wallet_transactions")
+          .select("id, amount_cents, created_at, metadata, reference_id")
+          .eq("user_id", user.id)
+          .eq("transaction_type", "provider_payment")
+          .eq("direction", "credit")
+          .order("created_at", { ascending: false })
+          .limit(50),
+      ]);
+
+      setSteps((stepsRes.data ?? []) as ProviderVerificationStep[]);
+      setJobs(
+        (jobsRes.data ?? []).map((j: any) => ({
+          id: j.id,
+          goal_id: j.goal_id,
+          goal_name: j.goal?.name ?? "—",
+          status: j.status,
+          total_amount_cents: j.total_amount_cents ?? 0,
+          paid_amount_cents: j.paid_amount_cents ?? 0,
+          updated_at: j.updated_at,
+        })),
+      );
+      const earnRows: ProviderEarning[] = (walletRes.data ?? []).map((w: any) => ({
+        id: w.id,
+        amount_cents: w.amount_cents ?? 0,
+        goal_id: w.metadata?.goal_id ?? w.reference_id ?? null,
+        goal_name: w.metadata?.goal_name ?? null,
+        payer_name: null,
+        created_at: w.created_at,
+      }));
+      setEarnings(earnRows);
+      // Total earned is the sum of all credits — RLS already restricts
+      // this to the provider's own rows so we can sum locally.
+      setTotalEarnedCents(
+        earnRows.reduce((acc, r) => acc + (r.amount_cents ?? 0), 0),
+      );
     } catch (e: any) {
       setError(e?.message ?? "Failed to load dashboard");
     } finally {
@@ -328,12 +403,55 @@ export function useProviderDashboard() {
     void fetchDashboard();
   }, [fetchDashboard]);
 
+  // Provider initiates a verification step (Level 2: document upload,
+  // Level 3: admin site visit). The DB trigger fans out to admins.
+  // If a row already exists with status in ('pending','in_progress'),
+  // this is a no-op so re-tapping the button doesn't double-notify.
+  const startVerificationStep = useCallback(
+    async (
+      stepType: "document_upload" | "admin_site_visit",
+      notes?: string,
+    ): Promise<{ ok: boolean; message?: string }> => {
+      if (!provider) return { ok: false, message: "No provider record" };
+      const existing = steps.find((s) => s.step_type === stepType);
+      if (
+        existing &&
+        (existing.status === "pending" || existing.status === "in_progress")
+      ) {
+        return { ok: false, message: "Step already in progress" };
+      }
+      const initialStatus =
+        stepType === "document_upload" ? "in_progress" : "pending";
+      const { error: insertErr } = await supabase
+        .from("provider_verification_steps")
+        .upsert(
+          {
+            provider_id: provider.id,
+            step_type: stepType,
+            status: initialStatus,
+            notes: notes ?? null,
+          },
+          { onConflict: "provider_id,step_type" },
+        );
+      if (insertErr) {
+        return { ok: false, message: insertErr.message };
+      }
+      await fetchDashboard();
+      return { ok: true };
+    },
+    [provider, steps, fetchDashboard],
+  );
+
   return {
     provider,
     steps,
+    jobs,
+    earnings,
+    totalEarnedCents,
     isProvider: provider !== null,
     loading,
     error,
     refetch: fetchDashboard,
+    startVerificationStep,
   };
 }
