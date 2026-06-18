@@ -433,6 +433,20 @@ export default function GoalDetailV2Screen() {
   // useNativeDriver=false here.
   const progressAnim = useRef(new Animated.Value(0)).current;
 
+  // Phase 1B — Verified Provider Network integration. Two pieces of
+  // state live here: the provider_category the goal owner tagged on
+  // create (so we know if the goal calls for a provider at all), and
+  // the most recently linked provider via goal_provider_links (so we
+  // can summarise "Paid to X" or "Active with X" inline).
+  const [providerCategory, setProviderCategory] = useState<string | null>(null);
+  const [linkedProvider, setLinkedProvider] = useState<{
+    link_id: string;
+    provider_id: string;
+    business_name: string;
+    status: string;
+    paid_amount_cents: number;
+  } | null>(null);
+
   const loadGoal = useCallback(async () => {
     if (!goalId) return;
     setLoading(true);
@@ -450,6 +464,43 @@ export default function GoalDetailV2Screen() {
     setTransactions(data.transactions);
     setMilestones(data.milestones);
     setRealStatus(data.goal.status);
+
+    // Phase 1B — pull provider_category + the most recently linked
+    // provider for this goal. Two-query parallel fan-out so the goal
+    // render isn't blocked on either result.
+    void (async () => {
+      try {
+        const [catRes, linkRes] = await Promise.all([
+          supabase
+            .from("user_savings_goals")
+            .select("provider_category")
+            .eq("id", goalId)
+            .maybeSingle(),
+          supabase
+            .from("goal_provider_links")
+            .select("id, provider_id, status, paid_amount_cents, providers!provider_id(business_name)")
+            .eq("goal_id", goalId)
+            .order("updated_at", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ]);
+        setProviderCategory((catRes.data as any)?.provider_category ?? null);
+        const link = linkRes.data as any;
+        if (link) {
+          setLinkedProvider({
+            link_id: link.id,
+            provider_id: link.provider_id,
+            business_name: link.providers?.business_name ?? "—",
+            status: link.status,
+            paid_amount_cents: link.paid_amount_cents ?? 0,
+          });
+        } else {
+          setLinkedProvider(null);
+        }
+      } catch {
+        // Non-fatal; the section just won't appear if the lookup fails.
+      }
+    })();
     // P2 — sync the round-up toggle with the DB row (default true if NULL).
     setRoundUpEnabledLocal(data.goal.roundUpEnabled ?? true);
     setIsRoundUpJar(data.goal.goalType === "round_up");
@@ -1286,6 +1337,60 @@ export default function GoalDetailV2Screen() {
                 <Text style={styles.linkCircleBody}>{t("goal_detail.link_circle_body")}</Text>
               </View>
             </TouchableOpacity>
+          )}
+
+          {/* Verified Provider Network (Phase 1B). Either shows a
+              summary of the linked provider OR a "Find a provider" CTA
+              when the goal is tagged with a provider_category. */}
+          {linkedProvider ? (
+            <TouchableOpacity
+              style={styles.card}
+              onPress={() =>
+                navigation.navigate(Routes.ProviderDetail as any, {
+                  providerId: linkedProvider.provider_id,
+                })
+              }
+              accessibilityRole="button"
+            >
+              <View style={styles.cardHeaderRow}>
+                <Text style={styles.cardHeading}>
+                  {t("goal_detail.provider_linked_title")}
+                </Text>
+                <Text style={styles.linkAction}>{t("goal_detail.see_all")}</Text>
+              </View>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: "#0A2342" }}>
+                {linkedProvider.business_name}
+              </Text>
+              <Text style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>
+                {t("goal_detail.provider_paid_so_far", {
+                  amount: `$${(linkedProvider.paid_amount_cents / 100).toFixed(2)}`,
+                })}{" "}
+                · {linkedProvider.status}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            realStatus === "active" && providerCategory ? (
+              <TouchableOpacity
+                style={styles.linkCircleButton}
+                onPress={() =>
+                  navigation.navigate(Routes.ProviderList as any, {
+                    goalId: goal.id,
+                  })
+                }
+                accessibilityRole="button"
+                activeOpacity={0.8}
+              >
+                <Text style={styles.linkCircleEmoji}>🛠️</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.linkCircleTitle}>
+                    {t("goal_detail.find_provider_title")}
+                  </Text>
+                  <Text style={styles.linkCircleBody}>
+                    {t("goal_detail.find_provider_body")}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ) : null
           )}
 
           {/* Recent activity */}

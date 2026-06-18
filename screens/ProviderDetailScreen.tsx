@@ -7,7 +7,7 @@
 // pointing to Phase 1B as the wire-up window.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -24,6 +24,16 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { ProviderReview, useProvider } from "../hooks/useProviders";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
+
+type GoalLink = {
+  id: string;
+  goal_id: string;
+  goal_name: string;
+  status: string;
+  paid_amount_cents: number;
+};
 
 type RouteParams = { providerId: string };
 
@@ -56,6 +66,38 @@ export default function ProviderDetailScreen() {
   const { providerId } = route.params ?? ({} as RouteParams);
 
   const { provider, reviews, loading, refetch } = useProvider(providerId);
+  const { user } = useAuth();
+
+  // Phase 1B — current user's own goal links to this provider. RLS
+  // already scopes goal_provider_links to the goal owner, so the
+  // result naturally only contains rows the caller is allowed to see.
+  const [myLinks, setMyLinks] = useState<GoalLink[]>([]);
+  useEffect(() => {
+    if (!providerId || !user?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("goal_provider_links")
+        .select(
+          "id, goal_id, status, paid_amount_cents, goal:user_savings_goals!goal_id(name)",
+        )
+        .eq("provider_id", providerId)
+        .order("updated_at", { ascending: false });
+      if (cancelled) return;
+      const rows = (data ?? []).map((r: any) => ({
+        id: r.id,
+        goal_id: r.goal_id,
+        goal_name: r.goal?.name ?? "—",
+        status: r.status,
+        paid_amount_cents: r.paid_amount_cents ?? 0,
+      }));
+      setMyLinks(rows);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [providerId, user?.id]);
+
   const [refreshing, setRefreshing] = React.useState(false);
   const onRefresh = async () => {
     setRefreshing(true);
@@ -196,6 +238,28 @@ export default function ProviderDetailScreen() {
             {provider.website ? (
               <ContactRow icon="globe-outline" text={provider.website} />
             ) : null}
+          </View>
+        ) : null}
+
+        {/* My existing goal links to this provider (Phase 1B). Only
+            rendered when the current user has at least one. */}
+        {myLinks.length > 0 ? (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>
+              {t("provider_detail.section_my_goal_links")}
+            </Text>
+            {myLinks.map((l) => (
+              <View key={l.id} style={styles.goalLinkRow}>
+                <Ionicons name="trophy-outline" size={16} color="#0A2342" />
+                <Text style={styles.goalLinkName} numberOfLines={1}>
+                  {l.goal_name}
+                </Text>
+                <Text style={styles.goalLinkAmount}>
+                  ${(l.paid_amount_cents / 100).toFixed(2)}
+                </Text>
+                <Text style={styles.goalLinkStatus}>{l.status}</Text>
+              </View>
+            ))}
           </View>
         ) : null}
 
@@ -401,4 +465,25 @@ const styles = StyleSheet.create({
   ctaPrimaryText: { fontSize: 14, fontWeight: "700", color: "#FFFFFF" },
   ctaSecondary: { backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E5E7EB" },
   ctaSecondaryText: { fontSize: 14, fontWeight: "700", color: "#0A2342" },
+
+  goalLinkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  goalLinkName: { flex: 1, fontSize: 13, fontWeight: "600", color: "#0A2342" },
+  goalLinkAmount: { fontSize: 13, fontWeight: "700", color: "#0A2342" },
+  goalLinkStatus: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#6B7280",
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    marginLeft: 4,
+  },
 });

@@ -19,7 +19,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
@@ -31,6 +31,11 @@ import {
 } from "../hooks/useProviders";
 
 type Nav = StackNavigationProp<RootStackParamList>;
+// Phase 1B — when launched from a goal context, the screen carries the
+// originating goal id. Each card swaps "View" for "Select this provider"
+// which deep-links into the goal→provider payment flow instead of the
+// public detail screen.
+type RouteParams = { goalId?: string };
 
 const CATEGORIES: ProviderCategory[] = [
   "construction",
@@ -69,7 +74,9 @@ function verificationLevelColor(level: number): string {
 
 export default function ProviderListScreen() {
   const navigation = useNavigation<Nav>();
+  const route = useRoute<RouteProp<{ params: RouteParams }, "params">>();
   const { t } = useTranslation();
+  const goalId = route.params?.goalId;
 
   const [category, setCategory] = useState<ProviderCategory | undefined>(undefined);
   const [country, setCountry] = useState<string | undefined>(undefined);
@@ -188,7 +195,17 @@ export default function ProviderListScreen() {
           renderItem={({ item }) => (
             <ProviderCard
               provider={item}
+              goalId={goalId}
               onPress={() => navigation.navigate("ProviderDetail", { providerId: item.id })}
+              onSelect={
+                goalId
+                  ? () =>
+                      navigation.navigate("GoalProviderPayment", {
+                        goalId,
+                        providerId: item.id,
+                      })
+                  : undefined
+              }
             />
           )}
         />
@@ -219,10 +236,14 @@ function Chip({
 
 function ProviderCard({
   provider,
+  goalId,
   onPress,
+  onSelect,
 }: {
   provider: Provider;
+  goalId?: string;
   onPress: () => void;
+  onSelect?: () => void;
 }) {
   const { t } = useTranslation();
   const locationLine = [provider.city, provider.country].filter(Boolean).join(", ");
@@ -254,10 +275,25 @@ function ProviderCard({
             ({provider.rating_count}) · {provider.total_jobs_completed} {t("provider_list.jobs")}
           </Text>
         </View>
-        <View style={styles.viewBtn}>
-          <Text style={styles.viewBtnText}>{t("provider_list.view")}</Text>
-          <Ionicons name="chevron-forward" size={14} color="#00C6AE" />
-        </View>
+        {/* In a goal context the primary CTA is "Select this provider"
+            (jumps straight into the payment flow). The whole card still
+            opens the public detail so users can inspect first. */}
+        {goalId && onSelect ? (
+          <TouchableOpacity
+            style={styles.selectBtn}
+            onPress={onSelect}
+            accessibilityRole="button"
+            accessibilityLabel={t("provider_list.select_provider")}
+          >
+            <Text style={styles.selectBtnText}>{t("provider_list.select_provider")}</Text>
+            <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.viewBtn}>
+            <Text style={styles.viewBtnText}>{t("provider_list.view")}</Text>
+            <Ionicons name="chevron-forward" size={14} color="#00C6AE" />
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -336,4 +372,14 @@ const styles = StyleSheet.create({
   ratingCount: { fontSize: 11, color: "#6B7280", marginLeft: 4 },
   viewBtn: { flexDirection: "row", alignItems: "center", gap: 2 },
   viewBtnText: { fontSize: 13, fontWeight: "700", color: "#00C6AE" },
+  selectBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#00C6AE",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  selectBtnText: { fontSize: 12, fontWeight: "700", color: "#FFFFFF" },
 });

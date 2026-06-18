@@ -28,10 +28,11 @@ import { WalletProvider } from "./context/WalletContext";
 import { CurrencyProvider } from "./context/CurrencyContext";
 import SplashScreen from "./screens/SplashScreen";
 import PayoutReceivedScreen from "./screens/PayoutReceivedScreen";
-// Verified Provider Network (Phase 1A)
+// Verified Provider Network (Phase 1A / 1B)
 import ProviderListScreen from "./screens/ProviderListScreen";
 import ProviderDetailScreen from "./screens/ProviderDetailScreen";
 import ProviderApplicationScreen from "./screens/ProviderApplicationScreen";
+import GoalProviderPaymentScreen from "./screens/GoalProviderPaymentScreen";
 import PayoutHistoryScreen from "./screens/PayoutHistoryScreen";
 import PayoutListener from "./components/PayoutListener";
 import WelcomeScreen from "./screens/WelcomeScreen";
@@ -580,10 +581,11 @@ export type RootStackParamList = {
   MarketInsight: { city?: string; category?: string };
   RequestProvider: undefined;
   WebView: { url: string; title?: string; onComplete?: () => void };
-  // Verified Provider Network (Phase 1A)
-  ProviderList: undefined;
+  // Verified Provider Network (Phase 1A / 1B)
+  ProviderList: { goalId?: string } | undefined;
   ProviderDetail: { providerId: string };
   ProviderApplication: undefined;
+  GoalProviderPayment: { goalId: string; providerId: string };
   // Trip Circle Flow
   ProviderDiscovery: undefined;
   ProviderProfileSetup: undefined;
@@ -1438,6 +1440,7 @@ function AppContent() {
           <Stack.Screen name="ProviderList" component={ProviderListScreen} />
           <Stack.Screen name="ProviderDetail" component={ProviderDetailScreen} />
           <Stack.Screen name="ProviderApplication" component={ProviderApplicationScreen} />
+          <Stack.Screen name="GoalProviderPayment" component={GoalProviderPaymentScreen} />
           {/* Deep Link Invite Screens */}
           <Stack.Screen name="CircleInvite" component={CircleInviteScreen} />
           {/* Public frictionless join — reachable unauthenticated at /join/:inviteCode */}
