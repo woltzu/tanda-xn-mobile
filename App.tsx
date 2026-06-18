@@ -1118,7 +1118,12 @@ function CirclesStackScreen() {
 function MarketStackScreen() {
   return (
     <MarketStack.Navigator screenOptions={{ headerShown: false }}>
-      <MarketStack.Screen name="MarketMain" component={MarketplaceScreen} />
+      {/* Marketplace-replace — the Market tab's initial route now lands on
+          the Verified Provider Network list. The old MarketplaceScreen is
+          still imported above so the HomeStack registration at
+          `name="Marketplace"` continues to work for any legacy deep
+          links / nav.navigate("Marketplace") call sites. */}
+      <MarketStack.Screen name="MarketMain" component={ProviderListScreen} />
       <MarketStack.Screen name="StoreDetail" component={StoreDetailScreen} />
       <MarketStack.Screen name="StoreApplication" component={StoreApplicationScreen} />
       <MarketStack.Screen name="BulkInvites" component={BulkInvitesScreen} />

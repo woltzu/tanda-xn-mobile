@@ -4498,7 +4498,22 @@
     "select_provider": "Select this provider",
     "level_basic": "Basic",
     "level_standard": "Standard",
-    "level_premium": "Premium"
+    "level_premium": "Premium",
+    "become_a_provider": "Become a provider",
+    "provider_dashboard_cta": "Provider dashboard",
+    "request_title": "Request a provider",
+    "request_body": "Can't find who you need? Tell us. When 5 members ask, we go find them.",
+    "request_category": "Category",
+    "request_country": "Country",
+    "request_city": "City",
+    "request_notes": "Notes",
+    "request_notes_placeholder": "Any details that would help us find the right provider…",
+    "request_cancel": "Cancel",
+    "request_submit": "Submit request",
+    "request_success_title": "Request received",
+    "request_success_body": "Thanks — we'll let you know as soon as a matching provider joins.",
+    "request_error_title": "Couldn't send",
+    "request_error_body": "Please try again in a moment."
   },
   "goal_provider_payment": {
     "title": "Pay provider from goal",

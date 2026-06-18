@@ -6,7 +6,7 @@
 // country, and minimum rating; tap a card to open ProviderDetailScreen.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,12 @@ import {
   ActivityIndicator,
   RefreshControl,
   FlatList,
+  Modal,
+  Pressable,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -27,14 +33,21 @@ import {
   Provider,
   ProviderCategory,
   ProviderFilters,
+  useProviderDashboard,
   useProviders,
 } from "../hooks/useProviders";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
 
 type Nav = StackNavigationProp<RootStackParamList>;
 // Phase 1B — when launched from a goal context, the screen carries the
 // originating goal id. Each card swaps "View" for "Select this provider"
 // which deep-links into the goal→provider payment flow instead of the
 // public detail screen.
+//
+// Marketplace-replace — this screen is also mounted as the MarketStack
+// initial route. In that case route.params is undefined and the header
+// hides the back button (canGoBack() returns false).
 type RouteParams = { goalId?: string };
 
 const CATEGORIES: ProviderCategory[] = [
@@ -77,10 +90,20 @@ export default function ProviderListScreen() {
   const route = useRoute<RouteProp<{ params: RouteParams }, "params">>();
   const { t } = useTranslation();
   const goalId = route.params?.goalId;
+  // Hide the back button when mounted as the MarketStack root — there's
+  // nothing to pop. Memoised so changes mid-session don't flicker.
+  const canGoBack = useMemo(() => navigation.canGoBack(), [navigation]);
+  // Provider-side CTA at the top of the list flips between "Become a
+  // provider" and "Provider dashboard" so users who already have a
+  // listing don't see the apply CTA again.
+  const { isProvider } = useProviderDashboard();
 
   const [category, setCategory] = useState<ProviderCategory | undefined>(undefined);
   const [country, setCountry] = useState<string | undefined>(undefined);
   const [minRating, setMinRating] = useState<number | undefined>(undefined);
+  // Inline request-a-provider sheet. Visibility lives here so the
+  // footer tile can flip it on without prop-drilling.
+  const [requestSheetOpen, setRequestSheetOpen] = useState(false);
 
   const filters: ProviderFilters = useMemo(
     () => ({ category, country, minRating }),
@@ -110,12 +133,43 @@ export default function ProviderListScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
+        {canGoBack ? (
+          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 38 }} />
+        )}
         <Text style={styles.headerTitle}>{t("provider_list.title")}</Text>
         <View style={{ width: 38 }} />
       </LinearGradient>
+
+      {/* Provider-side CTA. Shown only when the screen is the tab root —
+          a goal-context entry already has a focused "Select this
+          provider" task and the apply/dashboard CTA would distract. */}
+      {!goalId ? (
+        <TouchableOpacity
+          style={styles.providerCta}
+          onPress={() =>
+            navigation.navigate(
+              isProvider ? "ProviderDashboard" : "ProviderApplication",
+            )
+          }
+          accessibilityRole="button"
+        >
+          <Ionicons
+            name={isProvider ? "speedometer-outline" : "add-circle-outline"}
+            size={18}
+            color="#0A2342"
+          />
+          <Text style={styles.providerCtaText}>
+            {isProvider
+              ? t("provider_list.provider_dashboard_cta")
+              : t("provider_list.become_a_provider")}
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color="#6B7280" />
+        </TouchableOpacity>
+      ) : null}
 
       <View style={styles.filtersWrap}>
         <Text style={styles.filterLabel}>{t("provider_list.filter_category")}</Text>
@@ -192,6 +246,28 @@ export default function ProviderListScreen() {
               <Text style={styles.emptyText}>{t("provider_list.empty")}</Text>
             </View>
           }
+          ListFooterComponent={
+            !goalId ? (
+              <TouchableOpacity
+                style={styles.requestTile}
+                onPress={() => setRequestSheetOpen(true)}
+                accessibilityRole="button"
+              >
+                <View style={styles.requestTileIcon}>
+                  <Ionicons name="megaphone-outline" size={20} color="#7C3AED" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.requestTileTitle}>
+                    {t("provider_list.request_title")}
+                  </Text>
+                  <Text style={styles.requestTileBody}>
+                    {t("provider_list.request_body")}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#6B7280" />
+              </TouchableOpacity>
+            ) : null
+          }
           renderItem={({ item }) => (
             <ProviderCard
               provider={item}
@@ -210,7 +286,183 @@ export default function ProviderListScreen() {
           )}
         />
       )}
+
+      <ProviderRequestSheet
+        visible={requestSheetOpen}
+        onClose={() => setRequestSheetOpen(false)}
+      />
     </View>
+  );
+}
+
+// ─── ProviderRequestSheet ───────────────────────────────────────────────────
+// Inline modal sheet for the "Request a provider" tile. Collects the
+// category + country/city + free-text notes from the user, then fans out
+// one notification row per active admin (type = 'provider_request') so
+// the existing admin inbox surfaces it. No new schema needed for Phase 1A
+// of marketplace-replace — when request volume justifies it, this can be
+// promoted to a provider_requests table in a later phase.
+function ProviderRequestSheet({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const [category, setCategory] = useState<ProviderCategory | null>(null);
+  const [country, setCountry] = useState("");
+  const [city, setCity] = useState("");
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  // Reset state every time the sheet opens so a previous attempt's
+  // input doesn't bleed into the next one.
+  useEffect(() => {
+    if (!visible) {
+      setCategory(null);
+      setCountry("");
+      setCity("");
+      setNotes("");
+    }
+  }, [visible]);
+
+  const canSubmit =
+    !submitting && category !== null && country.trim().length > 0;
+
+  const handleSubmit = async () => {
+    if (!canSubmit || !category) return;
+    setSubmitting(true);
+    try {
+      const { data: admins } = await supabase
+        .from("admin_users")
+        .select("user_id")
+        .eq("is_active", true);
+      const rows = (admins ?? []).map((a: any) => ({
+        user_id: a.user_id,
+        type: "provider_request",
+        title: "Provider request submitted",
+        body:
+          `A member asked for a ${category} provider in ${city || "—"}, ${country}.` +
+          (notes ? " Notes: " + notes : ""),
+        data: {
+          requester_id: user?.id ?? null,
+          category,
+          country,
+          city,
+          notes,
+        },
+        read: false,
+      }));
+      if (rows.length > 0) {
+        await supabase.from("notifications").insert(rows);
+      }
+      onClose();
+      Alert.alert(
+        t("provider_list.request_success_title"),
+        t("provider_list.request_success_body"),
+      );
+    } catch (e: any) {
+      Alert.alert(
+        t("provider_list.request_error_title"),
+        e?.message ?? t("provider_list.request_error_body"),
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1 }}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>{t("provider_list.request_title")}</Text>
+            <Text style={styles.sheetBody}>{t("provider_list.request_body")}</Text>
+
+            <Text style={styles.sheetLabel}>{t("provider_list.request_category")}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipStrip}>
+              {CATEGORIES.map((c) => (
+                <TouchableOpacity
+                  key={c}
+                  style={[styles.chip, category === c && styles.chipActive]}
+                  onPress={() => setCategory(c)}
+                >
+                  <Text style={[styles.chipText, category === c && styles.chipTextActive]}>
+                    {t(`provider_category.${c}`)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <View style={styles.sheetRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sheetLabel}>{t("provider_list.request_country")}</Text>
+                <TextInput
+                  style={styles.sheetInput}
+                  value={country}
+                  onChangeText={setCountry}
+                  placeholder="e.g. Mali"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              <View style={{ width: 10 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sheetLabel}>{t("provider_list.request_city")}</Text>
+                <TextInput
+                  style={styles.sheetInput}
+                  value={city}
+                  onChangeText={setCity}
+                  placeholder="e.g. Bamako"
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+            </View>
+
+            <Text style={styles.sheetLabel}>{t("provider_list.request_notes")}</Text>
+            <TextInput
+              style={[styles.sheetInput, styles.sheetInputMultiline]}
+              value={notes}
+              onChangeText={setNotes}
+              placeholder={t("provider_list.request_notes_placeholder")}
+              placeholderTextColor="#9CA3AF"
+              multiline
+              maxLength={300}
+            />
+
+            <View style={styles.sheetActions}>
+              <TouchableOpacity
+                style={[styles.sheetBtn, styles.sheetBtnSecondary]}
+                onPress={onClose}
+                disabled={submitting}
+              >
+                <Text style={styles.sheetBtnSecondaryText}>
+                  {t("provider_list.request_cancel")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.sheetBtn, styles.sheetBtnPrimary, !canSubmit && { opacity: 0.5 }]}
+                onPress={handleSubmit}
+                disabled={!canSubmit}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.sheetBtnPrimaryText}>
+                    {t("provider_list.request_submit")}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -382,4 +634,96 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   selectBtnText: { fontSize: 12, fontWeight: "700", color: "#FFFFFF" },
+
+  providerCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FFFFFF",
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  providerCtaText: { flex: 1, fontSize: 14, fontWeight: "700", color: "#0A2342" },
+
+  requestTile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginTop: 10,
+  },
+  requestTileIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "#F5F3FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  requestTileTitle: { fontSize: 14, fontWeight: "800", color: "#0A2342" },
+  requestTileBody: { fontSize: 12, color: "#6B7280", marginTop: 2 },
+
+  // ─── Bottom-sheet (ProviderRequestSheet) ─────────────────────────────
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(10,35,66,0.55)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 28,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#E5E7EB",
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  sheetTitle: { fontSize: 18, fontWeight: "800", color: "#0A2342" },
+  sheetBody: { fontSize: 13, color: "#6B7280", marginTop: 4, marginBottom: 12 },
+  sheetLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  sheetRow: { flexDirection: "row" },
+  sheetInput: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#0A2342",
+  },
+  sheetInputMultiline: { minHeight: 64, textAlignVertical: "top" },
+  sheetActions: { flexDirection: "row", gap: 10, marginTop: 14 },
+  sheetBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sheetBtnPrimary: { backgroundColor: "#00C6AE" },
+  sheetBtnPrimaryText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
+  sheetBtnSecondary: { backgroundColor: "#F3F4F6", borderWidth: 1, borderColor: "#E5E7EB" },
+  sheetBtnSecondaryText: { color: "#0A2342", fontSize: 14, fontWeight: "700" },
 });

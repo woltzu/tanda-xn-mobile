@@ -4498,7 +4498,22 @@
     "select_provider": "Choisir ce prestataire",
     "level_basic": "Basique",
     "level_standard": "Standard",
-    "level_premium": "Premium"
+    "level_premium": "Premium",
+    "become_a_provider": "Devenir prestataire",
+    "provider_dashboard_cta": "Tableau de bord prestataire",
+    "request_title": "Demander un prestataire",
+    "request_body": "Vous ne trouvez pas le bon prestataire ? Dites-le-nous. Quand 5 membres demandent, nous allons les chercher.",
+    "request_category": "Catégorie",
+    "request_country": "Pays",
+    "request_city": "Ville",
+    "request_notes": "Notes",
+    "request_notes_placeholder": "Tout détail qui nous aiderait à trouver le bon prestataire…",
+    "request_cancel": "Annuler",
+    "request_submit": "Envoyer la demande",
+    "request_success_title": "Demande reçue",
+    "request_success_body": "Merci — nous vous préviendrons dès qu'un prestataire correspondant rejoint la plateforme.",
+    "request_error_title": "Envoi impossible",
+    "request_error_body": "Veuillez réessayer dans un instant."
   },
   "goal_provider_payment": {
     "title": "Payer un prestataire",
