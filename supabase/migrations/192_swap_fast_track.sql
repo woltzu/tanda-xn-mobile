@@ -15,11 +15,18 @@
 --   to green immediately on accept, which is the consent signal the user
 --   spec called for ("both parties must agree").
 --
--- Both functions are CREATE OR REPLACEd in place. Adding a default-valued
--- parameter to create_swap_request preserves the existing call sites
--- (positional `(p_circle_id, p_requester_id, p_target_id, p_reason)`
--- continues to compile because p_fast_track defaults to false).
+-- Both functions are CREATE OR REPLACEd in place. respond_to_swap_request
+-- keeps its 4-arg signature so REPLACE works cleanly. create_swap_request
+-- needs an extra step: Postgres treats the new 5-arg signature as a
+-- separate function, so we DROP the old 4-arg variant first to avoid a
+-- duplicate. (Surfaced live during the first apply: the new function landed
+-- as expected, but the original 4-arg version remained as a ghost overload
+-- that would have been selected for any caller that didn't pass p_fast_track.)
 -- ════════════════════════════════════════════════════════════════════════════
+
+-- Drop the original 4-arg signature first so the new 5-arg variant
+-- below is the only one in the catalog.
+DROP FUNCTION IF EXISTS public.create_swap_request(UUID, UUID, UUID, TEXT);
 
 CREATE OR REPLACE FUNCTION public.create_swap_request(
   p_circle_id UUID,
