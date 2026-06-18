@@ -23,6 +23,9 @@ import { useXnScore } from "../context/XnScoreContext";
 import { useWallet } from "../context/WalletContext";
 import { useIsAdmin } from "../hooks/useIsAdmin";
 import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
+// Phase 1A: Verified Provider Network — surfaces "Become a provider" if
+// the user has no provider row yet, or "Provider dashboard" if they do.
+import { useProviderDashboard } from "../hooks/useProviders";
 import { supabase } from "../lib/supabase";
 import { showToast } from "../components/Toast";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -58,6 +61,7 @@ export default function ProfileScreen() {
   // entirely when there's nothing to configure, so the menu row no
   // longer routes users to a mock-only screen.
   const { data: advanceDashboard } = useAdvanceDashboard();
+  const { isProvider } = useProviderDashboard();
   const hasActiveAdvance =
     (advanceDashboard?.active_advances?.length ?? 0) > 0;
 
@@ -328,6 +332,32 @@ export default function ProfileScreen() {
       items: [
         { icon: "ribbon-outline", label: t("profile.item_honor_system"), onPress: () => navigation.navigate("HonorSystem") },
         { icon: "hand-right-outline", label: t("profile.item_vouch"), onPress: () => navigation.navigate("VouchMember") },
+      ],
+    },
+    // Verified Provider Network (Phase 1A). Single row that switches
+    // between "Become a provider" (entry to the application wizard) and
+    // "Provider dashboard" (placeholder Alert until Phase 1B ships the
+    // dashboard surface). Always includes a "Browse providers" entry so
+    // diaspora-side users without a provider record can still discover.
+    {
+      section: t("profile.section_provider_network"),
+      items: [
+        { icon: "storefront-outline", label: t("profile.item_browse_providers"), onPress: () => navigation.navigate("ProviderList") },
+        isProvider
+          ? {
+              icon: "speedometer-outline",
+              label: t("profile.item_provider_dashboard"),
+              onPress: () =>
+                Alert.alert(
+                  t("profile.provider_dashboard_pending_title"),
+                  t("profile.provider_dashboard_pending_body"),
+                ),
+            }
+          : {
+              icon: "add-circle-outline",
+              label: t("profile.item_become_provider"),
+              onPress: () => navigation.navigate("ProviderApplication"),
+            },
       ],
     },
     {
