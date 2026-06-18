@@ -150,6 +150,7 @@ export const Routes = {
   JoinCircleByCode: "JoinCircleByCode",
   JoinCircleConfirm: "JoinCircleConfirm",
   JoinCircleSuccess: "JoinCircleSuccess",
+  PayoutReceived: "PayoutReceived",
   JoinConfirm: "JoinConfirm",
   KYCVerification: "KYCVerification",
   KYCHub: "KYCHub",

@@ -27,6 +27,8 @@ import { CirclesProvider } from "./context/CirclesContext";
 import { WalletProvider } from "./context/WalletContext";
 import { CurrencyProvider } from "./context/CurrencyContext";
 import SplashScreen from "./screens/SplashScreen";
+import PayoutReceivedScreen from "./screens/PayoutReceivedScreen";
+import PayoutListener from "./components/PayoutListener";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import LoginScreen from "./screens/LoginScreen";
 import SignupScreen from "./screens/SignupScreen";
@@ -407,6 +409,15 @@ export type RootStackParamList = {
   // dashboard, deep_link). Treated as an opaque label by the screen.
   JoinCircleConfirm: { circleId: string; source?: string };
   JoinCircleSuccess: { circleId: string; source?: string };
+  // Surfaced by the realtime channel in PayoutListener when a
+  // circle_payouts INSERT lands for the current user (status = completed),
+  // or by tapping a `payout_received` push notification.
+  PayoutReceived: {
+    payoutId: string;
+    circleId: string;
+    amount: number;
+    currency?: string;
+  };
   // Contribution Flow
   SelectCircleContribution: undefined;
   MakeContribution: { circleId: string };
@@ -1333,6 +1344,11 @@ function AppContent() {
             the happy path. Sits above the Navigator so it overlays every
             route, including auth screens. */}
         <OfflineBanner />
+        {/* No-render listener: subscribes to circle_payouts INSERTs for
+            the current user and routes them to the PayoutReceived
+            modal when the app is foreground. Push-tap routing for the
+            backgrounded case is handled by NotificationContext. */}
+        <PayoutListener />
         <Stack.Navigator
           initialRouteName="Splash"
           screenOptions={{
@@ -1395,6 +1411,17 @@ function AppContent() {
           <Stack.Screen name="OversightDashboard" component={OversightDashboardScreen} />
           <Stack.Screen name="AuditTrail" component={AuditTrailScreen} />
           <Stack.Screen name="QRCodeDisplay" component={QRCodeDisplayScreen} />
+          {/* PayoutReceived — transparent-modal "🎉 Payout received!"
+              sheet. Mounted on the root Stack so the realtime listener
+              + push-tap router can reach it from any screen. */}
+          <Stack.Screen
+            name="PayoutReceived"
+            component={PayoutReceivedScreen}
+            options={{
+              presentation: "transparentModal",
+              animation: "fade",
+            }}
+          />
           {/* Deep Link Invite Screens */}
           <Stack.Screen name="CircleInvite" component={CircleInviteScreen} />
           {/* Public frictionless join — reachable unauthenticated at /join/:inviteCode */}

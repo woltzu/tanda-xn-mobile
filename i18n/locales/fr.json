@@ -1,4 +1,13 @@
 {
+  "payout": {
+    "notification_title": "Paiement reçu !",
+    "notification_body": "Vous avez reçu {{amount}} $ de {{circle_name}}.",
+    "received_title": "🎉 Paiement reçu !",
+    "received_amount": "Montant",
+    "received_from": "De",
+    "received_view_wallet": "Voir le portefeuille",
+    "received_view_circle": "Voir le cercle"
+  },
   "first_launch": {
     "step_label_1": "Étape 1 sur 3 — Vérifiez votre e-mail",
     "step_label_2": "Étape 2 sur 3 — Rejoignez un cercle pour épargner entre proches",

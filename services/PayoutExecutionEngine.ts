@@ -335,8 +335,14 @@ export class PayoutExecutionEngine {
         })
         .eq('id', cycle.id);
 
-      // Send notifications
-      await this.sendPayoutNotifications(execution, distribution, cycle.recipient, cycle.circle);
+      // Materialize a `circle_payouts` row. Until migration 188 we
+      // wrote nothing to this table — CirclesContext.getCircleActivities
+      // already reads it for the activity feed, and the migration-188
+      // trigger fires off a `notifications` row (which the existing
+      // notification fan-out turns into the Expo push). The row is the
+      // single source of truth for "this user received this payout on
+      // this cycle".
+      await this.recordCirclePayout(execution, cycle, distribution);
 
       // Update recipient engagement metrics
       await this.updateRecipientEngagement(cycle.recipient_user_id, distribution);
@@ -1192,37 +1198,54 @@ export class PayoutExecutionEngine {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // NOTIFICATIONS
+  // PAYOUT-ROW MATERIALIZATION
+  //
+  // Writes the user-facing `circle_payouts` row that the rest of the
+  // app reads (activity feed, history). The DB-side trigger from
+  // migration 188 (notify_payout_received) inserts the matching
+  // `notifications` row when status='completed', which the existing
+  // notification fan-out converts into an Expo push.
+  //
+  // No try/catch here — if this fails after the wallet credit, the
+  // outer try in executePayout rolls the cycle into 'failed' and the
+  // ops alert fires. The credit itself is durable (it's a wallet
+  // transaction with its own audit trail).
   // ─────────────────────────────────────────────────────────────────────────────
 
-  private async sendPayoutNotifications(
+  private async recordCirclePayout(
     execution: any,
-    distribution: PayoutDistribution,
-    recipient: any,
-    circle: any
+    cycle: any,
+    _distribution: PayoutDistribution
   ): Promise<void> {
-    const amountDollars = (execution.net_amount_cents / 100).toFixed(2);
+    const amountDollars = execution.net_amount_cents / 100;
+    const circleId = cycle.circle?.id ?? cycle.circle_id;
+    const recipientId = cycle.recipient?.id ?? cycle.recipient_user_id;
+    const currency = cycle.circle?.currency ?? 'USD';
 
-    let body = `Your $${amountDollars} payout from ${circle.name} has been credited to your wallet!`;
+    const { error } = await supabase
+      .from('circle_payouts')
+      .insert({
+        circle_id: circleId,
+        recipient_id: recipientId,
+        cycle_number: cycle.cycle_number,
+        position: cycle.recipient_position ?? null,
+        amount: amountDollars,
+        currency,
+        actual_date: new Date().toISOString(),
+        status: 'completed',
+        payment_method: 'wallet',
+        transaction_id: execution.id,
+      });
 
-    if (distribution.toSavingsGoals.length > 0) {
-      const savingsTotal = distribution.toSavingsGoals.reduce(
-        (sum, s) => sum + s.amountCents, 0
-      ) / 100;
-      body += `\n\n$${savingsTotal.toFixed(2)} was automatically added to your savings goals.`;
+    if (error) {
+      // Re-throw so executePayout's catch block marks the execution
+      // failed. The wallet credit has already landed — the row write
+      // is the missing piece — so a partial-success state needs ops
+      // attention, not a silent swallow.
+      throw new Error(
+        `recordCirclePayout failed for execution ${execution.id}: ${error.message}`
+      );
     }
-
-    if (distribution.toBank) {
-      const bankAmount = (distribution.toBank.amountCents / 100).toFixed(2);
-      body += `\n\n$${bankAmount} is being transferred to your bank account (1-2 business days).`;
-    }
-
-    // In production, this would send push notification
-    console.log('Payout notification:', {
-      userId: recipient.id,
-      title: `Payout Received - $${amountDollars}`,
-      body
-    });
   }
 
   // ─────────────────────────────────────────────────────────────────────────────

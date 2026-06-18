@@ -1,4 +1,13 @@
 {
+  "payout": {
+    "notification_title": "Payout received!",
+    "notification_body": "You received ${{amount}} from {{circle_name}}.",
+    "received_title": "🎉 Payout received!",
+    "received_amount": "Amount",
+    "received_from": "From",
+    "received_view_wallet": "View wallet",
+    "received_view_circle": "View circle"
+  },
   "first_launch": {
     "step_label_1": "Step 1 of 3 — Verify your email",
     "step_label_2": "Step 2 of 3 — Join a circle to save with friends",
