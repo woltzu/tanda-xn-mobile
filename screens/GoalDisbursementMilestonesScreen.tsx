@@ -307,6 +307,9 @@ export default function GoalDisbursementMilestonesScreen() {
                   requestId: pendingReqs[m.id],
                 })
               }
+              onOpenVerificationHistory={() =>
+                navigation.navigate("VerificationMap", { milestoneId: m.id })
+              }
             />
           ))
         )}
@@ -326,6 +329,7 @@ function MilestoneCard({
   onRespond,
   onCancel,
   onOpenVerification,
+  onOpenVerificationHistory,
 }: {
   milestone: DisbursementMilestone;
   isGoalOwner: boolean;
@@ -337,6 +341,7 @@ function MilestoneCard({
   onRespond: (approved: boolean) => void;
   onCancel: () => void;
   onOpenVerification: () => void;
+  onOpenVerificationHistory: () => void;
 }) {
   const { t } = useTranslation();
   const color = statusColor(milestone.status);
@@ -492,6 +497,22 @@ function MilestoneCard({
             disabled={submitting}
           >
             <Text style={styles.btnDangerText}>{t("goal_disbursement.cancel_milestone")}</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {/* Phase 2D — "View verification" surfaces the project+photo
+            map for milestones that have been signed off (released or
+            verified). Lets the goal owner visually confirm the elder
+            was on site. */}
+        {milestone.status === "released" || milestone.status === "verified" ? (
+          <TouchableOpacity
+            style={[styles.btn, styles.btnSecondary]}
+            onPress={onOpenVerificationHistory}
+            disabled={submitting}
+          >
+            <Text style={styles.btnSecondaryText}>
+              {t("goal_disbursement.view_verification")}
+            </Text>
           </TouchableOpacity>
         ) : null}
       </View>

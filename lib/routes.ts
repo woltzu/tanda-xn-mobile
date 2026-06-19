@@ -46,6 +46,7 @@ export const Routes = {
   AdminDashboard: "AdminDashboard",
   AdminSettings: "AdminSettings",
   AdminVerificationQueue: "AdminVerificationQueue",
+  VerificationMap: "VerificationMap",
   AdvanceDetailsV2: "AdvanceDetailsV2",
   AdvanceHubV2: "AdvanceHubV2",
   AdvanceSettings: "AdvanceSettings",

@@ -15,7 +15,7 @@
 // location description.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -28,6 +28,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -35,6 +36,14 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
+
+// react-native-maps has no useful web implementation. Conditional
+// require so Metro tree-shakes it from the web bundle entirely; the
+// web branch renders a coords + distance panel instead. Phase 2D.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const Maps = Platform.OS !== "web" ? require("react-native-maps") : null;
+const MapView: any = Maps?.default ?? null;
+const Marker: any = Maps?.Marker ?? null;
 import { supabase } from "../lib/supabase";
 import {
   DisbursementMilestone,
@@ -49,6 +58,10 @@ type Photo = {
   storagePath?: string;
   uploading: boolean;
   error?: string;
+  // Phase 2D — override mode requires every photo to come from the
+  // camera (not the library). Tracked per-photo for the evidence
+  // payload audit trail.
+  source: "library" | "camera";
 };
 
 type GpsState =
@@ -60,6 +73,27 @@ type GpsState =
 
 const STORAGE_BUCKET = "verification-docs";
 const MAX_PHOTOS = 4;
+// Phase 2D geo-gate. 25 meters mirrors a typical small construction
+// site where the elder can stand near (but not in) the structure
+// being verified.
+const GATE_RADIUS_METERS = 25;
+// Override (Phase 2D) — when GPS drifts but the elder is genuinely on-
+// site, the override path requires more friction.
+const OVERRIDE_MIN_PHOTOS = 2;
+const OVERRIDE_MIN_REASON_CHARS = 50;
+
+// Haversine distance in meters between two lat/lng points.
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
 let photoCounter = 0;
 const newPhotoKey = () => `p_${++photoCounter}`;
@@ -90,6 +124,7 @@ export default function MilestoneVerificationScreen() {
 
   const [milestone, setMilestone] = useState<DisbursementMilestone | null>(null);
   const [providerName, setProviderName] = useState<string>("");
+  const [projectPin, setProjectPin] = useState<{ lat: number; lng: number } | null>(null);
   const [ctxLoading, setCtxLoading] = useState(true);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [locationText, setLocationText] = useState("");
@@ -97,6 +132,11 @@ export default function MilestoneVerificationScreen() {
   const [notes, setNotes] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [mode, setMode] = useState<"approve" | "reject" | null>(null);
+  // Phase 2D override — gates a heavier evidence requirement when GPS
+  // drift puts the elder >25m from the project pin but they're
+  // genuinely on-site.
+  const [overrideOn, setOverrideOn] = useState(false);
+  const [overrideReason, setOverrideReason] = useState("");
 
   const { submitting, respondVerification } = useDisbursementActions();
 
@@ -149,7 +189,9 @@ export default function MilestoneVerificationScreen() {
       const { data } = await supabase
         .from("goal_disbursement_milestones")
         .select(
-          "*, provider:providers!provider_id(business_name)",
+          // Phase 2D — also pull the goal's project pin so the gate has
+          // a target. Nulls are allowed; the gate degrades when missing.
+          "*, provider:providers!provider_id(business_name), goal:user_savings_goals!goal_id(project_latitude, project_longitude)",
         )
         .eq("id", milestoneId)
         .maybeSingle();
@@ -157,6 +199,13 @@ export default function MilestoneVerificationScreen() {
       const row = data as any;
       setMilestone((row as DisbursementMilestone) ?? null);
       setProviderName(row?.provider?.business_name ?? "");
+      const lat = row?.goal?.project_latitude;
+      const lng = row?.goal?.project_longitude;
+      if (typeof lat === "number" && typeof lng === "number") {
+        setProjectPin({ lat, lng });
+      } else {
+        setProjectPin(null);
+      }
       setCtxLoading(false);
     })();
     return () => {
@@ -164,8 +213,57 @@ export default function MilestoneVerificationScreen() {
     };
   }, [milestoneId]);
 
+  // Phase 2D — derive distance + gate decision in one place. Returns one
+  // of: 'no_pin' (project pin missing), 'no_gps' (elder hasn't granted
+  // location or capture failed), 'in_range' (≤25m), 'out_of_range' (>25m).
+  // The gate is permissive on no_pin and no_gps — the verification still
+  // requires photos + notes; the gate just doesn't add a hard radius check.
+  const distanceMeters = useMemo(() => {
+    if (!projectPin || gps.status !== "granted") return null;
+    return haversineMeters(
+      gps.latitude,
+      gps.longitude,
+      projectPin.lat,
+      projectPin.lng,
+    );
+  }, [projectPin, gps]);
+  const gateState: "checking" | "no_pin" | "no_gps" | "in_range" | "out_of_range" =
+    gps.status === "requesting"
+      ? "checking"
+      : !projectPin
+      ? "no_pin"
+      : gps.status !== "granted"
+      ? "no_gps"
+      : (distanceMeters ?? Infinity) <= GATE_RADIUS_METERS
+      ? "in_range"
+      : "out_of_range";
+  const gateBlocking = gateState === "out_of_range" && !overrideOn;
+
   const handlePickPhoto = async () => {
     if (photos.length >= MAX_PHOTOS) return;
+    // Phase 2D — override mode forces the camera path. The library
+    // picker can't prove the elder is on-site so it's disabled.
+    if (overrideOn) {
+      const camPerm = await ImagePicker.requestCameraPermissionsAsync();
+      if (camPerm.status !== "granted") {
+        Alert.alert(
+          t("verification.permission_denied_title"),
+          t("verification.camera_permission_denied_body"),
+        );
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.6,
+      });
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+      const uri = result.assets[0].uri;
+      const key = newPhotoKey();
+      setPhotos((prev) => [...prev, { key, uri, uploading: true, source: "camera" }]);
+      void uploadPhoto(key, uri);
+      return;
+    }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (perm.status !== "granted") {
       Alert.alert(t("verification.permission_denied_title"), t("verification.permission_denied_body"));
@@ -179,7 +277,7 @@ export default function MilestoneVerificationScreen() {
     if (result.canceled || !result.assets?.[0]?.uri) return;
     const uri = result.assets[0].uri;
     const key = newPhotoKey();
-    setPhotos((prev) => [...prev, { key, uri, uploading: true }]);
+    setPhotos((prev) => [...prev, { key, uri, uploading: true, source: "library" }]);
     void uploadPhoto(key, uri);
   };
 
@@ -222,13 +320,22 @@ export default function MilestoneVerificationScreen() {
   };
 
   const uploadsPending = photos.some((p) => p.uploading);
-  const hasUsablePhotos = photos.some((p) => p.storagePath);
+  const usablePhotoCount = photos.filter((p) => p.storagePath).length;
+  const cameraPhotoCount = photos.filter(
+    (p) => p.storagePath && p.source === "camera",
+  ).length;
 
+  // Phase 2D — approve gate. In override mode we need ≥2 camera-sourced
+  // photos AND ≥50-char reason. In normal mode we need ≥1 usable photo
+  // and the geo-gate must NOT be blocking (out_of_range + no override).
   const canApprove =
     !submitting &&
     !uploadsPending &&
     milestone !== null &&
-    hasUsablePhotos;
+    (overrideOn
+      ? cameraPhotoCount >= OVERRIDE_MIN_PHOTOS &&
+        overrideReason.trim().length >= OVERRIDE_MIN_REASON_CHARS
+      : !gateBlocking && usablePhotoCount >= 1);
   const canReject = !submitting && rejectReason.trim().length > 0;
 
   const handleApprove = async () => {
@@ -236,7 +343,11 @@ export default function MilestoneVerificationScreen() {
     const evidence: Record<string, unknown> = {
       photos: photos
         .filter((p) => p.storagePath)
-        .map((p) => ({ path: p.storagePath, bucket: STORAGE_BUCKET })),
+        .map((p) => ({
+          path: p.storagePath,
+          bucket: STORAGE_BUCKET,
+          source: p.source,
+        })),
       location_text: locationText.trim() || null,
       captured_at: new Date().toISOString(),
     };
@@ -246,6 +357,22 @@ export default function MilestoneVerificationScreen() {
         longitude: gps.longitude,
         accuracy: gps.accuracy,
         captured_at: gps.capturedAt,
+      };
+    }
+    if (projectPin) {
+      evidence.project_gps = {
+        latitude: projectPin.lat,
+        longitude: projectPin.lng,
+      };
+    }
+    if (distanceMeters !== null) {
+      evidence.distance_meters = Math.round(distanceMeters);
+    }
+    if (overrideOn) {
+      evidence.override = {
+        reason: overrideReason.trim(),
+        photos_via_camera: cameraPhotoCount,
+        gate_state: gateState,
       };
     }
     const res = await respondVerification(
@@ -331,13 +458,189 @@ export default function MilestoneVerificationScreen() {
 
           {mode !== "reject" ? (
             <>
-              {/* Photo evidence */}
+              {/* Phase 2D — Geo-gate. Chip + map + override. The gate is
+                  permissive when project pin is missing or GPS is denied
+                  (chip explains why); strict only when both are present. */}
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>
+                  {t("verification.gate_section_title")}
+                </Text>
+
+                {gateState === "checking" ? (
+                  <View style={styles.gpsRow}>
+                    <ActivityIndicator size="small" color="#00C6AE" />
+                    <Text style={styles.gpsRowText}>
+                      {t("verification.gps_requesting")}
+                    </Text>
+                  </View>
+                ) : gateState === "in_range" ? (
+                  <View style={[styles.gpsChip, styles.gpsChipOk]}>
+                    <Ionicons name="checkmark-circle" size={14} color="#065F46" />
+                    <Text style={styles.gpsChipText}>
+                      {t("verification.within_range", {
+                        meters: Math.round(distanceMeters ?? 0),
+                      })}
+                    </Text>
+                  </View>
+                ) : gateState === "out_of_range" ? (
+                  <View style={[styles.gpsChip, styles.gpsChipDanger]}>
+                    <Ionicons name="alert-circle" size={14} color="#B91C1C" />
+                    <Text style={[styles.gpsChipText, { color: "#B91C1C" }]}>
+                      {t("verification.outside_range", {
+                        meters: Math.round(distanceMeters ?? 0),
+                        radius: GATE_RADIUS_METERS,
+                      })}
+                    </Text>
+                  </View>
+                ) : gateState === "no_pin" ? (
+                  <View style={[styles.gpsChip, styles.gpsChipWarn]}>
+                    <Ionicons name="information-circle-outline" size={14} color="#92400E" />
+                    <Text style={[styles.gpsChipText, { color: "#92400E" }]}>
+                      {t("verification.no_project_pin")}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={[styles.gpsChip, styles.gpsChipWarn]}>
+                    <Ionicons name="location-outline" size={14} color="#92400E" />
+                    <Text style={[styles.gpsChipText, { color: "#92400E" }]}>
+                      {gps.status === "denied"
+                        ? t("verification.gps_denied")
+                        : t("verification.gps_error")}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Project + elder coords detail line. Always rendered
+                    when GPS is granted so the responder can sanity-check
+                    the pin before approving. */}
+                {gps.status === "granted" ? (
+                  <Text style={styles.gpsCoords}>
+                    {t("verification.your_location_label")} {gps.latitude.toFixed(5)}, {gps.longitude.toFixed(5)}
+                  </Text>
+                ) : null}
+                {projectPin ? (
+                  <Text style={styles.gpsCoords}>
+                    {t("verification.project_location_label")} {projectPin.lat.toFixed(5)}, {projectPin.lng.toFixed(5)}
+                  </Text>
+                ) : null}
+
+                {/* Map view — react-native-maps on native, coords panel on web. */}
+                {projectPin && gps.status === "granted" ? (
+                  Platform.OS !== "web" && MapView && Marker ? (
+                    <View style={styles.mapWrap}>
+                      <MapView
+                        style={styles.map}
+                        initialRegion={{
+                          latitude: (projectPin.lat + gps.latitude) / 2,
+                          longitude: (projectPin.lng + gps.longitude) / 2,
+                          latitudeDelta: Math.max(
+                            Math.abs(projectPin.lat - gps.latitude) * 2.5,
+                            0.005,
+                          ),
+                          longitudeDelta: Math.max(
+                            Math.abs(projectPin.lng - gps.longitude) * 2.5,
+                            0.005,
+                          ),
+                        }}
+                      >
+                        <Marker
+                          coordinate={{
+                            latitude: projectPin.lat,
+                            longitude: projectPin.lng,
+                          }}
+                          title={t("verification.project_location")}
+                          pinColor="#1D4ED8"
+                        />
+                        <Marker
+                          coordinate={{
+                            latitude: gps.latitude,
+                            longitude: gps.longitude,
+                          }}
+                          title={t("verification.your_location")}
+                          pinColor="#059669"
+                        />
+                      </MapView>
+                    </View>
+                  ) : (
+                    <View style={styles.mapWeb}>
+                      <Text style={styles.mapWebTitle}>
+                        {t("verification.web_map_title")}
+                      </Text>
+                      <Text style={styles.mapWebText}>
+                        🔵 {t("verification.project_location")} ·{" "}
+                        {projectPin.lat.toFixed(5)}, {projectPin.lng.toFixed(5)}
+                      </Text>
+                      <Text style={styles.mapWebText}>
+                        🟢 {t("verification.your_location")} ·{" "}
+                        {gps.latitude.toFixed(5)}, {gps.longitude.toFixed(5)}
+                      </Text>
+                      <Text style={styles.mapWebDistance}>
+                        {t("verification.distance", {
+                          meters: Math.round(distanceMeters ?? 0),
+                        })}
+                      </Text>
+                    </View>
+                  )
+                ) : null}
+
+                {/* Override toggle — only surfaced when the gate is
+                    blocking. Requires 2 camera photos + 50-char reason. */}
+                {gateState === "out_of_range" ? (
+                  <View style={styles.overrideBlock}>
+                    <View style={styles.overrideRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.overrideTitle}>
+                          {t("verification.override_toggle")}
+                        </Text>
+                        <Text style={styles.overrideBody}>
+                          {t("verification.override_required")}
+                        </Text>
+                      </View>
+                      <Switch
+                        value={overrideOn}
+                        onValueChange={setOverrideOn}
+                        trackColor={{ false: "#E5E7EB", true: "#F59E0B" }}
+                      />
+                    </View>
+                    {overrideOn ? (
+                      <>
+                        <Text style={styles.overridePinNote}>
+                          {t("verification.override_pin_deferred")}
+                        </Text>
+                        <Text style={styles.fieldLabel}>
+                          {t("verification.override_reason_label", {
+                            min: OVERRIDE_MIN_REASON_CHARS,
+                          })}
+                        </Text>
+                        <TextInput
+                          style={[styles.input, styles.inputMultiline]}
+                          value={overrideReason}
+                          onChangeText={setOverrideReason}
+                          placeholder={t("verification.override_reason_placeholder")}
+                          placeholderTextColor="#9CA3AF"
+                          multiline
+                          maxLength={500}
+                        />
+                        <Text style={styles.overrideCount}>
+                          {overrideReason.trim().length}/{OVERRIDE_MIN_REASON_CHARS}
+                        </Text>
+                      </>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+
+              {/* Photo evidence — add-tile disabled when the gate blocks. */}
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>
                   {t("verification.photo_upload_label")}
                 </Text>
                 <Text style={styles.sectionBody}>
-                  {t("verification.photo_upload_body", { max: MAX_PHOTOS })}
+                  {overrideOn
+                    ? t("verification.photo_upload_override_body", {
+                        min: OVERRIDE_MIN_PHOTOS,
+                      })
+                    : t("verification.photo_upload_body", { max: MAX_PHOTOS })}
                 </Text>
                 <View style={styles.photoGrid}>
                   {photos.map((p) => (
@@ -353,7 +656,11 @@ export default function MilestoneVerificationScreen() {
                         </View>
                       ) : (
                         <View style={styles.photoCheck}>
-                          <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                          <Ionicons
+                            name={p.source === "camera" ? "camera" : "checkmark"}
+                            size={14}
+                            color="#FFFFFF"
+                          />
                         </View>
                       )}
                       <TouchableOpacity
@@ -365,67 +672,40 @@ export default function MilestoneVerificationScreen() {
                       </TouchableOpacity>
                     </View>
                   ))}
-                  {photos.length < MAX_PHOTOS ? (
+                  {photos.length < MAX_PHOTOS && !gateBlocking ? (
                     <TouchableOpacity
                       style={[styles.photoTile, styles.photoAdd]}
                       onPress={handlePickPhoto}
                       accessibilityRole="button"
                     >
-                      <Ionicons name="camera-outline" size={24} color="#6B7280" />
+                      <Ionicons
+                        name={overrideOn ? "camera" : "camera-outline"}
+                        size={24}
+                        color="#6B7280"
+                      />
                       <Text style={styles.photoAddText}>
-                        {t("verification.add_photo")}
+                        {overrideOn
+                          ? t("verification.add_photo_camera")
+                          : t("verification.add_photo")}
                       </Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>
+                {gateBlocking ? (
+                  <Text style={styles.cameraDisabledNote}>
+                    {t("verification.camera_disabled")}
+                  </Text>
+                ) : null}
               </View>
 
-              {/* Location — GPS auto-capture with manual fallback. The
-                  manual field always renders so the responder can add a
-                  human-readable description; the GPS chip surfaces above
-                  it when capture succeeds. */}
+              {/* Manual location field — kept as a supplement so the
+                  responder can add a human-readable address. */}
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>
-                  {t("verification.gps_capture_label")}
+                  {t("verification.location_label")}
                 </Text>
-
-                {gps.status === "requesting" ? (
-                  <View style={styles.gpsRow}>
-                    <ActivityIndicator size="small" color="#00C6AE" />
-                    <Text style={styles.gpsRowText}>
-                      {t("verification.gps_requesting")}
-                    </Text>
-                  </View>
-                ) : gps.status === "granted" ? (
-                  <View style={[styles.gpsChip, styles.gpsChipOk]}>
-                    <Ionicons name="location" size={14} color="#065F46" />
-                    <Text style={styles.gpsChipText}>
-                      {t("verification.gps_captured", {
-                        lat: gps.latitude.toFixed(5),
-                        lng: gps.longitude.toFixed(5),
-                      })}
-                    </Text>
-                  </View>
-                ) : gps.status === "denied" ? (
-                  <View style={[styles.gpsChip, styles.gpsChipWarn]}>
-                    <Ionicons name="location-outline" size={14} color="#92400E" />
-                    <Text style={[styles.gpsChipText, { color: "#92400E" }]}>
-                      {t("verification.gps_denied")}
-                    </Text>
-                  </View>
-                ) : gps.status === "error" ? (
-                  <View style={[styles.gpsChip, styles.gpsChipWarn]}>
-                    <Ionicons name="alert-circle-outline" size={14} color="#92400E" />
-                    <Text style={[styles.gpsChipText, { color: "#92400E" }]}>
-                      {t("verification.gps_error")}
-                    </Text>
-                  </View>
-                ) : null}
-
-                <Text style={[styles.sectionBody, { marginTop: 8 }]}>
-                  {gps.status === "granted"
-                    ? t("verification.gps_manual_body_supplement")
-                    : t("verification.gps_fallback")}
+                <Text style={styles.sectionBody}>
+                  {t("verification.gps_manual_body_supplement")}
                 </Text>
                 <TextInput
                   style={styles.input}
@@ -700,5 +980,50 @@ const styles = StyleSheet.create({
   },
   gpsChipOk: { backgroundColor: "#D1FAE5" },
   gpsChipWarn: { backgroundColor: "#FEF3C7" },
+  gpsChipDanger: { backgroundColor: "#FEE2E2" },
   gpsChipText: { fontSize: 12, fontWeight: "700", color: "#065F46" },
+  gpsCoords: { fontSize: 11, color: "#6B7280", marginTop: 6 },
+
+  mapWrap: {
+    marginTop: 10,
+    borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  map: { height: 180, width: "100%" },
+  mapWeb: {
+    marginTop: 10,
+    borderRadius: 12,
+    padding: 12,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    gap: 4,
+  },
+  mapWebTitle: { fontSize: 13, fontWeight: "800", color: "#0A2342" },
+  mapWebText: { fontSize: 12, color: "#374151" },
+  mapWebDistance: { fontSize: 13, fontWeight: "700", color: "#0A2342", marginTop: 4 },
+
+  overrideBlock: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  overrideRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  overrideTitle: { fontSize: 13, fontWeight: "800", color: "#92400E" },
+  overrideBody: { fontSize: 11, color: "#92400E", marginTop: 2 },
+  overridePinNote: {
+    fontSize: 11,
+    color: "#92400E",
+    marginTop: 10,
+    fontStyle: "italic",
+  },
+  overrideCount: { fontSize: 11, color: "#6B7280", marginTop: 4, alignSelf: "flex-end" },
+  fieldLabel: { fontSize: 12, fontWeight: "700", color: "#0A2342", marginTop: 10, marginBottom: 6 },
+
+  cameraDisabledNote: { fontSize: 11, color: "#B91C1C", marginTop: 8 },
 });

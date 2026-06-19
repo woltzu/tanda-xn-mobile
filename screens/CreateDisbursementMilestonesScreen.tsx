@@ -34,6 +34,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
+import * as Location from "expo-location";
 import { supabase } from "../lib/supabase";
 import {
   CreateMilestoneInput,
@@ -47,6 +48,8 @@ type GoalRow = {
   id: string;
   name: string | null;
   target_amount_cents: number;
+  project_latitude: number | null;
+  project_longitude: number | null;
 };
 
 type ProviderRow = {
@@ -98,6 +101,13 @@ export default function CreateDisbursementMilestonesScreen() {
       verification_method: "owner",
     },
   ]);
+  // Project location — Phase 2D. Pre-filled from the goal if a pin
+  // already exists; otherwise the owner can use their current GPS or
+  // type lat/lng. NULL is allowed: the geo-gate degrades gracefully on
+  // the verification screen when no pin is set.
+  const [projectLatText, setProjectLatText] = useState("");
+  const [projectLngText, setProjectLngText] = useState("");
+  const [gpsBusy, setGpsBusy] = useState(false);
 
   const { submitting, createMilestones } = useDisbursementActions();
 
@@ -108,7 +118,9 @@ export default function CreateDisbursementMilestonesScreen() {
       const [g, p] = await Promise.all([
         supabase
           .from("user_savings_goals")
-          .select("id, name, target_amount_cents")
+          .select(
+            "id, name, target_amount_cents, project_latitude, project_longitude",
+          )
           .eq("id", goalId)
           .maybeSingle(),
         supabase
@@ -118,8 +130,14 @@ export default function CreateDisbursementMilestonesScreen() {
           .maybeSingle(),
       ]);
       if (!cancelled) {
-        setGoal((g.data as GoalRow) ?? null);
+        const goalRow = (g.data as GoalRow) ?? null;
+        setGoal(goalRow);
         setProvider((p.data as ProviderRow) ?? null);
+        // Pre-fill the project-pin inputs if the goal already carries one.
+        if (goalRow?.project_latitude != null && goalRow?.project_longitude != null) {
+          setProjectLatText(String(goalRow.project_latitude));
+          setProjectLngText(String(goalRow.project_longitude));
+        }
         setCtxLoading(false);
       }
     })();
@@ -175,8 +193,77 @@ export default function CreateDisbursementMilestonesScreen() {
     setDrafts((prev) => prev.map((d) => (d.key === key ? { ...d, ...patch } : d)));
   };
 
+  const parsedLat = (() => {
+    const n = parseFloat(projectLatText);
+    return Number.isFinite(n) && n >= -90 && n <= 90 ? n : null;
+  })();
+  const parsedLng = (() => {
+    const n = parseFloat(projectLngText);
+    return Number.isFinite(n) && n >= -180 && n <= 180 ? n : null;
+  })();
+  const hasProjectPin = parsedLat !== null && parsedLng !== null;
+  const pinPartialError =
+    (projectLatText.trim() !== "" || projectLngText.trim() !== "") && !hasProjectPin;
+
+  const handleCaptureGps = async () => {
+    if (Platform.OS === "web") {
+      Alert.alert(
+        t("create_milestones.gps_unavailable_title"),
+        t("create_milestones.gps_unavailable_body"),
+      );
+      return;
+    }
+    try {
+      setGpsBusy(true);
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status !== "granted") {
+        Alert.alert(
+          t("create_milestones.gps_denied_title"),
+          t("create_milestones.gps_denied_body"),
+        );
+        return;
+      }
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setProjectLatText(pos.coords.latitude.toFixed(6));
+      setProjectLngText(pos.coords.longitude.toFixed(6));
+    } catch (e: any) {
+      Alert.alert(
+        t("create_milestones.gps_error_title"),
+        e?.message ?? t("create_milestones.gps_error_body"),
+      );
+    } finally {
+      setGpsBusy(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!canSubmit || !goal || !provider) return;
+    if (pinPartialError) {
+      Alert.alert(
+        t("create_milestones.pin_invalid_title"),
+        t("create_milestones.pin_invalid_body"),
+      );
+      return;
+    }
+    // Persist the project pin (or clear it) BEFORE creating milestones.
+    // Best-effort — if the update fails (RLS shouldn't block the owner)
+    // we still continue with milestone creation so the wizard isn't
+    // blocked by a transient write error.
+    try {
+      await supabase
+        .from("user_savings_goals")
+        .update({
+          project_latitude: parsedLat,
+          project_longitude: parsedLng,
+        })
+        .eq("id", goal.id);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("[CreateDisbursementMilestones] pin save failed:", e);
+    }
+
     // Auto-fill amount distribution if the user gets confused: this
     // helper is opt-in via the "Even split" button, NOT applied silently.
     const payload: CreateMilestoneInput[] = drafts.map((d, i) => ({
@@ -257,6 +344,78 @@ export default function CreateDisbursementMilestonesScreen() {
                     amount: fmt(provider.max_project_value_cents),
                   })}
             </Text>
+          </View>
+
+          {/* Project location pin (Phase 2D). Optional — verification
+              geo-gate degrades gracefully when no pin is set, but elders
+              will be able to drift without a check. The owner can fill
+              this from the device's GPS or by typing lat/lng directly. */}
+          <View style={styles.pinCard}>
+            <View style={styles.pinHeader}>
+              <Ionicons name="location-outline" size={16} color="#0A2342" />
+              <Text style={styles.pinTitle}>
+                {t("create_milestones.pin_title")}
+              </Text>
+              {hasProjectPin ? (
+                <View style={styles.pinChipOk}>
+                  <Ionicons name="checkmark-circle" size={12} color="#065F46" />
+                  <Text style={styles.pinChipOkText}>
+                    {t("create_milestones.pin_set")}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.pinBody}>{t("create_milestones.pin_body")}</Text>
+            <TouchableOpacity
+              style={styles.gpsBtn}
+              onPress={handleCaptureGps}
+              disabled={gpsBusy}
+              accessibilityRole="button"
+            >
+              {gpsBusy ? (
+                <ActivityIndicator size="small" color="#0A2342" />
+              ) : (
+                <>
+                  <Ionicons name="locate-outline" size={16} color="#0A2342" />
+                  <Text style={styles.gpsBtnText}>
+                    {t("create_milestones.pin_use_current")}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <View style={styles.row2}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>
+                  {t("create_milestones.pin_lat_label")}
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={projectLatText}
+                  onChangeText={setProjectLatText}
+                  placeholder="e.g. 12.6392"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="numbers-and-punctuation"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>
+                  {t("create_milestones.pin_lng_label")}
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={projectLngText}
+                  onChangeText={setProjectLngText}
+                  placeholder="e.g. -8.0029"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="numbers-and-punctuation"
+                />
+              </View>
+            </View>
+            {pinPartialError ? (
+              <Text style={styles.pinError}>
+                {t("create_milestones.pin_invalid_body")}
+              </Text>
+            ) : null}
           </View>
 
           {/* Running sum + reconciliation */}
@@ -626,4 +785,41 @@ const styles = StyleSheet.create({
   btnPrimary: { backgroundColor: "#00C6AE" },
   btnPrimaryText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
   btnDisabled: { opacity: 0.5 },
+
+  pinCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  pinHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  pinTitle: { fontSize: 14, fontWeight: "800", color: "#0A2342" },
+  pinBody: { fontSize: 12, color: "#6B7280", marginTop: 4, marginBottom: 10 },
+  pinChipOk: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginLeft: "auto",
+    backgroundColor: "#D1FAE5",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  pinChipOkText: { fontSize: 11, fontWeight: "700", color: "#065F46" },
+  gpsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 10,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  gpsBtnText: { fontSize: 13, fontWeight: "700", color: "#0A2342" },
+  pinError: { fontSize: 12, color: "#B91C1C", marginTop: 6 },
 });
