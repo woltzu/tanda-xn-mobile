@@ -136,6 +136,7 @@ export const Routes = {
   GoalDisbursementMilestones: "GoalDisbursementMilestones",
   GoalProviderPayment: "GoalProviderPayment",
   GoalStories: "GoalStories",
+  GoalTemplateBrowser: "GoalTemplateBrowser",
   MilestoneVerification: "MilestoneVerification",
   GraduatedEntry: "GraduatedEntry",
   GroupChat: "GroupChat",

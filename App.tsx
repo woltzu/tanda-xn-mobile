@@ -45,6 +45,8 @@ import MilestoneVerificationScreen from "./screens/MilestoneVerificationScreen";
 import AdminVerificationQueueScreen from "./screens/AdminVerificationQueueScreen";
 // Phase 2D — verification history map (project pin + photo location).
 import VerificationMapScreen from "./screens/VerificationMapScreen";
+// Phase 4 — diaspora-dream goal templates.
+import GoalTemplateBrowserScreen from "./screens/GoalTemplateBrowserScreen";
 import PayoutHistoryScreen from "./screens/PayoutHistoryScreen";
 import PayoutListener from "./components/PayoutListener";
 import WelcomeScreen from "./screens/WelcomeScreen";
@@ -614,6 +616,8 @@ export type RootStackParamList = {
   AdminVerificationQueue: undefined;
   // Phase 2D — verification history map (released milestones).
   VerificationMap: { milestoneId: string };
+  // Phase 4 — diaspora-dream goal template browser.
+  GoalTemplateBrowser: undefined;
   // Trip Circle Flow
   ProviderDiscovery: undefined;
   ProviderProfileSetup: undefined;
@@ -1481,6 +1485,7 @@ function AppContent() {
           <Stack.Screen name="MilestoneVerification" component={MilestoneVerificationScreen} />
           <Stack.Screen name="AdminVerificationQueue" component={AdminVerificationQueueScreen} />
           <Stack.Screen name="VerificationMap" component={VerificationMapScreen} />
+          <Stack.Screen name="GoalTemplateBrowser" component={GoalTemplateBrowserScreen} />
           {/* Deep Link Invite Screens */}
           <Stack.Screen name="CircleInvite" component={CircleInviteScreen} />
           {/* Public frictionless join — reachable unauthenticated at /join/:inviteCode */}

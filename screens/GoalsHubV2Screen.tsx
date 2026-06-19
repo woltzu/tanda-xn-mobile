@@ -499,6 +499,28 @@ export default function GoalsHubV2Screen() {
             </View>
           ) : null}
 
+          {/* Phase 4 — template browser banner. Visible to users who
+              already have goals (the empty state has its own secondary
+              button). Subtle enough not to compete with the goals list. */}
+          {!loading && filteredGoals.length > 0 ? (
+            <TouchableOpacity
+              style={styles.templateBanner}
+              onPress={() => navigation.navigate(Routes.GoalTemplateBrowser as any)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.templateBannerIcon}>📋</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.templateBannerTitle}>
+                  {t("goals_hub_v2.template_banner_title")}
+                </Text>
+                <Text style={styles.templateBannerBody}>
+                  {t("goals_hub_v2.template_banner_body")}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#5B21B6" />
+            </TouchableOpacity>
+          ) : null}
+
           {/* Empty state */}
           {!loading && filteredGoals.length === 0 && (
             <View style={styles.emptyCard}>
@@ -514,6 +536,19 @@ export default function GoalsHubV2Screen() {
               >
                 <Text style={styles.emptyButtonText}>
                   {t("goals_hub_v2.empty_cta")}
+                </Text>
+              </TouchableOpacity>
+              {/* Phase 4 — secondary action: browse templates. Surfaces
+                  the diaspora-dream templates (house / wedding / business
+                  / school) to first-time users who don't know where to
+                  start. */}
+              <TouchableOpacity
+                onPress={() => navigation.navigate(Routes.GoalTemplateBrowser as any)}
+                accessibilityRole="button"
+                style={styles.emptyTemplateButton}
+              >
+                <Text style={styles.emptyTemplateButtonText}>
+                  {t("goals_hub_v2.empty_template_cta")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -747,6 +782,26 @@ const styles = StyleSheet.create({
     backgroundColor: TEAL,
   },
   emptyButtonText: { fontSize: 14, fontWeight: "600", color: "#FFFFFF" },
+  emptyTemplateButton: {
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  emptyTemplateButtonText: { fontSize: 13, fontWeight: "700", color: "#5B21B6" },
+  templateBanner: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#F5F3FF",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+  templateBannerIcon: { fontSize: 22 },
+  templateBannerTitle: { fontSize: 13, fontWeight: "800", color: "#5B21B6" },
+  templateBannerBody: { fontSize: 11, color: "#5B21B6", marginTop: 2 },
 
   // Cards
   card: {

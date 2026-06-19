@@ -959,6 +959,17 @@
     "last_amount": "Last: {{amount}}",
     "toast_round_up_saved": "Saved {{amount}} to your Round-up jar"
   },
+  "goal_template_browser": {
+    "title": "Goal templates",
+    "subtitle": "Diaspora dreams with realistic costs and timelines.",
+    "empty": "No templates available yet.",
+    "target": "Target",
+    "timeline": "Timeline",
+    "months": "{{count}} months",
+    "breakdown": "Cost breakdown",
+    "milestones": "Milestones",
+    "use_template": "Use this template"
+  },
   "goals_hub_v2": {
     "kicker": "MY GOALS",
     "title": "Achieve Your Dreams",
@@ -979,6 +990,9 @@
     "empty_title": "No Goals Yet",
     "empty_body": "Start your journey to achieving the life you came here to build.",
     "empty_cta": "Create Your First Goal",
+    "empty_template_cta": "Or use a template",
+    "template_banner_title": "Start with a template",
+    "template_banner_body": "Pre-filled goals for house, wedding, business and school.",
     "stories_title": "🏆 Achievement Stories",
     "see_all": "See All",
     "tip_title": "Pro Tip: Link a Circle",
@@ -992,6 +1006,7 @@
   "create_goal_express": {
     "header_title": "Create Goal",
     "header_subtitle": "One screen — name it, set a target, you're done",
+    "template_badge": "Template: {{name}}",
     "label_name": "Goal name",
     "placeholder_name": "e.g., Trip to Senegal",
     "label_amount": "Target amount",

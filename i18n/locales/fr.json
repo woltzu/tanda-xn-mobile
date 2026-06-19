@@ -959,6 +959,17 @@
     "last_amount": "Dernier : {{amount}}",
     "toast_round_up_saved": "{{amount}} ajouté à votre cagnotte Arrondi"
   },
+  "goal_template_browser": {
+    "title": "Modèles d'objectifs",
+    "subtitle": "Des rêves de la diaspora avec des coûts et délais réalistes.",
+    "empty": "Aucun modèle disponible pour l'instant.",
+    "target": "Cible",
+    "timeline": "Délai",
+    "months": "{{count}} mois",
+    "breakdown": "Détail des coûts",
+    "milestones": "Étapes",
+    "use_template": "Utiliser ce modèle"
+  },
   "goals_hub_v2": {
     "kicker": "MES OBJECTIFS",
     "title": "Réalisez vos rêves",
@@ -979,6 +990,9 @@
     "empty_title": "Aucun objectif pour le moment",
     "empty_body": "Commencez votre parcours vers la vie que vous êtes venu construire ici.",
     "empty_cta": "Créer votre premier objectif",
+    "empty_template_cta": "Ou utiliser un modèle",
+    "template_banner_title": "Démarrer avec un modèle",
+    "template_banner_body": "Objectifs pré-remplis pour maison, mariage, business et école.",
     "stories_title": "🏆 Histoires de réussite",
     "see_all": "Tout voir",
     "tip_title": "Astuce : liez un cercle",
@@ -992,6 +1006,7 @@
   "create_goal_express": {
     "header_title": "Créer un objectif",
     "header_subtitle": "Un seul écran — nommez-le, fixez un objectif, c'est terminé",
+    "template_badge": "Modèle : {{name}}",
     "label_name": "Nom de l'objectif",
     "placeholder_name": "ex. Voyage au Sénégal",
     "label_amount": "Montant cible",

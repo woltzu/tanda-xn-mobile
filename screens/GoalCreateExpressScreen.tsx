@@ -37,6 +37,7 @@ import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useGoalActions } from "../hooks/useGoalActions";
 import { useCircles } from "../context/CirclesContext";
+import { supabase } from "../lib/supabase";
 
 type SavingsType = "flexible" | "emergency" | "locked";
 
@@ -113,16 +114,38 @@ export default function GoalCreateExpressScreen() {
 
   // P2 — read route params so the spending banner on GoalsHubV2 can hand
   // off a pre-filled name + amount when the user taps "Save instead?".
+  // Phase 4 — also accept a `template` param when the user arrives via
+  // the goal-template browser. The template wins over generic suggestions.
   const route = (navigation as any).getState
     ? ((navigation as any).getState().routes.find((r: any) => r.name === Routes.GoalCreateExpress) ?? { params: {} })
     : { params: {} };
   const prefillName = (route?.params as { suggestedName?: string })?.suggestedName;
   const prefillAmount = (route?.params as { suggestedAmount?: number })?.suggestedAmount;
+  const template = (route?.params as {
+    template?: {
+      id: string;
+      category: string;
+      name: string;
+      default_target_cents?: number | null;
+      provider_categories?: string[] | null;
+    };
+  })?.template;
+  // Template name/target take precedence — the user picked this template
+  // for a reason. They can still edit the inputs before submit.
+  const templateName = template?.name;
+  const templateAmount =
+    template?.default_target_cents != null
+      ? Math.round((template.default_target_cents as number) / 100)
+      : undefined;
 
   // ── Form state ──────────────────────────────────────────────────────────
-  const [name, setName] = useState(prefillName ?? "");
+  const [name, setName] = useState(templateName ?? prefillName ?? "");
   const [amount, setAmount] = useState(
-    prefillAmount ? String(prefillAmount) : "",
+    templateAmount
+      ? String(templateAmount)
+      : prefillAmount
+      ? String(prefillAmount)
+      : "",
   );
 
   // P2 — median target across past goals. Loaded lazily on first amount
@@ -215,6 +238,26 @@ export default function GoalCreateExpressScreen() {
         return;
       }
 
+      // Phase 4 — stamp the goal's category + suggested provider
+      // category from the template. createGoal doesn't take these yet,
+      // so do it as a follow-up UPDATE. Best-effort: failure here is
+      // logged, not user-facing — the goal was created successfully.
+      if (template) {
+        try {
+          await supabase
+            .from("user_savings_goals")
+            .update({
+              category: template.category,
+              provider_category:
+                template.provider_categories?.[0] ?? null,
+            })
+            .eq("id", (goal as any).id);
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn("[GoalCreateExpress] template stamp failed:", e);
+        }
+      }
+
       // Replace so the user's back button goes to the Goals hub, not the
       // empty express form. Carries `justCreated` so the detail screen can
       // render the inline celebration banner.
@@ -271,6 +314,18 @@ export default function GoalCreateExpressScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Phase 4 — template badge. Renders only when the user
+              arrived from the goal-template browser; non-blocking
+              indicator that the form is pre-filled and editable. */}
+          {template ? (
+            <View style={styles.templateBadge}>
+              <Text style={styles.templateBadgeIcon}>📋</Text>
+              <Text style={styles.templateBadgeText} numberOfLines={1}>
+                {t("create_goal_express.template_badge", { name: template.name })}
+              </Text>
+            </View>
+          ) : null}
+
           {/* ── Name ───────────────────────────────────────────────────── */}
           <View style={styles.field}>
             <Text style={styles.label}>
@@ -972,4 +1027,20 @@ const styles = StyleSheet.create({
   },
   createBtnDisabled: { backgroundColor: "#E5E7EB" },
   createBtnText: { color: "#FFFFFF", fontWeight: "700", fontSize: 15 },
+
+  templateBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    backgroundColor: "#F5F3FF",
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginBottom: 14,
+  },
+  templateBadgeIcon: { fontSize: 14 },
+  templateBadgeText: { fontSize: 12, fontWeight: "700", color: "#5B21B6" },
 });
