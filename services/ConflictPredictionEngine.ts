@@ -346,6 +346,26 @@ export class ConflictPredictionEngine {
     return (data ?? []).map(mapConflict);
   }
 
+  /**
+   * Get conflict history for a CIRCLE — Bucket A fix.
+   *
+   * The ConflictAlertScreen was passing a circleId to useConflictHistory,
+   * which routed through getMemberConflicts(memberId) and filtered by
+   * member_id. That returned an empty list every time (unless a circle
+   * UUID happened to collide with a member UUID). This filter does what
+   * the screen always wanted: every conflict tied to this circle, both
+   * parties combined.
+   */
+  static async getCircleConflicts(circleId: string): Promise<ConflictRecord[]> {
+    const { data, error } = await supabase
+      .from("conflict_history")
+      .select("*")
+      .eq("circle_id", circleId)
+      .order("reported_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(mapConflict);
+  }
+
   /** Get conflicts between two specific members */
   static async getPairConflicts(idA: string, idB: string): Promise<ConflictRecord[]> {
     const { data, error } = await supabase

@@ -18,7 +18,7 @@
 // (replaced the legacy CirclesScreen in App.tsx).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   View,
@@ -45,6 +45,7 @@ import {
   useSubstitutePoolSummary,
 } from "../hooks/useSubstituteMember";
 import { usePartialPlanSummary } from "../hooks/usePartialContribution";
+import { useConflictAlertSummary } from "../hooks/useConflictAlertSummary";
 import { useAuth } from "../context/AuthContext";
 
 // ==========================================================================
@@ -77,15 +78,9 @@ function healthColor(score: number): string {
   return colors.errorText;
 }
 
-// Risk & Safety group mocks.
-const mockConflicts = {
-  count: 2,
-  most_recent: {
-    circle: "Family Circle",
-    descriptionKey: "circles_screen.conflict_recent_description_missed",
-    date: "Mar 10",
-  },
-};
+// Bucket A: legacy mockConflicts object (count + most_recent) deleted.
+// The card now reads real open-dispute + escalated-monitor counts via
+// useConflictAlertSummary across all of the user's circles.
 
 // Migration 206 (Bucket A): the Insurance Pool feature card now reads
 // the real circle_insurance_pools row + circles.insurance_pool_enabled
@@ -374,6 +369,18 @@ export default function CirclesV2Screen() {
   // with a real active-plan count across all circles. Drives the FeatureCard
   // status row + body line below.
   const { activeCount: partialActiveCount } = usePartialPlanSummary(user?.id);
+
+  // Conflict Alerts Bucket A: real open-dispute + escalated-monitor counts
+  // across all of the user's circles. mostRecent surfaces the freshest row
+  // (circle name + date) on the card so an elder can triage at a glance.
+  const conflictCircleIds = useMemo(
+    () => myCircles.map((c) => c.id),
+    [myCircles],
+  );
+  const {
+    openCount: conflictOpenCount,
+    mostRecent: conflictMostRecent,
+  } = useConflictAlertSummary(conflictCircleIds);
 
   // Every feature card now navigates to a real screen — no placeholder alerts.
 
@@ -672,36 +679,55 @@ export default function CirclesV2Screen() {
         </View>
 
         {/* ----- Conflict Alerts ----- */}
+        {/* Bucket A: real open-dispute + escalated-monitor counts. The
+            body row collapses to a healthy state when there's nothing
+            outstanding so the elder doesn't read a stale "Family Circle
+            Mar 10" forever. */}
         <FeatureCard
           icon="alert-circle-outline"
           iconColor={colors.errorText}
           title={t("circles_screen.conflict_title")}
           description={t("circles_screen.conflict_description")}
-          statusLabel={t("circles_screen.conflict_status_alerts", {
-            count: mockConflicts.count,
-          })}
-          statusColor={colors.errorText}
+          statusLabel={
+            conflictOpenCount > 0
+              ? t("circles_screen.conflict_status_alerts", {
+                  count: conflictOpenCount,
+                })
+              : t("circles_screen.conflict_status_clear")
+          }
+          statusColor={
+            conflictOpenCount > 0 ? colors.errorText : colors.textSecondary
+          }
           ctaLabel={t("circles_screen.conflict_cta")}
           ctaIcon="arrow-forward"
           onCta={handleOpenConflict}
         >
-          <Text style={styles.bodyLabel}>
-            {t("circles_screen.conflict_recent_label")}
-          </Text>
-          <View style={styles.recentAlertRow}>
-            <Ionicons
-              name="warning-outline"
-              size={14}
-              color={colors.errorText}
-            />
+          {conflictOpenCount > 0 && conflictMostRecent ? (
+            <>
+              <Text style={styles.bodyLabel}>
+                {t("circles_screen.conflict_recent_label")}
+              </Text>
+              <View style={styles.recentAlertRow}>
+                <Ionicons
+                  name="warning-outline"
+                  size={14}
+                  color={colors.errorText}
+                />
+                <Text style={styles.recentAlertText}>
+                  {t("circles_screen.conflict_recent_real", {
+                    circle: conflictMostRecent.circleName ?? "",
+                    date: new Date(
+                      conflictMostRecent.updatedAt,
+                    ).toLocaleDateString(),
+                  })}
+                </Text>
+              </View>
+            </>
+          ) : (
             <Text style={styles.recentAlertText}>
-              {t("circles_screen.conflict_recent_text", {
-                circle: mockConflicts.most_recent.circle,
-                description: t(mockConflicts.most_recent.descriptionKey),
-                date: mockConflicts.most_recent.date,
-              })}
+              {t("circles_screen.conflict_recent_clear")}
             </Text>
-          </View>
+          )}
         </FeatureCard>
 
         {/* ----- Insurance Pool ----- */}

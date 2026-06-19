@@ -171,8 +171,11 @@ function bustMonitorCache() {
   monitorCache = null;
 }
 
+// Bucket A: the legacy historyCache was keyed by memberId because the hook
+// was misnamed. The screen always passes a circleId. Cache shape now
+// matches the real key.
 type HistoryCacheEntry = {
-  memberId: string;
+  circleId: string;
   conflicts: ConflictRecord[];
   fetchedAt: number;
 };
@@ -247,22 +250,27 @@ export function usePostFormationMonitor(circleId: string | undefined) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 4. useConflictHistory — View conflict records for a member or circle
+// 4. useCircleConflictHistory — View conflict records for a CIRCLE
 // ═══════════════════════════════════════════════════════════════════════════════
+//
+// Bucket A fix: was `useConflictHistory(memberId)`. The screen always
+// passes a circleId, but the engine path filtered by member_id — returning
+// empty for any real call. Renamed + routed to the new engine method
+// `getCircleConflicts(circleId)` that filters by circle_id.
 
-export function useConflictHistory(memberId: string | undefined) {
+export function useCircleConflictHistory(circleId: string | undefined) {
   const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchInternal = useCallback(async () => {
-    if (!memberId) {
+    if (!circleId) {
       setConflicts([]);
       setLoading(false);
       return;
     }
     if (
       historyCache &&
-      historyCache.memberId === memberId &&
+      historyCache.circleId === circleId &&
       Date.now() - historyCache.fetchedAt < CONFLICT_CACHE_TTL_MS
     ) {
       setConflicts(historyCache.conflicts);
@@ -271,15 +279,15 @@ export function useConflictHistory(memberId: string | undefined) {
     }
     setLoading(true);
     try {
-      const data = await ConflictPredictionEngine.getMemberConflicts(memberId);
+      const data = await ConflictPredictionEngine.getCircleConflicts(circleId);
       setConflicts(data);
-      historyCache = { memberId, conflicts: data, fetchedAt: Date.now() };
+      historyCache = { circleId, conflicts: data, fetchedAt: Date.now() };
     } catch (err) {
-      console.error("useConflictHistory error:", err);
+      console.error("useCircleConflictHistory error:", err);
     } finally {
       setLoading(false);
     }
-  }, [memberId]);
+  }, [circleId]);
 
   // Pull-to-refresh path — busts cache then re-fetches fresh.
   const refresh = useCallback(async () => {

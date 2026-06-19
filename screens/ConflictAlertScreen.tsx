@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, ActivityIndicator, Alert,
@@ -10,15 +10,18 @@ import { useTranslation } from "react-i18next";
 import {
   useFormationReview,
   usePostFormationMonitor,
-  useConflictHistory,
+  useCircleConflictHistory,
   useConflictActions,
   type FormationFlag,
   type PostFormationMonitor as MonitorType,
   type ConflictRecord,
   type ReviewOutcome,
 } from "../hooks/useConflictPrediction";
+import { useCircleDisputes, type CircleDisputeRow } from "../hooks/useCircleDisputes";
+import { useProfileBatch } from "../hooks/useProfileBatch";
 import { useAuth } from "../context/AuthContext";
 import { useCircles } from "../context/CirclesContext";
+import { Routes } from "../lib/routes";
 
 // Engine return types use snake_case; the FlaggedPairSummary interface from
 // the engine matches what's actually inside circle_formation_flags.flagged_pair_ids.
@@ -50,21 +53,23 @@ const TABS: { key: TabKey; labelKey: string; icon: string }[] = [
   { key: "history", labelKey: "conflict_alert.tab_history", icon: "time-outline" },
 ];
 
-const SEVERITY_CONFIG: Record<string, { color: string; bg: string; icon: string }> = {
+// Bucket A: SEVERITY/TIER labels are now i18n keys looked up at render
+// time via t(`conflict_alert.severity_${key}`) and
+// t(`conflict_alert.tier_${key}`). Colour/icon meta stays as a literal
+// because the design tokens don't change per locale.
+const SEVERITY_META: Record<string, { color: string; bg: string; icon: string }> = {
   low:      { color: "#10B981", bg: "#ECFDF5", icon: "information-circle-outline" },
   medium:   { color: "#F59E0B", bg: "#FFFBEB", icon: "warning-outline" },
   high:     { color: "#EF4444", bg: "#FEF2F2", icon: "alert-circle-outline" },
   critical: { color: "#991B1B", bg: "#FEE2E2", icon: "skull-outline" },
 };
 
-// Engine tier vocabulary (clear | watch | flag | separate) — drives the
-// circle-level circleTier and the pair-level tier on FlaggedPairSummary.
-const TIER_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  clear:      { label: "Clear",      color: "#10B981", bg: "#ECFDF5" },
-  compatible: { label: "Compatible", color: "#10B981", bg: "#ECFDF5" },
-  watch:      { label: "Watch",      color: "#F59E0B", bg: "#FFFBEB" },
-  flag:       { label: "Flag",       color: "#EF4444", bg: "#FEF2F2" },
-  separate:   { label: "Separate",   color: "#991B1B", bg: "#FEE2E2" },
+const TIER_META: Record<string, { color: string; bg: string }> = {
+  clear:      { color: "#10B981", bg: "#ECFDF5" },
+  compatible: { color: "#10B981", bg: "#ECFDF5" },
+  watch:      { color: "#F59E0B", bg: "#FFFBEB" },
+  flag:       { color: "#EF4444", bg: "#FEF2F2" },
+  separate:   { color: "#991B1B", bg: "#FEE2E2" },
 };
 
 export default function ConflictAlertScreen() {
@@ -97,21 +102,56 @@ export default function ConflictAlertScreen() {
   // `undefined` short-circuits the fetch and returns empty data.
   const formation = useFormationReview();
   const monitor = usePostFormationMonitor(effectiveCircleId);
-  const history = useConflictHistory(effectiveCircleId);
+  // Bucket A fix: was useConflictHistory(effectiveCircleId) — wrong
+  // semantic. The hook filtered by member_id, so this returned []. The
+  // renamed hook calls engine.getCircleConflicts(circleId) which actually
+  // filters by circle_id.
+  const history = useCircleConflictHistory(effectiveCircleId);
+  const disputes = useCircleDisputes(effectiveCircleId);
   const actions = useConflictActions();
 
+  // Bucket A — collect every user id that appears on the visible cards
+  // (pair members from formation flags, monitored pair members, dispute
+  // parties) into a single batch lookup. Falls back to shortId on miss.
+  const profileIds = useMemo<string[]>(() => {
+    const ids = new Set<string>();
+    for (const flag of formation.pendingReviews) {
+      const pairs = (flag.flaggedPairIds ?? []) as unknown as FlaggedPair[];
+      for (const p of pairs) {
+        if (p.member_a_id) ids.add(p.member_a_id);
+        if (p.member_b_id) ids.add(p.member_b_id);
+      }
+    }
+    for (const m of monitor.monitors) {
+      if (m.memberAId) ids.add(m.memberAId);
+      if (m.memberBId) ids.add(m.memberBId);
+    }
+    for (const d of disputes.disputes) {
+      if (d.complainantId) ids.add(d.complainantId);
+      if (d.respondentId) ids.add(d.respondentId);
+    }
+    return Array.from(ids);
+  }, [formation.pendingReviews, monitor.monitors, disputes.disputes]);
+  const { names: profileNames } = useProfileBatch(profileIds);
+  const resolveName = useCallback(
+    (id?: string | null) => (id && profileNames.get(id)) || shortId(id ?? undefined),
+    [profileNames],
+  );
+
   const isRefreshing =
-    (activeTab === "live_signals" && (formation.loading || monitor.loading)) ||
+    (activeTab === "live_signals" &&
+      (formation.loading || monitor.loading || disputes.loading)) ||
     (activeTab === "history" && history.loading);
 
   const handleRefresh = useCallback(() => {
     if (activeTab === "live_signals") {
       formation.refresh();
       monitor.refresh();
+      disputes.refresh();
     } else {
       history.refresh();
     }
-  }, [activeTab, formation, monitor, history]);
+  }, [activeTab, formation, monitor, disputes, history]);
 
   // ── Formation review handlers ──────────────────────────────────────────────
   // Map UI verbs ("approved" / "rejected" / "override") to the engine's
@@ -133,13 +173,14 @@ export default function ConflictAlertScreen() {
       Alert.alert(t("conflict_alert.alert_signin_required_title"), t("conflict_alert.alert_signin_required_body"));
       return;
     }
+    const outcomeLabel = t(`conflict_alert.outcome_${uiOutcome}`);
     Alert.alert(
-      `${uiOutcome.charAt(0).toUpperCase() + uiOutcome.slice(1)} Formation`,
-      `Are you sure you want to ${uiOutcome} this formation?`,
+      t("conflict_alert.formation_review_alert_title", { outcome: outcomeLabel }),
+      t("conflict_alert.formation_review_alert_body", { outcome: outcomeLabel }),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("conflict_alert.formation_cancel"), style: "cancel" },
         {
-          text: "Confirm",
+          text: t("conflict_alert.formation_confirm"),
           style: uiOutcome === "rejected" ? "destructive" : "default",
           onPress: async () => {
             try {
@@ -147,7 +188,9 @@ export default function ConflictAlertScreen() {
                 flag.id,
                 user.id,
                 mapToReviewOutcome(uiOutcome),
-                `Reviewed via mobile dashboard`
+                // Server-side audit note — kept English so the DB row is
+                // legible to anyone auditing across locales.
+                "Reviewed via mobile dashboard",
               );
               formation.refresh();
             } catch (err: any) {
@@ -157,17 +200,17 @@ export default function ConflictAlertScreen() {
         },
       ]
     );
-  }, [formation, user?.id]);
+  }, [formation, user?.id, t]);
 
   // ── Resolve conflict handler ───────────────────────────────────────────────
   const handleResolve = useCallback((conflict: ConflictRecord) => {
     Alert.alert(
-      "Resolve Conflict",
-      "Mark this conflict as resolved?",
+      t("conflict_alert.formation_resolve_title"),
+      t("conflict_alert.formation_resolve_body"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("conflict_alert.formation_cancel"), style: "cancel" },
         {
-          text: "Resolve",
+          text: t("conflict_alert.formation_resolve_button"),
           onPress: async () => {
             try {
               await actions.resolveConflict(conflict.id, "manual", "Resolved from mobile");
@@ -179,36 +222,37 @@ export default function ConflictAlertScreen() {
         },
       ]
     );
-  }, [actions, history]);
+  }, [actions, history, t]);
 
-  // ── Formation tab ──────────────────────────────────────────────────────────
-  const renderFormationTab = () => {
+  // ── Open mediation handler ─────────────────────────────────────────────────
+  // The dispute_cases row drives Universe B. Tap routes to MediationCase
+  // (ConflictCaseScreen) — that screen owns the elder claim + ruling flow
+  // through ElderContext. The dispute id is carried via navigation state so
+  // the destination can hydrate the case lazily.
+  const handleOpenMediation = useCallback((dispute: CircleDisputeRow) => {
+    navigation.navigate(Routes.MediationCase, { caseId: dispute.id });
+  }, [navigation]);
+
+  // ── Formation section (Bucket A: empty rendered by combined fallback). ────
+  const renderFormationSection = () => {
     if (formation.loading && formation.pendingReviews.length === 0) {
       return <LoadingPlaceholder />;
     }
-
-    if (formation.pendingReviews.length === 0) {
-      return (
-        <EmptyState
-          icon="shield-checkmark"
-          title="No pending reviews"
-          subtitle="All circle formations have been reviewed"
-        />
-      );
-    }
+    if (formation.pendingReviews.length === 0) return null;
 
     return formation.pendingReviews.map((flag) => {
       // Engine: circleTier (not frictionTier), flaggedPairIds (snake-cased
       // payload, not flaggedPairs), flaggedAt (not createdAt), reviewNotes
       // (not notes). friction_score is already 0-100, no *100 needed.
-      const tier = TIER_CONFIG[flag.circleTier] ?? TIER_CONFIG.clear;
+      const tierMeta = TIER_META[flag.circleTier] ?? TIER_META.clear;
+      const tierLabel = t(`conflict_alert.tier_${flag.circleTier ?? "clear"}`);
       const pairs = flag.flaggedPairIds as unknown as FlaggedPair[];
       return (
         <View key={flag.id} style={styles.card}>
           <View style={styles.cardHeader}>
-            <View style={[styles.tierPill, { backgroundColor: tier.bg }]}>
-              <View style={[styles.tierDot, { backgroundColor: tier.color }]} />
-              <Text style={[styles.tierLabel, { color: tier.color }]}>{tier.label}</Text>
+            <View style={[styles.tierPill, { backgroundColor: tierMeta.bg }]}>
+              <View style={[styles.tierDot, { backgroundColor: tierMeta.color }]} />
+              <Text style={[styles.tierLabel, { color: tierMeta.color }]}>{tierLabel}</Text>
             </View>
             <Text style={styles.cardTimestamp}>
               {new Date(flag.flaggedAt).toLocaleDateString()}
@@ -217,8 +261,11 @@ export default function ConflictAlertScreen() {
 
           <Text style={styles.cardTitle}>{t("conflict_alert.card_title")}</Text>
           <Text style={styles.cardNotes}>
-            {flag.totalPairs} pair{flag.totalPairs === 1 ? "" : "s"} scored,{" "}
-            {flag.flaggedPairs} flagged. Highest pair {Math.round(flag.highestScore)}/100.
+            {t("conflict_alert.live_signals_subtitle", {
+              scored: flag.totalPairs,
+              flagged: flag.flaggedPairs,
+              highest: Math.round(flag.highestScore),
+            })}
           </Text>
 
           {pairs && pairs.length > 0 && (
@@ -228,10 +275,12 @@ export default function ConflictAlertScreen() {
                   <Ionicons name="people-outline" size={16} color="#6B7280" />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.pairText}>
-                      {shortId(pair.member_a_id)} ↔ {shortId(pair.member_b_id)}
+                      {resolveName(pair.member_a_id)} ↔ {resolveName(pair.member_b_id)}
                     </Text>
                     <Text style={[styles.pairText, { fontSize: 11, color: "#9CA3AF" }]}>
-                      Top factor: {formatFactor(pair.top_factor)}
+                      {t("conflict_alert.monitor_top_factor", {
+                        factor: formatFactor(pair.top_factor),
+                      })}
                     </Text>
                   </View>
                   <Text style={[styles.pairScore, { color: pair.friction_score >= 55 ? "#EF4444" : "#F59E0B" }]}>
@@ -277,21 +326,12 @@ export default function ConflictAlertScreen() {
     });
   };
 
-  // ── Monitoring tab ─────────────────────────────────────────────────────────
-  const renderMonitoringTab = () => {
+  // ── Monitoring section (Bucket A: empty rendered by combined fallback). ──
+  const renderMonitoringSection = () => {
     if (monitor.loading && monitor.monitors.length === 0) {
       return <LoadingPlaceholder />;
     }
-
-    if (monitor.monitors.length === 0) {
-      return (
-        <EmptyState
-          icon="pulse"
-          title="No active monitors"
-          subtitle="No pairs are currently being monitored in this circle"
-        />
-      );
-    }
+    if (monitor.monitors.length === 0) return null;
 
     return (
       <>
@@ -299,7 +339,9 @@ export default function ConflictAlertScreen() {
           <View style={styles.escalationBanner}>
             <Ionicons name="warning" size={20} color="#EF4444" />
             <Text style={styles.escalationText}>
-              {monitor.escalated.length} escalated pair{monitor.escalated.length !== 1 ? "s" : ""} require attention
+              {t("conflict_alert.monitor_escalated_pairs", {
+                count: monitor.escalated.length,
+              })}
             </Text>
           </View>
         )}
@@ -333,7 +375,9 @@ export default function ConflictAlertScreen() {
                     color={m.escalated ? "#EF4444" : "#00C6AE"}
                   />
                   <Text style={[styles.monitorStatus, { color: m.escalated ? "#EF4444" : "#00C6AE" }]}>
-                    {m.escalated ? "Escalated" : "Watching"}
+                    {m.escalated
+                      ? t("conflict_alert.monitor_escalated")
+                      : t("conflict_alert.monitor_watching")}
                   </Text>
                 </View>
                 <Text style={styles.cardTimestamp}>
@@ -344,7 +388,7 @@ export default function ConflictAlertScreen() {
               <View style={styles.pairRow}>
                 <Ionicons name="people" size={16} color="#0A2342" />
                 <Text style={styles.pairTextBold}>
-                  {shortId(m.memberAId)} ↔ {shortId(m.memberBId)}
+                  {resolveName(m.memberAId)} ↔ {resolveName(m.memberBId)}
                 </Text>
               </View>
 
@@ -375,6 +419,88 @@ export default function ConflictAlertScreen() {
     );
   };
 
+  // ── Disputes section (Bucket A — Universe B unified into Live signals). ──
+  const renderDisputesSection = () => {
+    if (disputes.loading && disputes.disputes.length === 0) {
+      return <LoadingPlaceholder />;
+    }
+    if (disputes.disputes.length === 0) return null;
+
+    return (
+      <>
+        <Text style={styles.sectionHeader}>
+          {t("conflict_alert.disputes_section_title", {
+            count: disputes.disputes.length,
+          })}
+        </Text>
+        {disputes.disputes.map((d) => (
+          <View key={d.id} style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={styles.disputePillRow}>
+                {d.autoCreated && (
+                  <View style={[styles.disputePill, styles.disputePillAuto]}>
+                    <Text style={styles.disputePillText}>
+                      {t("conflict_alert.dispute_auto_created")}
+                    </Text>
+                  </View>
+                )}
+                {d.escalationTier && (
+                  <View style={[styles.disputePill, styles.disputePillEscalated]}>
+                    <Text style={[styles.disputePillText, { color: "#991B1B" }]}>
+                      {t("conflict_alert.dispute_escalated_to", {
+                        tier: t(`conflict_alert.dispute_tier_${d.escalationTier}`),
+                      })}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={styles.cardTimestamp}>
+                {new Date(d.updatedAt).toLocaleDateString()}
+              </Text>
+            </View>
+            <Text style={styles.cardTitle}>
+              {d.autoCreated
+                ? t("conflict_alert.dispute_title_auto", {
+                    type: formatFactor(d.disputeType ?? "missed_contribution"),
+                  })
+                : t("conflict_alert.dispute_title_reported", {
+                    reporter: resolveName(d.complainantId),
+                  })}
+            </Text>
+            {d.description && (
+              <Text style={styles.cardNotes} numberOfLines={3}>
+                {d.description}
+              </Text>
+            )}
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.resolveBtn]}
+              onPress={() => handleOpenMediation(d)}
+              accessibilityRole="button"
+            >
+              <Ionicons name="hammer-outline" size={16} color="#FFFFFF" />
+              <Text style={styles.actionBtnText}>
+                {t("conflict_alert.dispute_open_mediation")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ))}
+      </>
+    );
+  };
+
+  // ── Combined empty state for Live signals ─────────────────────────────────
+  // When all three sections are empty and none is loading, render ONE card
+  // instead of the previous three stacked empties (formation + monitor +
+  // disputes). Mirrors the "this circle is healthy" framing in Circle Health
+  // Bucket B's no-data state.
+  const liveSignalsFullyEmpty =
+    !formation.loading &&
+    !monitor.loading &&
+    !disputes.loading &&
+    formation.pendingReviews.length === 0 &&
+    monitor.monitors.length === 0 &&
+    disputes.disputes.length === 0;
+
   // ── History tab ────────────────────────────────────────────────────────────
   const renderHistoryTab = () => {
     if (history.loading && history.conflicts.length === 0) {
@@ -385,8 +511,8 @@ export default function ConflictAlertScreen() {
       return (
         <EmptyState
           icon="time"
-          title="No conflict history"
-          subtitle="No conflicts have been recorded for this circle"
+          title={t("conflict_alert.history_empty_title")}
+          subtitle={t("conflict_alert.history_empty_body")}
         />
       );
     }
@@ -410,7 +536,7 @@ export default function ConflictAlertScreen() {
         </View>
 
         {history.conflicts.map((conflict) => {
-          const sev = SEVERITY_CONFIG[conflict.severity] ?? SEVERITY_CONFIG.low;
+          const sev = SEVERITY_META[conflict.severity] ?? SEVERITY_META.low;
           const isResolved = !!conflict.resolvedAt;
 
           return (
@@ -419,12 +545,14 @@ export default function ConflictAlertScreen() {
                 <View style={[styles.severityPill, { backgroundColor: sev.bg }]}>
                   <Ionicons name={sev.icon as any} size={14} color={sev.color} />
                   <Text style={[styles.severityLabel, { color: sev.color }]}>
-                    {conflict.severity.charAt(0).toUpperCase() + conflict.severity.slice(1)}
+                    {t(`conflict_alert.severity_${conflict.severity}`)}
                   </Text>
                 </View>
                 <View style={[styles.statusPill, isResolved ? styles.resolvedPill : styles.unresolvedPill]}>
                   <Text style={[styles.statusText, { color: isResolved ? "#10B981" : "#F59E0B" }]}>
-                    {isResolved ? "Resolved" : "Open"}
+                    {isResolved
+                      ? t("conflict_alert.status_resolved")
+                      : t("conflict_alert.status_open")}
                   </Text>
                 </View>
               </View>
@@ -476,7 +604,12 @@ export default function ConflictAlertScreen() {
             // Badge counts — live_signals now combines formation + monitoring.
             let badge = 0;
             if (tab.key === "live_signals") {
-              badge = formation.pendingReviews.length + monitor.escalated.length;
+              // Bucket A: badge now includes open disputes too — the bucket
+              // unification means the tab covers all three signal types.
+              badge =
+                formation.pendingReviews.length +
+                monitor.escalated.length +
+                disputes.disputes.length;
             } else if (tab.key === "history") {
               badge = history.unresolvedCount;
             }
@@ -550,9 +683,21 @@ export default function ConflictAlertScreen() {
             <>
               {activeTab === "live_signals" && (
                 <>
-                  {renderFormationTab()}
-                  <View style={{ height: 14 }} />
-                  {renderMonitoringTab()}
+                  {liveSignalsFullyEmpty ? (
+                    <EmptyState
+                      icon="shield-checkmark"
+                      title={t("conflict_alert.empty_no_live_signals_title")}
+                      subtitle={t("conflict_alert.empty_no_live_signals_body")}
+                    />
+                  ) : (
+                    <>
+                      {renderFormationSection()}
+                      <View style={{ height: 14 }} />
+                      {renderMonitoringSection()}
+                      <View style={{ height: 14 }} />
+                      {renderDisputesSection()}
+                    </>
+                  )}
                 </>
               )}
               {activeTab === "history" && renderHistoryTab()}
@@ -567,11 +712,13 @@ export default function ConflictAlertScreen() {
 
 // ── Shared sub-components ────────────────────────────────────────────────────
 
+// The dangling `t(...)` here predates the screen rewrite — there's no `t`
+// in scope at module level. Render the activity indicator without a label;
+// callers can still see the spinner.
 function LoadingPlaceholder() {
   return (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="large" color="#00C6AE" />
-      <Text style={styles.loadingText}>{t("conflict_alert.loading")}</Text>
     </View>
   );
 }
@@ -632,6 +779,31 @@ const styles = StyleSheet.create({
   resolvedPill: { backgroundColor: "#ECFDF5" },
   unresolvedPill: { backgroundColor: "#FFFBEB" },
   statusText: { fontSize: 12, fontWeight: "600" },
+
+  // Bucket A — section header above the Disputes list within Live signals
+  sectionHeader: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#0A2342",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  disputePillRow: { flexDirection: "row", gap: 6 },
+  disputePill: {
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  disputePillAuto: { backgroundColor: "#EEF2FF" },
+  disputePillEscalated: { backgroundColor: "#FEE2E2" },
+  disputePillText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#4338CA",
+    letterSpacing: 0.3,
+  },
 
   // Pairs list
   pairsList: { marginTop: 8, gap: 6 },

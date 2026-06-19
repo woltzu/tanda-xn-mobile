@@ -983,7 +983,9 @@ export {
   useCircleFormationCheck,
   useFormationReview,
   usePostFormationMonitor,
-  useConflictHistory,
+  // Bucket A — renamed from useConflictHistory after the
+  // memberId/circleId semantic fix.
+  useCircleConflictHistory,
   useConflictActions,
   useConflictDashboard,
   type PairScore,
