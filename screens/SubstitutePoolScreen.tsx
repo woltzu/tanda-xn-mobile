@@ -55,6 +55,7 @@ import {
   useSubstituteMemberActions,
   type PoolStatus,
 } from "../hooks/useSubstituteMember";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 // Bucket B — HelpSheet topics (one sheet, all four topics rendered in
 // sequence), plus the AsyncStorage gate for the first-visit coach mark
@@ -158,6 +159,23 @@ export default function SubstitutePoolScreen() {
     refresh: refreshAdmin,
   } = useAdminSubstitutionQueue(userId);
   const actions = useSubstituteMemberActions();
+  const { track } = useEventTracker();
+
+  // Bucket C — substitute_pool.viewed fires once per mount (StrictMode
+  // dev-mode double-mount safe). The tab-switch event uses a separate
+  // ref so the original mount fire doesn't double up with the first
+  // setActiveTab call from initial render.
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: "substitute_pool.viewed",
+      eventCategory: "circle",
+      eventAction: "view",
+      eventLabel: "mount",
+    });
+  }, [track]);
 
   // ── Local UI state ────────────────────────────────────────────────────────
   const [editing, setEditing] = useState(false);
@@ -171,6 +189,22 @@ export default function SubstitutePoolScreen() {
 
   // Bucket B — tabs, sheets, coach mark.
   const [activeTab, setActiveTab] = useState<TabKey>("membership");
+  // Bucket C — tab switches re-fire substitute_pool.viewed so we can
+  // measure attention split across membership / offers / admin.
+  const handleTabChange = useCallback(
+    (next: TabKey) => {
+      if (next === activeTab) return;
+      setActiveTab(next);
+      track({
+        eventType: "substitute_pool.viewed",
+        eventCategory: "circle",
+        eventAction: "view",
+        eventLabel: next,
+        eventValue: { tab: next },
+      });
+    },
+    [activeTab, track],
+  );
   const [helpOpen, setHelpOpen] = useState(false);
   const [reliabilityOpen, setReliabilityOpen] = useState(false);
   const [declineBudgetOpen, setDeclineBudgetOpen] = useState(false);
@@ -273,6 +307,18 @@ export default function SubstitutePoolScreen() {
         );
         return;
       }
+      // Bucket C — telemetry on confirmed save. Only the join path
+      // (not in pool → opting in) is "opt_in_submitted"; a preference
+      // edit on an already-joined member doesn't qualify per spec.
+      if (!isInPool) {
+        track({
+          eventType: "substitute_pool.opt_in_submitted",
+          eventCategory: "circle",
+          eventAction: "click",
+          eventLabel: formStatus,
+          eventValue: { status: formStatus },
+        });
+      }
       setEditing(false);
       refreshEntry();
     } finally {
@@ -322,6 +368,14 @@ export default function SubstitutePoolScreen() {
         );
         return;
       }
+      // Bucket C — telemetry on confirmed offer response.
+      track({
+        eventType: "substitute_pool.offer_responded",
+        eventCategory: "circle",
+        eventAction: "click",
+        eventLabel: action,
+        eventValue: { offer_id: offerId, response: action },
+      });
       refreshOffers();
       refreshEntry();
     } catch (err: any) {
@@ -349,6 +403,14 @@ export default function SubstitutePoolScreen() {
         );
         return;
       }
+      // Bucket C — telemetry on confirmed admin action.
+      track({
+        eventType: "substitute_pool.admin_action",
+        eventCategory: "circle",
+        eventAction: "click",
+        eventLabel: action,
+        eventValue: { record_id: recordId, action },
+      });
       refreshAdmin();
     } catch (err: any) {
       Alert.alert(
@@ -940,7 +1002,7 @@ export default function SubstitutePoolScreen() {
             <TouchableOpacity
               key={tab.key}
               style={[styles.tabBtn, isActive && styles.tabBtnActive]}
-              onPress={() => setActiveTab(tab.key)}
+              onPress={() => handleTabChange(tab.key)}
               accessibilityRole="button"
             >
               <Text

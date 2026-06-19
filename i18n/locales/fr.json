@@ -6383,6 +6383,18 @@
     "notification_low_balance_title": "Solde du fonds bas",
     "notification_low_balance_body": "Le fonds d'assurance pour {{circle}} est sous le seuil de sécurité."
   },
+  "substitute": {
+    "notification_offer_title": "Nouvelle proposition de remplacement",
+    "notification_offer_body": "Vous avez été sélectionné(e) pour rejoindre {{circle_name}} en tant que remplaçant(e).",
+    "notification_admin_pending_title": "Remplaçant en attente d'approbation",
+    "notification_admin_pending_body": "Un remplaçant attend votre approbation pour rejoindre {{circle_name}}.",
+    "notification_completed_title": "Remplacement effectué",
+    "notification_completed_body": "{{substitute_name}} a rejoint {{circle_name}}.",
+    "notification_declined_title": "Aucun remplaçant trouvé",
+    "notification_declined_body": "Votre demande de sortie pour {{circle_name}} n'a pas pu être satisfaite. Veuillez contacter un Aîné.",
+    "notification_unsuspended_title": "Levée de suspension",
+    "notification_unsuspended_body": "Votre suspension de remplaçant a été levée. Vous recevrez à nouveau des propositions."
+  },
   "community_events": {
     "header_title": "Événements à venir",
     "header_subtitle": "Vrais événements de votre communauté",

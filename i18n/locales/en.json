@@ -6383,6 +6383,18 @@
     "notification_low_balance_title": "Pool balance is low",
     "notification_low_balance_body": "The insurance pool for {{circle}} is below the safety threshold."
   },
+  "substitute": {
+    "notification_offer_title": "New substitution offer",
+    "notification_offer_body": "You've been matched to join {{circle_name}} as a substitute.",
+    "notification_admin_pending_title": "Substitute awaiting approval",
+    "notification_admin_pending_body": "A substitute is waiting for your approval to join {{circle_name}}.",
+    "notification_completed_title": "Substitution complete",
+    "notification_completed_body": "{{substitute_name}} has joined {{circle_name}}.",
+    "notification_declined_title": "No substitute found",
+    "notification_declined_body": "Your exit request for {{circle_name}} could not be fulfilled. Please contact an elder.",
+    "notification_unsuspended_title": "Substitute suspension lifted",
+    "notification_unsuspended_body": "Your substitute suspension has been lifted. You'll start receiving offers again."
+  },
   "community_events": {
     "header_title": "Upcoming Events",
     "header_subtitle": "Real events from your community",
