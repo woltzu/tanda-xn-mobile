@@ -22,7 +22,7 @@
 // pipeline actually writes.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -51,6 +51,7 @@ import {
   HealthStatus,
 } from "../hooks/useCircleHealth";
 import { useCircleHealthScoringHistory } from "../hooks/useScoringPipeline";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 // ─── Metric keys that have help copy (Bucket B). Topic = the i18n suffix. ───
 type HelpTopic =
@@ -97,6 +98,21 @@ function ChooserView() {
   const { t } = useTranslation();
   const navigation = useTypedNavigation();
   const { myCircles, isLoading: circlesLoading } = useCircles();
+  const { track } = useEventTracker();
+
+  // StrictMode double-mounts the screen in dev; firing .viewed once per
+  // actual visit needs a ref guard rather than relying on useEffect alone.
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: "circle_health.viewed",
+      eventCategory: "circle",
+      eventAction: "view",
+      eventLabel: "chooser",
+    });
+  }, [track]);
 
   const [healthMap, setHealthMap] = useState<Record<string, ChooserHealth>>({});
   const [loading, setLoading] = useState(false);
@@ -253,6 +269,7 @@ function DetailView({ circleId }: { circleId: string }) {
   const { t } = useTranslation();
   const navigation = useTypedNavigation();
   const { myCircles } = useCircles();
+  const { track } = useEventTracker();
   const {
     health,
     loading,
@@ -273,6 +290,44 @@ function DetailView({ circleId }: { circleId: string }) {
 
   // Help sheet topic — set by tapping a (?) icon, cleared on close.
   const [helpTopic, setHelpTopic] = useState<HelpTopic | null>(null);
+
+  // .viewed dedupe — fire once per circleId visit (StrictMode dev safe).
+  const viewedCircleRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (viewedCircleRef.current === circleId) return;
+    viewedCircleRef.current = circleId;
+    track({
+      eventType: "circle_health.viewed",
+      eventCategory: "circle",
+      eventAction: "view",
+      eventLabel: "detail",
+      eventValue: { circle_id: circleId },
+    });
+  }, [circleId, track]);
+
+  // .recomputed — fired once after the RPC settles. We don't have a return
+  // value from `recompute()`, so we watch the recomputing flag transition
+  // from true → false and read the latest error state at that moment.
+  const recomputeIntentRef = useRef(false);
+  useEffect(() => {
+    if (recomputing) {
+      recomputeIntentRef.current = true;
+      return;
+    }
+    if (!recomputeIntentRef.current) return;
+    recomputeIntentRef.current = false;
+    track({
+      eventType: "circle_health.recomputed",
+      eventCategory: "circle",
+      eventAction: "click",
+      eventLabel: circleId,
+      eventValue: {
+        circle_id: circleId,
+        success: error == null,
+        error_message: error,
+      },
+    });
+  }, [recomputing, error, circleId, track]);
 
   // Optimistically rounded numbers for display (DB stores DECIMAL).
   const score = health ? Math.round(health.health_score) : 0;
@@ -354,9 +409,20 @@ function DetailView({ circleId }: { circleId: string }) {
           {showActionBanner && actionReasonKey && health ? (
             <TouchableOpacity
               style={styles.actionBanner}
-              onPress={() =>
-                navigation.navigate(Routes.CircleDetail, { circleId })
-              }
+              onPress={() => {
+                track({
+                  eventType: "circle_health.action_banner_clicked",
+                  eventCategory: "circle",
+                  eventAction: "click",
+                  eventLabel: circleId,
+                  eventValue: {
+                    circle_id: circleId,
+                    banner_type:
+                      health.members_with_defaults > 0 ? "defaults" : "critical",
+                  },
+                });
+                navigation.navigate(Routes.CircleDetail, { circleId });
+              }}
               accessibilityRole="button"
             >
               <Ionicons name="warning" size={20} color="#991B1B" />

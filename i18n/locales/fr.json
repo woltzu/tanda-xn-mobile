@@ -6251,6 +6251,10 @@
     "help_avg_default_probability_threshold": "Sous 5 % c'est sûr. Au-dessus de 15 %, le cercle devrait se rééquilibrer.",
     "help_avg_default_probability_action": "Examinez les membres à risque et envisagez des plans de Contribution partielle ou des membres de substitution."
   },
+  "health": {
+    "notification_title": "Alerte de tendance sur la santé du cercle",
+    "notification_body": "La santé de {{circle_name}} commence à décliner. Consultez le tableau de bord santé."
+  },
   "community_events": {
     "header_title": "Événements à venir",
     "header_subtitle": "Vrais événements de votre communauté",

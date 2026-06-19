@@ -6251,6 +6251,10 @@
     "help_avg_default_probability_threshold": "Under 5% is safe. Above 15% means the circle should rebalance.",
     "help_avg_default_probability_action": "Review specific high-risk members and consider Partial Contribution plans or Substitute members."
   },
+  "health": {
+    "notification_title": "Circle health trend alert",
+    "notification_body": "{{circle_name}}'s health has started declining. Please check the health dashboard."
+  },
   "community_events": {
     "header_title": "Upcoming Events",
     "header_subtitle": "Real events from your community",
