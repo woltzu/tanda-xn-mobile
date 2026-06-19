@@ -32,6 +32,8 @@ import {
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
+  Modal,
+  Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -48,6 +50,15 @@ import {
   TREND_VISUALS,
   HealthStatus,
 } from "../hooks/useCircleHealth";
+import { useCircleHealthScoringHistory } from "../hooks/useScoringPipeline";
+
+// ─── Metric keys that have help copy (Bucket B). Topic = the i18n suffix. ───
+type HelpTopic =
+  | "on_time_contribution"
+  | "members_in_default"
+  | "total_members"
+  | "avg_xn_score"
+  | "avg_default_probability";
 
 // ─── Chooser-row shape (just what the row needs, not full coercion) ─────────
 type ChooserHealth = {
@@ -241,6 +252,7 @@ function ChooserView() {
 function DetailView({ circleId }: { circleId: string }) {
   const { t } = useTranslation();
   const navigation = useTypedNavigation();
+  const { myCircles } = useCircles();
   const {
     health,
     loading,
@@ -254,9 +266,39 @@ function DetailView({ circleId }: { circleId: string }) {
     hasNeverBeenComputed,
   } = useCircleHealth(circleId);
 
+  // 30-day score history for the sparkline. Returns empty array when the
+  // circle_health_history table has no rows for this circle yet (common on
+  // freshly created circles or before the first nightly pipeline run).
+  const { history } = useCircleHealthScoringHistory(circleId, 30);
+
+  // Help sheet topic — set by tapping a (?) icon, cleared on close.
+  const [helpTopic, setHelpTopic] = useState<HelpTopic | null>(null);
+
   // Optimistically rounded numbers for display (DB stores DECIMAL).
   const score = health ? Math.round(health.health_score) : 0;
   const gaugeColor = statusVisual?.color ?? colors.border;
+
+  // Look up the circle's name for the action-banner copy and the CTA target.
+  const circleName = useMemo(
+    () => myCircles.find((c) => c.id === circleId)?.name ?? "",
+    [myCircles, circleId],
+  );
+
+  // Action-banner trigger: critical status OR > 15% of members in default.
+  const defaultRatio = health
+    ? health.total_members > 0
+      ? health.members_with_defaults / health.total_members
+      : 0
+    : 0;
+  const showActionBanner =
+    !!health &&
+    (health.health_status === "critical" || defaultRatio > 0.15);
+  const actionReasonKey =
+    showActionBanner && health
+      ? health.members_with_defaults > 0
+        ? "action_needed_body_defaults"
+        : "action_needed_body_critical"
+      : null;
 
   const componentRows = health
     ? [
@@ -306,6 +348,37 @@ function DetailView({ circleId }: { circleId: string }) {
             {t("circle_health_screen.header_subtitle_detail")}
           </Text>
 
+          {/* Action banner — surfaces above the gauge when health is critical
+              or > 15% of members are in default. Tap routes to CircleDetail
+              so the user can drill into the Members tab and act. */}
+          {showActionBanner && actionReasonKey && health ? (
+            <TouchableOpacity
+              style={styles.actionBanner}
+              onPress={() =>
+                navigation.navigate(Routes.CircleDetail, { circleId })
+              }
+              accessibilityRole="button"
+            >
+              <Ionicons name="warning" size={20} color="#991B1B" />
+              <View style={styles.actionBannerCopy}>
+                <Text style={styles.actionBannerTitle}>
+                  {t("circle_health_screen.action_needed_title", {
+                    circle_name: circleName,
+                  })}
+                </Text>
+                <Text style={styles.actionBannerBody}>
+                  {t(`circle_health_screen.${actionReasonKey}`, {
+                    count: health.members_with_defaults,
+                    total: health.total_members,
+                  })}
+                </Text>
+                <Text style={styles.actionBannerCta}>
+                  {t("circle_health_screen.action_needed_cta")} ›
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ) : null}
+
           {/* Score card */}
           <View style={styles.overallCard}>
             <View style={styles.overallTopRow}>
@@ -347,6 +420,24 @@ function DetailView({ circleId }: { circleId: string }) {
                   { width: `${score}%`, backgroundColor: gaugeColor },
                 ]}
               />
+            </View>
+
+            {/* 30-day sparkline. Falls back to the no-history label when
+                circle_health_history hasn't accumulated rows yet. */}
+            <View style={styles.sparkRow}>
+              <Text style={styles.sparkLabel}>
+                {t("circle_health_screen.sparkline_label")}
+              </Text>
+              {history.length > 1 ? (
+                <Sparkline
+                  values={history.map((h) => h.healthScore).reverse()}
+                  color={gaugeColor}
+                />
+              ) : (
+                <Text style={styles.sparkEmpty}>
+                  {t("circle_health_screen.no_history")}
+                </Text>
+              )}
             </View>
 
             <View style={styles.deltaRow}>
@@ -460,7 +551,9 @@ function DetailView({ circleId }: { circleId: string }) {
               ))}
             </View>
 
-            {/* Underlying metrics */}
+            {/* Underlying metrics — every row has a (?) that opens HelpSheet
+                for that metric. Help copy lives under circle_health_screen.
+                help_<topic>_{title,description,threshold,action}. */}
             <Text style={styles.sectionHeader}>
               {t("circle_health_screen.section_metrics")}
             </Text>
@@ -468,24 +561,29 @@ function DetailView({ circleId }: { circleId: string }) {
               <MetricRow
                 label={t("circle_health_screen.metric_on_time_contribution")}
                 value={`${Math.round(health.on_time_contribution_pct)}%`}
+                onHelp={() => setHelpTopic("on_time_contribution")}
               />
               <MetricRow
                 label={t("circle_health_screen.metric_members_in_default")}
                 value={`${health.members_with_defaults} / ${health.total_members}`}
+                onHelp={() => setHelpTopic("members_in_default")}
               />
               <MetricRow
                 label={t("circle_health_screen.metric_total_members")}
                 value={`${health.total_members}`}
+                onHelp={() => setHelpTopic("total_members")}
               />
               <MetricRow
                 label={t("circle_health_screen.metric_avg_xn_score")}
                 value={`${Math.round(health.avg_member_xnscore)}`}
+                onHelp={() => setHelpTopic("avg_xn_score")}
               />
               <MetricRow
                 label={t(
                   "circle_health_screen.metric_avg_default_probability",
                 )}
                 value={`${Math.round(health.avg_default_probability * 100)}%`}
+                onHelp={() => setHelpTopic("avg_default_probability")}
                 last
               />
             </View>
@@ -519,6 +617,12 @@ function DetailView({ circleId }: { circleId: string }) {
           </>
         ) : null}
       </ScrollView>
+
+      {/* Glossary tooltip — opened by tapping any (?) icon. */}
+      <HelpSheet
+        topic={helpTopic}
+        onClose={() => setHelpTopic(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -527,18 +631,199 @@ function MetricRow({
   label,
   value,
   last,
+  onHelp,
 }: {
   label: string;
   value: string;
   last?: boolean;
+  onHelp?: () => void;
 }) {
   return (
     <View style={[styles.metricRow, last && styles.metricRowLast]}>
-      <Text style={styles.metricLabel}>{label}</Text>
+      <View style={styles.metricLabelRow}>
+        <Text style={styles.metricLabel}>{label}</Text>
+        {onHelp ? (
+          <TouchableOpacity
+            onPress={onHelp}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel={label}
+          >
+            <Ionicons
+              name="help-circle-outline"
+              size={16}
+              color={colors.textSecondary}
+              style={{ marginLeft: 6 }}
+            />
+          </TouchableOpacity>
+        ) : null}
+      </View>
       <Text style={styles.metricValue}>{value}</Text>
     </View>
   );
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Sparkline — View-based dot-bar chart for the 30-day score history.
+// Mirrors ScoreHubScreen's SparklineSeven but generic over input length.
+// ══════════════════════════════════════════════════════════════════════════════
+function Sparkline({ values, color }: { values: number[]; color: string }) {
+  if (values.length < 2) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(1, max - min);
+  return (
+    <View style={sparklineStyles.row}>
+      {values.map((v, i) => {
+        const h = 4 + Math.round(((v - min) / span) * 18);
+        const isLast = i === values.length - 1;
+        return (
+          <View
+            key={i}
+            style={[
+              sparklineStyles.dot,
+              {
+                height: h,
+                backgroundColor: isLast ? color : `${color}55`,
+              },
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
+const sparklineStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 2,
+    height: 22,
+  },
+  dot: {
+    width: 3,
+    borderRadius: 1.5,
+  },
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HelpSheet — Modal-based glossary, opened by tapping any (?) icon.
+// Reads circle_health_screen.help_<topic>_{title,description,threshold,action}.
+// ══════════════════════════════════════════════════════════════════════════════
+function HelpSheet({
+  topic,
+  onClose,
+}: {
+  topic: HelpTopic | null;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const visible = topic != null;
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={helpStyles.backdrop} onPress={onClose}>
+        <Pressable style={helpStyles.sheet} onPress={() => {}}>
+          <View style={helpStyles.handle} />
+          {topic ? (
+            <>
+              <Text style={helpStyles.title}>
+                {t(`circle_health_screen.help_${topic}_title`)}
+              </Text>
+              <Text style={helpStyles.label}>
+                {t("circle_health_screen.help_label_description")}
+              </Text>
+              <Text style={helpStyles.body}>
+                {t(`circle_health_screen.help_${topic}_description`)}
+              </Text>
+              <Text style={helpStyles.label}>
+                {t("circle_health_screen.help_label_threshold")}
+              </Text>
+              <Text style={helpStyles.body}>
+                {t(`circle_health_screen.help_${topic}_threshold`)}
+              </Text>
+              <Text style={helpStyles.label}>
+                {t("circle_health_screen.help_label_action")}
+              </Text>
+              <Text style={helpStyles.body}>
+                {t(`circle_health_screen.help_${topic}_action`)}
+              </Text>
+              <TouchableOpacity
+                style={helpStyles.closeBtn}
+                onPress={onClose}
+                accessibilityRole="button"
+              >
+                <Text style={helpStyles.closeBtnText}>
+                  {t("circle_health_screen.help_close")}
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : null}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const helpStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: colors.cardBg,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: colors.border,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    color: colors.textSecondary,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  body: {
+    fontSize: 13,
+    color: colors.textPrimary,
+    lineHeight: 18,
+  },
+  closeBtn: {
+    backgroundColor: colors.primaryNavy,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  closeBtnText: {
+    color: colors.textWhite,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+});
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Styles
@@ -613,6 +898,54 @@ const styles = StyleSheet.create({
   },
   deltaText: { fontSize: 12, fontWeight: "600" },
   trendChip: { fontSize: 12, fontWeight: "700" },
+
+  sparkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  sparkLabel: {
+    color: colors.textOnNavy,
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+  },
+  sparkEmpty: {
+    color: colors.textOnNavy,
+    fontSize: 11,
+    fontStyle: "italic",
+  },
+
+  actionBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#FEE2E2",
+    borderColor: "#FCA5A5",
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+  },
+  actionBannerCopy: { flex: 1, marginLeft: 10 },
+  actionBannerTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#991B1B",
+    marginBottom: 2,
+  },
+  actionBannerBody: {
+    fontSize: 12,
+    color: "#991B1B",
+    lineHeight: 16,
+  },
+  actionBannerCta: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#991B1B",
+    marginTop: 6,
+  },
 
   sectionHeader: {
     color: colors.textSecondary,
@@ -701,6 +1034,12 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   metricRowLast: { borderBottomWidth: 0 },
+  metricLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexShrink: 1,
+    paddingRight: 8,
+  },
   metricLabel: {
     fontSize: 13,
     color: colors.textSecondary,
