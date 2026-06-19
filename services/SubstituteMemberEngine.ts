@@ -139,6 +139,28 @@ export interface SubstitutionSummary {
   exitingMemberContributionHistory?: number;
 }
 
+// SubstitutePool Bucket A — server-side enrichment so the screen doesn't
+// need to re-join circles + profiles + circle_cycles itself.
+export interface EnrichedOffer {
+  record: SubstitutionRecord;
+  circleName: string | null;
+  circleAmount: number | null;
+  exitingMemberName: string | null;
+  remainingCycles: number;
+}
+
+export interface EnrichedAdminQueueItem {
+  record: SubstitutionRecord;
+  circleName: string | null;
+  exitingMemberName: string | null;
+  substituteMemberName: string | null;
+  substituteReliabilityScore: number;
+  originalPayoutAmountCents: number;
+  substituteShareCents: number;
+  insurancePoolShareCents: number;
+  originalMemberSettlementCents: number;
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION B — DB → App Mappers
@@ -1301,6 +1323,147 @@ export class SubstituteMemberEngine {
       .order('admin_notified_at', { ascending: true });
 
     return (data ?? []).map(mapSubstitutionRecord);
+  }
+
+
+  // ── H5: Enriched pending offers for a substitute member ──
+  //
+  // Returns the pending_confirmation offers joined with circle name +
+  // contribution amount + exiting member name + remaining cycle count.
+  // The SubstitutePoolScreen previously did all of this inline.
+
+  static async getEnrichedOffers(userId: string): Promise<EnrichedOffer[]> {
+    const { data: recs } = await supabase
+      .from('substitution_records')
+      .select('*')
+      .eq('substitute_member_id', userId)
+      .eq('status', 'pending_confirmation')
+      .order('confirmation_deadline', { ascending: true });
+
+    const records = recs ?? [];
+    if (records.length === 0) return [];
+
+    const circleIds = Array.from(new Set(records.map((r: any) => r.circle_id)));
+    const exitingIds = Array.from(new Set(records.map((r: any) => r.exiting_member_id)));
+
+    const [{ data: circles }, { data: profiles }] = await Promise.all([
+      supabase.from('circles').select('id, name, amount').in('id', circleIds),
+      supabase.from('profiles').select('id, full_name').in('id', exitingIds),
+    ]);
+
+    const circleMap = new Map((circles ?? []).map((c: any) => [c.id, c]));
+    const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p.full_name]));
+
+    // Per-circle remaining cycle counts (scheduled + collecting).
+    const remainingMap = new Map<string, number>();
+    await Promise.all(
+      circleIds.map(async (cid) => {
+        const { count } = await supabase
+          .from('circle_cycles')
+          .select('id', { count: 'exact', head: true })
+          .eq('circle_id', cid)
+          .in('cycle_status', ['scheduled', 'collecting']);
+        remainingMap.set(cid, count ?? 0);
+      }),
+    );
+
+    return records.map((r: any) => {
+      const c = circleMap.get(r.circle_id);
+      return {
+        record: mapSubstitutionRecord(r),
+        circleName: c?.name ?? null,
+        circleAmount: c?.amount != null ? Number(c.amount) : null,
+        exitingMemberName: profileMap.get(r.exiting_member_id) ?? null,
+        remainingCycles: remainingMap.get(r.circle_id) ?? 0,
+      };
+    });
+  }
+
+
+  // ── H6: Enriched admin queue across all circles the user moderates ──
+  //
+  // One query for memberships → one query for pending records across those
+  // circles → bulk lookups for circle names, profile names, exit-request
+  // share amounts, and substitute reliability scores. Returns the records
+  // already enriched so the admin section can render without further joins.
+
+  static async getAdminQueueForUser(userId: string): Promise<EnrichedAdminQueueItem[]> {
+    const { data: memberships } = await supabase
+      .from('circle_members')
+      .select('circle_id')
+      .eq('user_id', userId)
+      .in('role', ['creator', 'admin'])
+      .eq('status', 'active');
+
+    const adminCircleIds = Array.from(
+      new Set((memberships ?? []).map((m: any) => m.circle_id)),
+    );
+    if (adminCircleIds.length === 0) return [];
+
+    const { data: rawRecs } = await supabase
+      .from('substitution_records')
+      .select('*')
+      .in('circle_id', adminCircleIds)
+      .eq('status', 'admin_pending')
+      .order('admin_notified_at', { ascending: true });
+
+    const records = rawRecs ?? [];
+    if (records.length === 0) return [];
+
+    const peopleIds = Array.from(
+      new Set(
+        records.flatMap((r: any) => [r.exiting_member_id, r.substitute_member_id]),
+      ),
+    );
+    const exitReqIds = Array.from(new Set(records.map((r: any) => r.exit_request_id)));
+    const substituteIds = Array.from(
+      new Set(records.map((r: any) => r.substitute_member_id)),
+    );
+
+    const [
+      { data: circlesRows },
+      { data: peopleRows },
+      { data: exitReqRows },
+      { data: poolRows },
+    ] = await Promise.all([
+      supabase.from('circles').select('id, name').in('id', adminCircleIds),
+      supabase.from('profiles').select('id, full_name').in('id', peopleIds),
+      supabase
+        .from('circle_exit_requests')
+        .select(
+          'id, original_payout_amount_cents, substitute_share_cents, insurance_pool_share_cents, original_member_settlement_cents',
+        )
+        .in('id', exitReqIds),
+      supabase
+        .from('substitute_pool')
+        .select('member_id, substitute_reliability_score')
+        .in('member_id', substituteIds),
+    ]);
+
+    const circleMap = new Map((circlesRows ?? []).map((c: any) => [c.id, c.name]));
+    const peopleMap = new Map((peopleRows ?? []).map((p: any) => [p.id, p.full_name]));
+    const exitReqMap = new Map((exitReqRows ?? []).map((r: any) => [r.id, r]));
+    const poolMap = new Map(
+      (poolRows ?? []).map((p: any) => [
+        p.member_id,
+        Number(p.substitute_reliability_score),
+      ]),
+    );
+
+    return records.map((r: any) => {
+      const er: any = exitReqMap.get(r.exit_request_id) ?? {};
+      return {
+        record: mapSubstitutionRecord(r),
+        circleName: circleMap.get(r.circle_id) ?? null,
+        exitingMemberName: peopleMap.get(r.exiting_member_id) ?? null,
+        substituteMemberName: peopleMap.get(r.substitute_member_id) ?? null,
+        substituteReliabilityScore: poolMap.get(r.substitute_member_id) ?? 100,
+        originalPayoutAmountCents: er.original_payout_amount_cents ?? 0,
+        substituteShareCents: er.substitute_share_cents ?? 0,
+        insurancePoolShareCents: er.insurance_pool_share_cents ?? 0,
+        originalMemberSettlementCents: er.original_member_settlement_cents ?? 0,
+      };
+    });
   }
 
 

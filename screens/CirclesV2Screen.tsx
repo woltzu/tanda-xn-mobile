@@ -40,6 +40,11 @@ import { useCircles } from "../context/CirclesContext";
 import { useInsurancePool } from "../hooks/useInsurancePool";
 import { InsurancePoolEngine } from "../services/InsurancePoolEngine";
 import { useEventTracker } from "../hooks/useEventTracker";
+import {
+  usePoolEntry as useSubstitutePoolEntry,
+  useSubstitutePoolSummary,
+} from "../hooks/useSubstituteMember";
+import { useAuth } from "../context/AuthContext";
 
 // ==========================================================================
 // Mock data — to be replaced with real API feeds in later steps.
@@ -86,10 +91,10 @@ const mockConflicts = {
 // flag via useInsurancePool below. The legacy mockInsurance object
 // (initially_active + pool_balance) was deleted as part of that change.
 
-const mockSubstitute = {
-  initially_active: true,
-  available: 3,
-};
+// Substitute Pool Bucket A: the legacy mockSubstitute object
+// ({ initially_active, available }) was deleted. The card now reads the
+// user's pool entry status + global active count via useSubstitutePoolEntry
+// and useSubstitutePoolSummary below — no toggle.
 
 // Contribution & Payout group mocks.
 const mockPayout = {
@@ -342,9 +347,27 @@ export default function CirclesV2Screen() {
     [insurancePoolCircleId, insuranceActive, refetchInsurancePool, track, t],
   );
 
-  const [substituteActive, setSubstituteActive] = useState(
-    mockSubstitute.initially_active,
-  );
+  // Substitute Pool Bucket A — drop the mock useState and read real data:
+  //   * usePoolEntry  → "Active in pool" / "Not joined" / etc. for the
+  //                     current user (member-centric, not per-circle).
+  //   * useSubstitutePoolSummary → global active substitute count.
+  const { user } = useAuth();
+  const { entry: substituteEntry, isInPool: substituteInPool } =
+    useSubstitutePoolEntry(user?.id);
+  const { overview: substituteOverview } = useSubstitutePoolSummary();
+  const substituteAvailableCount = substituteOverview?.totalActive ?? 0;
+  // Map the user's pool entry to the i18n key suffix used on the badge.
+  const substituteStatusKey: "in_pool" | "standby" | "suspended" | "not_joined" =
+    !substituteEntry
+      ? "not_joined"
+      : substituteEntry.status === "active"
+        ? "in_pool"
+        : substituteEntry.status === "standby"
+          ? "standby"
+          : substituteEntry.status === "suspended"
+            ? "suspended"
+            : "not_joined";
+  void substituteInPool; // marked usable for future logic; silence lint.
   // ---- Per-circle Partial Contribution toggles ----
   const [partialEnabled, setPartialEnabled] = useState<Record<string, boolean>>(
     () =>
@@ -730,15 +753,26 @@ export default function CirclesV2Screen() {
         </FeatureCard>
 
         {/* ----- Substitute Pool ----- */}
+        {/* Bucket A: no headerToggle — the substitute pool is a global
+            queue, not a per-circle setting. We show the user's own pool
+            status as a badge + the live global active count instead. */}
         <FeatureCard
           icon="people-circle-outline"
           iconColor={colors.primaryNavy}
           title={t("circles_screen.substitute_title")}
           description={t("circles_screen.substitute_description")}
-          headerToggle={{
-            value: substituteActive,
-            onValueChange: setSubstituteActive,
-          }}
+          statusLabel={t(
+            `circles_screen.substitute_status_${substituteStatusKey}`,
+          )}
+          statusColor={
+            substituteStatusKey === "in_pool"
+              ? colors.successText
+              : substituteStatusKey === "standby"
+                ? colors.accentTeal
+                : substituteStatusKey === "suspended"
+                  ? colors.warningAmber
+                  : colors.textSecondary
+          }
           ctaLabel={t("circles_screen.substitute_cta")}
           ctaIcon="arrow-forward"
           onCta={handleOpenSubstitute}
@@ -751,7 +785,7 @@ export default function CirclesV2Screen() {
             />
             <Text style={styles.poolStatLabel}>
               {t("circles_screen.substitute_available", {
-                count: mockSubstitute.available,
+                count: substituteAvailableCount,
               })}
             </Text>
           </View>

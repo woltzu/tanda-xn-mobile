@@ -657,6 +657,10 @@ export {
   useSubstitutionOffer,
   useCircleSubstitutions,
   useSubstituteMemberActions,
+  // Bucket A additions
+  usePendingOffers,
+  useAdminSubstitutionQueue,
+  useSubstitutePoolSummary,
   type PoolStatus,
   type ExitReasonCategory,
   type PayoutEntitlementStatus,
@@ -670,6 +674,8 @@ export {
   type ExitEvaluation,
   type MatchCandidate,
   type SubstitutionSummary,
+  type EnrichedOffer,
+  type EnrichedAdminQueueItem,
 } from './useSubstituteMember';
 
 // Cron AI Jobs

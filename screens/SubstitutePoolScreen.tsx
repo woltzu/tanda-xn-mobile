@@ -1,30 +1,32 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// SubstitutePoolScreen — Phase D3.2 of feat(substitute)
+// SubstitutePoolScreen — feat(substitute) Bucket A rewrite.
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Single screen with two sections:
+// Three sections, each driven by its OWN hook and OWN spinner / empty state.
+// No more screen-wide setLoading gate, no more 30-second tick re-rendering
+// the entire scroll view.
 //
-// Member section (always visible):
-//   * Eligibility (via check_substitute_pool_eligibility RPC)
-//   * Opt-in form when eligible & not in pool: status (active/standby),
-//     max contribution $, language
-//   * Pool entry card when in pool: reliability score, totals, declines
-//     remaining (3 − decline_count_90d), edit, leave
-//   * Pending offers inbox: substitution_records where this user is the
-//     matched substitute and status='pending_confirmation'. Live countdown
-//     to confirmation_deadline. Accept calls respond_to_substitution(id,'accept'),
-//     decline calls respond_to_substitution(id,'decline').
+//   Member section (always visible):
+//     * usePoolEligibility(userId) → Trusted-tier + completed-circle gates
+//     * usePoolEntry(userId)       → current pool entry + realtime
+//     * Opt-in form when eligible & not in pool; preferences editor when in.
+//     * Leave Pool → useSubstituteMemberActions().leavePool.
 //
-// Admin section (only if user has role IN (creator, admin) in any circle):
-//   * One block per circle the user moderates
-//   * Lists substitution_records with status='admin_pending' for that circle
-//   * Each card shows exiting member name, proposed substitute name,
-//     substitute's reliability score, and the 80/10/10 split. Approve calls
-//     admin_approve_substitution(id), decline calls admin_decline_substitution(id).
-//     Live countdown to 24h auto-approval (record.admin_notified_at + 24h).
+//   Pending offers (always visible):
+//     * usePendingOffers(userId)   → enriched offers (circle + names + cycles)
+//                                    + realtime subscription on substitution_records.
+//     * Accept → confirmSubstitution; Decline → declineSubstitution.
+//
+//   Admin section (only when adminItems is non-empty):
+//     * useAdminSubstitutionQueue(userId) → cross-circle admin_pending list +
+//                                            realtime per moderated circle.
+//     * Approve → adminApprove; Decline → adminDecline.
+//
+// Each card uses an inline <Countdown> child that owns its own setInterval,
+// so the screen's other cards don't re-render on countdown ticks.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -40,76 +42,15 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
-import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
-
-// ── Types ───────────────────────────────────────────────────────────────────
-type PoolStatus = "active" | "standby" | "suspended" | "removed";
-
-interface Eligibility {
-  eligible: boolean;
-  reason?: string;
-  xn_score: number;
-  completed_circles: number;
-  already_in_pool: boolean;
-}
-
-interface PoolEntry {
-  id: string;
-  member_id: string;
-  status: PoolStatus;
-  availability_radius_miles: number;
-  max_contribution_amount_cents: number;
-  preferred_languages: string[];
-  substitute_reliability_score: number;
-  total_substitutions: number;
-  successful_substitutions: number;
-  decline_count_90d: number;
-  last_decline_at: string | null;
-}
-
-interface OfferRow {
-  id: string;
-  circle_id: string;
-  exit_request_id: string;
-  exiting_member_id: string;
-  substitute_member_id: string;
-  original_payout_position: number;
-  payout_entitlement_transfer_cents: number;
-  entry_cycle_number: number;
-  confirmation_deadline: string;
-  status: string;
-  // joined data
-  circle_name?: string;
-  circle_amount?: number;
-  exiting_member_name?: string;
-  remaining_cycles?: number;
-}
-
-interface AdminPendingRow {
-  id: string;
-  circle_id: string;
-  circle_name: string;
-  exit_request_id: string;
-  exiting_member_id: string;
-  exiting_member_name: string;
-  substitute_member_id: string;
-  substitute_member_name: string;
-  substitute_reliability_score: number;
-  original_payout_position: number;
-  admin_notified_at: string;
-  // From exit_request:
-  original_payout_amount_cents: number;
-  substitute_share_cents: number;
-  insurance_pool_share_cents: number;
-  original_member_settlement_cents: number;
-}
-
-interface AdminCircle {
-  id: string;
-  name: string;
-  pending: AdminPendingRow[];
-}
+import {
+  usePoolEligibility,
+  usePoolEntry,
+  usePendingOffers,
+  useAdminSubstitutionQueue,
+  useSubstituteMemberActions,
+  type PoolStatus,
+} from "../hooks/useSubstituteMember";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -117,18 +58,51 @@ function fmtCents(c: number): string {
   return `$${(c / 100).toFixed(2)}`;
 }
 
-function hoursRemaining(deadlineIso: string): number {
-  const ms = new Date(deadlineIso).getTime() - Date.now();
-  return Math.max(0, ms / (1000 * 60 * 60));
-}
-
 function fmtCountdown(hours: number): string {
   if (hours < 1) {
     const mins = Math.max(0, Math.round(hours * 60));
     return `${mins}m`;
   }
-  if (hours < 24) return `${Math.floor(hours)}h ${Math.round((hours % 1) * 60)}m`;
+  if (hours < 24) {
+    return `${Math.floor(hours)}h ${Math.round((hours % 1) * 60)}m`;
+  }
   return `${Math.floor(hours / 24)}d ${Math.floor(hours % 24)}h`;
+}
+
+// ── Countdown ──────────────────────────────────────────────────────────────
+// Self-contained countdown that owns its own ticker. Re-renders just
+// itself (not the whole screen). Replaces the legacy `tick` useState
+// pattern that re-rendered every card on every interval.
+function Countdown({
+  deadlineIso,
+  warningHoursThreshold,
+  prefixKey,
+}: {
+  deadlineIso: string;
+  warningHoursThreshold?: number;
+  prefixKey?: string;
+}) {
+  const { t } = useTranslation();
+  const compute = useCallback(
+    () =>
+      Math.max(0, (new Date(deadlineIso).getTime() - Date.now()) / 3_600_000),
+    [deadlineIso],
+  );
+  const [hours, setHours] = useState(compute);
+  useEffect(() => {
+    setHours(compute());
+    const id = setInterval(() => setHours(compute()), 30_000);
+    return () => clearInterval(id);
+  }, [compute]);
+  const warn = warningHoursThreshold != null && hours < warningHoursThreshold;
+  return (
+    <View style={[styles.badge, warn ? styles.badgeOrange : styles.badgeBlue]}>
+      <Text style={styles.badgeText}>
+        {prefixKey ? `${t(prefixKey)} ` : ""}
+        {fmtCountdown(hours)}
+      </Text>
+    </View>
+  );
 }
 
 // ── Main Component ──────────────────────────────────────────────────────────
@@ -139,312 +113,124 @@ export default function SubstitutePoolScreen() {
   const { user } = useAuth();
   const userId = user?.id;
 
-  const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [eligibility, setEligibility] = useState<Eligibility | null>(null);
-  const [poolEntry, setPoolEntry] = useState<PoolEntry | null>(null);
-  const [offers, setOffers] = useState<OfferRow[]>([]);
-  const [adminCircles, setAdminCircles] = useState<AdminCircle[]>([]);
-  const [busyOfferId, setBusyOfferId] = useState<string | null>(null);
-  const [busyAdminId, setBusyAdminId] = useState<string | null>(null);
+  // ── Hooks ─────────────────────────────────────────────────────────────────
+  const {
+    eligibility,
+    loading: eligibilityLoading,
+    refresh: refreshEligibility,
+    xnScore,
+    completedCircles,
+    eligible,
+  } = usePoolEligibility(userId);
+  const {
+    entry: poolEntry,
+    loading: entryLoading,
+    refresh: refreshEntry,
+    isInPool,
+    declinesRemaining,
+    successRate,
+  } = usePoolEntry(userId);
+  const {
+    offers,
+    loading: offersLoading,
+    refresh: refreshOffers,
+  } = usePendingOffers(userId);
+  const {
+    items: adminItems,
+    loading: adminLoading,
+    refresh: refreshAdmin,
+  } = useAdminSubstitutionQueue(userId);
+  const actions = useSubstituteMemberActions();
 
-  // Opt-in form state
+  // ── Local UI state ────────────────────────────────────────────────────────
   const [editing, setEditing] = useState(false);
   const [formStatus, setFormStatus] = useState<PoolStatus>("active");
-  const [formMaxContrib, setFormMaxContrib] = useState<string>("0"); // dollars, 0 = no cap
+  const [formMaxContrib, setFormMaxContrib] = useState<string>("0");
   const [formLanguage, setFormLanguage] = useState<string>("en");
   const [savingForm, setSavingForm] = useState(false);
+  const [busyOfferId, setBusyOfferId] = useState<string | null>(null);
+  const [busyAdminId, setBusyAdminId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Tick counter so countdowns re-render every 30s
-  const [tick, setTick] = useState(0);
+  // Hydrate form whenever the pool entry refreshes.
   useEffect(() => {
-    const t = setInterval(() => setTick((v) => v + 1), 30_000);
-    return () => clearInterval(t);
-  }, []);
-
-  // ── Data loaders ──────────────────────────────────────────────────────────
-  const loadEligibilityAndEntry = useCallback(async () => {
-    if (!userId) return;
-    const [{ data: eligData }, { data: entryData }] = await Promise.all([
-      supabase.rpc("check_substitute_pool_eligibility", { p_user_id: userId }),
-      supabase
-        .from("substitute_pool")
-        .select("*")
-        .eq("member_id", userId)
-        .maybeSingle(),
-    ]);
-    setEligibility(eligData ?? null);
-    if (entryData) {
-      const e: PoolEntry = {
-        ...entryData,
-        substitute_reliability_score: Number(entryData.substitute_reliability_score),
-      };
-      setPoolEntry(e);
-      // Hydrate form defaults from current entry
-      setFormStatus(e.status);
-      setFormMaxContrib(((e.max_contribution_amount_cents ?? 0) / 100).toString());
-      setFormLanguage((e.preferred_languages?.[0] ?? "en") as string);
-    } else {
-      setPoolEntry(null);
+    if (poolEntry) {
+      setFormStatus(poolEntry.status);
+      setFormMaxContrib(
+        ((poolEntry.maxContributionAmountCents ?? 0) / 100).toString(),
+      );
+      setFormLanguage(poolEntry.preferredLanguages?.[0] ?? "en");
     }
-  }, [userId]);
+  }, [poolEntry]);
 
-  const loadOffers = useCallback(async () => {
-    if (!userId) return;
-    const { data: raw } = await supabase
-      .from("substitution_records")
-      .select(
-        "id, circle_id, exit_request_id, exiting_member_id, substitute_member_id, original_payout_position, payout_entitlement_transfer_cents, entry_cycle_number, confirmation_deadline, status",
-      )
-      .eq("substitute_member_id", userId)
-      .eq("status", "pending_confirmation")
-      .order("confirmation_deadline", { ascending: true });
-
-    const records: OfferRow[] = (raw ?? []) as OfferRow[];
-    if (records.length === 0) {
-      setOffers([]);
-      return;
-    }
-
-    // Join in circles + exiting member names + remaining cycles
-    const circleIds = Array.from(new Set(records.map((r) => r.circle_id)));
-    const exitingIds = Array.from(new Set(records.map((r) => r.exiting_member_id)));
-
-    const [{ data: circles }, { data: profiles }] = await Promise.all([
-      supabase.from("circles").select("id, name, amount").in("id", circleIds),
-      supabase.from("profiles").select("id, full_name").in("id", exitingIds),
-    ]);
-
-    const circleMap = new Map((circles ?? []).map((c: any) => [c.id, c]));
-    const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
-
-    // Per-circle remaining cycle counts
-    const remainingMap = new Map<string, number>();
-    await Promise.all(
-      circleIds.map(async (cid) => {
-        const { count } = await supabase
-          .from("circle_cycles")
-          .select("id", { count: "exact", head: true })
-          .eq("circle_id", cid)
-          .in("cycle_status", ["scheduled", "collecting"]);
-        remainingMap.set(cid, count ?? 0);
-      }),
-    );
-
-    setOffers(
-      records.map((r) => {
-        const c = circleMap.get(r.circle_id);
-        const p = profileMap.get(r.exiting_member_id);
-        return {
-          ...r,
-          circle_name: c?.name,
-          circle_amount: c?.amount,
-          exiting_member_name: p?.full_name,
-          remaining_cycles: remainingMap.get(r.circle_id) ?? 0,
-        };
-      }),
-    );
-  }, [userId]);
-
-  const loadAdminQueue = useCallback(async () => {
-    if (!userId) return;
-
-    // Circles user moderates
-    const { data: memberships } = await supabase
-      .from("circle_members")
-      .select("circle_id, role")
-      .eq("user_id", userId)
-      .in("role", ["creator", "admin"])
-      .eq("status", "active");
-
-    const adminCircleIds = Array.from(
-      new Set((memberships ?? []).map((m: any) => m.circle_id)),
-    );
-
-    if (adminCircleIds.length === 0) {
-      setAdminCircles([]);
-      return;
-    }
-
-    const [{ data: circlesRaw }, { data: pending }] = await Promise.all([
-      supabase.from("circles").select("id, name").in("id", adminCircleIds),
-      supabase
-        .from("substitution_records")
-        .select(
-          "id, circle_id, exit_request_id, exiting_member_id, substitute_member_id, original_payout_position, admin_notified_at",
-        )
-        .in("circle_id", adminCircleIds)
-        .eq("status", "admin_pending")
-        .order("admin_notified_at", { ascending: true }),
-    ]);
-
-    const pendingRows = (pending ?? []) as any[];
-    if (pendingRows.length === 0) {
-      setAdminCircles((circlesRaw ?? []).map((c: any) => ({ id: c.id, name: c.name, pending: [] })));
-      return;
-    }
-
-    // Hydrate names + reliability + share amounts
-    const peopleIds = Array.from(
-      new Set(
-        pendingRows.flatMap((r: any) => [r.exiting_member_id, r.substitute_member_id]),
-      ),
-    );
-    const exitReqIds = Array.from(new Set(pendingRows.map((r: any) => r.exit_request_id)));
-    const substituteIds = Array.from(
-      new Set(pendingRows.map((r: any) => r.substitute_member_id)),
-    );
-
-    const [
-      { data: peopleRows },
-      { data: exitReqRows },
-      { data: poolRows },
-    ] = await Promise.all([
-      supabase.from("profiles").select("id, full_name").in("id", peopleIds),
-      supabase
-        .from("circle_exit_requests")
-        .select(
-          "id, original_payout_amount_cents, substitute_share_cents, insurance_pool_share_cents, original_member_settlement_cents",
-        )
-        .in("id", exitReqIds),
-      supabase
-        .from("substitute_pool")
-        .select("member_id, substitute_reliability_score")
-        .in("member_id", substituteIds),
-    ]);
-
-    const peopleMap = new Map((peopleRows ?? []).map((p: any) => [p.id, p.full_name]));
-    const exitReqMap = new Map((exitReqRows ?? []).map((r: any) => [r.id, r]));
-    const poolMap = new Map(
-      (poolRows ?? []).map((p: any) => [
-        p.member_id,
-        Number(p.substitute_reliability_score),
-      ]),
-    );
-
-    const circles = (circlesRaw ?? []) as Array<{ id: string; name: string }>;
-    const byCircle = new Map<string, AdminPendingRow[]>();
-    for (const r of pendingRows) {
-      const er = exitReqMap.get(r.exit_request_id);
-      const row: AdminPendingRow = {
-        id: r.id,
-        circle_id: r.circle_id,
-        circle_name: circles.find((c) => c.id === r.circle_id)?.name ?? "Circle",
-        exit_request_id: r.exit_request_id,
-        exiting_member_id: r.exiting_member_id,
-        exiting_member_name: peopleMap.get(r.exiting_member_id) ?? "Exiting member",
-        substitute_member_id: r.substitute_member_id,
-        substitute_member_name: peopleMap.get(r.substitute_member_id) ?? "Substitute",
-        substitute_reliability_score: poolMap.get(r.substitute_member_id) ?? 100,
-        original_payout_position: r.original_payout_position,
-        admin_notified_at: r.admin_notified_at,
-        original_payout_amount_cents: er?.original_payout_amount_cents ?? 0,
-        substitute_share_cents: er?.substitute_share_cents ?? 0,
-        insurance_pool_share_cents: er?.insurance_pool_share_cents ?? 0,
-        original_member_settlement_cents: er?.original_member_settlement_cents ?? 0,
-      };
-      const arr = byCircle.get(r.circle_id) ?? [];
-      arr.push(row);
-      byCircle.set(r.circle_id, arr);
-    }
-
-    setAdminCircles(
-      circles.map((c) => ({
-        id: c.id,
-        name: c.name,
-        pending: byCircle.get(c.id) ?? [],
-      })),
-    );
-  }, [userId]);
-
-  const loadAll = useCallback(async () => {
-    setLoading(true);
-    try {
-      await Promise.all([loadEligibilityAndEntry(), loadOffers(), loadAdminQueue()]);
-    } catch (err: any) {
-      // Soft-fail so partial data still renders
-      console.warn("[SubstitutePoolScreen] loadAll error:", err?.message);
-    } finally {
-      setLoading(false);
-    }
-  }, [loadEligibilityAndEntry, loadOffers, loadAdminQueue]);
-
-  useEffect(() => {
-    loadAll();
-  }, [loadAll]);
-
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadAll();
+    await Promise.all([
+      refreshEligibility(),
+      refreshEntry(),
+      refreshOffers(),
+      refreshAdmin(),
+    ]);
     setRefreshing(false);
-  };
+  }, [refreshEligibility, refreshEntry, refreshOffers, refreshAdmin]);
 
   // ── Pool actions ──────────────────────────────────────────────────────────
   const saveForm = async () => {
     if (!userId) return;
     const maxCents = Math.max(0, Math.round(Number(formMaxContrib) * 100));
     if (Number.isNaN(maxCents)) {
-      Alert.alert(t("substitute_pool_v2.alert_invalid_title"), t("substitute_pool_v2.alert_invalid_body"));
+      Alert.alert(
+        t("substitute_pool_v2.alert_invalid_title"),
+        t("substitute_pool_v2.alert_invalid_body"),
+      );
       return;
     }
     setSavingForm(true);
     try {
-      const payload: any = {
+      const prefs = {
         status: formStatus,
-        max_contribution_amount_cents: maxCents,
-        preferred_languages: [formLanguage],
+        maxContributionAmountCents: maxCents,
+        preferredLanguages: [formLanguage],
       };
-      if (poolEntry) {
-        // Update
-        const { error } = await supabase
-          .from("substitute_pool")
-          .update(payload)
-          .eq("member_id", userId);
-        if (error) {
-          Alert.alert(t("substitute_pool_v2.alert_could_not_update"), error.message);
-          return;
-        }
-      } else {
-        // Insert (RLS permits when member_id = auth.uid())
-        const { error } = await supabase
-          .from("substitute_pool")
-          .insert({
-            ...payload,
-            member_id: userId,
-            availability_radius_miles: 50,
-          });
-        if (error) {
-          Alert.alert(t("substitute_pool_v2.alert_could_not_join"), error.message);
-          return;
-        }
+      const result = isInPool
+        ? await actions.updatePreferences(userId, prefs)
+        : await actions.optIntoPool(userId, prefs);
+      if (!result.success) {
+        Alert.alert(
+          isInPool
+            ? t("substitute_pool_v2.alert_could_not_update")
+            : t("substitute_pool_v2.alert_could_not_join"),
+          result.error ?? "",
+        );
+        return;
       }
       setEditing(false);
-      await loadEligibilityAndEntry();
+      refreshEntry();
     } finally {
       setSavingForm(false);
     }
   };
 
-  const leavePool = async () => {
+  const leavePool = () => {
     if (!userId) return;
     Alert.alert(
-      "Leave substitute pool?",
-      "You won't be offered new substitution matches until you opt back in.",
+      t("substitute_pool.alert_leave_title"),
+      t("substitute_pool.alert_leave_body"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("substitute_pool.alert_leave_cancel"), style: "cancel" },
         {
-          text: "Leave Pool",
+          text: t("substitute_pool.alert_leave_confirm"),
           style: "destructive",
           onPress: async () => {
-            const { error } = await supabase
-              .from("substitute_pool")
-              .update({ status: "removed", removed_at: new Date().toISOString() })
-              .eq("member_id", userId);
-            if (error) {
-              Alert.alert(t("substitute_pool_v2.alert_could_not_leave"), error.message);
+            const result = await actions.leavePool(userId);
+            if (!result.success) {
+              Alert.alert(
+                t("substitute_pool_v2.alert_could_not_leave"),
+                result.error ?? "",
+              );
               return;
             }
-            await loadEligibilityAndEntry();
+            refreshEntry();
           },
         },
       ],
@@ -452,90 +238,102 @@ export default function SubstitutePoolScreen() {
   };
 
   // ── Offer actions ─────────────────────────────────────────────────────────
-  const respond = async (offer: OfferRow, response: "accept" | "decline") => {
-    setBusyOfferId(offer.id);
+  const respond = async (offerId: string, action: "accept" | "decline") => {
+    if (!userId) return;
+    setBusyOfferId(offerId);
     try {
-      const { data, error } = await supabase.rpc("respond_to_substitution", {
-        p_record_id: offer.id,
-        p_response: response,
-      });
-      if (error) {
-        Alert.alert(t("substitute_pool_v2.alert_could_not_respond"), error.message);
-        return;
-      }
-      const result = data as { success: boolean; error?: string };
+      const result =
+        action === "accept"
+          ? await actions.confirmSubstitution(offerId, userId)
+          : await actions.declineSubstitution(offerId, userId);
       if (!result.success) {
-        Alert.alert(t("substitute_pool_v2.alert_could_not_respond"), result.error ?? t("substitute_pool_v2.alert_unknown_error"));
+        Alert.alert(
+          t("substitute_pool_v2.alert_could_not_respond"),
+          result.error ?? t("substitute_pool_v2.alert_unknown_error"),
+        );
         return;
       }
-      await Promise.all([loadOffers(), loadEligibilityAndEntry()]);
+      refreshOffers();
+      refreshEntry();
     } catch (err: any) {
-      Alert.alert(t("substitute_pool_v2.alert_could_not_respond"), err?.message ?? t("substitute_pool_v2.alert_unknown_error"));
+      Alert.alert(
+        t("substitute_pool_v2.alert_could_not_respond"),
+        err?.message ?? t("substitute_pool_v2.alert_unknown_error"),
+      );
     } finally {
       setBusyOfferId(null);
     }
   };
 
   // ── Admin actions ─────────────────────────────────────────────────────────
-  const adminAct = async (row: AdminPendingRow, action: "approve" | "decline") => {
-    setBusyAdminId(row.id);
+  const adminAct = async (recordId: string, action: "approve" | "decline") => {
+    setBusyAdminId(recordId);
     try {
-      const rpc =
-        action === "approve" ? "admin_approve_substitution" : "admin_decline_substitution";
-      const { data, error } = await supabase.rpc(rpc, { p_record_id: row.id });
-      if (error) {
-        Alert.alert(t("substitute_pool_v2.alert_could_not_respond"), error.message);
-        return;
-      }
-      const result = data as { success: boolean; error?: string };
+      const result =
+        action === "approve"
+          ? await actions.adminApprove(recordId)
+          : await actions.adminDecline(recordId);
       if (!result.success) {
-        Alert.alert(t("substitute_pool_v2.alert_could_not_respond"), result.error ?? t("substitute_pool_v2.alert_unknown_error"));
+        Alert.alert(
+          t("substitute_pool_v2.alert_could_not_respond"),
+          result.error ?? t("substitute_pool_v2.alert_unknown_error"),
+        );
         return;
       }
-      await loadAdminQueue();
+      refreshAdmin();
     } catch (err: any) {
-      Alert.alert(t("substitute_pool_v2.alert_could_not_respond"), err?.message ?? t("substitute_pool_v2.alert_unknown_error"));
+      Alert.alert(
+        t("substitute_pool_v2.alert_could_not_respond"),
+        err?.message ?? t("substitute_pool_v2.alert_unknown_error"),
+      );
     } finally {
       setBusyAdminId(null);
     }
   };
 
-  // ── Derived UI state ──────────────────────────────────────────────────────
-  const inPool = !!poolEntry && poolEntry.status !== "removed";
-  const declinesRemaining = useMemo(
-    () => Math.max(0, 3 - (poolEntry?.decline_count_90d ?? 0)),
-    [poolEntry],
-  );
-  const successRate = useMemo(() => {
-    if (!poolEntry || poolEntry.total_substitutions === 0) return null;
-    return Math.round(
-      (poolEntry.successful_substitutions / poolEntry.total_substitutions) * 100,
-    );
-  }, [poolEntry]);
-
   // ── Renderers ─────────────────────────────────────────────────────────────
 
   const renderEligibility = () => {
+    if (eligibilityLoading && !eligibility) {
+      return (
+        <View style={styles.sectionSpinner}>
+          <ActivityIndicator color="#2563EB" />
+        </View>
+      );
+    }
     if (!eligibility) return null;
-    const color = eligibility.eligible || inPool ? "#10B981" : "#F59E0B";
+    const okGate = eligible || isInPool;
+    const color = okGate ? "#10B981" : "#F59E0B";
     return (
-      <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: color }]}>
-        <Text style={styles.cardTitle}>{t("substitute_pool_v2.card_eligibility")}</Text>
+      <View
+        style={[styles.card, { borderLeftWidth: 4, borderLeftColor: color }]}
+      >
+        <Text style={styles.cardTitle}>
+          {t("substitute_pool_v2.card_eligibility")}
+        </Text>
         <View style={styles.row}>
-          <Text style={styles.label}>{t("substitute_pool_v2.label_xnscore")}</Text>
+          <Text style={styles.label}>
+            {t("substitute_pool_v2.label_xnscore")}
+          </Text>
           <Text style={styles.value}>
-            {eligibility.xn_score}
-            {eligibility.xn_score >= 60 ? " ✓" : " (need 60+)"}
+            {xnScore}
+            {xnScore >= 60
+              ? " ✓"
+              : t("substitute_pool.eligibility_xnscore_need")}
           </Text>
         </View>
         <View style={styles.row}>
-          <Text style={styles.label}>{t("substitute_pool_v2.label_completed_circles")}</Text>
+          <Text style={styles.label}>
+            {t("substitute_pool_v2.label_completed_circles")}
+          </Text>
           <Text style={styles.value}>
-            {eligibility.completed_circles}
-            {eligibility.completed_circles >= 1 ? " ✓" : " (need 1+)"}
+            {completedCircles}
+            {completedCircles >= 1
+              ? " ✓"
+              : t("substitute_pool.eligibility_circles_need")}
           </Text>
         </View>
-        {!eligibility.eligible && !inPool && eligibility.reason && (
+        {!eligible && !isInPool && eligibility.reason && (
           <Text style={styles.helpText}>{eligibility.reason}</Text>
         )}
       </View>
@@ -543,38 +341,60 @@ export default function SubstitutePoolScreen() {
   };
 
   const renderPoolEntry = () => {
-    if (!inPool) return null;
+    if (entryLoading && !poolEntry) {
+      return (
+        <View style={styles.sectionSpinner}>
+          <ActivityIndicator color="#2563EB" />
+        </View>
+      );
+    }
+    if (!isInPool) return null;
+    const entry = poolEntry!;
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>{t("substitute_pool_v2.card_in_pool")}</Text>
+          <Text style={styles.cardTitle}>
+            {t("substitute_pool_v2.card_in_pool")}
+          </Text>
           <View
             style={[
               styles.badge,
-              poolEntry!.status === "active" && styles.badgeGreen,
-              poolEntry!.status === "standby" && styles.badgeBlue,
-              poolEntry!.status === "suspended" && styles.badgeOrange,
+              entry.status === "active" && styles.badgeGreen,
+              entry.status === "standby" && styles.badgeBlue,
+              entry.status === "suspended" && styles.badgeOrange,
             ]}
           >
-            <Text style={styles.badgeText}>{poolEntry!.status.toUpperCase()}</Text>
+            <Text style={styles.badgeText}>
+              {t(`substitute_pool.status_${entry.status}`)}
+            </Text>
           </View>
         </View>
         <View style={styles.row}>
-          <Text style={styles.label}>{t("substitute_pool_v2.label_reliability")}</Text>
-          <Text style={styles.value}>{poolEntry!.substitute_reliability_score.toFixed(2)}</Text>
+          <Text style={styles.label}>
+            {t("substitute_pool_v2.label_reliability")}
+          </Text>
+          <Text style={styles.value}>
+            {entry.substituteReliabilityScore.toFixed(2)}
+          </Text>
         </View>
         <View style={styles.row}>
-          <Text style={styles.label}>{t("substitute_pool_v2.label_total_substitutions")}</Text>
-          <Text style={styles.value}>{poolEntry!.total_substitutions}</Text>
+          <Text style={styles.label}>
+            {t("substitute_pool_v2.label_total_substitutions")}
+          </Text>
+          <Text style={styles.value}>{entry.totalSubstitutions}</Text>
         </View>
-        {successRate !== null && (
+        {entry.totalSubstitutions > 0 && (
           <View style={styles.row}>
-            <Text style={styles.label}>{t("substitute_pool_v2.label_success_rate")}</Text>
+            <Text style={styles.label}>
+              {t("substitute_pool_v2.label_success_rate")}
+            </Text>
             <Text style={styles.value}>{successRate}%</Text>
           </View>
         )}
         <View style={styles.row}>
-          <Text style={styles.label}>Declines remaining (90d)</Text>
+          <Text style={styles.label}>
+            {t("substitute_pool.label_declines_remaining")}
+          </Text>
           <Text
             style={[
               styles.value,
@@ -585,16 +405,22 @@ export default function SubstitutePoolScreen() {
           </Text>
         </View>
         <View style={styles.row}>
-          <Text style={styles.label}>{t("substitute_pool_v2.label_max_contribution")}</Text>
+          <Text style={styles.label}>
+            {t("substitute_pool_v2.label_max_contribution")}
+          </Text>
           <Text style={styles.value}>
-            {poolEntry!.max_contribution_amount_cents === 0
-              ? "No cap"
-              : fmtCents(poolEntry!.max_contribution_amount_cents)}
+            {entry.maxContributionAmountCents === 0
+              ? t("substitute_pool.value_no_cap")
+              : fmtCents(entry.maxContributionAmountCents)}
           </Text>
         </View>
         <View style={styles.row}>
-          <Text style={styles.label}>{t("substitute_pool_v2.label_language")}</Text>
-          <Text style={styles.value}>{poolEntry!.preferred_languages?.[0] ?? "en"}</Text>
+          <Text style={styles.label}>
+            {t("substitute_pool_v2.label_language")}
+          </Text>
+          <Text style={styles.value}>
+            {entry.preferredLanguages?.[0] ?? "en"}
+          </Text>
         </View>
         <View style={styles.actionRow}>
           <TouchableOpacity
@@ -603,12 +429,16 @@ export default function SubstitutePoolScreen() {
           >
             <Ionicons name="create-outline" size={16} color="#2563EB" />
             <Text style={styles.secondaryButtonText}>
-              {editing ? "Cancel" : "Edit preferences"}
+              {editing
+                ? t("substitute_pool.btn_cancel_edit")
+                : t("substitute_pool.btn_edit_preferences")}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.dangerButton} onPress={leavePool}>
             <Ionicons name="exit-outline" size={16} color="#FFFFFF" />
-            <Text style={styles.dangerButtonText}>{t("substitute_pool_v2.btn_leave_pool")}</Text>
+            <Text style={styles.dangerButtonText}>
+              {t("substitute_pool_v2.btn_leave_pool")}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -616,13 +446,19 @@ export default function SubstitutePoolScreen() {
   };
 
   const renderForm = () => {
-    if (inPool && !editing) return null;
-    if (!inPool && !(eligibility?.eligible)) return null;
+    if (isInPool && !editing) return null;
+    if (!isInPool && !eligible) return null;
     return (
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>{inPool ? "Edit preferences" : "Opt into the pool"}</Text>
+        <Text style={styles.cardTitle}>
+          {isInPool
+            ? t("substitute_pool.card_edit_prefs_title")
+            : t("substitute_pool.card_opt_in_title")}
+        </Text>
 
-        <Text style={styles.fieldLabel}>{t("substitute_pool_v2.field_status")}</Text>
+        <Text style={styles.fieldLabel}>
+          {t("substitute_pool_v2.field_status")}
+        </Text>
         <View style={styles.segment}>
           {(["active", "standby"] as PoolStatus[]).map((s) => (
             <TouchableOpacity
@@ -630,17 +466,24 @@ export default function SubstitutePoolScreen() {
               style={[styles.segItem, formStatus === s && styles.segItemActive]}
               onPress={() => setFormStatus(s)}
             >
-              <Text style={[styles.segText, formStatus === s && styles.segTextActive]}>
-                {s.charAt(0).toUpperCase() + s.slice(1)}
+              <Text
+                style={[
+                  styles.segText,
+                  formStatus === s && styles.segTextActive,
+                ]}
+              >
+                {t(`substitute_pool.status_${s}`)}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
         <Text style={styles.helpText}>
-          Active = ready to be offered substitutions. Standby = contactable but lower priority.
+          {t("substitute_pool.help_status_modes")}
         </Text>
 
-        <Text style={styles.fieldLabel}>Max contribution ($)</Text>
+        <Text style={styles.fieldLabel}>
+          {t("substitute_pool.field_max_contribution")}
+        </Text>
         <TextInput
           style={styles.input}
           keyboardType="decimal-pad"
@@ -648,17 +491,27 @@ export default function SubstitutePoolScreen() {
           onChangeText={setFormMaxContrib}
           placeholder={t("substitute_pool_v2.placeholder_no_cap")}
         />
-        <Text style={styles.helpText}>0 means no cap — you can take any circle.</Text>
+        <Text style={styles.helpText}>{t("substitute_pool.help_no_cap")}</Text>
 
-        <Text style={styles.fieldLabel}>{t("substitute_pool_v2.field_preferred_language")}</Text>
+        <Text style={styles.fieldLabel}>
+          {t("substitute_pool_v2.field_preferred_language")}
+        </Text>
         <View style={styles.segment}>
           {["en", "fr", "es"].map((l) => (
             <TouchableOpacity
               key={l}
-              style={[styles.segItem, formLanguage === l && styles.segItemActive]}
+              style={[
+                styles.segItem,
+                formLanguage === l && styles.segItemActive,
+              ]}
               onPress={() => setFormLanguage(l)}
             >
-              <Text style={[styles.segText, formLanguage === l && styles.segTextActive]}>
+              <Text
+                style={[
+                  styles.segText,
+                  formLanguage === l && styles.segTextActive,
+                ]}
+              >
                 {l.toUpperCase()}
               </Text>
             </TouchableOpacity>
@@ -666,7 +519,10 @@ export default function SubstitutePoolScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.primaryButton, savingForm && styles.primaryButtonDisabled]}
+          style={[
+            styles.primaryButton,
+            savingForm && styles.primaryButtonDisabled,
+          ]}
           onPress={saveForm}
           disabled={savingForm}
         >
@@ -674,7 +530,9 @@ export default function SubstitutePoolScreen() {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <Text style={styles.primaryButtonText}>
-              {inPool ? "Save preferences" : "Join substitute pool"}
+              {isInPool
+                ? t("substitute_pool.btn_save_preferences")
+                : t("substitute_pool.btn_join_pool")}
             </Text>
           )}
         </TouchableOpacity>
@@ -683,49 +541,73 @@ export default function SubstitutePoolScreen() {
   };
 
   const renderOffers = () => {
+    if (offersLoading && offers.length === 0) {
+      return (
+        <View style={styles.sectionSpinner}>
+          <ActivityIndicator color="#2563EB" />
+        </View>
+      );
+    }
     if (offers.length === 0) {
       return (
         <View style={styles.emptyBlock}>
           <Ionicons name="mail-open-outline" size={28} color="#9CA3AF" />
-          <Text style={styles.emptyText}>{t("substitute_pool_v2.empty_no_offers")}</Text>
+          <Text style={styles.emptyText}>
+            {t("substitute_pool_v2.empty_no_offers")}
+          </Text>
         </View>
       );
     }
     return offers.map((o) => {
-      // tick is read so eslint-friendly; countdown re-evaluates on every render
-      void tick;
-      const hours = hoursRemaining(o.confirmation_deadline);
+      const r = o.record;
+      const busy = busyOfferId === r.id;
       return (
-        <View key={o.id} style={styles.offerCard}>
+        <View key={r.id} style={styles.offerCard}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>{o.circle_name ?? "Circle"}</Text>
-            <View style={[styles.badge, hours < 6 ? styles.badgeOrange : styles.badgeBlue]}>
-              <Text style={styles.badgeText}>{fmtCountdown(hours)} left</Text>
-            </View>
+            <Text style={styles.cardTitle}>
+              {o.circleName ?? t("substitute_pool.label_unknown_circle")}
+            </Text>
+            <Countdown
+              deadlineIso={r.confirmationDeadline}
+              warningHoursThreshold={6}
+              prefixKey="substitute_pool.label_left_in"
+            />
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>{t("substitute_pool_v2.label_contribution")}</Text>
+            <Text style={styles.label}>
+              {t("substitute_pool_v2.label_contribution")}
+            </Text>
             <Text style={styles.value}>
-              {o.circle_amount != null ? `$${Number(o.circle_amount).toFixed(2)}` : "—"}
+              {o.circleAmount != null
+                ? `$${o.circleAmount.toFixed(2)}`
+                : "—"}
             </Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>{t("substitute_pool_v2.label_remaining_cycles")}</Text>
-            <Text style={styles.value}>{o.remaining_cycles ?? 0}</Text>
+            <Text style={styles.label}>
+              {t("substitute_pool_v2.label_remaining_cycles")}
+            </Text>
+            <Text style={styles.value}>{o.remainingCycles}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>{t("substitute_pool_v2.label_payout_position")}</Text>
-            <Text style={styles.value}>#{o.original_payout_position}</Text>
+            <Text style={styles.label}>
+              {t("substitute_pool_v2.label_payout_position")}
+            </Text>
+            <Text style={styles.value}>#{r.originalPayoutPosition}</Text>
           </View>
           <View style={styles.row}>
-            <Text style={styles.label}>{t("substitute_pool_v2.label_exiting_member")}</Text>
-            <Text style={styles.value}>{o.exiting_member_name ?? "—"}</Text>
+            <Text style={styles.label}>
+              {t("substitute_pool_v2.label_exiting_member")}
+            </Text>
+            <Text style={styles.value}>{o.exitingMemberName ?? "—"}</Text>
           </View>
-          {o.payout_entitlement_transfer_cents > 0 && (
+          {r.payoutEntitlementTransferCents > 0 && (
             <View style={styles.row}>
-              <Text style={styles.label}>Payout transfer (80%)</Text>
+              <Text style={styles.label}>
+                {t("substitute_pool.label_payout_transfer")}
+              </Text>
               <Text style={[styles.value, { color: "#10B981" }]}>
-                {fmtCents(o.payout_entitlement_transfer_cents)}
+                {fmtCents(r.payoutEntitlementTransferCents)}
               </Text>
             </View>
           )}
@@ -733,28 +615,36 @@ export default function SubstitutePoolScreen() {
             <TouchableOpacity
               style={[
                 styles.dangerButton,
-                busyOfferId === o.id && styles.primaryButtonDisabled,
+                busy && styles.primaryButtonDisabled,
               ]}
-              onPress={() => respond(o, "decline")}
-              disabled={busyOfferId === o.id}
+              onPress={() => respond(r.id, "decline")}
+              disabled={busy}
             >
               <Ionicons name="close-circle-outline" size={16} color="#FFFFFF" />
-              <Text style={styles.dangerButtonText}>{t("substitute_pool_v2.btn_decline")}</Text>
+              <Text style={styles.dangerButtonText}>
+                {t("substitute_pool_v2.btn_decline")}
+              </Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
                 styles.successButton,
-                busyOfferId === o.id && styles.primaryButtonDisabled,
+                busy && styles.primaryButtonDisabled,
               ]}
-              onPress={() => respond(o, "accept")}
-              disabled={busyOfferId === o.id}
+              onPress={() => respond(r.id, "accept")}
+              disabled={busy}
             >
-              {busyOfferId === o.id ? (
+              {busy ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <>
-                  <Ionicons name="checkmark-circle-outline" size={16} color="#FFFFFF" />
-                  <Text style={styles.successButtonText}>{t("substitute_pool_v2.btn_accept")}</Text>
+                  <Ionicons
+                    name="checkmark-circle-outline"
+                    size={16}
+                    color="#FFFFFF"
+                  />
+                  <Text style={styles.successButtonText}>
+                    {t("substitute_pool_v2.btn_accept")}
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
@@ -765,88 +655,137 @@ export default function SubstitutePoolScreen() {
   };
 
   const renderAdmin = () => {
-    if (adminCircles.length === 0) return null;
+    if (adminLoading && adminItems.length === 0) return null;
+    if (adminItems.length === 0) return null;
+    // Group items by circle so admins see their queues per-circle.
+    const grouped = new Map<string, typeof adminItems>();
+    for (const item of adminItems) {
+      const arr = grouped.get(item.record.circleId) ?? [];
+      arr.push(item);
+      grouped.set(item.record.circleId, arr);
+    }
     return (
       <>
-        <Text style={styles.sectionTitle}>{t("substitute_pool_v2.section_admin_queue")}</Text>
-        {adminCircles.map((c) => (
-          <View key={c.id} style={styles.adminBlock}>
-            <Text style={styles.adminCircleName}>{c.name}</Text>
-            {c.pending.length === 0 ? (
-              <View style={styles.emptyBlock}>
-                <Text style={styles.emptyText}>{t("substitute_pool_v2.empty_no_pending")}</Text>
-              </View>
-            ) : (
-              c.pending.map((row) => {
-                void tick;
-                const notifiedMs = new Date(row.admin_notified_at).getTime();
-                const autoApproveIn = Math.max(
-                  0,
-                  (notifiedMs + 24 * 3600 * 1000 - Date.now()) / (3600 * 1000),
-                );
-                return (
-                  <View key={row.id} style={styles.adminCard}>
-                    <View style={styles.cardHeader}>
-                      <Text style={styles.cardTitle}>{row.exiting_member_name} → {row.substitute_member_name}</Text>
-                      <View style={[styles.badge, autoApproveIn < 4 ? styles.badgeOrange : styles.badgeBlue]}>
-                        <Text style={styles.badgeText}>
-                          auto-approves in {fmtCountdown(autoApproveIn)}
+        <Text style={styles.sectionTitle}>
+          {t("substitute_pool_v2.section_admin_queue")}
+        </Text>
+        {Array.from(grouped.entries()).map(([circleId, rows]) => (
+          <View key={circleId} style={styles.adminBlock}>
+            <Text style={styles.adminCircleName}>
+              {rows[0].circleName ?? circleId}
+            </Text>
+            {rows.map((row) => {
+              const r = row.record;
+              const busy = busyAdminId === r.id;
+              const deadlineIso = r.adminNotifiedAt
+                ? new Date(
+                    new Date(r.adminNotifiedAt).getTime() +
+                      24 * 60 * 60 * 1000,
+                  ).toISOString()
+                : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+              return (
+                <View key={r.id} style={styles.adminCard}>
+                  <View style={styles.cardHeader}>
+                    <Text style={styles.cardTitle}>
+                      {row.exitingMemberName ?? "—"} →{" "}
+                      {row.substituteMemberName ?? "—"}
+                    </Text>
+                    <Countdown
+                      deadlineIso={deadlineIso}
+                      warningHoursThreshold={4}
+                      prefixKey="substitute_pool.label_auto_approve_in"
+                    />
+                  </View>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>
+                      {t("substitute_pool_v2.label_substitute_reliability")}
+                    </Text>
+                    <Text style={styles.value}>
+                      {row.substituteReliabilityScore.toFixed(2)}
+                    </Text>
+                  </View>
+                  <View style={styles.row}>
+                    <Text style={styles.label}>
+                      {t("substitute_pool_v2.label_position")}
+                    </Text>
+                    <Text style={styles.value}>#{r.originalPayoutPosition}</Text>
+                  </View>
+                  {row.originalPayoutAmountCents > 0 && (
+                    <View style={styles.splitBlock}>
+                      <Text style={styles.splitTitle}>
+                        {t("substitute_pool.label_80_10_10_split")}
+                      </Text>
+                      <View style={styles.row}>
+                        <Text style={styles.label}>
+                          {t("substitute_pool_v2.label_substitute")}
+                        </Text>
+                        <Text style={styles.value}>
+                          {fmtCents(row.substituteShareCents)}
+                        </Text>
+                      </View>
+                      <View style={styles.row}>
+                        <Text style={styles.label}>
+                          {t("substitute_pool_v2.label_insurance_pool")}
+                        </Text>
+                        <Text style={styles.value}>
+                          {fmtCents(row.insurancePoolShareCents)}
+                        </Text>
+                      </View>
+                      <View style={styles.row}>
+                        <Text style={styles.label}>
+                          {t("substitute_pool_v2.label_exiting_member")}
+                        </Text>
+                        <Text style={styles.value}>
+                          {fmtCents(row.originalMemberSettlementCents)}
                         </Text>
                       </View>
                     </View>
-                    <View style={styles.row}>
-                      <Text style={styles.label}>{t("substitute_pool_v2.label_substitute_reliability")}</Text>
-                      <Text style={styles.value}>{row.substitute_reliability_score.toFixed(2)}</Text>
-                    </View>
-                    <View style={styles.row}>
-                      <Text style={styles.label}>{t("substitute_pool_v2.label_position")}</Text>
-                      <Text style={styles.value}>#{row.original_payout_position}</Text>
-                    </View>
-                    {row.original_payout_amount_cents > 0 && (
-                      <View style={styles.splitBlock}>
-                        <Text style={styles.splitTitle}>80/10/10 split</Text>
-                        <View style={styles.row}>
-                          <Text style={styles.label}>{t("substitute_pool_v2.label_substitute")}</Text>
-                          <Text style={styles.value}>{fmtCents(row.substitute_share_cents)}</Text>
-                        </View>
-                        <View style={styles.row}>
-                          <Text style={styles.label}>{t("substitute_pool_v2.label_insurance_pool")}</Text>
-                          <Text style={styles.value}>{fmtCents(row.insurance_pool_share_cents)}</Text>
-                        </View>
-                        <View style={styles.row}>
-                          <Text style={styles.label}>{t("substitute_pool_v2.label_exiting_member")}</Text>
-                          <Text style={styles.value}>{fmtCents(row.original_member_settlement_cents)}</Text>
-                        </View>
-                      </View>
-                    )}
-                    <View style={styles.actionRow}>
-                      <TouchableOpacity
-                        style={[styles.dangerButton, busyAdminId === row.id && styles.primaryButtonDisabled]}
-                        onPress={() => adminAct(row, "decline")}
-                        disabled={busyAdminId === row.id}
-                      >
-                        <Ionicons name="close-circle-outline" size={16} color="#FFFFFF" />
-                        <Text style={styles.dangerButtonText}>{t("substitute_pool_v2.btn_decline")}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.successButton, busyAdminId === row.id && styles.primaryButtonDisabled]}
-                        onPress={() => adminAct(row, "approve")}
-                        disabled={busyAdminId === row.id}
-                      >
-                        {busyAdminId === row.id ? (
-                          <ActivityIndicator color="#FFFFFF" />
-                        ) : (
-                          <>
-                            <Ionicons name="checkmark-circle-outline" size={16} color="#FFFFFF" />
-                            <Text style={styles.successButtonText}>{t("substitute_pool_v2.btn_approve")}</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    </View>
+                  )}
+                  <View style={styles.actionRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.dangerButton,
+                        busy && styles.primaryButtonDisabled,
+                      ]}
+                      onPress={() => adminAct(r.id, "decline")}
+                      disabled={busy}
+                    >
+                      <Ionicons
+                        name="close-circle-outline"
+                        size={16}
+                        color="#FFFFFF"
+                      />
+                      <Text style={styles.dangerButtonText}>
+                        {t("substitute_pool_v2.btn_decline")}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.successButton,
+                        busy && styles.primaryButtonDisabled,
+                      ]}
+                      onPress={() => adminAct(r.id, "approve")}
+                      disabled={busy}
+                    >
+                      {busy ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <>
+                          <Ionicons
+                            name="checkmark-circle-outline"
+                            size={16}
+                            color="#FFFFFF"
+                          />
+                          <Text style={styles.successButtonText}>
+                            {t("substitute_pool_v2.btn_approve")}
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
                   </View>
-                );
-              })
-            )}
+                </View>
+              );
+            })}
           </View>
         ))}
       </>
@@ -862,32 +801,29 @@ export default function SubstitutePoolScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#1F2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t("screen_headers.substitute_pool")}</Text>
+        <Text style={styles.headerTitle}>
+          {t("screen_headers.substitute_pool")}
+        </Text>
         <View style={styles.headerPlaceholder} />
       </View>
 
       <ScrollView
         style={styles.content}
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
-        {loading ? (
-          <View style={styles.loadingBox}>
-            <ActivityIndicator color="#2563EB" />
-            <Text style={styles.loadingText}>{t("substitute_pool_v2.loading_text")}</Text>
-          </View>
-        ) : (
-          <>
-            {renderEligibility()}
-            {renderPoolEntry()}
-            {renderForm()}
+        {renderEligibility()}
+        {renderPoolEntry()}
+        {renderForm()}
 
-            <Text style={styles.sectionTitle}>{t("substitute_pool_v2.section_pending_offers")}</Text>
-            {renderOffers()}
+        <Text style={styles.sectionTitle}>
+          {t("substitute_pool_v2.section_pending_offers")}
+        </Text>
+        {renderOffers()}
 
-            {renderAdmin()}
-          </>
-        )}
+        {renderAdmin()}
       </ScrollView>
     </SafeAreaView>
   );
@@ -910,8 +846,10 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: "700", color: "#1F2937" },
   headerPlaceholder: { width: 40 },
   content: { flex: 1 },
-  loadingBox: { alignItems: "center", padding: 32, gap: 12 },
-  loadingText: { color: "#6B7280", fontSize: 14 },
+  sectionSpinner: {
+    alignItems: "center",
+    paddingVertical: 16,
+  },
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
@@ -929,7 +867,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
-  cardTitle: { fontSize: 15, fontWeight: "700", color: "#1F2937", flex: 1, paddingRight: 8 },
+  cardTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1F2937",
+    flex: 1,
+    paddingRight: 8,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "800",
@@ -946,12 +890,28 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, color: "#6B7280" },
   value: { fontSize: 13, fontWeight: "600", color: "#1F2937" },
   helpText: { fontSize: 12, color: "#6B7280", marginTop: 4, lineHeight: 17 },
-  badge: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8, backgroundColor: "#E5E7EB" },
-  badgeText: { fontSize: 10, fontWeight: "800", color: "#1F2937", letterSpacing: 0.4 },
+  badge: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: "#E5E7EB",
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#1F2937",
+    letterSpacing: 0.4,
+  },
   badgeGreen: { backgroundColor: "#D1FAE5" },
   badgeBlue: { backgroundColor: "#DBEAFE" },
   badgeOrange: { backgroundColor: "#FFEDD5" },
-  fieldLabel: { fontSize: 13, fontWeight: "600", color: "#374151", marginTop: 12, marginBottom: 6 },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#374151",
+    marginTop: 12,
+    marginBottom: 6,
+  },
   segment: {
     flexDirection: "row",
     backgroundColor: "#F3F4F6",
@@ -959,7 +919,12 @@ const styles = StyleSheet.create({
     padding: 3,
     gap: 3,
   },
-  segItem: { flex: 1, paddingVertical: 8, alignItems: "center", borderRadius: 6 },
+  segItem: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: "center",
+    borderRadius: 6,
+  },
   segItemActive: { backgroundColor: "#FFFFFF" },
   segText: { fontSize: 13, fontWeight: "600", color: "#6B7280" },
   segTextActive: { color: "#2563EB" },
@@ -1055,5 +1020,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",
   },
-  splitTitle: { fontSize: 13, fontWeight: "700", color: "#1F2937", marginBottom: 6 },
+  splitTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 6,
+  },
 });

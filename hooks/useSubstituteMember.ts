@@ -28,7 +28,10 @@ import {
   type ExitEvaluation,
   type MatchCandidate,
   type SubstitutionSummary,
+  type EnrichedOffer,
+  type EnrichedAdminQueueItem,
 } from '../services/SubstituteMemberEngine';
+import { supabase } from '../lib/supabase';
 
 // Re-export types for consumers
 export type {
@@ -45,6 +48,8 @@ export type {
   ExitEvaluation,
   MatchCandidate,
   SubstitutionSummary,
+  EnrichedOffer,
+  EnrichedAdminQueueItem,
 };
 
 
@@ -332,6 +337,163 @@ export function useCircleSubstitutions(circleId?: string) {
   }), [records, exitRequests]);
 
   return { records, exitRequests, loading, error, refresh: fetchData, ...computed };
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hook 8 (Bucket A): usePendingOffers
+// Enriched pending offers + realtime subscription on substitution_records.
+// Replaces the SubstitutePoolScreen's manual offer-list query + join chain.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function usePendingOffers(userId?: string) {
+  const [offers, setOffers] = useState<EnrichedOffer[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchOffers = useCallback(async () => {
+    if (!userId) {
+      setOffers([]);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await SubstituteMemberEngine.getEnrichedOffers(userId);
+      setOffers(data);
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to load offers');
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchOffers();
+  }, [fetchOffers]);
+
+  // Realtime: any change to a substitution_record where I'm the substitute
+  // triggers a re-fetch. Filtering server-side keeps the channel quiet.
+  useEffect(() => {
+    if (!userId) return;
+    const channel = SubstituteMemberEngine.subscribeToSubstitutionOffers(
+      userId,
+      () => fetchOffers(),
+    );
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [userId, fetchOffers]);
+
+  return { offers, loading, error, refresh: fetchOffers };
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hook 9 (Bucket A): useAdminSubstitutionQueue
+// Enriched admin_pending records across every circle the user moderates +
+// realtime subscriptions on each circle's substitution_records.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function useAdminSubstitutionQueue(userId?: string) {
+  const [items, setItems] = useState<EnrichedAdminQueueItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [moderatedCircleIds, setModeratedCircleIds] = useState<string[]>([]);
+
+  const fetchQueue = useCallback(async () => {
+    if (!userId) {
+      setItems([]);
+      setModeratedCircleIds([]);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await SubstituteMemberEngine.getAdminQueueForUser(userId);
+      setItems(data);
+      // Cache the set of moderated circles so the realtime effect can
+      // subscribe only to those — and re-subscribe when the set changes.
+      setModeratedCircleIds(
+        Array.from(new Set(data.map((i) => i.record.circleId))),
+      );
+    } catch (err: any) {
+      setError(err?.message ?? 'Failed to load admin queue');
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchQueue();
+  }, [fetchQueue]);
+
+  // Realtime: one subscription per moderated circle (typical user moderates
+  // 0–3, so the channel count stays small). Any insert / update / delete on
+  // a substitution_record in that circle triggers a fetch.
+  useEffect(() => {
+    if (moderatedCircleIds.length === 0) return;
+    const channels = moderatedCircleIds.map((cid) =>
+      SubstituteMemberEngine.subscribeToCircleSubstitutions(cid, () =>
+        fetchQueue(),
+      ),
+    );
+    return () => {
+      channels.forEach((c) => c.unsubscribe());
+    };
+  }, [moderatedCircleIds, fetchQueue]);
+
+  return { items, loading, error, refresh: fetchQueue };
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hook 10 (Bucket A): useSubstitutePoolSummary
+// Lightweight wrapper around getPoolOverview() for the CirclesV2 status row.
+// Refetches whenever the substitute_pool table changes anywhere.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function useSubstitutePoolSummary() {
+  const [overview, setOverview] = useState<{
+    totalActive: number;
+    totalStandby: number;
+    totalSuspended: number;
+    avgReliabilityScore: number;
+  } | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchOverview = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await SubstituteMemberEngine.getPoolOverview();
+      setOverview(data);
+    } catch {
+      setOverview(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchOverview();
+  }, [fetchOverview]);
+
+  // Realtime: any change to substitute_pool anywhere re-aggregates. Cheap.
+  useEffect(() => {
+    const ch = supabase
+      .channel('substitute-pool-summary')
+      .on(
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table: 'substitute_pool' },
+        () => fetchOverview(),
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [fetchOverview]);
+
+  return { overview, loading, refresh: fetchOverview };
 }
 
 
