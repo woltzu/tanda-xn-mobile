@@ -111,6 +111,28 @@ export default function GoalTemplateBrowserScreen() {
           ) : (
             templates.map((tpl) => <TemplateCard key={tpl.id} template={tpl} />)
           )}
+
+          {/* Phase 5 — community submission entry. Always visible so the
+              footer reads like an invitation; the queue triages before
+              anything lands in the public list. */}
+          <TouchableOpacity
+            style={styles.submitTile}
+            onPress={() => navigation.navigate("SubmitTemplate")}
+            accessibilityRole="button"
+          >
+            <View style={styles.submitTileIcon}>
+              <Ionicons name="add" size={20} color="#5B21B6" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.submitTileTitle}>
+                {t("goal_template_browser.submit_title")}
+              </Text>
+              <Text style={styles.submitTileBody}>
+                {t("goal_template_browser.submit_body")}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#6B7280" />
+          </TouchableOpacity>
         </ScrollView>
       )}
     </View>
@@ -323,4 +345,26 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   useBtnText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
+
+  submitTile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginTop: 4,
+  },
+  submitTileIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "#F5F3FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  submitTileTitle: { fontSize: 14, fontWeight: "800", color: "#0A2342" },
+  submitTileBody: { fontSize: 12, color: "#6B7280", marginTop: 2 },
 });

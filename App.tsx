@@ -47,6 +47,9 @@ import AdminVerificationQueueScreen from "./screens/AdminVerificationQueueScreen
 import VerificationMapScreen from "./screens/VerificationMapScreen";
 // Phase 4 — diaspora-dream goal templates.
 import GoalTemplateBrowserScreen from "./screens/GoalTemplateBrowserScreen";
+// Phase 5 (templates 2A) — community submissions + admin queue.
+import SubmitTemplateScreen from "./screens/SubmitTemplateScreen";
+import AdminTemplateQueueScreen from "./screens/AdminTemplateQueueScreen";
 import PayoutHistoryScreen from "./screens/PayoutHistoryScreen";
 import PayoutListener from "./components/PayoutListener";
 import WelcomeScreen from "./screens/WelcomeScreen";
@@ -618,6 +621,9 @@ export type RootStackParamList = {
   VerificationMap: { milestoneId: string };
   // Phase 4 — diaspora-dream goal template browser.
   GoalTemplateBrowser: undefined;
+  // Phase 5 — community template submission + admin queue.
+  SubmitTemplate: undefined;
+  AdminTemplateQueue: undefined;
   // Trip Circle Flow
   ProviderDiscovery: undefined;
   ProviderProfileSetup: undefined;
@@ -1486,6 +1492,8 @@ function AppContent() {
           <Stack.Screen name="AdminVerificationQueue" component={AdminVerificationQueueScreen} />
           <Stack.Screen name="VerificationMap" component={VerificationMapScreen} />
           <Stack.Screen name="GoalTemplateBrowser" component={GoalTemplateBrowserScreen} />
+          <Stack.Screen name="SubmitTemplate" component={SubmitTemplateScreen} />
+          <Stack.Screen name="AdminTemplateQueue" component={AdminTemplateQueueScreen} />
           {/* Deep Link Invite Screens */}
           <Stack.Screen name="CircleInvite" component={CircleInviteScreen} />
           {/* Public frictionless join — reachable unauthenticated at /join/:inviteCode */}

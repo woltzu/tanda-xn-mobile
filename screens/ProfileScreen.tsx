@@ -415,6 +415,12 @@ export default function ProfileScreen() {
                 label: t("profile.item_verification_queue"),
                 onPress: () => navigation.navigate("AdminVerificationQueue"),
               },
+              // Phase 5 (templates 2A) — community goal-template submissions.
+              {
+                icon: "albums-outline",
+                label: t("profile.item_template_queue"),
+                onPress: () => navigation.navigate("AdminTemplateQueue"),
+              },
               {
                 icon: "document-text-outline",
                 label: t("profile.item_audit_trail"),
