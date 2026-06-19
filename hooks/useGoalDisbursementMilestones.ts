@@ -207,11 +207,20 @@ export function useDisbursementActions() {
   );
 
   const respondVerification = useCallback(
-    (requestId: string, approved: boolean, notes?: string) =>
+    (
+      requestId: string,
+      approved: boolean,
+      notes?: string,
+      evidence?: Record<string, unknown>,
+    ) =>
       run("respond_disbursement_verification", {
         p_request_id: requestId,
         p_approved: approved,
         p_notes: notes ?? null,
+        // Phase 2B — evidence JSONB merged into the verification row when
+        // present (photos[], location_text, captured_at). The 4-arg RPC
+        // ignores empty objects.
+        p_evidence: evidence ?? {},
       }),
     [run],
   );

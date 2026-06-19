@@ -1415,6 +1415,35 @@ export default function GoalDetailV2Screen() {
             ) : null
           )}
 
+          {/* Phase 2B — "Create milestones" CTA. Shown only when there's
+              a linked provider AND no disbursement milestones exist yet
+              (so the screen doesn't double up with the progress card
+              below). Goal owner only — the gate is already enforced by
+              the create RPC, but we hide the affordance for clarity. */}
+          {linkedProvider && !milestoneCounts && realStatus === "active" ? (
+            <TouchableOpacity
+              style={styles.linkCircleButton}
+              onPress={() =>
+                navigation.navigate(Routes.CreateDisbursementMilestones as any, {
+                  goalId: goal.id,
+                  providerId: linkedProvider.provider_id,
+                })
+              }
+              activeOpacity={0.8}
+              accessibilityRole="button"
+            >
+              <Text style={styles.linkCircleEmoji}>🧱</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.linkCircleTitle}>
+                  {t("goal_detail.create_milestones_title")}
+                </Text>
+                <Text style={styles.linkCircleBody}>
+                  {t("goal_detail.create_milestones_body")}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ) : null}
+
           {/* Phase 2A — staged-disbursement summary. Visible only when
               the goal has milestones configured (disbursement_type
               switches to 'staged' when create_goal_disbursement_milestones

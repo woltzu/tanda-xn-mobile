@@ -143,6 +143,27 @@ export default function GoalDisbursementMilestonesScreen() {
     [milestones],
   );
 
+  // Retention holdback summary — what's been withheld so far from
+  // released milestones (i.e. money the provider hasn't seen yet because
+  // it's the holdback). The final milestone releases the full
+  // accumulated retention plus its own amount.
+  const retentionSoFar = useMemo(() => {
+    return milestones
+      .filter((m) => m.status === "released")
+      .reduce(
+        (acc, m) =>
+          acc + Math.floor((m.amount_cents * m.retention_percent) / 100),
+        0,
+      );
+  }, [milestones]);
+  const retentionPotential = useMemo(() => {
+    return milestones.reduce(
+      (acc, m) =>
+        acc + Math.floor((m.amount_cents * m.retention_percent) / 100),
+      0,
+    );
+  }, [milestones]);
+
   const isGoalOwner = goal !== null && user?.id === goal.user_id;
   const isProviderOfThisGoal =
     myProvider !== null &&
@@ -243,6 +264,25 @@ export default function GoalDisbursementMilestonesScreen() {
           ) : null}
         </View>
 
+        {/* Retention summary — surfaces the 10%-per-milestone holdback
+            policy and how much has been held so far on this goal. */}
+        {milestones.length > 0 && retentionPotential > 0 ? (
+          <View style={styles.retentionCard}>
+            <View style={styles.retentionRow}>
+              <Ionicons name="shield-outline" size={16} color="#7C3AED" />
+              <Text style={styles.retentionTitle}>
+                {t("goal_disbursement.retention_summary_title")}
+              </Text>
+            </View>
+            <Text style={styles.retentionBody}>
+              {t("goal_disbursement.retention_summary_body", {
+                held: fmt(retentionSoFar),
+                potential: fmt(retentionPotential),
+              })}
+            </Text>
+          </View>
+        ) : null}
+
         {milestones.length === 0 ? (
           <View style={styles.emptyCard}>
             <Ionicons name="flag-outline" size={48} color="#9CA3AF" />
@@ -261,6 +301,12 @@ export default function GoalDisbursementMilestonesScreen() {
               onRequestVerification={() => handleRequestVerification(m.id)}
               onRespond={(approved) => handleRespond(m.id, approved)}
               onCancel={() => handleCancel(m.id)}
+              onOpenVerification={() =>
+                navigation.navigate("MilestoneVerification", {
+                  milestoneId: m.id,
+                  requestId: pendingReqs[m.id],
+                })
+              }
             />
           ))
         )}
@@ -279,6 +325,7 @@ function MilestoneCard({
   onRequestVerification,
   onRespond,
   onCancel,
+  onOpenVerification,
 }: {
   milestone: DisbursementMilestone;
   isGoalOwner: boolean;
@@ -289,6 +336,7 @@ function MilestoneCard({
   onRequestVerification: () => void;
   onRespond: (approved: boolean) => void;
   onCancel: () => void;
+  onOpenVerification: () => void;
 }) {
   const { t } = useTranslation();
   const color = statusColor(milestone.status);
@@ -389,36 +437,49 @@ function MilestoneCard({
             elder/admin-method are gated by the RPC, so we render the button
             and let the server reject if unauthorized. */}
         {milestone.status === "verification_requested" && hasPendingRequest ? (
-          <>
-            {(isGoalOwner && milestone.verification_method === "owner") ||
-            milestone.verification_method === "elder" ||
+          milestone.verification_method === "owner" && isGoalOwner ? (
+            // Owner-method: inline approve/reject — no evidence collected,
+            // the goal owner just signs off based on their relationship
+            // with the provider.
+            <>
+              <TouchableOpacity
+                style={[styles.btn, styles.btnPrimary]}
+                onPress={() => onRespond(true)}
+                disabled={submitting}
+              >
+                <Text style={styles.btnPrimaryText}>
+                  {t("goal_disbursement.approve")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btn, styles.btnSecondary]}
+                onPress={() => onRespond(false)}
+                disabled={submitting}
+              >
+                <Text style={styles.btnSecondaryText}>
+                  {t("goal_disbursement.reject")}
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : milestone.verification_method === "elder" ||
             milestone.verification_method === "admin" ? (
-              <>
-                <TouchableOpacity
-                  style={[styles.btn, styles.btnPrimary]}
-                  onPress={() => onRespond(true)}
-                  disabled={submitting}
-                >
-                  <Text style={styles.btnPrimaryText}>
-                    {t("goal_disbursement.approve")}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.btn, styles.btnSecondary]}
-                  onPress={() => onRespond(false)}
-                  disabled={submitting}
-                >
-                  <Text style={styles.btnSecondaryText}>
-                    {t("goal_disbursement.reject")}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <Text style={styles.pendingText}>
-                {t("goal_disbursement.pending_review")}
+            // Elder/admin-method: route to the dedicated verification
+            // screen which collects photos + location + notes before
+            // calling respond_disbursement_verification(approve, evidence).
+            <TouchableOpacity
+              style={[styles.btn, styles.btnPrimary]}
+              onPress={onOpenVerification}
+              disabled={submitting}
+            >
+              <Text style={styles.btnPrimaryText}>
+                {t("goal_disbursement.open_verification")}
               </Text>
-            )}
-          </>
+            </TouchableOpacity>
+          ) : (
+            <Text style={styles.pendingText}>
+              {t("goal_disbursement.pending_review")}
+            </Text>
+          )
         ) : null}
 
         {isGoalOwner &&
@@ -549,4 +610,16 @@ const styles = StyleSheet.create({
   btnSecondaryText: { color: "#0A2342", fontSize: 13, fontWeight: "700" },
   btnDanger: { backgroundColor: "#FEE2E2" },
   btnDangerText: { color: "#B91C1C", fontSize: 13, fontWeight: "700" },
+
+  retentionCard: {
+    backgroundColor: "#F5F3FF",
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+  retentionRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  retentionTitle: { fontSize: 13, fontWeight: "800", color: "#5B21B6" },
+  retentionBody: { fontSize: 12, color: "#5B21B6", marginTop: 4, lineHeight: 16 },
 });

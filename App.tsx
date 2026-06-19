@@ -38,6 +38,9 @@ import ProviderNetworkVerificationScreen from "./screens/ProviderNetworkVerifica
 // Phase 2A — staged disbursement (Dream Escrow). NOT to be confused with
 // the existing GoalMilestonesScreen (percentage-based celebration timeline).
 import GoalDisbursementMilestonesScreen from "./screens/GoalDisbursementMilestonesScreen";
+// Phase 2B — creation wizard + elder/admin verification screen.
+import CreateDisbursementMilestonesScreen from "./screens/CreateDisbursementMilestonesScreen";
+import MilestoneVerificationScreen from "./screens/MilestoneVerificationScreen";
 import PayoutHistoryScreen from "./screens/PayoutHistoryScreen";
 import PayoutListener from "./components/PayoutListener";
 import WelcomeScreen from "./screens/WelcomeScreen";
@@ -599,6 +602,10 @@ export type RootStackParamList = {
   // (celebration). Owner / provider / elder all share this screen with
   // role-aware actions.
   GoalDisbursementMilestones: { goalId: string };
+  // Phase 2B — owner creates milestones (sum must match goal target),
+  // elder/admin signs off on a milestone with evidence.
+  CreateDisbursementMilestones: { goalId: string; providerId: string };
+  MilestoneVerification: { milestoneId: string; requestId: string };
   // Trip Circle Flow
   ProviderDiscovery: undefined;
   ProviderProfileSetup: undefined;
@@ -1462,6 +1469,8 @@ function AppContent() {
           <Stack.Screen name="ProviderDashboard" component={ProviderDashboardScreen} />
           <Stack.Screen name="ProviderNetworkVerification" component={ProviderNetworkVerificationScreen} />
           <Stack.Screen name="GoalDisbursementMilestones" component={GoalDisbursementMilestonesScreen} />
+          <Stack.Screen name="CreateDisbursementMilestones" component={CreateDisbursementMilestonesScreen} />
+          <Stack.Screen name="MilestoneVerification" component={MilestoneVerificationScreen} />
           {/* Deep Link Invite Screens */}
           <Stack.Screen name="CircleInvite" component={CircleInviteScreen} />
           {/* Public frictionless join — reachable unauthenticated at /join/:inviteCode */}
