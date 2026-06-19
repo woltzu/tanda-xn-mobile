@@ -28,6 +28,7 @@ import * as Clipboard from "expo-clipboard";
 import { useAuth } from "../context/AuthContext";
 import { useActivePlan } from "../hooks/usePartialContribution";
 import { useCircleHealth } from "../hooks/useCircleHealth";
+import { useSubstitutePoolSummary } from "../hooks/useSubstituteMember";
 import { useCircleAutopayConfig } from "../hooks/useCircleAutopay";
 import { useCircleAutopaySuggestion } from "../hooks/useCircleAutopaySuggestion";
 import { useCircleNotificationMute } from "../hooks/useCircleNotificationMute";
@@ -314,6 +315,12 @@ export default function CircleDetailScreen() {
     trendVisual: healthTrendVisual,
     scoreDelta: healthDelta,
   } = useCircleHealth(circleId);
+
+  // Substitute Pool Bucket B — global active-substitute count for the
+  // entry row added below the icon strip. The hook keeps itself fresh via
+  // a postgres_changes subscription on substitute_pool.
+  const { overview: substituteOverview } = useSubstitutePoolSummary();
+  const substituteAvailableCount = substituteOverview?.totalActive ?? 0;
 
   // Find the circle in all available sources: user circles, my circles, or browse circles
   const circle = [...circles, ...myCircles, ...browseCircles].find((c) => c.id === circleId);
@@ -992,6 +999,37 @@ export default function CircleDetailScreen() {
             </Text>
           </TouchableOpacity>
         </View>
+      ) : null}
+
+      {/* Substitute Pool Bucket B — entry row. Surfaces the live global
+          active-substitute count so circles in setup mode (or experiencing
+          churn) discover the safety net without leaving the circle screen.
+          No params on navigation — the screen is member-centric, not
+          per-circle. Visible only to members of the circle. */}
+      {isMember ? (
+        <TouchableOpacity
+          style={styles.substituteRow}
+          onPress={() =>
+            navigation.navigate(Routes.SubstitutePool as never)
+          }
+          accessibilityRole="button"
+          accessibilityLabel={t("circle_detail.substitute_pool_row_title")}
+        >
+          <View style={[styles.substituteRowIcon, { backgroundColor: "#ECFDF5" }]}>
+            <Ionicons name="people-circle-outline" size={20} color="#10B981" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.substituteRowTitle}>
+              {t("circle_detail.substitute_pool_row_title")}
+            </Text>
+            <Text style={styles.substituteRowSubtitle}>
+              {t("circle_detail.substitute_pool_row", {
+                count: substituteAvailableCount,
+              })}
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+        </TouchableOpacity>
       ) : null}
 
       {/* Phase 2 (circle autopay) — missed-contribution banner. Sits
@@ -2553,6 +2591,39 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#0A2342",
     textAlign: "center",
+  },
+
+  // Substitute Pool Bucket B — entry row
+  substituteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  substituteRowIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  substituteRowTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0A2342",
+  },
+  substituteRowSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
   },
   memberCardMe: {
     backgroundColor: "#F0FDFB",

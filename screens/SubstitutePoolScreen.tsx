@@ -26,7 +26,7 @@
 // so the screen's other cards don't re-render on countdown ticks.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -38,7 +38,11 @@ import {
   RefreshControl,
   Alert,
   TextInput,
+  Modal,
+  Pressable,
+  Animated,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -51,6 +55,19 @@ import {
   useSubstituteMemberActions,
   type PoolStatus,
 } from "../hooks/useSubstituteMember";
+
+// Bucket B — HelpSheet topics (one sheet, all four topics rendered in
+// sequence), plus the AsyncStorage gate for the first-visit coach mark
+// and the tab keys for the tabified layout.
+type HelpTopic =
+  | "how_pool"
+  | "commitment"
+  | "reliability"
+  | "decline_consequences";
+
+const POOL_COACH_KEY = "@tandaxn_substitute_pool_coach_seen_v1";
+
+type TabKey = "membership" | "offers" | "admin";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -151,6 +168,58 @@ export default function SubstitutePoolScreen() {
   const [busyOfferId, setBusyOfferId] = useState<string | null>(null);
   const [busyAdminId, setBusyAdminId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Bucket B — tabs, sheets, coach mark.
+  const [activeTab, setActiveTab] = useState<TabKey>("membership");
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [reliabilityOpen, setReliabilityOpen] = useState(false);
+  const [declineBudgetOpen, setDeclineBudgetOpen] = useState(false);
+  const showAdminTab = adminItems.length > 0;
+  // If the admin tab disappears (e.g. queue emptied while user was on it),
+  // bounce them back to a tab that's still visible.
+  useEffect(() => {
+    if (activeTab === "admin" && !showAdminTab) {
+      setActiveTab("membership");
+    }
+  }, [activeTab, showAdminTab]);
+
+  // First-visit coach mark — AsyncStorage-gated, fades in on mount,
+  // auto-dismisses after 4s or on tap. Same pattern as Insurance Pool
+  // Bucket B's POOL_COACH_KEY.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachOpacity = useRef(new Animated.Value(0)).current;
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    coachCheckedRef.current = true;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(POOL_COACH_KEY);
+        if (seen) return;
+        setCoachVisible(true);
+        Animated.timing(coachOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+      } catch {
+        // AsyncStorage unavailable → silently skip.
+      }
+    })();
+  }, [coachOpacity]);
+  const dismissCoach = useCallback(() => {
+    Animated.timing(coachOpacity, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setCoachVisible(false));
+    AsyncStorage.setItem(POOL_COACH_KEY, "1").catch(() => undefined);
+  }, [coachOpacity]);
+  useEffect(() => {
+    if (!coachVisible) return;
+    const tid = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(tid);
+  }, [coachVisible, dismissCoach]);
 
   // Hydrate form whenever the pool entry refreshes.
   useEffect(() => {
@@ -369,14 +438,28 @@ export default function SubstitutePoolScreen() {
             </Text>
           </View>
         </View>
-        <View style={styles.row}>
-          <Text style={styles.label}>
-            {t("substitute_pool_v2.label_reliability")}
-          </Text>
+        {/* Bucket B — reliability row is tappable; opens the explainer. */}
+        <TouchableOpacity
+          style={styles.rowTappable}
+          onPress={() => setReliabilityOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={t("substitute_pool.reliability_explainer_open")}
+        >
+          <View style={styles.labelWithIcon}>
+            <Text style={styles.label}>
+              {t("substitute_pool_v2.label_reliability")}
+            </Text>
+            <Ionicons
+              name="information-circle-outline"
+              size={14}
+              color="#6B7280"
+              style={{ marginLeft: 4 }}
+            />
+          </View>
           <Text style={styles.value}>
             {entry.substituteReliabilityScore.toFixed(2)}
           </Text>
-        </View>
+        </TouchableOpacity>
         <View style={styles.row}>
           <Text style={styles.label}>
             {t("substitute_pool_v2.label_total_substitutions")}
@@ -391,10 +474,28 @@ export default function SubstitutePoolScreen() {
             <Text style={styles.value}>{successRate}%</Text>
           </View>
         )}
+        {/* Bucket B — (?) next to declines remaining opens DeclineBudgetSheet. */}
         <View style={styles.row}>
-          <Text style={styles.label}>
-            {t("substitute_pool.label_declines_remaining")}
-          </Text>
+          <View style={styles.labelWithIcon}>
+            <Text style={styles.label}>
+              {t("substitute_pool.label_declines_remaining")}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setDeclineBudgetOpen(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={t(
+                "substitute_pool.decline_budget_explainer_open",
+              )}
+            >
+              <Ionicons
+                name="help-circle-outline"
+                size={14}
+                color="#6B7280"
+                style={{ marginLeft: 4 }}
+              />
+            </TouchableOpacity>
+          </View>
           <Text
             style={[
               styles.value,
@@ -792,6 +893,20 @@ export default function SubstitutePoolScreen() {
     );
   };
 
+  // Bucket B — tab descriptors. The admin tab is conditionally appended;
+  // its count badge mirrors the underlying queue length.
+  const tabDescriptors: Array<{ key: TabKey; labelKey: string; count?: number }> = [
+    { key: "membership", labelKey: "substitute_pool.tab_membership" },
+    { key: "offers", labelKey: "substitute_pool.tab_offers", count: offers.length },
+  ];
+  if (showAdminTab) {
+    tabDescriptors.push({
+      key: "admin",
+      labelKey: "substitute_pool.tab_admin_queue",
+      count: adminItems.length,
+    });
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -804,7 +919,42 @@ export default function SubstitutePoolScreen() {
         <Text style={styles.headerTitle}>
           {t("screen_headers.substitute_pool")}
         </Text>
-        <View style={styles.headerPlaceholder} />
+        {/* Bucket B — wire the previously-empty header slot to a (?) button
+            that opens the four-topic HelpSheet. */}
+        <TouchableOpacity
+          style={styles.headerBackButton}
+          onPress={() => setHelpOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={t("substitute_pool.help_open")}
+        >
+          <Ionicons name="help-circle-outline" size={24} color="#1F2937" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Bucket B — tab strip. Membership and offers always visible; admin
+          appears only when there's at least one pending admin action. */}
+      <View style={styles.tabRow}>
+        {tabDescriptors.map((tab) => {
+          const isActive = activeTab === tab.key;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.tabBtn, isActive && styles.tabBtnActive]}
+              onPress={() => setActiveTab(tab.key)}
+              accessibilityRole="button"
+            >
+              <Text
+                style={[
+                  styles.tabBtnText,
+                  isActive && styles.tabBtnTextActive,
+                ]}
+              >
+                {t(tab.labelKey)}
+                {tab.count != null && tab.count > 0 ? ` (${tab.count})` : ""}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <ScrollView
@@ -814,20 +964,332 @@ export default function SubstitutePoolScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {renderEligibility()}
-        {renderPoolEntry()}
-        {renderForm()}
+        {activeTab === "membership" && (
+          <>
+            {renderEligibility()}
+            {renderPoolEntry()}
+            {renderForm()}
+          </>
+        )}
 
-        <Text style={styles.sectionTitle}>
-          {t("substitute_pool_v2.section_pending_offers")}
-        </Text>
-        {renderOffers()}
+        {activeTab === "offers" && (
+          <>
+            <Text style={styles.sectionTitle}>
+              {t("substitute_pool_v2.section_pending_offers")}
+            </Text>
+            {renderOffers()}
+          </>
+        )}
 
-        {renderAdmin()}
+        {activeTab === "admin" && renderAdmin()}
       </ScrollView>
+
+      {/* Bucket B — sheets and coach overlay mount outside ScrollView. */}
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} />
+      <ReliabilityExplainerSheet
+        visible={reliabilityOpen}
+        onClose={() => setReliabilityOpen(false)}
+        currentScore={poolEntry?.substituteReliabilityScore ?? null}
+      />
+      <DeclineBudgetSheet
+        visible={declineBudgetOpen}
+        onClose={() => setDeclineBudgetOpen(false)}
+      />
+
+      {coachVisible && (
+        <Animated.View
+          style={[styles.coachOverlay, { opacity: coachOpacity }]}
+          pointerEvents="box-none"
+        >
+          <Pressable
+            style={styles.coachCard}
+            onPress={dismissCoach}
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name="people-circle"
+              size={20}
+              color="#10B981"
+            />
+            <Text style={styles.coachText}>
+              {t("substitute_pool.coach_tip")}
+            </Text>
+          </Pressable>
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HelpSheet — Modal-based, all four Bucket B topics in one scroll. Same
+// pattern as the Insurance Pool Bucket B HelpSheet.
+// ══════════════════════════════════════════════════════════════════════════════
+function HelpSheet({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const topics: HelpTopic[] = [
+    "how_pool",
+    "commitment",
+    "reliability",
+    "decline_consequences",
+  ];
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>
+            {t("substitute_pool.help_sheet_title")}
+          </Text>
+          <ScrollView style={{ maxHeight: 420 }}>
+            {topics.map((topic, idx) => (
+              <View
+                key={topic}
+                style={[
+                  sheetStyles.helpItem,
+                  idx === topics.length - 1 && sheetStyles.helpItemLast,
+                ]}
+              >
+                <Text style={sheetStyles.helpItemTitle}>
+                  {t(`substitute_pool.help_${topic}_title`)}
+                </Text>
+                <Text style={sheetStyles.body}>
+                  {t(`substitute_pool.help_${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+          <TouchableOpacity
+            style={sheetStyles.closeBtn}
+            onPress={onClose}
+            accessibilityRole="button"
+          >
+            <Text style={sheetStyles.closeBtnText}>
+              {t("substitute_pool.help_close")}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ReliabilityExplainerSheet — opened from the reliability row. Shows the
+// user's current score, the formula, and the three reliability tiers.
+// ══════════════════════════════════════════════════════════════════════════════
+function ReliabilityExplainerSheet({
+  visible,
+  onClose,
+  currentScore,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  currentScore: number | null;
+}) {
+  const { t } = useTranslation();
+  const fmt = (v: number | null) => (v == null ? "—" : v.toFixed(2));
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>
+            {t("substitute_pool.reliability_explainer_title")}
+          </Text>
+          <Text style={sheetStyles.body}>
+            {t("substitute_pool.reliability_current_score", {
+              score: fmt(currentScore),
+            })}
+          </Text>
+
+          <Text style={sheetStyles.sectionLabel}>
+            {t("substitute_pool.reliability_formula_label")}
+          </Text>
+          <Text style={sheetStyles.body}>
+            {t("substitute_pool.reliability_formula")}
+          </Text>
+
+          <Text style={sheetStyles.sectionLabel}>
+            {t("substitute_pool.reliability_tiers_label")}
+          </Text>
+          <View style={sheetStyles.tierRow}>
+            <Text
+              style={[sheetStyles.tierLabel, { color: "#10B981" }]}
+            >
+              {t("substitute_pool.reliability_tier_trusted")}
+            </Text>
+            <Text style={sheetStyles.body}>
+              {t("substitute_pool.reliability_tier_trusted_desc")}
+            </Text>
+          </View>
+          <View style={sheetStyles.tierRow}>
+            <Text style={[sheetStyles.tierLabel, { color: "#2563EB" }]}>
+              {t("substitute_pool.reliability_tier_reliable")}
+            </Text>
+            <Text style={sheetStyles.body}>
+              {t("substitute_pool.reliability_tier_reliable_desc")}
+            </Text>
+          </View>
+          <View style={sheetStyles.tierRow}>
+            <Text style={[sheetStyles.tierLabel, { color: "#F59E0B" }]}>
+              {t("substitute_pool.reliability_tier_on_notice")}
+            </Text>
+            <Text style={sheetStyles.body}>
+              {t("substitute_pool.reliability_tier_on_notice_desc")}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={sheetStyles.closeBtn}
+            onPress={onClose}
+            accessibilityRole="button"
+          >
+            <Text style={sheetStyles.closeBtnText}>
+              {t("substitute_pool.help_close")}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DeclineBudgetSheet — small tooltip-style modal opened from the (?) next
+// to "Declines remaining (90d)".
+// ══════════════════════════════════════════════════════════════════════════════
+function DeclineBudgetSheet({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>
+            {t("substitute_pool.decline_budget_explainer_title")}
+          </Text>
+          <Text style={sheetStyles.body}>
+            {t("substitute_pool.decline_budget_explainer")}
+          </Text>
+          <TouchableOpacity
+            style={sheetStyles.closeBtn}
+            onPress={onClose}
+            accessibilityRole="button"
+          >
+            <Text style={sheetStyles.closeBtnText}>
+              {t("substitute_pool.help_close")}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const sheetStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 12,
+  },
+  body: {
+    fontSize: 13,
+    color: "#1F2937",
+    lineHeight: 19,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    color: "#6B7280",
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  helpItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  helpItemLast: { borderBottomWidth: 0 },
+  helpItemTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 4,
+  },
+  tierRow: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  tierLabel: {
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 2,
+  },
+  closeBtn: {
+    backgroundColor: "#1F2937",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  closeBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+});
 
 // ── Styles ──────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
@@ -886,6 +1348,16 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 6,
+  },
+  rowTappable: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  labelWithIcon: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   label: { fontSize: 13, color: "#6B7280" },
   value: { fontSize: 13, fontWeight: "600", color: "#1F2937" },
@@ -1025,5 +1497,63 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1F2937",
     marginBottom: 6,
+  },
+
+  // Bucket B — tab strip
+  tabRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 4,
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  tabBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+  },
+  tabBtnActive: {
+    backgroundColor: "#1F2937",
+  },
+  tabBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#6B7280",
+  },
+  tabBtnTextActive: {
+    color: "#FFFFFF",
+  },
+
+  // Bucket B — coach overlay
+  coachOverlay: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 24,
+  },
+  coachCard: {
+    backgroundColor: "#1F2937",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  coachText: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
