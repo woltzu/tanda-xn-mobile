@@ -41,6 +41,8 @@ import GoalDisbursementMilestonesScreen from "./screens/GoalDisbursementMileston
 // Phase 2B — creation wizard + elder/admin verification screen.
 import CreateDisbursementMilestonesScreen from "./screens/CreateDisbursementMilestonesScreen";
 import MilestoneVerificationScreen from "./screens/MilestoneVerificationScreen";
+// Phase 2C — admin verification queue.
+import AdminVerificationQueueScreen from "./screens/AdminVerificationQueueScreen";
 import PayoutHistoryScreen from "./screens/PayoutHistoryScreen";
 import PayoutListener from "./components/PayoutListener";
 import WelcomeScreen from "./screens/WelcomeScreen";
@@ -606,6 +608,8 @@ export type RootStackParamList = {
   // elder/admin signs off on a milestone with evidence.
   CreateDisbursementMilestones: { goalId: string; providerId: string };
   MilestoneVerification: { milestoneId: string; requestId: string };
+  // Phase 2C — admin queue of pending verifications.
+  AdminVerificationQueue: undefined;
   // Trip Circle Flow
   ProviderDiscovery: undefined;
   ProviderProfileSetup: undefined;
@@ -1471,6 +1475,7 @@ function AppContent() {
           <Stack.Screen name="GoalDisbursementMilestones" component={GoalDisbursementMilestonesScreen} />
           <Stack.Screen name="CreateDisbursementMilestones" component={CreateDisbursementMilestonesScreen} />
           <Stack.Screen name="MilestoneVerification" component={MilestoneVerificationScreen} />
+          <Stack.Screen name="AdminVerificationQueue" component={AdminVerificationQueueScreen} />
           {/* Deep Link Invite Screens */}
           <Stack.Screen name="CircleInvite" component={CircleInviteScreen} />
           {/* Public frictionless join — reachable unauthenticated at /join/:inviteCode */}

@@ -9,10 +9,10 @@
 // flips the milestone to verified on approval, and stamps the elder fee
 // row when the responder isn't the goal owner.
 //
-// GPS NOTE — expo-location is not in the dependency tree as of Phase 2B.
-// To keep this commit free of native-dep changes, the screen takes a
-// manual location string instead. expo-location + automatic GPS capture
-// are a Phase 2C item.
+// GPS — Phase 2C adds automatic capture via expo-location on mount. If
+// permission is denied or the position lookup errors, the manual text
+// field stays in as a fallback so the responder can still attach a
+// location description.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState } from "react";
@@ -34,6 +34,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import { supabase } from "../lib/supabase";
 import {
   DisbursementMilestone,
@@ -49,6 +50,13 @@ type Photo = {
   uploading: boolean;
   error?: string;
 };
+
+type GpsState =
+  | { status: "idle" }
+  | { status: "requesting" }
+  | { status: "granted"; latitude: number; longitude: number; accuracy: number | null; capturedAt: string }
+  | { status: "denied" }
+  | { status: "error"; message: string };
 
 const STORAGE_BUCKET = "verification-docs";
 const MAX_PHOTOS = 4;
@@ -85,11 +93,53 @@ export default function MilestoneVerificationScreen() {
   const [ctxLoading, setCtxLoading] = useState(true);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [locationText, setLocationText] = useState("");
+  const [gps, setGps] = useState<GpsState>({ status: "idle" });
   const [notes, setNotes] = useState("");
   const [rejectReason, setRejectReason] = useState("");
   const [mode, setMode] = useState<"approve" | "reject" | null>(null);
 
   const { submitting, respondVerification } = useDisbursementActions();
+
+  // Phase 2C — request location permission and capture once on mount.
+  // We don't block the rest of the screen on this; failures fall through
+  // to the manual text field. Web bundles don't surface useful coords
+  // through expo-location, so we treat Platform.OS === 'web' as "denied"
+  // to keep the responder on the manual path.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (Platform.OS === "web") {
+        if (!cancelled) setGps({ status: "denied" });
+        return;
+      }
+      setGps({ status: "requesting" });
+      try {
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (cancelled) return;
+        if (perm.status !== "granted") {
+          setGps({ status: "denied" });
+          return;
+        }
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (cancelled) return;
+        setGps({
+          status: "granted",
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          capturedAt: new Date(pos.timestamp).toISOString(),
+        });
+      } catch (e: any) {
+        if (cancelled) return;
+        setGps({ status: "error", message: e?.message ?? "Location lookup failed" });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -183,13 +233,21 @@ export default function MilestoneVerificationScreen() {
 
   const handleApprove = async () => {
     if (!canApprove || !milestone) return;
-    const evidence = {
+    const evidence: Record<string, unknown> = {
       photos: photos
         .filter((p) => p.storagePath)
         .map((p) => ({ path: p.storagePath, bucket: STORAGE_BUCKET })),
       location_text: locationText.trim() || null,
       captured_at: new Date().toISOString(),
     };
+    if (gps.status === "granted") {
+      evidence.gps = {
+        latitude: gps.latitude,
+        longitude: gps.longitude,
+        accuracy: gps.accuracy,
+        captured_at: gps.capturedAt,
+      };
+    }
     const res = await respondVerification(
       requestId,
       true,
@@ -322,13 +380,52 @@ export default function MilestoneVerificationScreen() {
                 </View>
               </View>
 
-              {/* Manual location */}
+              {/* Location — GPS auto-capture with manual fallback. The
+                  manual field always renders so the responder can add a
+                  human-readable description; the GPS chip surfaces above
+                  it when capture succeeds. */}
               <View style={styles.section}>
                 <Text style={styles.sectionTitle}>
                   {t("verification.gps_capture_label")}
                 </Text>
-                <Text style={styles.sectionBody}>
-                  {t("verification.gps_manual_body")}
+
+                {gps.status === "requesting" ? (
+                  <View style={styles.gpsRow}>
+                    <ActivityIndicator size="small" color="#00C6AE" />
+                    <Text style={styles.gpsRowText}>
+                      {t("verification.gps_requesting")}
+                    </Text>
+                  </View>
+                ) : gps.status === "granted" ? (
+                  <View style={[styles.gpsChip, styles.gpsChipOk]}>
+                    <Ionicons name="location" size={14} color="#065F46" />
+                    <Text style={styles.gpsChipText}>
+                      {t("verification.gps_captured", {
+                        lat: gps.latitude.toFixed(5),
+                        lng: gps.longitude.toFixed(5),
+                      })}
+                    </Text>
+                  </View>
+                ) : gps.status === "denied" ? (
+                  <View style={[styles.gpsChip, styles.gpsChipWarn]}>
+                    <Ionicons name="location-outline" size={14} color="#92400E" />
+                    <Text style={[styles.gpsChipText, { color: "#92400E" }]}>
+                      {t("verification.gps_denied")}
+                    </Text>
+                  </View>
+                ) : gps.status === "error" ? (
+                  <View style={[styles.gpsChip, styles.gpsChipWarn]}>
+                    <Ionicons name="alert-circle-outline" size={14} color="#92400E" />
+                    <Text style={[styles.gpsChipText, { color: "#92400E" }]}>
+                      {t("verification.gps_error")}
+                    </Text>
+                  </View>
+                ) : null}
+
+                <Text style={[styles.sectionBody, { marginTop: 8 }]}>
+                  {gps.status === "granted"
+                    ? t("verification.gps_manual_body_supplement")
+                    : t("verification.gps_fallback")}
                 </Text>
                 <TextInput
                   style={styles.input}
@@ -582,4 +679,26 @@ const styles = StyleSheet.create({
   btnDanger: { backgroundColor: "#EF4444" },
   btnDangerText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
   btnDisabled: { opacity: 0.5 },
+
+  gpsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 4,
+    marginTop: 6,
+  },
+  gpsRowText: { fontSize: 13, color: "#6B7280" },
+  gpsChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    marginTop: 6,
+  },
+  gpsChipOk: { backgroundColor: "#D1FAE5" },
+  gpsChipWarn: { backgroundColor: "#FEF3C7" },
+  gpsChipText: { fontSize: 12, fontWeight: "700", color: "#065F46" },
 });

@@ -407,6 +407,14 @@ export default function ProfileScreen() {
                 label: t("profile.item_moderation_queue"),
                 onPress: () => navigation.navigate("AdminModeration"),
               },
+              // Phase 2C — staged-disbursement verification queue.
+              // Goal owners self-approve owner-method milestones inline;
+              // elder/admin-method milestones land here for review.
+              {
+                icon: "clipboard-outline",
+                label: t("profile.item_verification_queue"),
+                onPress: () => navigation.navigate("AdminVerificationQueue"),
+              },
               {
                 icon: "document-text-outline",
                 label: t("profile.item_audit_trail"),
