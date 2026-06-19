@@ -11,7 +11,7 @@
 // Data comes from `useProviderDashboard` (extended in Phase 1C).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -32,8 +32,15 @@ import {
   ProviderVerificationStep,
   useProviderDashboard,
 } from "../hooks/useProviders";
+import { supabase } from "../lib/supabase";
+import {
+  DisbursementMilestone,
+  DisbursementMilestoneStatus,
+} from "../hooks/useGoalDisbursementMilestones";
 
-type Tab = "overview" | "jobs" | "earnings" | "verification";
+type Tab = "overview" | "jobs" | "earnings" | "milestones" | "verification";
+
+type DisbursementMilestoneWithGoal = DisbursementMilestone & { goal_name: string };
 
 function fmt(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -87,6 +94,37 @@ export default function ProviderDashboardScreen() {
 
   const [tab, setTab] = useState<Tab>("overview");
   const [refreshing, setRefreshing] = useState(false);
+
+  // Phase 2A — staged-disbursement milestones the provider is working on,
+  // keyed by goal. Pulled in parallel with the existing useProviderDashboard
+  // queries; if the lookup fails the tab simply renders empty.
+  const [disbMilestones, setDisbMilestones] = useState<DisbursementMilestoneWithGoal[]>([]);
+  useEffect(() => {
+    if (!provider?.id) {
+      setDisbMilestones([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("goal_disbursement_milestones")
+        .select(
+          "*, goal:user_savings_goals!goal_id(name)",
+        )
+        .eq("provider_id", provider.id)
+        .order("updated_at", { ascending: false });
+      if (cancelled) return;
+      const rows = ((data ?? []) as any[]).map((r) => ({
+        ...r,
+        goal_name: r.goal?.name ?? "—",
+      })) as DisbursementMilestoneWithGoal[];
+      setDisbMilestones(rows);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [provider?.id]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await refetch();
@@ -185,6 +223,7 @@ export default function ProviderDashboardScreen() {
               { k: "overview", label: t("provider_dashboard.tab_overview") },
               { k: "jobs", label: t("provider_dashboard.tab_jobs") },
               { k: "earnings", label: t("provider_dashboard.tab_earnings") },
+              { k: "milestones", label: t("provider_dashboard.tab_milestones") },
               { k: "verification", label: t("provider_dashboard.tab_verification") },
             ] as const
           ).map((it) => (
@@ -211,6 +250,14 @@ export default function ProviderDashboardScreen() {
         {tab === "jobs" && <JobsSection jobs={jobs} />}
         {tab === "earnings" && (
           <EarningsSection earnings={earnings} totalEarnedCents={totalEarnedCents} />
+        )}
+        {tab === "milestones" && (
+          <MilestonesSection
+            milestones={disbMilestones}
+            onOpen={(goalId) =>
+              navigation.navigate("GoalDisbursementMilestones", { goalId })
+            }
+          />
         )}
         {tab === "verification" && (
           <VerificationSection
@@ -386,6 +433,73 @@ function EarningRow({ earning }: { earning: ProviderEarning }) {
       </View>
       <Text style={styles.earningAmount}>{fmt(earning.amount_cents)}</Text>
     </View>
+  );
+}
+
+function MilestonesSection({
+  milestones,
+  onOpen,
+}: {
+  milestones: DisbursementMilestoneWithGoal[];
+  onOpen: (goalId: string) => void;
+}) {
+  const { t } = useTranslation();
+  // Group by status so the "what needs my attention" milestones surface
+  // first. Order: in_progress (deliver), pending (accept), verification_
+  // requested (waiting on review), released/failed at the bottom.
+  const groups = useMemo(() => {
+    const order: DisbursementMilestoneStatus[] = [
+      "pending",
+      "in_progress",
+      "verification_requested",
+      "verified",
+      "released",
+      "failed",
+    ];
+    return order
+      .map((status) => ({
+        status,
+        items: milestones.filter((m) => m.status === status),
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [milestones]);
+
+  if (milestones.length === 0) {
+    return (
+      <View style={styles.sectionCard}>
+        <Text style={styles.mutedText}>
+          {t("provider_dashboard.no_milestones")}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      {groups.map((g) => (
+        <View key={g.status} style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>
+            {t(`goal_disbursement.status_${g.status}`)} · {g.items.length}
+          </Text>
+          {g.items.map((m) => (
+            <TouchableOpacity
+              key={m.id}
+              style={styles.jobRow}
+              onPress={() => onOpen(m.goal_id)}
+              accessibilityRole="button"
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.jobTitle} numberOfLines={1}>
+                  {m.goal_name} · {m.name}
+                </Text>
+                <Text style={styles.mutedText}>{fmt(m.amount_cents)}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#6B7280" />
+            </TouchableOpacity>
+          ))}
+        </View>
+      ))}
+    </>
   );
 }
 

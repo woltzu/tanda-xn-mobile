@@ -130,6 +130,7 @@ export const Routes = {
   GoalMilestones: "GoalMilestones",
   GoalsHub: "GoalsHub",
   GoalsHubV2: "GoalsHubV2",
+  GoalDisbursementMilestones: "GoalDisbursementMilestones",
   GoalProviderPayment: "GoalProviderPayment",
   GoalStories: "GoalStories",
   GraduatedEntry: "GraduatedEntry",

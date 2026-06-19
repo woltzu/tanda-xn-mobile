@@ -446,6 +446,14 @@ export default function GoalDetailV2Screen() {
     status: string;
     paid_amount_cents: number;
   } | null>(null);
+  // Phase 2A — staged-disbursement summary. When disbursement_type='staged'
+  // we render a compact "N of M complete" card linking to the milestones
+  // screen.
+  const [disbursementType, setDisbursementType] = useState<string | null>(null);
+  const [milestoneCounts, setMilestoneCounts] = useState<{
+    total: number;
+    released: number;
+  } | null>(null);
 
   const loadGoal = useCallback(async () => {
     if (!goalId) return;
@@ -470,10 +478,10 @@ export default function GoalDetailV2Screen() {
     // render isn't blocked on either result.
     void (async () => {
       try {
-        const [catRes, linkRes] = await Promise.all([
+        const [catRes, linkRes, milestoneRes] = await Promise.all([
           supabase
             .from("user_savings_goals")
-            .select("provider_category")
+            .select("provider_category, disbursement_type")
             .eq("id", goalId)
             .maybeSingle(),
           supabase
@@ -483,8 +491,13 @@ export default function GoalDetailV2Screen() {
             .order("updated_at", { ascending: false })
             .limit(1)
             .maybeSingle(),
+          supabase
+            .from("goal_disbursement_milestones")
+            .select("id, status")
+            .eq("goal_id", goalId),
         ]);
         setProviderCategory((catRes.data as any)?.provider_category ?? null);
+        setDisbursementType((catRes.data as any)?.disbursement_type ?? null);
         const link = linkRes.data as any;
         if (link) {
           setLinkedProvider({
@@ -496,6 +509,15 @@ export default function GoalDetailV2Screen() {
           });
         } else {
           setLinkedProvider(null);
+        }
+        const allMs = (milestoneRes.data ?? []) as any[];
+        if (allMs.length > 0) {
+          setMilestoneCounts({
+            total: allMs.length,
+            released: allMs.filter((m) => m.status === "released").length,
+          });
+        } else {
+          setMilestoneCounts(null);
         }
       } catch {
         // Non-fatal; the section just won't appear if the lookup fails.
@@ -1392,6 +1414,50 @@ export default function GoalDetailV2Screen() {
               </TouchableOpacity>
             ) : null
           )}
+
+          {/* Phase 2A — staged-disbursement summary. Visible only when
+              the goal has milestones configured (disbursement_type
+              switches to 'staged' when create_goal_disbursement_milestones
+              runs). Renders a compact progress card linking to the full
+              milestones screen. */}
+          {disbursementType === "staged" && milestoneCounts ? (
+            <TouchableOpacity
+              style={styles.card}
+              onPress={() =>
+                navigation.navigate(Routes.GoalDisbursementMilestones as any, {
+                  goalId: goal.id,
+                })
+              }
+              accessibilityRole="button"
+            >
+              <View style={styles.cardHeaderRow}>
+                <Text style={styles.cardHeading}>
+                  {t("goal_detail.milestones_section_title")}
+                </Text>
+                <Text style={styles.linkAction}>
+                  {t("goal_detail.view_milestones_button")}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 14, color: "#0A2342", fontWeight: "700", marginTop: 4 }}>
+                {t("goal_detail.milestones_count", {
+                  done: milestoneCounts.released,
+                  total: milestoneCounts.total,
+                })}
+              </Text>
+              <View style={{ height: 6, borderRadius: 999, backgroundColor: "#E5E7EB", marginTop: 8 }}>
+                <View
+                  style={{
+                    height: 6,
+                    borderRadius: 999,
+                    backgroundColor: "#00C6AE",
+                    width: `${Math.round(
+                      (milestoneCounts.released / Math.max(milestoneCounts.total, 1)) * 100,
+                    )}%`,
+                  }}
+                />
+              </View>
+            </TouchableOpacity>
+          ) : null}
 
           {/* Recent activity */}
           <View style={styles.card}>

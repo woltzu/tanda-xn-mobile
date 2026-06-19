@@ -35,6 +35,9 @@ import ProviderApplicationScreen from "./screens/ProviderApplicationScreen";
 import GoalProviderPaymentScreen from "./screens/GoalProviderPaymentScreen";
 import ProviderDashboardScreen from "./screens/ProviderDashboardScreen";
 import ProviderNetworkVerificationScreen from "./screens/ProviderNetworkVerificationScreen";
+// Phase 2A — staged disbursement (Dream Escrow). NOT to be confused with
+// the existing GoalMilestonesScreen (percentage-based celebration timeline).
+import GoalDisbursementMilestonesScreen from "./screens/GoalDisbursementMilestonesScreen";
 import PayoutHistoryScreen from "./screens/PayoutHistoryScreen";
 import PayoutListener from "./components/PayoutListener";
 import WelcomeScreen from "./screens/WelcomeScreen";
@@ -592,6 +595,10 @@ export type RootStackParamList = {
   // ProviderNetworkVerification is the Verified-Provider-Network screen.
   // (`ProviderVerification` already exists for the trip-circle KYC flow.)
   ProviderNetworkVerification: undefined;
+  // Phase 2A — staged-disbursement timeline. Distinct from GoalMilestones
+  // (celebration). Owner / provider / elder all share this screen with
+  // role-aware actions.
+  GoalDisbursementMilestones: { goalId: string };
   // Trip Circle Flow
   ProviderDiscovery: undefined;
   ProviderProfileSetup: undefined;
@@ -1454,6 +1461,7 @@ function AppContent() {
           <Stack.Screen name="GoalProviderPayment" component={GoalProviderPaymentScreen} />
           <Stack.Screen name="ProviderDashboard" component={ProviderDashboardScreen} />
           <Stack.Screen name="ProviderNetworkVerification" component={ProviderNetworkVerificationScreen} />
+          <Stack.Screen name="GoalDisbursementMilestones" component={GoalDisbursementMilestonesScreen} />
           {/* Deep Link Invite Screens */}
           <Stack.Screen name="CircleInvite" component={CircleInviteScreen} />
           {/* Public frictionless join — reachable unauthenticated at /join/:inviteCode */}
