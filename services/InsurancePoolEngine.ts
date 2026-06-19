@@ -20,7 +20,14 @@ import { CircleDemocracyEngine } from './CircleDemocracyEngine';
 
 export type PoolStatus = 'active' | 'suspended' | 'depleted' | 'closed' | 'distributing';
 
-export type PoolTransactionType = 'withholding' | 'coverage_payout' | 'distribution' | 'rollover';
+export type PoolTransactionType =
+  | 'withholding'
+  | 'coverage_payout'
+  | 'distribution'
+  | 'rollover'
+  // Migration 206: audit row written by set_circle_pool_enabled /
+  // set_member_pool_opt_in RPCs whenever a config flag flips.
+  | 'config_change';
 
 export type ClaimStatus = 'pending' | 'approved' | 'partial' | 'denied' | 'void';
 
@@ -40,6 +47,23 @@ export interface InsurancePool {
   approvedClaims: number;
   createdAt: string;
   updatedAt: string;
+  // Migration 206: circle-level admin switch. Read from
+  // circles.insurance_pool_enabled, NOT a column on circle_insurance_pools
+  // (so a single source of truth lives on circles).
+  adminEnabled: boolean;
+  circleName: string | null;
+  // Per-cycle contribution amount in cents — used by the pool-health
+  // gauge to compute "covers N defaults" relative to the pool balance.
+  contributionAmountCents: number | null;
+}
+
+// Migration 206 — one row per active member of the circle, used by the
+// Members tab on InsurancePoolScreen to show who is participating.
+export interface CirclePoolMember {
+  userId: string;
+  fullName: string | null;
+  role: 'creator' | 'admin' | 'elder' | 'member';
+  participatesInPool: boolean;
 }
 
 export interface PoolTransaction {
@@ -143,6 +167,11 @@ export interface RateCalculationResult {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function mapPool(row: any): InsurancePool {
+  // The join in getPoolStatus surfaces circles.insurance_pool_enabled and
+  // circles.name under row.circles. When the embed is missing (e.g., the
+  // join was skipped or the circle was removed), default to true / null
+  // so the screen still renders without crashing.
+  const circle = row.circles ?? {};
   return {
     id: row.id,
     circleId: row.circle_id,
@@ -159,6 +188,10 @@ function mapPool(row: any): InsurancePool {
     approvedClaims: row.approved_claims,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    adminEnabled: circle.insurance_pool_enabled !== false,
+    circleName: circle.name ?? null,
+    contributionAmountCents:
+      circle.amount != null ? Math.round(Number(circle.amount) * 100) : null,
   };
 }
 
@@ -234,14 +267,85 @@ export class InsurancePoolEngine {
    * Get the insurance pool for a circle
    */
   static async getPoolStatus(circleId: string): Promise<InsurancePool | null> {
+    // Join circles for migration-206 fields. Use maybeSingle so a missing
+    // pool row returns null instead of throwing.
     const { data, error } = await supabase
       .from('circle_insurance_pools')
-      .select('*')
+      .select('*, circles(name, insurance_pool_enabled, amount)')
       .eq('circle_id', circleId)
-      .single();
+      .maybeSingle();
 
     if (error || !data) return null;
     return mapPool(data);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Migration 206 — optional pool (circle + member toggles)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Admin/creator/elder toggles the circle-wide pool on or off.
+   * Backed by set_circle_pool_enabled SECURITY DEFINER RPC.
+   */
+  static async setCirclePoolEnabled(
+    circleId: string,
+    enabled: boolean,
+  ): Promise<{ success: boolean; enabled?: boolean; error?: string }> {
+    const { data, error } = await supabase.rpc('set_circle_pool_enabled', {
+      p_circle_id: circleId,
+      p_enabled: enabled,
+    });
+    if (error) return { success: false, error: error.message };
+    const payload = (data ?? {}) as { success?: boolean; enabled?: boolean; error?: string };
+    return {
+      success: payload.success ?? false,
+      enabled: payload.enabled,
+      error: payload.error,
+    };
+  }
+
+  /**
+   * Current user opts themselves in or out of the pool for a circle.
+   * Self-only (the RPC rejects p_user_id != auth.uid()).
+   */
+  static async setMemberPoolOptIn(
+    circleId: string,
+    userId: string,
+    participates: boolean,
+  ): Promise<{ success: boolean; participates?: boolean; error?: string }> {
+    const { data, error } = await supabase.rpc('set_member_pool_opt_in', {
+      p_circle_id: circleId,
+      p_user_id: userId,
+      p_participates: participates,
+    });
+    if (error) return { success: false, error: error.message };
+    const payload = (data ?? {}) as { success?: boolean; participates?: boolean; error?: string };
+    return {
+      success: payload.success ?? false,
+      participates: payload.participates,
+      error: payload.error,
+    };
+  }
+
+  /**
+   * List the members of a circle with their participates_in_pool flag.
+   * Used by the Members section on InsurancePoolScreen.
+   */
+  static async getCirclePoolMembers(circleId: string): Promise<CirclePoolMember[]> {
+    const { data, error } = await supabase
+      .from('circle_members')
+      .select('user_id, role, participates_in_pool, profiles:user_id(full_name)')
+      .eq('circle_id', circleId)
+      .eq('status', 'active')
+      .order('role', { ascending: true });
+
+    if (error || !data) return [];
+    return data.map((row: any) => ({
+      userId: row.user_id,
+      role: row.role,
+      participatesInPool: row.participates_in_pool !== false,
+      fullName: row.profiles?.full_name ?? null,
+    }));
   }
 
   /**

@@ -18,8 +18,9 @@
 // (replaced the legacy CirclesScreen in App.tsx).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -36,6 +37,8 @@ import { colors } from "../theme/tokens";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useCircles } from "../context/CirclesContext";
+import { useInsurancePool } from "../hooks/useInsurancePool";
+import { InsurancePoolEngine } from "../services/InsurancePoolEngine";
 
 // ==========================================================================
 // Mock data — to be replaced with real API feeds in later steps.
@@ -77,10 +80,10 @@ const mockConflicts = {
   },
 };
 
-const mockInsurance = {
-  initially_active: true,
-  pool_balance: 1200,
-};
+// Migration 206 (Bucket A): the Insurance Pool feature card now reads
+// the real circle_insurance_pools row + circles.insurance_pool_enabled
+// flag via useInsurancePool below. The legacy mockInsurance object
+// (initially_active + pool_balance) was deleted as part of that change.
 
 const mockSubstitute = {
   initially_active: true,
@@ -124,6 +127,8 @@ type FeatureCardProps = {
   headerToggle?: {
     value: boolean;
     onValueChange: (next: boolean) => void;
+    /** When true, the Switch is greyed out and ignores taps. */
+    disabled?: boolean;
   };
   ctaLabel: string;
   ctaIcon?: keyof typeof Ionicons.glyphMap;
@@ -167,6 +172,7 @@ function FeatureCard({
           <Switch
             value={headerToggle.value}
             onValueChange={headerToggle.onValueChange}
+            disabled={headerToggle.disabled}
             trackColor={{ false: colors.border, true: colors.accentTeal }}
             thumbColor={colors.cardBg}
           />
@@ -261,8 +267,14 @@ export default function CirclesV2Screen() {
     navigation.navigate(Routes.ConflictAlert, {
       circleId: myCircles[0]?.id,
     });
+  // Migration 206 (Bucket A): the Insurance Pool card now lives on the
+  // user's first active circle, matching how Conflict P0 was wired. If
+  // there are no circles, navigate without a circleId so the screen
+  // renders its empty state instead of crashing on a fictional UUID.
   const handleOpenInsurance = () =>
-    navigation.navigate(Routes.InsurancePool, { circleId: DEFAULT_CIRCLE_ID });
+    navigation.navigate(Routes.InsurancePool, {
+      circleId: myCircles[0]?.id,
+    });
   const handleOpenSubstitute = () => navigation.navigate(Routes.SubstitutePool);
   const handleOpenPayout = () =>
     navigation.navigate(Routes.DynamicPayout, { circleId: DEFAULT_CIRCLE_ID });
@@ -280,9 +292,46 @@ export default function CirclesV2Screen() {
     navigation.navigate(Routes.AdvanceHubV2);
 
   // ---- Toggle state for header switches ----
-  const [insuranceActive, setInsuranceActive] = useState(
-    mockInsurance.initially_active,
+  // Migration 206 (Bucket A): real Insurance Pool toggle backed by
+  // useInsurancePool(myCircles[0]?.id) + set_circle_pool_enabled RPC.
+  // Local `insuranceActive` is the optimistic flag rendered into the
+  // header switch — initialized from the live pool, kept in sync via
+  // useEffect, and rolled back if the RPC fails.
+  const insurancePoolCircleId = myCircles[0]?.id;
+  const {
+    pool: insurancePool,
+    refetch: refetchInsurancePool,
+  } = useInsurancePool(insurancePoolCircleId);
+  const [insuranceActive, setInsuranceActive] = useState<boolean>(true);
+  useEffect(() => {
+    if (insurancePool) {
+      setInsuranceActive(insurancePool.adminEnabled);
+    }
+  }, [insurancePool]);
+  const handleToggleInsurance = useCallback(
+    async (next: boolean) => {
+      if (!insurancePoolCircleId) return;
+      const prev = insuranceActive;
+      setInsuranceActive(next); // optimistic
+      const result = await InsurancePoolEngine.setCirclePoolEnabled(
+        insurancePoolCircleId,
+        next,
+      );
+      if (!result.success) {
+        // Roll back UI; surface the error via Alert.
+        setInsuranceActive(prev);
+        const reason =
+          result.error === "not_authorized"
+            ? t("insurance_pool.toggle_error_not_authorized")
+            : t("insurance_pool.toggle_error_generic");
+        Alert.alert(t("insurance_pool.toggle_error_title"), reason);
+        return;
+      }
+      refetchInsurancePool();
+    },
+    [insurancePoolCircleId, insuranceActive, refetchInsurancePool, t],
   );
+
   const [substituteActive, setSubstituteActive] = useState(
     mockSubstitute.initially_active,
   );
@@ -627,6 +676,9 @@ export default function CirclesV2Screen() {
         </FeatureCard>
 
         {/* ----- Insurance Pool ----- */}
+        {/* Migration 206 (Bucket A): toggle + balance come from the live
+            pool for the user's first active circle. Switch is disabled
+            when the user has no circles (no pool to flip). */}
         <FeatureCard
           icon="shield-checkmark-outline"
           iconColor={colors.accentTeal}
@@ -634,7 +686,8 @@ export default function CirclesV2Screen() {
           description={t("circles_screen.insurance_description")}
           headerToggle={{
             value: insuranceActive,
-            onValueChange: setInsuranceActive,
+            onValueChange: handleToggleInsurance,
+            disabled: !insurancePoolCircleId,
           }}
           ctaLabel={t("circles_screen.insurance_cta")}
           ctaIcon="arrow-forward"
@@ -645,7 +698,9 @@ export default function CirclesV2Screen() {
               {t("circles_screen.insurance_pool_balance_label")}
             </Text>
             <Text style={styles.poolStatValue}>
-              ${mockInsurance.pool_balance.toFixed(2)}
+              {insurancePool
+                ? `$${(insurancePool.balanceCents / 100).toFixed(2)}`
+                : "—"}
             </Text>
           </View>
           <Text

@@ -488,6 +488,7 @@ export {
   usePoolRate,
   usePoolCoverage,
   usePoolDistribution,
+  useCirclePoolMembers,
   type InsurancePool,
   type PoolTransaction,
   type PoolTransactionType,
@@ -499,6 +500,7 @@ export {
   type RateCalculationResult,
   type PoolStatus,
   type ClaimStatus,
+  type CirclePoolMember,
 } from './useInsurancePool';
 
 // Dynamic Payout Ordering Hooks

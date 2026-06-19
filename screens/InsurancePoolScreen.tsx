@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,7 +17,10 @@ import {
   useInsurancePool,
   usePoolTransactions,
   usePoolRate,
+  useCirclePoolMembers,
 } from "../hooks/useInsurancePool";
+import { InsurancePoolEngine } from "../services/InsurancePoolEngine";
+import { useAuth } from "../context/AuthContext";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -33,12 +37,16 @@ const COLORS = {
   card: "#FFFFFF",
 };
 
-type TabKey = "overview" | "claims" | "premiums";
+type TabKey = "overview" | "members" | "claims" | "premiums";
 
-const TABS: { key: TabKey; label: string }[] = [
-  { key: "overview", label: "Overview" },
-  { key: "claims", label: "Claims" },
-  { key: "premiums", label: "Premiums" },
+// Migration 206 (Bucket A): tab labels are now i18n keys, resolved
+// inside the component via t(). Order: Overview, Members, Claims,
+// Premiums so the new opt-in/out surface sits next to the headline.
+const TAB_KEYS: { key: TabKey; labelKey: string }[] = [
+  { key: "overview", labelKey: "insurance_pool.tab_overview" },
+  { key: "members", labelKey: "insurance_pool.tab_members" },
+  { key: "claims", labelKey: "insurance_pool.tab_claims" },
+  { key: "premiums", labelKey: "insurance_pool.tab_premiums" },
 ];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -64,8 +72,23 @@ const getHealthColor = (health: string) => {
   }
 };
 
-const getHealthLabel = (health: string) =>
-  health.charAt(0).toUpperCase() + health.slice(1);
+// Migration 206 (Bucket A): localized health label keyed off the i18n
+// bundle (was: raw lowercase tier text via .charAt+.slice). `no_data`
+// is rendered when there are no contributions yet to compare against.
+const getHealthLabelKey = (health: string): string => {
+  switch (health) {
+    case "healthy":
+      return "insurance_pool.health_healthy";
+    case "adequate":
+      return "insurance_pool.health_adequate";
+    case "low":
+      return "insurance_pool.health_low";
+    case "critical":
+      return "insurance_pool.health_critical";
+    default:
+      return "insurance_pool.health_no_data";
+  }
+};
 
 const getClaimIconName = (type: string): keyof typeof Ionicons.glyphMap => {
   switch (type) {
@@ -105,7 +128,11 @@ export default function InsurancePoolScreen() {
   // without a circleId. Fall back to empty so destructuring never throws.
   const { circleId } = route.params ?? ({} as { circleId: string });
 
+  const { user } = useAuth();
+  const currentUserId = user?.id;
+
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [optInBusy, setOptInBusy] = useState(false);
 
   // Real hooks
   const {
@@ -114,13 +141,11 @@ export default function InsurancePoolScreen() {
     error: poolError,
     refetch: refetchPool,
     balanceFormatted,
-    rateFormatted,
   } = useInsurancePool(circleId);
 
   const {
     transactions,
     loading: txLoading,
-    error: txError,
     refetch: refetchTx,
     totals,
   } = usePoolTransactions(circleId);
@@ -128,18 +153,24 @@ export default function InsurancePoolScreen() {
   const {
     currentRate,
     rateFormatted: rateDisplayFormatted,
-    rateHistory,
     loading: rateLoading,
     refetch: refetchRate,
   } = usePoolRate(circleId);
 
-  const loading = poolLoading || txLoading || rateLoading;
+  const {
+    members,
+    loading: membersLoading,
+    refetch: refetchMembers,
+  } = useCirclePoolMembers(circleId);
+
+  const loading = poolLoading || txLoading || rateLoading || membersLoading;
 
   const onRefresh = useCallback(() => {
     refetchPool();
     refetchTx();
     refetchRate();
-  }, [refetchPool, refetchTx, refetchRate]);
+    refetchMembers();
+  }, [refetchPool, refetchTx, refetchRate, refetchMembers]);
 
   // Derived data
   const claimTransactions = transactions.filter(
@@ -149,15 +180,67 @@ export default function InsurancePoolScreen() {
     (t) => t.transactionType === "withholding"
   );
   const premiumRatePct = currentRate * 100;
-  const poolHealth = pool
-    ? pool.balanceCents > pool.balanceCents * 0.8
-      ? "healthy"
-      : pool.balanceCents > pool.balanceCents * 0.5
-      ? "adequate"
-      : pool.balanceCents > pool.balanceCents * 0.2
-      ? "low"
-      : "critical"
-    : "healthy";
+
+  // ─── Bucket A fixes ─────────────────────────────────────────────────────
+  //
+  // Pool-health math (was: balance > balance * 0.8 — always false on
+  // positive balances). Compare balance against (memberCount × per-cycle
+  // contribution × 0.8), the cost of fully covering one default cycle.
+  // Falls back to a coverage-ratio if the circle.amount isn't known yet.
+  const memberCount = members.length;
+  const expectedFullCover =
+    pool && pool.contributionAmountCents && memberCount > 0
+      ? pool.contributionAmountCents * memberCount * 0.8
+      : 0;
+  const healthRatio =
+    pool && expectedFullCover > 0
+      ? pool.balanceCents / expectedFullCover
+      : null;
+  const poolHealth: "healthy" | "adequate" | "low" | "critical" | "no_data" =
+    !pool
+      ? "no_data"
+      : healthRatio == null
+        ? "no_data"
+        : healthRatio >= 0.8
+          ? "healthy"
+          : healthRatio >= 0.5
+            ? "adequate"
+            : healthRatio >= 0.2
+              ? "low"
+              : "critical";
+
+  // "Your premium" math (was: balance × rate, which scales with pool, not
+  // contribution). Sum the current user's most recent withholding txn.
+  const yourLastPremiumCents = useMemo(() => {
+    if (!currentUserId) return 0;
+    const mine = premiumTransactions.filter((tx) => tx.userId === currentUserId);
+    return mine.length > 0 ? Math.abs(mine[0].amountCents) : 0;
+  }, [premiumTransactions, currentUserId]);
+
+  const myMember = useMemo(
+    () => members.find((m) => m.userId === currentUserId) ?? null,
+    [members, currentUserId],
+  );
+
+  const handleToggleMyOptIn = useCallback(async () => {
+    if (!circleId || !currentUserId || !myMember) return;
+    const next = !myMember.participatesInPool;
+    setOptInBusy(true);
+    const result = await InsurancePoolEngine.setMemberPoolOptIn(
+      circleId,
+      currentUserId,
+      next,
+    );
+    setOptInBusy(false);
+    if (!result.success) {
+      Alert.alert(
+        t("insurance_pool.opt_in_error_title"),
+        t("insurance_pool.opt_in_error_generic"),
+      );
+      return;
+    }
+    refetchMembers();
+  }, [circleId, currentUserId, myMember, refetchMembers, t]);
 
   // ─── Loading State ───────────────────────────────────────────────────────
 
@@ -225,7 +308,9 @@ export default function InsurancePoolScreen() {
           <Text style={styles.balanceAmount}>{balanceFormatted}</Text>
           <Text style={styles.balanceLabel}>{t("insurance_pool.label_balance")}</Text>
 
-          {/* Health Status */}
+          {/* Health Status — Bucket A fix: ratio compares balance against
+              one full default-cycle's worth of contributions (memberCount
+              × per-cycle × 0.8). Shows percentage of that threshold. */}
           <View style={styles.healthRow}>
             <View
               style={[
@@ -236,17 +321,19 @@ export default function InsurancePoolScreen() {
             <Text
               style={[styles.healthText, { color: getHealthColor(poolHealth) }]}
             >
-              {getHealthLabel(poolHealth)}
+              {t(getHealthLabelKey(poolHealth))}
             </Text>
-            {pool && (
+            {healthRatio != null && (
               <Text style={styles.coverageText}>
-                {((pool.balanceCents / (totals.totalWithheldCents || 1)) * 100).toFixed(0)}%
-                coverage ratio
+                {t("insurance_pool.coverage_ratio", {
+                  pct: Math.round(healthRatio * 100),
+                })}
               </Text>
             )}
           </View>
 
-          {/* Quick Stats */}
+          {/* Quick Stats — Bucket A fix: "your premium" is now the user's
+              most recent withholding txn, not balance × rate. */}
           <View style={styles.statsRow}>
             <View style={styles.statBlock}>
               <Text style={styles.statValue}>{rateDisplayFormatted}</Text>
@@ -255,19 +342,15 @@ export default function InsurancePoolScreen() {
             <View style={styles.statDivider} />
             <View style={styles.statBlock}>
               <Text style={styles.statValue}>
-                {pool
-                  ? formatCents(
-                      Math.round(pool.balanceCents * currentRate)
-                    )
-                  : "$0.00"}
+                {formatCents(yourLastPremiumCents)}
               </Text>
-              <Text style={styles.statLabel}>{t("insurance_pool.stat_your_premium")}</Text>
+              <Text style={styles.statLabel}>
+                {t("insurance_pool.stat_your_last_premium")}
+              </Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statBlock}>
-              <Text style={styles.statValue}>
-                {pool?.memberCount ?? 0}
-              </Text>
+              <Text style={styles.statValue}>{memberCount}</Text>
               <Text style={styles.statLabel}>{t("insurance_pool.stat_members")}</Text>
             </View>
           </View>
@@ -275,7 +358,7 @@ export default function InsurancePoolScreen() {
 
         {/* Tab Selector */}
         <View style={styles.tabRow}>
-          {TABS.map((tab) => (
+          {TAB_KEYS.map((tab) => (
             <TouchableOpacity
               key={tab.key}
               style={[
@@ -290,7 +373,7 @@ export default function InsurancePoolScreen() {
                   activeTab === tab.key && styles.tabTextActive,
                 ]}
               >
-                {tab.label}
+                {t(tab.labelKey)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -305,18 +388,20 @@ export default function InsurancePoolScreen() {
               {[
                 {
                   num: 1,
-                  title: "Small Premium Each Cycle",
-                  desc: `${premiumRatePct.toFixed(1)}% of your contribution goes to the pool`,
+                  titleKey: "insurance_pool.how_step1_title",
+                  desc: t("insurance_pool.how_step1_desc", {
+                    rate: premiumRatePct.toFixed(1),
+                  }),
                 },
                 {
                   num: 2,
-                  title: "Pool Covers Shortfalls",
-                  desc: "If someone can't pay or uses partial mode, the pool covers the gap",
+                  titleKey: "insurance_pool.how_step2_title",
+                  desc: t("insurance_pool.how_step2_desc"),
                 },
                 {
                   num: 3,
-                  title: "Circle Stays on Track",
-                  desc: "Payouts happen on time regardless of individual shortfalls",
+                  titleKey: "insurance_pool.how_step3_title",
+                  desc: t("insurance_pool.how_step3_desc"),
                 },
               ].map((step, i) => (
                 <View key={step.num} style={[styles.stepRow, i > 0 && styles.stepRowSpaced]}>
@@ -324,7 +409,7 @@ export default function InsurancePoolScreen() {
                     <Text style={styles.stepNum}>{step.num}</Text>
                   </View>
                   <View style={styles.stepBody}>
-                    <Text style={styles.stepTitle}>{step.title}</Text>
+                    <Text style={styles.stepTitle}>{t(step.titleKey)}</Text>
                     <Text style={styles.stepDesc}>{step.desc}</Text>
                   </View>
                 </View>
@@ -333,7 +418,7 @@ export default function InsurancePoolScreen() {
 
             {/* Pool Breakdown */}
             <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
-              Pool Breakdown
+              {t("insurance_pool.section_breakdown")}
             </Text>
             <View style={styles.card}>
               <View style={styles.breakdownRow}>
@@ -360,12 +445,132 @@ export default function InsurancePoolScreen() {
           </View>
         )}
 
+        {/* ─── MEMBERS TAB (Migration 206 / Bucket A) ──────────────── */}
+        {activeTab === "members" && (
+          <View style={styles.tabContent}>
+            <Text style={styles.sectionTitle}>
+              {t("insurance_pool.section_members")}
+            </Text>
+            <Text style={styles.sectionSubtitle}>
+              {t("insurance_pool.section_members_subtitle")}
+            </Text>
+
+            {/* Self-card — only when the user is a member of this circle. */}
+            {myMember && (
+              <View style={[styles.card, styles.memberSelfCard]}>
+                <View style={styles.memberRow}>
+                  <View style={styles.memberLeft}>
+                    <Text style={styles.memberName}>
+                      {t("insurance_pool.member_self_label")}
+                    </Text>
+                    <View
+                      style={[
+                        styles.memberStatusPill,
+                        {
+                          backgroundColor: myMember.participatesInPool
+                            ? `${COLORS.green}1A`
+                            : `${COLORS.muted}1A`,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.memberStatusText,
+                          {
+                            color: myMember.participatesInPool
+                              ? COLORS.green
+                              : COLORS.muted,
+                          },
+                        ]}
+                      >
+                        {myMember.participatesInPool
+                          ? t("insurance_pool.member_participates")
+                          : t("insurance_pool.member_not_participating")}
+                      </Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.optInBtn,
+                      {
+                        backgroundColor: myMember.participatesInPool
+                          ? COLORS.muted
+                          : COLORS.teal,
+                        opacity: optInBusy ? 0.6 : 1,
+                      },
+                    ]}
+                    onPress={handleToggleMyOptIn}
+                    disabled={optInBusy}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.optInBtnText}>
+                      {myMember.participatesInPool
+                        ? t("insurance_pool.opt_out_cta")
+                        : t("insurance_pool.opt_in_cta")}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Other members — read-only badge. */}
+            {members
+              .filter((m) => m.userId !== currentUserId)
+              .map((m) => (
+                <View key={m.userId} style={styles.card}>
+                  <View style={styles.memberRow}>
+                    <View style={styles.memberLeft}>
+                      <Text style={styles.memberName}>
+                        {m.fullName ?? t("insurance_pool.member_no_name")}
+                      </Text>
+                      <Text style={styles.memberRole}>{m.role}</Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.memberStatusPill,
+                        {
+                          backgroundColor: m.participatesInPool
+                            ? `${COLORS.green}1A`
+                            : `${COLORS.muted}1A`,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.memberStatusText,
+                          {
+                            color: m.participatesInPool
+                              ? COLORS.green
+                              : COLORS.muted,
+                          },
+                        ]}
+                      >
+                        {m.participatesInPool
+                          ? t("insurance_pool.member_participates")
+                          : t("insurance_pool.member_not_participating")}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+
+            {members.length === 0 && !membersLoading && (
+              <View style={styles.emptyState}>
+                <Ionicons name="people-outline" size={40} color={COLORS.muted} />
+                <Text style={styles.emptyText}>
+                  {t("insurance_pool.empty_members")}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* ─── CLAIMS TAB ──────────────────────────────────────────── */}
         {activeTab === "claims" && (
           <View style={styles.tabContent}>
             <Text style={styles.sectionTitle}>{t("insurance_pool.section_claims")}</Text>
             <Text style={styles.sectionSubtitle}>
-              All claims are anonymous — member identities are protected
+              {t("insurance_pool.claims_subtitle")}
             </Text>
 
             {claimTransactions.length === 0 && !txLoading && (
@@ -410,7 +615,9 @@ export default function InsurancePoolScreen() {
           <View style={styles.tabContent}>
             <Text style={styles.sectionTitle}>{t("insurance_pool.section_premiums")}</Text>
             <Text style={styles.sectionSubtitle}>
-              Your {premiumRatePct.toFixed(1)}% contribution to the pool each cycle
+              {t("insurance_pool.premiums_subtitle", {
+                rate: premiumRatePct.toFixed(1),
+              })}
             </Text>
 
             {premiumTransactions.length === 0 && !txLoading && (
@@ -797,5 +1004,51 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: COLORS.muted,
+  },
+
+  // Members section (Bucket A)
+  memberSelfCard: {
+    borderColor: COLORS.teal,
+    borderWidth: 1,
+  },
+  memberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  memberLeft: { flex: 1 },
+  memberName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.navy,
+    marginBottom: 4,
+  },
+  memberRole: {
+    fontSize: 11,
+    color: COLORS.muted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
+  memberStatusPill: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  memberStatusText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  optInBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  optInBtnText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
   },
 });

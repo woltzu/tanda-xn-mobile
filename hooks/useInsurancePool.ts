@@ -23,6 +23,7 @@ import {
   type RateCalculationResult,
   type PoolStatus,
   type ClaimStatus,
+  type CirclePoolMember,
 } from '@/services/InsurancePoolEngine';
 
 // Re-export all types for consumer convenience
@@ -38,6 +39,7 @@ export type {
   RateCalculationResult,
   PoolStatus,
   ClaimStatus,
+  CirclePoolMember,
 };
 
 
@@ -300,6 +302,44 @@ export function usePoolCoverage(defaultId?: string) {
     refetch: fetchClaim,
     coverageFormatted,
   };
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// useCirclePoolMembers — Migration 206
+// Lists the circle's members with their participates_in_pool flag for the
+// Members section on InsurancePoolScreen. No realtime — opt-in/out is rare
+// and toggling re-fetches synchronously.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export function useCirclePoolMembers(circleId?: string) {
+  const [members, setMembers] = useState<CirclePoolMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchMembers = useCallback(async () => {
+    if (!circleId) {
+      setMembers([]);
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await InsurancePoolEngine.getCirclePoolMembers(circleId);
+      setMembers(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch pool members');
+    } finally {
+      setLoading(false);
+    }
+  }, [circleId]);
+
+  useEffect(() => {
+    fetchMembers();
+  }, [fetchMembers]);
+
+  return { members, loading, error, refetch: fetchMembers };
 }
 
 
