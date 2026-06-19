@@ -971,7 +971,8 @@
     "milestones": "Étapes",
     "use_template": "Utiliser ce modèle",
     "submit_title": "Proposer votre propre modèle",
-    "submit_body": "Partagez un plan d'objectif avec la diaspora. Les admins examinent avant publication."
+    "submit_body": "Partagez un plan d'objectif avec la diaspora. Les admins examinent avant publication.",
+    "location_adjustment": "Coûts ajustés pour {{country}} : {{base}} → {{adjusted}}"
   },
   "submit_template": {
     "title": "Proposer un modèle",
@@ -1075,6 +1076,11 @@
     "header_title": "Créer un objectif",
     "header_subtitle": "Un seul écran — nommez-le, fixez un objectif, c'est terminé",
     "template_badge": "Modèle : {{name}}",
+    "post_create_title": "Objectif créé",
+    "post_create_body": "Votre objectif est prêt. Voulez-vous repérer dès maintenant les prestataires avec qui travailler ?",
+    "provider_suggestion": "Nous avons trouvé {{count}} prestataires pour ce type d'objectif",
+    "browse_providers": "Parcourir les prestataires",
+    "continue_to_goal": "Continuer vers mon objectif",
     "label_name": "Nom de l'objectif",
     "placeholder_name": "ex. Voyage au Sénégal",
     "label_amount": "Montant cible",

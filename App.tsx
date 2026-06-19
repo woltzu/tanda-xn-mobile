@@ -598,8 +598,10 @@ export type RootStackParamList = {
   MarketInsight: { city?: string; category?: string };
   RequestProvider: undefined;
   WebView: { url: string; title?: string; onComplete?: () => void };
-  // Verified Provider Network (Phase 1A / 1B / 1C)
-  ProviderList: { goalId?: string } | undefined;
+  // Verified Provider Network (Phase 1A / 1B / 1C). initialCategory +
+  // initialCountry added in Phase 2B (templates) so the goal-template
+  // post-create banner can deep-link with the chip strip pre-filtered.
+  ProviderList: { goalId?: string; initialCategory?: string; initialCountry?: string } | undefined;
   ProviderDetail: { providerId: string };
   ProviderApplication: undefined;
   GoalProviderPayment: { goalId: string; providerId: string };

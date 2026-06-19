@@ -48,7 +48,14 @@ type Nav = StackNavigationProp<RootStackParamList>;
 // Marketplace-replace — this screen is also mounted as the MarketStack
 // initial route. In that case route.params is undefined and the header
 // hides the back button (canGoBack() returns false).
-type RouteParams = { goalId?: string };
+// Phase 2B (templates) — also accepts initialCategory + initialCountry
+// so the goal-template post-create provider banner can deep-link with
+// the chip strip pre-filtered.
+type RouteParams = {
+  goalId?: string;
+  initialCategory?: ProviderCategory;
+  initialCountry?: string;
+};
 
 const CATEGORIES: ProviderCategory[] = [
   "construction",
@@ -98,8 +105,12 @@ export default function ProviderListScreen() {
   // listing don't see the apply CTA again.
   const { isProvider } = useProviderDashboard();
 
-  const [category, setCategory] = useState<ProviderCategory | undefined>(undefined);
-  const [country, setCountry] = useState<string | undefined>(undefined);
+  const [category, setCategory] = useState<ProviderCategory | undefined>(
+    route.params?.initialCategory,
+  );
+  const [country, setCountry] = useState<string | undefined>(
+    route.params?.initialCountry,
+  );
   const [minRating, setMinRating] = useState<number | undefined>(undefined);
   // Inline request-a-provider sheet. Visibility lives here so the
   // footer tile can flip it on without prop-drilling.

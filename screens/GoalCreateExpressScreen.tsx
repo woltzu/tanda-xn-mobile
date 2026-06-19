@@ -198,6 +198,16 @@ export default function GoalCreateExpressScreen() {
 
   const [isCreating, setIsCreating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Phase 2B (templates) — post-create intermediate state. When the
+  // create came from a template AND providers exist for that category +
+  // user country, show a banner before the auto-navigate so the user
+  // can jump into the provider list with chips pre-filtered.
+  const [postCreate, setPostCreate] = useState<{
+    goalId: string;
+    providerCount: number;
+    initialCategory: string | null;
+    initialCountry: string | null;
+  } | null>(null);
 
   // ── Derived ─────────────────────────────────────────────────────────────
   const numericAmount = parseFloat(amount) || 0;
@@ -256,6 +266,58 @@ export default function GoalCreateExpressScreen() {
           // eslint-disable-next-line no-console
           console.warn("[GoalCreateExpress] template stamp failed:", e);
         }
+
+        // Phase 2B — log template usage + check for matching providers.
+        // Both are best-effort: usage failure is silent (analytics-only),
+        // provider-count failure falls through to the normal navigate.
+        try {
+          await supabase.from("template_usage").insert({
+            template_id: (template as any).id,
+            user_id: (goal as any).user_id ?? undefined,
+            goal_id: (goal as any).id,
+          });
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn("[GoalCreateExpress] template_usage insert failed:", e);
+        }
+
+        try {
+          // Pull user country once so the provider query and the
+          // route param can use the same value.
+          let userCountry: string | null = null;
+          if ((goal as any).user_id) {
+            const { data: prof } = await supabase
+              .from("profiles")
+              .select("country")
+              .eq("id", (goal as any).user_id)
+              .maybeSingle();
+            const c = (prof?.country as string | null) ?? null;
+            userCountry = c ? c.toUpperCase().slice(0, 2) : null;
+          }
+          const cats = (template as any).provider_categories as string[] | null;
+          if (cats && cats.length > 0) {
+            let countQuery = supabase
+              .from("providers")
+              .select("id", { count: "exact", head: true })
+              .eq("verification_status", "verified")
+              .eq("is_active", true)
+              .in("category", cats);
+            if (userCountry) countQuery = countQuery.eq("country", userCountry);
+            const { count } = await countQuery;
+            if (count && count > 0) {
+              setPostCreate({
+                goalId: (goal as any).id,
+                providerCount: count,
+                initialCategory: cats[0],
+                initialCountry: userCountry,
+              });
+              return;
+            }
+          }
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn("[GoalCreateExpress] provider count failed:", e);
+        }
       }
 
       // Replace so the user's back button goes to the Goals hub, not the
@@ -281,7 +343,85 @@ export default function GoalCreateExpressScreen() {
     }
   };
 
+  const continueToGoal = () => {
+    if (!postCreate) return;
+    const nav = navigation as unknown as {
+      replace?: (n: string, p?: Record<string, unknown>) => void;
+    };
+    const params = { goalId: postCreate.goalId, justCreated: true } as const;
+    if (typeof nav.replace === "function") {
+      nav.replace(Routes.GoalDetailV2, params);
+    } else {
+      navigation.navigate(Routes.GoalDetailV2, params);
+    }
+  };
+
+  const browseProviders = () => {
+    if (!postCreate) return;
+    navigation.navigate(Routes.ProviderList as any, {
+      goalId: postCreate.goalId,
+      initialCategory: postCreate.initialCategory,
+      initialCountry: postCreate.initialCountry,
+    });
+  };
+
   // ── Render ──────────────────────────────────────────────────────────────
+  if (postCreate) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
+          <View style={styles.headerRow}>
+            <View style={{ width: 38 }} />
+            <View style={styles.headerTitleWrap}>
+              <Text style={styles.headerTitle}>
+                {t("create_goal_express.header_title")}
+              </Text>
+            </View>
+          </View>
+        </LinearGradient>
+        <View style={styles.postCreateWrap}>
+          <Text style={styles.postCreateEmoji}>🎉</Text>
+          <Text style={styles.postCreateTitle}>
+            {t("create_goal_express.post_create_title")}
+          </Text>
+          <Text style={styles.postCreateBody}>
+            {t("create_goal_express.post_create_body")}
+          </Text>
+
+          <View style={styles.providerBanner}>
+            <View style={styles.providerBannerIcon}>
+              <Ionicons name="storefront-outline" size={20} color="#5B21B6" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.providerBannerTitle}>
+                {t("create_goal_express.provider_suggestion", {
+                  count: postCreate.providerCount,
+                })}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[styles.createBtn, { marginTop: 18 }]}
+            onPress={browseProviders}
+          >
+            <Text style={styles.createBtnText}>
+              {t("create_goal_express.browse_providers")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.continueBtn}
+            onPress={continueToGoal}
+          >
+            <Text style={styles.continueBtnText}>
+              {t("create_goal_express.continue_to_goal")}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -1043,4 +1183,39 @@ const styles = StyleSheet.create({
   },
   templateBadgeIcon: { fontSize: 14 },
   templateBadgeText: { fontSize: 12, fontWeight: "700", color: "#5B21B6" },
+
+  postCreateWrap: { flex: 1, padding: 24, alignItems: "center", justifyContent: "center" },
+  postCreateEmoji: { fontSize: 56 },
+  postCreateTitle: { fontSize: 22, fontWeight: "800", color: "#0A2342", marginTop: 16, textAlign: "center" },
+  postCreateBody: { fontSize: 14, color: "#6B7280", textAlign: "center", marginTop: 8, lineHeight: 20 },
+  providerBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 24,
+    backgroundColor: "#F5F3FF",
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+    borderRadius: 14,
+    padding: 14,
+    alignSelf: "stretch",
+  },
+  providerBannerIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  providerBannerTitle: { fontSize: 14, fontWeight: "800", color: "#5B21B6" },
+  continueBtn: {
+    marginTop: 10,
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    alignSelf: "stretch",
+  },
+  continueBtnText: { fontSize: 14, fontWeight: "700", color: "#0A2342" },
 });

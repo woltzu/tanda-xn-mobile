@@ -971,7 +971,8 @@
     "milestones": "Milestones",
     "use_template": "Use this template",
     "submit_title": "Submit your own template",
-    "submit_body": "Share a goal blueprint with the diaspora. Admins review before it goes live."
+    "submit_body": "Share a goal blueprint with the diaspora. Admins review before it goes live.",
+    "location_adjustment": "Costs adjusted for {{country}}: {{base}} → {{adjusted}}"
   },
   "submit_template": {
     "title": "Submit a template",
@@ -1075,6 +1076,11 @@
     "header_title": "Create Goal",
     "header_subtitle": "One screen — name it, set a target, you're done",
     "template_badge": "Template: {{name}}",
+    "post_create_title": "Goal created",
+    "post_create_body": "Your goal is ready. Want to line up the providers you'll work with?",
+    "provider_suggestion": "We found {{count}} providers for this goal type",
+    "browse_providers": "Browse providers",
+    "continue_to_goal": "Continue to my goal",
     "label_name": "Goal name",
     "placeholder_name": "e.g., Trip to Senegal",
     "label_amount": "Target amount",

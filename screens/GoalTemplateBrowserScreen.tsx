@@ -22,6 +22,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
 
 export type GoalTemplate = {
   id: string;
@@ -48,9 +49,16 @@ function fmt(cents: number): string {
 export default function GoalTemplateBrowserScreen() {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [templates, setTemplates] = useState<GoalTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Phase 2B — per-template multiplier keyed by template id. Resolved
+  // from template_cost_adjustments matched on the user's country. NULL
+  // means "no adjustment available" — card falls back to base amounts
+  // and shows no note.
+  const [userCountry, setUserCountry] = useState<string | null>(null);
+  const [adjustments, setAdjustments] = useState<Record<string, number>>({});
 
   const fetchTemplates = async () => {
     const { data, error } = await supabase
@@ -60,16 +68,62 @@ export default function GoalTemplateBrowserScreen() {
       )
       .eq("is_active", true)
       .order("default_target_cents", { ascending: false });
-    if (!error && data) {
-      setTemplates(data as GoalTemplate[]);
+    const tpls = !error && data ? (data as GoalTemplate[]) : [];
+    setTemplates(tpls);
+
+    // Phase 2B — fetch the multipliers for the user's country in one
+    // round-trip. Falls back silently to no-adjustment when the profile
+    // has no country or the lookup misses.
+    if (userCountry && tpls.length > 0) {
+      const ids = tpls.map((t) => t.id);
+      const { data: adj } = await supabase
+        .from("template_cost_adjustments")
+        .select("template_id, multiplier")
+        .in("template_id", ids)
+        .eq("country", userCountry);
+      const map: Record<string, number> = {};
+      for (const row of (adj ?? []) as Array<{ template_id: string; multiplier: number }>) {
+        map[row.template_id] = Number(row.multiplier);
+      }
+      setAdjustments(map);
+    } else {
+      setAdjustments({});
     }
+
     setLoading(false);
     setRefreshing(false);
   };
 
+  // Resolve user country once on mount. Re-fetch templates after we
+  // know it so the multiplier map is keyed correctly.
+  useEffect(() => {
+    if (!user?.id) {
+      setUserCountry(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("country")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (!cancelled) {
+        const c = (data?.country as string | null) ?? null;
+        setUserCountry(c ? c.toUpperCase().slice(0, 2) : null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
   useEffect(() => {
     void fetchTemplates();
-  }, []);
+    // We intentionally re-run when userCountry resolves so the
+    // adjustments fetch picks up the right country.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userCountry]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -109,7 +163,14 @@ export default function GoalTemplateBrowserScreen() {
               <Text style={styles.emptyText}>{t("goal_template_browser.empty")}</Text>
             </View>
           ) : (
-            templates.map((tpl) => <TemplateCard key={tpl.id} template={tpl} />)
+            templates.map((tpl) => (
+              <TemplateCard
+                key={tpl.id}
+                template={tpl}
+                multiplier={adjustments[tpl.id] ?? null}
+                country={userCountry}
+              />
+            ))
           )}
 
           {/* Phase 5 — community submission entry. Always visible so the
@@ -139,7 +200,15 @@ export default function GoalTemplateBrowserScreen() {
   );
 }
 
-function TemplateCard({ template }: { template: GoalTemplate }) {
+function TemplateCard({
+  template,
+  multiplier,
+  country,
+}: {
+  template: GoalTemplate;
+  multiplier: number | null;
+  country: string | null;
+}) {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
 
@@ -150,14 +219,30 @@ function TemplateCard({ template }: { template: GoalTemplate }) {
     (acc, item) => acc + (item.cost_cents ?? 0),
     0,
   );
-  const target = template.default_target_cents ?? costSum;
+  const baseTarget = template.default_target_cents ?? costSum;
+  // Phase 2B — apply the per-country multiplier. The base remains
+  // visible in the adjustment note so the user can sanity-check.
+  const hasAdjustment = multiplier !== null && Math.abs(multiplier - 1) > 0.001;
+  const target = hasAdjustment ? Math.round(baseTarget * (multiplier as number)) : baseTarget;
+  const adjustedCosts = template.cost_breakdown.map((item) => ({
+    ...item,
+    cost_cents: hasAdjustment
+      ? Math.round((item.cost_cents ?? 0) * (multiplier as number))
+      : item.cost_cents,
+  }));
 
   const handleUse = () => {
     // Pass the full template object so GoalCreateExpressScreen can pre-fill
     // every supported field (name, target, category, providers) without a
     // follow-up fetch. The full milestones array also rides along for the
-    // disbursement wizard's later consumption.
-    navigation.navigate("GoalCreateExpress", { template });
+    // disbursement wizard's later consumption. Override default_target_cents
+    // with the country-adjusted figure so the create form starts at the
+    // adjusted value, not the base.
+    navigation.navigate("GoalCreateExpress", {
+      template: hasAdjustment
+        ? { ...template, default_target_cents: target }
+        : template,
+    });
   };
 
   return (
@@ -175,6 +260,19 @@ function TemplateCard({ template }: { template: GoalTemplate }) {
       </View>
       {template.description ? (
         <Text style={styles.cardDescription}>{template.description}</Text>
+      ) : null}
+
+      {hasAdjustment ? (
+        <View style={styles.adjustmentNote}>
+          <Ionicons name="navigate-outline" size={12} color="#5B21B6" />
+          <Text style={styles.adjustmentNoteText}>
+            {t("goal_template_browser.location_adjustment", {
+              country: country ?? "—",
+              base: `$${(baseTarget / 100).toFixed(0)}`,
+              adjusted: `$${(target / 100).toFixed(0)}`,
+            })}
+          </Text>
+        </View>
       ) : null}
 
       <View style={styles.metaRow}>
@@ -196,12 +294,12 @@ function TemplateCard({ template }: { template: GoalTemplate }) {
         ) : null}
       </View>
 
-      {template.cost_breakdown.length > 0 ? (
+      {adjustedCosts.length > 0 ? (
         <View style={styles.breakdownBlock}>
           <Text style={styles.breakdownTitle}>
             {t("goal_template_browser.breakdown")}
           </Text>
-          {template.cost_breakdown.map((item, i) => (
+          {adjustedCosts.map((item, i) => (
             <View key={i} style={styles.breakdownRow}>
               <Text style={styles.breakdownItem} numberOfLines={1}>
                 {item.item}
@@ -367,4 +465,18 @@ const styles = StyleSheet.create({
   },
   submitTileTitle: { fontSize: 14, fontWeight: "800", color: "#0A2342" },
   submitTileBody: { fontSize: 12, color: "#6B7280", marginTop: 2 },
+
+  adjustmentNote: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F5F3FF",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+  adjustmentNoteText: { flex: 1, fontSize: 11, fontWeight: "700", color: "#5B21B6" },
 });
