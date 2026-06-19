@@ -1,8 +1,10 @@
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   RefreshControl, ActivityIndicator, Alert,
+  Modal, Pressable, Animated,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -22,6 +24,44 @@ import { useProfileBatch } from "../hooks/useProfileBatch";
 import { useAuth } from "../context/AuthContext";
 import { useCircles } from "../context/CirclesContext";
 import { Routes } from "../lib/routes";
+
+// Bucket B: AsyncStorage key for the first-visit coach mark. Version suffix
+// lets us re-prompt every user if the coach copy shifts materially.
+const CONFLICT_COACH_KEY = "@tandaxn_conflict_alert_coach_seen_v1";
+
+// Bucket B: HelpSheet topics — six glossary entries rendered together in one
+// scrollable sheet, opened by the header (?) button.
+type HelpTopic =
+  | "live_vs_dispute"
+  | "tier_levels"
+  | "why_autoflag"
+  | "when_escalate"
+  | "role_actions"
+  | "status_lifecycle";
+
+const HELP_TOPICS: HelpTopic[] = [
+  "live_vs_dispute",
+  "tier_levels",
+  "why_autoflag",
+  "when_escalate",
+  "role_actions",
+  "status_lifecycle",
+];
+
+// Bucket B: single source of truth for the 0–100 score → severity mapping.
+// All three visual layers (score-bar fill, pair-score number, monitor card
+// border accent) read from this constant via severityFromScore() so they
+// never disagree about where the colour bands sit.
+const SEVERITY_THRESHOLDS = { low: 30, medium: 60, high: 85 };
+
+type SeverityKey = "low" | "medium" | "high" | "critical";
+
+function severityFromScore(score: number): SeverityKey {
+  if (score >= SEVERITY_THRESHOLDS.high) return "critical";
+  if (score >= SEVERITY_THRESHOLDS.medium) return "high";
+  if (score >= SEVERITY_THRESHOLDS.low) return "medium";
+  return "low";
+}
 
 // Engine return types use snake_case; the FlaggedPairSummary interface from
 // the engine matches what's actually inside circle_formation_flags.flagged_pair_ids.
@@ -97,6 +137,19 @@ export default function ConflictAlertScreen() {
 
   const [activeTab, setActiveTab] = useState<TabKey>("live_signals");
 
+  // Bucket B — UX state. HelpSheet visibility, per-pill explainer payload,
+  // and the unified confirm-sheet payload that replaces Alert.alert for
+  // formation review + resolve actions.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [pillExplainer, setPillExplainer] = useState<
+    { kind: "tier" | "severity"; key: string } | null
+  >(null);
+  type ConfirmSheetPayload =
+    | { kind: "review"; outcome: "approved" | "override" | "rejected"; flag: FormationFlag }
+    | { kind: "resolve"; conflict: ConflictRecord }
+    | null;
+  const [confirmSheet, setConfirmSheet] = useState<ConfirmSheetPayload>(null);
+
   // Wire to real hooks. The cache layer added in P0 (see
   // useConflictPrediction.ts) is keyed by the id passed in, so passing
   // `undefined` short-circuits the fetch and returns empty data.
@@ -168,61 +221,92 @@ export default function ConflictAlertScreen() {
     return "overridden";
   };
 
+  // Bucket B — Alert.alert replaced by a single confirm bottom sheet.
+  // The Alert.alert call below is the ONE remaining guard: an unauthenticated
+  // reviewer is a state error, not a confirm flow, so keep it as a native
+  // alert with no bottom-sheet detour.
   const handleReview = useCallback((flag: FormationFlag, uiOutcome: "approved" | "rejected" | "override") => {
     if (!user?.id) {
       Alert.alert(t("conflict_alert.alert_signin_required_title"), t("conflict_alert.alert_signin_required_body"));
       return;
     }
-    const outcomeLabel = t(`conflict_alert.outcome_${uiOutcome}`);
-    Alert.alert(
-      t("conflict_alert.formation_review_alert_title", { outcome: outcomeLabel }),
-      t("conflict_alert.formation_review_alert_body", { outcome: outcomeLabel }),
-      [
-        { text: t("conflict_alert.formation_cancel"), style: "cancel" },
-        {
-          text: t("conflict_alert.formation_confirm"),
-          style: uiOutcome === "rejected" ? "destructive" : "default",
-          onPress: async () => {
-            try {
-              await formation.reviewFormation(
-                flag.id,
-                user.id,
-                mapToReviewOutcome(uiOutcome),
-                // Server-side audit note — kept English so the DB row is
-                // legible to anyone auditing across locales.
-                "Reviewed via mobile dashboard",
-              );
-              formation.refresh();
-            } catch (err: any) {
-              Alert.alert(t("conflict_alert.alert_error_title"), err?.message ?? t("conflict_alert.alert_failed_review"));
-            }
-          },
-        },
-      ]
-    );
-  }, [formation, user?.id, t]);
+    setConfirmSheet({ kind: "review", outcome: uiOutcome, flag });
+  }, [user?.id, t]);
 
   // ── Resolve conflict handler ───────────────────────────────────────────────
   const handleResolve = useCallback((conflict: ConflictRecord) => {
-    Alert.alert(
-      t("conflict_alert.formation_resolve_title"),
-      t("conflict_alert.formation_resolve_body"),
-      [
-        { text: t("conflict_alert.formation_cancel"), style: "cancel" },
-        {
-          text: t("conflict_alert.formation_resolve_button"),
-          onPress: async () => {
-            try {
-              await actions.resolveConflict(conflict.id, "manual", "Resolved from mobile");
-              history.refresh();
-            } catch {
-              Alert.alert(t("conflict_alert.alert_error_title"), t("conflict_alert.alert_failed_resolve"));
-            }
-          },
-        },
-      ]
-    );
-  }, [actions, history, t]);
+    setConfirmSheet({ kind: "resolve", conflict });
+  }, []);
+
+  // ── Confirm-sheet executor — runs the action chosen above. The sheet
+  // closes immediately on tap, then awaits the engine call. Errors fall back
+  // to a native Alert.alert because the sheet is already gone by then.
+  const executeConfirm = useCallback(async () => {
+    if (!confirmSheet) return;
+    const payload = confirmSheet;
+    setConfirmSheet(null);
+    try {
+      if (payload.kind === "review") {
+        if (!user?.id) return;
+        await formation.reviewFormation(
+          payload.flag.id,
+          user.id,
+          mapToReviewOutcome(payload.outcome),
+          // Server-side audit note — English by design (see Bucket A).
+          "Reviewed via mobile dashboard",
+        );
+        formation.refresh();
+      } else if (payload.kind === "resolve") {
+        await actions.resolveConflict(payload.conflict.id, "manual", "Resolved from mobile");
+        history.refresh();
+      }
+    } catch (err: any) {
+      const failKey =
+        payload.kind === "review"
+          ? "conflict_alert.alert_failed_review"
+          : "conflict_alert.alert_failed_resolve";
+      Alert.alert(t("conflict_alert.alert_error_title"), err?.message ?? t(failKey));
+    }
+  }, [confirmSheet, user?.id, formation, actions, history, t]);
+
+  // ── Bucket B coach mark ────────────────────────────────────────────────────
+  // First-visit hint. AsyncStorage-gated so it shows once per device/install.
+  // Auto-dismiss after 4s or on tap. Mirrors InsurancePoolScreen / SubstitutePool /
+  // PartialContribution Bucket B.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachOpacity = useRef(new Animated.Value(0)).current;
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    coachCheckedRef.current = true;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(CONFLICT_COACH_KEY);
+        if (seen) return;
+        setCoachVisible(true);
+        Animated.timing(coachOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+      } catch {
+        // AsyncStorage unavailable — silently skip.
+      }
+    })();
+  }, [coachOpacity]);
+  const dismissCoach = useCallback(() => {
+    Animated.timing(coachOpacity, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setCoachVisible(false));
+    AsyncStorage.setItem(CONFLICT_COACH_KEY, "1").catch(() => undefined);
+  }, [coachOpacity]);
+  useEffect(() => {
+    if (!coachVisible) return;
+    const tid = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(tid);
+  }, [coachVisible, dismissCoach]);
 
   // ── Open mediation handler ─────────────────────────────────────────────────
   // The dispute_cases row drives Universe B. Tap routes to MediationCase
@@ -250,10 +334,21 @@ export default function ConflictAlertScreen() {
       return (
         <View key={flag.id} style={styles.card}>
           <View style={styles.cardHeader}>
-            <View style={[styles.tierPill, { backgroundColor: tierMeta.bg }]}>
+            <TouchableOpacity
+              style={[styles.tierPill, { backgroundColor: tierMeta.bg }]}
+              onPress={() => setPillExplainer({ kind: "tier", key: flag.circleTier ?? "clear" })}
+              accessibilityRole="button"
+              accessibilityLabel={t("conflict_alert.tier_explainer_open", { label: tierLabel })}
+            >
               <View style={[styles.tierDot, { backgroundColor: tierMeta.color }]} />
               <Text style={[styles.tierLabel, { color: tierMeta.color }]}>{tierLabel}</Text>
-            </View>
+              <Ionicons
+                name="help-circle-outline"
+                size={12}
+                color={tierMeta.color}
+                style={{ marginLeft: 2 }}
+              />
+            </TouchableOpacity>
             <Text style={styles.cardTimestamp}>
               {new Date(flag.flaggedAt).toLocaleDateString()}
             </Text>
@@ -283,7 +378,12 @@ export default function ConflictAlertScreen() {
                       })}
                     </Text>
                   </View>
-                  <Text style={[styles.pairScore, { color: pair.friction_score >= 55 ? "#EF4444" : "#F59E0B" }]}>
+                  <Text
+                    style={[
+                      styles.pairScore,
+                      { color: SEVERITY_META[severityFromScore(pair.friction_score)].color },
+                    ]}
+                  >
                     {Math.round(pair.friction_score)}/100
                   </Text>
                 </View>
@@ -363,10 +463,22 @@ export default function ConflictAlertScreen() {
           // memberAId/memberBId only (no Name fields); escalationReason
           // (not reason); monitoringStart (not createdAt).
           // Previous code multiplied a 0-100 score by 100, making the bar
-          // always fill (`width: 7000%`) — fixed here.
+          // always fill (`width: 7000%`) — fixed in Bucket A.
+          // Bucket B: score → severity goes through severityFromScore so
+          // the bar fill, the pair-score text, and the card border all
+          // agree on the same threshold bands.
           const score = m.currentScore ?? m.initialScore;
+          const sevKey = severityFromScore(score);
+          const sevColor = SEVERITY_META[sevKey].color;
+          const showSevBorder = m.escalated || sevKey === "high" || sevKey === "critical";
           return (
-            <View key={m.id} style={[styles.card, m.escalated && styles.escalatedCard]}>
+            <View
+              key={m.id}
+              style={[
+                styles.card,
+                showSevBorder && { borderColor: sevColor, borderWidth: 1.5 },
+              ]}
+            >
               <View style={styles.cardHeader}>
                 <View style={styles.monitorMeta}>
                   <Ionicons
@@ -399,7 +511,7 @@ export default function ConflictAlertScreen() {
                       styles.scoreFill,
                       {
                         width: `${Math.min(score, 100)}%`,
-                        backgroundColor: score >= 70 ? "#EF4444" : score >= 40 ? "#F59E0B" : "#10B981",
+                        backgroundColor: sevColor,
                       },
                     ]}
                   />
@@ -539,15 +651,25 @@ export default function ConflictAlertScreen() {
           const sev = SEVERITY_META[conflict.severity] ?? SEVERITY_META.low;
           const isResolved = !!conflict.resolvedAt;
 
+          const sevLabel = t(`conflict_alert.severity_${conflict.severity}`);
           return (
             <View key={conflict.id} style={styles.card}>
               <View style={styles.cardHeader}>
-                <View style={[styles.severityPill, { backgroundColor: sev.bg }]}>
+                <TouchableOpacity
+                  style={[styles.severityPill, { backgroundColor: sev.bg }]}
+                  onPress={() => setPillExplainer({ kind: "severity", key: conflict.severity })}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("conflict_alert.severity_explainer_open", { label: sevLabel })}
+                >
                   <Ionicons name={sev.icon as any} size={14} color={sev.color} />
-                  <Text style={[styles.severityLabel, { color: sev.color }]}>
-                    {t(`conflict_alert.severity_${conflict.severity}`)}
-                  </Text>
-                </View>
+                  <Text style={[styles.severityLabel, { color: sev.color }]}>{sevLabel}</Text>
+                  <Ionicons
+                    name="help-circle-outline"
+                    size={12}
+                    color={sev.color}
+                    style={{ marginLeft: 2 }}
+                  />
+                </TouchableOpacity>
                 <View style={[styles.statusPill, isResolved ? styles.resolvedPill : styles.unresolvedPill]}>
                   <Text style={[styles.statusText, { color: isResolved ? "#10B981" : "#F59E0B" }]}>
                     {isResolved
@@ -594,7 +716,15 @@ export default function ConflictAlertScreen() {
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("screen_headers.conflict_alert")}</Text>
-          <View style={{ width: 40 }} />
+          {/* Bucket B — opens the HelpSheet glossary. */}
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setHelpOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t("conflict_alert.help_open")}
+          >
+            <Ionicons name="help-circle-outline" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
 
         {/* Tab bar */}
@@ -706,6 +836,36 @@ export default function ConflictAlertScreen() {
         </View>
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Bucket B — sheets and coach mark, mounted outside ScrollView so
+          they overlay the full screen. */}
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} />
+      <PillExplainerSheet
+        explainer={pillExplainer}
+        onClose={() => setPillExplainer(null)}
+      />
+      <ReviewConfirmSheet
+        payload={confirmSheet}
+        submitting={actions.submitting}
+        onConfirm={executeConfirm}
+        onCancel={() => setConfirmSheet(null)}
+      />
+
+      {coachVisible && (
+        <Animated.View
+          style={[styles.coachOverlay, { opacity: coachOpacity }]}
+          pointerEvents="box-none"
+        >
+          <Pressable
+            style={styles.coachCard}
+            onPress={dismissCoach}
+            accessibilityRole="button"
+          >
+            <Ionicons name="alert-circle-outline" size={20} color="#00C6AE" />
+            <Text style={styles.coachText}>{t("conflict_alert.coach_tip")}</Text>
+          </Pressable>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -733,6 +893,267 @@ function EmptyState({ icon, title, subtitle }: { icon: string; title: string; su
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// HelpSheet — Modal-based glossary for the conflict-alert surface. Opens from
+// the header (?) button. Reads conflict_alert.help_<topic>_{title,body} for
+// each of HELP_TOPICS.
+// ══════════════════════════════════════════════════════════════════════════════
+function HelpSheet({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>
+            {t("conflict_alert.help_sheet_title")}
+          </Text>
+          <ScrollView style={{ maxHeight: 460 }}>
+            {HELP_TOPICS.map((topic, idx) => (
+              <View
+                key={topic}
+                style={[
+                  sheetStyles.helpItem,
+                  idx === HELP_TOPICS.length - 1 && sheetStyles.helpItemLast,
+                ]}
+              >
+                <Text style={sheetStyles.helpItemTitle}>
+                  {t(`conflict_alert.help_${topic}_title`)}
+                </Text>
+                <Text style={sheetStyles.body}>
+                  {t(`conflict_alert.help_${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+          <TouchableOpacity
+            style={sheetStyles.closeBtn}
+            onPress={onClose}
+            accessibilityRole="button"
+          >
+            <Text style={sheetStyles.closeBtnText}>
+              {t("conflict_alert.help_close")}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PillExplainerSheet — opens from a tier or severity pill. Renders one
+// (title, body) pair keyed by the pill's kind + key.
+// ══════════════════════════════════════════════════════════════════════════════
+function PillExplainerSheet({
+  explainer,
+  onClose,
+}: {
+  explainer: { kind: "tier" | "severity"; key: string } | null;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const visible = explainer != null;
+  const prefix = explainer ? `conflict_alert.${explainer.kind}_explainer_${explainer.key}` : "";
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          {explainer ? (
+            <>
+              <Text style={sheetStyles.title}>{t(`${prefix}_title`)}</Text>
+              <Text style={sheetStyles.body}>{t(`${prefix}_body`)}</Text>
+            </>
+          ) : null}
+          <TouchableOpacity
+            style={sheetStyles.closeBtn}
+            onPress={onClose}
+            accessibilityRole="button"
+          >
+            <Text style={sheetStyles.closeBtnText}>
+              {t("conflict_alert.help_close")}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ReviewConfirmSheet — bottom-sheet replacement for the prior Alert.alert
+// confirm flows on Approve/Override/Reject + Resolve. Single Confirm + Cancel.
+// Title and body are looked up by action key (approved/override/rejected/resolve).
+// ══════════════════════════════════════════════════════════════════════════════
+function ReviewConfirmSheet({
+  payload,
+  submitting,
+  onConfirm,
+  onCancel,
+}: {
+  payload:
+    | { kind: "review"; outcome: "approved" | "override" | "rejected"; flag: FormationFlag }
+    | { kind: "resolve"; conflict: ConflictRecord }
+    | null;
+  submitting: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  const visible = payload != null;
+  // actionKey collapses both kinds into one of four i18n suffixes so the
+  // sheet can fetch title/body with a single template lookup.
+  const actionKey = payload
+    ? payload.kind === "resolve"
+      ? "resolve"
+      : payload.outcome
+    : null;
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onCancel}
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onCancel}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          {actionKey ? (
+            <>
+              <Text style={sheetStyles.title}>
+                {t(`conflict_alert.review_confirm_title_${actionKey}`)}
+              </Text>
+              <Text style={sheetStyles.body}>
+                {t(`conflict_alert.review_confirm_body_${actionKey}`)}
+              </Text>
+            </>
+          ) : null}
+          <View style={sheetStyles.confirmRow}>
+            <TouchableOpacity
+              style={[sheetStyles.cancelBtn]}
+              onPress={onCancel}
+              accessibilityRole="button"
+              disabled={submitting}
+            >
+              <Text style={sheetStyles.cancelBtnText}>
+                {t("conflict_alert.review_confirm_cancel")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[sheetStyles.closeBtn, { flex: 1, marginTop: 0 }]}
+              onPress={onConfirm}
+              accessibilityRole="button"
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={sheetStyles.closeBtnText}>
+                  {t("conflict_alert.review_confirm_confirm")}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const sheetStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 12,
+  },
+  body: {
+    fontSize: 13,
+    color: "#0A2342",
+    lineHeight: 19,
+  },
+  helpItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  helpItemLast: { borderBottomWidth: 0 },
+  helpItemTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 4,
+  },
+  closeBtn: {
+    backgroundColor: "#0A2342",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 20,
+  },
+  closeBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  confirmRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 20,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: "#F3F4F6",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelBtnText: {
+    color: "#0A2342",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+});
+
 // ── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
@@ -759,7 +1180,6 @@ const styles = StyleSheet.create({
 
   // Cards
   card: { backgroundColor: "#FFFFFF", borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: "#E5E7EB" },
-  escalatedCard: { borderColor: "#FCA5A5", borderWidth: 1.5 },
   cardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   cardTitle: { fontSize: 15, fontWeight: "600", color: "#0A2342", marginBottom: 6 },
   cardTimestamp: { fontSize: 12, color: "#9CA3AF" },
@@ -881,4 +1301,32 @@ const styles = StyleSheet.create({
 
   loadingContainer: { alignItems: "center", paddingVertical: 60 },
   loadingText: { fontSize: 14, color: "#9CA3AF", marginTop: 12 },
+
+  // Bucket B — first-visit coach overlay (mirrors InsurancePool pattern).
+  coachOverlay: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 24,
+  },
+  coachCard: {
+    backgroundColor: "#0A2342",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  coachText: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 13,
+    lineHeight: 18,
+  },
 });
