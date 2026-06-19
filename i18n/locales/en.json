@@ -6521,6 +6521,14 @@
     "help_avg_default_probability_threshold": "Under 5% is safe. Above 15% means the circle should rebalance.",
     "help_avg_default_probability_action": "Review specific high-risk members and consider Partial Contribution plans or Substitute members."
   },
+  "conflict": {
+    "notification_monitor_escalated_title": "Conflict monitor escalated",
+    "notification_monitor_escalated_body": "A conflict monitor in {{circle_name}} has escalated. Please review.",
+    "notification_dispute_escalated_elder_title": "Dispute escalated to elders",
+    "notification_dispute_escalated_elder_body": "A dispute in {{circle_name}} has been escalated to elders.",
+    "notification_dispute_escalated_global_title": "Dispute escalated to global queue",
+    "notification_dispute_escalated_global_body": "A dispute in {{circle_name}} has been escalated to the global queue."
+  },
   "health": {
     "notification_title": "Circle health trend alert",
     "notification_body": "{{circle_name}}'s health has started declining. Please check the health dashboard."

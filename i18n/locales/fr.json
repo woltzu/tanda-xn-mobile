@@ -6521,6 +6521,14 @@
     "help_avg_default_probability_threshold": "Sous 5 % c'est sûr. Au-dessus de 15 %, le cercle devrait se rééquilibrer.",
     "help_avg_default_probability_action": "Examinez les membres à risque et envisagez des plans de Contribution partielle ou des membres de substitution."
   },
+  "conflict": {
+    "notification_monitor_escalated_title": "Surveillance de conflit escaladée",
+    "notification_monitor_escalated_body": "Une surveillance de conflit dans {{circle_name}} a été escaladée. Veuillez examiner.",
+    "notification_dispute_escalated_elder_title": "Litige escaladé vers les aînés",
+    "notification_dispute_escalated_elder_body": "Un litige dans {{circle_name}} a été escaladé vers les aînés.",
+    "notification_dispute_escalated_global_title": "Litige escaladé vers la file globale",
+    "notification_dispute_escalated_global_body": "Un litige dans {{circle_name}} a été escaladé vers la file globale."
+  },
   "health": {
     "notification_title": "Alerte de tendance sur la santé du cercle",
     "notification_body": "La santé de {{circle_name}} commence à décliner. Consultez le tableau de bord santé."

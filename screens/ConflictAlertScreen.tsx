@@ -23,6 +23,7 @@ import { useCircleDisputes, type CircleDisputeRow } from "../hooks/useCircleDisp
 import { useProfileBatch } from "../hooks/useProfileBatch";
 import { useAuth } from "../context/AuthContext";
 import { useCircles } from "../context/CirclesContext";
+import { useEventTracker } from "../hooks/useEventTracker";
 import { Routes } from "../lib/routes";
 
 // Bucket B: AsyncStorage key for the first-visit coach mark. Version suffix
@@ -127,6 +128,7 @@ export default function ConflictAlertScreen() {
   // below, so swapping a circle re-fetches everything cleanly.
   const { myCircles } = useCircles();
   const activeCircles = myCircles.filter((c) => c.status === "active");
+  const { track } = useEventTracker();
   const [selectedCircleId, setSelectedCircleId] = useState<string | undefined>(
     routeCircleId,
   );
@@ -136,6 +138,53 @@ export default function ConflictAlertScreen() {
   const showNoCirclesState = !effectiveCircleId && noCirclesAtAll;
 
   const [activeTab, setActiveTab] = useState<TabKey>("live_signals");
+
+  // Bucket C telemetry. Caller role for resolved/review events comes from
+  // the user's circle membership row; falls back to 'member' if missing.
+  const myRole: string = useMemo(() => {
+    if (!effectiveCircleId) return "member";
+    const c = myCircles.find((mc) => mc.id === effectiveCircleId);
+    return c?.role ?? "member";
+  }, [myCircles, effectiveCircleId]);
+
+  // conflict_alert.viewed — fires once per (circleId, tab) pair. StrictMode
+  // double-mounts the screen in dev, so the ref is keyed by both axes; a
+  // tab change is treated as a separate view by the tab_switched event
+  // below, not here.
+  const viewedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!effectiveCircleId) return;
+    const key = `${effectiveCircleId}:${activeTab}`;
+    if (viewedRef.current === key) return;
+    viewedRef.current = key;
+    track({
+      eventType: "conflict_alert.viewed",
+      eventCategory: "circle",
+      eventAction: "view",
+      eventLabel: effectiveCircleId,
+      eventValue: { circle_id: effectiveCircleId, tab: activeTab },
+    });
+  }, [effectiveCircleId, activeTab, track]);
+
+  // conflict_alert.tab_switched — fires when the active tab changes. We
+  // skip the initial render so the very first viewed event doesn't get a
+  // matching tab_switched twin.
+  const lastTabRef = useRef<TabKey | null>(null);
+  useEffect(() => {
+    if (lastTabRef.current === null) {
+      lastTabRef.current = activeTab;
+      return;
+    }
+    if (lastTabRef.current === activeTab) return;
+    lastTabRef.current = activeTab;
+    track({
+      eventType: "conflict_alert.tab_switched",
+      eventCategory: "circle",
+      eventAction: "click",
+      eventLabel: effectiveCircleId ?? "none",
+      eventValue: { circle_id: effectiveCircleId, tab: activeTab },
+    });
+  }, [activeTab, effectiveCircleId, track]);
 
   // Bucket B — UX state. HelpSheet visibility, per-pill explainer payload,
   // and the unified confirm-sheet payload that replaces Alert.alert for
@@ -256,9 +305,34 @@ export default function ConflictAlertScreen() {
           "Reviewed via mobile dashboard",
         );
         formation.refresh();
+        // Bucket C telemetry — fires only on a successful engine write so
+        // the dataset doesn't get polluted with attempted-but-failed
+        // reviews (those surface as Alert.alert below).
+        track({
+          eventType: "conflict_alert.review_submitted",
+          eventCategory: "circle",
+          eventAction: "submit",
+          eventLabel: effectiveCircleId ?? "none",
+          eventValue: {
+            circle_id: effectiveCircleId,
+            flag_id: payload.flag.id,
+            outcome: payload.outcome,
+          },
+        });
       } else if (payload.kind === "resolve") {
         await actions.resolveConflict(payload.conflict.id, "manual", "Resolved from mobile");
         history.refresh();
+        track({
+          eventType: "conflict_alert.resolved",
+          eventCategory: "circle",
+          eventAction: "submit",
+          eventLabel: effectiveCircleId ?? "none",
+          eventValue: {
+            circle_id: effectiveCircleId,
+            conflict_id: payload.conflict.id,
+            resolved_by: myRole,
+          },
+        });
       }
     } catch (err: any) {
       const failKey =
@@ -267,7 +341,7 @@ export default function ConflictAlertScreen() {
           : "conflict_alert.alert_failed_resolve";
       Alert.alert(t("conflict_alert.alert_error_title"), err?.message ?? t(failKey));
     }
-  }, [confirmSheet, user?.id, formation, actions, history, t]);
+  }, [confirmSheet, user?.id, formation, actions, history, t, track, effectiveCircleId, myRole]);
 
   // ── Bucket B coach mark ────────────────────────────────────────────────────
   // First-visit hint. AsyncStorage-gated so it shows once per device/install.
@@ -314,8 +388,18 @@ export default function ConflictAlertScreen() {
   // through ElderContext. The dispute id is carried via navigation state so
   // the destination can hydrate the case lazily.
   const handleOpenMediation = useCallback((dispute: CircleDisputeRow) => {
+    track({
+      eventType: "conflict_alert.dispute_opened",
+      eventCategory: "circle",
+      eventAction: "click",
+      eventLabel: effectiveCircleId ?? "none",
+      eventValue: {
+        circle_id: effectiveCircleId,
+        dispute_id: dispute.id,
+      },
+    });
     navigation.navigate(Routes.MediationCase, { caseId: dispute.id });
-  }, [navigation]);
+  }, [navigation, track, effectiveCircleId]);
 
   // ── Formation section (Bucket A: empty rendered by combined fallback). ────
   const renderFormationSection = () => {
