@@ -6443,6 +6443,18 @@
     "notification_low_balance_title": "Solde du fonds bas",
     "notification_low_balance_body": "Le fonds d'assurance pour {{circle}} est sous le seuil de sécurité."
   },
+  "partial": {
+    "notification_activated_title": "Plan de paiement flexible activé",
+    "notification_activated_body": "Votre plan de paiement flexible pour {{circle_name}} est actif. Payez {{pay_now}} $ maintenant.",
+    "notification_completed_title": "Plan flexible terminé",
+    "notification_completed_body": "Tous les rattrapages payés. Votre plan flexible pour {{circle_name}} est terminé.",
+    "notification_cancelled_title": "Plan flexible annulé",
+    "notification_cancelled_body": "Votre plan flexible pour {{circle_name}} a été annulé.",
+    "notification_defaulted_title": "Paiement de rattrapage manqué",
+    "notification_defaulted_body": "Un paiement de rattrapage pour {{circle_name}} a été manqué. Votre XnScore pourrait en être affecté.",
+    "notification_catch_up_reminder_title": "Paiement de rattrapage à venir",
+    "notification_catch_up_reminder_body": "Un paiement de rattrapage de {{amount}} $ pour {{circle_name}} est dû le {{due_date}}."
+  },
   "substitute": {
     "notification_offer_title": "Nouvelle proposition de remplacement",
     "notification_offer_body": "Vous avez été sélectionné(e) pour rejoindre {{circle_name}} en tant que remplaçant(e).",

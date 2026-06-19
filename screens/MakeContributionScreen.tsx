@@ -129,6 +129,21 @@ export default function MakeContributionScreen() {
   // Telemetry tracker. opened event is ref-guarded so StrictMode double-
   // mount doesn't double-emit; the other events fire on their natural
   // interaction triggers.
+  //
+  // Partial Contribution Bucket C — TODO: when a contribution succeeds
+  // and the underlying cycle_contributions row has contribution_type =
+  // 'catch_up' (set by the activate_partial_contribution RPC at plan
+  // creation time), fire:
+  //   track({
+  //     eventType: "partial_pool.catch_up_paid",
+  //     eventCategory: "circle",
+  //     eventAction: "click",
+  //     eventLabel: circleId,
+  //     eventValue: { circle_id, plan_id, contribution_id, amount_cents },
+  //   });
+  // Wiring it cleanly needs a SELECT on cycle_contributions to discover
+  // the type + partial_plan_id around the success handler — left as a
+  // follow-up so we don't risk a half-wired telemetry path now.
   const { track } = useEventTracker();
   const openedTrackedRef = useRef(false);
 

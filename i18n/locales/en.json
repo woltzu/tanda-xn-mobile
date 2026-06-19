@@ -6443,6 +6443,18 @@
     "notification_low_balance_title": "Pool balance is low",
     "notification_low_balance_body": "The insurance pool for {{circle}} is below the safety threshold."
   },
+  "partial": {
+    "notification_activated_title": "Flexible payment plan activated",
+    "notification_activated_body": "Your flexible payment plan for {{circle_name}} is active. Pay ${{pay_now}} now.",
+    "notification_completed_title": "Flexible plan complete",
+    "notification_completed_body": "All catch-ups paid. Your flexible plan for {{circle_name}} is complete.",
+    "notification_cancelled_title": "Flexible plan cancelled",
+    "notification_cancelled_body": "Your flexible plan for {{circle_name}} has been cancelled.",
+    "notification_defaulted_title": "Catch-up payment missed",
+    "notification_defaulted_body": "A catch-up payment for {{circle_name}} was missed. Your XnScore may be affected.",
+    "notification_catch_up_reminder_title": "Catch-up payment due soon",
+    "notification_catch_up_reminder_body": "Catch-up payment of ${{amount}} for {{circle_name}} is due on {{due_date}}."
+  },
   "substitute": {
     "notification_offer_title": "New substitution offer",
     "notification_offer_body": "You've been matched to join {{circle_name}} as a substitute.",

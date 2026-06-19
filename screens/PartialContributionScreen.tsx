@@ -46,6 +46,7 @@ import {
   usePreview,
   usePartialContributionActions,
 } from "../hooks/usePartialContribution";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 // Bucket B — single HelpSheet listing 5 topics; per-bullet explainer sheet
 // keyed off a topic enum; AsyncStorage gate for the first-visit coach mark.
@@ -90,6 +91,23 @@ export default function PartialContributionScreen() {
   const { circleId, cycleId: paramCycleId } =
     route.params ?? ({} as RouteParams);
   const { user } = useAuth();
+  const { track } = useEventTracker();
+
+  // Bucket C — partial_pool.viewed fires once per mount (StrictMode-safe
+  // ref guard). Other events (activated, cancelled) fire from their
+  // respective action handlers below.
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: "partial_pool.viewed",
+      eventCategory: "circle",
+      eventAction: "view",
+      eventLabel: circleId,
+      eventValue: { circle_id: circleId },
+    });
+  }, [circleId, track]);
 
   // Bucket B — sheet / coach state.
   const [helpOpen, setHelpOpen] = useState(false);
@@ -207,6 +225,19 @@ export default function PartialContributionScreen() {
       );
       return;
     }
+    // Bucket C — telemetry on confirmed activation.
+    track({
+      eventType: "partial_pool.activated",
+      eventCategory: "circle",
+      eventAction: "click",
+      eventLabel: circleId,
+      eventValue: {
+        circle_id: circleId,
+        cycle_id: resolvedCycleId,
+        pay_now_cents: summary?.pay_now_cents,
+        plan_id: result.plan_id,
+      },
+    });
     await Promise.all([fetchPreview(), refetchPlan()]);
   };
 
@@ -237,6 +268,14 @@ export default function PartialContributionScreen() {
                 Alert.alert(t("partial_contribution.alert_could_not_cancel"), error.message);
                 return;
               }
+              // Bucket C — telemetry on confirmed cancellation.
+              track({
+                eventType: "partial_pool.cancelled",
+                eventCategory: "circle",
+                eventAction: "click",
+                eventLabel: plan.id,
+                eventValue: { plan_id: plan.id, circle_id: circleId },
+              });
               // Bucket A: viewMode dropped — the screen auto-flips back to
               // activation once hasPlan turns false from refetchPlan().
               await Promise.all([fetchPreview(), refetchPlan()]);
