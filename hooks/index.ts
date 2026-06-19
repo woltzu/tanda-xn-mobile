@@ -634,10 +634,12 @@ export {
 // Partial Contributions
 export {
   usePartialEligibility,
-  useActivationSummary,
   useActivePlan,
   useMemberPlanHistory,
   usePartialContributionActions,
+  // Bucket A additions
+  usePreview,
+  usePartialPlanSummary,
   type PlanStatus,
   type ContributionType,
   type CatchUpItemStatus,
@@ -646,6 +648,12 @@ export {
   type EligibilityCheck,
   type PartialContributionSummary,
   type PartialActivationResult,
+  type PartialPreviewResult,
+  type PartialPreviewEligibility,
+  type PartialPreviewSummary,
+  type PartialPreviewCoverage,
+  type PartialActivateResult,
+  type CoverageStatus,
 } from './usePartialContribution';
 
 // Substitute Member System

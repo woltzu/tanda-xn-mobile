@@ -81,6 +81,61 @@ export interface PartialActivationResult {
   catchUpContributionIds: string[];
 }
 
+// Bucket A — RPC payload shapes, matching the migration-102 server side.
+// These replace the broken TS-built getActivationSummary +
+// activatePartialContribution paths described in the migration header.
+
+export interface PartialPreviewEligibility {
+  eligible: boolean;
+  reason: string | null;
+  uses_this_year: number;
+  fee_required: boolean;
+  fee_cents: number;
+}
+
+export interface PartialPreviewSummary {
+  current_contribution_id: string;
+  original_amount_cents: number;
+  pay_now_cents: number;
+  catch_up_1_cents: number;
+  catch_up_1_due: string;
+  catch_up_1_cycle_number: number;
+  catch_up_2_cents: number;
+  catch_up_2_due: string;
+  catch_up_2_cycle_number: number;
+  regular_contribution_cents: number;
+  total_next_cycle_cents: number;
+  total_cycle_after_cents: number;
+}
+
+export type CoverageStatus =
+  | "covered_full"
+  | "covered_partial"
+  | "no_balance"
+  | "no_pool";
+
+export interface PartialPreviewCoverage {
+  pool_id: string | null;
+  pool_balance_cents: number;
+  shortfall_cents: number;
+  approved_cents: number;
+  coverage_status: CoverageStatus;
+}
+
+export interface PartialPreviewResult {
+  success: boolean;
+  eligibility: PartialPreviewEligibility;
+  summary?: PartialPreviewSummary;
+  coverage_preview?: PartialPreviewCoverage;
+  error?: string;
+}
+
+export interface PartialActivateResult {
+  success: boolean;
+  plan_id?: string;
+  error?: string;
+}
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAPPERS — snake_case (DB) → camelCase (app)
@@ -254,271 +309,59 @@ export class PartialContributionEngine {
   // ─────────────────────────────────────────────────────────────────────────────
 
   /**
-   * Get a preview summary of what partial contribution would look like.
-   * Does NOT activate — just calculates and returns the summary.
+   * Preview the partial-contribution shape for (circle, cycle).
+   *
+   * Bucket A: replaces the broken pre-migration-102 TS implementation that
+   * did 4 separate selects with wrong column names. This wraps the
+   * single-transaction preview_partial_contribution RPC (migration 102),
+   * which returns eligibility + 50/25/25 summary + insurance-pool coverage
+   * preview in one round-trip.
    */
-  static async getActivationSummary(
-    userId: string,
+  static async preview(
     circleId: string,
-    cycleId: string
-  ): Promise<PartialContributionSummary> {
-    // Get the current contribution
-    const { data: contribution, error: contribErr } = await supabase
-      .from('cycle_contributions')
-      .select('expected_amount')
-      .eq('cycle_id', cycleId)
-      .eq('user_id', userId)
-      .single();
-
-    if (contribErr || !contribution) {
-      throw new Error('Contribution record not found for this cycle.');
+    cycleId: string,
+  ): Promise<PartialPreviewResult> {
+    const { data, error } = await supabase.rpc("preview_partial_contribution", {
+      p_circle_id: circleId,
+      p_cycle_id: cycleId,
+    });
+    if (error) {
+      return {
+        success: false,
+        eligibility: {
+          eligible: false,
+          reason: error.message,
+          uses_this_year: 0,
+          fee_required: false,
+          fee_cents: 0,
+        },
+        error: error.message,
+      };
     }
-
-    const originalCents = Math.round(contribution.expected_amount * 100);
-    const payNowCents = Math.round(originalCents * 0.5);
-    const catchUp1Cents = Math.round(originalCents * 0.25);
-    const catchUp2Cents = originalCents - payNowCents - catchUp1Cents; // Remainder to avoid rounding issues
-
-    // Get the next two cycles
-    const { data: currentCycle } = await supabase
-      .from('circle_cycles')
-      .select('cycle_number')
-      .eq('id', cycleId)
-      .single();
-
-    if (!currentCycle) throw new Error('Current cycle not found.');
-
-    const { data: nextCycles, error: nextErr } = await supabase
-      .from('circle_cycles')
-      .select('cycle_number, contribution_deadline, expected_amount')
-      .eq('circle_id', circleId)
-      .gt('cycle_number', currentCycle.cycle_number)
-      .order('cycle_number')
-      .limit(2);
-
-    if (nextErr) throw new Error(`Failed to fetch next cycles: ${nextErr.message}`);
-
-    if (!nextCycles || nextCycles.length < 2) {
-      throw new Error('Not enough future cycles available for catch-up scheduling. At least 2 more cycles are required.');
-    }
-
-    // Fee check
-    const eligibility = await this.checkEligibility(userId, circleId, cycleId);
-    const regularContributionCents = Math.round(nextCycles[0].expected_amount * 100);
-
-    return {
-      originalAmount: originalCents / 100,
-      payNowAmount: payNowCents / 100,
-      catchUp1Amount: catchUp1Cents / 100,
-      catchUp1Date: nextCycles[0].contribution_deadline,
-      catchUp1CycleNumber: nextCycles[0].cycle_number,
-      catchUp2Amount: catchUp2Cents / 100,
-      catchUp2Date: nextCycles[1].contribution_deadline,
-      catchUp2CycleNumber: nextCycles[1].cycle_number,
-      regularContribution: regularContributionCents / 100,
-      totalNextCycle: (regularContributionCents + catchUp1Cents) / 100,
-      totalCycleAfter: (regularContributionCents + catchUp2Cents) / 100,
-      feeCents: eligibility.feeCents,
-      usesThisYear: eligibility.usesThisYear,
-    };
+    return data as PartialPreviewResult;
   }
 
   /**
-   * Activate partial contribution mode for a member.
+   * Activate the 50/25/25 partial-contribution plan for (circle, cycle).
    *
-   * 1. Checks eligibility
-   * 2. Calculates 50/25/25 split
-   * 3. Updates current contribution to partial
-   * 4. Creates plan record with catch-up schedule
-   * 5. Creates two catch-up contribution records
-   * 6. Triggers insurance pool coverage for shortfall
-   * 7. Notifies circle admin (identity-protected)
+   * Bucket A: replaces the broken pre-migration-102 TS implementation. This
+   * wraps the single-transaction activate_partial_contribution RPC, which
+   * does eligibility re-check, 50/25/25 split, contribution UPDATE,
+   * catch-up INSERTs, plan INSERT, and pool-coverage recording in one
+   * transaction. No more 8-call sequence with no transaction boundary.
    */
-  static async activatePartialContribution(
-    userId: string,
+  static async activate(
     circleId: string,
-    cycleId: string
-  ): Promise<PartialActivationResult> {
-    // 1. Check eligibility
-    const eligibility = await this.checkEligibility(userId, circleId, cycleId);
-    if (!eligibility.eligible) {
-      throw new Error(eligibility.reason || 'Not eligible for partial contribution.');
+    cycleId: string,
+  ): Promise<PartialActivateResult> {
+    const { data, error } = await supabase.rpc("activate_partial_contribution", {
+      p_circle_id: circleId,
+      p_cycle_id: cycleId,
+    });
+    if (error) {
+      return { success: false, error: error.message };
     }
-
-    // 2. Get the current contribution
-    const { data: contribution, error: contribErr } = await supabase
-      .from('cycle_contributions')
-      .select('*')
-      .eq('cycle_id', cycleId)
-      .eq('user_id', userId)
-      .single();
-
-    if (contribErr || !contribution) {
-      throw new Error('Contribution record not found.');
-    }
-
-    const originalCents = Math.round(contribution.expected_amount * 100);
-    const payNowCents = Math.round(originalCents * 0.5);
-    const catchUp1Cents = Math.round(originalCents * 0.25);
-    const catchUp2Cents = originalCents - payNowCents - catchUp1Cents;
-
-    // 3. Get next two cycles
-    const { data: currentCycle } = await supabase
-      .from('circle_cycles')
-      .select('cycle_number')
-      .eq('id', cycleId)
-      .single();
-
-    if (!currentCycle) throw new Error('Current cycle not found.');
-
-    const { data: nextCycles } = await supabase
-      .from('circle_cycles')
-      .select('id, cycle_number, contribution_deadline, expected_amount')
-      .eq('circle_id', circleId)
-      .gt('cycle_number', currentCycle.cycle_number)
-      .order('cycle_number')
-      .limit(2);
-
-    if (!nextCycles || nextCycles.length < 2) {
-      throw new Error('Not enough future cycles for catch-up scheduling.');
-    }
-
-    // 4. Create the plan record first (needed for FK)
-    const catchUpSchedule = [
-      {
-        cycle_number: nextCycles[0].cycle_number,
-        amount_cents: catchUp1Cents,
-        due_date: nextCycles[0].contribution_deadline,
-        contribution_id: null, // Will be updated after creating catch-up contributions
-        status: 'scheduled',
-      },
-      {
-        cycle_number: nextCycles[1].cycle_number,
-        amount_cents: catchUp2Cents,
-        due_date: nextCycles[1].contribution_deadline,
-        contribution_id: null,
-        status: 'scheduled',
-      },
-    ];
-
-    const { data: plan, error: planErr } = await supabase
-      .from('partial_contribution_plans')
-      .insert({
-        member_id: userId,
-        circle_id: circleId,
-        cycle_id: cycleId,
-        original_amount_cents: originalCents,
-        paid_amount_cents: payNowCents,
-        remaining_amount_cents: catchUp1Cents + catchUp2Cents,
-        catch_up_schedule: catchUpSchedule,
-        fee_cents: eligibility.feeCents,
-        uses_this_year: eligibility.usesThisYear + 1,
-        status: 'active',
-      })
-      .select()
-      .single();
-
-    if (planErr) throw new Error(`Failed to create plan: ${planErr.message}`);
-
-    // 5. Update current contribution to partial
-    const { error: updateErr } = await supabase
-      .from('cycle_contributions')
-      .update({
-        is_partial: true,
-        partial_plan_id: plan.id,
-        contribution_type: 'partial',
-        contributed_amount: payNowCents / 100,
-        status: 'partial',
-        covered_by: 'insurance_pool',
-        covered_amount: (catchUp1Cents + catchUp2Cents) / 100,
-      })
-      .eq('id', contribution.id);
-
-    if (updateErr) throw new Error(`Failed to update contribution: ${updateErr.message}`);
-
-    // 6. Create two catch-up contribution records
-    const catchUpContributions = [];
-
-    for (let i = 0; i < nextCycles.length; i++) {
-      const catchUpAmount = i === 0 ? catchUp1Cents : catchUp2Cents;
-
-      const { data: catchUpContrib, error: catchErr } = await supabase
-        .from('cycle_contributions')
-        .insert({
-          cycle_id: nextCycles[i].id,
-          circle_id: circleId,
-          user_id: userId,
-          member_id: contribution.member_id,
-          expected_amount: catchUpAmount / 100,
-          due_date: nextCycles[i].contribution_deadline,
-          contributed_amount: 0,
-          status: 'pending',
-          is_partial: false,
-          partial_plan_id: plan.id,
-          contribution_type: 'catch_up',
-        })
-        .select()
-        .single();
-
-      if (catchErr) {
-        console.warn(`[PartialContribution] Failed to create catch-up ${i + 1}:`, catchErr);
-        continue;
-      }
-
-      catchUpContributions.push(catchUpContrib);
-
-      // Update the plan's catch_up_schedule with the contribution ID
-      catchUpSchedule[i].contribution_id = catchUpContrib.id;
-    }
-
-    // Update plan with contribution IDs in schedule
-    await supabase
-      .from('partial_contribution_plans')
-      .update({ catch_up_schedule: catchUpSchedule })
-      .eq('id', plan.id);
-
-    // 7. Request insurance pool coverage for the shortfall
-    try {
-      await this._requestInsuranceCoverage(
-        circleId,
-        contribution.id,
-        (catchUp1Cents + catchUp2Cents) / 100
-      );
-    } catch (err) {
-      console.warn('[PartialContribution] Insurance coverage request failed:', err);
-      // Non-fatal — plan still activates
-    }
-
-    // 8. Notify circle admin (identity-protected)
-    try {
-      await this._notifyCircleAdmin(circleId, currentCycle.cycle_number);
-    } catch (err) {
-      console.warn('[PartialContribution] Admin notification failed:', err);
-    }
-
-    // Build summary for return
-    const regularContributionCents = Math.round(nextCycles[0].expected_amount * 100);
-    const summary: PartialContributionSummary = {
-      originalAmount: originalCents / 100,
-      payNowAmount: payNowCents / 100,
-      catchUp1Amount: catchUp1Cents / 100,
-      catchUp1Date: nextCycles[0].contribution_deadline,
-      catchUp1CycleNumber: nextCycles[0].cycle_number,
-      catchUp2Amount: catchUp2Cents / 100,
-      catchUp2Date: nextCycles[1].contribution_deadline,
-      catchUp2CycleNumber: nextCycles[1].cycle_number,
-      regularContribution: regularContributionCents / 100,
-      totalNextCycle: (regularContributionCents + catchUp1Cents) / 100,
-      totalCycleAfter: (regularContributionCents + catchUp2Cents) / 100,
-      feeCents: eligibility.feeCents,
-      usesThisYear: eligibility.usesThisYear + 1,
-    };
-
-    return {
-      plan: mapPlan(plan),
-      summary,
-      catchUpContributionIds: catchUpContributions.map((c: any) => c.id),
-    };
+    return data as PartialActivateResult;
   }
 
 
@@ -835,103 +678,13 @@ export class PartialContributionEngine {
 
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // SECTION G — Notification (Private)
+  // SECTION G — Notification
   // ─────────────────────────────────────────────────────────────────────────────
-
-  /**
-   * Notify circle admin that a member activated partial mode.
-   * Identity-protected: does NOT reveal which member.
-   */
-  private static async _notifyCircleAdmin(
-    circleId: string,
-    cycleNumber: number
-  ): Promise<void> {
-    // Find circle admins/creators
-    const { data: admins } = await supabase
-      .from('circle_members')
-      .select('user_id')
-      .eq('circle_id', circleId)
-      .in('role', ['creator', 'admin']);
-
-    if (!admins || admins.length === 0) return;
-
-    const notifications = admins.map((admin: any) => ({
-      member_id: admin.user_id,
-      notification_type: 'circle_events',
-      title: 'Contribution Flexibility Activated',
-      body: `A member has activated contribution flexibility for cycle ${cycleNumber}. The circle timeline is not affected.`,
-      data: {
-        circle_id: circleId,
-        cycle_number: cycleNumber,
-        type: 'partial_contribution_activated',
-      },
-      status: 'pending',
-    }));
-
-    const { error } = await supabase
-      .from('notification_queue')
-      .insert(notifications);
-
-    if (error) {
-      console.warn('[PartialContribution] Failed to notify admins:', error);
-    }
-  }
-
-  /**
-   * Request insurance pool coverage for the partial contribution shortfall.
-   */
-  private static async _requestInsuranceCoverage(
-    circleId: string,
-    contributionId: string,
-    shortfallAmount: number
-  ): Promise<void> {
-    // Insert a coverage claim into the insurance pool
-    const { data: pool } = await supabase
-      .from('circle_insurance_pools')
-      .select('id, balance_cents, status')
-      .eq('circle_id', circleId)
-      .eq('status', 'active')
-      .single();
-
-    if (!pool) {
-      console.warn('[PartialContribution] No active insurance pool for circle');
-      return;
-    }
-
-    const shortfallCents = Math.round(shortfallAmount * 100);
-
-    // Create coverage claim
-    const { error: claimErr } = await supabase
-      .from('insurance_coverage_claims')
-      .insert({
-        pool_id: pool.id,
-        circle_id: circleId,
-        claimant_contribution_id: contributionId,
-        claim_amount_cents: shortfallCents,
-        approved_amount_cents: Math.min(shortfallCents, pool.balance_cents),
-        claim_type: 'partial_contribution',
-        status: 'approved',
-        reason: 'Automatic coverage for partial contribution shortfall',
-      });
-
-    if (claimErr) {
-      console.warn('[PartialContribution] Failed to create coverage claim:', claimErr);
-      return;
-    }
-
-    // Deduct from pool balance
-    const { error: deductErr } = await supabase
-      .from('circle_insurance_pools')
-      .update({
-        balance_cents: pool.balance_cents - Math.min(shortfallCents, pool.balance_cents),
-        total_paid_out_cents: (pool.total_paid_out_cents || 0) + Math.min(shortfallCents, pool.balance_cents),
-        total_claims: (pool.total_claims || 0) + 1,
-        approved_claims: (pool.approved_claims || 0) + 1,
-      })
-      .eq('id', pool.id);
-
-    if (deductErr) {
-      console.warn('[PartialContribution] Failed to deduct from pool:', deductErr);
-    }
-  }
+  // Bucket A: _notifyCircleAdmin and _requestInsuranceCoverage are deleted.
+  // Both lived inside the broken TS activate path and wrote to schemas they
+  // didn't match (insurance_coverage_claims requires default-coverage fields
+  // that don't exist for partial coverage; the notification_queue write
+  // duplicated work the activate_partial_contribution RPC now does
+  // server-side, and will be superseded by Bucket C's notify_partial_plan_*
+  // trigger).
 }

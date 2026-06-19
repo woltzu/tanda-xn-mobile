@@ -1,27 +1,27 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// PartialContributionScreen — Phase D2 of feat(partial)
+// PartialContributionScreen — Bucket A rewrite.
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Activation flow + tracking flow for the 50/25/25 partial-contribution plan.
+// Single-mode render: activation view when the user has no plan, tracking
+// view when they do. The Activation/Tracking toggle is gone (the eligibility
+// check blocks a second activation while one is active, so the toggle's
+// "go back to activation" mode was meaningless).
 //
-// Data sources after D2:
-//   * Preview     → preview_partial_contribution RPC      (migration 102)
-//   * Activate    → activate_partial_contribution RPC     (migration 102)
-//   * Active plan → useActivePlan hook (direct table read works against prod)
+// Data sources, all via hooks now (no direct supabase.rpc calls — those got
+// retired with the engine rewrite):
+//   * Preview     → usePreview                  → engine.preview()
+//                                                → preview_partial_contribution RPC
+//   * Activate    → usePartialContributionActions.activatePartialContribution
+//                                                → engine.activate()
+//                                                → activate_partial_contribution RPC
+//   * Active plan → useActivePlan               (realtime via engine subscription)
 //
-// The hook layer that wraps the broken TS engine (useActivationSummary,
-// usePartialContributionActions.activatePartialContribution) is bypassed —
-// those go through methods that hit the column-name and schema bugs flagged
-// in the migration 102 header. The hook surface for the tracking view
-// (useActivePlan) stays as-is because it's a clean direct query on
-// partial_contribution_plans.
-//
-// Route param `cycleId` is optional: when not provided (e.g. when the user
-// arrives from MakeContributionScreen which doesn't know real cycle UUIDs)
-// the screen resolves the active cycle from circle_cycles on mount.
+// Cycle resolution: when navigator doesn't pass a cycleId, the first
+// scheduled/collecting cycle is fetched on mount. The error message is now
+// i18n'd (was a hardcoded English string).
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -37,7 +37,11 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
-import { useActivePlan } from "../hooks/usePartialContribution";
+import {
+  useActivePlan,
+  usePreview,
+  usePartialContributionActions,
+} from "../hooks/usePartialContribution";
 
 const COLORS = {
   navy: "#0A2342",
@@ -54,44 +58,9 @@ const COLORS = {
 
 type RouteParams = { circleId: string; cycleId?: string };
 
-interface PreviewSummary {
-  current_contribution_id: string;
-  original_amount_cents: number;
-  pay_now_cents: number;
-  catch_up_1_cents: number;
-  catch_up_1_due: string;
-  catch_up_1_cycle_number: number;
-  catch_up_2_cents: number;
-  catch_up_2_due: string;
-  catch_up_2_cycle_number: number;
-  regular_contribution_cents: number;
-  total_next_cycle_cents: number;
-  total_cycle_after_cents: number;
-}
-
-interface PreviewEligibility {
-  eligible: boolean;
-  reason: string | null;
-  uses_this_year: number;
-  fee_required: boolean;
-  fee_cents: number;
-}
-
-interface PreviewCoverage {
-  pool_id: string | null;
-  pool_balance_cents: number;
-  shortfall_cents: number;
-  approved_cents: number;
-  coverage_status: "covered_full" | "covered_partial" | "no_balance" | "no_pool";
-}
-
-interface PreviewResult {
-  success: boolean;
-  eligibility: PreviewEligibility;
-  summary?: PreviewSummary;
-  coverage_preview?: PreviewCoverage;
-  error?: string;
-}
+// Bucket A: PreviewResult / PreviewEligibility / PreviewSummary /
+// PreviewCoverage moved to PartialContributionEngine as
+// PartialPreviewResult etc. The screen now reads them via usePreview().
 
 const formatCents = (c: number) => `$${(c / 100).toFixed(2)}`;
 
@@ -104,8 +73,6 @@ export default function PartialContributionScreen() {
   const { circleId, cycleId: paramCycleId } =
     route.params ?? ({} as RouteParams);
   const { user } = useAuth();
-
-  const [viewMode, setViewMode] = useState<"activation" | "tracking">("activation");
 
   // ── Cycle resolution ─────────────────────────────────────────────────────
   // If the navigator didn't pass a cycleId, look up the active cycle.
@@ -134,7 +101,8 @@ export default function PartialContributionScreen() {
       if (error) {
         setCycleError(error.message);
       } else if (!data) {
-        setCycleError("This circle has no active cycle to activate flexible payment for.");
+        // Bucket A — was hardcoded English at this site.
+        setCycleError(t("partial_contribution.error_no_active_cycle"));
       } else {
         setResolvedCycleId(data.id);
       }
@@ -142,39 +110,22 @@ export default function PartialContributionScreen() {
     return () => {
       cancelled = true;
     };
-  }, [circleId, paramCycleId]);
+  }, [circleId, paramCycleId, t]);
 
-  // ── Preview (eligibility + summary + coverage) ───────────────────────────
-  const [preview, setPreview] = useState<PreviewResult | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(true);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  // ── Preview (eligibility + summary + coverage) via the engine wrapper ────
+  const {
+    preview,
+    eligibility,
+    summary,
+    coverage,
+    catchUpDates,
+    loading: previewLoading,
+    error: previewError,
+    refetch: fetchPreview,
+  } = usePreview(circleId, resolvedCycleId);
+  void preview; // captured for future telemetry; lint-friendly placeholder.
 
-  const fetchPreview = useCallback(async () => {
-    if (!user?.id || !resolvedCycleId) return;
-    setPreviewLoading(true);
-    setPreviewError(null);
-    try {
-      const { data, error } = await supabase.rpc("preview_partial_contribution", {
-        p_circle_id: circleId,
-        p_cycle_id: resolvedCycleId,
-      });
-      if (error) {
-        setPreviewError(error.message);
-        return;
-      }
-      setPreview(data as PreviewResult);
-    } catch (err: any) {
-      setPreviewError(err?.message ?? "Could not load preview");
-    } finally {
-      setPreviewLoading(false);
-    }
-  }, [circleId, resolvedCycleId, user?.id]);
-
-  useEffect(() => {
-    fetchPreview();
-  }, [fetchPreview]);
-
-  // ── Tracking (active plan from hook — direct table read works) ───────────
+  // ── Tracking (active plan + realtime via the existing hook) ──────────────
   const {
     plan,
     loading: planLoading,
@@ -184,40 +135,20 @@ export default function PartialContributionScreen() {
     refetch: refetchPlan,
   } = useActivePlan(user?.id, circleId);
 
-  // Auto-flip to tracking when we detect an active plan (e.g. after activate)
-  useEffect(() => {
-    if (hasPlan && viewMode === "activation") {
-      setViewMode("tracking");
-    }
-  }, [hasPlan, viewMode]);
-
-  // ── Activate action ──────────────────────────────────────────────────────
-  const [activating, setActivating] = useState(false);
+  // ── Activate action via the engine wrapper ───────────────────────────────
+  const { activatePartialContribution, activating } =
+    usePartialContributionActions();
   const handleActivate = async () => {
     if (!resolvedCycleId) return;
-    setActivating(true);
-    try {
-      const { data, error } = await supabase.rpc("activate_partial_contribution", {
-        p_circle_id: circleId,
-        p_cycle_id: resolvedCycleId,
-      });
-      if (error) {
-        Alert.alert(t("partial_contribution.alert_could_not_activate"), error.message);
-        return;
-      }
-      const result = data as { success: boolean; error?: string; plan_id?: string };
-      if (!result.success) {
-        Alert.alert(t("partial_contribution.alert_could_not_activate"), result.error ?? t("partial_contribution.alert_unknown_error"));
-        return;
-      }
-      // Refresh both preview (eligibility now blocks) and the active plan
-      await Promise.all([fetchPreview(), refetchPlan()]);
-      setViewMode("tracking");
-    } catch (err: any) {
-      Alert.alert(t("partial_contribution.alert_could_not_activate"), err?.message ?? t("partial_contribution.alert_unknown_error"));
-    } finally {
-      setActivating(false);
+    const result = await activatePartialContribution(circleId, resolvedCycleId);
+    if (!result.success) {
+      Alert.alert(
+        t("partial_contribution.alert_could_not_activate"),
+        result.error ?? t("partial_contribution.alert_unknown_error"),
+      );
+      return;
     }
+    await Promise.all([fetchPreview(), refetchPlan()]);
   };
 
   // ── Cancel action (still uses the hook — engine cancelPlan is a clean
@@ -226,12 +157,12 @@ export default function PartialContributionScreen() {
   const handleCancel = () => {
     if (!plan?.id) return;
     Alert.alert(
-      "Cancel Plan",
-      "Are you sure you want to cancel and pay the remaining amount now?",
+      t("partial_contribution.cancel_alert_title"),
+      t("partial_contribution.cancel_alert_body"),
       [
-        { text: "No", style: "cancel" },
+        { text: t("partial_contribution.no_button"), style: "cancel" },
         {
-          text: "Yes, Cancel",
+          text: t("partial_contribution.cancel_button"),
           style: "destructive",
           onPress: async () => {
             setCancelling(true);
@@ -247,8 +178,9 @@ export default function PartialContributionScreen() {
                 Alert.alert(t("partial_contribution.alert_could_not_cancel"), error.message);
                 return;
               }
+              // Bucket A: viewMode dropped — the screen auto-flips back to
+              // activation once hasPlan turns false from refetchPlan().
               await Promise.all([fetchPreview(), refetchPlan()]);
-              setViewMode("activation");
             } finally {
               setCancelling(false);
             }
@@ -268,27 +200,13 @@ export default function PartialContributionScreen() {
 
   // ── Derived UI state ─────────────────────────────────────────────────────
   const loading = previewLoading || planLoading;
-  const showTracking = viewMode === "tracking" && hasPlan;
+  // Bucket A — drop showTracking + viewMode toggle. The two views are
+  // mutually exclusive: render tracking when a plan exists, activation when
+  // it doesn't. The previous toggle was always auto-flipped to tracking on
+  // hasPlan anyway (eligibility blocks a second activation).
+  const showTracking = hasPlan;
 
-  const eligibility = preview?.eligibility;
-  const summary = preview?.summary;
-  const coverage = preview?.coverage_preview;
-
-  const catchUpDates = useMemo(() => {
-    if (!summary) return [];
-    return [
-      {
-        cycleNumber: summary.catch_up_1_cycle_number,
-        date: summary.catch_up_1_due,
-        amountCents: summary.catch_up_1_cents,
-      },
-      {
-        cycleNumber: summary.catch_up_2_cycle_number,
-        date: summary.catch_up_2_due,
-        amountCents: summary.catch_up_2_cents,
-      },
-    ];
-  }, [summary]);
+  // eligibility / summary / coverage / catchUpDates now come from usePreview.
 
   // ── Renderers ────────────────────────────────────────────────────────────
 
@@ -339,45 +257,8 @@ export default function PartialContributionScreen() {
           />
         }
       >
-        {/* View toggle */}
-        <View style={styles.toggleContainer}>
-          <View style={styles.toggleWrapper}>
-            <TouchableOpacity
-              style={[
-                styles.toggleBtn,
-                viewMode === "activation" && styles.toggleBtnActive,
-              ]}
-              onPress={() => setViewMode("activation")}
-            >
-              <Text
-                style={[
-                  styles.toggleText,
-                  viewMode === "activation" && styles.toggleTextActive,
-                ]}
-              >
-                Activation
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.toggleBtn,
-                viewMode === "tracking" && styles.toggleBtnActive,
-              ]}
-              onPress={() => setViewMode("tracking")}
-              disabled={!hasPlan}
-            >
-              <Text
-                style={[
-                  styles.toggleText,
-                  viewMode === "tracking" && styles.toggleTextActive,
-                  !hasPlan && { opacity: 0.4 },
-                ]}
-              >
-                Tracking
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        {/* Bucket A: the Activation/Tracking toggle is gone. The page
+            chooses based on hasPlan — see `showTracking` above. */}
 
         {previewError && (
           <View style={styles.errorBanner}>
@@ -396,8 +277,7 @@ export default function PartialContributionScreen() {
                 </View>
                 <Text style={styles.heroTitle}>{t("partial_contribution.hero_title")}</Text>
                 <Text style={styles.heroSubtitle}>
-                  Pay 50% now and split the rest over the next 2 cycles. No
-                  penalty to your XnScore.
+                  {t("partial_contribution.hero_subtitle")}
                 </Text>
               </View>
             </View>
@@ -413,12 +293,16 @@ export default function PartialContributionScreen() {
                   />
                   <View style={styles.eligibilityText}>
                     <Text style={styles.eligibilityTitle}>
-                      {eligibility.eligible ? "You're Eligible" : "Not Available"}
+                      {eligibility.eligible
+                        ? t("partial_contribution.eligible")
+                        : t("partial_contribution.not_available")}
                     </Text>
                     <Text style={styles.mutedText}>
                       {eligibility.uses_this_year === 0
-                        ? "First use this year — no fee"
-                        : `Used ${eligibility.uses_this_year}× in the last 12 months — $10 fee applies`}
+                        ? t("partial_contribution.first_use_free")
+                        : t("partial_contribution.fee_applies", {
+                            count: eligibility.uses_this_year,
+                          })}
                     </Text>
                     {!eligibility.eligible && eligibility.reason ? (
                       <Text style={[styles.mutedText, { color: COLORS.red }]}>
@@ -439,7 +323,9 @@ export default function PartialContributionScreen() {
                   <View style={styles.breakdownLeft}>
                     <View style={[styles.dot, { backgroundColor: COLORS.teal }]} />
                     <View>
-                      <Text style={styles.breakdownLabel}>Pay Now (50%)</Text>
+                      <Text style={styles.breakdownLabel}>
+                        {t("partial_contribution.pay_now")}
+                      </Text>
                       <Text style={styles.mutedText}>{t("partial_contribution.due_today")}</Text>
                     </View>
                   </View>
@@ -459,10 +345,15 @@ export default function PartialContributionScreen() {
                       />
                       <View>
                         <Text style={styles.breakdownLabel}>
-                          Catch-Up {i + 1} (25%)
+                          {i === 0
+                            ? t("partial_contribution.catch_up_1")
+                            : t("partial_contribution.catch_up_2")}
                         </Text>
                         <Text style={styles.mutedText}>
-                          Cycle {catchUp.cycleNumber} — {catchUp.date}
+                          {t("partial_contribution.catch_up_cycle_date", {
+                            cycle: catchUp.cycleNumber,
+                            date: catchUp.date,
+                          })}
                         </Text>
                       </View>
                     </View>
@@ -489,28 +380,20 @@ export default function PartialContributionScreen() {
 
             {/* What happens */}
             <View style={styles.card}>
-              <Text style={styles.sectionTitle}>{t("partial_contribution.section_what_happens")}</Text>
+              <Text style={styles.sectionTitle}>
+                {t("partial_contribution.what_happens_title")}
+              </Text>
               {[
-                {
-                  icon: "shield-checkmark" as const,
-                  text: "Insurance pool covers the 50% shortfall — circle stays on track",
-                },
-                {
-                  icon: "star" as const,
-                  text: "No XnScore penalty if catch-up payments made on time",
-                },
-                {
-                  icon: "eye-off" as const,
-                  text: "Circle admin notified anonymously — your identity stays private",
-                },
-                {
-                  icon: "calendar" as const,
-                  text: "Catch-up amounts due in the next 2 cycles",
-                },
+                { icon: "shield-checkmark" as const, key: "bullet_1" },
+                { icon: "star" as const, key: "bullet_2" },
+                { icon: "eye-off" as const, key: "bullet_3" },
+                { icon: "calendar" as const, key: "bullet_4" },
               ].map((item, i) => (
                 <View key={i} style={styles.infoRow}>
                   <Ionicons name={item.icon} size={20} color={COLORS.green} />
-                  <Text style={styles.infoText}>{item.text}</Text>
+                  <Text style={styles.infoText}>
+                    {t(`partial_contribution.${item.key}`)}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -542,7 +425,7 @@ export default function PartialContributionScreen() {
                     ]}
                   >
                     {formatCents(coverage.approved_cents)}{" "}
-                    ({coverage.coverage_status.replace(/_/g, " ")})
+                    ({t(`partial_contribution.coverage_status_${coverage.coverage_status}`)})
                   </Text>
                 </View>
               </View>
@@ -553,7 +436,9 @@ export default function PartialContributionScreen() {
               <View style={styles.feeNotice}>
                 <Ionicons name="pricetag" size={20} color={COLORS.orange} />
                 <Text style={styles.feeText}>
-                  A ${(eligibility.fee_cents / 100).toFixed(2)} fee applies (2nd use this year)
+                  {t("partial_contribution.fee_notice", {
+                    amount: (eligibility.fee_cents / 100).toFixed(2),
+                  })}
                 </Text>
               </View>
             )}
@@ -572,8 +457,10 @@ export default function PartialContributionScreen() {
               ) : (
                 <Text style={styles.primaryButtonText}>
                   {summary
-                    ? `Activate Flexible Payment — Pay ${formatCents(summary.pay_now_cents)} Now`
-                    : "Activate Flexible Payment"}
+                    ? t("partial_contribution.activate_button", {
+                        amount: formatCents(summary.pay_now_cents),
+                      })
+                    : t("partial_contribution.activate_button_no_amount")}
                 </Text>
               )}
             </TouchableOpacity>
@@ -582,7 +469,9 @@ export default function PartialContributionScreen() {
               style={styles.secondaryButton}
               onPress={() => navigation.goBack()}
             >
-              <Text style={styles.secondaryButtonText}>{t("partial_contribution.btn_pay_full_instead")}</Text>
+              <Text style={styles.secondaryButtonText}>
+                {t("partial_contribution.pay_full_button")}
+              </Text>
             </TouchableOpacity>
           </>
         ) : (
@@ -594,7 +483,7 @@ export default function PartialContributionScreen() {
                     <Ionicons name="checkmark-circle" size={22} color={COLORS.teal} />
                   </View>
                   <Text style={[styles.planStatusText, { color: COLORS.teal }]}>
-                    Flexible Payment Active
+                    {t("partial_contribution.badge_active")}
                   </Text>
                 </View>
 
@@ -614,16 +503,21 @@ export default function PartialContributionScreen() {
                         { color: COLORS.teal, fontWeight: "600" },
                       ]}
                     >
-                      Paid: {catchUpProgress.paid}/{catchUpProgress.total}
+                      {t("partial_contribution.progress_paid", {
+                        paid: catchUpProgress.paid,
+                        total: catchUpProgress.total,
+                      })}
                     </Text>
                     <Text style={styles.mutedText}>
-                      Remaining: ${remainingAmount.toFixed(2)}
+                      {t("partial_contribution.progress_remaining", {
+                        amount: remainingAmount.toFixed(2),
+                      })}
                     </Text>
                   </View>
                 </View>
 
                 <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
-                  Catch-Up Schedule
+                  {t("partial_contribution.catch_up_schedule_title")}
                 </Text>
                 {plan.catchUpSchedule?.map((item: any, i: number) => (
                   <View key={i} style={styles.catchUpRow}>
@@ -660,7 +554,9 @@ export default function PartialContributionScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.catchUpLabel}>
-                        Cycle {item.cycleNumber}
+                        {t("partial_contribution.cycle_label", {
+                          cycle: item.cycleNumber,
+                        })}
                       </Text>
                       <Text style={styles.mutedText}>{item.dueDate}</Text>
                     </View>
@@ -680,7 +576,7 @@ export default function PartialContributionScreen() {
                         },
                       ]}
                     >
-                      {item.status}
+                      {t(`partial_contribution.item_status_${item.status}`)}
                     </Text>
                   </View>
                 ))}
@@ -696,7 +592,7 @@ export default function PartialContributionScreen() {
                 <ActivityIndicator color={COLORS.red} />
               ) : (
                 <Text style={styles.cancelButtonText}>
-                  Cancel Plan & Pay Remaining Now
+                  {t("partial_contribution.cancel_plan_button")}
                 </Text>
               )}
             </TouchableOpacity>

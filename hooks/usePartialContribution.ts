@@ -20,6 +20,12 @@ import {
   type EligibilityCheck,
   type PartialContributionSummary,
   type PartialActivationResult,
+  type PartialPreviewResult,
+  type PartialPreviewEligibility,
+  type PartialPreviewSummary,
+  type PartialPreviewCoverage,
+  type PartialActivateResult,
+  type CoverageStatus,
 } from '@/services/PartialContributionEngine';
 
 // Re-export all types for consumer convenience
@@ -32,6 +38,12 @@ export type {
   EligibilityCheck,
   PartialContributionSummary,
   PartialActivationResult,
+  PartialPreviewResult,
+  PartialPreviewEligibility,
+  PartialPreviewSummary,
+  PartialPreviewCoverage,
+  PartialActivateResult,
+  CoverageStatus,
 };
 
 
@@ -95,65 +107,122 @@ export function usePartialEligibility(
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// useActivationSummary — Preview data for the confirmation screen
+// usePreview — Bucket A
+// Wraps the working preview_partial_contribution RPC via engine.preview().
+// Replaces the dead useActivationSummary hook that routed through the broken
+// pre-migration-102 TS preview path.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export function useActivationSummary(
-  userId?: string,
-  circleId?: string,
-  cycleId?: string
-) {
-  const [summary, setSummary] = useState<PartialContributionSummary | null>(null);
+export function usePreview(circleId?: string, cycleId?: string | null) {
+  const [preview, setPreview] = useState<PartialPreviewResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchSummary = useCallback(async () => {
-    if (!userId || !circleId || !cycleId) {
-      setSummary(null);
+  const fetchPreview = useCallback(async () => {
+    if (!circleId || !cycleId) {
+      setPreview(null);
       setLoading(false);
       return;
     }
-
     try {
       setLoading(true);
       setError(null);
-      const result = await PartialContributionEngine.getActivationSummary(
-        userId, circleId, cycleId
-      );
-      setSummary(result);
+      const result = await PartialContributionEngine.preview(circleId, cycleId);
+      setPreview(result);
+      if (!result.success && result.error) {
+        setError(result.error);
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch activation summary');
+      setError(err?.message ?? 'Failed to fetch preview');
     } finally {
       setLoading(false);
     }
-  }, [userId, circleId, cycleId]);
+  }, [circleId, cycleId]);
+
+  useEffect(() => {
+    fetchPreview();
+  }, [fetchPreview]);
+
+  // Convenience accessors — keep call sites concise.
+  const eligibility = useMemo(() => preview?.eligibility ?? null, [preview]);
+  const summary = useMemo(() => preview?.summary ?? null, [preview]);
+  const coverage = useMemo(() => preview?.coverage_preview ?? null, [preview]);
+  const catchUpDates = useMemo(() => {
+    if (!summary) return [];
+    return [
+      {
+        cycleNumber: summary.catch_up_1_cycle_number,
+        date: summary.catch_up_1_due,
+        amountCents: summary.catch_up_1_cents,
+      },
+      {
+        cycleNumber: summary.catch_up_2_cycle_number,
+        date: summary.catch_up_2_due,
+        amountCents: summary.catch_up_2_cents,
+      },
+    ];
+  }, [summary]);
+
+  return {
+    preview,
+    eligibility,
+    summary,
+    coverage,
+    catchUpDates,
+    loading,
+    error,
+    refetch: fetchPreview,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// usePartialPlanSummary — Bucket A
+// Lightweight count of the current user's active partial-contribution plans
+// across all their circles. Drives the CirclesV2 status row. Subscribes to
+// the same realtime channel as useActivePlan so the row updates without a
+// manual refresh after activate / cancel.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export function usePartialPlanSummary(userId?: string) {
+  const [activeCount, setActiveCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  const fetchSummary = useCallback(async () => {
+    if (!userId) {
+      setActiveCount(0);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const { count } = await supabase
+        .from('partial_contribution_plans')
+        .select('id', { count: 'exact', head: true })
+        .eq('member_id', userId)
+        .eq('status', 'active');
+      setActiveCount(count ?? 0);
+    } catch {
+      setActiveCount(0);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
 
   useEffect(() => {
     fetchSummary();
   }, [fetchSummary]);
 
-  // Computed
-  const payNowAmount = useMemo(() => summary?.payNowAmount ?? 0, [summary]);
-  const totalNextCycle = useMemo(() => summary?.totalNextCycle ?? 0, [summary]);
-  const totalCycleAfter = useMemo(() => summary?.totalCycleAfter ?? 0, [summary]);
-  const catchUpDates = useMemo(() => {
-    if (!summary) return [];
-    return [
-      { date: summary.catchUp1Date, amount: summary.catchUp1Amount, cycleNumber: summary.catchUp1CycleNumber },
-      { date: summary.catchUp2Date, amount: summary.catchUp2Amount, cycleNumber: summary.catchUp2CycleNumber },
-    ];
-  }, [summary]);
+  useEffect(() => {
+    if (!userId) return;
+    const channel = PartialContributionEngine.subscribeToPlans(userId, () =>
+      fetchSummary(),
+    );
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, fetchSummary]);
 
-  return {
-    summary,
-    loading,
-    error,
-    refetch: fetchSummary,
-    payNowAmount,
-    totalNextCycle,
-    totalCycleAfter,
-    catchUpDates,
-  };
+  return { activeCount, loading, refresh: fetchSummary };
 }
 
 
@@ -310,20 +379,27 @@ export function usePartialContributionActions() {
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Activate the 50/25/25 plan for (circle, cycle).
+   *
+   * Bucket A — signature drops the `userId` param (the RPC infers caller
+   * from auth.uid()) and the return type drops from the unreliable
+   * client-built PartialActivationResult to the RPC's authoritative
+   * { success, plan_id?, error? } payload. Callers re-fetch the plan via
+   * useActivePlan after a success — that's the source of truth now.
+   */
   const activatePartialContribution = useCallback(async (
-    userId: string,
     circleId: string,
-    cycleId: string
-  ): Promise<PartialActivationResult | null> => {
+    cycleId: string,
+  ): Promise<PartialActivateResult> => {
     try {
       setActivating(true);
       setError(null);
-      return await PartialContributionEngine.activatePartialContribution(
-        userId, circleId, cycleId
-      );
-    } catch (err: any) {
-      setError(err.message || 'Failed to activate partial contribution');
-      return null;
+      const result = await PartialContributionEngine.activate(circleId, cycleId);
+      if (!result.success && result.error) {
+        setError(result.error);
+      }
+      return result;
     } finally {
       setActivating(false);
     }

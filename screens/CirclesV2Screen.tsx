@@ -44,6 +44,7 @@ import {
   usePoolEntry as useSubstitutePoolEntry,
   useSubstitutePoolSummary,
 } from "../hooks/useSubstituteMember";
+import { usePartialPlanSummary } from "../hooks/usePartialContribution";
 import { useAuth } from "../context/AuthContext";
 
 // ==========================================================================
@@ -102,12 +103,10 @@ const mockPayout = {
   total: 6,
 };
 
-type PartialRow = { id: string; name: string; initially_enabled: boolean };
-const mockPartial: PartialRow[] = [
-  { id: "fam", name: "Family Circle", initially_enabled: true },
-  { id: "biz", name: "Business Builders", initially_enabled: false },
-  { id: "fri", name: "Friends 2025", initially_enabled: false },
-];
+// Partial Contribution Bucket A: legacy mockPartial array deleted. The
+// feature is a global member-action triggered from a specific cycle's
+// contribution — not a per-circle setting. The card now shows the user's
+// real active-plan count via usePartialPlanSummary below.
 
 const mockSwap = {
   last_request_date: "Mar 5",
@@ -284,10 +283,12 @@ export default function CirclesV2Screen() {
   const handleOpenSubstitute = () => navigation.navigate(Routes.SubstitutePool);
   const handleOpenPayout = () =>
     navigation.navigate(Routes.DynamicPayout, { circleId: DEFAULT_CIRCLE_ID });
+  // Partial Contribution Bucket A: navigate with the user's first active
+  // circle id, not the mock DEFAULT_CIRCLE_ID. The screen resolves the
+  // active cycle on mount so cycleId can stay omitted.
   const handleOpenPartial = () =>
     navigation.navigate(Routes.PartialContribution, {
-      circleId: DEFAULT_CIRCLE_ID,
-      cycleId: DEFAULT_CYCLE_ID,
+      circleId: myCircles[0]?.id,
     });
   const handleOpenSwap = () =>
     navigation.navigate(Routes.PositionSwap, { circleId: DEFAULT_CIRCLE_ID });
@@ -368,16 +369,11 @@ export default function CirclesV2Screen() {
             ? "suspended"
             : "not_joined";
   void substituteInPool; // marked usable for future logic; silence lint.
-  // ---- Per-circle Partial Contribution toggles ----
-  const [partialEnabled, setPartialEnabled] = useState<Record<string, boolean>>(
-    () =>
-      mockPartial.reduce<Record<string, boolean>>((acc, row) => {
-        acc[row.id] = row.initially_enabled;
-        return acc;
-      }, {}),
-  );
-  const togglePartial = (id: string) =>
-    setPartialEnabled((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  // Partial Contribution Bucket A: replace the mock per-circle Switch state
+  // with a real active-plan count across all circles. Drives the FeatureCard
+  // status row + body line below.
+  const { activeCount: partialActiveCount } = usePartialPlanSummary(user?.id);
 
   // Every feature card now navigates to a real screen — no placeholder alerts.
 
@@ -820,55 +816,44 @@ export default function CirclesV2Screen() {
         />
 
         {/* ----- Partial Contribution ----- */}
+        {/* Bucket A: no per-circle toggles — partial contribution is a
+            member-action on a specific cycle, not a circle-level setting.
+            The card now surfaces the user's real active-plan count. */}
         <FeatureCard
           icon="pie-chart-outline"
           iconColor={colors.primaryNavy}
           title={t("circles_screen.partial_title")}
           description={t("circles_screen.partial_description")}
+          statusLabel={
+            partialActiveCount > 0
+              ? t("circles_screen.partial_status_active", {
+                  count: partialActiveCount,
+                })
+              : t("circles_screen.partial_status_none")
+          }
+          statusColor={
+            partialActiveCount > 0
+              ? colors.accentTeal
+              : colors.textSecondary
+          }
           ctaLabel={t("circles_screen.partial_cta")}
           ctaIcon="arrow-forward"
           onCta={handleOpenPartial}
         >
-          <Text style={styles.bodyLabel}>
-            {t("circles_screen.partial_per_circle_label")}
-          </Text>
-          {mockPartial.map((row, idx) => {
-            const enabled = partialEnabled[row.id];
-            return (
-              <View
-                key={row.id}
-                style={[
-                  styles.partialRow,
-                  idx === mockPartial.length - 1 && styles.partialRowLast,
-                ]}
-              >
-                <Text style={styles.partialName}>{row.name}</Text>
-                <Text
-                  style={[
-                    styles.partialStateLabel,
-                    {
-                      color: enabled
-                        ? colors.successText
-                        : colors.textSecondary,
-                    },
-                  ]}
-                >
-                  {enabled
-                    ? t("circles_screen.partial_enabled")
-                    : t("circles_screen.partial_disabled")}
-                </Text>
-                <Switch
-                  value={enabled}
-                  onValueChange={() => togglePartial(row.id)}
-                  trackColor={{
-                    false: colors.border,
-                    true: colors.accentTeal,
-                  }}
-                  thumbColor={colors.cardBg}
-                />
-              </View>
-            );
-          })}
+          <View style={styles.poolStatRow}>
+            <Ionicons
+              name="receipt-outline"
+              size={14}
+              color={colors.textSecondary}
+            />
+            <Text style={styles.poolStatLabel}>
+              {partialActiveCount > 0
+                ? t("circles_screen.partial_body_active", {
+                    count: partialActiveCount,
+                  })
+                : t("circles_screen.partial_body_idle")}
+            </Text>
+          </View>
         </FeatureCard>
 
         {/* ----- Position Swap ----- */}
