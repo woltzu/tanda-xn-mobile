@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,11 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Animated,
+  Modal,
+  Pressable,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -21,6 +25,17 @@ import {
 } from "../hooks/useInsurancePool";
 import { InsurancePoolEngine } from "../services/InsurancePoolEngine";
 import { useAuth } from "../context/AuthContext";
+
+// Bucket B (Migration 206 follow-up): four HelpSheet topics + AsyncStorage
+// key used to gate the first-visit coach mark. The key version suffix lets
+// us re-prompt every user if the copy shifts materially in the future.
+type HelpTopic =
+  | "withholding"
+  | "missed_payment"
+  | "money_back"
+  | "rate_factors";
+
+const POOL_COACH_KEY = "@tandaxn_insurance_pool_coach_seen_v1";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -134,6 +149,12 @@ export default function InsurancePoolScreen() {
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [optInBusy, setOptInBusy] = useState(false);
 
+  // Bucket B — HelpSheet topic (null when closed) + tappable rate explainer
+  // sheet (independent of HelpSheet so the user can drill into rate
+  // factors directly from the stat card).
+  const [helpTopic, setHelpTopic] = useState<HelpTopic | null>(null);
+  const [rateExplainerOpen, setRateExplainerOpen] = useState(false);
+
   // Real hooks
   const {
     pool,
@@ -153,9 +174,14 @@ export default function InsurancePoolScreen() {
   const {
     currentRate,
     rateFormatted: rateDisplayFormatted,
+    rateHistory,
     loading: rateLoading,
     refetch: refetchRate,
   } = usePoolRate(circleId);
+  // Bucket B — most recent rate-history row drives the factor breakdown in
+  // the RateExplainerSheet. usePoolRate orders by effective_from DESC, so
+  // history[0] is the latest snapshot.
+  const latestRateFactors = rateHistory[0] ?? null;
 
   const {
     members,
@@ -217,6 +243,23 @@ export default function InsurancePoolScreen() {
     return mine.length > 0 ? Math.abs(mine[0].amountCents) : 0;
   }, [premiumTransactions, currentUserId]);
 
+  // Bucket B — per-user contributions card: lifetime total + count of
+  // distinct cycles the user has paid into. Cycle count via Set on
+  // cycleId. Excludes null cycleId so a NULL value (older txns without
+  // a cycle pointer) doesn't inflate the count to "1".
+  const myContributions = useMemo(() => {
+    if (!currentUserId) {
+      return { totalCents: 0, cycleCount: 0 };
+    }
+    const mine = premiumTransactions.filter((tx) => tx.userId === currentUserId);
+    const totalCents = mine.reduce((acc, tx) => acc + Math.abs(tx.amountCents), 0);
+    const cycles = new Set<string>();
+    for (const tx of mine) {
+      if (tx.cycleId) cycles.add(tx.cycleId);
+    }
+    return { totalCents, cycleCount: cycles.size };
+  }, [premiumTransactions, currentUserId]);
+
   const myMember = useMemo(
     () => members.find((m) => m.userId === currentUserId) ?? null,
     [members, currentUserId],
@@ -241,6 +284,44 @@ export default function InsurancePoolScreen() {
     }
     refetchMembers();
   }, [circleId, currentUserId, myMember, refetchMembers, t]);
+
+  // Bucket B — first-visit coach mark. AsyncStorage-gated so it shows once
+  // per device/install. Fades in on mount, auto-dismisses after 4s, or
+  // dismisses on tap. Pattern mirrors PositionSwapScreen's tabCoach.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachOpacity = useRef(new Animated.Value(0)).current;
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    coachCheckedRef.current = true;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(POOL_COACH_KEY);
+        if (seen) return;
+        setCoachVisible(true);
+        Animated.timing(coachOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+      } catch {
+        // AsyncStorage unavailable → silently skip the coach.
+      }
+    })();
+  }, [coachOpacity]);
+  const dismissCoach = useCallback(() => {
+    Animated.timing(coachOpacity, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setCoachVisible(false));
+    AsyncStorage.setItem(POOL_COACH_KEY, "1").catch(() => undefined);
+  }, [coachOpacity]);
+  useEffect(() => {
+    if (!coachVisible) return;
+    const tid = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(tid);
+  }, [coachVisible, dismissCoach]);
 
   // ─── Loading State ───────────────────────────────────────────────────────
 
@@ -281,7 +362,14 @@ export default function InsurancePoolScreen() {
             <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("screen_headers.insurance_pool")}</Text>
-          <TouchableOpacity style={styles.headerButton}>
+          {/* Bucket B — wire the previously-dead info button to the
+              HelpSheet, opening to the "How withholding works" topic. */}
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => setHelpTopic("withholding")}
+            accessibilityRole="button"
+            accessibilityLabel={t("insurance_pool.help_open")}
+          >
             <Ionicons name="information-circle-outline" size={22} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
@@ -333,12 +421,27 @@ export default function InsurancePoolScreen() {
           </View>
 
           {/* Quick Stats — Bucket A fix: "your premium" is now the user's
-              most recent withholding txn, not balance × rate. */}
+              most recent withholding txn, not balance × rate. Bucket B
+              makes the rate stat tappable so the user can drill into the
+              factors that set it. */}
           <View style={styles.statsRow}>
-            <View style={styles.statBlock}>
-              <Text style={styles.statValue}>{rateDisplayFormatted}</Text>
+            <TouchableOpacity
+              style={styles.statBlock}
+              onPress={() => setRateExplainerOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t("insurance_pool.rate_explainer_open")}
+            >
+              <View style={styles.statValueRow}>
+                <Text style={styles.statValue}>{rateDisplayFormatted}</Text>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={12}
+                  color={COLORS.muted}
+                  style={{ marginLeft: 3 }}
+                />
+              </View>
               <Text style={styles.statLabel}>{t("insurance_pool.stat_premium_rate")}</Text>
-            </View>
+            </TouchableOpacity>
             <View style={styles.statDivider} />
             <View style={styles.statBlock}>
               <Text style={styles.statValue}>
@@ -355,6 +458,32 @@ export default function InsurancePoolScreen() {
             </View>
           </View>
         </View>
+
+        {/* Bucket B — per-user contributions card. Always renders (even
+            with $0 / 0 cycles) so the user understands what the pool
+            costs them and what they get back. */}
+        {currentUserId && (
+          <View style={[styles.card, styles.yourContribCard]}>
+            <View style={styles.yourContribHeader}>
+              <Ionicons name="wallet-outline" size={18} color={COLORS.teal} />
+              <Text style={styles.yourContribTitle}>
+                {t("insurance_pool.your_contrib_title")}
+              </Text>
+            </View>
+            <Text style={styles.yourContribAmount}>
+              {formatCents(myContributions.totalCents)}
+            </Text>
+            <Text style={styles.yourContribSub}>
+              {t("insurance_pool.your_total_contributions", {
+                amount: formatCents(myContributions.totalCents),
+                cycles: myContributions.cycleCount,
+              })}
+            </Text>
+            <Text style={styles.yourContribHint}>
+              {t("insurance_pool.rollover_hint")}
+            </Text>
+          </View>
+        )}
 
         {/* Tab Selector */}
         <View style={styles.tabRow}>
@@ -649,9 +778,293 @@ export default function InsurancePoolScreen() {
         {/* Bottom spacer */}
         <View style={{ height: 32 }} />
       </ScrollView>
+
+      {/* Bucket B — sheets and coach mark, mounted outside ScrollView so
+          they overlay the entire screen. */}
+      <HelpSheet topic={helpTopic} onClose={() => setHelpTopic(null)} />
+      <RateExplainerSheet
+        visible={rateExplainerOpen}
+        onClose={() => setRateExplainerOpen(false)}
+        currentRate={currentRate}
+        factors={latestRateFactors}
+      />
+
+      {coachVisible && (
+        <Animated.View
+          style={[styles.coachOverlay, { opacity: coachOpacity }]}
+          pointerEvents="box-none"
+        >
+          <Pressable
+            style={styles.coachCard}
+            onPress={dismissCoach}
+            accessibilityRole="button"
+          >
+            <Ionicons name="shield-checkmark" size={20} color={COLORS.teal} />
+            <Text style={styles.coachText}>
+              {t("insurance_pool.coach_tip")}
+            </Text>
+          </Pressable>
+        </Animated.View>
+      )}
     </View>
   );
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HelpSheet — Modal-based glossary, opened by tapping the header (?) button.
+// Reads insurance_pool.help_<topic>_{title,body}. Mirrors the CircleHealth
+// Bucket B HelpSheet pattern.
+// ══════════════════════════════════════════════════════════════════════════════
+function HelpSheet({
+  topic,
+  onClose,
+}: {
+  topic: HelpTopic | null;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const visible = topic != null;
+  // Render all four topics in a single scrollable sheet — the (?) button
+  // is the only entry point so there's no need for per-topic deep links.
+  const topics: HelpTopic[] = [
+    "withholding",
+    "missed_payment",
+    "money_back",
+    "rate_factors",
+  ];
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>
+            {t("insurance_pool.help_sheet_title")}
+          </Text>
+          <ScrollView style={{ maxHeight: 400 }}>
+            {topics.map((topicKey, idx) => (
+              <View
+                key={topicKey}
+                style={[
+                  sheetStyles.helpItem,
+                  idx === topics.length - 1 && sheetStyles.helpItemLast,
+                ]}
+              >
+                <Text style={sheetStyles.helpItemTitle}>
+                  {t(`insurance_pool.help_${topicKey}_title`)}
+                </Text>
+                <Text style={sheetStyles.body}>
+                  {t(`insurance_pool.help_${topicKey}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+          <TouchableOpacity
+            style={sheetStyles.closeBtn}
+            onPress={onClose}
+            accessibilityRole="button"
+          >
+            <Text style={sheetStyles.closeBtnText}>
+              {t("insurance_pool.help_close")}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RateExplainerSheet — opens from the rate stat tile. Shows the latest rate
+// + factor breakdown read from insurance_pool_rate_history (avg/min member
+// XnScore, members below fair, default history factor).
+// ══════════════════════════════════════════════════════════════════════════════
+function RateExplainerSheet({
+  visible,
+  onClose,
+  currentRate,
+  factors,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  currentRate: number;
+  factors: {
+    avgMemberScore: number | null;
+    minMemberScore: number | null;
+    membersBelowFair: number;
+    defaultHistoryFactor: number | null;
+  } | null;
+}) {
+  const { t } = useTranslation();
+  const fmtScore = (v: number | null) =>
+    v == null ? "—" : Math.round(v).toString();
+  const fmtFactor = (v: number | null) =>
+    v == null ? "—" : `${(v * 100).toFixed(2)}%`;
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>
+            {t("insurance_pool.rate_explainer_title")}
+          </Text>
+          <Text style={sheetStyles.body}>
+            {t("insurance_pool.rate_explainer_current_rate", {
+              rate: (currentRate * 100).toFixed(2),
+            })}
+          </Text>
+
+          <Text style={sheetStyles.sectionLabel}>
+            {t("insurance_pool.rate_explainer_factors")}
+          </Text>
+          <View style={sheetStyles.factorRow}>
+            <Text style={sheetStyles.factorLabel}>
+              {t("insurance_pool.factor_avg_score")}
+            </Text>
+            <Text style={sheetStyles.factorValue}>
+              {fmtScore(factors?.avgMemberScore ?? null)}
+            </Text>
+          </View>
+          <View style={sheetStyles.factorRow}>
+            <Text style={sheetStyles.factorLabel}>
+              {t("insurance_pool.factor_min_score")}
+            </Text>
+            <Text style={sheetStyles.factorValue}>
+              {fmtScore(factors?.minMemberScore ?? null)}
+            </Text>
+          </View>
+          <View style={sheetStyles.factorRow}>
+            <Text style={sheetStyles.factorLabel}>
+              {t("insurance_pool.factor_members_at_risk")}
+            </Text>
+            <Text style={sheetStyles.factorValue}>
+              {factors?.membersBelowFair ?? "—"}
+            </Text>
+          </View>
+          <View style={sheetStyles.factorRow}>
+            <Text style={sheetStyles.factorLabel}>
+              {t("insurance_pool.factor_default_history")}
+            </Text>
+            <Text style={sheetStyles.factorValue}>
+              {fmtFactor(factors?.defaultHistoryFactor ?? null)}
+            </Text>
+          </View>
+
+          <Text style={sheetStyles.sectionLabel}>
+            {t("insurance_pool.rate_explainer_why_label")}
+          </Text>
+          <Text style={sheetStyles.body}>
+            {t("insurance_pool.rate_explainer_description")}
+          </Text>
+
+          <TouchableOpacity
+            style={sheetStyles.closeBtn}
+            onPress={onClose}
+            accessibilityRole="button"
+          >
+            <Text style={sheetStyles.closeBtnText}>
+              {t("insurance_pool.help_close")}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const sheetStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: COLORS.card,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: COLORS.border,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: COLORS.navy,
+    marginBottom: 12,
+  },
+  body: {
+    fontSize: 13,
+    color: COLORS.navy,
+    lineHeight: 19,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    color: COLORS.muted,
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  factorRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  factorLabel: {
+    fontSize: 13,
+    color: COLORS.muted,
+    fontWeight: "500",
+  },
+  factorValue: {
+    fontSize: 14,
+    color: COLORS.navy,
+    fontWeight: "700",
+  },
+  helpItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  helpItemLast: { borderBottomWidth: 0 },
+  helpItemTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: COLORS.navy,
+    marginBottom: 4,
+  },
+  closeBtn: {
+    backgroundColor: COLORS.navy,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  closeBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+});
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
@@ -1004,6 +1417,76 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: COLORS.muted,
+  },
+
+  // Bucket B — per-user contributions card
+  yourContribCard: {
+    marginTop: 12,
+    borderColor: COLORS.teal,
+    borderWidth: 1,
+  },
+  yourContribHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  yourContribTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    color: COLORS.navy,
+  },
+  yourContribAmount: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: COLORS.navy,
+    marginBottom: 4,
+  },
+  yourContribSub: {
+    fontSize: 13,
+    color: COLORS.navy,
+    marginBottom: 4,
+  },
+  yourContribHint: {
+    fontSize: 12,
+    color: COLORS.muted,
+    fontStyle: "italic",
+  },
+
+  // Bucket B — rate stat (tappable) layout
+  statValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  // Bucket B — first-visit coach overlay
+  coachOverlay: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 24,
+  },
+  coachCard: {
+    backgroundColor: COLORS.navy,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  coachText: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 13,
+    lineHeight: 18,
   },
 
   // Members section (Bucket A)
