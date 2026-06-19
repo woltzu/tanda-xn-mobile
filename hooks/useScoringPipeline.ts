@@ -134,9 +134,14 @@ export function useDefaultProbabilityHistory(userId?: string, days: number = 90)
 // └─────────────────────────────────────────────────────────────────────────────┘
 
 /**
- * Hook to get a circle's health score.
+ * Hook to get a circle's health score via the ScoringPipelineService.
+ *
+ * NOTE: The canonical Phase-D3 hook lives in hooks/useCircleHealth.ts and
+ * owns the bare `useCircleHealth` name. This one is the
+ * ScoringPipelineService-shaped variant (CircleHealthScore type, not the
+ * coerced row shape) and is retained for the scoring dashboards.
  */
-export function useCircleHealth(circleId: string | null) {
+export function useCircleHealthScoring(circleId: string | null) {
   const [health, setHealth] = useState<CircleHealthScore | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -186,8 +191,13 @@ export function useCircleHealth(circleId: string | null) {
 
 /**
  * Hook to get circle health history for trend analysis.
+ *
+ * See note on useCircleHealthScoring above for the rename rationale.
  */
-export function useCircleHealthHistory(circleId: string | null, days: number = 90) {
+export function useCircleHealthScoringHistory(
+  circleId: string | null,
+  days: number = 90,
+) {
   const [history, setHistory] = useState<CircleHealthHistory[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

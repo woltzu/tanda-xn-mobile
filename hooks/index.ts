@@ -421,8 +421,8 @@ export {
 export {
   useDefaultProbability,
   useDefaultProbabilityHistory,
-  useCircleHealth,
-  useCircleHealthHistory,
+  useCircleHealthScoring,
+  useCircleHealthScoringHistory,
   useScoreAlerts,
   useMyAlerts,
   useCircleAlerts,

@@ -1,15 +1,28 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// screens/CircleHealthScreen.tsx — deep-dive for the CirclesV2 Health card.
+// screens/CircleHealthScreen.tsx — Circle Health surface (Bucket A revival).
 // ══════════════════════════════════════════════════════════════════════════════
 //
-// Shows the same three circles as CirclesV2's Circle Health summary, expanded
-// with the three real health metrics: default rate, payout speed (days from
-// cycle close to payout), and active-member ratio.
+// Two modes driven by route.params.circleId:
 //
-// Mock data only — replace with the real circle-health query when available.
+//   * Chooser (no circleId)   — lists the user's circles with status pill
+//                               + score pulled from circle_health_scores in
+//                               a single bulk SELECT. Tapping a row navigates
+//                               here again with the circleId param.
+//
+//   * Detail  (circleId set)  — wires to useCircleHealth(circleId), the same
+//                               hook that powers CircleDetail's Health card.
+//                               Renders: status pill, score gauge, 4 component
+//                               scores, 5 real metrics, trend chip, last
+//                               computed timestamp, "Refresh now" button that
+//                               calls the recompute_circle_health RPC.
+//
+// The earlier mock-data implementation invented metric names that did not
+// exist in the schema (`payout_speed_days`, `active_ratio_pct`). Those are
+// gone — the only metrics rendered here are the ones the nightly scoring
+// pipeline actually writes.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -18,81 +31,109 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTranslation } from "react-i18next";
+import { useRoute } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { Routes } from "../lib/routes";
 import { colors } from "../theme/tokens";
+import { supabase } from "../lib/supabase";
+import { useCircles } from "../context/CirclesContext";
+import {
+  useCircleHealth,
+  STATUS_VISUALS,
+  TREND_VISUALS,
+  HealthStatus,
+} from "../hooks/useCircleHealth";
 
-type CircleHealthRow = {
-  id: string;
-  name: string;
-  score: number;
-  default_rate_pct: number;
-  payout_speed_days: number;
-  active_ratio_pct: number;
+// ─── Chooser-row shape (just what the row needs, not full coercion) ─────────
+type ChooserHealth = {
+  health_score: number;
+  health_status: HealthStatus;
 };
 
-const mockHealth: CircleHealthRow[] = [
-  {
-    id: "fam",
-    name: "Family Circle",
-    score: 92,
-    default_rate_pct: 0,
-    payout_speed_days: 1,
-    active_ratio_pct: 100,
-  },
-  {
-    id: "biz",
-    name: "Business Builders",
-    score: 78,
-    default_rate_pct: 4,
-    payout_speed_days: 3,
-    active_ratio_pct: 80,
-  },
-  {
-    id: "fri",
-    name: "Friends 2025",
-    score: 55,
-    default_rate_pct: 12,
-    payout_speed_days: 7,
-    active_ratio_pct: 50,
-  },
-];
-
-function scoreColor(score: number): string {
-  if (score >= 80) return colors.accentTeal;
-  if (score >= 60) return colors.warningAmber;
-  return colors.errorText;
+// ─── Relative-time helper (no extra dep — date-fns isn't already imported) ──
+function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "—";
+  const seconds = Math.round((Date.now() - then) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
 }
 
-function statusTagKey(score: number): string {
-  if (score >= 80) return "circle_health_screen.tag_healthy";
-  if (score >= 60) return "circle_health_screen.tag_watch";
-  return "circle_health_screen.tag_at_risk";
-}
-
+// ══════════════════════════════════════════════════════════════════════════════
+// Top-level screen — picks Chooser or Detail based on route.params.circleId.
+// ══════════════════════════════════════════════════════════════════════════════
 export default function CircleHealthScreen() {
+  const route = useRoute<any>();
+  const circleId: string | undefined = route.params?.circleId;
+  return circleId ? <DetailView circleId={circleId} /> : <ChooserView />;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ChooserView — bulk SELECT of circle_health_scores for the user's circles.
+// ══════════════════════════════════════════════════════════════════════════════
+function ChooserView() {
   const { t } = useTranslation();
   const navigation = useTypedNavigation();
+  const { myCircles, isLoading: circlesLoading } = useCircles();
 
-  // Average of the 3 circles for the "OVERALL HEALTH" tile.
-  const overall = Math.round(
-    mockHealth.reduce((a, r) => a + r.score, 0) / mockHealth.length,
-  );
-  const overallColor = scoreColor(overall);
+  const [healthMap, setHealthMap] = useState<Record<string, ChooserHealth>>({});
+  const [loading, setLoading] = useState(false);
+
+  const ids = useMemo(() => myCircles.map((c) => c.id), [myCircles]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (ids.length === 0) {
+      setHealthMap({});
+      return;
+    }
+    setLoading(true);
+    supabase
+      .from("circle_health_scores")
+      .select("circle_id, health_score, health_status")
+      .in("circle_id", ids)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error || !data) {
+          setHealthMap({});
+        } else {
+          const map: Record<string, ChooserHealth> = {};
+          for (const row of data) {
+            map[row.circle_id] = {
+              health_score: Number(row.health_score),
+              health_status: row.health_status as HealthStatus,
+            };
+          }
+          setHealthMap(map);
+        }
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ids]);
+
+  const showSpinner = circlesLoading || loading;
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primaryNavy} />
-
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ===== HEADER ===== */}
         <LinearGradient
           colors={[colors.primaryNavy, "#143654"]}
           start={{ x: 0, y: 0 }}
@@ -104,6 +145,154 @@ export default function CircleHealthScreen() {
               onPress={() => navigation.goBack()}
               style={styles.backBtn}
               accessibilityRole="button"
+              accessibilityLabel={t("common.back")}
+            >
+              <Ionicons name="arrow-back" size={22} color={colors.textWhite} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>
+              {t("circle_health_screen.header_title")}
+            </Text>
+            <View style={{ width: 36 }} />
+          </View>
+          <Text style={styles.headerSubtitle}>
+            {t("circle_health_screen.header_subtitle_chooser")}
+          </Text>
+        </LinearGradient>
+
+        <Text style={styles.sectionHeader}>
+          {t("circle_health_screen.chooser_title")}
+        </Text>
+
+        {showSpinner ? (
+          <ActivityIndicator
+            style={{ marginTop: 24 }}
+            color={colors.accentTeal}
+          />
+        ) : myCircles.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>
+              {t("circle_health_screen.no_circles")}
+            </Text>
+          </View>
+        ) : (
+          myCircles.map((circle) => {
+            const row = healthMap[circle.id];
+            const visual = row ? STATUS_VISUALS[row.health_status] : null;
+            return (
+              <TouchableOpacity
+                key={circle.id}
+                style={styles.chooserCard}
+                onPress={() =>
+                  navigation.navigate(Routes.CircleHealth, {
+                    circleId: circle.id,
+                  })
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`${circle.name} — ${t(
+                  "circle_health_screen.view_details",
+                )}`}
+              >
+                <View style={styles.chooserLeft}>
+                  <Text style={styles.chooserName}>{circle.name}</Text>
+                  {row ? (
+                    <View style={styles.chooserMeta}>
+                      <Text style={styles.chooserScore}>
+                        {Math.round(row.health_score)}
+                        <Text style={styles.chooserOutOf}>
+                          {" "}
+                          {t("circle_health_screen.score_out_of")}
+                        </Text>
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.chooserNoScore}>
+                      {t("circle_health_screen.no_score_yet")}
+                    </Text>
+                  )}
+                </View>
+                {visual ? (
+                  <View
+                    style={[styles.statusPill, { backgroundColor: visual.bg }]}
+                  >
+                    <Text style={[styles.statusPillText, { color: visual.color }]}>
+                      {visual.emoji}{" "}
+                      {t(`circle_health_screen.status_${row!.health_status}`)}
+                    </Text>
+                  </View>
+                ) : (
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={colors.textSecondary}
+                  />
+                )}
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DetailView — single-circle health backed by useCircleHealth(circleId).
+// ══════════════════════════════════════════════════════════════════════════════
+function DetailView({ circleId }: { circleId: string }) {
+  const { t } = useTranslation();
+  const navigation = useTypedNavigation();
+  const {
+    health,
+    loading,
+    recomputing,
+    error,
+    refresh,
+    recompute,
+    statusVisual,
+    trendVisual,
+    scoreDelta,
+    hasNeverBeenComputed,
+  } = useCircleHealth(circleId);
+
+  // Optimistically rounded numbers for display (DB stores DECIMAL).
+  const score = health ? Math.round(health.health_score) : 0;
+  const gaugeColor = statusVisual?.color ?? colors.border;
+
+  const componentRows = health
+    ? [
+        {
+          key: "contribution_reliability",
+          value: health.contribution_reliability_score,
+        },
+        { key: "member_quality", value: health.member_quality_score },
+        {
+          key: "financial_stability",
+          value: health.financial_stability_score,
+        },
+        { key: "social_cohesion", value: health.social_cohesion_score },
+      ]
+    : [];
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor={colors.primaryNavy} />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <LinearGradient
+          colors={[colors.primaryNavy, "#143654"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.header}
+        >
+          <View style={styles.headerTopRow}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={styles.backBtn}
+              accessibilityRole="button"
+              accessibilityLabel={t("common.back")}
             >
               <Ionicons name="arrow-back" size={22} color={colors.textWhite} />
             </TouchableOpacity>
@@ -114,114 +303,246 @@ export default function CircleHealthScreen() {
           </View>
 
           <Text style={styles.headerSubtitle}>
-            {t("circle_health_screen.header_subtitle")}
+            {t("circle_health_screen.header_subtitle_detail")}
           </Text>
 
-          {/* Overall health gauge */}
+          {/* Score card */}
           <View style={styles.overallCard}>
-            <Text style={styles.overallLabel}>
-              {t("circle_health_screen.overall_label")}
-            </Text>
-            <View style={styles.overallScoreRow}>
-              <Text style={[styles.overallScore, { color: overallColor }]}>
-                {overall}
+            <View style={styles.overallTopRow}>
+              <Text style={styles.overallLabel}>
+                {t("circle_health_screen.metric_health_score")}
               </Text>
-              <Text style={styles.overallOutOf}> / 100</Text>
+              {statusVisual ? (
+                <View
+                  style={[
+                    styles.statusPill,
+                    { backgroundColor: statusVisual.bg },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusPillText,
+                      { color: statusVisual.color },
+                    ]}
+                  >
+                    {statusVisual.emoji}{" "}
+                    {t(`circle_health_screen.status_${health!.health_status}`)}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={styles.overallScoreRow}>
+              <Text style={[styles.overallScore, { color: gaugeColor }]}>
+                {score}
+              </Text>
+              <Text style={styles.overallOutOf}>
+                {" "}
+                {t("circle_health_screen.score_out_of")}
+              </Text>
             </View>
             <View style={styles.gaugeBg}>
               <View
                 style={[
                   styles.gaugeFill,
-                  { width: `${overall}%`, backgroundColor: overallColor },
+                  { width: `${score}%`, backgroundColor: gaugeColor },
                 ]}
               />
+            </View>
+
+            <View style={styles.deltaRow}>
+              {scoreDelta != null ? (
+                <Text
+                  style={[
+                    styles.deltaText,
+                    {
+                      color:
+                        scoreDelta > 0
+                          ? "#10B981"
+                          : scoreDelta < 0
+                            ? "#EF4444"
+                            : colors.textOnNavy,
+                    },
+                  ]}
+                >
+                  {scoreDelta > 0
+                    ? t("circle_health_screen.delta_positive", {
+                        delta: scoreDelta,
+                      })
+                    : scoreDelta < 0
+                      ? t("circle_health_screen.delta_negative", {
+                          delta: scoreDelta,
+                        })
+                      : t("circle_health_screen.delta_zero")}
+                </Text>
+              ) : (
+                <View />
+              )}
+              {trendVisual ? (
+                <Text
+                  style={[styles.trendChip, { color: trendVisual.color }]}
+                >
+                  {trendVisual.emoji}{" "}
+                  {t(`circle_health_screen.trend_${health!.trend}`)}
+                </Text>
+              ) : null}
             </View>
           </View>
         </LinearGradient>
 
-        {/* ===== PER-CIRCLE BREAKDOWN ===== */}
-        <Text style={styles.sectionHeader}>
-          {t("circle_health_screen.section_per_circle")}
-        </Text>
+        {/* Loading / empty / error */}
+        {loading && !health ? (
+          <ActivityIndicator
+            style={{ marginTop: 24 }}
+            color={colors.accentTeal}
+          />
+        ) : null}
 
-        {mockHealth.map((row) => {
-          const color = scoreColor(row.score);
-          return (
-            <View key={row.id} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardName}>{row.name}</Text>
+        {error ? (
+          <View style={styles.errorCard}>
+            <Text style={styles.errorTitle}>
+              {t("circle_health_screen.error_title")}
+            </Text>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={refresh}
+              accessibilityRole="button"
+            >
+              <Text style={styles.retryBtnText}>
+                {t("circle_health_screen.error_retry")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {hasNeverBeenComputed && !error ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>
+              {t("circle_health_screen.no_score_yet")}
+            </Text>
+            <TouchableOpacity
+              style={styles.retryBtn}
+              onPress={recompute}
+              disabled={recomputing}
+              accessibilityRole="button"
+            >
+              <Text style={styles.retryBtnText}>
+                {recomputing
+                  ? t("circle_health_screen.refreshing")
+                  : t("circle_health_screen.refresh_now")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {health ? (
+          <>
+            {/* Component scores — what makes up the headline score */}
+            <Text style={styles.sectionHeader}>
+              {t("circle_health_screen.section_components")}
+            </Text>
+            <View style={styles.card}>
+              {componentRows.map((row, idx) => (
                 <View
+                  key={row.key}
                   style={[
-                    styles.statusTag,
-                    { backgroundColor: `${color}1A` },
+                    styles.metricRow,
+                    idx === componentRows.length - 1 && styles.metricRowLast,
                   ]}
                 >
-                  <Text style={[styles.statusTagText, { color }]}>
-                    {t(statusTagKey(row.score))}
+                  <Text style={styles.metricLabel}>
+                    {t(`circle_health_screen.component_${row.key}`)}
+                  </Text>
+                  <Text style={styles.metricValue}>
+                    {Math.round(row.value)} / 100
                   </Text>
                 </View>
-              </View>
-
-              {/* Per-circle health gauge */}
-              <View style={styles.cardGaugeRow}>
-                <Text style={styles.cardMetricLabel}>
-                  {t("circle_health_screen.metric_health_score")}
-                </Text>
-                <Text style={[styles.cardMetricScore, { color }]}>
-                  {row.score}
-                  <Text style={styles.cardMetricOutOf}> / 100</Text>
-                </Text>
-              </View>
-              <View style={styles.gaugeBg}>
-                <View
-                  style={[
-                    styles.gaugeFill,
-                    { width: `${row.score}%`, backgroundColor: color },
-                  ]}
-                />
-              </View>
-
-              {/* Three real metrics */}
-              <View style={styles.metricRow}>
-                <Text style={styles.metricLabel}>
-                  {t("circle_health_screen.metric_default_rate")}
-                </Text>
-                <Text
-                  style={[
-                    styles.metricValue,
-                    {
-                      color:
-                        row.default_rate_pct === 0
-                          ? colors.successText
-                          : row.default_rate_pct < 5
-                            ? colors.warningAmber
-                            : colors.errorText,
-                    },
-                  ]}
-                >
-                  {row.default_rate_pct}%
-                </Text>
-              </View>
-              <View style={styles.metricRow}>
-                <Text style={styles.metricLabel}>
-                  {t("circle_health_screen.metric_payout_speed")}
-                </Text>
-                <Text style={styles.metricValue}>{row.payout_speed_days}d</Text>
-              </View>
-              <View style={[styles.metricRow, styles.metricRowLast]}>
-                <Text style={styles.metricLabel}>
-                  {t("circle_health_screen.metric_active_ratio")}
-                </Text>
-                <Text style={styles.metricValue}>{row.active_ratio_pct}%</Text>
-              </View>
+              ))}
             </View>
-          );
-        })}
+
+            {/* Underlying metrics */}
+            <Text style={styles.sectionHeader}>
+              {t("circle_health_screen.section_metrics")}
+            </Text>
+            <View style={styles.card}>
+              <MetricRow
+                label={t("circle_health_screen.metric_on_time_contribution")}
+                value={`${Math.round(health.on_time_contribution_pct)}%`}
+              />
+              <MetricRow
+                label={t("circle_health_screen.metric_members_in_default")}
+                value={`${health.members_with_defaults} / ${health.total_members}`}
+              />
+              <MetricRow
+                label={t("circle_health_screen.metric_total_members")}
+                value={`${health.total_members}`}
+              />
+              <MetricRow
+                label={t("circle_health_screen.metric_avg_xn_score")}
+                value={`${Math.round(health.avg_member_xnscore)}`}
+              />
+              <MetricRow
+                label={t(
+                  "circle_health_screen.metric_avg_default_probability",
+                )}
+                value={`${Math.round(health.avg_default_probability * 100)}%`}
+                last
+              />
+            </View>
+
+            {/* Refresh footer */}
+            <View style={styles.footer}>
+              <Text style={styles.footerStamp}>
+                {t("circle_health_screen.last_computed", {
+                  when: relativeTime(health.last_computed_at),
+                })}
+              </Text>
+              <TouchableOpacity
+                style={styles.refreshBtn}
+                onPress={recompute}
+                disabled={recomputing}
+                accessibilityRole="button"
+                accessibilityLabel={t("circle_health_screen.refresh_now")}
+              >
+                {recomputing ? (
+                  <ActivityIndicator size="small" color={colors.textWhite} />
+                ) : (
+                  <Ionicons name="refresh" size={18} color={colors.textWhite} />
+                )}
+                <Text style={styles.refreshBtnText}>
+                  {recomputing
+                    ? t("circle_health_screen.refreshing")
+                    : t("circle_health_screen.refresh_now")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+function MetricRow({
+  label,
+  value,
+  last,
+}: {
+  label: string;
+  value: string;
+  last?: boolean;
+}) {
+  return (
+    <View style={[styles.metricRow, last && styles.metricRowLast]}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue}>{value}</Text>
+    </View>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Styles
+// ══════════════════════════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.screenBg },
   scroll: { flex: 1 },
@@ -260,12 +581,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
   },
+  overallTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
   overallLabel: {
     color: colors.textOnNavy,
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.5,
-    marginBottom: 4,
   },
   overallScoreRow: {
     flexDirection: "row",
@@ -278,6 +604,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 4,
   },
+
+  deltaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 6,
+  },
+  deltaText: { fontSize: 12, fontWeight: "600" },
+  trendChip: { fontSize: 12, fontWeight: "700" },
 
   sectionHeader: {
     color: colors.textSecondary,
@@ -295,58 +630,64 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 12,
     borderRadius: 14,
-    padding: 16,
+    padding: 8,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  cardHeader: {
+
+  chooserCard: {
+    backgroundColor: colors.cardBg,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    justifyContent: "space-between",
   },
-  cardName: {
+  chooserLeft: { flex: 1, paddingRight: 12 },
+  chooserName: {
     fontSize: 15,
     fontWeight: "700",
     color: colors.textPrimary,
   },
-  statusTag: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
-  statusTagText: {
-    fontSize: 11,
-    fontWeight: "700",
-  },
-
-  cardGaugeRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "baseline",
-    marginBottom: 4,
-  },
-  cardMetricLabel: {
+  chooserMeta: { marginTop: 4 },
+  chooserScore: {
     fontSize: 13,
     color: colors.textSecondary,
     fontWeight: "600",
   },
-  cardMetricScore: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  cardMetricOutOf: {
-    fontSize: 12,
+  chooserOutOf: {
+    fontSize: 11,
     color: colors.textSecondary,
     fontWeight: "500",
+  },
+  chooserNoScore: {
+    marginTop: 4,
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontStyle: "italic",
+  },
+
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
 
   gaugeBg: {
     height: 6,
-    backgroundColor: colors.border,
+    backgroundColor: "rgba(255,255,255,0.15)",
     borderRadius: 3,
     overflow: "hidden",
-    marginBottom: 12,
+    marginBottom: 6,
   },
   gaugeFill: { height: "100%", borderRadius: 3 },
 
@@ -354,7 +695,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -369,4 +711,69 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontWeight: "700",
   },
+
+  emptyCard: {
+    backgroundColor: colors.cardBg,
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 14,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+
+  errorCard: {
+    backgroundColor: "#FEE2E2",
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  errorTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#991B1B",
+    marginBottom: 4,
+  },
+  errorText: {
+    fontSize: 13,
+    color: "#991B1B",
+    marginBottom: 12,
+  },
+  retryBtn: {
+    backgroundColor: "#991B1B",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignSelf: "flex-start",
+  },
+  retryBtnText: { color: colors.textWhite, fontSize: 13, fontWeight: "700" },
+
+  footer: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  footerStamp: { fontSize: 12, color: colors.textSecondary },
+  refreshBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.primaryNavy,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  refreshBtnText: { color: colors.textWhite, fontSize: 13, fontWeight: "700" },
 });
