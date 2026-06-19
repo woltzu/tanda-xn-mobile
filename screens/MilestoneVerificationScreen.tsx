@@ -125,6 +125,11 @@ export default function MilestoneVerificationScreen() {
   const [milestone, setMilestone] = useState<DisbursementMilestone | null>(null);
   const [providerName, setProviderName] = useState<string>("");
   const [projectPin, setProjectPin] = useState<{ lat: number; lng: number } | null>(null);
+  // Phase 3 — verification checklist sourced from
+  // milestone_checklist_templates by the goal's category. Items render
+  // as toggleable rows; checked state stamped into evidence.checklist.
+  const [checklist, setChecklist] = useState<string[]>([]);
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [ctxLoading, setCtxLoading] = useState(true);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [locationText, setLocationText] = useState("");
@@ -189,9 +194,9 @@ export default function MilestoneVerificationScreen() {
       const { data } = await supabase
         .from("goal_disbursement_milestones")
         .select(
-          // Phase 2D — also pull the goal's project pin so the gate has
-          // a target. Nulls are allowed; the gate degrades when missing.
-          "*, provider:providers!provider_id(business_name), goal:user_savings_goals!goal_id(project_latitude, project_longitude)",
+          // Phase 2D — pull project pin. Phase 3 — also goal.category so
+          // we can fetch the matching checklist template.
+          "*, provider:providers!provider_id(business_name), goal:user_savings_goals!goal_id(project_latitude, project_longitude, category)",
         )
         .eq("id", milestoneId)
         .maybeSingle();
@@ -207,6 +212,20 @@ export default function MilestoneVerificationScreen() {
         setProjectPin(null);
       }
       setCtxLoading(false);
+
+      // Phase 3 — pull the checklist template for the goal's category.
+      // No category → no checklist; the rest of the screen still works.
+      const category = row?.goal?.category;
+      if (category) {
+        const { data: tpl } = await supabase
+          .from("milestone_checklist_templates")
+          .select("checks")
+          .eq("category", category)
+          .maybeSingle();
+        if (!cancelled && tpl?.checks && Array.isArray(tpl.checks)) {
+          setChecklist(tpl.checks as string[]);
+        }
+      }
     })();
     return () => {
       cancelled = true;
@@ -373,6 +392,12 @@ export default function MilestoneVerificationScreen() {
         reason: overrideReason.trim(),
         photos_via_camera: cameraPhotoCount,
         gate_state: gateState,
+      };
+    }
+    if (checklist.length > 0) {
+      evidence.checklist = {
+        items: checklist,
+        checked: checklist.filter((c) => !!checked[c]),
       };
     }
     const res = await respondVerification(
@@ -629,6 +654,46 @@ export default function MilestoneVerificationScreen() {
                   </View>
                 ) : null}
               </View>
+
+              {/* Phase 3 — verification checklist. Sourced from the
+                  category template; reviewer ticks what's been observed
+                  and the result is captured in evidence.checklist. */}
+              {checklist.length > 0 ? (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>
+                    {t("verification.checklist_title")}
+                  </Text>
+                  <Text style={styles.sectionBody}>
+                    {t("verification.checklist_body")}
+                  </Text>
+                  {checklist.map((item) => {
+                    const isChecked = !!checked[item];
+                    return (
+                      <TouchableOpacity
+                        key={item}
+                        style={styles.checklistRow}
+                        onPress={() =>
+                          setChecked((prev) => ({ ...prev, [item]: !isChecked }))
+                        }
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: isChecked }}
+                      >
+                        <View
+                          style={[
+                            styles.checkbox,
+                            isChecked && styles.checkboxOn,
+                          ]}
+                        >
+                          {isChecked ? (
+                            <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                          ) : null}
+                        </View>
+                        <Text style={styles.checklistText}>{item}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
 
               {/* Photo evidence — add-tile disabled when the gate blocks. */}
               <View style={styles.section}>
@@ -1026,4 +1091,25 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 12, fontWeight: "700", color: "#0A2342", marginTop: 10, marginBottom: 6 },
 
   cameraDisabledNote: { fontSize: 11, color: "#B91C1C", marginTop: 8 },
+
+  checklistRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: "#9CA3AF",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  checkboxOn: { backgroundColor: "#059669", borderColor: "#059669" },
+  checklistText: { flex: 1, fontSize: 13, color: "#0A2342" },
 });

@@ -50,6 +50,12 @@ type GoalRow = {
   target_amount_cents: number;
   project_latitude: number | null;
   project_longitude: number | null;
+  category: string | null;
+};
+
+type CategoryTemplate = {
+  category: string;
+  milestones: { name: string; description?: string; default_percent: number }[];
 };
 
 type ProviderRow = {
@@ -108,6 +114,11 @@ export default function CreateDisbursementMilestonesScreen() {
   const [projectLatText, setProjectLatText] = useState("");
   const [projectLngText, setProjectLngText] = useState("");
   const [gpsBusy, setGpsBusy] = useState(false);
+  // Phase 3 — category template (suggested milestones). When non-null the
+  // banner card surfaces a "Use template" action that replaces drafts
+  // with the template rows, sized against the goal target.
+  const [template, setTemplate] = useState<CategoryTemplate | null>(null);
+  const [templateDismissed, setTemplateDismissed] = useState(false);
 
   const { submitting, createMilestones } = useDisbursementActions();
 
@@ -119,7 +130,7 @@ export default function CreateDisbursementMilestonesScreen() {
         supabase
           .from("user_savings_goals")
           .select(
-            "id, name, target_amount_cents, project_latitude, project_longitude",
+            "id, name, target_amount_cents, project_latitude, project_longitude, category",
           )
           .eq("id", goalId)
           .maybeSingle(),
@@ -139,6 +150,19 @@ export default function CreateDisbursementMilestonesScreen() {
           setProjectLngText(String(goalRow.project_longitude));
         }
         setCtxLoading(false);
+        // Phase 3 — look up a category template so the wizard can offer
+        // a one-tap seed. Skipped silently if the goal has no category
+        // or no template exists for it yet.
+        if (goalRow?.category) {
+          const { data: tplData } = await supabase
+            .from("goal_category_templates")
+            .select("category, milestones")
+            .eq("category", goalRow.category)
+            .maybeSingle();
+          if (!cancelled && tplData) {
+            setTemplate(tplData as CategoryTemplate);
+          }
+        }
       }
     })();
     return () => {
@@ -282,6 +306,30 @@ export default function CreateDisbursementMilestonesScreen() {
     navigation.replace("GoalDisbursementMilestones", { goalId: goal.id });
   };
 
+  const handleApplyTemplate = () => {
+    if (!template || !goal) return;
+    const target = goal.target_amount_cents;
+    // Allocate by default_percent. Any rounding remainder gets pushed to
+    // the LAST row so the sum still equals target exactly.
+    let allocated = 0;
+    const next: Draft[] = template.milestones.map((m, i) => {
+      const isLast = i === template.milestones.length - 1;
+      const portion = isLast
+        ? target - allocated
+        : Math.round((target * m.default_percent) / 100);
+      allocated += portion;
+      return {
+        key: newKey(),
+        name: m.name,
+        description: m.description ?? "",
+        amountText: (portion / 100).toFixed(2),
+        verification_method: "owner",
+      };
+    });
+    setDrafts(next);
+    setTemplateDismissed(true);
+  };
+
   const handleEvenSplit = () => {
     if (drafts.length === 0 || targetCents === 0) return;
     const per = Math.floor(targetCents / drafts.length);
@@ -345,6 +393,45 @@ export default function CreateDisbursementMilestonesScreen() {
                   })}
             </Text>
           </View>
+
+          {/* Phase 3 — category template suggestion. Banner appears once
+              when a template exists for the goal's category and the
+              user hasn't dismissed it yet. Dismissed state is local to
+              this screen mount — re-opening offers it again. */}
+          {template && !templateDismissed ? (
+            <View style={styles.templateCard}>
+              <View style={styles.templateHeader}>
+                <Ionicons name="sparkles-outline" size={16} color="#7C3AED" />
+                <Text style={styles.templateTitle}>
+                  {t("create_milestones.template_title", { category: template.category })}
+                </Text>
+              </View>
+              <Text style={styles.templateBody}>
+                {t("create_milestones.template_body", {
+                  count: template.milestones.length,
+                })}
+              </Text>
+              <View style={styles.templateActions}>
+                <TouchableOpacity
+                  style={[styles.btn, styles.btnPrimary, { flex: 1 }]}
+                  onPress={handleApplyTemplate}
+                >
+                  <Text style={styles.btnPrimaryText}>
+                    {t("create_milestones.template_use")}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.templateDismiss}
+                  onPress={() => setTemplateDismissed(true)}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.templateDismissText}>
+                    {t("create_milestones.template_skip")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
 
           {/* Project location pin (Phase 2D). Optional — verification
               geo-gate degrades gracefully when no pin is set, but elders
@@ -822,4 +909,19 @@ const styles = StyleSheet.create({
   },
   gpsBtnText: { fontSize: 13, fontWeight: "700", color: "#0A2342" },
   pinError: { fontSize: 12, color: "#B91C1C", marginTop: 6 },
+
+  templateCard: {
+    backgroundColor: "#F5F3FF",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#DDD6FE",
+  },
+  templateHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  templateTitle: { fontSize: 14, fontWeight: "800", color: "#5B21B6" },
+  templateBody: { fontSize: 12, color: "#5B21B6", marginTop: 4, marginBottom: 10 },
+  templateActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  templateDismiss: { paddingHorizontal: 10, paddingVertical: 8 },
+  templateDismissText: { fontSize: 13, fontWeight: "700", color: "#5B21B6" },
 });
