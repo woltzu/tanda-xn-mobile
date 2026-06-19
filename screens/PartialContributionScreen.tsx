@@ -21,7 +21,7 @@
 // i18n'd (was a hardcoded English string).
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -31,7 +31,11 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Modal,
+  Pressable,
+  Animated,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -42,6 +46,19 @@ import {
   usePreview,
   usePartialContributionActions,
 } from "../hooks/usePartialContribution";
+
+// Bucket B — single HelpSheet listing 5 topics; per-bullet explainer sheet
+// keyed off a topic enum; AsyncStorage gate for the first-visit coach mark.
+type HelpTopic =
+  | "why_split"
+  | "missed_catch_up"
+  | "pool_covers"
+  | "fee_when"
+  | "xnscore_protection";
+
+type BulletTopic = 1 | 2 | 3 | 4;
+
+const PARTIAL_COACH_KEY = "@tandaxn_partial_contribution_coach_seen_v1";
 
 const COLORS = {
   navy: "#0A2342",
@@ -73,6 +90,48 @@ export default function PartialContributionScreen() {
   const { circleId, cycleId: paramCycleId } =
     route.params ?? ({} as RouteParams);
   const { user } = useAuth();
+
+  // Bucket B — sheet / coach state.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [feeExplainerOpen, setFeeExplainerOpen] = useState(false);
+  const [bulletTopic, setBulletTopic] = useState<BulletTopic | null>(null);
+
+  // First-visit coach mark — AsyncStorage gated, fades in on mount,
+  // auto-dismisses after 4s or on tap. Same pattern as Insurance / Substitute.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachOpacity = useRef(new Animated.Value(0)).current;
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    coachCheckedRef.current = true;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(PARTIAL_COACH_KEY);
+        if (seen) return;
+        setCoachVisible(true);
+        Animated.timing(coachOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+      } catch {
+        // AsyncStorage unavailable → silently skip.
+      }
+    })();
+  }, [coachOpacity]);
+  const dismissCoach = useCallback(() => {
+    Animated.timing(coachOpacity, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setCoachVisible(false));
+    AsyncStorage.setItem(PARTIAL_COACH_KEY, "1").catch(() => undefined);
+  }, [coachOpacity]);
+  useEffect(() => {
+    if (!coachVisible) return;
+    const tid = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(tid);
+  }, [coachVisible, dismissCoach]);
 
   // ── Cycle resolution ─────────────────────────────────────────────────────
   // If the navigator didn't pass a cycleId, look up the active cycle.
@@ -243,7 +302,15 @@ export default function PartialContributionScreen() {
           <Ionicons name="arrow-back" size={22} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t("partial_contribution.header_title")}</Text>
-        <View style={styles.headerBtn} />
+        {/* Bucket B — wire the previously-empty header slot to a (?) button. */}
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={() => setHelpOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={t("partial_contribution.help_open")}
+        >
+          <Ionicons name="help-circle-outline" size={22} color="#FFF" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -378,28 +445,44 @@ export default function PartialContributionScreen() {
               </View>
             )}
 
-            {/* What happens */}
+            {/* What happens — Bucket B: each bullet is tappable; opens a
+                BulletExplainerSheet with a deeper explanation. */}
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>
                 {t("partial_contribution.what_happens_title")}
               </Text>
               {[
-                { icon: "shield-checkmark" as const, key: "bullet_1" },
-                { icon: "star" as const, key: "bullet_2" },
-                { icon: "eye-off" as const, key: "bullet_3" },
-                { icon: "calendar" as const, key: "bullet_4" },
+                { icon: "shield-checkmark" as const, key: "bullet_1", topic: 1 as BulletTopic },
+                { icon: "star" as const, key: "bullet_2", topic: 2 as BulletTopic },
+                { icon: "eye-off" as const, key: "bullet_3", topic: 3 as BulletTopic },
+                { icon: "calendar" as const, key: "bullet_4", topic: 4 as BulletTopic },
               ].map((item, i) => (
-                <View key={i} style={styles.infoRow}>
+                <TouchableOpacity
+                  key={i}
+                  style={styles.infoRow}
+                  onPress={() => setBulletTopic(item.topic)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t(`partial_contribution.${item.key}`)}
+                >
                   <Ionicons name={item.icon} size={20} color={COLORS.green} />
                   <Text style={styles.infoText}>
                     {t(`partial_contribution.${item.key}`)}
                   </Text>
-                </View>
+                  <Ionicons
+                    name="information-circle-outline"
+                    size={14}
+                    color={COLORS.muted}
+                    style={{ marginLeft: 4 }}
+                  />
+                </TouchableOpacity>
               ))}
             </View>
 
-            {/* Coverage detail */}
-            {coverage && coverage.coverage_status !== "no_pool" && summary && (
+            {/* Coverage detail. Bucket B fix: when coverage_status is
+                'no_pool', render a fallback explainer instead of
+                silently hiding the section (which previously left the
+                "What happens" claim about insurance coverage unbacked). */}
+            {coverage && summary && coverage.coverage_status !== "no_pool" && (
               <View style={styles.card}>
                 <Text style={styles.sectionTitle}>{t("partial_contribution.section_insurance")}</Text>
                 <View style={styles.row}>
@@ -430,17 +513,40 @@ export default function PartialContributionScreen() {
                 </View>
               </View>
             )}
+            {coverage && summary && coverage.coverage_status === "no_pool" && (
+              <View style={[styles.card, styles.noPoolCard]}>
+                <View style={styles.noPoolHeader}>
+                  <Ionicons name="information-circle" size={20} color={COLORS.muted} />
+                  <Text style={styles.noPoolTitle}>
+                    {t("partial_contribution.section_insurance")}
+                  </Text>
+                </View>
+                <Text style={styles.noPoolBody}>
+                  {t("partial_contribution.coverage_fallback_no_pool")}
+                </Text>
+              </View>
+            )}
 
-            {/* Fee notice */}
+            {/* Fee notice — Bucket B: tappable, opens FeeExplainerSheet. */}
             {eligibility?.fee_required && (
-              <View style={styles.feeNotice}>
+              <TouchableOpacity
+                style={styles.feeNotice}
+                onPress={() => setFeeExplainerOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel={t("partial_contribution.fee_explainer_title")}
+              >
                 <Ionicons name="pricetag" size={20} color={COLORS.orange} />
                 <Text style={styles.feeText}>
                   {t("partial_contribution.fee_notice", {
                     amount: (eligibility.fee_cents / 100).toFixed(2),
                   })}
                 </Text>
-              </View>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={14}
+                  color={COLORS.orange}
+                />
+              </TouchableOpacity>
             )}
 
             {/* Action buttons */}
@@ -599,9 +705,250 @@ export default function PartialContributionScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* Bucket B — sheets and coach overlay, mounted outside ScrollView. */}
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} />
+      <FeeExplainerSheet
+        visible={feeExplainerOpen}
+        onClose={() => setFeeExplainerOpen(false)}
+      />
+      <BulletExplainerSheet
+        topic={bulletTopic}
+        onClose={() => setBulletTopic(null)}
+      />
+
+      {coachVisible && (
+        <Animated.View
+          style={[styles.coachOverlay, { opacity: coachOpacity }]}
+          pointerEvents="box-none"
+        >
+          <Pressable
+            style={styles.coachCard}
+            onPress={dismissCoach}
+            accessibilityRole="button"
+          >
+            <Ionicons name="calendar" size={20} color={COLORS.teal} />
+            <Text style={styles.coachText}>
+              {t("partial_contribution.coach_tip")}
+            </Text>
+          </Pressable>
+        </Animated.View>
+      )}
     </View>
   );
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HelpSheet — Modal-based, 5 topics in one scroll.
+// ══════════════════════════════════════════════════════════════════════════════
+function HelpSheet({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const topics: HelpTopic[] = [
+    "why_split",
+    "missed_catch_up",
+    "pool_covers",
+    "fee_when",
+    "xnscore_protection",
+  ];
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>
+            {t("partial_contribution.help_sheet_title")}
+          </Text>
+          <ScrollView style={{ maxHeight: 440 }}>
+            {topics.map((topic, idx) => (
+              <View
+                key={topic}
+                style={[
+                  sheetStyles.helpItem,
+                  idx === topics.length - 1 && sheetStyles.helpItemLast,
+                ]}
+              >
+                <Text style={sheetStyles.helpItemTitle}>
+                  {t(`partial_contribution.help_${topic}_title`)}
+                </Text>
+                <Text style={sheetStyles.body}>
+                  {t(`partial_contribution.help_${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+          <TouchableOpacity
+            style={sheetStyles.closeBtn}
+            onPress={onClose}
+            accessibilityRole="button"
+          >
+            <Text style={sheetStyles.closeBtnText}>
+              {t("partial_contribution.help_close")}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FeeExplainerSheet — opened from the fee notice tap.
+// ══════════════════════════════════════════════════════════════════════════════
+function FeeExplainerSheet({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>
+            {t("partial_contribution.fee_explainer_title")}
+          </Text>
+          <Text style={sheetStyles.body}>
+            {t("partial_contribution.fee_explainer_body")}
+          </Text>
+          <TouchableOpacity
+            style={sheetStyles.closeBtn}
+            onPress={onClose}
+            accessibilityRole="button"
+          >
+            <Text style={sheetStyles.closeBtnText}>
+              {t("partial_contribution.help_close")}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BulletExplainerSheet — opens when a "What happens" bullet is tapped.
+// Shows the original bullet text plus a deeper _explainer body.
+// ══════════════════════════════════════════════════════════════════════════════
+function BulletExplainerSheet({
+  topic,
+  onClose,
+}: {
+  topic: BulletTopic | null;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const visible = topic != null;
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          {topic ? (
+            <>
+              <Text style={sheetStyles.title}>
+                {t(`partial_contribution.bullet_${topic}`)}
+              </Text>
+              <Text style={sheetStyles.body}>
+                {t(`partial_contribution.what_happens_bullet_${topic}_explainer`)}
+              </Text>
+              <TouchableOpacity
+                style={sheetStyles.closeBtn}
+                onPress={onClose}
+                accessibilityRole="button"
+              >
+                <Text style={sheetStyles.closeBtnText}>
+                  {t("partial_contribution.help_close")}
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : null}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const sheetStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 12,
+  },
+  body: {
+    fontSize: 13,
+    color: "#0A2342",
+    lineHeight: 19,
+  },
+  helpItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  helpItemLast: { borderBottomWidth: 0 },
+  helpItemTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 4,
+  },
+  closeBtn: {
+    backgroundColor: "#0A2342",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  closeBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
@@ -828,5 +1175,55 @@ const styles = StyleSheet.create({
     color: COLORS.navy,
     textAlign: "center",
     lineHeight: 20,
+  },
+
+  // Bucket B — no-pool fallback card
+  noPoolCard: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  noPoolHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  noPoolTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: COLORS.navy,
+  },
+  noPoolBody: {
+    fontSize: 13,
+    color: COLORS.muted,
+    lineHeight: 18,
+  },
+
+  // Bucket B — coach overlay
+  coachOverlay: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 24,
+  },
+  coachCard: {
+    backgroundColor: COLORS.navy,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  coachText: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
