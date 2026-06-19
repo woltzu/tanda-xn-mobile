@@ -6314,6 +6314,14 @@
     "notification_title": "Alerte de tendance sur la santé du cercle",
     "notification_body": "La santé de {{circle_name}} commence à décliner. Consultez le tableau de bord santé."
   },
+  "insurance": {
+    "notification_claim_paid_defaulter_title": "Votre manque a été couvert",
+    "notification_claim_paid_defaulter_body": "Le fonds a couvert {{amount}} pour votre contribution manquée dans {{circle}}.",
+    "notification_claim_paid_elder_title": "Le fonds a couvert un membre",
+    "notification_claim_paid_elder_body": "Le fonds a couvert {{amount}} pour une contribution manquée dans {{circle}}.",
+    "notification_low_balance_title": "Solde du fonds bas",
+    "notification_low_balance_body": "Le fonds d'assurance pour {{circle}} est sous le seuil de sécurité."
+  },
   "community_events": {
     "header_title": "Événements à venir",
     "header_subtitle": "Vrais événements de votre communauté",

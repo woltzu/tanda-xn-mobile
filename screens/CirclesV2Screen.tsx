@@ -39,6 +39,7 @@ import { Routes } from "../lib/routes";
 import { useCircles } from "../context/CirclesContext";
 import { useInsurancePool } from "../hooks/useInsurancePool";
 import { InsurancePoolEngine } from "../services/InsurancePoolEngine";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 // ==========================================================================
 // Mock data — to be replaced with real API feeds in later steps.
@@ -302,6 +303,7 @@ export default function CirclesV2Screen() {
     pool: insurancePool,
     refetch: refetchInsurancePool,
   } = useInsurancePool(insurancePoolCircleId);
+  const { track } = useEventTracker();
   const [insuranceActive, setInsuranceActive] = useState<boolean>(true);
   useEffect(() => {
     if (insurancePool) {
@@ -327,9 +329,17 @@ export default function CirclesV2Screen() {
         Alert.alert(t("insurance_pool.toggle_error_title"), reason);
         return;
       }
+      // Bucket C — telemetry on confirmed-applied admin toggle.
+      track({
+        eventType: "pool.circle_toggled",
+        eventCategory: "circle",
+        eventAction: "click",
+        eventLabel: insurancePoolCircleId,
+        eventValue: { circle_id: insurancePoolCircleId, new_value: next },
+      });
       refetchInsurancePool();
     },
-    [insurancePoolCircleId, insuranceActive, refetchInsurancePool, t],
+    [insurancePoolCircleId, insuranceActive, refetchInsurancePool, track, t],
   );
 
   const [substituteActive, setSubstituteActive] = useState(

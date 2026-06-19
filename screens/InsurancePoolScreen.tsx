@@ -25,6 +25,7 @@ import {
 } from "../hooks/useInsurancePool";
 import { InsurancePoolEngine } from "../services/InsurancePoolEngine";
 import { useAuth } from "../context/AuthContext";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 // Bucket B (Migration 206 follow-up): four HelpSheet topics + AsyncStorage
 // key used to gate the first-visit coach mark. The key version suffix lets
@@ -145,9 +146,27 @@ export default function InsurancePoolScreen() {
 
   const { user } = useAuth();
   const currentUserId = user?.id;
+  const { track } = useEventTracker();
 
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [optInBusy, setOptInBusy] = useState(false);
+
+  // Bucket C — pool.viewed dedupe: fire once per circleId visit (StrictMode
+  // double-mounts the screen in dev). The ref tracks the last circleId we
+  // tracked so a route change to a different pool re-fires.
+  const poolViewedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!circleId) return;
+    if (poolViewedRef.current === circleId) return;
+    poolViewedRef.current = circleId;
+    track({
+      eventType: "pool.viewed",
+      eventCategory: "circle",
+      eventAction: "view",
+      eventLabel: circleId,
+      eventValue: { circle_id: circleId },
+    });
+  }, [circleId, track]);
 
   // Bucket B — HelpSheet topic (null when closed) + tappable rate explainer
   // sheet (independent of HelpSheet so the user can drill into rate
@@ -282,8 +301,21 @@ export default function InsurancePoolScreen() {
       );
       return;
     }
+    // Bucket C — telemetry. Self-toggle only (no admin path here yet), so
+    // was_self is always true for the time being.
+    track({
+      eventType: "pool.member_opted_out",
+      eventCategory: "circle",
+      eventAction: "click",
+      eventLabel: circleId,
+      eventValue: {
+        circle_id: circleId,
+        new_value: next,
+        was_self: true,
+      },
+    });
     refetchMembers();
-  }, [circleId, currentUserId, myMember, refetchMembers, t]);
+  }, [circleId, currentUserId, myMember, refetchMembers, track, t]);
 
   // Bucket B — first-visit coach mark. AsyncStorage-gated so it shows once
   // per device/install. Fades in on mount, auto-dismisses after 4s, or

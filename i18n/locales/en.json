@@ -6314,6 +6314,14 @@
     "notification_title": "Circle health trend alert",
     "notification_body": "{{circle_name}}'s health has started declining. Please check the health dashboard."
   },
+  "insurance": {
+    "notification_claim_paid_defaulter_title": "Your shortfall was covered",
+    "notification_claim_paid_defaulter_body": "The pool covered {{amount}} for your missed contribution in {{circle}}.",
+    "notification_claim_paid_elder_title": "Pool covered a member",
+    "notification_claim_paid_elder_body": "The pool covered {{amount}} for a missed contribution in {{circle}}.",
+    "notification_low_balance_title": "Pool balance is low",
+    "notification_low_balance_body": "The insurance pool for {{circle}} is below the safety threshold."
+  },
   "community_events": {
     "header_title": "Upcoming Events",
     "header_subtitle": "Real events from your community",
