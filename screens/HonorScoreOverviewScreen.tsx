@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,8 +7,11 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
-  Alert,
+  Modal,
+  Pressable,
+  Animated,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -17,7 +20,7 @@ import { useTranslation } from "react-i18next";
 // instead of the AsyncStorage-backed elderProfile.honorScore mock. Same
 // shape as the post-Bucket-A XnScore Dashboard: one composite hook that
 // fans out into score/tier/pillars/history/weakestPillar.
-import { useHonorScoreDashboard } from "../hooks/useHonorScore";
+import { useHonorScoreDashboard, useHonorScoreHistory, useHonorScorePillarBreakdown } from "../hooks/useHonorScore";
 import {
   HonorScoreEngine,
   HonorScoreTier,
@@ -26,9 +29,57 @@ import {
 type RootStackParamList = {
   HonorScoreOverview: undefined;
   BecomeElder: undefined;
+  // Honor Bucket B — tip CTAs route here.
+  VouchMember: undefined;
+  Circles: undefined;
+  ElderTrainingHub: undefined;
+  ScoreHub: undefined;
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
+
+// Honor Bucket B — AsyncStorage gate for the first-visit coach mark.
+// Versioned so we can re-prompt every user if the copy ever shifts.
+const COACH_KEY = "@tandaxn_honor_coach_seen_v1";
+
+// Honor Bucket B — six topics rendered together in one scrollable
+// HelpSheet, opened by the header (?) button.
+type HelpTopic =
+  | "what_is_honor_score"
+  | "three_pillars"
+  | "vouching_works"
+  | "disputes_affect"
+  | "expertise_domains"
+  | "tier_ladder";
+const HELP_TOPICS: HelpTopic[] = [
+  "what_is_honor_score",
+  "three_pillars",
+  "vouching_works",
+  "disputes_affect",
+  "expertise_domains",
+  "tier_ladder",
+];
+
+// Honor Bucket B — pillar → improve-CTA destination. Each weakest-
+// pillar tip routes to the surface where the user can act on it.
+type RouteName = keyof RootStackParamList;
+function routeForPillar(key: string): RouteName {
+  switch (key) {
+    case "community": return "Circles";
+    case "character": return "VouchMember";
+    case "expertise": return "ElderTrainingHub";
+    default:          return "ScoreHub";
+  }
+}
+
+// Honor Bucket B — per-pillar explainer payload. Captures the pillar
+// key + current/max score so the sheet can render "32 / 40" alongside
+// the localized title + body + sub-components + matching tip.
+type PillarExplainer = {
+  key: string;
+  value: number;
+  max: number;
+} | null;
 
 // Honor Bucket A — canonical tier ladder, sourced from the engine.
 // Replaces the literal Platinum/Gold/Silver/Bronze/Provisional ladder
@@ -103,17 +154,102 @@ export default function HonorScoreOverviewScreen() {
     history,
     weakestPillar,
   } = useHonorScoreDashboard();
+  // Bucket B — sub-component breakdown is read via the pillar hook so
+  // the explainer sheet can render value/max per sub-component.
+  const { subComponents } = useHonorScorePillarBreakdown();
+  // Bucket B — 30 rows of history give the sparkline + the existing
+  // Recent Activity card their data. The dashboard hook only pulls 20;
+  // this dedicated fetch widens the window to 30 days without changing
+  // the dashboard's behaviour.
+  const { history: extendedHistory } = useHonorScoreHistory(undefined, 30);
 
   const totalScore = score?.totalScore ?? null;
 
-  // Honor Bucket A — Bucket B will replace this with a HelpSheet. The
-  // placeholder Alert kills the dead-button bug without forking copy.
-  const handleHelpPress = () => {
-    Alert.alert(
-      t("honor_overview.help_title"),
-      t("honor_overview.help_placeholder")
-    );
-  };
+  // Honor Bucket B — HelpSheet visibility + per-pillar explainer
+  // payload. State lives at component scope so the back-button can
+  // dismiss either sheet without unmounting the screen.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [pillarExplainer, setPillarExplainer] = useState<PillarExplainer>(null);
+
+  // Bucket B — first-visit coach mark. Same Animated.Value + useRef
+  // gate pattern as XnScore Bucket B. Auto-dismiss after 4 s or on
+  // tap; the gate ensures it never re-shows after the first visit.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachOpacity = useRef(new Animated.Value(0)).current;
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    coachCheckedRef.current = true;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_KEY);
+        if (seen) return;
+        setCoachVisible(true);
+        Animated.timing(coachOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+      } catch {
+        // AsyncStorage unavailable — silently skip.
+      }
+    })();
+  }, [coachOpacity]);
+  const dismissCoach = useCallback(() => {
+    Animated.timing(coachOpacity, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setCoachVisible(false));
+    AsyncStorage.setItem(COACH_KEY, "1").catch(() => undefined);
+  }, [coachOpacity]);
+  useEffect(() => {
+    if (!coachVisible) return;
+    const tid = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(tid);
+  }, [coachVisible, dismissCoach]);
+
+  // Bucket B — open the help sheet. Replaces the Bucket-A Alert.alert
+  // placeholder.
+  const handleHelpPress = useCallback(() => {
+    setHelpOpen(true);
+  }, []);
+
+  // Bucket B — pillar row tap → explainer sheet. The payload is the
+  // canonical pillar object so the sheet can render value/max + tier
+  // sub-components by key.
+  const openPillarExplainer = useCallback((key: string, value: number, max: number) => {
+    setPillarExplainer({ key, value, max });
+  }, []);
+
+  // Bucket B — sparkline data. honor_score_history rows are sorted
+  // desc-by-created_at, so reverse for chronological order. Each
+  // row's `score` field is the post-event score; the current score
+  // is appended so the rightmost dot always reflects "now" even if
+  // no event has landed in the last few hours. Sparkline renders a
+  // no-history fallback below 2 points.
+  const historyForSparkline = useMemo<number[]>(() => {
+    const rows = [...extendedHistory].reverse();
+    const values: number[] = [];
+    for (const row of rows) {
+      const direct = Number(row.score);
+      if (Number.isFinite(direct)) values.push(direct);
+    }
+    if (totalScore != null) values.push(Number(totalScore));
+    return values;
+  }, [extendedHistory, totalScore]);
+
+  // Bucket B — improvement tips driven by pillars sorted weakest-first.
+  // Each tip is tappable and routes via routeForPillar(). When no
+  // pillars exist (rare empty state), falls back to the three baseline
+  // tips already covered by the i18n keys.
+  const topTips = useMemo(() => {
+    if (!pillars || pillars.length === 0) return [];
+    return [...pillars]
+      .sort((a, b) => a.percentage - b.percentage)
+      .slice(0, 3)
+      .map((p) => ({ key: p.key, value: p.value, max: p.max, percentage: p.percentage }));
+  }, [pillars]);
 
   // ── Loading gate ────────────────────────────────────────────────────────
   if (loading && score == null) {
@@ -198,6 +334,12 @@ export default function HonorScoreOverviewScreen() {
             </View>
           </View>
 
+          {/* Bucket B — 30-day sparkline. Reads honor_score_history
+              + appends the current score so the rightmost dot is
+              always "now". Falls back to a no-history label below
+              2 points. */}
+          <Sparkline values={historyForSparkline} accentColor={tierInfo?.color ?? "#00C6AE"} />
+
           {/* Progress to next tier — from the engine helper. */}
           {progressToNextTier?.nextTier ? (
             <View style={styles.progressSection}>
@@ -237,15 +379,29 @@ export default function HonorScoreOverviewScreen() {
                 const color = PILLAR_COLOR[p.key] ?? "#6B7280";
                 const pct = p.max > 0 ? Math.min(100, (p.value / p.max) * 100) : 0;
                 return (
-                  <View key={p.key} style={styles.pillarRow}>
+                  // Bucket B — pillar row is tappable. The (?) glyph
+                  // next to the label flags the affordance; tapping
+                  // anywhere on the row opens the PillarExplainerSheet.
+                  <TouchableOpacity
+                    key={p.key}
+                    style={styles.pillarRow}
+                    onPress={() => openPillarExplainer(p.key, p.value, p.max)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("honor_overview.pillar_explainer_open", {
+                      pillar: t(`honor_overview.pillar_${p.key}`),
+                    })}
+                  >
                     <View style={[styles.pillarIcon, { backgroundColor: color + "20" }]}>
                       <Ionicons name={icon} size={18} color={color} />
                     </View>
                     <View style={styles.pillarBody}>
                       <View style={styles.pillarHeader}>
-                        <Text style={styles.pillarName}>
-                          {t(`honor_overview.pillar_${p.key}`)}
-                        </Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                          <Text style={styles.pillarName}>
+                            {t(`honor_overview.pillar_${p.key}`)}
+                          </Text>
+                          <Ionicons name="help-circle-outline" size={13} color={color} />
+                        </View>
                         <Text style={styles.pillarValue}>
                           {Math.round(p.value)} / {p.max}
                         </Text>
@@ -262,7 +418,7 @@ export default function HonorScoreOverviewScreen() {
                         />
                       </View>
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })
             ) : (
@@ -352,70 +508,297 @@ export default function HonorScoreOverviewScreen() {
           </View>
         </View>
 
-        {/* Improve — data-driven: leads with weakest pillar, falls back
-            to a generic "balance all three" tip. */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("honor_overview.section_improve")}</Text>
-          <View style={styles.tipsCard}>
-            {weakestPillar ? (
-              <View style={styles.tipItem}>
-                <View
-                  style={[
-                    styles.tipIcon,
-                    { backgroundColor: (PILLAR_COLOR[weakestPillar.key] ?? "#6B7280") + "20" },
-                  ]}
+        {/* Bucket B — Improve your Honor Score. Top-3 pillars sorted
+            weakest-first; each tip is tappable and routes via
+            routeForPillar(). When the engine returns no pillars
+            (fresh user), the card is skipped — the empty state above
+            already explains the situation. */}
+        {topTips.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t("honor_overview.tips_title")}</Text>
+            {topTips.map((tip, i) => {
+              const color = PILLAR_COLOR[tip.key] ?? "#6B7280";
+              const icon = PILLAR_ICON[tip.key] ?? "ellipse-outline";
+              const pointsRemaining = Math.max(0, Math.round(tip.max - tip.value));
+              return (
+                <TouchableOpacity
+                  key={`${tip.key}-${i}`}
+                  style={styles.tipCard}
+                  onPress={() => {
+                    const route = routeForPillar(tip.key);
+                    navigation.navigate(route as any);
+                  }}
+                  accessibilityRole="button"
                 >
-                  <Ionicons
-                    name={PILLAR_ICON[weakestPillar.key] ?? "ellipse-outline"}
-                    size={20}
-                    color={PILLAR_COLOR[weakestPillar.key] ?? "#6B7280"}
-                  />
-                </View>
-                <View style={styles.tipContent}>
+                  <View style={styles.tipHeaderRow}>
+                    <View style={[styles.tipFactorChip, { backgroundColor: color + "20" }]}>
+                      <Ionicons name={icon} size={12} color={color} />
+                      <Text style={[styles.tipFactorChipText, { color }]}>
+                        {t(`honor_overview.pillar_${tip.key}`)}
+                      </Text>
+                    </View>
+                    {pointsRemaining > 0 ? (
+                      <Text style={[styles.tipPoints, { color }]}>
+                        {t("honor_overview.tip_points_label", { points: pointsRemaining })}
+                      </Text>
+                    ) : null}
+                  </View>
                   <Text style={styles.tipTitle}>
-                    {t("honor_overview.tip_focus_pillar_title", {
-                      pillar: t(`honor_overview.pillar_${weakestPillar.key}`),
-                    })}
+                    {t(`honor_overview.tip_pillar_${tip.key}_title`)}
                   </Text>
-                  <Text style={styles.tipDescription}>
-                    {t(`honor_overview.tip_focus_pillar_${weakestPillar.key}_body`)}
+                  <Text style={styles.tipBody}>
+                    {t(`honor_overview.tip_pillar_${tip.key}_body`)}
                   </Text>
-                </View>
-              </View>
-            ) : null}
-            <View style={styles.tipItem}>
-              <View style={[styles.tipIcon, { backgroundColor: "#EDE9FE" }]}>
-                <Ionicons name="hand-right" size={20} color="#7C3AED" />
-              </View>
-              <View style={styles.tipContent}>
-                <Text style={styles.tipTitle}>{t("honor_overview.tip_vouches_title")}</Text>
-                <Text style={styles.tipDescription}>{t("honor_overview.tip_vouches_body")}</Text>
-              </View>
-            </View>
-            <View style={styles.tipItem}>
-              <View style={[styles.tipIcon, { backgroundColor: "#F0FDFB" }]}>
-                <Ionicons name="shield-checkmark" size={20} color="#00C6AE" />
-              </View>
-              <View style={styles.tipContent}>
-                <Text style={styles.tipTitle}>{t("honor_overview.tip_mediation_title")}</Text>
-                <Text style={styles.tipDescription}>{t("honor_overview.tip_mediation_body")}</Text>
-              </View>
-            </View>
-            <View style={styles.tipItem}>
-              <View style={[styles.tipIcon, { backgroundColor: "#DBEAFE" }]}>
-                <Ionicons name="school" size={20} color="#3B82F6" />
-              </View>
-              <View style={styles.tipContent}>
-                <Text style={styles.tipTitle}>{t("honor_overview.tip_training_title")}</Text>
-                <Text style={styles.tipDescription}>{t("honor_overview.tip_training_body")}</Text>
-              </View>
-            </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
-        </View>
+        ) : null}
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      {/* Bucket B — modals + coach mark. Mounted as siblings to the
+          ScrollView so they sit above content but inside the screen's
+          root View. */}
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} t={t} />
+      <PillarExplainerSheet
+        explainer={pillarExplainer}
+        onClose={() => setPillarExplainer(null)}
+        subComponents={subComponents}
+        weakestPillarKey={weakestPillar?.key ?? null}
+        navigate={(route) => {
+          setPillarExplainer(null);
+          navigation.navigate(route as any);
+        }}
+        t={t}
+      />
+      {coachVisible ? (
+        <Animated.View
+          style={[styles.coachOverlay, { opacity: coachOpacity }]}
+          pointerEvents="box-none"
+        >
+          <Pressable style={styles.coachBackdrop} onPress={dismissCoach}>
+            <View style={styles.coachCard}>
+              <Ionicons name="bulb-outline" size={20} color="#FBBF24" />
+              <Text style={styles.coachText}>{t("honor_overview.coach_tip")}</Text>
+            </View>
+          </Pressable>
+        </Animated.View>
+      ) : null}
     </SafeAreaView>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Bucket B subcomponents
+// ─────────────────────────────────────────────────────────────────────────
+
+type TFn = (key: string, opts?: any) => string;
+
+// Bucket B — 30-day sparkline. Renders post-event score values as
+// dot bars. Below 2 data points we render the no-history fallback
+// instead of a flat line that would convey nothing.
+function Sparkline({ values, accentColor }: { values: number[]; accentColor: string }) {
+  const { t } = useTranslation();
+  if (!values || values.length < 2) {
+    return (
+      <View style={sparklineStyles.fallback}>
+        <Text style={sparklineStyles.fallbackText}>{t("honor_overview.no_history")}</Text>
+      </View>
+    );
+  }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(1, max - min);
+  // Cap at 30 dots so the sparkline width stays bounded on narrow phones.
+  const trimmed = values.slice(-30);
+  return (
+    <View style={sparklineStyles.container}>
+      {trimmed.map((v, i) => {
+        const pct = (v - min) / span;
+        const height = 4 + pct * 26;
+        return (
+          <View
+            key={i}
+            style={[
+              sparklineStyles.dot,
+              {
+                height,
+                backgroundColor:
+                  i === trimmed.length - 1 ? accentColor : "rgba(15,23,42,0.25)",
+              },
+            ]}
+          />
+        );
+      })}
+    </View>
+  );
+}
+
+// Bucket B — HelpSheet glossary. Six topics, each a localized title +
+// body block. Modal slides from the bottom; backdrop tap dismisses.
+function HelpSheet({
+  visible,
+  onClose,
+  t,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  t: TFn;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => undefined}>
+          <View style={sheetStyles.handle} />
+          <View style={sheetStyles.headerRow}>
+            <Text style={sheetStyles.title}>{t("honor_overview.help_sheet_title")}</Text>
+            <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel={t("honor_overview.help_close")}>
+              <Ionicons name="close" size={22} color="#0A2342" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} style={sheetStyles.scroll}>
+            {HELP_TOPICS.map((topic) => (
+              <View key={topic} style={sheetStyles.helpItem}>
+                <Text style={sheetStyles.helpItemTitle}>
+                  {t(`honor_overview.help_${topic}_title`)}
+                </Text>
+                <Text style={sheetStyles.helpItemBody}>
+                  {t(`honor_overview.help_${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// Bucket B — per-pillar explainer. Renders title/value/body +
+// sub-components (real values from useHonorScorePillarBreakdown) +
+// a CTA that routes to the action surface for that pillar.
+function PillarExplainerSheet({
+  explainer,
+  onClose,
+  subComponents,
+  weakestPillarKey,
+  navigate,
+  t,
+}: {
+  explainer: PillarExplainer;
+  onClose: () => void;
+  subComponents: { community: { name: string; value: number; max: number }[]; character: { name: string; value: number; max: number }[]; expertise: { name: string; value: number; max: number }[] } | null;
+  weakestPillarKey: string | null;
+  navigate: (route: RouteName) => void;
+  t: TFn;
+}) {
+  if (!explainer) return null;
+  const color = PILLAR_COLOR[explainer.key] ?? "#6B7280";
+  const icon = PILLAR_ICON[explainer.key] ?? "ellipse-outline";
+  const pillarLabel = t(`honor_overview.pillar_${explainer.key}`);
+  // Map the sub-component array's `name` strings (defined in the
+  // hook) to the i18n key for each sub-component so the sheet
+  // shows localized labels rather than the raw engine names.
+  const subRows: { name: string; value: number; max: number }[] =
+    subComponents && (subComponents as any)[explainer.key]
+      ? ((subComponents as any)[explainer.key] as { name: string; value: number; max: number }[])
+      : [];
+  const subKeyForName = (name: string): string => {
+    switch (name) {
+      case "Circles Participation":   return "circles_participation";
+      case "Community Engagement":    return "community_engagement";
+      case "Vouch Given":             return "vouch_given";
+      case "Vouch Received":          return "vouch_received";
+      case "Dispute Involvement":     return "dispute_involvement";
+      case "Top 3 Domain Average":    return "expertise_top3_avg";
+      case "Active Domains":          return "expertise_domains_active";
+      default: return name.toLowerCase().replace(/\s+/g, "_");
+    }
+  };
+  const isWeakest = weakestPillarKey === explainer.key;
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => undefined}>
+          <View style={sheetStyles.handle} />
+          <View style={sheetStyles.headerRow}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Ionicons name={icon} size={18} color={color} />
+              <Text style={sheetStyles.title}>{pillarLabel}</Text>
+            </View>
+            <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel={t("honor_overview.help_close")}>
+              <Ionicons name="close" size={22} color="#0A2342" />
+            </TouchableOpacity>
+          </View>
+          <View style={sheetStyles.scoreChipRow}>
+            <Text style={[sheetStyles.scoreChipText, { backgroundColor: color + "20", color: "#0A2342" }]}>
+              {Math.round(explainer.value)} / {explainer.max}
+            </Text>
+            {isWeakest ? (
+              <Text style={sheetStyles.weakestChip}>{t("honor_overview.weakest_chip")}</Text>
+            ) : null}
+          </View>
+          <Text style={sheetStyles.explainerBody}>
+            {t(`honor_overview.pillar_explainer_${explainer.key}_body`)}
+          </Text>
+          {subRows.length > 0 ? (
+            <View style={sheetStyles.subBlock}>
+              <Text style={sheetStyles.subHeading}>
+                {t("honor_overview.subcomponents_heading")}
+              </Text>
+              {subRows.map((sub) => {
+                const subKey = subKeyForName(sub.name);
+                const subPct = sub.max > 0 ? Math.min(100, (sub.value / sub.max) * 100) : 0;
+                return (
+                  <View key={sub.name} style={sheetStyles.subRow}>
+                    <View style={sheetStyles.subRowHeader}>
+                      <Text style={sheetStyles.subRowLabel}>
+                        {t(`honor_overview.subcomp_${subKey}`, { defaultValue: sub.name })}
+                      </Text>
+                      <Text style={sheetStyles.subRowValue}>
+                        {Math.round(sub.value)} / {sub.max}
+                      </Text>
+                    </View>
+                    <View style={sheetStyles.subRowBarBg}>
+                      <View
+                        style={[
+                          sheetStyles.subRowBarFill,
+                          { width: `${Math.max(subPct, 3)}%`, backgroundColor: color },
+                        ]}
+                      />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+          <View style={sheetStyles.tipBlock}>
+            <Text style={sheetStyles.tipBlockHeading}>
+              {t("honor_overview.tips_title")}
+            </Text>
+            <Text style={sheetStyles.tipBlockTitle}>
+              {t(`honor_overview.tip_pillar_${explainer.key}_title`)}
+            </Text>
+            <Text style={sheetStyles.tipBlockBody}>
+              {t(`honor_overview.tip_pillar_${explainer.key}_body`)}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[sheetStyles.ctaBtn, { backgroundColor: color }]}
+            onPress={() => navigate(routeForPillar(explainer.key))}
+          >
+            <Text style={sheetStyles.ctaBtnText}>
+              {t(`honor_overview.tip_pillar_${explainer.key}_cta`)}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={sheetStyles.closeBtn} onPress={onClose}>
+            <Text style={sheetStyles.closeBtnText}>{t("honor_overview.help_close")}</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -498,12 +881,67 @@ const styles = StyleSheet.create({
   activityEmpty: { padding: 24, alignItems: "center", gap: 8 },
   activityEmptyText: { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
 
-  tipsCard: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 16, gap: 14, borderWidth: 1, borderColor: "#E5E7EB" },
-  tipItem: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-  tipIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  tipContent: { flex: 1 },
-  tipTitle: { fontSize: 14, fontWeight: "600", color: "#1a1a2e" },
-  tipDescription: { fontSize: 12, color: "#6B7280", marginTop: 2, lineHeight: 17 },
+  // Bucket B — improvement tip cards (tappable, pillar-routed).
+  tipCard: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#E5E7EB", marginBottom: 10 },
+  tipHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  tipFactorChip: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10 },
+  tipFactorChipText: { fontSize: 11, fontWeight: "700" },
+  tipPoints: { fontSize: 12, fontWeight: "700" },
+  tipTitle: { fontSize: 14, fontWeight: "600", color: "#1a1a2e", marginBottom: 4 },
+  tipBody: { fontSize: 13, color: "#6B7280", lineHeight: 18 },
+
+  // Bucket B — coach mark overlay.
+  coachOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "flex-start" },
+  coachBackdrop: { flex: 1, alignItems: "center", paddingTop: 110, paddingHorizontal: 24 },
+  coachCard: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "rgba(15,23,42,0.96)", paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12, maxWidth: 320 },
+  coachText: { flex: 1, fontSize: 13, color: "#FFFFFF", lineHeight: 18 },
 
   bottomPadding: { height: 40 },
+});
+
+// Bucket B — 30-day sparkline styles. The accent dot at the right
+// edge is colored by the active tier; the rest are muted slate to
+// keep the focus on the current value.
+const sparklineStyles = StyleSheet.create({
+  container: { flexDirection: "row", alignItems: "flex-end", gap: 3, marginTop: 14, height: 32 },
+  dot: { width: 4, borderRadius: 2 },
+  fallback: { marginTop: 14, height: 32, alignItems: "center", justifyContent: "center" },
+  fallbackText: { fontSize: 11, color: "#6B7280", fontStyle: "italic" },
+});
+
+// Bucket B — bottom-sheet shared styles (HelpSheet + PillarExplainerSheet).
+const sheetStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  sheet: { backgroundColor: "#FFFFFF", borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 30, maxHeight: "86%" },
+  handle: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: "#E5E7EB", marginBottom: 12 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  title: { fontSize: 17, fontWeight: "700", color: "#0A2342" },
+  scroll: { maxHeight: 500 },
+  helpItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
+  helpItemTitle: { fontSize: 14, fontWeight: "700", color: "#0A2342", marginBottom: 4 },
+  helpItemBody: { fontSize: 13, color: "#4B5563", lineHeight: 19 },
+
+  scoreChipRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
+  scoreChipText: { fontSize: 13, fontWeight: "700", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, overflow: "hidden" },
+  weakestChip: { fontSize: 11, fontWeight: "700", color: "#92400E", backgroundColor: "#FEF3C7", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, overflow: "hidden" },
+  explainerBody: { fontSize: 13, color: "#4B5563", lineHeight: 19, marginBottom: 14 },
+
+  subBlock: { marginBottom: 14 },
+  subHeading: { fontSize: 11, fontWeight: "700", color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 },
+  subRow: { marginBottom: 10 },
+  subRowHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
+  subRowLabel: { fontSize: 13, color: "#0A2342" },
+  subRowValue: { fontSize: 13, fontWeight: "700", color: "#0A2342" },
+  subRowBarBg: { height: 4, backgroundColor: "#E5E7EB", borderRadius: 2 },
+  subRowBarFill: { height: 4, borderRadius: 2 },
+
+  tipBlock: { backgroundColor: "#F8FAFC", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 14 },
+  tipBlockHeading: { fontSize: 11, fontWeight: "700", color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 },
+  tipBlockTitle: { fontSize: 13, fontWeight: "700", color: "#0A2342", marginBottom: 4 },
+  tipBlockBody: { fontSize: 13, color: "#4B5563", lineHeight: 18 },
+
+  ctaBtn: { borderRadius: 12, alignItems: "center", paddingVertical: 14, marginBottom: 10 },
+  ctaBtnText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
+  closeBtn: { borderRadius: 12, alignItems: "center", paddingVertical: 14, backgroundColor: "#F1F5F9" },
+  closeBtnText: { color: "#0A2342", fontSize: 14, fontWeight: "600" },
 });
