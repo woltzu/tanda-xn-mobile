@@ -107,7 +107,6 @@ import LoanMarketplaceScreen from "./screens/LoanMarketplaceScreen";
 import LoanApplicationScreen from "./screens/LoanApplicationScreen";
 import LoanDetailsScreen from "./screens/LoanDetailsScreen";
 import LoanCalculatorScreen from "./screens/LoanCalculatorScreen";
-import LoanDashboardScreen from "./screens/LoanDashboardScreen";
 // V1 goal stack (GoalsHubScreen, CreateGoalScreen, GoalDetailsScreen,
 // DepositToGoalScreen, WithdrawFromGoalScreen, EditGoalScreen) was removed
 // in the Goals P0 cut-over. V2 is the live path; entry is GoalsHubV2 +
@@ -519,7 +518,6 @@ export type RootStackParamList = {
   LoanApplication: { productId: string };
   LoanDetails: { loanId: string };
   LoanCalculator: undefined;
-  LoanDashboard: undefined;
   // Savings Goals Flow
   // V1 goal route types removed in the P0 cut-over. The live entries are
   // GoalsHubV2, GoalCreateExpress, GoalDetailV2 below.
@@ -891,7 +889,6 @@ function HomeStackScreen() {
       <HomeStack.Screen name="LoanApplication" component={LoanApplicationScreen} />
       <HomeStack.Screen name="LoanDetails" component={LoanDetailsScreen} />
       <HomeStack.Screen name="LoanCalculator" component={LoanCalculatorScreen} />
-      <HomeStack.Screen name="LoanDashboard" component={LoanDashboardScreen} />
       <HomeStack.Screen name="XnScoreDashboard" component={XnScoreDashboardScreen} />
       <HomeStack.Screen name="XnScoreHistory" component={XnScoreHistoryScreen} />
       <HomeStack.Screen name="SelectCircleContribution" component={SelectCircleContributionScreen} />

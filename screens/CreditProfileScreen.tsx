@@ -1,4 +1,33 @@
-import React, { useState, useCallback } from "react";
+// ══════════════════════════════════════════════════════════════════════════════
+// screens/CreditProfileScreen.tsx — User's credit history + loan eligibility
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// Bucket A of the Credit Profile review (2026-06-20). The legacy screen was
+// titled "Credit Profile" but functionally rendered only eligibility data
+// (assessments + eligible products). The user's actual loan history (real
+// `loans` / `loan_applications` / `loan_payments` rows) was unreachable.
+//
+// This version is the canonical loan-history surface and keeps the eligibility
+// card intact at the top as the action surface for applying for new loans.
+//
+// Sections, top to bottom:
+//   1. Eligibility card        — score, max loan, max advance, approval %
+//   2. Default recovery row    — conditional (defaults / late contributions)
+//   3. Summary card            — Borrowed / Repaid / Outstanding / Defaults
+//   4. My loans                — list from public.loans, tap → LoanDetails
+//   5. Upcoming payments       — next 3 from loan_payment_schedule
+//   6. Eligible products       — apply-for-new-loan section
+//   7. Footer links            — full credit report, XnScore explainer
+//
+// Removed (duplicated elsewhere in XnScore Dashboard):
+//   - Assessment Breakdown dimensions
+//   - "How to Improve" tip list
+//
+// Header (?) is wired to a localized Alert placeholder; Bucket B will replace
+// with a HelpSheet (5 topics).
+// ══════════════════════════════════════════════════════════════════════════════
+
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -21,6 +50,12 @@ import {
 } from "../hooks/useCreditworthiness";
 import { useUserDefaults } from "../hooks/useDefaultCascade";
 import { useLateContributions } from "../hooks/useLateContributions";
+import {
+  useLoanProfile,
+  LoanProfileLoan,
+  LoanStatus,
+  UpcomingPayment,
+} from "../hooks/useLoanProfile";
 import { Routes } from "../lib/routes";
 
 const COLORS = {
@@ -45,12 +80,6 @@ const getTierColor = (tier: string) => {
   }
 };
 
-const getScoreColor = (score: number) => {
-  if (score >= 80) return COLORS.green;
-  if (score >= 60) return COLORS.yellow;
-  return COLORS.red;
-};
-
 const PRODUCT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   salary_advance: "flash",
   circle_loan: "cash",
@@ -58,11 +87,27 @@ const PRODUCT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   business_micro_loan: "briefcase",
 };
 
+const STATUS_PILL_COLOR: Record<LoanStatus, { fg: string; bg: string }> = {
+  active:         { fg: "#065F46", bg: "#D1FAE5" },
+  paid_off:       { fg: "#374151", bg: "#F3F4F6" },
+  defaulted:      { fg: "#991B1B", bg: "#FEE2E2" },
+  in_collections: { fg: "#991B1B", bg: "#FEE2E2" },
+  written_off:    { fg: "#6B7280", bg: "#E5E7EB" },
+};
+
 const formatCents = (c: number) => `$${(c / 100).toLocaleString()}`;
+
+function formatShortDate(iso: string, locale: string): string {
+  try {
+    return new Intl.DateTimeFormat(locale, { month: "short", day: "numeric" }).format(new Date(iso));
+  } catch {
+    return new Date(iso).toLocaleDateString();
+  }
+}
 
 export default function CreditProfileScreen() {
   const navigation = useNavigation<any>();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
 
   const {
@@ -81,18 +126,64 @@ export default function CreditProfileScreen() {
   const { hasActiveDefaults } = useUserDefaults();
   const { lateContributions } = useLateContributions();
   const hasRecoveryItems = hasActiveDefaults || lateContributions.length > 0;
-  const { canApply, reason: applyReason, loading: applyLoading } = useCanApplyForLoans(user?.id);
+  const { canApply, reason: applyReason } = useCanApplyForLoans(user?.id);
 
-  const loading = assessmentLoading || productsLoading;
+  const {
+    summary,
+    loans,
+    upcomingPayments,
+    hasLoans,
+    hasUpcoming,
+    loading: loanProfileLoading,
+    refresh: refreshLoanProfile,
+  } = useLoanProfile(user?.id);
+
+  const loading = assessmentLoading || productsLoading || loanProfileLoading;
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([refetchAssessment(), refetchProducts()]);
+    await Promise.all([refetchAssessment(), refetchProducts(), refreshLoanProfile()]);
     setRefreshing(false);
-  }, [refetchAssessment, refetchProducts]);
+  }, [refetchAssessment, refetchProducts, refreshLoanProfile]);
 
-  if (loading && !refreshing) {
+  const handleHelpPress = useCallback(() => {
+    Alert.alert(
+      t("credit_profile.help_placeholder_title"),
+      t("credit_profile.help_placeholder_body"),
+    );
+  }, [t]);
+
+  const handleStatHelp = useCallback(
+    (kind: "borrowed" | "repaid" | "outstanding" | "defaults") => {
+      Alert.alert(
+        t(`credit_profile.summary_${kind}`),
+        t("credit_profile.help_placeholder_body"),
+      );
+    },
+    [t],
+  );
+
+  const handleLoanPress = useCallback(
+    (loan: LoanProfileLoan) => {
+      navigation.navigate(Routes.LoanDetails, { loanId: loan.id });
+    },
+    [navigation],
+  );
+
+  const handlePayNow = useCallback(
+    (payment: UpcomingPayment) => {
+      // Pay-now screen lands in Bucket B; for Bucket A surface a localized
+      // placeholder so the affordance is discoverable today.
+      Alert.alert(
+        t("credit_profile.pay_now"),
+        t("credit_profile.help_placeholder_body"),
+      );
+    },
+    [t],
+  );
+
+  if (loading && !refreshing && !hasLoans) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={COLORS.teal} />
@@ -106,8 +197,6 @@ export default function CreditProfileScreen() {
   const maxLoan = assessment?.approved_amount_cents ?? 0;
   const maxAdvance = assessment?.max_advance_cents ?? 0;
   const approvalPct = assessment?.approval_likelihood ?? 0;
-  const dimensions = assessment?.dimension_scores ?? [];
-  const improvementActions = assessment?.improvement_actions ?? [];
 
   return (
     <View style={styles.container}>
@@ -117,8 +206,13 @@ export default function CreditProfileScreen() {
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t("credit_profile.header_title")}</Text>
-        <TouchableOpacity style={styles.headerBtn}>
-          <Ionicons name="information-circle-outline" size={24} color="#FFF" />
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={handleHelpPress}
+          accessibilityRole="button"
+          accessibilityLabel={t("credit_profile.help_button_a11y")}
+        >
+          <Ionicons name="help-circle-outline" size={24} color="#FFF" />
         </TouchableOpacity>
       </View>
 
@@ -127,7 +221,7 @@ export default function CreditProfileScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.teal} />}
       >
-        {/* Credit Score Card */}
+        {/* ── 1. Eligibility Card ──────────────────────────────────── */}
         <View style={[styles.card, styles.scoreCard]}>
           <Text style={styles.scoreNumber}>{score}</Text>
           <Text style={[styles.tierLabel, { color: tierColor }]}>
@@ -135,7 +229,6 @@ export default function CreditProfileScreen() {
           </Text>
           <Text style={styles.mutedText}>{t("credit_profile.muted_text")}</Text>
 
-          {/* Limits Row */}
           <View style={styles.limitsRow}>
             <View style={styles.limitCol}>
               <Text style={styles.limitValue}>{formatCents(maxLoan)}</Text>
@@ -154,16 +247,13 @@ export default function CreditProfileScreen() {
           </View>
         </View>
 
-        {/* Default Recovery Row — only shown when the user has unresolved
-            defaults or late contributions. Visible directly under the
-            score card so it's the first thing a user with overdue items
-            sees on their credit profile. */}
+        {/* ── 2. Default Recovery (conditional) ────────────────────── */}
         {hasRecoveryItems && (
           <TouchableOpacity
             style={styles.recoveryRow}
             onPress={() => navigation.navigate(Routes.DefaultRecovery)}
             accessibilityRole="button"
-            accessibilityLabel="Open default recovery"
+            accessibilityLabel={t("credit_profile.recovery_title")}
           >
             <View style={styles.recoveryRowIcon}>
               <Ionicons name="warning" size={18} color={COLORS.red} />
@@ -172,45 +262,139 @@ export default function CreditProfileScreen() {
               <Text style={styles.recoveryRowTitle}>{t("credit_profile.recovery_title")}</Text>
               <Text style={styles.recoveryRowSubtitle}>
                 {hasActiveDefaults
-                  ? "Unresolved defaults need attention"
-                  : "Late contributions to resolve"}
+                  ? t("credit_profile.recovery_subtitle_defaults")
+                  : t("credit_profile.recovery_subtitle_late")}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={COLORS.muted} />
           </TouchableOpacity>
         )}
 
-        {/* Assessment Breakdown */}
-        {dimensions.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>{t("credit_profile.section_assessment")}</Text>
-            {dimensions.map((dim: any, i: number) => {
-              const dimScore = dim.score ?? 0;
-              const color = getScoreColor(dimScore);
-              return (
-                <View key={i} style={styles.card}>
-                  <View style={styles.dimHeader}>
-                    <Text style={styles.dimLabel}>{dim.label ?? dim.dimension}</Text>
-                    <Text style={[styles.dimScore, { color }]}>{dimScore}/100</Text>
+        {/* ── 3. Summary Card ──────────────────────────────────────── */}
+        <Text style={styles.sectionTitle}>{t("credit_profile.section_summary")}</Text>
+        <View style={styles.card}>
+          <View style={styles.summaryGrid}>
+            <SummaryStat
+              label={t("credit_profile.summary_borrowed")}
+              value={formatCents(summary.totalBorrowedCents)}
+              color={COLORS.navy}
+              onHelp={() => handleStatHelp("borrowed")}
+              tHelpA11y={t("credit_profile.stat_help_a11y")}
+            />
+            <SummaryStat
+              label={t("credit_profile.summary_repaid")}
+              value={formatCents(summary.totalRepaidCents)}
+              color={COLORS.green}
+              onHelp={() => handleStatHelp("repaid")}
+              tHelpA11y={t("credit_profile.stat_help_a11y")}
+            />
+            <SummaryStat
+              label={t("credit_profile.summary_outstanding")}
+              value={formatCents(summary.totalOutstandingCents)}
+              color={COLORS.orange}
+              onHelp={() => handleStatHelp("outstanding")}
+              tHelpA11y={t("credit_profile.stat_help_a11y")}
+            />
+            <SummaryStat
+              label={t("credit_profile.summary_defaults")}
+              value={String(summary.defaultCount)}
+              color={summary.defaultCount > 0 ? COLORS.red : COLORS.muted}
+              onHelp={() => handleStatHelp("defaults")}
+              tHelpA11y={t("credit_profile.stat_help_a11y")}
+            />
+          </View>
+        </View>
+
+        {/* ── 4. My Loans ──────────────────────────────────────────── */}
+        <Text style={styles.sectionTitle}>{t("credit_profile.section_my_loans")}</Text>
+        {hasLoans ? (
+          loans.map((loan) => {
+            const pill = STATUS_PILL_COLOR[loan.status] ?? STATUS_PILL_COLOR.active;
+            const progressPct =
+              loan.paymentsTotal > 0
+                ? Math.round((loan.paymentsMade / loan.paymentsTotal) * 100)
+                : 0;
+            return (
+              <TouchableOpacity
+                key={loan.id}
+                style={styles.card}
+                onPress={() => handleLoanPress(loan)}
+                accessibilityRole="button"
+                activeOpacity={0.85}
+              >
+                <View style={styles.loanHeaderRow}>
+                  <Text style={styles.loanPrincipal}>{formatCents(loan.principalCents)}</Text>
+                  <View style={[styles.statusPill, { backgroundColor: pill.bg }]}>
+                    <Text style={[styles.statusPillText, { color: pill.fg }]}>
+                      {t(`credit_profile.loan_status_${loan.status}`)}
+                    </Text>
                   </View>
-                  <View style={styles.dimProgressTrack}>
-                    <View
-                      style={[
-                        styles.dimProgressFill,
-                        { width: `${dimScore}%`, backgroundColor: color },
-                      ]}
-                    />
-                  </View>
-                  {dim.description && (
-                    <Text style={[styles.mutedText, { marginTop: 6 }]}>{dim.description}</Text>
-                  )}
                 </View>
-              );
-            })}
-          </>
+
+                <View style={styles.progressTrack}>
+                  <View
+                    style={[
+                      styles.progressFill,
+                      { width: `${progressPct}%`, backgroundColor: loan.isDelinquent ? COLORS.red : COLORS.teal },
+                    ]}
+                  />
+                </View>
+                <View style={styles.loanMetaRow}>
+                  <Text style={styles.mutedText}>
+                    {loan.paymentsMade} / {loan.paymentsTotal}
+                    {loan.paymentsTotal > 0 ? ` (${progressPct}%)` : ""}
+                  </Text>
+                  {loan.nextPaymentDate && loan.status === "active" ? (
+                    <Text style={styles.mutedText}>
+                      {t("credit_profile.payment_due")} {formatShortDate(loan.nextPaymentDate, i18n.language)}
+                    </Text>
+                  ) : loan.closedAt ? (
+                    <Text style={styles.mutedText}>
+                      {t("credit_profile.closed_at")} {formatShortDate(loan.closedAt, i18n.language)}
+                    </Text>
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        ) : (
+          <View style={styles.emptyCard}>
+            <Ionicons name="cash-outline" size={28} color={COLORS.muted} />
+            <Text style={styles.emptyTitle}>{t("credit_profile.empty_loans_title")}</Text>
+            <Text style={styles.emptyBody}>{t("credit_profile.empty_loans_body")}</Text>
+          </View>
         )}
 
-        {/* Eligible Products */}
+        {/* ── 5. Upcoming Payments ─────────────────────────────────── */}
+        <Text style={styles.sectionTitle}>{t("credit_profile.section_upcoming_payments")}</Text>
+        {hasUpcoming ? (
+          upcomingPayments.map((p) => (
+            <View key={p.scheduleId ?? `${p.loanId}-${p.dueDate}`} style={styles.card}>
+              <View style={styles.paymentRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.paymentAmount}>{formatCents(p.amountCents)}</Text>
+                  <Text style={styles.mutedText}>
+                    {t("credit_profile.payment_due")} {formatShortDate(p.dueDate, i18n.language)}
+                    {p.paymentNumber ? ` · #${p.paymentNumber}` : ""}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.payNowBtn}
+                  onPress={() => handlePayNow(p)}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.payNowText}>{t("credit_profile.pay_now")}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        ) : (
+          <View style={styles.emptyCardCompact}>
+            <Text style={styles.emptyBody}>{t("credit_profile.empty_payments_title")}</Text>
+          </View>
+        )}
+
+        {/* ── 6. Eligible Products ─────────────────────────────────── */}
         {eligibleProducts && eligibleProducts.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>{t("credit_profile.section_products")}</Text>
@@ -223,9 +407,7 @@ export default function CreditProfileScreen() {
                     <View
                       style={[
                         styles.productIcon,
-                        {
-                          backgroundColor: isEligible ? `${COLORS.teal}15` : COLORS.bg,
-                        },
+                        { backgroundColor: isEligible ? `${COLORS.teal}15` : COLORS.bg },
                       ]}
                     >
                       <Ionicons
@@ -239,7 +421,7 @@ export default function CreditProfileScreen() {
                       <Text style={styles.mutedText}>
                         {isEligible
                           ? `Up to ${formatCents(product.max_amount_cents ?? 0)}`
-                          : product.ineligibility_reason ?? "Not eligible"}
+                          : product.ineligibility_reason ?? t("credit_profile.alert_not_eligible")}
                       </Text>
                     </View>
                     {isEligible ? (
@@ -247,11 +429,12 @@ export default function CreditProfileScreen() {
                         style={styles.applyBtn}
                         onPress={() => {
                           if (canApply) {
-                            navigation.navigate("LoanApplication", {
-                              productId: product.id,
-                            });
+                            navigation.navigate("LoanApplication", { productId: product.id });
                           } else {
-                            Alert.alert(t("credit_profile.alert_cannot_apply_title"), applyReason ?? t("credit_profile.alert_not_eligible"));
+                            Alert.alert(
+                              t("credit_profile.alert_cannot_apply_title"),
+                              applyReason ?? t("credit_profile.alert_not_eligible"),
+                            );
                           }
                         }}
                       >
@@ -270,64 +453,72 @@ export default function CreditProfileScreen() {
           </>
         )}
 
-        {/* How to Improve */}
-        {improvementActions.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>{t("credit_profile.section_improve")}</Text>
-            {improvementActions.map((action: any, i: number) => {
-              const actionText = typeof action === "string" ? action : action.description ?? "";
-              return (
-                <View key={i} style={styles.card}>
-                  <View style={styles.actionRow}>
-                    <View style={styles.actionNumber}>
-                      <Text style={styles.actionNumberText}>{i + 1}</Text>
-                    </View>
-                    <Text style={styles.actionText}>{actionText}</Text>
-                  </View>
-                </View>
-              );
-            })}
-          </>
-        )}
+        {/* ── 7. Footer links ──────────────────────────────────────── */}
+        <TouchableOpacity
+          style={styles.footerLink}
+          onPress={() => navigation.navigate(Routes.CreditReport)}
+          accessibilityRole="button"
+        >
+          <Ionicons name="document-text-outline" size={16} color={COLORS.teal} />
+          <Text style={styles.footerLinkText}>{t("credit_profile.section_view_full_report")}</Text>
+          <Ionicons name="chevron-forward" size={16} color={COLORS.teal} />
+        </TouchableOpacity>
 
-        <View style={{ height: 40 }} />
+        <TouchableOpacity
+          style={styles.footerLink}
+          onPress={() => navigation.navigate(Routes.XnScoreDashboard)}
+          accessibilityRole="button"
+        >
+          <Ionicons name="trending-up-outline" size={16} color={COLORS.teal} />
+          <Text style={styles.footerLinkText}>{t("credit_profile.section_how_score_uses")}</Text>
+          <Ionicons name="chevron-forward" size={16} color={COLORS.teal} />
+        </TouchableOpacity>
+
+        <View style={{ height: 32 }} />
       </ScrollView>
     </View>
   );
 }
 
+// ─── Subcomponents ────────────────────────────────────────────────────────────
+
+function SummaryStat({
+  label,
+  value,
+  color,
+  onHelp,
+  tHelpA11y,
+}: {
+  label: string;
+  value: string;
+  color: string;
+  onHelp: () => void;
+  tHelpA11y: string;
+}) {
+  return (
+    <View style={styles.summaryStat}>
+      <View style={styles.summaryStatLabelRow}>
+        <Text style={styles.summaryStatLabel}>{label}</Text>
+        <TouchableOpacity
+          onPress={onHelp}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          accessibilityRole="button"
+          accessibilityLabel={tHelpA11y}
+        >
+          <Ionicons name="information-circle-outline" size={14} color={COLORS.muted} />
+        </TouchableOpacity>
+      </View>
+      <Text style={[styles.summaryStatValue, { color }]}>{value}</Text>
+    </View>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: COLORS.bg },
-  recoveryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: COLORS.red + "33",
-    gap: 12,
-    marginBottom: 12,
-  },
-  recoveryRowIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.red + "15",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  recoveryRowTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: COLORS.navy,
-  },
-  recoveryRowSubtitle: {
-    fontSize: 12,
-    color: COLORS.muted,
-    marginTop: 2,
-  },
+
   header: {
     backgroundColor: COLORS.navy,
     paddingTop: 50,
@@ -385,53 +576,106 @@ const styles = StyleSheet.create({
   limitLabel: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
   divider: { width: 1, height: 28, backgroundColor: COLORS.border },
 
-  // Dimensions
-  dimHeader: {
+  // Recovery row
+  recoveryRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: COLORS.red + "33",
+    gap: 12,
+    marginBottom: 12,
   },
-  dimLabel: { fontSize: 14, fontWeight: "600", color: COLORS.navy },
-  dimScore: { fontSize: 14, fontWeight: "700" },
-  dimProgressTrack: {
-    height: 6,
-    backgroundColor: COLORS.border,
-    borderRadius: 3,
-    overflow: "hidden",
+  recoveryRowIcon: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: COLORS.red + "15",
+    alignItems: "center", justifyContent: "center",
   },
-  dimProgressFill: { height: 6, borderRadius: 3 },
+  recoveryRowTitle: { fontSize: 14, fontWeight: "600", color: COLORS.navy },
+  recoveryRowSubtitle: { fontSize: 12, color: COLORS.muted, marginTop: 2 },
+
+  // Summary
+  summaryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginHorizontal: -6,
+  },
+  summaryStat: {
+    width: "50%",
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+  },
+  summaryStatLabelRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  summaryStatLabel: { fontSize: 11, fontWeight: "700", color: COLORS.muted, letterSpacing: 0.4, textTransform: "uppercase" },
+  summaryStatValue: { fontSize: 20, fontWeight: "800", marginTop: 4 },
+
+  // Loan rows
+  loanHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  loanPrincipal: { fontSize: 16, fontWeight: "700", color: COLORS.navy },
+  statusPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
+  statusPillText: { fontSize: 11, fontWeight: "700", letterSpacing: 0.4, textTransform: "uppercase" },
+  progressTrack: { height: 6, backgroundColor: COLORS.border, borderRadius: 3, overflow: "hidden" },
+  progressFill: { height: 6, borderRadius: 3 },
+  loanMetaRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 8 },
+
+  // Empty state
+  emptyCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    padding: 24,
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: "dashed",
+  },
+  emptyCardCompact: {
+    backgroundColor: COLORS.white,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: "dashed",
+  },
+  emptyTitle: { fontSize: 14, fontWeight: "700", color: COLORS.navy, marginTop: 4 },
+  emptyBody: { fontSize: 12, color: COLORS.muted, textAlign: "center", lineHeight: 17 },
+
+  // Upcoming payments
+  paymentRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  paymentAmount: { fontSize: 16, fontWeight: "700", color: COLORS.navy },
+  payNowBtn: {
+    backgroundColor: COLORS.teal,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  payNowText: { fontSize: 13, fontWeight: "700", color: "#FFF" },
 
   // Products
   productRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  productIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  productIcon: { width: 40, height: 40, borderRadius: 20, justifyContent: "center", alignItems: "center" },
   productName: { fontSize: 14, fontWeight: "600", color: COLORS.navy },
-  applyBtn: {
-    backgroundColor: COLORS.teal,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
+  applyBtn: { backgroundColor: COLORS.teal, borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8 },
   applyBtnText: { fontSize: 13, fontWeight: "600", color: "#FFF" },
   lockedRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   lockedText: { fontSize: 12, color: COLORS.muted },
 
-  // Actions
-  actionRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-  actionNumber: {
-    width: 24,
-    height: 24,
+  // Footer
+  footerLink: {
+    backgroundColor: COLORS.white,
     borderRadius: 12,
-    backgroundColor: COLORS.teal,
-    justifyContent: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    flexDirection: "row",
     alignItems: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  actionNumberText: { fontSize: 12, fontWeight: "700", color: "#FFF" },
-  actionText: { flex: 1, fontSize: 14, color: "#374151", lineHeight: 20 },
+  footerLinkText: { flex: 1, fontSize: 14, fontWeight: "700", color: COLORS.teal },
 });

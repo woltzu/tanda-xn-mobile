@@ -208,7 +208,7 @@ export default function LoanMarketplaceScreen() {
           {activeLoans.length > 0 && (
             <TouchableOpacity
               style={styles.activeLoansBar}
-              onPress={() => navigation.navigate(Routes.LoanDashboard)}
+              onPress={() => navigation.navigate(Routes.CreditProfile)}
             >
               <View style={styles.activeLoansLeft}>
                 <Ionicons name="wallet" size={18} color="#F59E0B" />
