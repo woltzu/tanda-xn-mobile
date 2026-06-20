@@ -23,7 +23,12 @@ export type FeedPostType =
   | "goal_reached"
   | "circle_joined"
   | "payout_received"
-  | "xn_level_up";
+  | "xn_level_up"
+  // Post to Community Bucket A (2026-06-20). A generic member-authored
+  // community update — text + optional image. Lives in feed_posts so it
+  // reuses the existing like/comment/realtime pipeline; the dead
+  // community_posts table is no longer written to.
+  | "community";
 
 export type FeedVisibility = "public" | "community" | "anonymous";
 
@@ -221,6 +226,11 @@ type FeedContextType = {
     relatedId?: string,
     relatedType?: string,
     imageUploadStatus?: ImageUploadStatus,
+    // Post to Community Bucket A — opt-in `type` override. Defaults to
+    // 'dream' to keep CreateDreamPostScreen and other existing callers
+    // unchanged. PostToCommunityScreen passes 'community' to land in the
+    // same feed_posts pipeline without forking the create path.
+    type?: FeedPostType,
   ) => Promise<FeedPost>;
   // Patch the image_url after a successful background upload. Used by
   // CreateDreamPostScreen's optimistic-insert flow.
@@ -549,6 +559,7 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
     relatedId?: string,
     relatedType?: string,
     imageUploadStatus: ImageUploadStatus = "completed",
+    type: FeedPostType = "dream",
   ): Promise<FeedPost> => {
     if (!user?.id) throw new Error("Must be logged in to create a post");
 
@@ -559,7 +570,7 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
       .from("feed_posts")
       .insert({
         user_id: user.id,
-        type: "dream",
+        type,
         content,
         image_url: imageUrl || null,
         image_upload_status: imageUploadStatus,

@@ -55,6 +55,8 @@ const POST_TYPE_CONFIG: Record<FeedPostType, { emoji: string; label: string; col
   circle_joined: { emoji: "\u{1F91D}", label: "Group Win", color: "#6366F1" },
   payout_received: { emoji: "\u{1F4B8}", label: "Payout", color: "#059669" },
   xn_level_up: { emoji: "\u{2B06}\u{FE0F}", label: "Level Up", color: "#EC4899" },
+  // Post to Community Bucket A — member-authored community update.
+  community: { emoji: "\u{1F4AC}", label: "Community", color: "#3B82F6" },
 };
 
 // Format relative time

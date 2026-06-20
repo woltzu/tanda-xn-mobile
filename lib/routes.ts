@@ -73,6 +73,7 @@ export const Routes = {
   CloseCircle: "CloseCircle",
   Community: "Community",
   CommunityBrowser: "CommunityBrowser",
+  CommunityFeed: "CommunityFeed",
   CommunityHub: "CommunityHub",
   CommunityMain: "CommunityMain",
   CommunityMemory: "CommunityMemory",

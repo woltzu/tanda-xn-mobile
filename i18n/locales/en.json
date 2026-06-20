@@ -538,6 +538,11 @@
     "pill_join_more": "Join more",
     "section_new_arrivals": "New Arrivals",
     "see_all": "See All",
+    "section_community_title": "Community",
+    "section_community_see_all": "See all",
+    "section_community_create_a11y": "Share a post",
+    "section_community_empty_title": "Start the conversation",
+    "section_community_empty": "Share an update with your community — text or photo.",
     "empty_arrivals": "No new arrivals yet — the village is growing",
     "arrival_from_unknown": "around the world",
     "arrival_from": "From {{country}}",
@@ -4795,7 +4800,21 @@
     "header_title": "Post to Community",
     "section_sharing": "What are you sharing?",
     "placeholder_title": "Title (optional)",
-    "placeholder_body": "Write your post..."
+    "placeholder_body": "Write your post...",
+    "btn_post": "Post",
+    "body_placeholder": "What's on your mind?",
+    "visibility_info": "Your post will be visible to all members of this community. Your first name will be shown as the author.",
+    "image_add": "Add a photo",
+    "image_remove": "Remove image",
+    "image_perm_title": "Photos access needed",
+    "image_perm_body": "Allow TandaXn to access your photos to attach an image to this post."
+  },
+  "community_feed": {
+    "header_title": "Community",
+    "compose_a11y": "Share a post",
+    "empty_title": "Nothing here yet",
+    "empty_body": "Be the first to share an update with your community.",
+    "empty_cta": "Share a post"
   },
   "store_application": {
     "alert_required": "Required",

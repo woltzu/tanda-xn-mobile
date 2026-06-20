@@ -234,6 +234,7 @@ import NewArrivalsScreen from "./screens/NewArrivalsScreen";
 import GatheringsScreen from "./screens/GatheringsScreen";
 import CreateGatheringScreen from "./screens/CreateGatheringScreen";
 import CommunityMemoryScreen from "./screens/CommunityMemoryScreen";
+import CommunityFeedScreen from "./screens/CommunityFeedScreen";
 import PostToCommunityScreen from "./screens/PostToCommunityScreen";
 // New Tab Screens (Navigation Restructure)
 import ActionScreen from "./screens/ActionScreen";
@@ -527,6 +528,7 @@ export type RootStackParamList = {
   AddRecipient: { returnTo?: string };
   // Community Flow
   CommunityBrowser: undefined;
+  CommunityFeed: undefined;
   CommunityHub: { communityId: string };
   CreateCommunity: { parentId?: string } | undefined;
   // Phase 1a (migration 131): read-only directory of the user's memberships
@@ -1059,6 +1061,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="Gatherings" component={GatheringsScreen} />
       <HomeStack.Screen name="CreateGathering" component={CreateGatheringScreen} />
       <HomeStack.Screen name="CommunityMemory" component={CommunityMemoryScreen} />
+      <HomeStack.Screen name="CommunityFeed" component={CommunityFeedScreen} />
       <HomeStack.Screen name="PostToCommunity" component={PostToCommunityScreen} />
     </HomeStack.Navigator>
   );
@@ -1218,6 +1221,7 @@ function CommunityStackScreen() {
       <CommunityStack.Screen name="Gatherings" component={GatheringsScreen} />
       <CommunityStack.Screen name="CreateGathering" component={CreateGatheringScreen} />
       <CommunityStack.Screen name="CommunityMemory" component={CommunityMemoryScreen} />
+      <CommunityStack.Screen name="CommunityFeed" component={CommunityFeedScreen} />
       <CommunityStack.Screen name="PostToCommunity" component={PostToCommunityScreen} />
       <CommunityStack.Screen name="ElderDashboard" component={ElderDashboardScreen} />
       {/* Conflict P1 — legacy elder route names aliased to merged screens. */}

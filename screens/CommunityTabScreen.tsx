@@ -36,6 +36,8 @@ import {
   useNearYou,
   useDreamFeed,
 } from '../hooks/useCommunityFeatures';
+import { useFeed } from '../context/FeedContext';
+import FeedPostCard from '../components/FeedPostCard';
 
 // ============================================================================
 // DESIGN TOKENS
@@ -212,6 +214,22 @@ const CommunityTabScreen: React.FC = () => {
     refresh: refreshNearYou,
   } = useNearYou(userCity);
 
+  // Post to Community Bucket A — Community section data. Reads from the
+  // live feed_posts pipeline (no separate fetch — useFeed already returns
+  // every type and shares its cache with DreamFeedScreen). Filtered to
+  // type='community' here so the section is scoped to member-authored
+  // updates, not auto-posts or dream posts.
+  const {
+    posts: feedPosts,
+    likedPostIds,
+    toggleLike,
+    refreshFeed,
+  } = useFeed();
+  const communityPosts = React.useMemo(
+    () => feedPosts.filter((p) => p.type === 'community').slice(0, 3),
+    [feedPosts],
+  );
+
   // Mock community elders (from getCommunityMembers filtered by role)
   const [communityElders] = useState([
     {
@@ -248,9 +266,10 @@ const CommunityTabScreen: React.FC = () => {
       refreshGatherings(),
       refreshMemories(),
       refreshNearYou(),
+      refreshFeed(),
     ]);
     setRefreshing(false);
-  }, [refreshArrivals, refreshGatherings, refreshMemories, refreshNearYou]);
+  }, [refreshArrivals, refreshGatherings, refreshMemories, refreshNearYou, refreshFeed]);
 
   // Welcome handler
   const handleSendWelcome = useCallback(
@@ -441,6 +460,89 @@ const CommunityTabScreen: React.FC = () => {
               color={COLORS.subtitle}
             />
           </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
+  // Post to Community Bucket A — "Community" section. Shows up to 3 of
+  // the most recent member-authored community posts (filtered from
+  // useFeed in the parent scope), each rendered as a full FeedPostCard
+  // so likes / comments work in place. Header has a (+) shortcut to the
+  // composer and a "See all" link into the dedicated CommunityFeed.
+  // Empty state CTAs straight into the composer.
+  const renderCommunityPosts = () => {
+    const openFeed = () => navigation.navigate(Routes.CommunityFeed as never);
+    const openCreate = () =>
+      navigation.navigate(Routes.PostToCommunity as never);
+    const openPost = (postId: string) =>
+      navigation.navigate(Routes.PostDetail as never, { postId } as never);
+    const openAuthor = (userId: string) =>
+      navigation.navigate('UserDreamProfile' as never, { userId } as never);
+
+    return (
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            {t('community_tab.section_community_title')}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <TouchableOpacity
+              onPress={openCreate}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={t('community_tab.section_community_create_a11y')}
+            >
+              <Ionicons name="add-circle" size={22} color={COLORS.teal} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={openFeed}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={styles.sectionLink}>
+                {t('community_tab.section_community_see_all')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {communityPosts.length === 0 ? (
+          <TouchableOpacity
+            style={styles.dreamTeaserCard}
+            onPress={openCreate}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+          >
+            <View style={styles.dreamTeaserIcon}>
+              <Ionicons name="chatbubble-ellipses" size={20} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.dreamTeaserTitle} numberOfLines={1}>
+                {t('community_tab.section_community_empty_title')}
+              </Text>
+              <Text style={styles.dreamTeaserMeta} numberOfLines={2}>
+                {t('community_tab.section_community_empty')}
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={COLORS.subtitle}
+            />
+          </TouchableOpacity>
+        ) : (
+          communityPosts.map((post) => (
+            <FeedPostCard
+              key={post.id}
+              post={post}
+              isLiked={likedPostIds.has(post.id)}
+              onLike={() => toggleLike(post.id)}
+              onComment={() => openPost(post.id)}
+              onPress={() => openPost(post.id)}
+              onAuthorPress={openAuthor}
+              currentUserId={user?.id}
+            />
+          ))
         )}
       </View>
     );
@@ -939,7 +1041,13 @@ const CommunityTabScreen: React.FC = () => {
         {/* 2b. Upcoming Events teaser (full list in EventsScreen) */}
         {renderUpcomingEvents()}
 
-        {/* 2c. Dreams teaser (full list in DreamFeedScreen) */}
+        {/* 2c. Community Posts — Post to Community Bucket A. Inline
+             FeedPostCards for member-authored type='community' posts
+             from feed_posts. Sits ahead of Dreams so a new post the
+             user just published is the first thing they see. */}
+        {renderCommunityPosts()}
+
+        {/* 2d. Dreams teaser (full list in DreamFeedScreen) */}
         {renderDreamFeed()}
 
         {/* Kente Divider */}

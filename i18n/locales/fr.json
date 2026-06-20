@@ -538,6 +538,11 @@
     "pill_join_more": "Rejoindre plus",
     "section_new_arrivals": "Nouveaux arrivants",
     "see_all": "Tout voir",
+    "section_community_title": "Communauté",
+    "section_community_see_all": "Tout voir",
+    "section_community_create_a11y": "Partager une publication",
+    "section_community_empty_title": "Lancez la conversation",
+    "section_community_empty": "Partagez une actualité avec votre communauté — texte ou photo.",
     "empty_arrivals": "Pas encore de nouveaux arrivants — le village grandit",
     "arrival_from_unknown": "des quatre coins du monde",
     "arrival_from": "Depuis {{country}}",
@@ -4795,7 +4800,21 @@
     "header_title": "Publier à la communauté",
     "section_sharing": "Que partagez-vous ?",
     "placeholder_title": "Titre (facultatif)",
-    "placeholder_body": "Écrivez votre publication..."
+    "placeholder_body": "Écrivez votre publication...",
+    "btn_post": "Publier",
+    "body_placeholder": "Que voulez-vous partager ?",
+    "visibility_info": "Votre publication sera visible par tous les membres de cette communauté. Votre prénom sera affiché comme auteur.",
+    "image_add": "Ajouter une photo",
+    "image_remove": "Supprimer l'image",
+    "image_perm_title": "Accès aux photos requis",
+    "image_perm_body": "Autorisez TandaXn à accéder à vos photos pour joindre une image à cette publication."
+  },
+  "community_feed": {
+    "header_title": "Communauté",
+    "compose_a11y": "Partager une publication",
+    "empty_title": "Rien ici pour l'instant",
+    "empty_body": "Soyez le premier à partager une actualité avec votre communauté.",
+    "empty_cta": "Partager une publication"
   },
   "store_application": {
     "alert_required": "Requis",
