@@ -51,6 +51,7 @@ import {
   LoanStatus,
   UpcomingPayment,
 } from "../hooks/useLoanProfile";
+import { useEventTracker } from "../hooks/useEventTracker";
 import { Routes } from "../lib/routes";
 
 const COLORS = {
@@ -157,6 +158,20 @@ export default function CreditProfileScreen() {
 
   const loading = assessmentLoading || productsLoading || loanProfileLoading;
 
+  // Bucket C — telemetry. One-shot mount fire for credit_profile.viewed,
+  // useRef-guarded so the focus refetch loop can't double-emit.
+  const { track } = useEventTracker();
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: "credit_profile.viewed",
+      eventCategory: "credit",
+      eventAction: "viewed",
+    });
+  }, [track]);
+
   const scrollRef = useRef<ScrollView | null>(null);
   const productsAnchorY = useRef(0);
 
@@ -212,7 +227,12 @@ export default function CreditProfileScreen() {
   // ── Handlers ────────────────────────────────────────────────────────────────
   const handleHelpPress = useCallback(() => {
     setHelpOpen(true);
-  }, []);
+    track({
+      eventType: "credit_profile.help_opened",
+      eventCategory: "credit",
+      eventAction: "opened",
+    });
+  }, [track]);
 
   const handleStatHelp = useCallback((kind: StatKey) => {
     setStatExplainer(kind);
@@ -224,13 +244,31 @@ export default function CreditProfileScreen() {
 
   const handleLoanPress = useCallback(
     (loan: LoanProfileLoan) => {
+      track({
+        eventType: "credit_profile.loan_tapped",
+        eventCategory: "credit",
+        eventAction: "tapped",
+        eventLabel: loan.id,
+        eventValue: { loan_id: loan.id, status: loan.status },
+      });
       navigation.navigate(Routes.LoanDetails, { loanId: loan.id });
     },
-    [navigation],
+    [navigation, track],
   );
 
   const handlePayNow = useCallback(
-    (_payment: UpcomingPayment) => {
+    (payment: UpcomingPayment) => {
+      track({
+        eventType: "credit_profile.payment_tapped",
+        eventCategory: "credit",
+        eventAction: "tapped",
+        eventLabel: payment.loanId,
+        eventValue: {
+          loan_id: payment.loanId,
+          schedule_id: payment.scheduleId,
+          amount_cents: payment.amountCents,
+        },
+      });
       // Pay-now screen lands in a later bucket; for now surface a localized
       // placeholder so the affordance is discoverable today.
       Alert.alert(
@@ -238,7 +276,7 @@ export default function CreditProfileScreen() {
         t("credit_profile.help_placeholder_body"),
       );
     },
-    [t],
+    [t, track],
   );
 
   // Empty-state CTA — either jump straight into LoanApplication with the
@@ -248,6 +286,16 @@ export default function CreditProfileScreen() {
     (p: any) => p.is_eligible !== false,
   );
   const handleEmptyApply = useCallback(() => {
+    track({
+      eventType: "credit_profile.apply_tapped",
+      eventCategory: "credit",
+      eventAction: "tapped",
+      eventValue: {
+        source: "empty_state",
+        has_eligible_product: !!firstEligibleProduct,
+        can_apply: canApply,
+      },
+    });
     if (firstEligibleProduct && canApply) {
       navigation.navigate("LoanApplication", { productId: firstEligibleProduct.id });
       return;
@@ -260,7 +308,7 @@ export default function CreditProfileScreen() {
       t("credit_profile.alert_cannot_apply_title"),
       applyReason ?? t("credit_profile.alert_not_eligible"),
     );
-  }, [firstEligibleProduct, canApply, navigation, t, applyReason]);
+  }, [firstEligibleProduct, canApply, navigation, t, applyReason, track]);
 
   if (loading && !refreshing && !hasLoans) {
     return (

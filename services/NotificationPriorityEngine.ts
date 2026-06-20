@@ -493,6 +493,26 @@ export class NotificationPriorityEngine {
     }
   }
 
+  /**
+   * Credit Profile Bucket C — map the notifications.type values that
+   * migration 220's loan-domain triggers emit onto the abstract
+   * NotificationType used for priority routing. All four loan events
+   * are money-movement / risk events, so they all map to
+   * "payment_critical" (highest tier alongside contributions and
+   * payouts).
+   */
+  static categoryForLoanNotification(dbType: string): NotificationType | null {
+    switch (dbType) {
+      case "loan_disbursed":
+      case "loan_payment_recorded":
+      case "loan_overdue":
+      case "loan_application_status":
+        return "payment_critical";
+      default:
+        return null;
+    }
+  }
+
   /** Time sensitivity: closer deadline = higher score. */
   private static calculateTimeSensitivity(data: Record<string, any>): number {
     const hoursUntilDue = data.hours_until_due ?? data.hoursUntilDue;

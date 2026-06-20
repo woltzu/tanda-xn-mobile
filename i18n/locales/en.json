@@ -4269,6 +4269,16 @@
     "notification_decay_warning_title": "XnScore decay warning",
     "notification_decay_warning_body": "Your XnScore may decay if you remain inactive. Make a contribution to keep it stable."
   },
+  "loan": {
+    "notification_disbursed_title": "Loan disbursed",
+    "notification_disbursed_body": "Your loan of ${{amount}} has been disbursed to your wallet.",
+    "notification_payment_recorded_title": "Loan payment recorded",
+    "notification_payment_recorded_body": "Your payment of ${{amount}} has been applied to your loan.",
+    "notification_overdue_title": "Loan overdue",
+    "notification_overdue_body": "Your loan is now overdue. Please make a payment to avoid additional fees.",
+    "notification_application_status_title": "Loan application {{status}}",
+    "notification_application_status_body": "Your loan application has been {{status}}."
+  },
   "honor": {
     "notification_tier_change_title": "Honor Score tier updated",
     "notification_tier_change_body": "Your Honor Score has moved from {{old_tier}} to {{new_tier}}.",

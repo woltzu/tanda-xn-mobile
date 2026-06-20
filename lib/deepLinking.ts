@@ -101,6 +101,12 @@ export const linkingConfig = {
       // (migration 216) route straight to the dashboard.
       // userId optional; absent = own profile.
       MoodInsights: "mood/:userId?",
+
+      // Credit Profile — Bucket C of the Credit Profile review. Lets
+      // loan_disbursed / loan_payment_recorded / loan_overdue /
+      // loan_application_status notifications (migration 220) route
+      // straight to the profile. userId optional; absent = own profile.
+      CreditProfile: "credit/:userId?",
     },
   },
 };

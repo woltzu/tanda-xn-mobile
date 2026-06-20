@@ -4269,6 +4269,16 @@
     "notification_decay_warning_title": "Avertissement de baisse du XnScore",
     "notification_decay_warning_body": "Votre XnScore peut baisser si vous restez inactif. Effectuez une cotisation pour le stabiliser."
   },
+  "loan": {
+    "notification_disbursed_title": "Prêt versé",
+    "notification_disbursed_body": "Votre prêt de {{amount}} $ a été versé dans votre portefeuille.",
+    "notification_payment_recorded_title": "Paiement de prêt enregistré",
+    "notification_payment_recorded_body": "Votre paiement de {{amount}} $ a été appliqué à votre prêt.",
+    "notification_overdue_title": "Prêt en retard",
+    "notification_overdue_body": "Votre prêt est en retard. Veuillez effectuer un paiement pour éviter des frais supplémentaires.",
+    "notification_application_status_title": "Demande de prêt {{status}}",
+    "notification_application_status_body": "Votre demande de prêt a été {{status}}."
+  },
   "honor": {
     "notification_tier_change_title": "Palier Score d'honneur mis à jour",
     "notification_tier_change_body": "Votre Score d'honneur est passé de {{old_tier}} à {{new_tier}}.",
