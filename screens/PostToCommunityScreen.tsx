@@ -34,6 +34,8 @@ import {
   Image,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Modal,
+  Pressable,
   Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -55,6 +57,25 @@ const RETRY_URI_KEY_PREFIX = "@tandaxn_dream_post_retry_uri:";
 const MAX_BODY = 2000;
 const MAX_TITLE = 100;
 
+// Bucket B — char count thresholds. Hide until >100 chars typed, then show
+// teal; switch to red + "X left" when 50 or fewer remain.
+const CHAR_COUNT_SHOW_AT = 100;
+const CHAR_COUNT_WARN_AT = MAX_BODY - 50;
+
+// Bucket B — HelpSheet topics. Four anchors: scope, visibility, image
+// rules, moderation path.
+type HelpTopic =
+  | "what_to_post"
+  | "who_sees_posts"
+  | "image_guidelines"
+  | "report_or_hide";
+const HELP_TOPICS: HelpTopic[] = [
+  "what_to_post",
+  "who_sees_posts",
+  "image_guidelines",
+  "report_or_hide",
+];
+
 export default function PostToCommunityScreen() {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
@@ -67,6 +88,7 @@ export default function PostToCommunityScreen() {
   const [mediaUri, setMediaUri] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   // ── Image picker ────────────────────────────────────────────────────────────
   const handlePickImage = async () => {
@@ -160,8 +182,10 @@ export default function PostToCommunityScreen() {
 
   const canPost = body.trim().length > 0 && !submitting;
   const charCount = body.length;
-  const showCharCount = charCount > MAX_BODY - 200;
-  const charCountColor = charCount > MAX_BODY - 50 ? "#EF4444" : "#9CA3AF";
+  const showCharCount = charCount > CHAR_COUNT_SHOW_AT;
+  const charsRemaining = MAX_BODY - charCount;
+  const charsLow = charCount >= CHAR_COUNT_WARN_AT;
+  const charCountColor = charsLow ? "#EF4444" : "#00C6AE";
 
   return (
     <View style={styles.container}>
@@ -173,9 +197,23 @@ export default function PostToCommunityScreen() {
           >
             <Ionicons name="close" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>
-            {t("post_to_community.header_title")}
-          </Text>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>
+              {t("post_to_community.header_title")}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setHelpOpen(true)}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={t("post_to_community.help_button_a11y")}
+            >
+              <Ionicons
+                name="help-circle-outline"
+                size={20}
+                color="#FFFFFF"
+              />
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
             style={[styles.postButton, !canPost && styles.postButtonDisabled]}
             onPress={handlePost}
@@ -227,7 +265,14 @@ export default function PostToCommunityScreen() {
 
           {showCharCount && (
             <Text style={[styles.charCount, { color: charCountColor }]}>
-              {charCount}/{MAX_BODY}
+              {charsLow
+                ? t("post_to_community.char_count_left", {
+                    count: charsRemaining,
+                  })
+                : t("post_to_community.char_count", {
+                    current: charCount,
+                    max: MAX_BODY,
+                  })}
             </Text>
           )}
 
@@ -275,7 +320,67 @@ export default function PostToCommunityScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Bucket B — HelpSheet (4 topics) opened by the header (?) button. */}
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} t={t} />
     </View>
+  );
+}
+
+// ─── HelpSheet ────────────────────────────────────────────────────────────────
+// Bucket B — bottom sheet with 4 topics (what to post, who sees, image
+// rules, moderation). Matches the pattern used by Credit Profile / AI
+// Insights / Stress / Mood Bucket B.
+
+function HelpSheet({
+  visible,
+  onClose,
+  t,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  t: (key: string, opts?: any) => string;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => undefined}>
+          <View style={sheetStyles.handle} />
+          <View style={sheetStyles.headerRow}>
+            <Text style={sheetStyles.title}>
+              {t("post_to_community.help_sheet_title")}
+            </Text>
+            <TouchableOpacity
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel={t("post_to_community.help_close")}
+            >
+              <Ionicons name="close" size={22} color="#0A2342" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={sheetStyles.scroll}
+          >
+            {HELP_TOPICS.map((topic) => (
+              <View key={topic} style={sheetStyles.helpItem}>
+                <Text style={sheetStyles.helpItemTitle}>
+                  {t(`post_to_community.help_${topic}_title`)}
+                </Text>
+                <Text style={sheetStyles.helpItemBody}>
+                  {t(`post_to_community.help_${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -322,6 +427,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  headerCenter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   backButton: {
     width: 40,
@@ -389,6 +499,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     position: "relative",
+    // Bucket B — subtle shadow + border so the preview reads as an
+    // attached asset, not part of the form.
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 6,
+    elevation: 2,
+    backgroundColor: "#FFFFFF",
   },
   imagePreview: { width: "100%", height: 240, backgroundColor: "#E5E7EB" },
   imageRemoveBtn: {
@@ -415,4 +535,51 @@ const styles = StyleSheet.create({
     borderColor: "#E5E7EB",
   },
   infoText: { flex: 1, fontSize: 13, color: "#6B7280", lineHeight: 18 },
+});
+
+// Bucket B — bottom-sheet shared styles (HelpSheet). Matches the shape
+// used by Credit Profile / AI Insights HelpSheets.
+const sheetStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 30,
+    maxHeight: "86%",
+  },
+  handle: {
+    alignSelf: "center",
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#E5E7EB",
+    marginBottom: 12,
+  },
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  title: { fontSize: 17, fontWeight: "700", color: "#0A2342" },
+  scroll: { maxHeight: 500 },
+  helpItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+  },
+  helpItemTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 4,
+  },
+  helpItemBody: { fontSize: 13, color: "#4B5563", lineHeight: 19 },
 });

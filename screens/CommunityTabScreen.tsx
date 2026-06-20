@@ -6,7 +6,7 @@
 // Near You, and Community Memory.
 // ============================================================================
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,10 @@ import {
   RefreshControl,
   SafeAreaView,
   Image,
+  Animated,
+  Pressable,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -38,6 +41,11 @@ import {
 } from '../hooks/useCommunityFeatures';
 import { useFeed } from '../context/FeedContext';
 import FeedPostCard from '../components/FeedPostCard';
+
+// Post to Community Bucket B — AsyncStorage gate for the first-visit
+// coach mark on the Community section. Versioned so we can re-prompt
+// every user if the copy ever shifts.
+const COMMUNITY_POST_COACH_KEY = '@tandaxn_community_post_coach_seen_v1';
 
 // ============================================================================
 // DESIGN TOKENS
@@ -229,6 +237,45 @@ const CommunityTabScreen: React.FC = () => {
     () => feedPosts.filter((p) => p.type === 'community').slice(0, 3),
     [feedPosts],
   );
+
+  // Post to Community Bucket B — first-visit coach mark pointing at the
+  // Community section's (+). Same Animated.Value + AsyncStorage gate
+  // pattern as Stress / Mood / Credit Profile Bucket B. Auto-dismiss
+  // after 4 s or on tap.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachOpacity = useRef(new Animated.Value(0)).current;
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    coachCheckedRef.current = true;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COMMUNITY_POST_COACH_KEY);
+        if (seen) return;
+        setCoachVisible(true);
+        Animated.timing(coachOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+      } catch {
+        // AsyncStorage unavailable — silently skip.
+      }
+    })();
+  }, [coachOpacity]);
+  const dismissCoach = useCallback(() => {
+    Animated.timing(coachOpacity, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setCoachVisible(false));
+    AsyncStorage.setItem(COMMUNITY_POST_COACH_KEY, '1').catch(() => undefined);
+  }, [coachOpacity]);
+  useEffect(() => {
+    if (!coachVisible) return;
+    const tid = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(tid);
+  }, [coachVisible, dismissCoach]);
 
   // Mock community elders (from getCommunityMembers filtered by role)
   const [communityElders] = useState([
@@ -1099,6 +1146,25 @@ const CommunityTabScreen: React.FC = () => {
         {/* Bottom spacing for tab bar */}
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Post to Community Bucket B — first-visit coach mark pointing at
+          the Community section's (+) shortcut. Mounted as a sibling to
+          the scroll view so it floats above content. */}
+      {coachVisible ? (
+        <Animated.View
+          style={[styles.coachOverlay, { opacity: coachOpacity }]}
+          pointerEvents="box-none"
+        >
+          <Pressable style={styles.coachBackdrop} onPress={dismissCoach}>
+            <View style={styles.coachCard}>
+              <Ionicons name="bulb-outline" size={20} color="#FBBF24" />
+              <Text style={styles.coachText}>
+                {t('community_tab.coach_tip')}
+              </Text>
+            </View>
+          </Pressable>
+        </Animated.View>
+      ) : null}
     </SafeAreaView>
   );
 };
@@ -1112,6 +1178,31 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.bg,
   },
+
+  // Post to Community Bucket B — coach mark (matches the shape used by
+  // Stress / Mood / Credit Profile B). Top-anchored so it lands above
+  // the Community section header without occluding nav.
+  coachOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-start',
+  },
+  coachBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    paddingTop: 180,
+    paddingHorizontal: 24,
+  },
+  coachCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(15,23,42,0.96)',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    maxWidth: 320,
+  },
+  coachText: { flex: 1, fontSize: 13, color: '#FFFFFF', lineHeight: 18 },
 
   // ── Top Bar ──────────────────────────────────────────────────────────────
   topBar: {
