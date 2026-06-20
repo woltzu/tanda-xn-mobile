@@ -4256,6 +4256,12 @@
     "notification_decay_warning_title": "Honor Score decay warning",
     "notification_decay_warning_body": "Your Honor Score may decay if you remain inactive. Vouch or participate to keep it stable."
   },
+  "stress": {
+    "notification_status_change_title": "Stress Score alert",
+    "notification_status_change_body": "Your stress score is now {{status_label}}. Tap to see details and suggested actions.",
+    "notification_intervention_offered_title": "Support available",
+    "notification_intervention_offered_body": "We've suggested a next step to help reduce your stress. Tap to review."
+  },
   "stress_score": {
     "loading": "Loading your wellness data...",
     "header_title": "Financial Wellness",

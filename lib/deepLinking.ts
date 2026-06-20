@@ -89,6 +89,12 @@ export const linkingConfig = {
       // honor_tier_change notification (migration 214) route straight
       // to the overview. userId optional; absent = own profile.
       HonorScoreOverview: "honor/:userId?",
+
+      // Stress Score Dashboard — Bucket C of the Stress review. Lets
+      // the stress_status_change and stress_intervention_offered
+      // notifications (migration 215) route straight to the dashboard.
+      // userId optional; absent = own profile.
+      StressScoreDashboard: "stress/:userId?",
     },
   },
 };

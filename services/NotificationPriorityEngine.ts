@@ -433,6 +433,36 @@ export class NotificationPriorityEngine {
     }
   }
 
+  /**
+   * Stress Bucket C — map the notifications.type values that migration
+   * 215's notify_stress_status_change trigger emits onto the abstract
+   * NotificationType buckets. Unlike honor / xnscore, stress
+   * notifications are routed into payment_critical: a member crossing
+   * into orange/red stress has direct financial-stakes implications
+   * and the engine's typeBasePriority for payment_critical is the
+   * highest (10) — exactly the urgency we want.
+   *
+   *   stress_status_change          → payment_critical (crossed into
+   *                                                     orange/red)
+   *   stress_intervention_offered   → payment_critical (auto-suggested
+   *                                                     next step is
+   *                                                     waiting on the
+   *                                                     dashboard)
+   *
+   * Returns null when the input isn't a stress type, so callers can
+   * fall back to whatever other mapping covers cycle / xnscore /
+   * honor / KYC / payout_received.
+   */
+  static categoryForStressNotification(dbType: string): NotificationType | null {
+    switch (dbType) {
+      case "stress_status_change":
+      case "stress_intervention_offered":
+        return "payment_critical";
+      default:
+        return null;
+    }
+  }
+
   /** Time sensitivity: closer deadline = higher score. */
   private static calculateTimeSensitivity(data: Record<string, any>): number {
     const hoursUntilDue = data.hours_until_due ?? data.hoursUntilDue;

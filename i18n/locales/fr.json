@@ -4256,6 +4256,12 @@
     "notification_decay_warning_title": "Avertissement de baisse du Score d'honneur",
     "notification_decay_warning_body": "Votre Score d'honneur peut baisser si vous restez inactif. Cautionnez ou participez pour le stabiliser."
   },
+  "stress": {
+    "notification_status_change_title": "Alerte Score de stress",
+    "notification_status_change_body": "Votre score de stress est maintenant {{status_label}}. Touchez pour voir les détails et les actions suggérées.",
+    "notification_intervention_offered_title": "Soutien disponible",
+    "notification_intervention_offered_body": "Nous avons suggéré une prochaine étape pour aider à réduire votre stress. Touchez pour la consulter."
+  },
   "stress_score": {
     "loading": "Chargement de vos données de bien-être...",
     "header_title": "Bien-être financier",

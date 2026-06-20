@@ -20,6 +20,7 @@ import { useTranslation } from "react-i18next";
 import { useStressScore, useStressIntervention } from "../hooks/useFinancialStressPrediction";
 import { useStressActions } from "../hooks/useFinancialStressPrediction";
 import type { StressStatus, StressTrend, SignalBreakdown } from "../hooks/useFinancialStressPrediction";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -180,6 +181,41 @@ export default function StressScoreDashboardScreen() {
     return entries.sort((a, b) => b.weighted - a.weighted)[0];
   }, [breakdown]);
 
+  // Bucket C — fire stress.top_stressor_revealed once per mount per
+  // distinct top stressor. Indicates the user actually saw the card
+  // (not just landed on the screen with no breakdown yet). Skips
+  // when topStressor is null and re-fires when the key changes
+  // mid-session (rare — only if the recompute reorders signals).
+  const topStressorRevealedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!topStressor) return;
+    if (topStressorRevealedRef.current === topStressor.key) return;
+    topStressorRevealedRef.current = topStressor.key;
+    track({
+      eventType: "stress.top_stressor_revealed",
+      eventCategory: "score",
+      eventAction: "revealed",
+      eventLabel: topStressor.key,
+      eventValue: { weighted: topStressor.weighted },
+    });
+  }, [topStressor, track]);
+
+  // Bucket C — telemetry channel. Bound by useEventTracker to the
+  // current user; events flow through EventService into user_events.
+  const { track } = useEventTracker();
+  // useRef-guarded one-shot mount fire so the focus refetch loop
+  // doesn't double-emit stress.viewed.
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: "stress.viewed",
+      eventCategory: "score",
+      eventAction: "viewed",
+    });
+  }, [track]);
+
   // Bucket B — HelpSheet visibility + per-signal explainer payload.
   // State lives at component scope so the back-button can dismiss
   // either sheet without unmounting the screen.
@@ -225,10 +261,15 @@ export default function StressScoreDashboardScreen() {
   }, [coachVisible, dismissCoach]);
 
   // Bucket B — open the help sheet. Replaces the Bucket-A Alert.alert
-  // placeholder.
+  // placeholder. Bucket C emits stress.help_opened.
   const handleHelpPress = useCallback(() => {
     setHelpOpen(true);
-  }, []);
+    track({
+      eventType: "stress.help_opened",
+      eventCategory: "score",
+      eventAction: "opened",
+    });
+  }, [track]);
 
   // Bucket B — signal row tap → explainer sheet. The payload carries
   // the canonical signal key + raw and weighted values so the sheet
@@ -237,8 +278,15 @@ export default function StressScoreDashboardScreen() {
   const openSignalExplainer = useCallback(
     (key: SignalKey, rawValue: number, weightedValue: number) => {
       setSignalExplainer({ key, rawValue, weightedValue });
+      track({
+        eventType: "stress.signal_explainer_opened",
+        eventCategory: "score",
+        eventAction: "opened",
+        eventLabel: key,
+        eventValue: { raw_value: rawValue, weighted_value: weightedValue },
+      });
     },
-    [],
+    [track],
   );
 
   // Bucket B — top-stressor "View details" CTA now opens the per-signal
@@ -280,6 +328,14 @@ export default function StressScoreDashboardScreen() {
     if (!activeIntervention) return;
     try {
       await acceptIntervention(activeIntervention.id);
+      // Bucket C — fire after the optimistic accept so we don't
+      // double-emit on retry.
+      track({
+        eventType: "stress.intervention_accepted",
+        eventCategory: "score",
+        eventAction: "accepted",
+        eventLabel: activeIntervention.interventionType,
+      });
       refreshIntervention();
     } catch (err) {
       console.error("Accept intervention error:", err);
@@ -290,6 +346,12 @@ export default function StressScoreDashboardScreen() {
     if (!activeIntervention) return;
     try {
       await declineIntervention(activeIntervention.id);
+      track({
+        eventType: "stress.intervention_declined",
+        eventCategory: "score",
+        eventAction: "declined",
+        eventLabel: activeIntervention.interventionType,
+      });
       refreshIntervention();
     } catch (err) {
       console.error("Decline intervention error:", err);
@@ -702,6 +764,12 @@ export default function StressScoreDashboardScreen() {
                 key={key}
                 style={styles.card}
                 onPress={() => {
+                  track({
+                    eventType: "stress.tip_tapped",
+                    eventCategory: "score",
+                    eventAction: "tapped",
+                    eventLabel: key,
+                  });
                   const route = SUGGESTION_ROUTE[key] ?? "WalletMain";
                   navigation.navigate(route as any);
                 }}
