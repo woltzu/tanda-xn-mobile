@@ -28,6 +28,7 @@ import {
 } from "../hooks/useContributionMoodDetection";
 import { ContributionMoodDetectionEngine } from "../services/ContributionMoodDetectionEngine";
 import { useAuth } from "../context/AuthContext";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 // ─── Status config ───────────────────────────────────────────────────────────
 
@@ -166,6 +167,22 @@ export default function MoodInsightsScreen() {
   const [optedOut, setOptedOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Mood Bucket C — telemetry channel. Bound by useEventTracker to
+  // the current user; events flow through EventService into user_events.
+  const { track } = useEventTracker();
+  // useRef-guarded one-shot mount fire so the focus refetch loop
+  // doesn't double-emit mood.viewed.
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: "mood.viewed",
+      eventCategory: "score",
+      eventAction: "viewed",
+    });
+  }, [track]);
+
   // Mood Bucket B — HelpSheet visibility + per-signal explainer
   // payload. State lives at component scope so the back-button can
   // dismiss either sheet without unmounting the screen.
@@ -243,16 +260,29 @@ export default function MoodInsightsScreen() {
     setOptedOut(newOptedOut);
     try {
       await setOptOut(newOptedOut);
+      // Bucket C — fire after the call succeeds so we don't log a
+      // toggle that was reverted by the catch below.
+      track({
+        eventType: "mood.opt_out_toggled",
+        eventCategory: "score",
+        eventAction: "toggled",
+        eventValue: { opted_out: newOptedOut },
+      });
     } catch {
       setOptedOut(!newOptedOut);
     }
-  }, [setOptOut]);
+  }, [setOptOut, track]);
 
   // Mood Bucket B — open the HelpSheet. Replaces the Bucket-A
-  // Alert.alert placeholder.
+  // Alert.alert placeholder. Bucket C emits mood.help_opened.
   const handleHelpPress = useCallback(() => {
     setHelpOpen(true);
-  }, []);
+    track({
+      eventType: "mood.help_opened",
+      eventCategory: "score",
+      eventAction: "opened",
+    });
+  }, [track]);
 
   // Mood Bucket B — signal row tap → explainer sheet. Payload carries
   // the canonical signal key + normalized and weighted values so the
@@ -261,8 +291,15 @@ export default function MoodInsightsScreen() {
   const openSignalExplainer = useCallback(
     (key: SignalKey, normalized: number, weighted: number) => {
       setSignalExplainer({ key, normalized, weighted });
+      track({
+        eventType: "mood.signal_explainer_opened",
+        eventCategory: "score",
+        eventAction: "opened",
+        eventLabel: key,
+        eventValue: { normalized, weighted },
+      });
     },
-    [],
+    [track],
   );
 
   const config = STATUS_CONFIG[tier];
@@ -300,6 +337,24 @@ export default function MoodInsightsScreen() {
     if (entries.length === 0) return null;
     return entries.sort((a, b) => b.weighted - a.weighted)[0];
   }, [signals]);
+
+  // Mood Bucket C — fire mood.top_signal_revealed once per mount per
+  // distinct top signal. Indicates the user actually saw the card
+  // (not just landed on the screen with no breakdown yet). Skips
+  // when topSignal is null; re-fires when the key changes mid-session.
+  const topSignalRevealedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!topSignal) return;
+    if (topSignalRevealedRef.current === topSignal.key) return;
+    topSignalRevealedRef.current = topSignal.key;
+    track({
+      eventType: "mood.top_signal_revealed",
+      eventCategory: "score",
+      eventAction: "revealed",
+      eventLabel: topSignal.key,
+      eventValue: { weighted: topSignal.weighted },
+    });
+  }, [topSignal, track]);
 
   // Mood Bucket B — top-signal "View details" CTA opens the per-signal
   // explainer for that signal. Replaces the Bucket-A Alert.
@@ -635,7 +690,20 @@ export default function MoodInsightsScreen() {
                 <TouchableOpacity
                   style={styles.interventionBtnSecondary}
                   disabled={responding}
-                  onPress={() => declineIntervention(activeIntervention.id)}
+                  onPress={async () => {
+                    try {
+                      await declineIntervention(activeIntervention.id);
+                      track({
+                        eventType: "mood.intervention_declined",
+                        eventCategory: "score",
+                        eventAction: "declined",
+                        eventLabel: activeIntervention.interventionType,
+                      });
+                    } catch (e) {
+                      // Engine logs errors; swallowed here to avoid
+                      // crashing the screen on a transient failure.
+                    }
+                  }}
                 >
                   <Text style={styles.interventionBtnSecondaryText}>
                     {t("mood_insights.intervention_decline")}
@@ -644,7 +712,19 @@ export default function MoodInsightsScreen() {
                 <TouchableOpacity
                   style={styles.interventionBtnPrimary}
                   disabled={responding}
-                  onPress={() => acceptIntervention(activeIntervention.id)}
+                  onPress={async () => {
+                    try {
+                      await acceptIntervention(activeIntervention.id);
+                      track({
+                        eventType: "mood.intervention_accepted",
+                        eventCategory: "score",
+                        eventAction: "accepted",
+                        eventLabel: activeIntervention.interventionType,
+                      });
+                    } catch (e) {
+                      // see above.
+                    }
+                  }}
                 >
                   <Text style={styles.interventionBtnPrimaryText}>
                     {t("mood_insights.intervention_accept_elder")}

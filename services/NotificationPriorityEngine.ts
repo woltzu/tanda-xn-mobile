@@ -463,6 +463,36 @@ export class NotificationPriorityEngine {
     }
   }
 
+  /**
+   * Mood Bucket C — map the notifications.type values that migration
+   * 216's notify_mood_drift_change trigger emits onto the abstract
+   * NotificationType buckets. Unlike stress (payment_critical), mood
+   * notifications are routed to coaching_goals: a mood-drift signal
+   * is wellbeing-flavoured, not a direct financial-stakes alert, and
+   * over-prioritising it would over-notify users at a sensitive time.
+   * The engine's typeBasePriority for coaching_goals is 3, vs 10 for
+   * payment_critical — exactly the gentler tone we want.
+   *
+   *   mood_drift_change          → coaching_goals (tier crossed into
+   *                                                disengaging / at_risk)
+   *   mood_intervention_offered  → coaching_goals (auto-suggested next
+   *                                                step is waiting on
+   *                                                the dashboard)
+   *
+   * Returns null when the input isn't a mood type, so callers can
+   * fall back to whatever other mapping covers cycle / xnscore /
+   * honor / stress / KYC / payout_received.
+   */
+  static categoryForMoodNotification(dbType: string): NotificationType | null {
+    switch (dbType) {
+      case "mood_drift_change":
+      case "mood_intervention_offered":
+        return "coaching_goals";
+      default:
+        return null;
+    }
+  }
+
   /** Time sensitivity: closer deadline = higher score. */
   private static calculateTimeSensitivity(data: Record<string, any>): number {
     const hoursUntilDue = data.hours_until_due ?? data.hoursUntilDue;

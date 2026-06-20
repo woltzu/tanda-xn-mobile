@@ -4262,6 +4262,12 @@
     "notification_intervention_offered_title": "Soutien disponible",
     "notification_intervention_offered_body": "Nous avons suggéré une prochaine étape pour aider à réduire votre stress. Touchez pour la consulter."
   },
+  "mood": {
+    "notification_drift_change_title": "Changement d'humeur détecté",
+    "notification_drift_change_body": "Votre dérive d'humeur est passée à {{tier_label}}. Touchez pour voir les détails.",
+    "notification_intervention_offered_title": "Soutien disponible",
+    "notification_intervention_offered_body": "Nous avons suggéré une prochaine étape pour soutenir votre humeur. Touchez pour la consulter."
+  },
   "stress_score": {
     "loading": "Chargement de vos données de bien-être...",
     "header_title": "Bien-être financier",

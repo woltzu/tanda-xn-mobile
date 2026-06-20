@@ -95,6 +95,12 @@ export const linkingConfig = {
       // notifications (migration 215) route straight to the dashboard.
       // userId optional; absent = own profile.
       StressScoreDashboard: "stress/:userId?",
+
+      // Mood Insights — Bucket C of the Mood review. Lets the
+      // mood_drift_change and mood_intervention_offered notifications
+      // (migration 216) route straight to the dashboard.
+      // userId optional; absent = own profile.
+      MoodInsights: "mood/:userId?",
     },
   },
 };

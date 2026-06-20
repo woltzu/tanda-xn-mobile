@@ -4262,6 +4262,12 @@
     "notification_intervention_offered_title": "Support available",
     "notification_intervention_offered_body": "We've suggested a next step to help reduce your stress. Tap to review."
   },
+  "mood": {
+    "notification_drift_change_title": "Mood change detected",
+    "notification_drift_change_body": "Your mood drift has shifted to {{tier_label}}. Tap to see details.",
+    "notification_intervention_offered_title": "Support available",
+    "notification_intervention_offered_body": "We've suggested a next step to help with your mood. Tap to review."
+  },
   "stress_score": {
     "loading": "Loading your wellness data...",
     "header_title": "Financial Wellness",
