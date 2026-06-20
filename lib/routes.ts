@@ -148,7 +148,6 @@ export const Routes = {
   HelpCenter: "HelpCenter",
   Home: "Home",
   HonorScoreOverview: "HonorScoreOverview",
-  HonorSystem: "HonorSystem",
   HowCirclesWork: "HowCirclesWork",
   IDVerificationStart: "IDVerificationStart",
   InsurancePool: "InsurancePool",

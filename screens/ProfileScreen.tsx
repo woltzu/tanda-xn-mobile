@@ -333,7 +333,10 @@ export default function ProfileScreen() {
     {
       section: t("profile.section_trust"),
       items: [
-        { icon: "ribbon-outline", label: t("profile.item_honor_system"), onPress: () => navigation.navigate("HonorSystem") },
+        // Honor Bucket A — Honor System screen retired; the entry now
+        // routes to the real Honor Score Overview (real data + 3-pillar
+        // breakdown + canonical tier ladder).
+        { icon: "ribbon-outline", label: t("profile.item_honor_system"), onPress: () => navigation.navigate("HonorScoreOverview") },
         { icon: "hand-right-outline", label: t("profile.item_vouch"), onPress: () => navigation.navigate("VouchMember") },
       ],
     },

@@ -96,7 +96,10 @@ import WalletTransactionSuccessScreen from "./screens/WalletTransactionSuccessSc
 import XnScoreDashboardScreen from "./screens/XnScoreDashboardScreen";
 import XnScoreHistoryScreen from "./screens/XnScoreHistoryScreen";
 import VouchMemberScreen from "./screens/VouchMemberScreen";
-import HonorSystemScreen from "./screens/HonorSystemScreen";
+// Honor Bucket A — HonorSystemScreen deleted. Its content was a separate
+// vouching-tier story (Newcomer/Guardian/Mentor/Elder/Sage based on vouches
+// count) that contradicted the canonical Honor Score tier ladder. Vouching
+// lives under the Character pillar on HonorScoreOverviewScreen now.
 import AccessRestrictedScreen from "./screens/AccessRestrictedScreen";
 import RemittanceScreen from "./screens/RemittanceScreen";
 import DomesticSendMoneyScreen from "./screens/DomesticSendMoneyScreen";
@@ -504,9 +507,8 @@ export type RootStackParamList = {
   // XnScore Flow
   XnScoreDashboard: undefined;
   XnScoreHistory: undefined;
-  // Trust & Honor System
+  // Trust & Honor System — Honor Bucket A retired the HonorSystem route.
   VouchMember: undefined;
-  HonorSystem: undefined;
   AccessRestricted: {
     type: string;
     requiredScore?: number;
@@ -1054,7 +1056,6 @@ function HomeStackScreen() {
       <HomeStack.Screen name="ActiveSessions" component={ActiveSessionsScreen} />
       <HomeStack.Screen name="AboutApp" component={AboutAppScreen} />
       <HomeStack.Screen name="VouchMember" component={VouchMemberScreen} />
-      <HomeStack.Screen name="HonorSystem" component={HonorSystemScreen} />
       {/* Community Sub-screens (reachable from Community tab too) */}
       <HomeStack.Screen name="NearYou" component={NearYouScreen} />
       <HomeStack.Screen name="NewArrivals" component={NewArrivalsScreen} />
