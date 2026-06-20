@@ -979,6 +979,19 @@ export class ContributionMoodDetectionEngine {
     if (error) throw error;
   }
 
+  /**
+   * Mood Bucket A — public getter for the current opt-out state.
+   * Returns false (analysis enabled) when no preferences row exists,
+   * matching the default behaviour the rest of the engine assumes.
+   * The screen reads this on mount so the toggle reflects the real
+   * persisted value (previously the toggle initialised to false and
+   * lied until the user touched it).
+   */
+  static async getOptOut(memberId: string): Promise<boolean> {
+    const prefs = await this._getPreferences(memberId);
+    return prefs?.optedOut ?? false;
+  }
+
   /** Get mood keywords */
   static async getKeywords(language?: string): Promise<MoodKeyword[]> {
     let q = supabase.from("mood_keywords")
