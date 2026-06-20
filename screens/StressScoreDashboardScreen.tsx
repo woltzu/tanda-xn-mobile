@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Dimensions,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -22,37 +23,55 @@ const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
 const BG = "#F5F7FA";
 
-const STATUS_CONFIG: Record<StressStatus, { color: string; bg: string; label: string }> = {
-  green: { color: "#10B981", bg: "rgba(16,185,129,0.1)", label: "Healthy" },
-  yellow: { color: "#EAB308", bg: "rgba(234,179,8,0.1)", label: "Mild Stress" },
-  orange: { color: "#F97316", bg: "rgba(249,115,22,0.1)", label: "Elevated Stress" },
-  red: { color: "#EF4444", bg: "rgba(239,68,68,0.1)", label: "High Stress" },
+// Bucket A \u2014 STATUS_CONFIG now carries only visual data; the human label
+// is read inline at render via t('stress_score.status_<key>').
+const STATUS_CONFIG: Record<StressStatus, { color: string; bg: string }> = {
+  green: { color: "#10B981", bg: "rgba(16,185,129,0.1)" },
+  yellow: { color: "#EAB308", bg: "rgba(234,179,8,0.1)" },
+  orange: { color: "#F97316", bg: "rgba(249,115,22,0.1)" },
+  red: { color: "#EF4444", bg: "rgba(239,68,68,0.1)" },
 };
 
+// Bucket A \u2014 same pattern. Icon + color stay in the constant; the
+// "Getting better!" / "Holding steady" / "Needs attention" message
+// is t('stress_score.trend_<key>') at render.
 const TREND_CONFIG: Record<NonNullable<StressTrend>, {
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
-  message: string;
 }> = {
-  improving: { icon: "trending-down", color: "#10B981", message: "Getting better!" },
-  stable: { icon: "remove-outline", color: "#9CA3AF", message: "Holding steady" },
-  worsening: { icon: "trending-up", color: "#EF4444", message: "Needs attention" },
+  improving: { icon: "trending-down", color: "#10B981" },
+  stable:    { icon: "remove-outline", color: "#9CA3AF" },
+  worsening: { icon: "trending-up",   color: "#EF4444" },
 };
 
 type SignalKey = keyof SignalBreakdown;
 
-const SIGNAL_META: Record<SignalKey, { name: string; weight: string; icon: keyof typeof Ionicons.glyphMap }> = {
-  contribution_delay: { name: "Payment Timing", weight: "30% weight", icon: "time-outline" },
-  ticket_language: { name: "Support Messages", weight: "35% weight", icon: "chatbubble-outline" },
-  login_drop: { name: "App Activity", weight: "20% weight", icon: "log-in-outline" },
-  early_payout_request: { name: "Payout Requests", weight: "15% weight", icon: "cash-outline" },
+// Bucket A \u2014 SIGNAL_META keeps numeric weight + icon; the localized
+// name + weight label are produced at render via
+// t('stress_score.signal_<key>_name') and the shared signal_weight_label.
+const SIGNAL_META: Record<SignalKey, { weight: number; icon: keyof typeof Ionicons.glyphMap }> = {
+  contribution_delay:   { weight: 30, icon: "time-outline" },
+  ticket_language:      { weight: 35, icon: "chatbubble-outline" },
+  login_drop:           { weight: 20, icon: "log-in-outline" },
+  early_payout_request: { weight: 15, icon: "cash-outline" },
 };
 
-const TIPS = [
-  "Pay contributions before the deadline to lower your timing signal",
-  "Stay active in the app \u2014 regular logins show engagement",
-  "Reach out to support if you need help \u2014 we\u2019re here for you",
-];
+// Bucket A \u2014 each top-stressor key maps to a suggested next step.
+// Routes are resolved on tap. Wallet covers contribution timing; the
+// Help Center owns support flows; AdvanceHubV2 handles the liquidity
+// advance path; Home is the "open the app more often" landing.
+type RouteName =
+  | "WalletMain"
+  | "HelpCenter"
+  | "Home"
+  | "MakeContribution"
+  | "AdvanceHubV2";
+const SUGGESTION_ROUTE: Record<SignalKey, RouteName> = {
+  contribution_delay:   "WalletMain",
+  ticket_language:      "HelpCenter",
+  login_drop:           "Home",
+  early_payout_request: "AdvanceHubV2",
+};
 
 function getSignalStatus(value: number): StressStatus {
   if (value <= 30) return "green";
@@ -98,6 +117,40 @@ export default function StressScoreDashboardScreen() {
   const breakdown = currentScore?.signalBreakdown;
   const cfg = STATUS_CONFIG[status];
   const trendCfg = TREND_CONFIG[trendKey];
+
+  // Bucket A — top stressor: highest weighted_value across the 4
+  // signals. Used by the prominent card above the breakdown AND by
+  // the suggestions section when no active intervention exists.
+  const topStressor = useMemo<{ key: SignalKey; value: number; weighted: number } | null>(() => {
+    if (!breakdown) return null;
+    const entries = (Object.keys(SIGNAL_META) as SignalKey[])
+      .map((k) => {
+        const c = breakdown[k];
+        return c ? { key: k, value: c.raw_value, weighted: c.weighted_value } : null;
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+    if (entries.length === 0) return null;
+    return entries.sort((a, b) => b.weighted - a.weighted)[0];
+  }, [breakdown]);
+
+  // Bucket A — placeholder Alert for the (?) header button.
+  // Bucket B replaces this with a real HelpSheet.
+  const handleHelpPress = useCallback(() => {
+    Alert.alert(
+      t("stress_score.help_placeholder_title"),
+      t("stress_score.help_placeholder_body"),
+    );
+  }, [t]);
+
+  // Bucket A — view details placeholder for the top-stressor card.
+  // Bucket B wires this to the per-signal explainer sheet.
+  const handleTopStressorDetails = useCallback(() => {
+    if (!topStressor) return;
+    Alert.alert(
+      t(`stress_score.signal_${topStressor.key}_name`),
+      t("stress_score.help_placeholder_body"),
+    );
+  }, [t, topStressor]);
 
   // Chart data from history
   const chartData = useMemo(() => {
@@ -157,7 +210,7 @@ export default function StressScoreDashboardScreen() {
           <Ionicons name="arrow-back" size={22} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t("stress_score.header_title")}</Text>
-        <TouchableOpacity style={styles.headerBtn}>
+        <TouchableOpacity style={styles.headerBtn} onPress={handleHelpPress}>
           <Ionicons name="information-circle-outline" size={22} color="rgba(255,255,255,0.8)" />
         </TouchableOpacity>
       </View>
@@ -171,38 +224,112 @@ export default function StressScoreDashboardScreen() {
         }
       >
         {/* ── Main Score Card ── */}
-        <View style={styles.card}>
-          <Text style={styles.scoreLabel}>{t("stress_score.score_label")}</Text>
+        {currentScore ? (
+          <View style={styles.card}>
+            <Text style={styles.scoreLabel}>{t("stress_score.score_label")}</Text>
 
-          <View style={styles.scoreRow}>
-            <Text style={[styles.scoreValue, { color: cfg.color }]}>{score}</Text>
-            <Text style={styles.scoreMax}>/100</Text>
-          </View>
+            <View style={styles.scoreRow}>
+              <Text style={[styles.scoreValue, { color: cfg.color }]}>{score}</Text>
+              <Text style={styles.scoreMax}>/100</Text>
+            </View>
 
-          {/* Status badge */}
-          <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
-            <View style={[styles.statusDot, { backgroundColor: cfg.color }]} />
-            <Text style={[styles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
-          </View>
+            {/* Bucket A — direction subtitle. The #1 misread risk on
+                this screen: a fresh user sees the number and the
+                green trend arrow and may think "lower is worse".
+                This line eliminates the ambiguity. */}
+            <Text style={styles.directionSubtitle}>
+              {t("stress_score.higher_worse_subtitle")}
+            </Text>
 
-          {/* Trend */}
-          <View style={styles.trendContainer}>
-            <View style={styles.trendRow}>
-              <Ionicons name={trendCfg.icon} size={16} color={trendCfg.color} />
-              <Text style={[styles.trendDelta, { color: trendCfg.color }]}>
-                {scoreDelta > 0 ? "+" : ""}
-                {scoreDelta} pts from last check
+            {/* Status badge */}
+            <View style={[styles.statusBadge, { backgroundColor: cfg.bg }]}>
+              <View style={[styles.statusDot, { backgroundColor: cfg.color }]} />
+              <Text style={[styles.statusText, { color: cfg.color }]}>
+                {t(`stress_score.status_${status}`)}
               </Text>
             </View>
-            <Text style={styles.trendMessage}>{trendCfg.message}</Text>
+
+            {/* Trend — Bucket A uses arrows (↑/↓) instead of +/− to
+                avoid the "+5" reading-as-good ambiguity. */}
+            <View style={styles.trendContainer}>
+              <View style={styles.trendRow}>
+                <Ionicons name={trendCfg.icon} size={16} color={trendCfg.color} />
+                <Text style={[styles.trendDelta, { color: trendCfg.color }]}>
+                  {t("stress_score.delta_from_last", {
+                    arrow: scoreDelta > 0 ? "↑" : scoreDelta < 0 ? "↓" : "→",
+                    pts: Math.abs(scoreDelta),
+                  })}
+                </Text>
+              </View>
+              <Text style={styles.trendMessage}>{t(`stress_score.trend_${trendKey}`)}</Text>
+            </View>
           </View>
-        </View>
+        ) : (
+          // Bucket A — empty state when there's no stress score row yet.
+          // The user just installed, or hasn't generated any signals.
+          <View style={[styles.card, styles.emptyCard]}>
+            <Ionicons name="heart-outline" size={36} color="#D1D5DB" />
+            <Text style={styles.emptyTitle}>{t("stress_score.empty_title")}</Text>
+            <Text style={styles.emptyBody}>{t("stress_score.empty_state")}</Text>
+          </View>
+        )}
+
+        {/* Bucket A — Top stressor card. Surfaced above the equal-weight
+            breakdown so the user knows where to focus first. Skipped
+            entirely on the empty state, when no breakdown exists. */}
+        {currentScore && topStressor ? (
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={handleTopStressorDetails}
+            style={[styles.card, styles.topStressorCard]}
+          >
+            <View style={styles.topStressorHeader}>
+              <View
+                style={[
+                  styles.topStressorIconWrap,
+                  { backgroundColor: STATUS_CONFIG[getSignalStatus(topStressor.value)].bg },
+                ]}
+              >
+                <Ionicons
+                  name={SIGNAL_META[topStressor.key].icon}
+                  size={22}
+                  color={STATUS_CONFIG[getSignalStatus(topStressor.value)].color}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.topStressorEyebrow}>
+                  {t("stress_score.top_stressor_title")}
+                </Text>
+                <Text style={styles.topStressorName}>
+                  {t(`stress_score.signal_${topStressor.key}_name`)}
+                </Text>
+              </View>
+              <Text
+                style={[
+                  styles.topStressorValue,
+                  { color: STATUS_CONFIG[getSignalStatus(topStressor.value)].color },
+                ]}
+              >
+                {Math.round(topStressor.value)}
+              </Text>
+            </View>
+            <Text style={styles.topStressorBody}>
+              {t("stress_score.top_stressor_body")}
+            </Text>
+            <View style={styles.topStressorCta}>
+              <Text style={styles.topStressorCtaText}>
+                {t("stress_score.top_stressor_view_details")}
+              </Text>
+              <Ionicons name="chevron-forward" size={16} color={TEAL} />
+            </View>
+          </TouchableOpacity>
+        ) : null}
 
         {/* ── Signal Breakdown ── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("stress_score.section_contributing")}</Text>
           <Text style={styles.sectionSubtitle}>
-            4 signals weighted to calculate your score
+            {t("stress_score.section_contributing_subtitle")}
           </Text>
 
           {breakdown &&
@@ -220,8 +347,12 @@ export default function StressScoreDashboardScreen() {
                       <Ionicons name={meta.icon} size={20} color={sigColor} />
                     </View>
                     <View style={styles.signalInfo}>
-                      <Text style={styles.signalName}>{meta.name}</Text>
-                      <Text style={styles.signalWeight}>{meta.weight}</Text>
+                      <Text style={styles.signalName}>
+                        {t(`stress_score.signal_${key}_name`)}
+                      </Text>
+                      <Text style={styles.signalWeight}>
+                        {t("stress_score.signal_weight_label", { pct: meta.weight })}
+                      </Text>
                     </View>
                     <Text style={[styles.signalValue, { color: sigColor }]}>
                       {Math.round(component.raw_value)}
@@ -239,13 +370,63 @@ export default function StressScoreDashboardScreen() {
                   </View>
 
                   <Text style={styles.signalDetail}>
-                    {component.signals_used} signal{component.signals_used !== 1 ? "s" : ""} used
-                    {" \u2022 "}weighted {component.weighted_value.toFixed(1)} pts
+                    {t("stress_score.signal_detail", {
+                      count: component.signals_used,
+                      value: component.weighted_value.toFixed(1),
+                    })}
                   </Text>
                 </View>
               );
             })}
         </View>
+
+        {/* Bucket A \u2014 Suggestions when there's no active intervention.
+            The user with a 78 stress score used to see nothing
+            actionable here; now we lead with the top-stressor-driven
+            next step and link to the right surface. */}
+        {currentScore && !hasActiveIntervention && topStressor ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t("stress_score.suggestions_title")}</Text>
+            <Text style={styles.sectionSubtitle}>{t("stress_score.suggestions_subtitle")}</Text>
+            <TouchableOpacity
+              style={[styles.card, styles.suggestionCard]}
+              onPress={() => {
+                const route = SUGGESTION_ROUTE[topStressor.key] ?? "WalletMain";
+                navigation.navigate(route as any);
+              }}
+              activeOpacity={0.85}
+            >
+              <View style={styles.suggestionHeader}>
+                <View
+                  style={[
+                    styles.signalIconWrap,
+                    { backgroundColor: "rgba(0,198,174,0.12)" },
+                  ]}
+                >
+                  <Ionicons
+                    name={SIGNAL_META[topStressor.key].icon}
+                    size={20}
+                    color={TEAL}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.suggestionTitle}>
+                    {t(`stress_score.suggestion_${topStressor.key}_title`)}
+                  </Text>
+                  <Text style={styles.suggestionBody}>
+                    {t(`stress_score.suggestion_${topStressor.key}_body`)}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.suggestionCta}>
+                <Text style={styles.suggestionCtaText}>
+                  {t(`stress_score.suggestion_${topStressor.key}_cta`)}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={TEAL} />
+              </View>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* ── Intervention Offer ── */}
         {hasActiveIntervention && activeIntervention && (
@@ -265,14 +446,18 @@ export default function StressScoreDashboardScreen() {
                   <View style={styles.installmentBox}>
                     {activeIntervention.installmentAmounts.map((item: any, i: number) => (
                       <View key={i} style={styles.installmentRow}>
-                        <Text style={styles.installmentLabel}>Payment {i + 1}</Text>
+                        <Text style={styles.installmentLabel}>
+                          {t("stress_score.installment_payment", { n: i + 1 })}
+                        </Text>
                         <Text style={styles.installmentAmount}>
                           {typeof item === "number"
                             ? formatCents(item)
                             : item.amount ?? `$${item}`}
                         </Text>
                         {item.dueDate && (
-                          <Text style={styles.installmentDate}>Due {item.dueDate}</Text>
+                          <Text style={styles.installmentDate}>
+                            {t("stress_score.installment_due", { date: item.dueDate })}
+                          </Text>
                         )}
                       </View>
                     ))}
@@ -307,7 +492,7 @@ export default function StressScoreDashboardScreen() {
         {/* ── Score History ── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("stress_score.section_history")}</Text>
-          <Text style={styles.sectionSubtitle}>Last 14 days</Text>
+          <Text style={styles.sectionSubtitle}>{t("stress_score.chart_subtitle")}</Text>
 
           <View style={styles.card}>
             {chartData ? (
@@ -362,24 +547,52 @@ export default function StressScoreDashboardScreen() {
           </View>
         </View>
 
-        {/* ── Tips ── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("stress_score.section_tips")}</Text>
-
-          {TIPS.map((tip, i) => (
-            <View key={i} style={styles.card}>
-              <View style={styles.tipRow}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={20}
-                  color={TEAL}
-                  style={styles.tipIcon}
-                />
-                <Text style={styles.tipText}>{tip}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
+        {/* Bucket A — data-driven tips. Leads with the top stressor's
+            tip, then the other 3 in their canonical order. Replaces
+            the static 3-string TIPS array. Skipped if no breakdown. */}
+        {currentScore && topStressor ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t("stress_score.section_tips")}</Text>
+            {[
+              topStressor.key,
+              ...((Object.keys(SIGNAL_META) as SignalKey[]).filter((k) => k !== topStressor.key)),
+            ].map((key) => (
+              <TouchableOpacity
+                key={key}
+                style={styles.card}
+                onPress={() => {
+                  const route = SUGGESTION_ROUTE[key] ?? "WalletMain";
+                  navigation.navigate(route as any);
+                }}
+                activeOpacity={0.85}
+              >
+                <View style={styles.tipRow}>
+                  <View
+                    style={[
+                      styles.signalIconWrap,
+                      { backgroundColor: "rgba(0,198,174,0.12)" },
+                    ]}
+                  >
+                    <Ionicons
+                      name={SIGNAL_META[key].icon}
+                      size={18}
+                      color={TEAL}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.tipTitle}>
+                      {t(`stress_score.tip_${key}_title`)}
+                    </Text>
+                    <Text style={styles.tipText}>
+                      {t(`stress_score.tip_${key}_body`)}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : null}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -696,19 +909,140 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
 
-  // Tips
+  // Tips (Bucket A — tappable rows w/ icon + title + body)
   tipRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 12,
   },
   tipIcon: {
     marginTop: 1,
   },
+  tipTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: NAVY,
+    marginBottom: 2,
+  },
   tipText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     color: "#6B7280",
-    lineHeight: 20,
+    lineHeight: 18,
+  },
+
+  // Bucket A — direction subtitle under the score number.
+  directionSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    textAlign: "center",
+    marginTop: 4,
+    fontStyle: "italic",
+  },
+
+  // Bucket A — empty-state card (no stress score row yet).
+  emptyCard: {
+    alignItems: "center",
+    paddingVertical: 32,
+    gap: 8,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: NAVY,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  emptyBody: {
+    fontSize: 13,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 18,
+  },
+
+  // Bucket A — top stressor card. Visually distinct: teal-tinted
+  // border + slightly larger headline.
+  topStressorCard: {
+    borderWidth: 1,
+    borderColor: "rgba(0,198,174,0.3)",
+  },
+  topStressorHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  topStressorIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  topStressorEyebrow: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  topStressorName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: NAVY,
+    marginTop: 2,
+  },
+  topStressorValue: {
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  topStressorBody: {
+    fontSize: 13,
+    color: "#6B7280",
+    marginTop: 10,
+    lineHeight: 18,
+  },
+  topStressorCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 12,
+  },
+  topStressorCtaText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: TEAL,
+  },
+
+  // Bucket A — suggestions section (only when no active intervention).
+  suggestionCard: {
+    borderWidth: 1,
+    borderColor: "rgba(0,198,174,0.2)",
+  },
+  suggestionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  suggestionTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: NAVY,
+    marginBottom: 2,
+  },
+  suggestionBody: {
+    fontSize: 13,
+    color: "#6B7280",
+    lineHeight: 18,
+  },
+  suggestionCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 12,
+  },
+  suggestionCtaText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: TEAL,
   },
 });
