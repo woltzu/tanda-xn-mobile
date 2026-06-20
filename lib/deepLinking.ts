@@ -78,6 +78,12 @@ export const linkingConfig = {
       WalletMain: "wallet",
       ProfileMain: "profile",
       Settings: "settings",
+
+      // XnScore Dashboard — Bucket C of the XnScore review. Lets the
+      // xnscore_tier_change notification (migration 213) route the user
+      // straight to their score. userId is optional; when absent the
+      // screen reads the auth context (own profile).
+      XnScoreDashboard: "xnscore/:userId?",
     },
   },
 };

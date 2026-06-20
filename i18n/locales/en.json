@@ -4240,6 +4240,14 @@
     "velocity_capped": "Velocity capped",
     "points_label": "points"
   },
+  "xnscore": {
+    "notification_tier_change_title": "XnScore tier updated",
+    "notification_tier_change_body": "Your XnScore has moved from {{old_tier}} to {{new_tier}}.",
+    "notification_milestone_title": "Score milestone reached",
+    "notification_milestone_body": "You've reached {{score}} points! Keep it up.",
+    "notification_decay_warning_title": "XnScore decay warning",
+    "notification_decay_warning_body": "Your XnScore may decay if you remain inactive. Make a contribution to keep it stable."
+  },
   "stress_score": {
     "loading": "Loading your wellness data...",
     "header_title": "Financial Wellness",

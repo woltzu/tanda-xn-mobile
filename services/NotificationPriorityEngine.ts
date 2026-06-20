@@ -372,6 +372,36 @@ export class NotificationPriorityEngine {
     }
   }
 
+  /**
+   * XnScore Bucket C — map the notifications.type values that migration 213's
+   * notify_xnscore_tier_change trigger emits (plus the milestone /
+   * decay_warning push categories the score-event taxonomy carries) onto
+   * the five abstract NotificationType buckets the engine reasons about.
+   *
+   *   xnscore_tier_change   → score_changes (a tier flip is the strongest
+   *                                          score signal we send; the
+   *                                          engine has no dedicated
+   *                                          "score_critical" bucket so
+   *                                          this rides the existing
+   *                                          score channel)
+   *   xnscore_milestone     → score_changes (you crossed a band threshold)
+   *   xnscore_decay_warning → score_changes (you're about to lose points
+   *                                          if you stay inactive)
+   *
+   * Returns null when the input isn't an xnscore type, so callers can fall
+   * back to whatever other mapping covers cycle / KYC / payout_received.
+   */
+  static categoryForXnScoreNotification(dbType: string): NotificationType | null {
+    switch (dbType) {
+      case "xnscore_tier_change":
+      case "xnscore_milestone":
+      case "xnscore_decay_warning":
+        return "score_changes";
+      default:
+        return null;
+    }
+  }
+
   /** Time sensitivity: closer deadline = higher score. */
   private static calculateTimeSensitivity(data: Record<string, any>): number {
     const hoursUntilDue = data.hours_until_due ?? data.hoursUntilDue;

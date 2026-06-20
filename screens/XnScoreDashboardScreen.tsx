@@ -33,6 +33,7 @@ import {
 } from "../hooks/useXnScore";
 import { useUserDefaults } from "../hooks/useDefaultCascade";
 import { useLateContributions } from "../hooks/useLateContributions";
+import { useEventTracker } from "../hooks/useEventTracker";
 import {
   getTierByKeyOrFallback,
   getNextTier,
@@ -171,6 +172,22 @@ export default function XnScoreDashboardScreen() {
   const { lateContributions } = useLateContributions();
   const hasRecoveryItems = hasActiveDefaults || lateContributions.length > 0;
 
+  // Bucket C — telemetry channel. Bound by useEventTracker to the
+  // current user; events flow through EventService into user_events.
+  const { track } = useEventTracker();
+  // useRef-guarded one-shot mount fire so the focus refetch loop doesn't
+  // double-emit xnscore.viewed.
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: "xnscore.viewed",
+      eventCategory: "score",
+      eventAction: "viewed",
+    });
+  }, [track]);
+
   // Bucket B — HelpSheet visibility + per-factor explainer payload.
   const [helpOpen, setHelpOpen] = useState(false);
   const [factorExplainer, setFactorExplainer] = useState<FactorExplainer>(null);
@@ -223,8 +240,15 @@ export default function XnScoreDashboardScreen() {
         description: tip.description,
         potential_points: tip.potential_points,
       } : null });
+      track({
+        eventType: "xnscore.factor_explainer_opened",
+        eventCategory: "score",
+        eventAction: "opened",
+        eventLabel: key,
+        eventValue: { score, max_score: maxScore },
+      });
     },
-    [breakdown],
+    [breakdown, track],
   );
 
   // ── Tier resolution (Bucket A.3) ──────────────────────────────────────
@@ -329,7 +353,14 @@ export default function XnScoreDashboardScreen() {
               {/* Bucket B — opens the HelpSheet glossary. */}
               <TouchableOpacity
                 style={styles.historyButton}
-                onPress={() => setHelpOpen(true)}
+                onPress={() => {
+                  setHelpOpen(true);
+                  track({
+                    eventType: "xnscore.help_opened",
+                    eventCategory: "score",
+                    eventAction: "opened",
+                  });
+                }}
                 accessibilityRole="button"
                 accessibilityLabel={t("xnscore_dashboard.help_open")}
               >
@@ -337,7 +368,14 @@ export default function XnScoreDashboardScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.historyButton}
-                onPress={() => navigation.navigate("XnScoreHistory")}
+                onPress={() => {
+                  track({
+                    eventType: "xnscore.history_opened",
+                    eventCategory: "score",
+                    eventAction: "opened",
+                  });
+                  navigation.navigate("XnScoreHistory");
+                }}
               >
                 <Ionicons name="time-outline" size={24} color="#FFFFFF" />
               </TouchableOpacity>
@@ -430,9 +468,25 @@ export default function XnScoreDashboardScreen() {
           {/* Tier-progress strip (Bucket A.7) — N points to next tier
               + the first 3 featuresSummary bullets that next tier
               unlocks. featuresSummary is split on ", " so the bullets
-              come straight from lib/tiers.ts without an extra config. */}
+              come straight from lib/tiers.ts without an extra config.
+              Bucket C — strip is now tappable and emits
+              xnscore.tier_progress_tapped (next-tier label in label,
+              points_to_next in metadata). */}
           {nextTier ? (
-            <View style={styles.tierProgressCard}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => {
+                track({
+                  eventType: "xnscore.tier_progress_tapped",
+                  eventCategory: "score",
+                  eventAction: "tapped",
+                  eventLabel: nextTier.tierKey,
+                  eventValue: { points_to_next: pointsToNext },
+                });
+                navigation.navigate("ScoreHub");
+              }}
+              style={styles.tierProgressCard}
+            >
               <View style={styles.tierProgressHeader}>
                 <Text style={styles.tierProgressTitle}>
                   {t("xnscore_dashboard.tier_progress_title", {
@@ -463,7 +517,7 @@ export default function XnScoreDashboardScreen() {
                   ))}
                 </>
               ) : null}
-            </View>
+            </TouchableOpacity>
           ) : (
             <View style={styles.tierProgressCard}>
               <Text style={styles.tierProgressAtMax}>
@@ -551,6 +605,13 @@ export default function XnScoreDashboardScreen() {
                     key={`${tip.factor}-${i}`}
                     style={styles.tipCard}
                     onPress={() => {
+                      track({
+                        eventType: "xnscore.tip_tapped",
+                        eventCategory: "score",
+                        eventAction: "tapped",
+                        eventLabel: tip.factor,
+                        eventValue: { potential_points: tip.potential_points },
+                      });
                       const route = routeForFactor(tip.factor);
                       navigation.navigate(route as any);
                     }}

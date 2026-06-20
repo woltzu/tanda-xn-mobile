@@ -4240,6 +4240,14 @@
     "velocity_capped": "Plafond de vitesse atteint",
     "points_label": "points"
   },
+  "xnscore": {
+    "notification_tier_change_title": "Palier XnScore mis à jour",
+    "notification_tier_change_body": "Votre XnScore est passé de {{old_tier}} à {{new_tier}}.",
+    "notification_milestone_title": "Jalon de score atteint",
+    "notification_milestone_body": "Vous avez atteint {{score}} points ! Continuez ainsi.",
+    "notification_decay_warning_title": "Avertissement de baisse du XnScore",
+    "notification_decay_warning_body": "Votre XnScore peut baisser si vous restez inactif. Effectuez une cotisation pour le stabiliser."
+  },
   "stress_score": {
     "loading": "Chargement de vos données de bien-être...",
     "header_title": "Bien-être financier",
