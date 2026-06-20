@@ -27,7 +27,7 @@
 --      i18n_title_key / i18n_body_key in data for client-side rendering.
 --
 --   2. compute_grace_period_end trigger on circle_cycles BEFORE UPDATE
---      OF status. When NEW.status='deadline_reached' and
+--      OF status. When NEW.cycle_status='deadline_reached' and
 --      grace_period_end IS NULL, sets it to
 --      contribution_deadline + circle.grace_period_days days.
 --
@@ -83,7 +83,7 @@ BEGIN
   -- Short-circuit when the column didn't actually change. UPDATE OF
   -- status fires whenever an UPDATE statement targets the status column,
   -- not just on transitions.
-  IF OLD.status IS NOT DISTINCT FROM NEW.status THEN
+  IF OLD.cycle_status IS NOT DISTINCT FROM NEW.cycle_status THEN
     RETURN NEW;
   END IF;
 
@@ -97,7 +97,7 @@ BEGIN
 
   -- ─── scheduled → collecting ──────────────────────────────────────────────
   -- Cycle window opens. Notify every active member.
-  IF NEW.status = 'collecting' AND OLD.status = 'scheduled' THEN
+  IF NEW.cycle_status = 'collecting' AND OLD.cycle_status = 'scheduled' THEN
     FOR v_member IN
       SELECT user_id FROM public.circle_members
        WHERE circle_id = NEW.circle_id AND status = 'active'
@@ -135,12 +135,12 @@ BEGIN
 
   -- ─── collecting → deadline_reached ───────────────────────────────────────
   -- Deadline hit. Notify members who still owe + the recipient.
-  ELSIF NEW.status = 'deadline_reached' AND OLD.status = 'collecting' THEN
+  ELSIF NEW.cycle_status = 'deadline_reached' AND OLD.cycle_status = 'collecting' THEN
     -- Unpaid members.
     FOR v_member IN
       SELECT user_id FROM public.cycle_contributions
        WHERE cycle_id = NEW.id
-         AND status NOT IN ('completed', 'covered', 'excused')
+         AND contribution_status NOT IN ('completed', 'covered', 'excused')
     LOOP
       SELECT id INTO v_existing_id
         FROM public.notifications
@@ -175,14 +175,14 @@ BEGIN
 
   -- ─── deadline_reached → grace_period ─────────────────────────────────────
   -- Grace started. Notify late members with the grace-day count.
-  ELSIF NEW.status = 'grace_period' AND OLD.status = 'deadline_reached' THEN
+  ELSIF NEW.cycle_status = 'grace_period' AND OLD.cycle_status = 'deadline_reached' THEN
     SELECT COALESCE(grace_period_days, 2) INTO v_grace_days
       FROM public.circles WHERE id = NEW.circle_id;
     FOR v_member IN
       SELECT cc.user_id, GREATEST(0, EXTRACT(DAY FROM (NOW() - NEW.contribution_deadline))::INT) AS days_late
         FROM public.cycle_contributions cc
        WHERE cc.cycle_id = NEW.id
-         AND cc.status NOT IN ('completed', 'covered', 'excused')
+         AND cc.contribution_status NOT IN ('completed', 'covered', 'excused')
     LOOP
       SELECT id INTO v_existing_id
         FROM public.notifications
@@ -218,7 +218,7 @@ BEGIN
 
   -- ─── grace_period → ready_payout ─────────────────────────────────────────
   -- Payout is queued. Notify the recipient.
-  ELSIF NEW.status = 'ready_payout' AND OLD.status IN ('grace_period', 'collecting', 'deadline_reached') THEN
+  ELSIF NEW.cycle_status = 'ready_payout' AND OLD.cycle_status IN ('grace_period', 'collecting', 'deadline_reached') THEN
     IF v_recipient_id IS NOT NULL THEN
       SELECT id INTO v_existing_id
         FROM public.notifications
@@ -255,7 +255,7 @@ BEGIN
   -- Cycle done. Recipient + every active member gets a cycle_closed
   -- notification. The recipient also already received 'payout_received'
   -- from migration 188's trigger on the circle_payouts INSERT.
-  ELSIF NEW.status = 'closed' AND OLD.status = 'payout_completed' THEN
+  ELSIF NEW.cycle_status = 'closed' AND OLD.cycle_status = 'payout_completed' THEN
     FOR v_member IN
       SELECT user_id FROM public.circle_members
        WHERE circle_id = NEW.circle_id AND status = 'active'
@@ -299,7 +299,7 @@ $$;
 
 DROP TRIGGER IF EXISTS circle_cycles_state_notify ON public.circle_cycles;
 CREATE TRIGGER circle_cycles_state_notify
-  AFTER UPDATE OF status ON public.circle_cycles
+  AFTER UPDATE OF cycle_status ON public.circle_cycles
   FOR EACH ROW
   EXECUTE FUNCTION public.notify_cycle_state_change();
 
@@ -320,8 +320,8 @@ AS $$
 DECLARE
   v_grace_days INT;
 BEGIN
-  IF NEW.status = 'deadline_reached'
-     AND COALESCE(OLD.status, '') <> 'deadline_reached'
+  IF NEW.cycle_status = 'deadline_reached'
+     AND COALESCE(OLD.cycle_status, '') <> 'deadline_reached'
      AND NEW.grace_period_end IS NULL
      AND NEW.contribution_deadline IS NOT NULL THEN
     SELECT COALESCE(grace_period_days, 2)
@@ -339,7 +339,7 @@ $$;
 
 DROP TRIGGER IF EXISTS circle_cycles_compute_grace_end ON public.circle_cycles;
 CREATE TRIGGER circle_cycles_compute_grace_end
-  BEFORE UPDATE OF status ON public.circle_cycles
+  BEFORE UPDATE OF cycle_status ON public.circle_cycles
   FOR EACH ROW
   EXECUTE FUNCTION public.compute_grace_period_end();
 
@@ -361,17 +361,17 @@ AS $$
 DECLARE
   v_has_covered BOOLEAN := FALSE;
 BEGIN
-  IF NEW.status = 'ready_payout'
+  IF NEW.cycle_status = 'ready_payout'
      AND COALESCE(NEW.collected_amount, 0) = 0
      AND (NEW.payout_amount IS NULL OR NEW.payout_amount = 0) THEN
     SELECT EXISTS (
       SELECT 1 FROM public.cycle_contributions
-       WHERE cycle_id = NEW.id AND status = 'covered'
+       WHERE cycle_id = NEW.id AND contribution_status = 'covered'
     ) INTO v_has_covered;
     IF NOT v_has_covered THEN
-      NEW.status := 'payout_failed';
+      NEW.cycle_status := 'payout_failed';
       NEW.last_payout_error := 'zero_collected';
-      NEW.status_changed_at := NOW();
+      NEW.cycle_status_changed_at := NOW();
     END IF;
   END IF;
   RETURN NEW;
@@ -383,7 +383,7 @@ $$;
 
 DROP TRIGGER IF EXISTS circle_cycles_guard_zero_collected ON public.circle_cycles;
 CREATE TRIGGER circle_cycles_guard_zero_collected
-  BEFORE UPDATE OF status ON public.circle_cycles
+  BEFORE UPDATE OF cycle_status ON public.circle_cycles
   FOR EACH ROW
   EXECUTE FUNCTION public.guard_zero_collected_payout();
 
