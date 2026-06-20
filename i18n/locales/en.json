@@ -4248,6 +4248,14 @@
     "notification_decay_warning_title": "XnScore decay warning",
     "notification_decay_warning_body": "Your XnScore may decay if you remain inactive. Make a contribution to keep it stable."
   },
+  "honor": {
+    "notification_tier_change_title": "Honor Score tier updated",
+    "notification_tier_change_body": "Your Honor Score has moved from {{old_tier}} to {{new_tier}}.",
+    "notification_milestone_title": "Honor Score milestone reached",
+    "notification_milestone_body": "You've reached {{score}} points! Keep building your reputation.",
+    "notification_decay_warning_title": "Honor Score decay warning",
+    "notification_decay_warning_body": "Your Honor Score may decay if you remain inactive. Vouch or participate to keep it stable."
+  },
   "stress_score": {
     "loading": "Loading your wellness data...",
     "header_title": "Financial Wellness",
@@ -4360,7 +4368,8 @@
     "tip_pillar_expertise_title": "Complete a training course",
     "tip_pillar_expertise_body": "Finish a course in one of your skill domains. If it raises a domain into your top three, your Expertise pillar lifts immediately.",
     "tip_pillar_expertise_cta": "Open training hub",
-    "no_history": "No recent score history yet"
+    "no_history": "No recent score history yet",
+    "see_all": "See all"
   },
   "score_breakdown": {
     "header_title": "XnScore Breakdown",

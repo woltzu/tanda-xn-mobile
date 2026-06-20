@@ -402,6 +402,37 @@ export class NotificationPriorityEngine {
     }
   }
 
+  /**
+   * Honor Bucket C — map the notifications.type values that migration
+   * 214's notify_honor_tier_change trigger emits (plus the milestone /
+   * decay_warning push categories the honor-event taxonomy will carry)
+   * onto the five abstract NotificationType buckets the engine reasons
+   * about.
+   *
+   *   honor_tier_change    → score_changes (tier flip — strongest
+   *                                          honor signal; no
+   *                                          dedicated score_critical
+   *                                          bucket exists so this
+   *                                          rides the score channel)
+   *   honor_milestone      → score_changes (crossed a band threshold)
+   *   honor_decay_warning  → score_changes (about to lose points if
+   *                                          inactive)
+   *
+   * Returns null when the input isn't a honor type, so callers can
+   * fall back to whatever other mapping covers cycle / xnscore /
+   * KYC / payout_received.
+   */
+  static categoryForHonorNotification(dbType: string): NotificationType | null {
+    switch (dbType) {
+      case "honor_tier_change":
+      case "honor_milestone":
+      case "honor_decay_warning":
+        return "score_changes";
+      default:
+        return null;
+    }
+  }
+
   /** Time sensitivity: closer deadline = higher score. */
   private static calculateTimeSensitivity(data: Record<string, any>): number {
     const hoursUntilDue = data.hours_until_due ?? data.hoursUntilDue;

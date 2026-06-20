@@ -84,6 +84,11 @@ export const linkingConfig = {
       // straight to their score. userId is optional; when absent the
       // screen reads the auth context (own profile).
       XnScoreDashboard: "xnscore/:userId?",
+
+      // Honor Score Overview — Bucket C of the Honor review. Lets the
+      // honor_tier_change notification (migration 214) route straight
+      // to the overview. userId optional; absent = own profile.
+      HonorScoreOverview: "honor/:userId?",
     },
   },
 };

@@ -4248,6 +4248,14 @@
     "notification_decay_warning_title": "Avertissement de baisse du XnScore",
     "notification_decay_warning_body": "Votre XnScore peut baisser si vous restez inactif. Effectuez une cotisation pour le stabiliser."
   },
+  "honor": {
+    "notification_tier_change_title": "Palier Score d'honneur mis à jour",
+    "notification_tier_change_body": "Votre Score d'honneur est passé de {{old_tier}} à {{new_tier}}.",
+    "notification_milestone_title": "Jalon de Score d'honneur atteint",
+    "notification_milestone_body": "Vous avez atteint {{score}} points ! Continuez à bâtir votre réputation.",
+    "notification_decay_warning_title": "Avertissement de baisse du Score d'honneur",
+    "notification_decay_warning_body": "Votre Score d'honneur peut baisser si vous restez inactif. Cautionnez ou participez pour le stabiliser."
+  },
   "stress_score": {
     "loading": "Chargement de vos données de bien-être...",
     "header_title": "Bien-être financier",
@@ -4360,7 +4368,8 @@
     "tip_pillar_expertise_title": "Terminez une formation",
     "tip_pillar_expertise_body": "Finissez une formation dans l'un de vos domaines. Si elle fait entrer le domaine dans votre top 3, votre pilier Expertise monte tout de suite.",
     "tip_pillar_expertise_cta": "Ouvrir le centre de formations",
-    "no_history": "Pas encore d'historique récent"
+    "no_history": "Pas encore d'historique récent",
+    "see_all": "Voir tout"
   },
   "score_breakdown": {
     "header_title": "Détail du XnScore",

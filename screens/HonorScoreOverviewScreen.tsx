@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 // shape as the post-Bucket-A XnScore Dashboard: one composite hook that
 // fans out into score/tier/pillars/history/weakestPillar.
 import { useHonorScoreDashboard, useHonorScoreHistory, useHonorScorePillarBreakdown } from "../hooks/useHonorScore";
+import { useEventTracker } from "../hooks/useEventTracker";
 import {
   HonorScoreEngine,
   HonorScoreTier,
@@ -165,6 +166,23 @@ export default function HonorScoreOverviewScreen() {
 
   const totalScore = score?.totalScore ?? null;
 
+  // Honor Bucket C — telemetry channel. Bound by useEventTracker to
+  // the current user; events flow through EventService into
+  // user_events.
+  const { track } = useEventTracker();
+  // useRef-guarded one-shot mount fire so the focus refetch loop
+  // doesn't double-emit honor.viewed.
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: "honor.viewed",
+      eventCategory: "score",
+      eventAction: "viewed",
+    });
+  }, [track]);
+
   // Honor Bucket B — HelpSheet visibility + per-pillar explainer
   // payload. State lives at component scope so the back-button can
   // dismiss either sheet without unmounting the screen.
@@ -213,14 +231,26 @@ export default function HonorScoreOverviewScreen() {
   // placeholder.
   const handleHelpPress = useCallback(() => {
     setHelpOpen(true);
-  }, []);
+    track({
+      eventType: "honor.help_opened",
+      eventCategory: "score",
+      eventAction: "opened",
+    });
+  }, [track]);
 
   // Bucket B — pillar row tap → explainer sheet. The payload is the
   // canonical pillar object so the sheet can render value/max + tier
   // sub-components by key.
   const openPillarExplainer = useCallback((key: string, value: number, max: number) => {
     setPillarExplainer({ key, value, max });
-  }, []);
+    track({
+      eventType: "honor.pillar_explainer_opened",
+      eventCategory: "score",
+      eventAction: "opened",
+      eventLabel: key,
+      eventValue: { value, max },
+    });
+  }, [track]);
 
   // Bucket B — sparkline data. honor_score_history rows are sorted
   // desc-by-created_at, so reverse for chronological order. Each
@@ -340,9 +370,26 @@ export default function HonorScoreOverviewScreen() {
               2 points. */}
           <Sparkline values={historyForSparkline} accentColor={tierInfo?.color ?? "#00C6AE"} />
 
-          {/* Progress to next tier — from the engine helper. */}
+          {/* Progress to next tier — Bucket C wraps the strip in a
+              TouchableOpacity that routes to ScoreHub and emits
+              honor.tier_progress_tapped. The score card itself remains
+              non-tappable so the user can't accidentally route while
+              reading their number. */}
           {progressToNextTier?.nextTier ? (
-            <View style={styles.progressSection}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={() => {
+                track({
+                  eventType: "honor.tier_progress_tapped",
+                  eventCategory: "score",
+                  eventAction: "tapped",
+                  eventLabel: progressToNextTier.nextTier ?? undefined,
+                  eventValue: { pts_needed: Math.round(progressToNextTier.pointsNeeded) },
+                });
+                navigation.navigate("ScoreHub" as any);
+              }}
+              style={styles.progressSection}
+            >
               <View style={styles.progressHeader}>
                 <Text style={styles.progressLabel}>
                   {t("honor_overview.progress_to", {
@@ -364,7 +411,7 @@ export default function HonorScoreOverviewScreen() {
                   ]}
                 />
               </View>
-            </View>
+            </TouchableOpacity>
           ) : null}
         </View>
 
@@ -461,9 +508,26 @@ export default function HonorScoreOverviewScreen() {
           </View>
         </View>
 
-        {/* Recent Activity — real honor_score_history rows. */}
+        {/* Recent Activity — real honor_score_history rows. Bucket C
+            adds a "See all" header link routing to ScoreHub (the
+            broader cross-score history surface) and emits
+            honor.history_opened. */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("honor_overview.section_recent")}</Text>
+          <View style={styles.recentHeaderRow}>
+            <Text style={styles.sectionTitle}>{t("honor_overview.section_recent")}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                track({
+                  eventType: "honor.history_opened",
+                  eventCategory: "score",
+                  eventAction: "opened",
+                });
+                navigation.navigate("ScoreHub" as any);
+              }}
+            >
+              <Text style={styles.recentSeeAll}>{t("honor_overview.see_all")}</Text>
+            </TouchableOpacity>
+          </View>
           <View style={styles.activityCard}>
             {recentHistory.length > 0 ? (
               recentHistory.map((row, idx) => {
@@ -525,6 +589,13 @@ export default function HonorScoreOverviewScreen() {
                   key={`${tip.key}-${i}`}
                   style={styles.tipCard}
                   onPress={() => {
+                    track({
+                      eventType: "honor.tip_tapped",
+                      eventCategory: "score",
+                      eventAction: "tapped",
+                      eventLabel: tip.key,
+                      eventValue: { pts_available: pointsRemaining },
+                    });
                     const route = routeForPillar(tip.key);
                     navigation.navigate(route as any);
                   }}
@@ -847,6 +918,10 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: 20, marginBottom: 24 },
   sectionTitle: { fontSize: 18, fontWeight: "700", color: "#1a1a2e", marginBottom: 4 },
   sectionSubtitle: { fontSize: 12, color: "#6B7280", marginBottom: 12 },
+  // Honor Bucket C — Recent Activity section header now hosts a
+  // "See all" link routing to the wider ScoreHub history.
+  recentHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  recentSeeAll: { fontSize: 13, fontWeight: "600", color: "#00C6AE" },
 
   pillarsCard: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 16, gap: 16, borderWidth: 1, borderColor: "#E5E7EB" },
   pillarRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
