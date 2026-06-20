@@ -22,9 +22,13 @@
 // tier-change-notification (Bucket A of the tier review):
 //   1. Read notifications where type IN ('ai_insight','ai_weekly_digest')
 //      AND push_sent_at IS NULL.
-//   2. Fetch the recipient's expo_push_token from `profiles`.
-//   3. POST to https://exp.host/--/api/v2/push/send.
-//   4. Mark the row push_sent_at = NOW() (or push_error on failure).
+//   2. (Bucket C) Defensive dedup: if the source ai_decision has a
+//      source_event_id that already drove a push for this user via
+//      another notification type in the last 5 minutes, skip the push
+//      and stamp push_sent_at so the row doesn't retry.
+//   3. Fetch the recipient's expo_push_token from `profiles`.
+//   4. POST to https://exp.host/--/api/v2/push/send.
+//   5. Mark the row push_sent_at = NOW() (or push_error on failure).
 //
 // Schedule:
 //   Every 1–2 minutes via pg_cron or Supabase Scheduler. Short cadence
@@ -86,9 +90,64 @@ serve(async (req: Request) => {
     }
 
     let delivered = 0;
+    let deduped = 0;
     const failures: Array<{ id: string; reason: string }> = [];
 
     for (const row of pending ?? []) {
+      // ── Bucket C — defensive dedup ────────────────────────────────────
+      // Multiple triggers can fire on the same source event (e.g., an
+      // xn_scores tier flip drives both notify_xnscore_tier_change AND
+      // record_ai_decision_for_xnscore_tier via migration 219). The score-
+      // domain notification is in-app only today, but a future generic
+      // push dispatcher could push it. If that ever happens we'd send the
+      // same user two pushes for one event. Pre-emptive check: if any
+      // other notification for this user shares the same source_event_id
+      // from the linked ai_decisions row AND was already push_sent_at
+      // stamped within the last 5 minutes, treat this ai_insight as a
+      // dup, stamp it sent (so the partial index drops it), and move on.
+      //
+      // Today this is a no-op — only ai_insight rows currently set
+      // push_sent_at — so the check fires zero matches and execution
+      // falls through to the normal push path. Keeping it here means
+      // adding a source-domain push dispatcher later requires no change
+      // to this function.
+      const decisionId = (row.data as Record<string, unknown> | null)?.[
+        "decision_id"
+      ];
+      if (row.type === "ai_insight" && typeof decisionId === "string") {
+        const { data: decision } = await supabase
+          .from("ai_decisions")
+          .select("source_event_id, source_event_type")
+          .eq("id", decisionId)
+          .maybeSingle();
+        const srcId = (decision as { source_event_id?: string | null } | null)
+          ?.source_event_id;
+        if (srcId) {
+          const cutoff = new Date(Date.now() - 5 * 60_000).toISOString();
+          const { data: rivals } = await supabase
+            .from("notifications")
+            .select("id")
+            .eq("user_id", row.user_id)
+            .neq("type", "ai_insight")
+            .not("push_sent_at", "is", null)
+            .gte("created_at", cutoff)
+            .filter("data->>source_event_id", "eq", srcId)
+            .limit(1);
+          if (rivals && rivals.length > 0) {
+            const { error: stampErr } = await supabase
+              .from("notifications")
+              .update({ push_sent_at: new Date().toISOString() })
+              .eq("id", row.id);
+            if (stampErr) {
+              failures.push({ id: row.id, reason: `dedup_stamp_${stampErr.code ?? "err"}` });
+              continue;
+            }
+            deduped++;
+            continue;
+          }
+        }
+      }
+
       // Read the recipient's most recent device token. A missing token
       // is a soft-fail — we leave push_sent_at NULL so a later sweep
       // retries after the user opens the app and registers a token.
@@ -163,6 +222,7 @@ serve(async (req: Request) => {
         finished: new Date().toISOString(),
         scanned: pending?.length ?? 0,
         delivered,
+        deduped,
         failed: failures.length,
         failures,
       }),
