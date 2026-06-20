@@ -15,7 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useCircles } from "../context/CirclesContext";
 import { useOrganizerTrips } from "../hooks/useTripOrganizer";
-import { useXnScore } from "../context/XnScoreContext";
+import { useXnScoreFromBundle } from "../hooks/useXnScore";
 import { useWallet } from "../context/WalletContext";
 import { useAdvance, LOAN_PRODUCTS, ELIGIBILITY_TIERS } from "../context/AdvanceContext";
 import { useSavings } from "../context/SavingsContext";
@@ -257,7 +257,11 @@ export default function DashboardScreen() {
       refreshOrganizerTrips();
     }, [refreshOrganizerTrips])
   );
-  const { score } = useXnScore();
+  // Bucket D — real bundled XnScore. Null while loading; downstream
+  // gates use `?? 0` so a loading user is treated as below any
+  // positive minimum.
+  const { score: realScore } = useXnScoreFromBundle();
+  const score = realScore ?? 0;
   const { balance: walletBalance } = useWallet();
   const { hasActiveDefaults } = useUserDefaults();
   const { lateContributions } = useLateContributions();

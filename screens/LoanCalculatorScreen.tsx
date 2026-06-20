@@ -14,7 +14,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useLoan, LOAN_PRODUCTS, LoanProduct, LoanType } from "../context/AdvanceContext";
-import { useXnScore } from "../context/XnScoreContext";
+import { useXnScoreFromBundle } from "../hooks/useXnScore";
 import { useCurrency } from "../context/CurrencyContext";
 
 type LoanCalculatorNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -34,7 +34,11 @@ export default function LoanCalculatorScreen() {
   const navigation = useNavigation<LoanCalculatorNavigationProp>();
   const { t } = useTranslation();
   const { calculateLoan, getAvailableProducts, getEligibility, getEligibilityTier } = useLoan();
-  const { score } = useXnScore();
+  // Bucket D — real bundled XnScore for the rate calculator.
+  // Default 0 keeps a loading user at the floor APR until the bundle
+  // resolves.
+  const { score: realScore } = useXnScoreFromBundle();
+  const score = realScore ?? 0;
   const { formatCurrency } = useCurrency();
 
   // Mock SMC (Stable Monthly Contribution) - realistic value for testing larger loans

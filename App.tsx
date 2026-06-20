@@ -155,7 +155,9 @@ import OversightDashboardScreen from "./screens/OversightDashboardScreen";
 // import MediationToolsScreen from "./screens/MediationToolsScreen";
 import AuditTrailScreen from "./screens/AuditTrailScreen";
 import SelectCircleContributionScreen from "./screens/SelectCircleContributionScreen";
-import { XnScoreProvider } from "./context/XnScoreContext";
+// Bucket D — XnScoreProvider retired. Real score reads through
+// useXnScoreFromBundle (hooks/useXnScore.ts) backed by get_user_scores;
+// no provider needed in the tree.
 import { TrustProvider } from "./context/TrustContext";
 import { AdvanceProvider } from "./context/AdvanceContext";
 import { SavingsProvider } from "./context/SavingsContext";
@@ -1681,7 +1683,6 @@ export default function App() {
         <CurrencyProvider>
           <CirclesProvider>
             <WalletProvider>
-              <XnScoreProvider>
                 <TrustProvider>
                   <AdvanceProvider>
                     <SavingsProvider>
@@ -1716,7 +1717,6 @@ export default function App() {
                     </SavingsProvider>
                   </AdvanceProvider>
                 </TrustProvider>
-              </XnScoreProvider>
             </WalletProvider>
           </CirclesProvider>
         </CurrencyProvider>

@@ -30,7 +30,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
-import { useXnScore } from "../context/XnScoreContext";
+import { useXnScoreFromBundle } from "./useXnScore";
 
 export type SuggestedCircle = {
   id: string;
@@ -58,7 +58,10 @@ export function useSuggestedCircles(opts?: {
   error: string | null;
 } {
   const { user } = useAuth();
-  const { score } = useXnScore();
+  // Bucket D — real bundled XnScore replaces the legacy AsyncStorage
+  // context. `score` is `number | null` while loading; the userScore
+  // line below coerces null to 0 so the cache key stays stable.
+  const { score } = useXnScoreFromBundle();
   const userId = user?.id ?? null;
   const userScore = typeof score === "number" ? score : 0;
   const enabled = opts?.enabled ?? true;

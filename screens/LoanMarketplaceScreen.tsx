@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useLoan, LOAN_PRODUCTS, LoanProduct, LoanType, ELIGIBILITY_TIERS } from "../context/AdvanceContext";
-import { useXnScore } from "../context/XnScoreContext";
+import { useXnScoreFromBundle } from "../hooks/useXnScore";
 
 const TYPE_LABELS: Record<LoanType, { label: string; color: string; icon: string }> = {
   small: { label: "Quick", color: "#10B981", icon: "flash" },
@@ -24,7 +24,9 @@ export default function LoanMarketplaceScreen() {
   const navigation = useTypedNavigation();
   const { t } = useTranslation();
   const { getEligibility, getAvailableProducts, activeLoans, getTotalOutstanding } = useLoan();
-  const { score } = useXnScore();
+  // Bucket D — real bundled XnScore for loan-product eligibility chips.
+  const { score: realScore } = useXnScoreFromBundle();
+  const score = realScore ?? 0;
 
   // Mock SMC (in production, calculate from circle contributions)
   const mockSMC = 500;

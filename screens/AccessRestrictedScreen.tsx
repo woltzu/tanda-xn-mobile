@@ -11,7 +11,8 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
-import { useXnScore } from "../context/XnScoreContext";
+import { useXnScoreFromBundle } from "../hooks/useXnScore";
+import { getTierByKeyOrFallback } from "../lib/tiers";
 import { useTrust, TrustTier } from "../context/TrustContext";
 
 type AccessRestrictedNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -73,7 +74,13 @@ export default function AccessRestrictedScreen() {
   const navigation = useNavigation<AccessRestrictedNavigationProp>();
   const route = useRoute<AccessRestrictedRouteProp>();
   const { t } = useTranslation();
-  const { score, level } = useXnScore();
+  // Bucket D — real bundled XnScore + tier. Legacy `level` (Ionicons
+  // name, hex, label) is replaced by TIER_CATALOG: `tier.icon` is an
+  // emoji rendered as Text, `tier.color` is the same hex, `tier.label`
+  // is the display name.
+  const { score: realScore, tierKey } = useXnScoreFromBundle();
+  const score = realScore ?? 0;
+  const tier = getTierByKeyOrFallback(tierKey);
   const { getTrustTier } = useTrust();
 
   const restrictionType = route.params?.type || "score_too_low";
@@ -130,14 +137,10 @@ export default function AccessRestrictedScreen() {
               <View style={styles.scoreSection}>
                 <Text style={styles.scoreLabel}>{t("access_restricted.your_score")}</Text>
                 <View style={styles.scoreValue}>
-                  <Ionicons
-                    name={level.icon as any}
-                    size={20}
-                    color={level.color}
-                  />
-                  <Text style={[styles.scoreNumber, { color: level.color }]}>{score}</Text>
+                  <Text style={{ fontSize: 18 }}>{tier.icon}</Text>
+                  <Text style={[styles.scoreNumber, { color: tier.color }]}>{score}</Text>
                 </View>
-                <Text style={styles.scoreTier}>{level.name}</Text>
+                <Text style={styles.scoreTier}>{tier.label}</Text>
               </View>
 
               <View style={styles.scoreDivider} />

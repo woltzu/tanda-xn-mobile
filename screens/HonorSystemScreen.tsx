@@ -13,7 +13,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useTrust } from "../context/TrustContext";
-import { useXnScore } from "../context/XnScoreContext";
+import { useXnScoreFromBundle } from "../hooks/useXnScore";
 
 type HonorSystemNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -128,7 +128,10 @@ const getBadgeTierColor = (tier: string) => {
 export default function HonorSystemScreen() {
   const navigation = useNavigation<HonorSystemNavigationProp>();
   const { t } = useTranslation();
-  const { score } = useXnScore();
+  // Bucket D — real bundled XnScore. Null while loading; rendered
+  // alongside honor stats and the loaded value short-circuits any
+  // race with the honor card.
+  const { score } = useXnScoreFromBundle();
   const {
     honorStats,
     vouchRecords,

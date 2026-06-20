@@ -15,7 +15,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useTrust } from "../context/TrustContext";
-import { useXnScore } from "../context/XnScoreContext";
+import { useXnScoreFromBundle } from "../hooks/useXnScore";
 import MemberTrustBadge from "../components/MemberTrustBadge";
 
 type VouchMemberNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -53,7 +53,9 @@ export default function VouchMemberScreen() {
   const navigation = useNavigation<VouchMemberNavigationProp>();
   const route = useRoute<VouchMemberRouteProp>();
   const { t } = useTranslation();
-  const { score } = useXnScore();
+  // Bucket D — real bundled XnScore for the vouch-power calculation.
+  const { score: realScore } = useXnScoreFromBundle();
+  const score = realScore ?? 0;
   const {
     canVouchForOthers,
     honorStats,

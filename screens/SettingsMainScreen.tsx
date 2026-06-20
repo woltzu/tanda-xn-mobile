@@ -14,7 +14,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useAuth, getEmailRedirectUrl } from "../context/AuthContext";
-import { useXnScore } from "../context/XnScoreContext";
+import { useXnScoreFromBundle } from "../hooks/useXnScore";
 import { useWalkthrough } from "../hooks/useWalkthrough";
 import { supabase } from "../lib/supabase";
 
@@ -37,7 +37,9 @@ export default function SettingsMainScreen() {
   const navigation = useNavigation<SettingsNavigationProp>();
   const { t } = useTranslation();
   const { user, logout, isEmailVerified } = useAuth();
-  const { score } = useXnScore();
+  // Bucket D — real bundled XnScore for the Settings header row.
+  // Null while loading; rendered numeric or `—` downstream.
+  const { score } = useXnScoreFromBundle();
   const { resetAllWalkthroughs } = useWalkthrough();
 
   // Email-verification resend state. Lives at component scope so the

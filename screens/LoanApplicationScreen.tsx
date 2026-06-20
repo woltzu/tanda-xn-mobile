@@ -22,7 +22,7 @@ import {
   RepaymentMethod,
   DisbursementMethod,
 } from "../context/AdvanceContext";
-import { useXnScore } from "../context/XnScoreContext";
+import { useXnScoreFromBundle } from "../hooks/useXnScore";
 import { useCurrency } from "../context/CurrencyContext";
 
 type LoanApplicationNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -92,7 +92,10 @@ export default function LoanApplicationScreen() {
     getAdvanceablePayouts,
     getMonthlyObligations,
   } = useLoan();
-  const { score } = useXnScore();
+  // Bucket D — real bundled XnScore for loan eligibility gating.
+  // Defaulting to 0 keeps a loading user under any positive minimum.
+  const { score: realScore } = useXnScoreFromBundle();
+  const score = realScore ?? 0;
   const { formatCurrency } = useCurrency();
 
   const product = getProductById(productId);

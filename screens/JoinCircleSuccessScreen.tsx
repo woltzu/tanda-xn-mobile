@@ -14,7 +14,10 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
-import { useXnScore } from "../context/XnScoreContext";
+// Bucket D — legacy useXnScore.processCircleEvent("joined") removed.
+// The server now credits the join via the same circle_members INSERT
+// path that already records the membership; no client side-effect call
+// needed.
 
 type JoinCircleSuccessNavigationProp = StackNavigationProp<RootStackParamList>;
 type JoinCircleSuccessRouteProp = RouteProp<RootStackParamList, "JoinCircleSuccess">;
@@ -60,7 +63,7 @@ export default function JoinCircleSuccessScreen() {
   const { t } = useTranslation();
   const { circleId } = route.params;
   const { circles, browseCircles, myCircles } = useCircles();
-  const { processCircleEvent } = useXnScore();
+  // Bucket D — score credit happens server-side; no client hook.
 
   // Animation values
   const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -71,8 +74,8 @@ export default function JoinCircleSuccessScreen() {
   const circle = [...circles, ...myCircles, ...browseCircles].find((c) => c.id === circleId);
 
   useEffect(() => {
-    // Award XnScore points for joining a circle
-    processCircleEvent("joined");
+    // Bucket D — score credit happens server-side from the
+    // circle_members INSERT; no client call needed.
 
     // Success animation sequence
     Animated.sequence([

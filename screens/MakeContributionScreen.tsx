@@ -16,7 +16,12 @@ import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
-import { useXnScore } from "../context/XnScoreContext";
+// Bucket D — legacy useXnScore.processContribution removed. The real
+// backend now credits the score from a Postgres trigger on the
+// contributions table (migration 020 → tr_contribution_activity →
+// update_financial_activity → apply_xnscore_adjustment). The two
+// processContribution() calls below are gone; the score lands
+// server-side once the contribution row exists.
 import { useWallet } from "../context/WalletContext";
 import { usePayment } from "../context/PaymentContext";
 import { invalidateCircleDetailCache } from "../hooks/useCircleDetail";
@@ -100,7 +105,7 @@ export default function MakeContributionScreen() {
   const { circleId } = route.params;
   const { circles, browseCircles, myCircles } = useCircles();
   const { user } = useAuth();
-  const { processContribution } = useXnScore();
+  // Bucket D — score side-effect handled by server trigger; no client hook.
   const { currencies, getCurrencyBalance, makeContribution } = useWallet();
   const {
     paymentMethods: stripePaymentMethods,
@@ -534,9 +539,9 @@ export default function MakeContributionScreen() {
           isCrossBorder ? exchangeInfo?.rate : undefined
         );
 
-        const isEarly = daysUntilDue > 2;
-        const isOnTime = daysUntilDue >= 0;
-        await processContribution(circleId, isOnTime, isEarly);
+        // Bucket D — score adjustment happens server-side via the
+        // tr_contribution_activity trigger; we no longer fire a client
+        // processContribution() call.
 
         // Bust the View-Circle-Details 30 s cache so when the user
         // returns from the success screen the balance, contribution
@@ -606,9 +611,7 @@ export default function MakeContributionScreen() {
           }
         }
 
-        const isEarly = daysUntilDue > 2;
-        const isOnTime = daysUntilDue >= 0;
-        await processContribution(circleId, isOnTime, isEarly);
+        // Bucket D — score adjustment handled server-side; no client call.
 
         invalidateCircleDetailCache(circleId);
 
