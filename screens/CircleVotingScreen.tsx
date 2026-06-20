@@ -15,8 +15,18 @@ import type {
   VoteChoice,
 } from "../services/CircleDemocracyEngine";
 import { Routes } from "../lib/routes";
+import { useEventTracker } from "../hooks/useEventTracker";
 
-type RouteParams = { CircleVoting: { circleId: string } };
+// Bucket C — optional preset param. AdminSettingsScreen passes it to
+// pre-fill the create sheet with a `change_rules` proposal instead of
+// asking the admin to retype the values they just edited.
+type RouteParams = {
+  CircleVoting: {
+    circleId: string;
+    presetType?: ProposalType;
+    presetPayload?: Record<string, any>;
+  };
+};
 
 // Bucket B — AsyncStorage gate for the first-visit coach mark. Version
 // suffix lets us re-prompt every user if the copy shifts.
@@ -125,7 +135,8 @@ export default function CircleVotingScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<RouteParams, "CircleVoting">>();
   const { t } = useTranslation();
-  const { circleId } = route.params;
+  const { circleId, presetType, presetPayload } = route.params;
+  const { track } = useEventTracker();
 
   const [activeTab, setActiveTab] = useState<"active" | "closed">("active");
 
@@ -180,6 +191,61 @@ export default function CircleVotingScreen() {
     const tid = setTimeout(() => dismissCoach(), 4000);
     return () => clearTimeout(tid);
   }, [coachVisible, dismissCoach]);
+
+  // Bucket C telemetry.
+  //   * voting.viewed — first time the screen renders for a given circleId.
+  //     useRef dedupes against StrictMode double-mount.
+  //   * voting.tab_switched — fires when activeTab changes. lastTabRef is
+  //     seeded from null on first render so the initial render doesn't get
+  //     a twin tab_switched alongside its viewed.
+  const viewedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!circleId) return;
+    if (viewedRef.current === circleId) return;
+    viewedRef.current = circleId;
+    track({
+      eventType: "voting.viewed",
+      eventCategory: "circle",
+      eventAction: "view",
+      eventLabel: circleId,
+      eventValue: { circle_id: circleId },
+    });
+  }, [circleId, track]);
+
+  const lastTabRef = useRef<"active" | "closed" | null>(null);
+  useEffect(() => {
+    if (lastTabRef.current === null) {
+      lastTabRef.current = activeTab;
+      return;
+    }
+    if (lastTabRef.current === activeTab) return;
+    lastTabRef.current = activeTab;
+    track({
+      eventType: "voting.tab_switched",
+      eventCategory: "circle",
+      eventAction: "click",
+      eventLabel: circleId,
+      eventValue: { circle_id: circleId, tab: activeTab },
+    });
+  }, [activeTab, circleId, track]);
+
+  // Bucket C — preset route param. AdminSettingsScreen sends the user here
+  // with a pre-filled change_rules payload. We open the sheet at step
+  // "form" once per (presetType + presetPayload) tuple — the JSON.stringify
+  // key in the ref prevents repeated re-opens if the screen re-renders.
+  const presetAppliedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!presetType) return;
+    const key = `${presetType}:${JSON.stringify(presetPayload ?? {})}`;
+    if (presetAppliedRef.current === key) return;
+    presetAppliedRef.current = key;
+    setSelectedType(presetType);
+    setFormPayload(presetPayload ?? {});
+    setCustomTitle("");
+    setCustomDescription("");
+    setCreateStep("form");
+    setCreateOpen(true);
+  }, [presetType, presetPayload]);
 
   const {
     activeProposals,
@@ -242,6 +308,19 @@ export default function CircleVotingScreen() {
       formPayload,
     );
     if (result) {
+      // Bucket C — fires only on successful create-and-open. Carries the
+      // type so we can split funnel/conversion by proposal kind.
+      track({
+        eventType: "voting.proposal_created",
+        eventCategory: "circle",
+        eventAction: "submit",
+        eventLabel: circleId,
+        eventValue: {
+          circle_id: circleId,
+          proposal_id: result.id,
+          proposal_type: selectedType,
+        },
+      });
       closeCreate();
       refetch();
     } else {
@@ -250,7 +329,7 @@ export default function CircleVotingScreen() {
         t("circle_voting.alert_create_failed"),
       );
     }
-  }, [selectedType, formPayload, customTitle, customDescription, circleId, createAndOpen, closeCreate, refetch, t]);
+  }, [selectedType, formPayload, customTitle, customDescription, circleId, createAndOpen, closeCreate, refetch, t, track]);
 
   // ── Vote flow ────────────────────────────────────────────────────────────
   const openVoteConfirm = useCallback(
@@ -275,6 +354,19 @@ export default function CircleVotingScreen() {
       payload.reasoning.trim() || undefined,
     );
     if (result) {
+      // Bucket C — fires only on success. Carries the vote choice so we
+      // can measure yes/no/abstain mix per circle.
+      track({
+        eventType: "voting.vote_cast",
+        eventCategory: "circle",
+        eventAction: "submit",
+        eventLabel: circleId,
+        eventValue: {
+          circle_id: circleId,
+          proposal_id: payload.proposalId,
+          vote: payload.choice,
+        },
+      });
       refetch();
     } else {
       Alert.alert(
@@ -282,7 +374,7 @@ export default function CircleVotingScreen() {
         t("circle_voting.alert_vote_failed"),
       );
     }
-  }, [confirmVote, castVote, refetch, t]);
+  }, [confirmVote, castVote, refetch, t, track, circleId]);
 
   // ── Loading gate ─────────────────────────────────────────────────────────
   if (loading && activeProposals.length === 0 && closedProposals.length === 0) {
@@ -391,7 +483,20 @@ export default function CircleVotingScreen() {
               onExplainType={() => setPillExplainer({ kind: "type", key: p.proposalType })}
               onExplainThreshold={() => setPillExplainer({ kind: "threshold" })}
               onExplainQuorum={() => setPillExplainer({ kind: "quorum" })}
-              onOpenDetail={() => navigation.navigate(Routes.ProposalDetail, { proposalId: p.id })}
+              onOpenDetail={() => {
+                track({
+                  eventType: "voting.proposal_opened",
+                  eventCategory: "circle",
+                  eventAction: "click",
+                  eventLabel: circleId,
+                  eventValue: {
+                    circle_id: circleId,
+                    proposal_id: p.id,
+                    proposal_type: p.proposalType,
+                  },
+                });
+                navigation.navigate(Routes.ProposalDetail, { proposalId: p.id });
+              }}
               voting={voting}
             />
           ))

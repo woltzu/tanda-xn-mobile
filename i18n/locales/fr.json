@@ -6341,6 +6341,12 @@
   "admin_settings_v2": {
     "alert_saved_title": "Enregistré",
     "alert_saved_body": "Les paramètres ont été mis à jour avec succès.",
+    "alert_no_circle_title": "Impossible d'enregistrer sans cercle",
+    "alert_no_circle_body": "Ouvrez ces paramètres depuis un cercle pour enregistrer les modifications.",
+    "alert_save_failed_title": "Échec de l'enregistrement",
+    "alert_save_failed_body": "Impossible de mettre à jour les paramètres de gouvernance. Veuillez réessayer.",
+    "alert_no_changes_title": "Aucune modification",
+    "alert_no_changes_body": "Il n'y a aucune modification à enregistrer.",
     "btn_save": "Enregistrer",
     "section_member_permissions": "Autorisations des membres",
     "section_notifications": "Notifications",
@@ -6719,6 +6725,12 @@
     "notification_declined_body": "Votre demande de sortie pour {{circle_name}} n'a pas pu être satisfaite. Veuillez contacter un Aîné.",
     "notification_unsuspended_title": "Levée de suspension",
     "notification_unsuspended_body": "Votre suspension de remplaçant a été levée. Vous recevrez à nouveau des propositions."
+  },
+  "voting": {
+    "notification_proposal_open_title": "Nouvelle proposition : {{title}}",
+    "notification_proposal_open_body": "Une nouvelle proposition « {{title}} » est ouverte au vote dans {{circle_name}}.",
+    "notification_proposal_resolved_title": "Proposition {{result}} : {{title}}",
+    "notification_proposal_resolved_body": "La proposition « {{title}} » dans {{circle_name}} a été {{result}}."
   },
   "community_events": {
     "header_title": "Événements à venir",

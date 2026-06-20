@@ -47,6 +47,9 @@ export interface GovernanceSettings {
   allowVoteChange: boolean;
   closeOnAllVoted: boolean;
   autoExecuteApproved: boolean;
+  // Bucket C: when true, joining the circle creates the member row with
+  // status='pending' and an admit_member proposal is auto-created.
+  requireMemberApproval: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -139,6 +142,7 @@ function mapGovernanceSettings(row: any): GovernanceSettings {
     allowVoteChange: row.allow_vote_change || false,
     closeOnAllVoted: row.close_on_all_voted ?? true,
     autoExecuteApproved: row.auto_execute_approved || false,
+    requireMemberApproval: row.require_member_approval || false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -205,6 +209,7 @@ const DEFAULT_GOVERNANCE: Omit<GovernanceSettings, 'id' | 'circleId' | 'createdA
   allowVoteChange: false,
   closeOnAllVoted: true,
   autoExecuteApproved: false,
+  requireMemberApproval: false,
 };
 
 const CRITICAL_PROPOSAL_TYPES: ProposalType[] = ['dissolve_circle', 'remove_member'];
@@ -262,6 +267,7 @@ export class CircleDemocracyEngine {
     if (updates.allowVoteChange !== undefined) dbUpdates.allow_vote_change = updates.allowVoteChange;
     if (updates.closeOnAllVoted !== undefined) dbUpdates.close_on_all_voted = updates.closeOnAllVoted;
     if (updates.autoExecuteApproved !== undefined) dbUpdates.auto_execute_approved = updates.autoExecuteApproved;
+    if (updates.requireMemberApproval !== undefined) dbUpdates.require_member_approval = updates.requireMemberApproval;
 
     const { data, error } = await supabase
       .from('circle_governance_settings')

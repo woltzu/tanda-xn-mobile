@@ -6341,6 +6341,12 @@
   "admin_settings_v2": {
     "alert_saved_title": "Saved",
     "alert_saved_body": "Settings have been updated successfully.",
+    "alert_no_circle_title": "Can't save without a circle",
+    "alert_no_circle_body": "Open these settings from inside a circle to save changes.",
+    "alert_save_failed_title": "Save failed",
+    "alert_save_failed_body": "We couldn't update the governance settings. Please try again.",
+    "alert_no_changes_title": "No changes",
+    "alert_no_changes_body": "There aren't any changes to save.",
     "btn_save": "Save",
     "section_member_permissions": "Member Permissions",
     "section_notifications": "Notifications",
@@ -6719,6 +6725,12 @@
     "notification_declined_body": "Your exit request for {{circle_name}} could not be fulfilled. Please contact an elder.",
     "notification_unsuspended_title": "Substitute suspension lifted",
     "notification_unsuspended_body": "Your substitute suspension has been lifted. You'll start receiving offers again."
+  },
+  "voting": {
+    "notification_proposal_open_title": "New proposal: {{title}}",
+    "notification_proposal_open_body": "A new proposal '{{title}}' is open for voting in {{circle_name}}.",
+    "notification_proposal_resolved_title": "Proposal {{result}}: {{title}}",
+    "notification_proposal_resolved_body": "The proposal '{{title}}' in {{circle_name}} was {{result}}."
   },
   "community_events": {
     "header_title": "Upcoming Events",

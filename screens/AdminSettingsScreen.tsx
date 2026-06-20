@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -14,17 +14,25 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 
 import { useTranslation } from "react-i18next";
+import { useCircleGovernance } from "../hooks/useCircleDemocracy";
+import { Routes } from "../lib/routes";
 interface AdminSettingsParams {
   circleName?: string;
   circleId?: string;
 }
 
 export default function AdminSettingsScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const route = useRoute();
   const params = (route.params as AdminSettingsParams) || {};
   const circleName = params.circleName || "Family Savings Circle";
+  const circleId = params.circleId;
+
+  // Bucket C — pull governance so we can hydrate the
+  // "Require approval for new members" toggle from the real
+  // require_member_approval column and write changes back.
+  const { settings: governanceSettings, updateSettings } = useCircleGovernance(circleId);
 
   // Permission Settings
   const [permissions, setPermissions] = useState({
@@ -65,6 +73,26 @@ export default function AdminSettingsScreen() {
 
   const [hasChanges, setHasChanges] = useState(false);
 
+  // Bucket C — baseline snapshot so handleSave can detect what changed.
+  // gracePeriodBaselineRef captures the initial-state value on mount;
+  // requireApprovalBaselineRef hydrates from governance when it loads.
+  const gracePeriodBaselineRef = useRef<string>(paymentRules.gracePeriodDays);
+  const requireApprovalBaselineRef = useRef<boolean>(
+    permissions.requireApprovalForNewMembers,
+  );
+
+  // Hydrate the "Require approval" toggle from the governance row once it
+  // arrives. Falls back to the local-state default if no row exists yet.
+  useEffect(() => {
+    if (!governanceSettings) return;
+    const fromDb = governanceSettings.requireMemberApproval;
+    requireApprovalBaselineRef.current = fromDb;
+    setPermissions((prev) => ({
+      ...prev,
+      requireApprovalForNewMembers: fromDb,
+    }));
+  }, [governanceSettings]);
+
   const updatePermission = (key: keyof typeof permissions) => {
     setPermissions({ ...permissions, [key]: !permissions[key] });
     setHasChanges(true);
@@ -85,24 +113,73 @@ export default function AdminSettingsScreen() {
     setHasChanges(true);
   };
 
-  const handleSave = () => {
-    Alert.alert(
-      "Save Settings",
-      "Are you sure you want to save these changes? They will apply to all circle members immediately.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Save",
-          onPress: () => {
-            // Simulate save
-            setTimeout(() => {
-              setHasChanges(false);
-              Alert.alert(t("admin_settings_v2.alert_saved_title"), t("admin_settings_v2.alert_saved_body"));
-            }, 500);
-          },
+  // Bucket C — replaces the prior `setTimeout` mock. Two real paths:
+  //   1. Governance-only changes (require_member_approval) write directly
+  //      via updateSettings — these are platform-level rules, not
+  //      member-facing votes.
+  //   2. Circle-rule changes (grace period today; contribution amount and
+  //      frequency in future passes) route through a `change_rules`
+  //      proposal so members can vote. We navigate to CircleVoting with a
+  //      preset payload; the screen opens the create sheet pre-filled.
+  // If a circleId is missing (legacy callers), we surface a clear notice
+  // instead of pretending to save.
+  const handleSave = async () => {
+    if (!circleId) {
+      Alert.alert(
+        t("admin_settings_v2.alert_no_circle_title"),
+        t("admin_settings_v2.alert_no_circle_body"),
+      );
+      return;
+    }
+
+    // ── Governance-only direct writes ──────────────────────────────────────
+    const requireApprovalChanged =
+      permissions.requireApprovalForNewMembers !== requireApprovalBaselineRef.current;
+    if (requireApprovalChanged) {
+      const updated = await updateSettings({
+        requireMemberApproval: permissions.requireApprovalForNewMembers,
+      });
+      if (updated) {
+        requireApprovalBaselineRef.current = permissions.requireApprovalForNewMembers;
+      } else {
+        Alert.alert(
+          t("admin_settings_v2.alert_save_failed_title"),
+          t("admin_settings_v2.alert_save_failed_body"),
+        );
+        return;
+      }
+    }
+
+    // ── Vote-routed rule changes ──────────────────────────────────────────
+    const gracePeriodChanged =
+      paymentRules.gracePeriodDays.trim() !== gracePeriodBaselineRef.current.trim();
+    if (gracePeriodChanged) {
+      // Reset baseline so subsequent saves don't re-prompt the same change.
+      gracePeriodBaselineRef.current = paymentRules.gracePeriodDays;
+      setHasChanges(false);
+      navigation.navigate(Routes.CircleVoting, {
+        circleId,
+        presetType: "change_rules",
+        presetPayload: {
+          rule: "grace_period",
+          value: paymentRules.gracePeriodDays,
         },
-      ]
-    );
+      });
+      return;
+    }
+
+    if (requireApprovalChanged) {
+      setHasChanges(false);
+      Alert.alert(
+        t("admin_settings_v2.alert_saved_title"),
+        t("admin_settings_v2.alert_saved_body"),
+      );
+    } else {
+      Alert.alert(
+        t("admin_settings_v2.alert_no_changes_title"),
+        t("admin_settings_v2.alert_no_changes_body"),
+      );
+    }
   };
 
   const renderToggleRow = (
