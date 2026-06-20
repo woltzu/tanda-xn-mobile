@@ -171,6 +171,54 @@ export function useDecisionHistory(
   const totalDecisions = useMemo(() => decisions.length, [decisions]);
   const latestDecision = useMemo(() => decisions[0] || null, [decisions]);
   const hasDecisions = useMemo(() => decisions.length > 0, [decisions]);
+  // Bucket B — number of decisions the user has not opened yet.
+  // Drives the "New" pill counter in the Score Hub entry row.
+  const unviewedCount = useMemo(
+    () => decisions.filter((d) => !d.viewedAt).length,
+    [decisions],
+  );
+
+  // Bucket B — mark a single decision viewed. Optimistic: local state
+  // updates immediately so the "New" pill disappears without waiting
+  // for the network round-trip. Cache is invalidated so subsequent
+  // navigations re-fetch the canonical state.
+  const markDecisionViewed = useCallback(
+    async (decisionId: string) => {
+      setDecisions((prev) => {
+        let changed = false;
+        const next = prev.map((d) => {
+          if (d.id !== decisionId || d.viewedAt) return d;
+          changed = true;
+          return { ...d, viewedAt: new Date().toISOString() };
+        });
+        return changed ? next : prev;
+      });
+      const ok = await ExplainableAIEngine.markDecisionViewed(decisionId);
+      if (ok && userId) bustDecisionCache(userId);
+      return ok;
+    },
+    [userId],
+  );
+
+  // Bucket B — mark every still-unviewed decision viewed. Same
+  // optimistic pattern; returns the number of rows that were freshly
+  // marked so callers can surface a toast.
+  const markAllViewed = useCallback(async () => {
+    if (!userId) return 0;
+    setDecisions((prev) => {
+      let changed = false;
+      const now = new Date().toISOString();
+      const next = prev.map((d) => {
+        if (d.viewedAt) return d;
+        changed = true;
+        return { ...d, viewedAt: now };
+      });
+      return changed ? next : prev;
+    });
+    const n = await ExplainableAIEngine.markAllDecisionsViewed(userId);
+    if (n > 0) bustDecisionCache(userId);
+    return n;
+  }, [userId]);
 
   return {
     decisions,
@@ -181,6 +229,9 @@ export function useDecisionHistory(
     totalDecisions,
     latestDecision,
     hasDecisions,
+    unviewedCount,
+    markDecisionViewed,
+    markAllViewed,
   };
 }
 

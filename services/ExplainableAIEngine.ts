@@ -59,6 +59,10 @@ export interface AIDecision {
   sourceEventType: string | null;
   notificationSent: boolean;
   createdAt: string;
+  // Bucket B — read-state tracking. Set by markDecisionViewed /
+  // markAllViewed; NULL means the user has not opened the AI Insights
+  // card for this decision yet. Backed by migration 218.
+  viewedAt: string | null;
 }
 
 export interface GenerateExplanationResult {
@@ -387,6 +391,10 @@ function mapDecision(row: any): AIDecision {
     sourceEventType: row.source_event_type || null,
     notificationSent: row.notification_sent ?? false,
     createdAt: row.created_at,
+    // Bucket B — column added by migration 218. Pre-migration rows
+    // return undefined here; we coerce to null so the hook can treat
+    // "not yet viewed" as a stable single value.
+    viewedAt: row.viewed_at ?? null,
   };
 }
 
@@ -683,6 +691,59 @@ export class ExplainableAIEngine {
       byType,
       mostRecent,
     };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Bucket B — Read-state mutations (backed by viewed_at, migration 218)
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Stamp viewed_at = now() on a single decision. No-op if the row is
+   * already viewed (UPDATE filtered on viewed_at IS NULL).
+   *
+   * Returns true if the row was updated, false otherwise (including
+   * when the migration has not yet been applied — the error is
+   * swallowed so the screen does not break in pre-migration installs).
+   */
+  static async markDecisionViewed(decisionId: string): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('ai_decisions')
+        .update({ viewed_at: new Date().toISOString() })
+        .eq('id', decisionId)
+        .is('viewed_at', null);
+      if (error) {
+        console.warn('[ExplainableAI] markDecisionViewed failed:', error.message);
+        return false;
+      }
+      return true;
+    } catch (err: any) {
+      console.warn('[ExplainableAI] markDecisionViewed threw:', err?.message);
+      return false;
+    }
+  }
+
+  /**
+   * Stamp viewed_at = now() on every still-unviewed decision for a
+   * user. Used by the "mark all read" affordance.
+   */
+  static async markAllDecisionsViewed(userId: string): Promise<number> {
+    try {
+      const { data, error } = await supabase
+        .from('ai_decisions')
+        .update({ viewed_at: new Date().toISOString() })
+        .eq('member_id', userId)
+        .is('viewed_at', null)
+        .select('id');
+      if (error) {
+        console.warn('[ExplainableAI] markAllDecisionsViewed failed:', error.message);
+        return 0;
+      }
+      return (data ?? []).length;
+    } catch (err: any) {
+      console.warn('[ExplainableAI] markAllDecisionsViewed threw:', err?.message);
+      return 0;
+    }
   }
 
 
