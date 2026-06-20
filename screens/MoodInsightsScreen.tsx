@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,11 @@ import {
   ActivityIndicator,
   Switch,
   Alert,
+  Modal,
+  Pressable,
+  Animated,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -79,6 +83,42 @@ const SUGGESTION_ROUTE: Record<SignalKey, RouteName> = {
   length:   "Community",
 };
 
+// Mood Bucket B — AsyncStorage gate for the first-visit coach mark.
+// Versioned so we can re-prompt every user if the copy ever shifts.
+const COACH_KEY = "@tandaxn_mood_coach_seen_v1";
+
+// Mood Bucket B — six topics in the HelpSheet, opened by the header
+// (?). "what_we_measure" is the anchor topic — explicit on what we
+// collect (only your own circle messages, never private DMs, never
+// others' messages about you) and where the analysis runs (server,
+// no third-party LLM). Mood is the most intimate signal in the app,
+// so this disclosure carries the load.
+type HelpTopic =
+  | "what_is_mood_score"
+  | "five_signals"
+  | "what_we_measure"
+  | "tiers"
+  | "trend_direction"
+  | "interventions";
+const HELP_TOPICS: HelpTopic[] = [
+  "what_is_mood_score",
+  "five_signals",
+  "what_we_measure",
+  "tiers",
+  "trend_direction",
+  "interventions",
+];
+
+// Mood Bucket B — per-signal explainer payload. Captures the canonical
+// signal key plus the current normalized + weighted values so the
+// sheet can render "32 / 100 · weighted 11.2 pts" alongside localized
+// copy and a CTA.
+type SignalExplainer = {
+  key: SignalKey;
+  normalized: number;
+  weighted: number;
+} | null;
+
 function getBarColor(value: number): string {
   if (value > 50) return "#F97316";
   if (value > 30) return "#EAB308";
@@ -126,6 +166,51 @@ export default function MoodInsightsScreen() {
   const [optedOut, setOptedOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Mood Bucket B — HelpSheet visibility + per-signal explainer
+  // payload. State lives at component scope so the back-button can
+  // dismiss either sheet without unmounting the screen.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [signalExplainer, setSignalExplainer] = useState<SignalExplainer>(null);
+
+  // Mood Bucket B — first-visit coach mark. Same Animated.Value +
+  // useRef gate pattern as Stress/XnScore/Honor Bucket B. Auto-dismiss
+  // after 4 s or on tap; the gate ensures it never re-shows after
+  // the first visit.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachOpacity = useRef(new Animated.Value(0)).current;
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    coachCheckedRef.current = true;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_KEY);
+        if (seen) return;
+        setCoachVisible(true);
+        Animated.timing(coachOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+      } catch {
+        // AsyncStorage unavailable — silently skip.
+      }
+    })();
+  }, [coachOpacity]);
+  const dismissCoach = useCallback(() => {
+    Animated.timing(coachOpacity, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setCoachVisible(false));
+    AsyncStorage.setItem(COACH_KEY, "1").catch(() => undefined);
+  }, [coachOpacity]);
+  useEffect(() => {
+    if (!coachVisible) return;
+    const tid = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(tid);
+  }, [coachVisible, dismissCoach]);
+
   const loading = scoreLoading || interventionLoading;
 
   // Mood Bucket A — read the real opt-out state from
@@ -163,14 +248,22 @@ export default function MoodInsightsScreen() {
     }
   }, [setOptOut]);
 
-  // Mood Bucket A — Bucket B will replace this with a real HelpSheet.
-  // The placeholder Alert kills the dead-button bug without forking copy.
+  // Mood Bucket B — open the HelpSheet. Replaces the Bucket-A
+  // Alert.alert placeholder.
   const handleHelpPress = useCallback(() => {
-    Alert.alert(
-      t("mood_insights.help_placeholder_title"),
-      t("mood_insights.help_placeholder_body"),
-    );
-  }, [t]);
+    setHelpOpen(true);
+  }, []);
+
+  // Mood Bucket B — signal row tap → explainer sheet. Payload carries
+  // the canonical signal key + normalized and weighted values so the
+  // sheet can render "32 / 100 · weighted 11.2 pts" alongside
+  // localized copy and a CTA routing via SUGGESTION_ROUTE.
+  const openSignalExplainer = useCallback(
+    (key: SignalKey, normalized: number, weighted: number) => {
+      setSignalExplainer({ key, normalized, weighted });
+    },
+    [],
+  );
 
   const config = STATUS_CONFIG[tier];
   const score = currentSnapshot?.compositeMoodScore ?? 0;
@@ -208,15 +301,12 @@ export default function MoodInsightsScreen() {
     return entries.sort((a, b) => b.weighted - a.weighted)[0];
   }, [signals]);
 
-  // Mood Bucket A — placeholder for the top-signal explainer. Bucket B
-  // replaces this with the per-signal SignalExplainerSheet.
+  // Mood Bucket B — top-signal "View details" CTA opens the per-signal
+  // explainer for that signal. Replaces the Bucket-A Alert.
   const handleTopSignalDetails = useCallback(() => {
     if (!topSignal) return;
-    Alert.alert(
-      t(`mood_insights.signal_${topSignal.key}_name`),
-      t("mood_insights.help_placeholder_body"),
-    );
-  }, [t, topSignal]);
+    openSignalExplainer(topSignal.key, topSignal.normalized, topSignal.weighted);
+  }, [openSignalExplainer, topSignal]);
 
   // ─── Loading state ─────────────────────────────────────────────────────────
 
@@ -395,16 +485,33 @@ export default function MoodInsightsScreen() {
               const meta = SIGNAL_META[key];
               const normalized = signal.normalized ?? 0;
               const weight = signal.weight ?? 0;
+              const weighted = (signal as any).weightedValue ?? normalized * weight;
+              const barColor = getBarColor(normalized);
 
               return (
-                <View key={key} style={styles.signalCard}>
+                // Mood Bucket B — signal row is now tappable. The (?)
+                // glyph next to the name flags the affordance; tapping
+                // anywhere on the row opens the SignalExplainerSheet.
+                <TouchableOpacity
+                  key={key}
+                  style={styles.signalCard}
+                  onPress={() => openSignalExplainer(key, normalized, weighted)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("mood_insights.signal_explainer_open", {
+                    signal: t(`mood_insights.signal_${key}_name`),
+                  })}
+                  activeOpacity={0.85}
+                >
                   <View style={styles.signalIconWrap}>
                     <Ionicons name={meta.icon} size={18} color={NAVY} />
                   </View>
                   <View style={styles.signalLeft}>
-                    <Text style={styles.signalLabel}>
-                      {t(`mood_insights.signal_${key}_name`)}
-                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                      <Text style={styles.signalLabel}>
+                        {t(`mood_insights.signal_${key}_name`)}
+                      </Text>
+                      <Ionicons name="help-circle-outline" size={13} color={barColor} />
+                    </View>
                     <Text style={styles.signalWeight}>
                       {t("mood_insights.signal_weight_label", { pct: Math.round(weight * 100) })}
                     </Text>
@@ -415,13 +522,13 @@ export default function MoodInsightsScreen() {
                         styles.signalBarFill,
                         {
                           width: `${Math.min(normalized, 100)}%`,
-                          backgroundColor: getBarColor(normalized),
+                          backgroundColor: barColor,
                         },
                       ]}
                     />
                   </View>
                   <Text style={styles.signalValue}>{Math.round(normalized)}</Text>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -567,8 +674,172 @@ export default function MoodInsightsScreen() {
             accessibilityLabel={t("mood_insights.opt_out_title")}
           />
         </View>
+
+        {/* Mood Bucket B — privacy/transparency footer. The opt-out
+            row above is the action; this paragraph is the assurance.
+            Belongs especially on this screen because mood analysis is
+            NLP over circle messages — the most intimate signal in
+            the app. */}
+        <View style={styles.privacyFooter}>
+          <Ionicons name="lock-closed-outline" size={14} color={MUTED} />
+          <Text style={styles.privacyFooterText}>
+            {t("mood_insights.privacy_footer")}
+          </Text>
+        </View>
       </ScrollView>
+
+      {/* Mood Bucket B — modals + coach mark. Mounted as siblings to
+          the ScrollView so they sit above content but inside the
+          screen's root View. */}
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} t={t} />
+      <SignalExplainerSheet
+        explainer={signalExplainer}
+        onClose={() => setSignalExplainer(null)}
+        navigate={(route) => {
+          setSignalExplainer(null);
+          navigation.navigate(route as any);
+        }}
+        t={t}
+      />
+      {coachVisible ? (
+        <Animated.View
+          style={[styles.coachOverlay, { opacity: coachOpacity }]}
+          pointerEvents="box-none"
+        >
+          <Pressable style={styles.coachBackdrop} onPress={dismissCoach}>
+            <View style={styles.coachCard}>
+              <Ionicons name="bulb-outline" size={20} color="#FBBF24" />
+              <Text style={styles.coachText}>{t("mood_insights.coach_tip")}</Text>
+            </View>
+          </Pressable>
+        </Animated.View>
+      ) : null}
     </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Mood Bucket B subcomponents
+// ─────────────────────────────────────────────────────────────────────────
+
+type TFn = (key: string, opts?: any) => string;
+
+// Mood Bucket B — HelpSheet glossary. Six topics, each a localized
+// title + body block. Modal slides from the bottom; backdrop tap
+// dismisses.
+function HelpSheet({
+  visible,
+  onClose,
+  t,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  t: TFn;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => undefined}>
+          <View style={sheetStyles.handle} />
+          <View style={sheetStyles.headerRow}>
+            <Text style={sheetStyles.title}>{t("mood_insights.help_sheet_title")}</Text>
+            <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel={t("mood_insights.help_close")}>
+              <Ionicons name="close" size={22} color={NAVY} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} style={sheetStyles.scroll}>
+            {HELP_TOPICS.map((topic) => (
+              <View key={topic} style={sheetStyles.helpItem}>
+                <Text style={sheetStyles.helpItemTitle}>
+                  {t(`mood_insights.help_${topic}_title`)}
+                </Text>
+                <Text style={sheetStyles.helpItemBody}>
+                  {t(`mood_insights.help_${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// Mood Bucket B — per-signal explainer. Renders signal title +
+// current value chip + body + data source + direction note + CTA
+// routing to the action surface for that signal.
+function SignalExplainerSheet({
+  explainer,
+  onClose,
+  navigate,
+  t,
+}: {
+  explainer: SignalExplainer;
+  onClose: () => void;
+  navigate: (route: RouteName) => void;
+  t: TFn;
+}) {
+  if (!explainer) return null;
+  const meta = SIGNAL_META[explainer.key];
+  const barColor = getBarColor(explainer.normalized);
+  const route = SUGGESTION_ROUTE[explainer.key] ?? "Community";
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => undefined}>
+          <View style={sheetStyles.handle} />
+          <View style={sheetStyles.headerRow}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Ionicons name={meta.icon} size={18} color={barColor} />
+              <Text style={sheetStyles.title}>
+                {t(`mood_insights.signal_${explainer.key}_name`)}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel={t("mood_insights.help_close")}>
+              <Ionicons name="close" size={22} color={NAVY} />
+            </TouchableOpacity>
+          </View>
+          <View style={sheetStyles.chipRow}>
+            <Text style={[sheetStyles.scoreChip, { backgroundColor: barColor + "1F", color: NAVY }]}>
+              {Math.round(explainer.normalized)} / 100
+            </Text>
+            <Text style={[sheetStyles.scoreChip, { backgroundColor: "#F1F5F9", color: NAVY }]}>
+              {t("mood_insights.signal_explainer_weighted_chip", { value: explainer.weighted.toFixed(1) })}
+            </Text>
+          </View>
+          <Text style={sheetStyles.explainerBody}>
+            {t(`mood_insights.signal_explainer_${explainer.key}_body`)}
+          </Text>
+          <View style={sheetStyles.subBlock}>
+            <Text style={sheetStyles.subHeading}>
+              {t("mood_insights.signal_explainer_source_heading")}
+            </Text>
+            <Text style={sheetStyles.subBody}>
+              {t(`mood_insights.signal_explainer_${explainer.key}_source`)}
+            </Text>
+          </View>
+          <View style={sheetStyles.subBlock}>
+            <Text style={sheetStyles.subHeading}>
+              {t("mood_insights.signal_explainer_direction_heading")}
+            </Text>
+            <Text style={sheetStyles.subBody}>
+              {t(`mood_insights.signal_explainer_${explainer.key}_direction_note`)}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[sheetStyles.ctaBtn, { backgroundColor: TEAL }]}
+            onPress={() => navigate(route)}
+          >
+            <Text style={sheetStyles.ctaBtnText}>
+              {t(`mood_insights.signal_explainer_${explainer.key}_cta`)}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={sheetStyles.closeBtn} onPress={onClose}>
+            <Text style={sheetStyles.closeBtnText}>{t("mood_insights.help_close")}</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -772,4 +1043,81 @@ const styles = StyleSheet.create({
   optOutLeft: { flex: 1 },
   optOutTitle: { fontSize: 15, fontWeight: "600", color: NAVY },
   optOutSub: { fontSize: 12, color: MUTED, marginTop: 2 },
+
+  // Mood Bucket B — privacy/transparency footer below the opt-out.
+  privacyFooter: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingHorizontal: 4,
+    marginTop: 4,
+  },
+  privacyFooterText: {
+    flex: 1,
+    fontSize: 11,
+    color: MUTED,
+    lineHeight: 16,
+    fontStyle: "italic",
+  },
+
+  // Mood Bucket B — coach mark overlay.
+  coachOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "flex-start",
+  },
+  coachBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    paddingTop: 160,
+    paddingHorizontal: 24,
+  },
+  coachCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(15,23,42,0.96)",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    maxWidth: 320,
+  },
+  coachText: { flex: 1, fontSize: 13, color: "#FFF", lineHeight: 18 },
+});
+
+// Mood Bucket B — bottom-sheet shared styles (HelpSheet + SignalExplainerSheet).
+const sheetStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  sheet: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 30,
+    maxHeight: "86%",
+  },
+  handle: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: "#E5E7EB", marginBottom: 12 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  title: { fontSize: 17, fontWeight: "700", color: NAVY },
+  scroll: { maxHeight: 500 },
+  helpItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
+  helpItemTitle: { fontSize: 14, fontWeight: "700", color: NAVY, marginBottom: 4 },
+  helpItemBody: { fontSize: 13, color: "#4B5563", lineHeight: 19 },
+
+  chipRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  scoreChip: { fontSize: 12, fontWeight: "700", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, overflow: "hidden" },
+  explainerBody: { fontSize: 13, color: "#4B5563", lineHeight: 19, marginBottom: 14 },
+
+  subBlock: { backgroundColor: "#F8FAFC", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 10 },
+  subHeading: { fontSize: 11, fontWeight: "700", color: MUTED, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 },
+  subBody: { fontSize: 13, color: "#4B5563", lineHeight: 18 },
+
+  ctaBtn: { borderRadius: 12, alignItems: "center", paddingVertical: 14, marginTop: 4, marginBottom: 10 },
+  ctaBtnText: { color: "#FFF", fontSize: 14, fontWeight: "700" },
+  closeBtn: { borderRadius: 12, alignItems: "center", paddingVertical: 14, backgroundColor: "#F1F5F9" },
+  closeBtnText: { color: NAVY, fontSize: 14, fontWeight: "600" },
 });
