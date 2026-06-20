@@ -29,6 +29,7 @@ import { useAuth } from "../context/AuthContext";
 import { useActivePlan } from "../hooks/usePartialContribution";
 import { useCircleHealth } from "../hooks/useCircleHealth";
 import { useSubstitutePoolSummary } from "../hooks/useSubstituteMember";
+import { useCircleProposals } from "../hooks/useCircleDemocracy";
 import { useCircleAutopayConfig } from "../hooks/useCircleAutopay";
 import { useCircleAutopaySuggestion } from "../hooks/useCircleAutopaySuggestion";
 import { useCircleNotificationMute } from "../hooks/useCircleNotificationMute";
@@ -321,6 +322,12 @@ export default function CircleDetailScreen() {
   // a postgres_changes subscription on substitute_pool.
   const { overview: substituteOverview } = useSubstitutePoolSummary();
   const substituteAvailableCount = substituteOverview?.totalActive ?? 0;
+
+  // Voting Bucket A — open-count badge on the header voting icon. Uses the
+  // same hook that drives the voting screen so it stays in sync (the hook
+  // subscribes to postgres_changes on circle_proposals).
+  const { activeProposals: openProposalsForBadge } = useCircleProposals(circleId);
+  const openProposalCount = openProposalsForBadge.length;
 
   // Find the circle in all available sources: user circles, my circles, or browse circles
   const circle = [...circles, ...myCircles, ...browseCircles].find((c) => c.id === circleId);
@@ -1884,6 +1891,13 @@ export default function CircleDetailScreen() {
                 accessibilityLabel={t("circle_detail.tab_voting")}
               >
                 <Ionicons name="reader-outline" size={20} color="#FFFFFF" />
+                {openProposalCount > 0 && (
+                  <View style={styles.headerActionBadge}>
+                    <Text style={styles.headerActionBadgeText}>
+                      {openProposalCount > 9 ? "9+" : openProposalCount}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.headerActionButton}
@@ -2319,6 +2333,23 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.1)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  headerActionBadge: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#EF4444",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 4,
+  },
+  headerActionBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "700",
   },
   circleInfo: {
     alignItems: "center",

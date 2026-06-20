@@ -1,29 +1,91 @@
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert, TextInput, Modal,
+  ActivityIndicator, RefreshControl, Alert, TextInput, Modal, Pressable,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useCircleProposals, useCreateProposal, useCastVote } from "../hooks/useCircleDemocracy";
+import type {
+  CircleProposal,
+  ProposalType,
+  VoteChoice,
+} from "../services/CircleDemocracyEngine";
 
 type RouteParams = { CircleVoting: { circleId: string } };
 
-const VOTE_COLORS: Record<string, { bg: string; text: string; icon: string }> = {
-  yes: { bg: "#10B98115", text: "#10B981", icon: "thumbs-up" },
-  no: { bg: "#EF444415", text: "#EF4444", icon: "thumbs-down" },
+// ── Vote colour palette ─────────────────────────────────────────────────────
+const VOTE_META: Record<VoteChoice, { bg: string; text: string; icon: string }> = {
+  yes:     { bg: "#10B98115", text: "#10B981", icon: "thumbs-up" },
+  no:      { bg: "#EF444415", text: "#EF4444", icon: "thumbs-down" },
   abstain: { bg: "#6B728015", text: "#6B7280", icon: "remove-circle-outline" },
 };
 
-const STATUS_STYLES: Record<string, { color: string; icon: string; label: string }> = {
-  draft: { color: "#6B7280", icon: "create-outline", label: "Draft" },
-  open: { color: "#3B82F6", icon: "radio-button-on", label: "Open" },
-  closed: { color: "#F59E0B", icon: "lock-closed", label: "Closed" },
-  executed: { color: "#10B981", icon: "checkmark-done-circle", label: "Executed" },
-  cancelled: { color: "#EF4444", icon: "close-circle", label: "Cancelled" },
+// ── Status pill meta. Labels are i18n keys looked up at render time. ────────
+const STATUS_META: Record<string, { color: string; icon: string; labelKey: string }> = {
+  draft:     { color: "#6B7280", icon: "create-outline",          labelKey: "circle_voting.status_draft" },
+  open:      { color: "#3B82F6", icon: "radio-button-on",          labelKey: "circle_voting.status_open" },
+  closed:    { color: "#F59E0B", icon: "lock-closed",              labelKey: "circle_voting.status_closed" },
+  executed:  { color: "#10B981", icon: "checkmark-done-circle",    labelKey: "circle_voting.status_executed" },
+  cancelled: { color: "#EF4444", icon: "close-circle",             labelKey: "circle_voting.status_cancelled" },
 };
+
+// ── Bucket A: template picker. Six types ship in Bucket A; resolve_dispute +
+//   pool_rollover are engine-only for now and stay out of the picker until
+//   their dedicated screens (Bucket B / future) wire them up.
+const PROPOSAL_TEMPLATES: {
+  type: Exclude<ProposalType, "resolve_dispute" | "pool_rollover">;
+  icon: keyof typeof Ionicons.glyphMap;
+  isCritical: boolean;
+}[] = [
+  { type: "admit_member",        icon: "person-add-outline",      isCritical: false },
+  { type: "remove_member",       icon: "person-remove-outline",   isCritical: true  },
+  { type: "change_rules",        icon: "settings-outline",        isCritical: false },
+  { type: "change_payout_order", icon: "swap-vertical-outline",   isCritical: false },
+  { type: "dissolve_circle",     icon: "warning-outline",         isCritical: true  },
+  { type: "custom",              icon: "create-outline",          isCritical: false },
+];
+
+type RuleKey = "contribution" | "grace_period" | "frequency";
+const RULE_OPTIONS: RuleKey[] = ["contribution", "grace_period", "frequency"];
+
+// ── Title auto-derivation per template. Custom returns null so the screen
+//   falls back to the user-supplied title.
+function deriveTitle(
+  t: (k: string, opts?: any) => string,
+  type: ProposalType,
+  payload: Record<string, any>,
+  customTitle: string,
+): string {
+  switch (type) {
+    case "admit_member":
+      return t("circle_voting.title_admit_member", { name: payload.member || "—" });
+    case "remove_member":
+      return t("circle_voting.title_remove_member", { name: payload.member || "—" });
+    case "change_rules": {
+      const rule = (payload.rule as RuleKey) || "contribution";
+      const value = payload.value || "—";
+      return t(`circle_voting.title_change_rules_${rule}`, { value });
+    }
+    case "change_payout_order":
+      return t("circle_voting.title_change_payout_order");
+    case "dissolve_circle":
+      return t("circle_voting.title_dissolve_circle");
+    case "custom":
+    default:
+      return customTitle.trim() || t("circle_voting.title_custom_fallback");
+  }
+}
+
+// ── Confirm-sheet payload type ──────────────────────────────────────────────
+type ConfirmVote = {
+  proposalId: string;
+  title: string;
+  choice: VoteChoice;
+  reasoning: string;
+} | null;
 
 export default function CircleVotingScreen() {
   const navigation = useNavigation<any>();
@@ -32,11 +94,17 @@ export default function CircleVotingScreen() {
   const { circleId } = route.params;
 
   const [activeTab, setActiveTab] = useState<"active" | "closed">("active");
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [newTitle, setNewTitle] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [votingProposalId, setVotingProposalId] = useState<string | null>(null);
-  const [voteReasoning, setVoteReasoning] = useState("");
+
+  // Bucket A — two-step create sheet.
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createStep, setCreateStep] = useState<"type" | "form">("type");
+  const [selectedType, setSelectedType] = useState<ProposalType | null>(null);
+  const [formPayload, setFormPayload] = useState<Record<string, any>>({});
+  const [customTitle, setCustomTitle] = useState("");
+  const [customDescription, setCustomDescription] = useState("");
+
+  // Bucket A — vote confirm sheet.
+  const [confirmVote, setConfirmVote] = useState<ConfirmVote>(null);
 
   const {
     activeProposals,
@@ -49,31 +117,99 @@ export default function CircleVotingScreen() {
   const { createAndOpen, loading: creating } = useCreateProposal();
   const { castVote, loading: voting } = useCastVote();
 
-  const handleCreateProposal = async () => {
-    if (!newTitle.trim()) {
-      Alert.alert(t("circle_voting.alert_error_title"), t("circle_voting.alert_title_required"));
-      return;
-    }
-    const result = await createAndOpen(circleId, "general", newTitle.trim(), newDescription.trim());
-    if (result) {
-      setShowCreateModal(false);
-      setNewTitle("");
-      setNewDescription("");
-      refetch();
-    }
-  };
-
-  const handleVote = async (proposalId: string, vote: "yes" | "no" | "abstain") => {
-    const result = await castVote(proposalId, vote, voteReasoning.trim() || undefined);
-    if (result) {
-      setVotingProposalId(null);
-      setVoteReasoning("");
-      refetch();
-    }
-  };
-
   const proposals = activeTab === "active" ? activeProposals : closedProposals;
 
+  // ── Create flow ──────────────────────────────────────────────────────────
+  const resetCreate = useCallback(() => {
+    setCreateStep("type");
+    setSelectedType(null);
+    setFormPayload({});
+    setCustomTitle("");
+    setCustomDescription("");
+  }, []);
+
+  const closeCreate = useCallback(() => {
+    setCreateOpen(false);
+    resetCreate();
+  }, [resetCreate]);
+
+  const handlePickType = useCallback((type: ProposalType) => {
+    setSelectedType(type);
+    setFormPayload(type === "change_rules" ? { rule: "contribution" } : {});
+    setCreateStep("form");
+  }, []);
+
+  const handleSubmitCreate = useCallback(async () => {
+    if (!selectedType) return;
+
+    // Per-type minimum validation. Keep error surface compact: a single
+    // Alert.alert when a required field is empty; the user already sees the
+    // sheet, so a banner would be redundant.
+    const missingFieldKey = validatePayload(selectedType, formPayload, customTitle);
+    if (missingFieldKey) {
+      Alert.alert(
+        t("circle_voting.alert_error_title"),
+        t("circle_voting.alert_field_required", { field: t(missingFieldKey) }),
+      );
+      return;
+    }
+
+    const title = deriveTitle(t, selectedType, formPayload, customTitle);
+    const description = selectedType === "custom"
+      ? customDescription.trim() || undefined
+      : formPayload.reason || undefined;
+
+    const result = await createAndOpen(
+      circleId,
+      selectedType,
+      title,
+      description,
+      formPayload,
+    );
+    if (result) {
+      closeCreate();
+      refetch();
+    } else {
+      Alert.alert(
+        t("circle_voting.alert_error_title"),
+        t("circle_voting.alert_create_failed"),
+      );
+    }
+  }, [selectedType, formPayload, customTitle, customDescription, circleId, createAndOpen, closeCreate, refetch, t]);
+
+  // ── Vote flow ────────────────────────────────────────────────────────────
+  const openVoteConfirm = useCallback(
+    (proposal: CircleProposal, choice: VoteChoice) => {
+      setConfirmVote({
+        proposalId: proposal.id,
+        title: proposal.title,
+        choice,
+        reasoning: "",
+      });
+    },
+    [],
+  );
+
+  const executeVote = useCallback(async () => {
+    if (!confirmVote) return;
+    const payload = confirmVote;
+    setConfirmVote(null);
+    const result = await castVote(
+      payload.proposalId,
+      payload.choice,
+      payload.reasoning.trim() || undefined,
+    );
+    if (result) {
+      refetch();
+    } else {
+      Alert.alert(
+        t("circle_voting.alert_error_title"),
+        t("circle_voting.alert_vote_failed"),
+      );
+    }
+  }, [confirmVote, castVote, refetch, t]);
+
+  // ── Loading gate ─────────────────────────────────────────────────────────
   if (loading && activeProposals.length === 0 && closedProposals.length === 0) {
     return (
       <View style={styles.centered}>
@@ -92,7 +228,7 @@ export default function CircleVotingScreen() {
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("circle_voting.header_title")}</Text>
-          <TouchableOpacity style={styles.addButton} onPress={() => setShowCreateModal(true)}>
+          <TouchableOpacity style={styles.addButton} onPress={() => setCreateOpen(true)}>
             <Ionicons name="add" size={24} color="#FFFFFF" />
           </TouchableOpacity>
         </View>
@@ -101,11 +237,15 @@ export default function CircleVotingScreen() {
         <View style={styles.statsRow}>
           <View style={styles.statPill}>
             <Ionicons name="radio-button-on" size={12} color="#3B82F6" />
-            <Text style={styles.statText}>{activeProposals.length} Active</Text>
+            <Text style={styles.statText}>
+              {t("circle_voting.stat_active", { count: activeProposals.length })}
+            </Text>
           </View>
           <View style={styles.statPill}>
             <Ionicons name="checkmark-done" size={12} color="#10B981" />
-            <Text style={styles.statText}>{closedProposals.length} Completed</Text>
+            <Text style={styles.statText}>
+              {t("circle_voting.stat_completed", { count: closedProposals.length })}
+            </Text>
           </View>
         </View>
       </LinearGradient>
@@ -117,7 +257,7 @@ export default function CircleVotingScreen() {
           onPress={() => setActiveTab("active")}
         >
           <Text style={[styles.tabText, activeTab === "active" && styles.tabTextActive]}>
-            Active ({activeProposals.length})
+            {t("circle_voting.tab_active", { count: activeProposals.length })}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -125,7 +265,7 @@ export default function CircleVotingScreen() {
           onPress={() => setActiveTab("closed")}
         >
           <Text style={[styles.tabText, activeTab === "closed" && styles.tabTextActive]}>
-            Completed ({closedProposals.length})
+            {t("circle_voting.tab_completed", { count: closedProposals.length })}
           </Text>
         </TouchableOpacity>
       </View>
@@ -146,194 +286,597 @@ export default function CircleVotingScreen() {
           <View style={styles.emptyState}>
             <Ionicons name="chatbubbles-outline" size={48} color="#00C6AE" />
             <Text style={styles.emptyTitle}>
-              {activeTab === "active" ? "No Active Proposals" : "No Completed Proposals"}
+              {activeTab === "active"
+                ? t("circle_voting.empty_active_title")
+                : t("circle_voting.empty_completed_title")}
             </Text>
             <Text style={styles.emptySubtitle}>
               {activeTab === "active"
-                ? "Tap + to create a new proposal for your circle"
-                : "Completed proposals will appear here"}
+                ? t("circle_voting.empty_active_body")
+                : t("circle_voting.empty_completed_body")}
             </Text>
           </View>
         ) : (
-          proposals.map((proposal) => {
-            const statusStyle = STATUS_STYLES[proposal.status] || STATUS_STYLES.draft;
-            const isOpen = proposal.status === "open";
-            const endsAt = proposal.votingEndsAt ? new Date(proposal.votingEndsAt) : null;
-            const isExpired = endsAt ? endsAt <= new Date() : false;
-
-            return (
-              <View key={proposal.id} style={styles.card}>
-                {/* Card Header */}
-                <View style={styles.cardHeader}>
-                  <View style={[styles.statusBadge, { backgroundColor: statusStyle.color + "15" }]}>
-                    <Ionicons name={statusStyle.icon as any} size={12} color={statusStyle.color} />
-                    <Text style={[styles.statusText, { color: statusStyle.color }]}>{statusStyle.label}</Text>
-                  </View>
-                  {endsAt && (
-                    <Text style={styles.deadline}>
-                      {isExpired ? "Ended" : `Ends ${endsAt.toLocaleDateString()}`}
-                    </Text>
-                  )}
-                </View>
-
-                {/* Title & Description */}
-                <Text style={styles.proposalTitle}>{proposal.title}</Text>
-                {proposal.description && (
-                  <Text style={styles.proposalDesc} numberOfLines={3}>{proposal.description}</Text>
-                )}
-
-                {/* Type Badge */}
-                <View style={styles.typeBadge}>
-                  <Ionicons name="document-text-outline" size={12} color="#8B5CF6" />
-                  <Text style={styles.typeText}>
-                    {proposal.proposalType.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}
-                  </Text>
-                </View>
-
-                {/* Vote Progress */}
-                {proposal.yesVotes != null && (
-                  <View style={styles.voteProgress}>
-                    <View style={styles.voteRow}>
-                      <View style={styles.voteItem}>
-                        <Ionicons name="thumbs-up" size={14} color="#10B981" />
-                        <Text style={[styles.voteCount, { color: "#10B981" }]}>{proposal.yesVotes ?? 0}</Text>
-                      </View>
-                      <View style={styles.voteItem}>
-                        <Ionicons name="thumbs-down" size={14} color="#EF4444" />
-                        <Text style={[styles.voteCount, { color: "#EF4444" }]}>{proposal.noVotes ?? 0}</Text>
-                      </View>
-                      <View style={styles.voteItem}>
-                        <Ionicons name="remove-circle-outline" size={14} color="#6B7280" />
-                        <Text style={[styles.voteCount, { color: "#6B7280" }]}>{proposal.abstainVotes ?? 0}</Text>
-                      </View>
-                    </View>
-
-                    {/* Progress Bar */}
-                    {(proposal.yesVotes ?? 0) + (proposal.noVotes ?? 0) > 0 && (
-                      <View style={styles.progressBarBg}>
-                        <View
-                          style={[
-                            styles.progressBarFill,
-                            {
-                              width: `${Math.round(
-                                ((proposal.yesVotes ?? 0) /
-                                  ((proposal.yesVotes ?? 0) + (proposal.noVotes ?? 0))) *
-                                100
-                              )}%`,
-                            },
-                          ]}
-                        />
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                {/* Vote Actions */}
-                {isOpen && !isExpired && (
-                  <>
-                    {votingProposalId === proposal.id ? (
-                      <View style={styles.voteActions}>
-                        <TextInput
-                          style={styles.reasonInput}
-                          placeholder={t("circle_voting.placeholder_reason")}
-                          placeholderTextColor="#9CA3AF"
-                          value={voteReasoning}
-                          onChangeText={setVoteReasoning}
-                        />
-                        <View style={styles.voteButtons}>
-                          {(["yes", "no", "abstain"] as const).map((choice) => {
-                            const cfg = VOTE_COLORS[choice];
-                            return (
-                              <TouchableOpacity
-                                key={choice}
-                                style={[styles.voteBtn, { backgroundColor: cfg.bg }]}
-                                onPress={() => handleVote(proposal.id, choice)}
-                                disabled={voting}
-                              >
-                                <Ionicons name={cfg.icon as any} size={16} color={cfg.text} />
-                                <Text style={[styles.voteBtnText, { color: cfg.text }]}>
-                                  {choice.charAt(0).toUpperCase() + choice.slice(1)}
-                                </Text>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
-                        <TouchableOpacity onPress={() => { setVotingProposalId(null); setVoteReasoning(""); }}>
-                          <Text style={styles.cancelText}>{t("circle_voting.btn_cancel")}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={styles.castVoteBtn}
-                        onPress={() => setVotingProposalId(proposal.id)}
-                      >
-                        <Ionicons name="hand-left-outline" size={16} color="#00C6AE" />
-                        <Text style={styles.castVoteText}>{t("circle_voting.btn_cast_vote")}</Text>
-                      </TouchableOpacity>
-                    )}
-                  </>
-                )}
-              </View>
-            );
-          })
+          proposals.map((p) => (
+            <ProposalCard
+              key={p.id}
+              proposal={p}
+              onVote={(choice) => openVoteConfirm(p, choice)}
+              voting={voting}
+            />
+          ))
         )}
 
         <View style={{ height: 32 }} />
       </ScrollView>
 
-      {/* Create Proposal Modal */}
-      <Modal visible={showCreateModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t("circle_voting.modal_new_proposal")}</Text>
-              <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                <Ionicons name="close" size={24} color="#0A2342" />
-              </TouchableOpacity>
-            </View>
+      {/* Create proposal sheet (Bucket A — 2-step) */}
+      <CreateProposalSheet
+        visible={createOpen}
+        step={createStep}
+        selectedType={selectedType}
+        payload={formPayload}
+        customTitle={customTitle}
+        customDescription={customDescription}
+        creating={creating}
+        onPickType={handlePickType}
+        onBack={() => setCreateStep("type")}
+        onClose={closeCreate}
+        onChangePayload={setFormPayload}
+        onChangeCustomTitle={setCustomTitle}
+        onChangeCustomDescription={setCustomDescription}
+        onSubmit={handleSubmitCreate}
+      />
 
-            <Text style={styles.inputLabel}>{t("circle_voting.label_title")}</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder={t("circle_voting.placeholder_title")}
-              placeholderTextColor="#9CA3AF"
-              value={newTitle}
-              onChangeText={setNewTitle}
-            />
-
-            <Text style={styles.inputLabel}>{t("circle_voting.label_description")}</Text>
-            <TextInput
-              style={[styles.modalInput, styles.modalTextArea]}
-              placeholder={t("circle_voting.placeholder_description")}
-              placeholderTextColor="#9CA3AF"
-              value={newDescription}
-              onChangeText={setNewDescription}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-
-            <TouchableOpacity
-              style={[styles.submitBtn, creating && styles.submitBtnDisabled]}
-              onPress={handleCreateProposal}
-              disabled={creating}
-            >
-              {creating ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <>
-                  <Ionicons name="send" size={16} color="#FFFFFF" />
-                  <Text style={styles.submitBtnText}>{t("circle_voting.btn_submit")}</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Vote confirm sheet */}
+      <VoteConfirmSheet
+        payload={confirmVote}
+        voting={voting}
+        onChangeReason={(r) => setConfirmVote(confirmVote ? { ...confirmVote, reasoning: r } : null)}
+        onCancel={() => setConfirmVote(null)}
+        onConfirm={executeVote}
+      />
     </View>
   );
 }
 
+// ── Validation ──────────────────────────────────────────────────────────────
+// Returns an i18n key identifying the missing required field, or null when
+// the payload is good to submit.
+function validatePayload(
+  type: ProposalType,
+  payload: Record<string, any>,
+  customTitle: string,
+): string | null {
+  switch (type) {
+    case "admit_member":
+      return payload.member ? null : "circle_voting.field_member_email";
+    case "remove_member":
+      if (!payload.member) return "circle_voting.field_target_member";
+      return payload.reason ? null : "circle_voting.field_reason";
+    case "change_rules":
+      if (!payload.rule) return "circle_voting.field_rule_to_change";
+      return payload.value ? null : "circle_voting.field_new_value";
+    case "change_payout_order":
+      return payload.order_proposal ? null : "circle_voting.field_order_proposal";
+    case "dissolve_circle":
+      return payload.reason ? null : "circle_voting.field_reason";
+    case "custom":
+      return customTitle.trim() ? null : "circle_voting.field_custom_title";
+    default:
+      return null;
+  }
+}
+
+// ── ProposalCard ────────────────────────────────────────────────────────────
+function ProposalCard({
+  proposal,
+  onVote,
+  voting,
+}: {
+  proposal: CircleProposal;
+  onVote: (choice: VoteChoice) => void;
+  voting: boolean;
+}) {
+  const { t } = useTranslation();
+
+  const statusMeta = STATUS_META[proposal.status] || STATUS_META.draft;
+  const isOpen = proposal.status === "open";
+  const endsAt = proposal.votingEndsAt ? new Date(proposal.votingEndsAt) : null;
+  const isExpired = endsAt ? endsAt <= new Date() : false;
+
+  // ── Bucket A derived metrics ──────────────────────────────────────────────
+  const { quorumNeeded, totalVoted, quorumLine, thresholdLabel } = useMemo(() => {
+    const totalVoted = proposal.votesFor + proposal.votesAgainst + proposal.votesAbstain;
+    const quorumNeeded = Math.ceil(proposal.eligibleVoters * proposal.quorumPct);
+    const remaining = Math.max(0, quorumNeeded - totalVoted);
+    const quorumLine = remaining === 0
+      ? t("circle_voting.quorum_reached")
+      : t("circle_voting.quorum_needed", { need: remaining, total: quorumNeeded });
+    const pct = Math.round(proposal.thresholdPct * 100);
+    const thresholdLabel = pct === 50
+      ? t("circle_voting.threshold_simple_majority")
+      : t("circle_voting.threshold_label", { pct });
+    return { quorumNeeded, totalVoted, quorumLine, thresholdLabel };
+  }, [proposal.votesFor, proposal.votesAgainst, proposal.votesAbstain, proposal.eligibleVoters, proposal.quorumPct, proposal.thresholdPct, t]);
+
+  // Progress-bar fill: % of yes among decisive (yes+no) votes.
+  const decisive = proposal.votesFor + proposal.votesAgainst;
+  const yesPct = decisive > 0 ? Math.round((proposal.votesFor / decisive) * 100) : 0;
+
+  // Result chip — only when the proposal is closed.
+  const resultChip = useMemo(() => {
+    if (proposal.status !== "closed" && proposal.status !== "executed") return null;
+    if (proposal.result === "approved") {
+      const executedLabel = proposal.executedAt
+        ? t("circle_voting.result_executed")
+        : t("circle_voting.result_pending_execution");
+      return {
+        color: "#10B981",
+        bg: "#10B98115",
+        icon: "checkmark-circle" as const,
+        label: t("circle_voting.result_approved"),
+        sub: executedLabel,
+      };
+    }
+    if (proposal.result === "rejected") {
+      const neededPct = Math.round(proposal.thresholdPct * 100);
+      return {
+        color: "#EF4444",
+        bg: "#EF444415",
+        icon: "close-circle" as const,
+        label: t("circle_voting.result_rejected"),
+        sub: t("circle_voting.result_reason_threshold", { pct: yesPct, needed: neededPct }),
+      };
+    }
+    if (proposal.result === "no_quorum") {
+      return {
+        color: "#F59E0B",
+        bg: "#F59E0B15",
+        icon: "alert-circle" as const,
+        label: t("circle_voting.result_no_quorum"),
+        sub: t("circle_voting.result_reason_quorum", {
+          voted: totalVoted,
+          eligible: proposal.eligibleVoters,
+        }),
+      };
+    }
+    return null;
+  }, [proposal.status, proposal.result, proposal.executedAt, proposal.thresholdPct, proposal.eligibleVoters, yesPct, totalVoted, t]);
+
+  return (
+    <View style={styles.card}>
+      {/* Top row */}
+      <View style={styles.cardHeader}>
+        <View style={[styles.statusBadge, { backgroundColor: statusMeta.color + "15" }]}>
+          <Ionicons name={statusMeta.icon as any} size={12} color={statusMeta.color} />
+          <Text style={[styles.statusText, { color: statusMeta.color }]}>
+            {t(statusMeta.labelKey)}
+          </Text>
+        </View>
+        {endsAt && (
+          <Text style={styles.deadline}>
+            {isExpired
+              ? t("circle_voting.deadline_ended")
+              : t("circle_voting.deadline_ends_at", { date: endsAt.toLocaleDateString() })}
+          </Text>
+        )}
+      </View>
+
+      {/* Title + description */}
+      <Text style={styles.proposalTitle}>{proposal.title}</Text>
+      {proposal.description && (
+        <Text style={styles.proposalDesc} numberOfLines={3}>{proposal.description}</Text>
+      )}
+
+      {/* Type + threshold pills */}
+      <View style={styles.pillRow}>
+        <View style={styles.typeBadge}>
+          <Ionicons name="document-text-outline" size={12} color="#8B5CF6" />
+          <Text style={styles.typeText}>
+            {t(`circle_voting.type_${proposal.proposalType}`)}
+          </Text>
+        </View>
+        <View style={styles.thresholdBadge}>
+          <Ionicons name="speedometer-outline" size={12} color="#0A2342" />
+          <Text style={styles.thresholdText}>{thresholdLabel}</Text>
+        </View>
+      </View>
+
+      {/* Vote progress (Bucket A — votesFor/votesAgainst/votesAbstain) */}
+      <View style={styles.voteProgress}>
+        <View style={styles.voteRow}>
+          <View style={styles.voteItem}>
+            <Ionicons name="thumbs-up" size={14} color="#10B981" />
+            <Text style={[styles.voteCount, { color: "#10B981" }]}>{proposal.votesFor}</Text>
+          </View>
+          <View style={styles.voteItem}>
+            <Ionicons name="thumbs-down" size={14} color="#EF4444" />
+            <Text style={[styles.voteCount, { color: "#EF4444" }]}>{proposal.votesAgainst}</Text>
+          </View>
+          <View style={styles.voteItem}>
+            <Ionicons name="remove-circle-outline" size={14} color="#6B7280" />
+            <Text style={[styles.voteCount, { color: "#6B7280" }]}>{proposal.votesAbstain}</Text>
+          </View>
+        </View>
+
+        {decisive > 0 && (
+          <View style={styles.progressBarBg}>
+            <View style={[styles.progressBarFill, { width: `${yesPct}%` }]} />
+          </View>
+        )}
+
+        <Text style={styles.quorumLine}>{quorumLine}</Text>
+      </View>
+
+      {/* Result chip (closed proposals) */}
+      {resultChip && (
+        <View style={[styles.resultChip, { backgroundColor: resultChip.bg }]}>
+          <Ionicons name={resultChip.icon} size={14} color={resultChip.color} />
+          <Text style={[styles.resultLabel, { color: resultChip.color }]}>
+            {resultChip.label} · {resultChip.sub}
+          </Text>
+        </View>
+      )}
+
+      {/* Vote buttons (open + not expired) */}
+      {isOpen && !isExpired && (
+        <View style={styles.voteButtons}>
+          {(["yes", "no", "abstain"] as const).map((choice) => {
+            const cfg = VOTE_META[choice];
+            return (
+              <TouchableOpacity
+                key={choice}
+                style={[styles.voteBtn, { backgroundColor: cfg.bg }]}
+                onPress={() => onVote(choice)}
+                disabled={voting}
+              >
+                <Ionicons name={cfg.icon as any} size={16} color={cfg.text} />
+                <Text style={[styles.voteBtnText, { color: cfg.text }]}>
+                  {t(`circle_voting.vote_${choice}`)}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// CreateProposalSheet — 2-step bottom sheet (Bucket A).
+//   Step 1: pick a proposal type from 6 templates.
+//   Step 2: type-specific payload form. Title is auto-derived for templated
+//           types; only `custom` exposes a title field.
+// ══════════════════════════════════════════════════════════════════════════════
+function CreateProposalSheet({
+  visible,
+  step,
+  selectedType,
+  payload,
+  customTitle,
+  customDescription,
+  creating,
+  onPickType,
+  onBack,
+  onClose,
+  onChangePayload,
+  onChangeCustomTitle,
+  onChangeCustomDescription,
+  onSubmit,
+}: {
+  visible: boolean;
+  step: "type" | "form";
+  selectedType: ProposalType | null;
+  payload: Record<string, any>;
+  customTitle: string;
+  customDescription: string;
+  creating: boolean;
+  onPickType: (type: ProposalType) => void;
+  onBack: () => void;
+  onClose: () => void;
+  onChangePayload: (next: Record<string, any>) => void;
+  onChangeCustomTitle: (s: string) => void;
+  onChangeCustomDescription: (s: string) => void;
+  onSubmit: () => void;
+}) {
+  const { t } = useTranslation();
+
+  const setField = (key: string, value: any) =>
+    onChangePayload({ ...payload, [key]: value });
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+
+          {/* Header */}
+          <View style={sheetStyles.headerRow}>
+            {step === "form" ? (
+              <TouchableOpacity onPress={onBack} accessibilityRole="button">
+                <Ionicons name="chevron-back" size={22} color="#0A2342" />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 22 }} />
+            )}
+            <Text style={sheetStyles.title}>
+              {step === "type"
+                ? t("circle_voting.create_step_pick_type")
+                : t(`circle_voting.type_${selectedType}`)}
+            </Text>
+            <TouchableOpacity onPress={onClose} accessibilityRole="button">
+              <Ionicons name="close" size={22} color="#0A2342" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Step 1 — type picker */}
+          {step === "type" && (
+            <ScrollView style={{ maxHeight: 480 }}>
+              {PROPOSAL_TEMPLATES.map((tmpl) => (
+                <TouchableOpacity
+                  key={tmpl.type}
+                  style={sheetStyles.typeCard}
+                  onPress={() => onPickType(tmpl.type)}
+                  accessibilityRole="button"
+                >
+                  <View style={sheetStyles.typeIconWrap}>
+                    <Ionicons name={tmpl.icon} size={22} color="#00C6AE" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={sheetStyles.typeNameRow}>
+                      <Text style={sheetStyles.typeName}>
+                        {t(`circle_voting.type_${tmpl.type}`)}
+                      </Text>
+                      {tmpl.isCritical && (
+                        <View style={sheetStyles.criticalPill}>
+                          <Text style={sheetStyles.criticalText}>
+                            {t("circle_voting.type_critical_pill")}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={sheetStyles.typeDesc} numberOfLines={2}>
+                      {t(`circle_voting.type_${tmpl.type}_desc`)}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+
+          {/* Step 2 — type-specific form */}
+          {step === "form" && selectedType && (
+            <ScrollView style={{ maxHeight: 480 }}>
+              <Text style={sheetStyles.formHint}>
+                {t(`circle_voting.type_${selectedType}_desc`)}
+              </Text>
+
+              {selectedType === "admit_member" && (
+                <Field
+                  label={t("circle_voting.field_member_email")}
+                  value={payload.member ?? ""}
+                  onChangeText={(v) => setField("member", v)}
+                />
+              )}
+
+              {selectedType === "remove_member" && (
+                <>
+                  <Field
+                    label={t("circle_voting.field_target_member")}
+                    value={payload.member ?? ""}
+                    onChangeText={(v) => setField("member", v)}
+                  />
+                  <Field
+                    label={t("circle_voting.field_reason")}
+                    value={payload.reason ?? ""}
+                    onChangeText={(v) => setField("reason", v)}
+                    multiline
+                  />
+                </>
+              )}
+
+              {selectedType === "change_rules" && (
+                <>
+                  <Text style={sheetStyles.inputLabel}>
+                    {t("circle_voting.field_rule_to_change")}
+                  </Text>
+                  <View style={sheetStyles.segmented}>
+                    {RULE_OPTIONS.map((rk) => {
+                      const active = payload.rule === rk;
+                      return (
+                        <TouchableOpacity
+                          key={rk}
+                          style={[sheetStyles.segment, active && sheetStyles.segmentActive]}
+                          onPress={() => onChangePayload({ ...payload, rule: rk, value: "" })}
+                        >
+                          <Text style={[sheetStyles.segmentText, active && sheetStyles.segmentTextActive]}>
+                            {t(`circle_voting.field_rule_${rk}`)}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  <Field
+                    label={t("circle_voting.field_new_value")}
+                    value={payload.value ?? ""}
+                    onChangeText={(v) => setField("value", v)}
+                  />
+                </>
+              )}
+
+              {selectedType === "change_payout_order" && (
+                <Field
+                  label={t("circle_voting.field_order_proposal")}
+                  value={payload.order_proposal ?? ""}
+                  onChangeText={(v) => setField("order_proposal", v)}
+                  multiline
+                />
+              )}
+
+              {selectedType === "dissolve_circle" && (
+                <Field
+                  label={t("circle_voting.field_reason")}
+                  value={payload.reason ?? ""}
+                  onChangeText={(v) => setField("reason", v)}
+                  multiline
+                />
+              )}
+
+              {selectedType === "custom" && (
+                <>
+                  <Field
+                    label={t("circle_voting.field_custom_title")}
+                    value={customTitle}
+                    onChangeText={onChangeCustomTitle}
+                  />
+                  <Field
+                    label={t("circle_voting.field_custom_description")}
+                    value={customDescription}
+                    onChangeText={onChangeCustomDescription}
+                    multiline
+                  />
+                </>
+              )}
+
+              <TouchableOpacity
+                style={[sheetStyles.submitBtn, creating && { opacity: 0.6 }]}
+                onPress={onSubmit}
+                disabled={creating}
+                accessibilityRole="button"
+              >
+                {creating ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="send" size={16} color="#FFFFFF" />
+                    <Text style={sheetStyles.submitBtnText}>
+                      {t("circle_voting.create_submit")}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChangeText,
+  multiline,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (s: string) => void;
+  multiline?: boolean;
+}) {
+  return (
+    <>
+      <Text style={sheetStyles.inputLabel}>{label}</Text>
+      <TextInput
+        style={[sheetStyles.input, multiline && sheetStyles.inputMultiline]}
+        placeholderTextColor="#9CA3AF"
+        value={value}
+        onChangeText={onChangeText}
+        multiline={multiline}
+        textAlignVertical={multiline ? "top" : "center"}
+      />
+    </>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// VoteConfirmSheet — bottom sheet that replaces Alert.alert on vote tap.
+// ══════════════════════════════════════════════════════════════════════════════
+function VoteConfirmSheet({
+  payload,
+  voting,
+  onChangeReason,
+  onCancel,
+  onConfirm,
+}: {
+  payload: ConfirmVote;
+  voting: boolean;
+  onChangeReason: (s: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const { t } = useTranslation();
+  const visible = payload != null;
+  const choice = payload?.choice;
+  const meta = choice ? VOTE_META[choice] : null;
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+      <Pressable style={sheetStyles.backdrop} onPress={onCancel}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          {payload && choice && meta ? (
+            <>
+              <View style={[sheetStyles.confirmChoice, { backgroundColor: meta.bg }]}>
+                <Ionicons name={meta.icon as any} size={20} color={meta.text} />
+                <Text style={[sheetStyles.confirmChoiceText, { color: meta.text }]}>
+                  {t(`circle_voting.vote_${choice}`)}
+                </Text>
+              </View>
+              <Text style={sheetStyles.title}>
+                {t(`circle_voting.vote_confirm_title_${choice}`)}
+              </Text>
+              <Text style={sheetStyles.body}>
+                {t(`circle_voting.vote_confirm_body_${choice}`, { title: payload.title })}
+              </Text>
+              <Text style={sheetStyles.inputLabel}>
+                {t("circle_voting.placeholder_reason")}
+              </Text>
+              <TextInput
+                style={[sheetStyles.input, sheetStyles.inputMultiline]}
+                placeholderTextColor="#9CA3AF"
+                value={payload.reasoning}
+                onChangeText={onChangeReason}
+                multiline
+                textAlignVertical="top"
+              />
+              <View style={sheetStyles.confirmRow}>
+                <TouchableOpacity
+                  style={sheetStyles.cancelBtn}
+                  onPress={onCancel}
+                  disabled={voting}
+                  accessibilityRole="button"
+                >
+                  <Text style={sheetStyles.cancelBtnText}>
+                    {t("circle_voting.vote_confirm_cancel")}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[sheetStyles.submitBtn, { flex: 1, marginTop: 0 }, voting && { opacity: 0.6 }]}
+                  onPress={onConfirm}
+                  disabled={voting}
+                  accessibilityRole="button"
+                >
+                  {voting ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={sheetStyles.submitBtnText}>
+                      {t("circle_voting.vote_confirm_confirm")}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : null}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ── Styles ──────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F7FA" },
   centered: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#F5F7FA" },
@@ -379,37 +922,72 @@ const styles = StyleSheet.create({
   proposalTitle: { fontSize: 16, fontWeight: "700", color: "#0A2342", marginBottom: 4 },
   proposalDesc: { fontSize: 13, color: "#6B7280", lineHeight: 18, marginBottom: 8 },
 
-  typeBadge: { flexDirection: "row", alignItems: "center", gap: 4, alignSelf: "flex-start", backgroundColor: "#8B5CF615", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, marginBottom: 12 },
-  typeText: { fontSize: 11, color: "#8B5CF6", fontWeight: "500" },
+  // Pills row (type + threshold)
+  pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 12 },
+  typeBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#8B5CF615", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  typeText: { fontSize: 11, color: "#8B5CF6", fontWeight: "600" },
+  thresholdBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#E5E7EB", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 },
+  thresholdText: { fontSize: 11, color: "#0A2342", fontWeight: "600" },
 
-  // Vote Progress
-  voteProgress: { borderTopWidth: 1, borderTopColor: "#F3F4F6", paddingTop: 12, marginBottom: 8 },
+  // Vote progress
+  voteProgress: { borderTopWidth: 1, borderTopColor: "#F3F4F6", paddingTop: 12, marginBottom: 10 },
   voteRow: { flexDirection: "row", justifyContent: "space-around", marginBottom: 8 },
   voteItem: { flexDirection: "row", alignItems: "center", gap: 4 },
   voteCount: { fontSize: 14, fontWeight: "700" },
-  progressBarBg: { height: 6, backgroundColor: "#F3F4F6", borderRadius: 3, overflow: "hidden" },
+  progressBarBg: { height: 6, backgroundColor: "#F3F4F6", borderRadius: 3, overflow: "hidden", marginBottom: 8 },
   progressBarFill: { height: 6, backgroundColor: "#10B981", borderRadius: 3 },
+  quorumLine: { fontSize: 12, color: "#6B7280", fontWeight: "500" },
 
-  // Vote Actions
-  castVoteBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: "#00C6AE", marginTop: 4 },
-  castVoteText: { fontSize: 14, fontWeight: "600", color: "#00C6AE" },
+  // Result chip
+  resultChip: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, marginBottom: 8 },
+  resultLabel: { fontSize: 12, fontWeight: "600", flex: 1 },
 
-  voteActions: { borderTopWidth: 1, borderTopColor: "#F3F4F6", paddingTop: 12, gap: 10 },
-  reasonInput: { backgroundColor: "#F5F7FA", borderRadius: 8, padding: 10, fontSize: 13, color: "#0A2342" },
-  voteButtons: { flexDirection: "row", gap: 8 },
+  // Vote buttons
+  voteButtons: { flexDirection: "row", gap: 8, marginTop: 4 },
   voteBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 10, borderRadius: 8 },
   voteBtnText: { fontSize: 13, fontWeight: "600" },
-  cancelText: { fontSize: 13, color: "#6B7280", textAlign: "center", marginTop: 4 },
+});
 
-  // Modal
-  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
-  modalContent: { backgroundColor: "#FFFFFF", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-  modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 },
-  modalTitle: { fontSize: 18, fontWeight: "700", color: "#0A2342" },
-  inputLabel: { fontSize: 13, fontWeight: "600", color: "#0A2342", marginBottom: 6 },
-  modalInput: { backgroundColor: "#F5F7FA", borderRadius: 10, padding: 12, fontSize: 14, color: "#0A2342", marginBottom: 16 },
-  modalTextArea: { height: 100 },
-  submitBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#00C6AE", paddingVertical: 14, borderRadius: 12 },
-  submitBtnDisabled: { opacity: 0.6 },
+// ── Sheet styles (shared by Create + VoteConfirm) ───────────────────────────
+const sheetStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
+  sheet: { backgroundColor: "#FFFFFF", borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 20, paddingBottom: 36 },
+  handle: { width: 40, height: 4, backgroundColor: "#E5E7EB", borderRadius: 2, alignSelf: "center", marginBottom: 14 },
+  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  title: { fontSize: 17, fontWeight: "700", color: "#0A2342" },
+  body: { fontSize: 13, color: "#0A2342", lineHeight: 19, marginBottom: 12 },
+
+  formHint: { fontSize: 12, color: "#6B7280", marginBottom: 12 },
+
+  // Type cards
+  typeCard: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
+  typeIconWrap: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#00C6AE15", alignItems: "center", justifyContent: "center" },
+  typeNameRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
+  typeName: { fontSize: 14, fontWeight: "700", color: "#0A2342" },
+  typeDesc: { fontSize: 12, color: "#6B7280", lineHeight: 16 },
+  criticalPill: { backgroundColor: "#FEE2E2", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 },
+  criticalText: { fontSize: 10, fontWeight: "700", color: "#991B1B", letterSpacing: 0.3 },
+
+  // Inputs
+  inputLabel: { fontSize: 12, fontWeight: "600", color: "#0A2342", marginTop: 12, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.4 },
+  input: { backgroundColor: "#F5F7FA", borderRadius: 10, padding: 12, fontSize: 14, color: "#0A2342" },
+  inputMultiline: { minHeight: 80, paddingTop: 12 },
+
+  // Segmented (change_rules → which rule)
+  segmented: { flexDirection: "row", gap: 6, marginBottom: 4 },
+  segment: { flex: 1, alignItems: "center", paddingVertical: 8, borderRadius: 8, backgroundColor: "#F5F7FA" },
+  segmentActive: { backgroundColor: "#00C6AE15", borderWidth: 1, borderColor: "#00C6AE" },
+  segmentText: { fontSize: 12, fontWeight: "600", color: "#6B7280" },
+  segmentTextActive: { color: "#00C6AE" },
+
+  // Submit
+  submitBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#00C6AE", paddingVertical: 14, borderRadius: 12, marginTop: 20 },
   submitBtnText: { fontSize: 15, fontWeight: "700", color: "#FFFFFF" },
+
+  // Confirm sheet
+  confirmChoice: { flexDirection: "row", alignItems: "center", gap: 8, alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginBottom: 12 },
+  confirmChoiceText: { fontSize: 13, fontWeight: "700" },
+  confirmRow: { flexDirection: "row", gap: 10, marginTop: 20 },
+  cancelBtn: { flex: 1, backgroundColor: "#F3F4F6", borderRadius: 10, paddingVertical: 12, alignItems: "center", justifyContent: "center" },
+  cancelBtnText: { color: "#0A2342", fontSize: 14, fontWeight: "700" },
 });
