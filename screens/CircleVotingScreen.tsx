@@ -1,8 +1,9 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Alert, TextInput, Modal, Pressable,
+  ActivityIndicator, RefreshControl, Alert, TextInput, Modal, Pressable, Animated,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -13,8 +14,41 @@ import type {
   ProposalType,
   VoteChoice,
 } from "../services/CircleDemocracyEngine";
+import { Routes } from "../lib/routes";
 
 type RouteParams = { CircleVoting: { circleId: string } };
+
+// Bucket B — AsyncStorage gate for the first-visit coach mark. Version
+// suffix lets us re-prompt every user if the copy shifts.
+const VOTING_COACH_KEY = "@tandaxn_voting_coach_seen_v1";
+
+// Bucket B — six glossary entries shown together in one scrollable
+// HelpSheet, opened by the header (?) button.
+type HelpTopic =
+  | "what_is_proposal"
+  | "who_can_create"
+  | "six_types"
+  | "quorum_vs_threshold"
+  | "voting_period"
+  | "what_happens_on_approval";
+
+const HELP_TOPICS: HelpTopic[] = [
+  "what_is_proposal",
+  "who_can_create",
+  "six_types",
+  "quorum_vs_threshold",
+  "voting_period",
+  "what_happens_on_approval",
+];
+
+// Bucket B — per-pill explainer payload. The same sheet renders all three
+// kinds; "type" passes through the proposal_type slug so the sheet looks
+// up circle_voting.type_explainer_<key>_{title,body}.
+type PillExplainer =
+  | { kind: "type"; key: string }
+  | { kind: "quorum" }
+  | { kind: "threshold" }
+  | null;
 
 // ── Vote colour palette ─────────────────────────────────────────────────────
 const VOTE_META: Record<VoteChoice, { bg: string; text: string; icon: string }> = {
@@ -105,6 +139,47 @@ export default function CircleVotingScreen() {
 
   // Bucket A — vote confirm sheet.
   const [confirmVote, setConfirmVote] = useState<ConfirmVote>(null);
+
+  // Bucket B — HelpSheet visibility + per-pill explainer payload.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [pillExplainer, setPillExplainer] = useState<PillExplainer>(null);
+
+  // Bucket B — first-visit coach mark. Pattern mirrors Conflict Alerts /
+  // Insurance Pool: AsyncStorage gate, animated fade-in, 4s auto-dismiss.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachOpacity = useRef(new Animated.Value(0)).current;
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    coachCheckedRef.current = true;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(VOTING_COACH_KEY);
+        if (seen) return;
+        setCoachVisible(true);
+        Animated.timing(coachOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+      } catch {
+        // AsyncStorage unavailable — silently skip.
+      }
+    })();
+  }, [coachOpacity]);
+  const dismissCoach = useCallback(() => {
+    Animated.timing(coachOpacity, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setCoachVisible(false));
+    AsyncStorage.setItem(VOTING_COACH_KEY, "1").catch(() => undefined);
+  }, [coachOpacity]);
+  useEffect(() => {
+    if (!coachVisible) return;
+    const tid = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(tid);
+  }, [coachVisible, dismissCoach]);
 
   const {
     activeProposals,
@@ -228,9 +303,20 @@ export default function CircleVotingScreen() {
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("circle_voting.header_title")}</Text>
-          <TouchableOpacity style={styles.addButton} onPress={() => setCreateOpen(true)}>
-            <Ionicons name="add" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {/* Bucket B — opens the HelpSheet glossary. */}
+            <TouchableOpacity
+              style={styles.iconButton}
+              onPress={() => setHelpOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t("circle_voting.help_open")}
+            >
+              <Ionicons name="help-circle-outline" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton} onPress={() => setCreateOpen(true)}>
+              <Ionicons name="add" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Stats */}
@@ -302,6 +388,10 @@ export default function CircleVotingScreen() {
               key={p.id}
               proposal={p}
               onVote={(choice) => openVoteConfirm(p, choice)}
+              onExplainType={() => setPillExplainer({ kind: "type", key: p.proposalType })}
+              onExplainThreshold={() => setPillExplainer({ kind: "threshold" })}
+              onExplainQuorum={() => setPillExplainer({ kind: "quorum" })}
+              onOpenDetail={() => navigation.navigate(Routes.ProposalDetail, { proposalId: p.id })}
               voting={voting}
             />
           ))
@@ -336,6 +426,23 @@ export default function CircleVotingScreen() {
         onCancel={() => setConfirmVote(null)}
         onConfirm={executeVote}
       />
+
+      {/* Bucket B — HelpSheet + per-pill explainer sheets. */}
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} />
+      <PillExplainerSheet explainer={pillExplainer} onClose={() => setPillExplainer(null)} />
+
+      {/* Bucket B — first-visit coach mark. */}
+      {coachVisible && (
+        <Animated.View
+          style={[styles.coachOverlay, { opacity: coachOpacity }]}
+          pointerEvents="box-none"
+        >
+          <Pressable style={styles.coachCard} onPress={dismissCoach} accessibilityRole="button">
+            <Ionicons name="bulb-outline" size={20} color="#00C6AE" />
+            <Text style={styles.coachText}>{t("circle_voting.coach_tip")}</Text>
+          </Pressable>
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -372,10 +479,18 @@ function validatePayload(
 function ProposalCard({
   proposal,
   onVote,
+  onExplainType,
+  onExplainThreshold,
+  onExplainQuorum,
+  onOpenDetail,
   voting,
 }: {
   proposal: CircleProposal;
   onVote: (choice: VoteChoice) => void;
+  onExplainType: () => void;
+  onExplainThreshold: () => void;
+  onExplainQuorum: () => void;
+  onOpenDetail: () => void;
   voting: boolean;
 }) {
   const { t } = useTranslation();
@@ -446,41 +561,59 @@ function ProposalCard({
 
   return (
     <View style={styles.card}>
-      {/* Top row */}
-      <View style={styles.cardHeader}>
-        <View style={[styles.statusBadge, { backgroundColor: statusMeta.color + "15" }]}>
-          <Ionicons name={statusMeta.icon as any} size={12} color={statusMeta.color} />
-          <Text style={[styles.statusText, { color: statusMeta.color }]}>
-            {t(statusMeta.labelKey)}
-          </Text>
+      {/* Card body tap target — top section is wrapped in a Pressable that
+          routes to the detail screen. Bucket B: enables the "tap card to
+          see who voted / payload / cancel" affordance without stealing
+          taps from the explicit vote buttons below. */}
+      <Pressable onPress={onOpenDetail} accessibilityRole="button">
+        {/* Top row */}
+        <View style={styles.cardHeader}>
+          <View style={[styles.statusBadge, { backgroundColor: statusMeta.color + "15" }]}>
+            <Ionicons name={statusMeta.icon as any} size={12} color={statusMeta.color} />
+            <Text style={[styles.statusText, { color: statusMeta.color }]}>
+              {t(statusMeta.labelKey)}
+            </Text>
+          </View>
+          {endsAt && (
+            <Text style={styles.deadline}>
+              {isExpired
+                ? t("circle_voting.deadline_ended")
+                : t("circle_voting.deadline_ends_at", { date: endsAt.toLocaleDateString() })}
+            </Text>
+          )}
         </View>
-        {endsAt && (
-          <Text style={styles.deadline}>
-            {isExpired
-              ? t("circle_voting.deadline_ended")
-              : t("circle_voting.deadline_ends_at", { date: endsAt.toLocaleDateString() })}
-          </Text>
+
+        {/* Title + description */}
+        <Text style={styles.proposalTitle}>{proposal.title}</Text>
+        {proposal.description && (
+          <Text style={styles.proposalDesc} numberOfLines={3}>{proposal.description}</Text>
         )}
-      </View>
+      </Pressable>
 
-      {/* Title + description */}
-      <Text style={styles.proposalTitle}>{proposal.title}</Text>
-      {proposal.description && (
-        <Text style={styles.proposalDesc} numberOfLines={3}>{proposal.description}</Text>
-      )}
-
-      {/* Type + threshold pills */}
+      {/* Type + threshold pills (Bucket B: tappable explainers) */}
       <View style={styles.pillRow}>
-        <View style={styles.typeBadge}>
+        <TouchableOpacity
+          style={styles.typeBadge}
+          onPress={onExplainType}
+          accessibilityRole="button"
+          accessibilityLabel={t("circle_voting.type_explainer_open", { label: t(`circle_voting.type_${proposal.proposalType}`) })}
+        >
           <Ionicons name="document-text-outline" size={12} color="#8B5CF6" />
           <Text style={styles.typeText}>
             {t(`circle_voting.type_${proposal.proposalType}`)}
           </Text>
-        </View>
-        <View style={styles.thresholdBadge}>
+          <Ionicons name="help-circle-outline" size={12} color="#8B5CF6" style={{ marginLeft: 2 }} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.thresholdBadge}
+          onPress={onExplainThreshold}
+          accessibilityRole="button"
+          accessibilityLabel={t("circle_voting.threshold_explainer_open")}
+        >
           <Ionicons name="speedometer-outline" size={12} color="#0A2342" />
           <Text style={styles.thresholdText}>{thresholdLabel}</Text>
-        </View>
+          <Ionicons name="help-circle-outline" size={12} color="#0A2342" style={{ marginLeft: 2 }} />
+        </TouchableOpacity>
       </View>
 
       {/* Vote progress (Bucket A — votesFor/votesAgainst/votesAbstain) */}
@@ -506,7 +639,17 @@ function ProposalCard({
           </View>
         )}
 
-        <Text style={styles.quorumLine}>{quorumLine}</Text>
+        {/* Bucket B: tap-explainable quorum line (small (?) keeps the row
+            scannable on a list of N cards). */}
+        <TouchableOpacity
+          onPress={onExplainQuorum}
+          accessibilityRole="button"
+          accessibilityLabel={t("circle_voting.quorum_explainer_open")}
+          style={styles.quorumLineRow}
+        >
+          <Text style={styles.quorumLine}>{quorumLine}</Text>
+          <Ionicons name="help-circle-outline" size={12} color="#9CA3AF" />
+        </TouchableOpacity>
       </View>
 
       {/* Result chip (closed proposals) */}
@@ -887,7 +1030,8 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   backButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center" },
   headerTitle: { fontSize: 20, fontWeight: "700", color: "#FFFFFF" },
-  addButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center" },
+  headerActions: { flexDirection: "row", gap: 8 },
+  iconButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center" },
 
   statsRow: { flexDirection: "row", gap: 8, marginTop: 14 },
   statPill: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(255,255,255,0.1)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16 },
@@ -936,6 +1080,7 @@ const styles = StyleSheet.create({
   voteCount: { fontSize: 14, fontWeight: "700" },
   progressBarBg: { height: 6, backgroundColor: "#F3F4F6", borderRadius: 3, overflow: "hidden", marginBottom: 8 },
   progressBarFill: { height: 6, backgroundColor: "#10B981", borderRadius: 3 },
+  quorumLineRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   quorumLine: { fontSize: 12, color: "#6B7280", fontWeight: "500" },
 
   // Result chip
@@ -946,9 +1091,123 @@ const styles = StyleSheet.create({
   voteButtons: { flexDirection: "row", gap: 8, marginTop: 4 },
   voteBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 10, borderRadius: 8 },
   voteBtnText: { fontSize: 13, fontWeight: "600" },
+
+  // Bucket B — first-visit coach overlay.
+  coachOverlay: { position: "absolute", left: 16, right: 16, bottom: 24 },
+  coachCard: {
+    backgroundColor: "#0A2342",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  coachText: { flex: 1, color: "#FFFFFF", fontSize: 13, lineHeight: 18 },
 });
 
-// ── Sheet styles (shared by Create + VoteConfirm) ───────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// HelpSheet — six-topic glossary modal (Bucket B), opened by the header
+// (?) button. Reads circle_voting.help_<topic>_{title,body}.
+// ══════════════════════════════════════════════════════════════════════════════
+function HelpSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>{t("circle_voting.help_sheet_title")}</Text>
+          <ScrollView style={{ maxHeight: 460 }}>
+            {HELP_TOPICS.map((topic, idx) => (
+              <View
+                key={topic}
+                style={[
+                  sheetStyles.helpItem,
+                  idx === HELP_TOPICS.length - 1 && sheetStyles.helpItemLast,
+                ]}
+              >
+                <Text style={sheetStyles.helpItemTitle}>
+                  {t(`circle_voting.help_${topic}_title`)}
+                </Text>
+                <Text style={sheetStyles.body}>
+                  {t(`circle_voting.help_${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+          <TouchableOpacity
+            style={sheetStyles.submitBtn}
+            onPress={onClose}
+            accessibilityRole="button"
+          >
+            <Text style={sheetStyles.submitBtnText}>{t("circle_voting.help_close")}</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PillExplainerSheet — opens from a tappable pill on the proposal card.
+// Three kinds: "type" (per proposal type), "quorum", "threshold". The
+// "type" kind interpolates {{label}} so the title reads naturally for
+// each type. quorum / threshold have static title/body keys.
+// ══════════════════════════════════════════════════════════════════════════════
+function PillExplainerSheet({
+  explainer,
+  onClose,
+}: {
+  explainer: PillExplainer;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const visible = explainer != null;
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          {explainer?.kind === "type" ? (
+            <>
+              <Text style={sheetStyles.title}>
+                {t(`circle_voting.type_explainer_${explainer.key}_title`)}
+              </Text>
+              <Text style={sheetStyles.body}>
+                {t(`circle_voting.type_explainer_${explainer.key}_body`)}
+              </Text>
+            </>
+          ) : explainer?.kind === "quorum" ? (
+            <>
+              <Text style={sheetStyles.title}>{t("circle_voting.quorum_explainer_title")}</Text>
+              <Text style={sheetStyles.body}>{t("circle_voting.quorum_explainer_body")}</Text>
+            </>
+          ) : explainer?.kind === "threshold" ? (
+            <>
+              <Text style={sheetStyles.title}>{t("circle_voting.threshold_explainer_title")}</Text>
+              <Text style={sheetStyles.body}>{t("circle_voting.threshold_explainer_body")}</Text>
+            </>
+          ) : null}
+          <TouchableOpacity
+            style={sheetStyles.submitBtn}
+            onPress={onClose}
+            accessibilityRole="button"
+          >
+            <Text style={sheetStyles.submitBtnText}>{t("circle_voting.help_close")}</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ── Sheet styles (shared by Create + VoteConfirm + Help + PillExplainer) ───
 const sheetStyles = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
   sheet: { backgroundColor: "#FFFFFF", borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 20, paddingBottom: 36 },
@@ -990,4 +1249,9 @@ const sheetStyles = StyleSheet.create({
   confirmRow: { flexDirection: "row", gap: 10, marginTop: 20 },
   cancelBtn: { flex: 1, backgroundColor: "#F3F4F6", borderRadius: 10, paddingVertical: 12, alignItems: "center", justifyContent: "center" },
   cancelBtnText: { color: "#0A2342", fontSize: 14, fontWeight: "700" },
+
+  // Bucket B — HelpSheet items.
+  helpItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#E5E7EB" },
+  helpItemLast: { borderBottomWidth: 0 },
+  helpItemTitle: { fontSize: 14, fontWeight: "700", color: "#0A2342", marginBottom: 4 },
 });

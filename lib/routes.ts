@@ -66,6 +66,7 @@ export const Routes = {
   CircleInvite: "CircleInvite",
   CircleVisualizer: "CircleVisualizer",
   CircleVoting: "CircleVoting",
+  ProposalDetail: "ProposalDetail",
   Circles: "Circles",
   CirclesMain: "CirclesMain",
   CloseCircle: "CloseCircle",

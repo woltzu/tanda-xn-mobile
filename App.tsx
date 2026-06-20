@@ -207,6 +207,7 @@ import DefaultRecoveryScreen from "./screens/DefaultRecoveryScreen";
 import DefaultDetailScreen from "./screens/DefaultDetailScreen";
 import LateContributionDetailScreen from "./screens/LateContributionDetailScreen";
 import CircleVotingScreen from "./screens/CircleVotingScreen";
+import ProposalDetailScreen from "./screens/ProposalDetailScreen";
 import GraduatedEntryScreen from "./screens/GraduatedEntryScreen";
 import KYCVerificationScreen from "./screens/KYCVerificationScreen";
 import EarlyInterventionScreen from "./screens/EarlyInterventionScreen";
@@ -669,6 +670,7 @@ export type RootStackParamList = {
   DefaultDetail: { defaultId: string };
   LateContributionDetail: { lateContributionId: string };
   CircleVoting: { circleId: string };
+  ProposalDetail: { proposalId: string };
   GraduatedEntry: undefined;
   KYCVerification: undefined;
   // KYC P1: unified hub + single document screen. The legacy
@@ -1120,6 +1122,7 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="PositionSwap" component={PositionSwapScreen} />
       <CirclesStack.Screen name="CycleTimeline" component={CycleTimelineScreen} />
       <CirclesStack.Screen name="CircleVoting" component={CircleVotingScreen} />
+      <CirclesStack.Screen name="ProposalDetail" component={ProposalDetailScreen} />
       <CirclesStack.Screen name="DynamicPayout" component={DynamicPayoutScreen} />
       <CirclesStack.Screen name="CircleVisualizer" component={CircleVisualizerScreen} />
       {/* Advance V2 — reachable from both Home (HomeStack) and Circles
