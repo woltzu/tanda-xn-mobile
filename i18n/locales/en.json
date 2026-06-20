@@ -6777,6 +6777,20 @@
     "help_avg_default_probability_threshold": "Under 5% is safe. Above 15% means the circle should rebalance.",
     "help_avg_default_probability_action": "Review specific high-risk members and consider Partial Contribution plans or Substitute members."
   },
+  "cycle": {
+    "notification_cycle_started_title": "Contributions open for {{circle_name}}",
+    "notification_cycle_started_body": "Cycle {{cycle_number}} is now open. Your contribution of ${{amount}} is due by {{due_date}}.",
+    "notification_contribution_due_title": "Contribution due soon",
+    "notification_contribution_due_body": "Your contribution of ${{amount}} for {{circle_name}} is due by {{due_date}}.",
+    "notification_late_grace_title": "Grace period started",
+    "notification_late_grace_body": "You're {{days}} days late for {{circle_name}}. You have {{grace_days}} days of grace.",
+    "notification_payout_ready_title": "Payout ready",
+    "notification_payout_ready_body": "Your payout of ${{amount}} from {{circle_name}} is ready.",
+    "notification_cycle_closed_title": "Cycle completed",
+    "notification_cycle_closed_body": "Cycle {{cycle_number}} in {{circle_name}} is complete. Payout has been sent.",
+    "notification_payout_stuck_title": "Payout stuck — admin action needed",
+    "notification_payout_stuck_body": "Cycle {{cycle_number}} in {{circle_name}} has been waiting on a payout for more than 72 hours. Please review."
+  },
   "conflict": {
     "notification_monitor_escalated_title": "Conflict monitor escalated",
     "notification_monitor_escalated_body": "A conflict monitor in {{circle_name}} has escalated. Please review.",

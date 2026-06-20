@@ -17,6 +17,7 @@ import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import { useEventTracker } from "../hooks/useEventTracker";
 import {
   useCurrentCycle,
   useCircleCycles,
@@ -179,6 +180,7 @@ export default function CycleTimelineScreen() {
   const navigation = useTypedNavigation();
   const route = useRoute<RouteProp<{ params: RouteParams }, "params">>();
   const { circleId } = route.params;
+  const { track } = useEventTracker();
 
   const {
     cycle: currentCycle,
@@ -246,6 +248,23 @@ export default function CycleTimelineScreen() {
     const tid = setTimeout(() => dismissCoach(), 4000);
     return () => clearTimeout(tid);
   }, [coachVisible, dismissCoach]);
+
+  // Bucket C telemetry — timeline.viewed (useRef-deduped per circleId so
+  // StrictMode double-mount doesn't double-count) plus the four
+  // interaction events fired from the handlers below.
+  const viewedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!circleId) return;
+    if (viewedRef.current === circleId) return;
+    viewedRef.current = circleId;
+    track({
+      eventType: "timeline.viewed",
+      eventCategory: "circle",
+      eventAction: "view",
+      eventLabel: circleId,
+      eventValue: { circle_id: circleId },
+    });
+  }, [circleId, track]);
 
   const loading = cycleLoading || cyclesLoading || contribLoading || statsLoading;
   // First non-null error from any of the three hooks. Bucket A fix B6:
@@ -347,9 +366,20 @@ export default function CycleTimelineScreen() {
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t("screen_headers.cycle_timeline")}</Text>
-        {/* Bucket B — opens the HelpSheet glossary. */}
+        {/* Bucket B — opens the HelpSheet glossary. Bucket C: fire a
+            telemetry event so we can see which topics actually get the
+            (?) tap (the sheet itself is the 6-topic landing). */}
         <TouchableOpacity
-          onPress={() => setHelpOpen(true)}
+          onPress={() => {
+            track({
+              eventType: "timeline.help_opened",
+              eventCategory: "circle",
+              eventAction: "click",
+              eventLabel: circleId,
+              eventValue: { circle_id: circleId },
+            });
+            setHelpOpen(true);
+          }}
           accessibilityRole="button"
           accessibilityLabel={t("cycle_timeline.help_open")}
         >
@@ -486,9 +516,20 @@ export default function CycleTimelineScreen() {
                         explaining what that status means. */}
                     <TouchableOpacity
                       style={[styles.statusPill, { backgroundColor: meta.bg }]}
-                      onPress={() =>
-                        setPillExplainer({ kind: "status", key: (member.status as ContributionStatus) ?? "pending" })
-                      }
+                      onPress={() => {
+                        const statusKey = (member.status as ContributionStatus) ?? "pending";
+                        // Bucket C telemetry — carries the status that was
+                        // explained so we can see which ones members ask
+                        // about most.
+                        track({
+                          eventType: "timeline.state_explainer_opened",
+                          eventCategory: "circle",
+                          eventAction: "click",
+                          eventLabel: circleId,
+                          eventValue: { circle_id: circleId, status: statusKey },
+                        });
+                        setPillExplainer({ kind: "status", key: statusKey });
+                      }}
                       accessibilityRole="button"
                       accessibilityLabel={t("cycle_timeline.status_explainer_open", { label: t(meta.labelKey) })}
                     >
@@ -531,9 +572,23 @@ export default function CycleTimelineScreen() {
                 <TouchableOpacity
                   key={cycle.id ?? cycle.cycle_number}
                   style={styles.stripItem}
-                  onPress={() =>
-                    navigation.navigate(Routes.CycleDetail, { circleId, cycleId: cycle.id })
-                  }
+                  onPress={() => {
+                    // Bucket C telemetry — record which cycle the user
+                    // drilled into so we can see whether the strip is
+                    // actually used vs the hero card.
+                    track({
+                      eventType: "timeline.cycle_drilled_in",
+                      eventCategory: "circle",
+                      eventAction: "click",
+                      eventLabel: circleId,
+                      eventValue: {
+                        circle_id: circleId,
+                        cycle_id: cycle.id,
+                        cycle_number: cycle.cycle_number,
+                      },
+                    });
+                    navigation.navigate(Routes.CycleDetail, { circleId, cycleId: cycle.id });
+                  }}
                   accessibilityRole="button"
                   accessibilityLabel={t("cycle_timeline.cycle_label", { n: cycle.cycle_number })}
                 >
@@ -567,7 +622,19 @@ export default function CycleTimelineScreen() {
         <CtaBand
           state={cta}
           amount={contributionAmount}
-          onPay={() => navigation.navigate(Routes.MakeContribution, { circleId })}
+          onPay={() => {
+            // Bucket C telemetry — only fires when the user actually has a
+            // tappable CtaBand (pending/late/partial). Paid/missed bands
+            // are non-tappable and don't invoke onPay.
+            track({
+              eventType: "timeline.pay_tapped",
+              eventCategory: "wallet",
+              eventAction: "click",
+              eventLabel: circleId,
+              eventValue: { circle_id: circleId, cta_state: cta },
+            });
+            navigation.navigate(Routes.MakeContribution, { circleId });
+          }}
         />
       </ScrollView>
 

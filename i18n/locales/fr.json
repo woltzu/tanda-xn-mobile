@@ -6777,6 +6777,20 @@
     "help_avg_default_probability_threshold": "Sous 5 % c'est sûr. Au-dessus de 15 %, le cercle devrait se rééquilibrer.",
     "help_avg_default_probability_action": "Examinez les membres à risque et envisagez des plans de Contribution partielle ou des membres de substitution."
   },
+  "cycle": {
+    "notification_cycle_started_title": "Contributions ouvertes pour {{circle_name}}",
+    "notification_cycle_started_body": "Le cycle {{cycle_number}} est maintenant ouvert. Votre contribution de {{amount}} $ est due avant le {{due_date}}.",
+    "notification_contribution_due_title": "Contribution due bientôt",
+    "notification_contribution_due_body": "Votre contribution de {{amount}} $ pour {{circle_name}} est due avant le {{due_date}}.",
+    "notification_late_grace_title": "Délai de grâce démarré",
+    "notification_late_grace_body": "Vous avez {{days}} jours de retard pour {{circle_name}}. Vous disposez de {{grace_days}} jours de grâce.",
+    "notification_payout_ready_title": "Paiement prêt",
+    "notification_payout_ready_body": "Votre paiement de {{amount}} $ de {{circle_name}} est prêt.",
+    "notification_cycle_closed_title": "Cycle terminé",
+    "notification_cycle_closed_body": "Le cycle {{cycle_number}} dans {{circle_name}} est terminé. Le paiement a été envoyé.",
+    "notification_payout_stuck_title": "Paiement bloqué — action admin requise",
+    "notification_payout_stuck_body": "Le cycle {{cycle_number}} dans {{circle_name}} attend un paiement depuis plus de 72 heures. Veuillez vérifier."
+  },
   "conflict": {
     "notification_monitor_escalated_title": "Surveillance de conflit escaladée",
     "notification_monitor_escalated_body": "Une surveillance de conflit dans {{circle_name}} a été escaladée. Veuillez examiner.",

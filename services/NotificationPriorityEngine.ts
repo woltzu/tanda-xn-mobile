@@ -338,6 +338,40 @@ export class NotificationPriorityEngine {
     return priorities[type] ?? 1;
   }
 
+  /**
+   * Cycle Timeline Bucket C — map the specific notifications.type values
+   * that migration 212's notify_cycle_state_change trigger emits onto the
+   * five abstract NotificationType buckets the engine knows about. The
+   * priority engine itself only reasons about the abstract categories, so
+   * the caller (push pipeline, in-app router, etc.) calls this mapper
+   * when it sees a row with one of the cycle types and needs to decide
+   * how loud to be.
+   *
+   *   cycle_started  → circle_events    (informational; cycle window open)
+   *   cycle_closed   → circle_events    (informational; cycle wrap)
+   *   contribution_due → payment_critical (the user owes money soon)
+   *   late_grace     → payment_critical (the user is past due)
+   *   payout_ready   → payment_critical (the recipient is waiting on cash)
+   *   payout_stuck   → payment_critical (admin alert — financial impact)
+   *
+   * Returns null when the input isn't a cycle type, so callers can fall
+   * back to whatever other mapping covers KYC / payout_received / etc.
+   */
+  static categoryForCycleNotification(dbType: string): NotificationType | null {
+    switch (dbType) {
+      case "cycle_started":
+      case "cycle_closed":
+        return "circle_events";
+      case "contribution_due":
+      case "late_grace":
+      case "payout_ready":
+      case "payout_stuck":
+        return "payment_critical";
+      default:
+        return null;
+    }
+  }
+
   /** Time sensitivity: closer deadline = higher score. */
   private static calculateTimeSensitivity(data: Record<string, any>): number {
     const hoursUntilDue = data.hours_until_due ?? data.hoursUntilDue;

@@ -59,6 +59,10 @@ export const linkingConfig = {
 
       // Detail screens (registered on the root Stack, navigable from anywhere)
       CircleDetail: "circle/:circleId",
+      // Cycle Timeline — Bucket C of the cycle audit. Lets notifications
+      // (cycle_started / contribution_due / payout_ready / cycle_closed)
+      // route the user straight to the timeline for the relevant circle.
+      CycleTimeline: "timeline/:circleId",
       CommunityHub: "community/:communityId",
       GoalsHub: "goals",
       CreateGoal: "goals/create",
