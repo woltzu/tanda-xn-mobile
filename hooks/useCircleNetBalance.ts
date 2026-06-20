@@ -3,15 +3,23 @@
 // Computes the Home tile's "circle net" — per-circle and total — for the
 // signed-in user.
 //
-// Definitions (matching the existing Home bottom-sheet sign convention):
+// Definitions:
 //
 //   contributed  = SUM(circle_contributions.amount)
 //                  WHERE user_id = me AND status = 'paid'
 //   received     = SUM(circle_payouts.amount)
 //                  WHERE recipient_id = me AND status = 'completed'
-//   net          = received - contributed
-//                  positive → I'm ahead (received more than I put in)
-//                  negative → I'm "owed" (put in more than received)
+//   net          = contributed - received
+//                  positive → the circle owes me the difference
+//                             (I've put in more than I've taken out so
+//                              far — positive equity).
+//                  negative → I'm "ahead" in cash, will catch up later
+//                             (I've taken out more than I've put in;
+//                              upcoming contributions will close the gap).
+//
+// Sign convention matches a bank account: deposits (contributions)
+// add to the balance; withdrawals (payouts) subtract. Positive net
+// therefore reads as "balance you're owed."
 //
 // We scope the per-circle list to the user's CURRENTLY ACTIVE memberships
 // (circle_members.status = 'active'). Past activity in circles the user
@@ -162,7 +170,7 @@ export function useCircleNetBalance(): UseCircleNetBalanceResult {
             circleName: name,
             contributed,
             received,
-            net: received - contributed,
+            net: contributed - received,
           };
         });
 

@@ -253,10 +253,12 @@ export default function HomeScreen() {
   );
   const hasActiveCircle = activeCircles.length > 0;
 
-  // Real circle net = payouts received minus contributions made,
-  // aggregated across the user's currently-active memberships. Sign
-  // convention matches the bottom-sheet rows below: positive net =
-  // ahead (received more), negative = owed (put in more).
+  // Real circle net = contributions made minus payouts received,
+  // aggregated across the user's currently-active memberships.
+  // Bank-account sign convention: positive net = circle owes you
+  // (you've deposited more than you've withdrawn); negative net =
+  // you've taken out ahead of schedule and will catch up via
+  // upcoming contributions.
   const {
     circleNetBalances,
     totalNet: totalCircleNet,
@@ -330,12 +332,12 @@ export default function HomeScreen() {
       if (circleTotals.net > 0) {
         lines.push({
           icon: "sync-outline",
-          text: `Your circle net is ${formatSigned(circleTotals.net)} — you've contributed more than you've received. You're ahead.`,
+          text: `Your circle net is ${formatSigned(circleTotals.net)} — you've contributed more than you've received. The circle owes you the difference.`,
         });
       } else if (circleTotals.net < 0) {
         lines.push({
           icon: "sync-outline",
-          text: `Your circle net is ${formatSigned(circleTotals.net)} — you've received more than you've contributed so far. Stay on top of upcoming contributions.`,
+          text: `Your circle net is ${formatSigned(circleTotals.net)} — you've received more than you've contributed so far. You're ahead in cash; upcoming contributions will close the gap.`,
         });
       } else {
         lines.push({
@@ -1778,7 +1780,7 @@ export default function HomeScreen() {
                   const stat = circleNetById.get(c.id);
                   const contributed = stat?.contributed ?? 0;
                   const received = stat?.received ?? 0;
-                  const net = stat?.net ?? received - contributed;
+                  const net = stat?.net ?? contributed - received;
                   return (
                     <View key={c.id} style={styles.sheetRow}>
                       <View style={{ flex: 1 }}>
