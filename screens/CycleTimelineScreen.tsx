@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -7,7 +7,11 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Modal,
+  Pressable,
+  Animated,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -18,8 +22,34 @@ import {
   useCircleCycles,
   useCycleContributions,
   useCycleStats,
+  useCycleStatusSummary,
 } from "../hooks/useCycleProgression";
 import type { ContributionStatus } from "../services/CycleProgressionEngine";
+
+// Bucket B — AsyncStorage gate for the first-visit coach mark.
+const TIMELINE_COACH_KEY = "@tandaxn_timeline_coach_seen_v1";
+
+// Bucket B — HelpSheet topics, rendered together in one scrollable sheet
+// from the header (?) button.
+type HelpTopic =
+  | "what_is_cycle"
+  | "what_statuses_mean"
+  | "deadline_vs_grace"
+  | "who_receives_payout"
+  | "missed_contribution"
+  | "cycle_closes";
+const HELP_TOPICS: HelpTopic[] = [
+  "what_is_cycle",
+  "what_statuses_mean",
+  "deadline_vs_grace",
+  "who_receives_payout",
+  "missed_contribution",
+  "cycle_closes",
+];
+
+// Bucket B — per-pill explainer payload. The same sheet renders any of
+// the 7 ContributionStatus values, keyed by the status string.
+type PillExplainer = { kind: "status"; key: ContributionStatus } | null;
 
 const COLORS = {
   navy: "#0A2342",
@@ -83,6 +113,35 @@ const META_FALLBACK: StatusMeta = STATUS_META.pending;
 const PAID_STATUSES: ContributionStatus[] = ["completed", "covered"];
 const DONE_STATUSES: ContributionStatus[] = ["completed", "covered", "excused"];
 
+// Bucket B — cycle-status meta drives the hero card state chip. Maps the
+// CycleStatus enum to a colour + label + descriptor template. For states
+// with a clear time signal (collecting, grace_period) we interpolate
+// remaining days; the rest just show the label.
+const CYCLE_STATUS_META: Record<string, { color: string; labelKey: string }> = {
+  scheduled:        { color: COLORS.muted,  labelKey: "cycle_timeline.state_scheduled" },
+  collecting:       { color: COLORS.teal,   labelKey: "cycle_timeline.state_collecting" },
+  deadline_reached: { color: COLORS.orange, labelKey: "cycle_timeline.state_deadline_reached" },
+  grace_period:     { color: COLORS.orange, labelKey: "cycle_timeline.state_grace_period" },
+  ready_payout:     { color: COLORS.blue,   labelKey: "cycle_timeline.state_ready_payout" },
+  payout_pending:   { color: COLORS.blue,   labelKey: "cycle_timeline.state_payout_pending" },
+  payout_completed: { color: COLORS.green,  labelKey: "cycle_timeline.state_payout_completed" },
+  payout_failed:    { color: COLORS.red,    labelKey: "cycle_timeline.state_payout_failed" },
+  payout_retry:     { color: COLORS.orange, labelKey: "cycle_timeline.state_payout_retry" },
+  closed:           { color: COLORS.green,  labelKey: "cycle_timeline.state_closed" },
+  skipped:          { color: COLORS.muted,  labelKey: "cycle_timeline.state_skipped" },
+  cancelled:        { color: COLORS.muted,  labelKey: "cycle_timeline.state_cancelled" },
+};
+const CYCLE_STATUS_FALLBACK = CYCLE_STATUS_META.scheduled;
+
+// Pure day-delta helper used by the state chip for "X days left" / "X days
+// grace left" decorations. Returns null when the input is missing.
+function daysUntil(dateStr: string | null | undefined): number | null {
+  if (!dateStr) return null;
+  const target = new Date(dateStr).getTime();
+  if (!isFinite(target)) return null;
+  return Math.max(0, Math.ceil((target - Date.now()) / 86400000));
+}
+
 // Relative-time label for a contribution timestamp. Bucket A: the screen
 // previously rendered "Paid {date}" by string-concatenation in English;
 // now it picks one of three i18n keys keyed by days delta.
@@ -141,6 +200,53 @@ export default function CycleTimelineScreen() {
 
   const { stats, loading: statsLoading } = useCycleStats(circleId);
 
+  // Bucket B — the RPC-backed summary replaces the screen's client-side
+  // count math for the progress bar. Cron + trigger updates land here
+  // through the contribution-realtime listener inside the hook.
+  const { summary } = useCycleStatusSummary(currentCycle?.id);
+
+  // Bucket B — HelpSheet + per-pill explainer visibility.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [pillExplainer, setPillExplainer] = useState<PillExplainer>(null);
+
+  // Bucket B — first-visit coach mark. Same Animated.Value + useRef gate
+  // pattern as prior buckets (Conflict Alerts, Voting). Auto-dismiss
+  // after 4 s, or on tap.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachOpacity = useRef(new Animated.Value(0)).current;
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    coachCheckedRef.current = true;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(TIMELINE_COACH_KEY);
+        if (seen) return;
+        setCoachVisible(true);
+        Animated.timing(coachOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+      } catch {
+        // AsyncStorage unavailable — silently skip.
+      }
+    })();
+  }, [coachOpacity]);
+  const dismissCoach = useCallback(() => {
+    Animated.timing(coachOpacity, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setCoachVisible(false));
+    AsyncStorage.setItem(TIMELINE_COACH_KEY, "1").catch(() => undefined);
+  }, [coachOpacity]);
+  useEffect(() => {
+    if (!coachVisible) return;
+    const tid = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(tid);
+  }, [coachVisible, dismissCoach]);
+
   const loading = cycleLoading || cyclesLoading || contribLoading || statsLoading;
   // First non-null error from any of the three hooks. Bucket A fix B6:
   // previously cycleError was destructured but never rendered.
@@ -153,19 +259,60 @@ export default function CycleTimelineScreen() {
     setRefreshing(false);
   }, []);
 
-  // ─── Derived metrics (Bucket A fix B1) ─────────────────────────────────
-  // Previously: filter on status === "paid" (an enum value that doesn't
-  // exist) returned [] always. Progress bar permanently 0/N.
-  // Now: paid = completed + covered, per the engine's ContributionStatus
-  // enum. useMemo prevents an unnecessary recompute when the parent
-  // re-renders for an unrelated reason.
+  // ─── Derived metrics ───────────────────────────────────────────────────
+  // Bucket A fix B1 was the client-side "paid = completed + covered"
+  // filter. Bucket B prefers the RPC summary (one round-trip,
+  // server-authoritative) when it's available; the client-side filter
+  // stays as a graceful fallback so the bar renders even if the RPC errors.
   const { paidCount, totalMembers, progressPct } = useMemo(() => {
+    if (summary) {
+      return {
+        paidCount: summary.totalReceived,
+        totalMembers: summary.totalExpected,
+        progressPct: summary.progressPctByCount,
+      };
+    }
     const list = contributions ?? [];
     const paid = list.filter((c: any) => PAID_STATUSES.includes(c.status)).length;
     const total = list.length;
-    const pct = total > 0 ? (paid / total) * 100 : 0;
-    return { paidCount: paid, totalMembers: total, progressPct: pct };
-  }, [contributions]);
+    return {
+      paidCount: paid,
+      totalMembers: total,
+      progressPct: total > 0 ? (paid / total) * 100 : 0,
+    };
+  }, [summary, contributions]);
+
+  // Bucket B — state chip data for the hero card. The chip renders the
+  // cycle's lifecycle state (collecting / grace_period / ready_payout /
+  // …) with a remaining-days decoration for the two time-sensitive
+  // states. Falls back to the bare label everywhere else.
+  const stateChip = useMemo(() => {
+    if (!currentCycle) return null;
+    const meta = CYCLE_STATUS_META[currentCycle.status] ?? CYCLE_STATUS_FALLBACK;
+    const base = t(meta.labelKey);
+    let decoration = "";
+    if (currentCycle.status === "collecting") {
+      const left = daysUntil(currentCycle.contribution_deadline);
+      if (left != null) {
+        decoration = t("cycle_timeline.state_days_left", { count: left });
+      }
+    } else if (currentCycle.status === "grace_period" || currentCycle.status === "deadline_reached") {
+      const left = daysUntil(currentCycle.grace_period_end);
+      if (left != null) {
+        decoration = t("cycle_timeline.state_grace_days_left", { count: left });
+      }
+    }
+    return { meta, label: decoration ? `${base} · ${decoration}` : base };
+  }, [currentCycle, t]);
+
+  // Bucket B — payout-row tap handler. The simplest correct routing for
+  // now is PayoutHistory for any tap; PayoutReceived is a transparent-
+  // modal celebration screen wired to push notifications, not really
+  // meant to be opened on-demand from history. Recipient-specific
+  // deep linking can be revisited in Bucket C or later.
+  const handlePayoutTap = useCallback(() => {
+    navigation.navigate(Routes.PayoutHistory);
+  }, [navigation]);
 
   // The user's own contribution row drives the CTA band. useCurrentCycle
   // attaches it as my_contribution.
@@ -200,7 +347,14 @@ export default function CycleTimelineScreen() {
           <Ionicons name="arrow-back" size={24} color="#FFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t("screen_headers.cycle_timeline")}</Text>
-        <View style={{ width: 24 }} />
+        {/* Bucket B — opens the HelpSheet glossary. */}
+        <TouchableOpacity
+          onPress={() => setHelpOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={t("cycle_timeline.help_open")}
+        >
+          <Ionicons name="help-circle-outline" size={22} color="#FFF" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -233,6 +387,20 @@ export default function CycleTimelineScreen() {
             </Text>
           </View>
 
+          {/* Bucket B — state chip. Sits above the progress bar so the
+              first thing the user sees about the active cycle is what
+              state it's in (collecting / grace_period / ready_payout / …).
+              Time-sensitive states (collecting, grace_period,
+              deadline_reached) get a "X days left" decoration. */}
+          {stateChip && (
+            <View style={[styles.stateChip, { backgroundColor: `${stateChip.meta.color}15`, borderColor: stateChip.meta.color }]}>
+              <View style={[styles.stateDot, { backgroundColor: stateChip.meta.color }]} />
+              <Text style={[styles.stateChipText, { color: stateChip.meta.color }]}>
+                {stateChip.label}
+              </Text>
+            </View>
+          )}
+
           {/* Contribution Progress (Bucket A fix B1: real paid count) */}
           <View style={styles.progressSection}>
             <View style={styles.progressRow}>
@@ -259,7 +427,12 @@ export default function CycleTimelineScreen() {
                 </Text>
               </View>
             </View>
-            <View style={styles.infoBox}>
+            <TouchableOpacity
+              style={styles.infoBox}
+              onPress={handlePayoutTap}
+              accessibilityRole="button"
+              accessibilityLabel={t("cycle_timeline.payout_tap_open")}
+            >
               <Ionicons name="card-outline" size={20} color={COLORS.green} />
               <View style={{ marginLeft: 10, flex: 1 }}>
                 <Text style={styles.infoLabel}>{t("final_polish.cycletimeline_payout")}</Text>
@@ -274,7 +447,8 @@ export default function CycleTimelineScreen() {
                   </Text>
                 ) : null}
               </View>
-            </View>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.muted} />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -308,11 +482,21 @@ export default function CycleTimelineScreen() {
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
                     <Text style={styles.memberAmount}>{formatDollars(memberAmount)}</Text>
-                    <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
+                    {/* Bucket B — tappable status pill opens a small sheet
+                        explaining what that status means. */}
+                    <TouchableOpacity
+                      style={[styles.statusPill, { backgroundColor: meta.bg }]}
+                      onPress={() =>
+                        setPillExplainer({ kind: "status", key: (member.status as ContributionStatus) ?? "pending" })
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel={t("cycle_timeline.status_explainer_open", { label: t(meta.labelKey) })}
+                    >
                       <Text style={[styles.statusPillText, { color: meta.fg }]}>
                         {t(meta.labelKey)}
                       </Text>
-                    </View>
+                      <Ionicons name="help-circle-outline" size={10} color={meta.fg} style={{ marginLeft: 2 }} />
+                    </TouchableOpacity>
                   </View>
                 </View>
               </View>
@@ -326,65 +510,55 @@ export default function CycleTimelineScreen() {
           </View>
         )}
 
-        {/* Full Timeline (Bucket A fix B2 + amount column rename) */}
-        <Text style={[styles.sectionTitle, { marginTop: 8 }]}>{t("final_polish.cycletimeline_full_timeline")}</Text>
-        <View style={styles.timeline}>
-          {allCycles?.map((cycle: any, i: number) => {
-            const isActive = cycle.id === currentCycle?.id;
-            const isCompleted = cycle.status === "closed" || cycle.status === "payout_completed";
-            const dotColor = isCompleted ? COLORS.green : isActive ? COLORS.teal : "#D1D5DB";
-            // Prefer the real payout date once a payout has landed; fall
-            // back to the expected date for upcoming cycles. The previous
-            // screen read cycle.payout_date (no such column) → "TBD" on
-            // every row.
-            const dateStr = cycle.actual_payout_date
-              ? new Date(cycle.actual_payout_date).toLocaleDateString()
-              : cycle.expected_payout_date
-                ? new Date(cycle.expected_payout_date).toLocaleDateString()
-                : t("cycle_timeline.tbd");
-
-            return (
-              <View key={cycle.id ?? i} style={styles.timelineItem}>
-                {i < (allCycles?.length ?? 0) - 1 && <View style={styles.timelineConnector} />}
-                <View style={[styles.timelineDot, { backgroundColor: dotColor }]}>
-                  {isCompleted && <Ionicons name="checkmark" size={12} color="#FFF" />}
-                  {isActive && <Ionicons name="pulse" size={12} color="#FFF" />}
-                </View>
-                <View style={[styles.timelineCard, isActive && { borderWidth: 2, borderColor: COLORS.teal }]}>
-                  <View style={styles.timelineCardHeader}>
-                    <Text
-                      style={[
-                        styles.timelineCycleLabel,
-                        { color: isActive ? COLORS.teal : COLORS.navy },
-                      ]}
-                    >
-                      {t("cycle_timeline.cycle_label", { n: cycle.cycle_number })}
-                    </Text>
-                    <Text style={styles.mutedText}>{dateStr}</Text>
+        {/* Bucket B — horizontal cycle strip. Replaces the redundant
+            vertical "Full Timeline" list with a glanceable scroll of
+            dots, one per cycle. Tap a dot to drill into CycleDetail.
+            Colour: green for completed/closed, teal for the active cycle,
+            gray for upcoming. */}
+        <Text style={[styles.sectionTitle, { marginTop: 8 }]}>{t("cycle_timeline.jump_to_cycle")}</Text>
+        {allCycles && allCycles.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.stripContent}
+            style={styles.stripScroll}
+          >
+            {allCycles.map((cycle: any) => {
+              const isActive = cycle.id === currentCycle?.id;
+              const isCompleted = cycle.status === "closed" || cycle.status === "payout_completed";
+              const dotColor = isCompleted ? COLORS.green : isActive ? COLORS.teal : "#D1D5DB";
+              return (
+                <TouchableOpacity
+                  key={cycle.id ?? cycle.cycle_number}
+                  style={styles.stripItem}
+                  onPress={() =>
+                    navigation.navigate(Routes.CycleDetail, { circleId, cycleId: cycle.id })
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={t("cycle_timeline.cycle_label", { n: cycle.cycle_number })}
+                >
+                  <View style={[styles.stripDot, { backgroundColor: dotColor }, isActive && styles.stripDotActive]}>
+                    {isCompleted ? (
+                      <Ionicons name="checkmark" size={14} color="#FFF" />
+                    ) : isActive ? (
+                      <Ionicons name="pulse" size={14} color="#FFF" />
+                    ) : (
+                      <Text style={styles.stripDotNumber}>{cycle.cycle_number}</Text>
+                    )}
                   </View>
-                  <Text style={styles.mutedText}>
-                    {t("cycle_timeline.payout_to_short", {
-                      name: cycle.recipient?.full_name ?? shortId(cycle.recipient_user_id),
-                    })}
+                  <Text style={[styles.stripLabel, isActive && { color: COLORS.teal, fontWeight: "700" }]}>
+                    {cycle.cycle_number}
                   </Text>
-                  <Text style={[styles.timelineAmount, { color: COLORS.teal }]}>
-                    {/* Bucket A fix: cycle.payout_amount is dollars per
-                        engine type (was previously payout_amount_cents,
-                        which doesn't exist — every row showed $0.00). */}
-                    {formatDollars(cycle.payout_amount)}
-                  </Text>
-                  {isActive && (
-                    <View style={styles.currentCycleBadge}>
-                      <Text style={styles.currentCycleBadgeText}>
-                        {t("final_polish.cycletimeline_current_cycle")}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            );
-          })}
-        </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        ) : (
+          <View style={[styles.card, styles.emptyCard]}>
+            <Ionicons name="hourglass-outline" size={36} color={COLORS.muted} />
+            <Text style={styles.emptyBody}>{t("cycle_timeline.empty_no_cycles")}</Text>
+          </View>
+        )}
 
         {/* Bucket A fix A.7 — status-aware CTA band. The previous screen
             always rendered "Pay $1.00 Now" regardless of whether the user
@@ -396,7 +570,101 @@ export default function CycleTimelineScreen() {
           onPay={() => navigation.navigate(Routes.MakeContribution, { circleId })}
         />
       </ScrollView>
+
+      {/* Bucket B — HelpSheet + per-pill explainer sheets, mounted
+          outside the ScrollView so they overlay the full screen. */}
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} />
+      <PillExplainerSheet explainer={pillExplainer} onClose={() => setPillExplainer(null)} />
+
+      {/* Bucket B — first-visit coach mark. */}
+      {coachVisible && (
+        <Animated.View
+          style={[styles.coachOverlay, { opacity: coachOpacity }]}
+          pointerEvents="box-none"
+        >
+          <Pressable style={styles.coachCard} onPress={dismissCoach} accessibilityRole="button">
+            <Ionicons name="bulb-outline" size={20} color={COLORS.teal} />
+            <Text style={styles.coachText}>{t("cycle_timeline.coach_tip")}</Text>
+          </Pressable>
+        </Animated.View>
+      )}
     </View>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// HelpSheet — six-topic glossary, opened from the header (?) button.
+// ══════════════════════════════════════════════════════════════════════════════
+function HelpSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>{t("cycle_timeline.help_sheet_title")}</Text>
+          <ScrollView style={{ maxHeight: 460 }}>
+            {HELP_TOPICS.map((topic, idx) => (
+              <View
+                key={topic}
+                style={[
+                  sheetStyles.helpItem,
+                  idx === HELP_TOPICS.length - 1 && sheetStyles.helpItemLast,
+                ]}
+              >
+                <Text style={sheetStyles.helpItemTitle}>
+                  {t(`cycle_timeline.help_${topic}_title`)}
+                </Text>
+                <Text style={sheetStyles.body}>
+                  {t(`cycle_timeline.help_${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+          <TouchableOpacity style={sheetStyles.closeBtn} onPress={onClose} accessibilityRole="button">
+            <Text style={sheetStyles.closeBtnText}>{t("cycle_timeline.help_close")}</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PillExplainerSheet — per-status explainer. The 7 ContributionStatus
+// values each carry a {title, body} pair under cycle_timeline.status_
+// explainer_<key>_*.
+// ══════════════════════════════════════════════════════════════════════════════
+function PillExplainerSheet({
+  explainer,
+  onClose,
+}: {
+  explainer: PillExplainer;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const visible = explainer != null;
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          {explainer ? (
+            <>
+              <Text style={sheetStyles.title}>
+                {t(`cycle_timeline.status_explainer_${explainer.key}_title`)}
+              </Text>
+              <Text style={sheetStyles.body}>
+                {t(`cycle_timeline.status_explainer_${explainer.key}_body`)}
+              </Text>
+            </>
+          ) : null}
+          <TouchableOpacity style={sheetStyles.closeBtn} onPress={onClose} accessibilityRole="button">
+            <Text style={sheetStyles.closeBtnText}>{t("cycle_timeline.help_close")}</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -519,45 +787,62 @@ const styles = StyleSheet.create({
   statusIcon: { width: 32, height: 32, borderRadius: 16, justifyContent: "center", alignItems: "center" },
   memberName: { fontSize: 14, fontWeight: "600", color: COLORS.navy },
   memberAmount: { fontSize: 14, fontWeight: "700", color: COLORS.navy },
-  statusPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginTop: 4 },
+  // Bucket B: pill is now tappable + carries a (?) glyph; styled as flex
+  // row to fit the icon.
+  statusPill: { flexDirection: "row", alignItems: "center", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginTop: 4 },
   statusPillText: { fontSize: 10, fontWeight: "700", letterSpacing: 0.3 },
 
-  timeline: { position: "relative" },
-  timelineItem: { flexDirection: "row", alignItems: "flex-start", position: "relative" },
-  timelineConnector: {
-    position: "absolute",
-    left: 11,
-    top: 24,
-    width: 2,
-    height: "100%",
-    backgroundColor: COLORS.border,
+  // Bucket B — horizontal cycle strip (replaces the vertical timeline list).
+  stripScroll: { marginBottom: 12 },
+  stripContent: { paddingVertical: 4, paddingHorizontal: 2, gap: 14 },
+  stripItem: { alignItems: "center", gap: 4 },
+  stripDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  timelineDot: { width: 24, height: 24, borderRadius: 12, justifyContent: "center", alignItems: "center", zIndex: 1 },
-  timelineCard: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    padding: 14,
-    marginLeft: 12,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 4,
-    elevation: 1,
+  stripDotActive: {
+    borderWidth: 2,
+    borderColor: COLORS.teal,
+    transform: [{ scale: 1.05 }],
   },
-  timelineCardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 },
-  timelineCycleLabel: { fontSize: 14, fontWeight: "700" },
-  timelineAmount: { fontSize: 14, fontWeight: "600", marginTop: 4 },
-  currentCycleBadge: {
+  stripDotNumber: { fontSize: 12, fontWeight: "700", color: "#FFF" },
+  stripLabel: { fontSize: 11, color: COLORS.muted },
+
+  // Bucket B — state chip on hero card.
+  stateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
     alignSelf: "flex-start",
-    backgroundColor: `${COLORS.teal}15`,
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginTop: 8,
+    marginBottom: 14,
   },
-  currentCycleBadgeText: { fontSize: 11, fontWeight: "600", color: COLORS.teal },
+  stateDot: { width: 8, height: 8, borderRadius: 4 },
+  stateChipText: { fontSize: 12, fontWeight: "700" },
+
+  // Bucket B — first-visit coach overlay.
+  coachOverlay: { position: "absolute", left: 16, right: 16, bottom: 24 },
+  coachCard: {
+    backgroundColor: COLORS.navy,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  coachText: { flex: 1, color: "#FFF", fontSize: 13, lineHeight: 18 },
 
   payButton: {
     backgroundColor: COLORS.teal,
@@ -586,4 +871,25 @@ const styles = StyleSheet.create({
   payBandPaid: { backgroundColor: `${COLORS.green}15`, borderWidth: 1, borderColor: `${COLORS.green}55` },
   payBandMissed: { backgroundColor: `${COLORS.red}15`, borderWidth: 1, borderColor: `${COLORS.red}55` },
   payBandText: { fontSize: 14, fontWeight: "700" },
+});
+
+// ── Sheet styles shared by HelpSheet + PillExplainerSheet ────────────────────
+const sheetStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
+  sheet: { backgroundColor: COLORS.white, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 20, paddingBottom: 36 },
+  handle: { width: 40, height: 4, backgroundColor: COLORS.border, borderRadius: 2, alignSelf: "center", marginBottom: 14 },
+  title: { fontSize: 17, fontWeight: "700", color: COLORS.navy, marginBottom: 12 },
+  body: { fontSize: 13, color: COLORS.navy, lineHeight: 19 },
+  helpItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  helpItemLast: { borderBottomWidth: 0 },
+  helpItemTitle: { fontSize: 14, fontWeight: "700", color: COLORS.navy, marginBottom: 4 },
+  closeBtn: {
+    backgroundColor: COLORS.navy,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 20,
+  },
+  closeBtnText: { color: "#FFF", fontSize: 14, fontWeight: "700" },
 });

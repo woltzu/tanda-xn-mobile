@@ -551,6 +551,107 @@ export function useCycleEvents(cycleId: string | undefined, limit: number = 20) 
 }
 
 /**
+ * Bucket B — get_cycle_status_summary RPC adoption.
+ *
+ * The screen previously recomputed paid / pending / late / missed counts
+ * client-side by looping over every cycle_contributions row. The DB has
+ * had a server-authoritative `get_cycle_status_summary(p_cycle_id UUID)`
+ * function since migration 012 (line 566) returning:
+ *   total_expected, total_received, total_pending, total_late,
+ *   total_missed, collected_amount, expected_amount, collection_percentage
+ * One round-trip; same numbers the cron and triggers see.
+ *
+ * Subscribes to cycle_contributions so a member's pay-tap auto-refreshes
+ * the counts without a manual refresh.
+ */
+export interface CycleStatusSummary {
+  totalExpected: number;
+  totalReceived: number;
+  totalPending: number;
+  totalLate: number;
+  totalMissed: number;
+  collectedAmount: number;
+  expectedAmount: number;
+  collectionPct: number;
+  // Convenience: count-based progress for the bar (vs amount-based).
+  progressPctByCount: number;
+}
+
+export function useCycleStatusSummary(cycleId: string | undefined) {
+  const [summary, setSummary] = useState<CycleStatusSummary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchSummary = useCallback(async () => {
+    if (!cycleId) {
+      setLoading(false);
+      setSummary(null);
+      return;
+    }
+    try {
+      setLoading(true);
+      const { data, error: rpcError } = await supabase.rpc(
+        'get_cycle_status_summary',
+        { p_cycle_id: cycleId },
+      );
+      if (rpcError) throw rpcError;
+      // The RPC RETURNS TABLE → supabase-js gives an array of one row.
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) {
+        setSummary(null);
+      } else {
+        const totalExpected = parseInt(row.total_expected ?? 0, 10) || 0;
+        const totalReceived = parseInt(row.total_received ?? 0, 10) || 0;
+        setSummary({
+          totalExpected,
+          totalReceived,
+          totalPending: parseInt(row.total_pending ?? 0, 10) || 0,
+          totalLate:    parseInt(row.total_late    ?? 0, 10) || 0,
+          totalMissed:  parseInt(row.total_missed  ?? 0, 10) || 0,
+          collectedAmount: parseFloat(row.collected_amount ?? '0') || 0,
+          expectedAmount:  parseFloat(row.expected_amount  ?? '0') || 0,
+          collectionPct:   parseFloat(row.collection_percentage ?? '0') || 0,
+          progressPctByCount: totalExpected > 0 ? (totalReceived / totalExpected) * 100 : 0,
+        });
+      }
+      setError(null);
+    } catch (err: any) {
+      console.error('[useCycleStatusSummary] Error:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [cycleId]);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
+
+  // Re-fetch on contribution changes — keeps the count in lockstep with
+  // the cycle_contributions realtime feed without an extra subscription
+  // on the screen.
+  useEffect(() => {
+    if (!cycleId) return;
+    const subscription = supabase
+      .channel(`cycle-summary-${cycleId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'cycle_contributions',
+          filter: `cycle_id=eq.${cycleId}`,
+        },
+        () => { fetchSummary(); },
+      )
+      .subscribe();
+    return () => { subscription.unsubscribe(); };
+  }, [cycleId, fetchSummary]);
+
+  return { summary, loading, error, refetch: fetchSummary };
+}
+
+/**
  * Hook to get user's scheduled reminders
  */
 export function useMyReminders() {

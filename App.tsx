@@ -201,6 +201,7 @@ import AIJobsHealthScreen from "./screens/AIJobsHealthScreen";
 import PartialContributionScreen from "./screens/PartialContributionScreen";
 import PositionSwapScreen from "./screens/PositionSwapScreen";
 import CycleTimelineScreen from "./screens/CycleTimelineScreen";
+import CycleDetailScreen from "./screens/CycleDetailScreen";
 import ScoreBreakdownScreen from "./screens/ScoreBreakdownScreen";
 import CreditProfileScreen from "./screens/CreditProfileScreen";
 import DefaultRecoveryScreen from "./screens/DefaultRecoveryScreen";
@@ -664,6 +665,7 @@ export type RootStackParamList = {
   PartialContribution: { circleId: string; cycleId?: string };
   PositionSwap: { circleId: string };
   CycleTimeline: { circleId: string };
+  CycleDetail: { circleId: string; cycleId: string };
   ScoreBreakdown: undefined;
   CreditProfile: undefined;
   DefaultRecovery: undefined;
@@ -1121,6 +1123,7 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="PartialContribution" component={PartialContributionScreen} />
       <CirclesStack.Screen name="PositionSwap" component={PositionSwapScreen} />
       <CirclesStack.Screen name="CycleTimeline" component={CycleTimelineScreen} />
+      <CirclesStack.Screen name="CycleDetail" component={CycleDetailScreen} />
       <CirclesStack.Screen name="CircleVoting" component={CircleVotingScreen} />
       <CirclesStack.Screen name="ProposalDetail" component={ProposalDetailScreen} />
       <CirclesStack.Screen name="DynamicPayout" component={DynamicPayoutScreen} />
