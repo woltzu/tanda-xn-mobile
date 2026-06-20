@@ -2668,7 +2668,28 @@
   "decision_history": {
     "header": "Decision History",
     "filter_label": "Time window",
-    "empty_title": "No decisions yet"
+    "empty_title": "No decisions yet",
+    "empty_body": "When the system makes a decision about your account (liquidity advance, tier change, score adjustment), the explanation will appear here.",
+    "filter_7d": "Last 7d",
+    "filter_30d": "Last 30d",
+    "filter_all": "All",
+    "all_types_chip": "All types",
+    "loading": "Loading decisions…",
+    "value_label": "value:",
+    "no_render_fallback": "No explanation rendered for this decision.",
+    "count_in_window_one": "{{count}} decision in window",
+    "count_in_window_other": "{{count}} decisions in window",
+    "type_liquidity_denial": "Liquidity Denial",
+    "type_tier_advancement": "Tier Advancement",
+    "type_tier_demotion": "Tier Demotion",
+    "type_xnscore_increase": "XnScore Increase",
+    "type_xnscore_decrease": "XnScore Decrease",
+    "type_circle_join_rejection": "Circle Join Rejection",
+    "type_intervention_message": "Intervention",
+    "type_payout_position": "Payout Position",
+    "type_honor_score_change": "Honor Score Change",
+    "type_stress_score_change": "Stress Score Change",
+    "type_mood_drift_change": "Mood Drift Change"
   },
   "notification_prefs": {
     "header": "Notifications",
@@ -7367,7 +7388,12 @@
     "mood_explanation": "Your contribution sentiment has shifted slightly over the past week.",
     "honor_card_title": "Honor Score",
     "honor_status": "72 / 100 — Elder",
-    "honor_explanation": "Your reputation is strong across Community, Character, and Expertise pillars."
+    "honor_explanation": "Your reputation is strong across Community, Character, and Expertise pillars.",
+    "empty_card_body": "We don't have a specific explanation yet. Keep using TandaXn to generate insights.",
+    "help_button_a11y": "About AI Insights",
+    "help_placeholder_title": "About AI Insights",
+    "help_placeholder_body": "Each card shows the latest plain-language explanation for one of your scores. Tap a card to open its dashboard, or open the full decision history below.",
+    "view_history_link": "See full decision history"
   },
   "circles_screen": {
     "recommended_entry": "Recommended for you",

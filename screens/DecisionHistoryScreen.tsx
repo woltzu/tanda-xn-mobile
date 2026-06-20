@@ -53,70 +53,85 @@ const COLORS = {
 type Window = "7d" | "30d" | "all";
 
 // Tier-style metadata per decision_type — keeps the badge + icon
-// consistent across rows of the same kind.
+// consistent across rows of the same kind. Label resolution happens at
+// the call site via t(`decision_history.type_${type}`) so the
+// dictionary stays loc-clean.
 const TYPE_STYLE: Record<
   string,
-  { label: string; icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }
+  { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }
 > = {
   liquidity_denial: {
-    label: "Liquidity Denial",
     icon: "ban-outline",
     color: "#991B1B",
     bg: "#FEE2E2",
   },
   tier_advancement: {
-    label: "Tier Advancement",
     icon: "trending-up",
     color: "#065F46",
     bg: "#D1FAE5",
   },
   tier_demotion: {
-    label: "Tier Demotion",
     icon: "trending-down",
     color: "#92400E",
     bg: "#FEF3C7",
   },
   xnscore_increase: {
-    label: "XnScore Increase",
     icon: "arrow-up-circle-outline",
     color: "#065F46",
     bg: "#D1FAE5",
   },
   xnscore_decrease: {
-    label: "XnScore Decrease",
     icon: "arrow-down-circle-outline",
     color: "#92400E",
     bg: "#FEF3C7",
   },
   circle_join_rejection: {
-    label: "Circle Join Rejection",
     icon: "close-circle-outline",
     color: "#991B1B",
     bg: "#FEE2E2",
   },
   intervention_message: {
-    label: "Intervention",
     icon: "chatbubble-ellipses-outline",
     color: "#1E40AF",
     bg: "#DBEAFE",
   },
   payout_position: {
-    label: "Payout Position",
     icon: "list-outline",
     color: "#374151",
     bg: "#F3F4F6",
+  },
+  honor_score_change: {
+    icon: "ribbon-outline",
+    color: "#065F46",
+    bg: "#D1FAE5",
+  },
+  stress_score_change: {
+    icon: "pulse-outline",
+    color: "#9A3412",
+    bg: "#FFEDD5",
+  },
+  mood_drift_change: {
+    icon: "happy-outline",
+    color: "#92400E",
+    bg: "#FEF3C7",
   },
 };
 
 function styleFor(type: string) {
   return (
     TYPE_STYLE[type] ?? {
-      label: type.replace(/_/g, " "),
       icon: "ellipsis-horizontal-circle-outline" as const,
       color: COLORS.muted,
       bg: "#F3F4F6",
     }
   );
+}
+
+function labelFor(type: string, tr: (k: string, opts?: any) => string): string {
+  const key = `decision_history.type_${type}`;
+  const translated = tr(key);
+  if (translated !== key) return translated;
+  return type.replace(/_/g, " ");
 }
 
 function fmtDate(iso: string): string {
@@ -223,7 +238,11 @@ export default function DecisionHistoryScreen() {
                     windowFilter === w && styles.segTextActive,
                   ]}
                 >
-                  {w === "7d" ? "Last 7d" : w === "30d" ? "Last 30d" : "All"}
+                  {w === "7d"
+                    ? t("decision_history.filter_7d")
+                    : w === "30d"
+                    ? t("decision_history.filter_30d")
+                    : t("decision_history.filter_all")}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -245,14 +264,17 @@ export default function DecisionHistoryScreen() {
                 "tier_demotion",
                 "xnscore_increase",
                 "xnscore_decrease",
+                "honor_score_change",
+                "stress_score_change",
+                "mood_drift_change",
                 "circle_join_rejection",
               ] as Array<DecisionType | "all">
-            ).map((t) => {
-              const s = t === "all" ? null : styleFor(t);
-              const active = typeFilter === t;
+            ).map((type) => {
+              const s = type === "all" ? null : styleFor(type);
+              const active = typeFilter === type;
               return (
                 <TouchableOpacity
-                  key={t}
+                  key={type}
                   style={[
                     styles.chip,
                     active && {
@@ -260,7 +282,7 @@ export default function DecisionHistoryScreen() {
                       borderColor: s ? s.color : COLORS.navy,
                     },
                   ]}
-                  onPress={() => setTypeFilter(t)}
+                  onPress={() => setTypeFilter(type)}
                 >
                   <Text
                     style={[
@@ -268,7 +290,9 @@ export default function DecisionHistoryScreen() {
                       active && { color: "#FFFFFF" },
                     ]}
                   >
-                    {t === "all" ? "All types" : s!.label}
+                    {type === "all"
+                      ? t("decision_history.all_types_chip")
+                      : labelFor(type, t)}
                   </Text>
                 </TouchableOpacity>
               );
@@ -280,7 +304,7 @@ export default function DecisionHistoryScreen() {
         {loading && !refreshing && decisions.length === 0 ? (
           <View style={styles.loadingBox}>
             <ActivityIndicator color={COLORS.teal} />
-            <Text style={styles.muted}>Loading decisions…</Text>
+            <Text style={styles.muted}>{t("decision_history.loading")}</Text>
           </View>
         ) : error ? (
           <View style={styles.errorBox}>
@@ -292,15 +316,15 @@ export default function DecisionHistoryScreen() {
             <Ionicons name="document-text-outline" size={36} color={COLORS.muted} />
             <Text style={styles.emptyTitle}>{t("decision_history.empty_title")}</Text>
             <Text style={styles.emptyBody}>
-              When the system makes a decision about your account (liquidity
-              advance, tier change, score adjustment), the explanation will
-              appear here.
+              {t("decision_history.empty_body")}
             </Text>
           </View>
         ) : (
           <>
             <Text style={styles.summary}>
-              {totalDecisions} decision{totalDecisions === 1 ? "" : "s"} in window
+              {t("decision_history.count_in_window", {
+                count: totalDecisions,
+              })}
             </Text>
 
             {grouped.map(([type, rows]) => {
@@ -311,7 +335,7 @@ export default function DecisionHistoryScreen() {
                     <View style={[styles.sectionIcon, { backgroundColor: s.bg }]}>
                       <Ionicons name={s.icon} size={16} color={s.color} />
                     </View>
-                    <Text style={styles.sectionTitle}>{s.label}</Text>
+                    <Text style={styles.sectionTitle}>{labelFor(type, t)}</Text>
                     <Text style={styles.sectionCount}>
                       {rows.length}
                     </Text>
@@ -331,13 +355,13 @@ export default function DecisionHistoryScreen() {
                         </Text>
                       ) : (
                         <Text style={styles.cardExplanationMuted}>
-                          No explanation rendered for this decision.
+                          {t("decision_history.no_render_fallback")}
                         </Text>
                       )}
                       <View style={styles.cardMeta}>
                         {d.decisionValue && (
                           <Text style={styles.metaValue}>
-                            value: {d.decisionValue}
+                            {t("decision_history.value_label")} {d.decisionValue}
                           </Text>
                         )}
                         <View style={{ flex: 1 }} />

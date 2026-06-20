@@ -2668,7 +2668,28 @@
   "decision_history": {
     "header": "Historique des décisions",
     "filter_label": "Période",
-    "empty_title": "Aucune décision pour l'instant"
+    "empty_title": "Aucune décision pour l'instant",
+    "empty_body": "Lorsque le système prend une décision concernant votre compte (avance de liquidité, changement de palier, ajustement de score), l'explication apparaîtra ici.",
+    "filter_7d": "7 derniers j",
+    "filter_30d": "30 derniers j",
+    "filter_all": "Tout",
+    "all_types_chip": "Tous les types",
+    "loading": "Chargement des décisions…",
+    "value_label": "valeur :",
+    "no_render_fallback": "Aucune explication rendue pour cette décision.",
+    "count_in_window_one": "{{count}} décision sur la période",
+    "count_in_window_other": "{{count}} décisions sur la période",
+    "type_liquidity_denial": "Refus de liquidité",
+    "type_tier_advancement": "Promotion de palier",
+    "type_tier_demotion": "Rétrogradation de palier",
+    "type_xnscore_increase": "Hausse du XnScore",
+    "type_xnscore_decrease": "Baisse du XnScore",
+    "type_circle_join_rejection": "Refus d'adhésion au cercle",
+    "type_intervention_message": "Intervention",
+    "type_payout_position": "Position de paiement",
+    "type_honor_score_change": "Changement de Score d'Honneur",
+    "type_stress_score_change": "Changement de Score de Stress",
+    "type_mood_drift_change": "Changement de Dérive d'Humeur"
   },
   "notification_prefs": {
     "header": "Notifications",
@@ -7367,7 +7388,12 @@
     "mood_explanation": "Votre sentiment de contribution a légèrement changé au cours de la semaine dernière.",
     "honor_card_title": "Score d'honneur",
     "honor_status": "72 / 100 — Aîné",
-    "honor_explanation": "Votre réputation est solide dans les piliers Communauté, Caractère et Expertise."
+    "honor_explanation": "Votre réputation est solide dans les piliers Communauté, Caractère et Expertise.",
+    "empty_card_body": "Nous n'avons pas encore d'explication spécifique. Continuez à utiliser TandaXn pour générer des analyses.",
+    "help_button_a11y": "À propos des analyses IA",
+    "help_placeholder_title": "À propos des analyses IA",
+    "help_placeholder_body": "Chaque carte montre la dernière explication en langage clair pour l'un de vos scores. Touchez une carte pour ouvrir son tableau de bord, ou ouvrez l'historique complet des décisions ci-dessous.",
+    "view_history_link": "Voir l'historique complet des décisions"
   },
   "circles_screen": {
     "recommended_entry": "Recommandé pour vous",
