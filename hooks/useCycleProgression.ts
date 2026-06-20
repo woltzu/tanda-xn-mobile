@@ -204,6 +204,29 @@ export function useCircleCycles(circleId: string | undefined) {
     fetchCycles();
   }, [fetchCycles]);
 
+  // Bucket A — realtime listener on circle_cycles changes. Previously only
+  // useCurrentCycle had a subscription, so the "Full Timeline" list cards
+  // (which read from this hook) wouldn't refresh when the cron flipped a
+  // cycle's status (scheduled → collecting, ready_payout → closed, etc.).
+  // event: '*' covers INSERT/UPDATE/DELETE; the filter scopes to one circle.
+  useEffect(() => {
+    if (!circleId) return;
+    const subscription = supabase
+      .channel(`cycles-list-${circleId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'circle_cycles',
+          filter: `circle_id=eq.${circleId}`,
+        },
+        () => { fetchCycles(); }
+      )
+      .subscribe();
+    return () => { subscription.unsubscribe(); };
+  }, [circleId, fetchCycles]);
+
   return { cycles, loading, error, refetch: fetchCycles };
 }
 
