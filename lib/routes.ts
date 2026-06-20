@@ -246,7 +246,6 @@ export const Routes = {
   RequestProvider: "RequestProvider",
   ResetPassword: "ResetPassword",
   SavedRecipients: "SavedRecipients",
-  ScoreBreakdown: "ScoreBreakdown",
   SecuritySettings: "SecuritySettings",
   SelectCircleContribution: "SelectCircleContribution",
   ServiceForm: "ServiceForm",

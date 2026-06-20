@@ -11,6 +11,7 @@ import {
   StatusBar,
   Animated,
   Image,
+  ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -29,6 +30,7 @@ import { useCircles, type Circle } from "../context/CirclesContext";
 import { useCircleNetBalance } from "../hooks/useCircleNetBalance";
 import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
 import { useScoreHubBadge } from "../hooks/useScoreHubBadge";
+import { useXnScoreFromBundle } from "../hooks/useXnScore";
 import { useProfileIconBadge } from "../hooks/useProfileIconBadge";
 import { useNotificationsBadge } from "../hooks/useNotificationsBadge";
 import { useProfile } from "../hooks/useProfile";
@@ -41,9 +43,14 @@ import { useEventTracker } from "../hooks/useEventTracker";
 // What remains here is only the static thresholds + the activity/upcoming/
 // expected feeds that don't have their own hook yet.
 // ==========================================================================
+// Bucket A — `xn_score: 78` was a hardcoded display fallback that the
+// credit-score row read every render, so new users with no real score
+// (and existing users whose bundle hadn't loaded yet) saw a misleading
+// "78" instead of a loading state. The value now comes from the real
+// score bundle via useXnScoreFromBundle(); the row renders an em-dash
+// while the bundle is loading.
 const mockData = {
   has_been_in_circle_30_days: true,
-  xn_score: 78,
 };
 
 const mockGoal = {
@@ -397,6 +404,10 @@ export default function HomeScreen() {
   // an AI insight notification is unread. Pure read of cache + already-
   // mounted NotificationContext — no extra RPC.
   const scoreHubBadge = useScoreHubBadge();
+  // Bucket A — real XnScore for the credit-score row. `score` is
+  // null while the bundle is loading or unavailable; the row renders
+  // an em-dash in that case.
+  const { score: realXnScore, loading: xnScoreLoading } = useXnScoreFromBundle();
   // Open notifications Bucket A — entry-point signal for the bell.
   // Reads from the already-mounted NotificationContext (no new RPC,
   // realtime subscription is shared). Critical when any unread
@@ -1672,7 +1683,13 @@ export default function HomeScreen() {
               <Text style={styles.creditLabel}>
                 {t("home_screen.xn_score_label")}
               </Text>
-              <Text style={styles.creditScore}>{mockData.xn_score}</Text>
+              {realXnScore != null ? (
+                <Text style={styles.creditScore}>{realXnScore}</Text>
+              ) : xnScoreLoading ? (
+                <ActivityIndicator size="small" color={colors.primaryNavy} />
+              ) : (
+                <Text style={styles.creditScore}>—</Text>
+              )}
             </View>
             <View style={styles.creditRight}>
               <Text style={styles.creditLink}>

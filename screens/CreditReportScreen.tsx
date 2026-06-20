@@ -148,9 +148,7 @@ export default function CreditReportScreen() {
           </View>
           <Text style={styles.heroTitle}>{t("credit_report.hero_title")}</Text>
           <Text style={styles.heroSubtitle}>
-            Generate a shareable PDF that summarises your contribution
-            consistency, XnScore, and circle completions. Useful when proving
-            financial reliability to a bank, landlord, or employer.
+            {t("credit_report.hero_subtitle")}
           </Text>
         </View>
 
@@ -167,44 +165,28 @@ export default function CreditReportScreen() {
                 <Text
                   style={[styles.segText, months === m && styles.segTextActive]}
                 >
-                  Last {m} months
+                  {t("credit_report.segment_last_months", { n: m })}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
           <Text style={styles.help}>
-            Reports cover paid, late, partial, and missed contributions in the
-            selected window, plus your XnScore movement and circle activity.
+            {t("credit_report.window_help")}
           </Text>
         </View>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t("credit_report.card_contents")}</Text>
           {[
-            {
-              icon: "checkmark-circle-outline" as const,
-              text: "Summary cards: total contributions, on-time rate, XnScore, circles completed",
-            },
-            {
-              icon: "trending-up-outline" as const,
-              text: "Payment streak, best streak, late and missed counts",
-            },
-            {
-              icon: "people-outline" as const,
-              text: "Circles participated, completed, default-free, abandoned",
-            },
-            {
-              icon: "list-outline" as const,
-              text: "Transaction-by-transaction history with circle name, amount, status",
-            },
-            {
-              icon: "shield-outline" as const,
-              text: "Disclaimer: not a regulated credit score, behavioural report only",
-            },
+            { icon: "checkmark-circle-outline" as const, key: "credit_report.bullet_summary" },
+            { icon: "trending-up-outline" as const,     key: "credit_report.bullet_streak" },
+            { icon: "people-outline" as const,           key: "credit_report.bullet_circles" },
+            { icon: "list-outline" as const,             key: "credit_report.bullet_transactions" },
+            { icon: "shield-outline" as const,           key: "credit_report.bullet_disclaimer" },
           ].map((item, i) => (
             <View key={i} style={styles.bulletRow}>
               <Ionicons name={item.icon} size={18} color="#00C6AE" />
-              <Text style={styles.bulletText}>{item.text}</Text>
+              <Text style={styles.bulletText}>{t(item.key)}</Text>
             </View>
           ))}
         </View>

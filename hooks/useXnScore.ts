@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 import {
   XnScoreEngine,
   XnScore,
@@ -24,6 +25,16 @@ import {
   ScoreAdjustmentTrigger,
   SCORE_ADJUSTMENTS
 } from '@/services/XnScoreEngine';
+import {
+  ScoreBundle,
+  getCachedScoreBundle,
+  setCachedScoreBundle,
+  subscribeToScoreCache,
+} from '@/lib/scoreCache';
+import {
+  scoreBreakdownEngine,
+  ScoreBreakdown,
+} from '@/services/ScoreBreakdownEngine';
 
 // ┌─────────────────────────────────────────────────────────────────────────────┐
 // │ MAIN SCORE HOOKS                                                            │
@@ -1321,4 +1332,138 @@ export function useDecayGrowthDashboard(userId?: string) {
       return recs;
     }, [riskInfo, tenureProgress, isInRecovery, daysRemaining])
   };
+}
+
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │ BUCKET A — REAL-BACKEND HOOKS (replaces XnScoreContext)                     │
+// └─────────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * Read the user's current XnScore + tier from the shared score bundle.
+ *
+ * Replaces the AsyncStorage-backed XnScoreContext that powered the legacy
+ * Dashboard / Profile / FeatureGate consumers. Reads from the same
+ * scoreCache the ScoreHub fills, and falls back to a direct `get_user_scores`
+ * RPC call when the cache is empty (e.g. user opens the Dashboard before
+ * ever visiting the Hub).
+ *
+ * Subscribes to scoreCache notifications so a Hub refresh propagates here
+ * automatically — no manual refetch needed.
+ *
+ * Returns `score: null` while loading; consumers should render a skeleton.
+ */
+export function useXnScoreFromBundle() {
+  const { user } = useAuth();
+  const userId = user?.id;
+  const [bundle, setBundle] = useState<ScoreBundle | null>(() =>
+    userId ? getCachedScoreBundle(userId) : null,
+  );
+  const [loading, setLoading] = useState<boolean>(!bundle);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchBundle = useCallback(async (force = false) => {
+    if (!userId) {
+      setBundle(null);
+      setLoading(false);
+      return;
+    }
+    if (!force) {
+      const cached = getCachedScoreBundle(userId);
+      if (cached) {
+        setBundle(cached);
+        setLoading(false);
+        return;
+      }
+    }
+    setLoading(true);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('get_user_scores', {
+        p_user_id: userId,
+      });
+      if (rpcError) throw rpcError;
+      const row = Array.isArray(data) ? data[0] : data;
+      if (row) {
+        setCachedScoreBundle(userId, row as ScoreBundle);
+        setBundle(row as ScoreBundle);
+      } else {
+        setBundle(null);
+      }
+      setError(null);
+    } catch (err: any) {
+      console.error('[useXnScoreFromBundle] fetch failed', err);
+      setError(err.message ?? 'fetch_failed');
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  // Initial fetch. Cache hits short-circuit inside fetchBundle; cache miss
+  // triggers the RPC.
+  useEffect(() => {
+    if (!userId) return;
+    if (bundle) {
+      setLoading(false);
+      return;
+    }
+    fetchBundle(false);
+  }, [userId, bundle, fetchBundle]);
+
+  // Re-render whenever any other surface (ScoreHub, etc.) refreshes the
+  // shared cache. No fetching here — just a read from the freshly-written
+  // entry.
+  useEffect(() => {
+    if (!userId) return;
+    const unsub = subscribeToScoreCache(() => {
+      const next = getCachedScoreBundle(userId);
+      if (next) setBundle(next);
+    });
+    return unsub;
+  }, [userId]);
+
+  return {
+    bundle,
+    score: bundle?.xnscore ?? null,
+    tierKey: bundle?.xnscore_tier ?? null,
+    delta: bundle?.xnscore_delta ?? null,
+    previous: bundle?.xnscore_previous ?? null,
+    percentile: bundle?.xnscore_percentile ?? null,
+    score7dAgo: bundle?.xnscore_7d_ago ?? null,
+    loading,
+    error,
+    refresh: () => fetchBundle(true),
+  };
+}
+
+/**
+ * Wrap the `get_score_breakdown` RPC for the 5-factor server-authoritative
+ * breakdown. Cached server-side for an hour; the hook caches the response
+ * in memory so a navigation back-and-forth doesn't re-fire the RPC.
+ */
+export function useXnScoreBreakdown(userId?: string) {
+  const { user } = useAuth();
+  const targetUserId = userId ?? user?.id;
+  const [breakdown, setBreakdown] = useState<ScoreBreakdown | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchBreakdown = useCallback(async () => {
+    if (!targetUserId) return;
+    setLoading(true);
+    try {
+      const data = await scoreBreakdownEngine.getScoreBreakdown(targetUserId);
+      setBreakdown(data);
+      setError(null);
+    } catch (err: any) {
+      console.error('[useXnScoreBreakdown] fetch failed', err);
+      setError(err.message ?? 'fetch_failed');
+    } finally {
+      setLoading(false);
+    }
+  }, [targetUserId]);
+
+  useEffect(() => {
+    fetchBreakdown();
+  }, [fetchBreakdown]);
+
+  return { breakdown, loading, error, refresh: fetchBreakdown };
 }

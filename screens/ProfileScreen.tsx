@@ -19,7 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useProfile";
 import AvatarPicker from "../components/AvatarPicker";
-import { useXnScore } from "../context/XnScoreContext";
+import { useXnScoreFromBundle } from "../hooks/useXnScore";
 import { useWallet } from "../context/WalletContext";
 import { useIsAdmin } from "../hooks/useIsAdmin";
 import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
@@ -49,7 +49,10 @@ export default function ProfileScreen() {
   // in parallel.
   const { profile, loading: profileLoading, refetch: refetchProfile } =
     useProfile();
-  const { score, refreshScore } = useXnScore();
+  // Bucket A — XnScoreContext retired; read the real score from the
+  // shared bundle the ScoreHub fills. `score` is `number | null` while
+  // the bundle is loading; the row below renders an em-dash for null.
+  const { score, refresh: refreshScore } = useXnScoreFromBundle();
   const { balance: walletBalance, refreshWallet } = useWallet();
   // Moderation P0 (2026-06-13): platform-admin tools section. Hidden for
   // non-admins; surfaces both the moderation queue and the AI ops health
@@ -528,10 +531,10 @@ export default function ProfileScreen() {
               onPress={() => navigation.navigate("ScoreHub")}
               style={styles.xnScoreSlimRow}
               accessibilityRole="button"
-              accessibilityLabel={`${t("profile.xn_score_label")} ${score}`}
+              accessibilityLabel={`${t("profile.xn_score_label")} ${score ?? ""}`}
             >
               <Text style={styles.xnScoreSlimText}>
-                {t("profile.xn_score_label")}: {score}
+                {t("profile.xn_score_label")}: {score ?? "—"}
               </Text>
               <Ionicons name="chevron-forward" size={14} color="#FFFFFF" />
             </TouchableOpacity>

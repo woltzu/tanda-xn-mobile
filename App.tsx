@@ -202,7 +202,6 @@ import PartialContributionScreen from "./screens/PartialContributionScreen";
 import PositionSwapScreen from "./screens/PositionSwapScreen";
 import CycleTimelineScreen from "./screens/CycleTimelineScreen";
 import CycleDetailScreen from "./screens/CycleDetailScreen";
-import ScoreBreakdownScreen from "./screens/ScoreBreakdownScreen";
 import CreditProfileScreen from "./screens/CreditProfileScreen";
 import DefaultRecoveryScreen from "./screens/DefaultRecoveryScreen";
 import DefaultDetailScreen from "./screens/DefaultDetailScreen";
@@ -666,7 +665,6 @@ export type RootStackParamList = {
   PositionSwap: { circleId: string };
   CycleTimeline: { circleId: string };
   CycleDetail: { circleId: string; cycleId: string };
-  ScoreBreakdown: undefined;
   CreditProfile: undefined;
   DefaultRecovery: undefined;
   DefaultDetail: { defaultId: string };
@@ -966,7 +964,6 @@ function HomeStackScreen() {
       <HomeStack.Screen name="DecisionHistory" component={DecisionHistoryScreen} />
       <HomeStack.Screen name="AIJobsHealth" component={AIJobsHealthScreen} />
       <HomeStack.Screen name="EarlyIntervention" component={EarlyInterventionScreen} />
-      <HomeStack.Screen name="ScoreBreakdown" component={ScoreBreakdownScreen} />
       <HomeStack.Screen name="CreditProfile" component={CreditProfileScreen} />
       <HomeStack.Screen name="GraduatedEntry" component={GraduatedEntryScreen} />
       {/* CrossCircleLending deduplicated → CirclesStack canonical only. */}

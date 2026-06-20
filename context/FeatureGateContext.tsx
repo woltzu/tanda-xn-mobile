@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "./AuthContext";
-import { useXnScore } from "./XnScoreContext";
+import { useXnScoreFromBundle } from "../hooks/useXnScore";
 
 // ==================== DB ROW TYPES ====================
 
@@ -462,7 +462,14 @@ export const useFeatureGates = () => {
 
 export const FeatureGateProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
-  const { score: xnScore } = useXnScore();
+  // Bucket A — XnScoreContext mock retired. useXnScoreFromBundle reads
+  // the same shared bundle the ScoreHub fills, so the gate evaluates
+  // against the real score. `score` is nullable while the bundle is in
+  // flight; default to 0 so the gate logic below (which expects a
+  // number) keeps the same "no score → no access" semantics it had with
+  // the prior context's initial-value fallback.
+  const { score: scoreFromBundle } = useXnScoreFromBundle();
+  const xnScore = scoreFromBundle ?? 0;
 
   const [gates, setGates] = useState<FeatureGate[]>([]);
   const [overrides, setOverrides] = useState<UserFeatureOverride[]>([]);
