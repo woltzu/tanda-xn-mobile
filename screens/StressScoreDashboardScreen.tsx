@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -9,7 +9,11 @@ import {
   RefreshControl,
   Dimensions,
   Alert,
+  Modal,
+  Pressable,
+  Animated,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -73,6 +77,49 @@ const SUGGESTION_ROUTE: Record<SignalKey, RouteName> = {
   early_payout_request: "AdvanceHubV2",
 };
 
+// Bucket B — AsyncStorage gate for the first-visit coach mark.
+// Versioned so we can re-prompt every user if the copy ever shifts.
+const COACH_KEY = "@tandaxn_stress_coach_seen_v1";
+
+// Bucket B — six topics in the HelpSheet, opened by the header (?).
+// "what_we_measure" is the privacy/transparency topic — explicit on
+// what we collect and what we don't, because the stress signals
+// include behavioural data (login activity, ticket NLP).
+type HelpTopic =
+  | "what_is_stress_score"
+  | "four_signals"
+  | "what_we_measure"
+  | "status_colors"
+  | "trend_direction"
+  | "interventions";
+const HELP_TOPICS: HelpTopic[] = [
+  "what_is_stress_score",
+  "four_signals",
+  "what_we_measure",
+  "status_colors",
+  "trend_direction",
+  "interventions",
+];
+
+// Bucket B — per-signal explainer payload. Captures the signal key
+// plus its current raw_value and weighted_value so the sheet can
+// render "32 / 100" + "weighted 11.2 pts" alongside the localized
+// title, body, data source, and CTA.
+type SignalExplainer = {
+  key: SignalKey;
+  rawValue: number;
+  weightedValue: number;
+} | null;
+
+// Bucket B — chart Y-axis tick stops and threshold bands. 30/60/80
+// match getSignalStatus() — green ≤30, yellow ≤60, orange ≤80, red >80.
+const CHART_Y_TICKS = [0, 20, 40, 60, 80, 100];
+const CHART_THRESHOLDS: Array<{ value: number; color: string }> = [
+  { value: 30, color: "#10B981" },
+  { value: 60, color: "#EAB308" },
+  { value: 80, color: "#F97316" },
+];
+
 function getSignalStatus(value: number): StressStatus {
   if (value <= 30) return "green";
   if (value <= 60) return "yellow";
@@ -133,24 +180,73 @@ export default function StressScoreDashboardScreen() {
     return entries.sort((a, b) => b.weighted - a.weighted)[0];
   }, [breakdown]);
 
-  // Bucket A — placeholder Alert for the (?) header button.
-  // Bucket B replaces this with a real HelpSheet.
-  const handleHelpPress = useCallback(() => {
-    Alert.alert(
-      t("stress_score.help_placeholder_title"),
-      t("stress_score.help_placeholder_body"),
-    );
-  }, [t]);
+  // Bucket B — HelpSheet visibility + per-signal explainer payload.
+  // State lives at component scope so the back-button can dismiss
+  // either sheet without unmounting the screen.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [signalExplainer, setSignalExplainer] = useState<SignalExplainer>(null);
 
-  // Bucket A — view details placeholder for the top-stressor card.
-  // Bucket B wires this to the per-signal explainer sheet.
+  // Bucket B — first-visit coach mark. Same Animated.Value + useRef
+  // gate pattern as XnScore/Honor Bucket B. Auto-dismiss after 4 s or
+  // on tap; the gate ensures it never re-shows after the first visit.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachOpacity = useRef(new Animated.Value(0)).current;
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    coachCheckedRef.current = true;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_KEY);
+        if (seen) return;
+        setCoachVisible(true);
+        Animated.timing(coachOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+      } catch {
+        // AsyncStorage unavailable — silently skip.
+      }
+    })();
+  }, [coachOpacity]);
+  const dismissCoach = useCallback(() => {
+    Animated.timing(coachOpacity, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setCoachVisible(false));
+    AsyncStorage.setItem(COACH_KEY, "1").catch(() => undefined);
+  }, [coachOpacity]);
+  useEffect(() => {
+    if (!coachVisible) return;
+    const tid = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(tid);
+  }, [coachVisible, dismissCoach]);
+
+  // Bucket B — open the help sheet. Replaces the Bucket-A Alert.alert
+  // placeholder.
+  const handleHelpPress = useCallback(() => {
+    setHelpOpen(true);
+  }, []);
+
+  // Bucket B — signal row tap → explainer sheet. The payload carries
+  // the canonical signal key + raw and weighted values so the sheet
+  // can render "32 / 100 · weighted 11.2 pts" alongside localized
+  // copy and a CTA routing via SUGGESTION_ROUTE.
+  const openSignalExplainer = useCallback(
+    (key: SignalKey, rawValue: number, weightedValue: number) => {
+      setSignalExplainer({ key, rawValue, weightedValue });
+    },
+    [],
+  );
+
+  // Bucket B — top-stressor "View details" CTA now opens the per-signal
+  // explainer for that signal. Replaces the Bucket-A Alert placeholder.
   const handleTopStressorDetails = useCallback(() => {
     if (!topStressor) return;
-    Alert.alert(
-      t(`stress_score.signal_${topStressor.key}_name`),
-      t("stress_score.help_placeholder_body"),
-    );
-  }, [t, topStressor]);
+    openSignalExplainer(topStressor.key, topStressor.value, topStressor.weighted);
+  }, [openSignalExplainer, topStressor]);
 
   // Chart data from history
   const chartData = useMemo(() => {
@@ -341,15 +437,30 @@ export default function StressScoreDashboardScreen() {
               const sigColor = STATUS_CONFIG[sigStatus].color;
 
               return (
-                <View key={key} style={styles.card}>
+                // Bucket B — signal row is now tappable. The (?) glyph
+                // next to the name flags the affordance; tapping anywhere
+                // opens the SignalExplainerSheet for that signal.
+                <TouchableOpacity
+                  key={key}
+                  style={styles.card}
+                  onPress={() => openSignalExplainer(key, component.raw_value, component.weighted_value)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("stress_score.signal_explainer_open", {
+                    signal: t(`stress_score.signal_${key}_name`),
+                  })}
+                  activeOpacity={0.85}
+                >
                   <View style={styles.signalHeader}>
                     <View style={styles.signalIconWrap}>
                       <Ionicons name={meta.icon} size={20} color={sigColor} />
                     </View>
                     <View style={styles.signalInfo}>
-                      <Text style={styles.signalName}>
-                        {t(`stress_score.signal_${key}_name`)}
-                      </Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                        <Text style={styles.signalName}>
+                          {t(`stress_score.signal_${key}_name`)}
+                        </Text>
+                        <Ionicons name="help-circle-outline" size={13} color={sigColor} />
+                      </View>
                       <Text style={styles.signalWeight}>
                         {t("stress_score.signal_weight_label", { pct: meta.weight })}
                       </Text>
@@ -375,7 +486,7 @@ export default function StressScoreDashboardScreen() {
                       value: component.weighted_value.toFixed(1),
                     })}
                   </Text>
-                </View>
+                </TouchableOpacity>
               );
             })}
         </View>
@@ -496,21 +607,29 @@ export default function StressScoreDashboardScreen() {
 
           <View style={styles.card}>
             {chartData ? (
-              <View style={styles.chartContainer}>
+              // Bucket B — chart polish. Y-axis labels on the left
+              // (0/20/40/60/80/100), threshold bands at 30/60/80 that
+              // match the status zones, and the existing dot/line plot
+              // sitting on top of them.
+              <View style={styles.chartFrame}>
+                <View style={styles.chartYAxis}>
+                  {[...CHART_Y_TICKS].reverse().map((tick) => (
+                    <Text key={tick} style={styles.chartYTick}>{tick}</Text>
+                  ))}
+                </View>
                 <View style={{ width: chartData.width, height: chartData.height }}>
-                  {/* Simple dot-line chart rendered with Views */}
-                  {chartData.points.map((p, i) => {
-                    const statusColor = STATUS_CONFIG[getSignalStatus(p.score)].color;
+                  {/* Threshold bands — at 30/60/80, colored to match
+                      getSignalStatus(). A horizontal dashed line gives
+                      the user a sense of "you are in the red zone" or
+                      "you crossed into orange today." */}
+                  {CHART_THRESHOLDS.map((th) => {
+                    const y = chartData.height - (th.value / 100) * chartData.height;
                     return (
                       <View
-                        key={i}
+                        key={`th-${th.value}`}
                         style={[
-                          styles.chartDot,
-                          {
-                            left: p.x - 4,
-                            top: p.y - 4,
-                            backgroundColor: statusColor,
-                          },
+                          styles.chartThreshold,
+                          { top: y, borderTopColor: th.color },
                         ]}
                       />
                     );
@@ -534,6 +653,28 @@ export default function StressScoreDashboardScreen() {
                             width: len,
                             transform: [{ rotate: `${angle}deg` }],
                             transformOrigin: "0 0",
+                          },
+                        ]}
+                      />
+                    );
+                  })}
+                  {/* Score dots — colored by status. The latest dot
+                      stays largest so the user can spot "now." */}
+                  {chartData.points.map((p, i) => {
+                    const statusColor = STATUS_CONFIG[getSignalStatus(p.score)].color;
+                    const isLatest = i === chartData.points.length - 1;
+                    return (
+                      <View
+                        key={i}
+                        style={[
+                          styles.chartDot,
+                          {
+                            left: p.x - (isLatest ? 5 : 4),
+                            top: p.y - (isLatest ? 5 : 4),
+                            width: isLatest ? 10 : 8,
+                            height: isLatest ? 10 : 8,
+                            borderRadius: isLatest ? 5 : 4,
+                            backgroundColor: statusColor,
                           },
                         ]}
                       />
@@ -594,9 +735,169 @@ export default function StressScoreDashboardScreen() {
           </View>
         ) : null}
 
+        {/* Bucket B — privacy / transparency note. Stress-score
+            signals include behavioural data (login activity, ticket
+            NLP), so an explicit "what we share and what we don't"
+            disclosure belongs at the bottom of this screen even when
+            it doesn't belong on XnScore/Honor. */}
+        <View style={styles.privacyCard}>
+          <Ionicons name="lock-closed-outline" size={16} color="#6B7280" />
+          <Text style={styles.privacyText}>{t("stress_score.privacy_note")}</Text>
+        </View>
+
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Bucket B — modals + coach mark. Mounted as siblings to the
+          ScrollView so they sit above content but inside the screen's
+          root View. */}
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} t={t} />
+      <SignalExplainerSheet
+        explainer={signalExplainer}
+        onClose={() => setSignalExplainer(null)}
+        navigate={(route) => {
+          setSignalExplainer(null);
+          navigation.navigate(route as any);
+        }}
+        t={t}
+      />
+      {coachVisible ? (
+        <Animated.View
+          style={[styles.coachOverlay, { opacity: coachOpacity }]}
+          pointerEvents="box-none"
+        >
+          <Pressable style={styles.coachBackdrop} onPress={dismissCoach}>
+            <View style={styles.coachCard}>
+              <Ionicons name="bulb-outline" size={20} color="#FBBF24" />
+              <Text style={styles.coachText}>{t("stress_score.coach_tip")}</Text>
+            </View>
+          </Pressable>
+        </Animated.View>
+      ) : null}
     </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Bucket B subcomponents
+// ─────────────────────────────────────────────────────────────────────────
+
+type TFn = (key: string, opts?: any) => string;
+
+// Bucket B — HelpSheet glossary. Six topics, each a localized title +
+// body block. Modal slides from the bottom; backdrop tap dismisses.
+function HelpSheet({
+  visible,
+  onClose,
+  t,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  t: TFn;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => undefined}>
+          <View style={sheetStyles.handle} />
+          <View style={sheetStyles.headerRow}>
+            <Text style={sheetStyles.title}>{t("stress_score.help_sheet_title")}</Text>
+            <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel={t("stress_score.help_close")}>
+              <Ionicons name="close" size={22} color="#0A2342" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} style={sheetStyles.scroll}>
+            {HELP_TOPICS.map((topic) => (
+              <View key={topic} style={sheetStyles.helpItem}>
+                <Text style={sheetStyles.helpItemTitle}>
+                  {t(`stress_score.help_${topic}_title`)}
+                </Text>
+                <Text style={sheetStyles.helpItemBody}>
+                  {t(`stress_score.help_${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// Bucket B — per-signal explainer. Renders signal title + current
+// value chip + localized body + data source + status/weight + a CTA
+// that routes to the action surface for that signal.
+function SignalExplainerSheet({
+  explainer,
+  onClose,
+  navigate,
+  t,
+}: {
+  explainer: SignalExplainer;
+  onClose: () => void;
+  navigate: (route: RouteName) => void;
+  t: TFn;
+}) {
+  if (!explainer) return null;
+  const meta = SIGNAL_META[explainer.key];
+  const sigStatus = getSignalStatus(explainer.rawValue);
+  const cfg = STATUS_CONFIG[sigStatus];
+  const route = SUGGESTION_ROUTE[explainer.key] ?? "WalletMain";
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => undefined}>
+          <View style={sheetStyles.handle} />
+          <View style={sheetStyles.headerRow}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Ionicons name={meta.icon} size={18} color={cfg.color} />
+              <Text style={sheetStyles.title}>
+                {t(`stress_score.signal_${explainer.key}_name`)}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose} accessibilityRole="button" accessibilityLabel={t("stress_score.help_close")}>
+              <Ionicons name="close" size={22} color="#0A2342" />
+            </TouchableOpacity>
+          </View>
+          <View style={sheetStyles.chipRow}>
+            <Text style={[sheetStyles.scoreChip, { backgroundColor: cfg.bg, color: cfg.color }]}>
+              {Math.round(explainer.rawValue)} / 100
+            </Text>
+            <Text style={[sheetStyles.scoreChip, { backgroundColor: "#F1F5F9", color: "#0A2342" }]}>
+              {t("stress_score.signal_weight_label", { pct: meta.weight })}
+            </Text>
+          </View>
+          <Text style={sheetStyles.explainerBody}>
+            {t(`stress_score.signal_explainer_${explainer.key}_body`)}
+          </Text>
+          <View style={sheetStyles.sourceBlock}>
+            <Text style={sheetStyles.sourceHeading}>
+              {t("stress_score.signal_explainer_source_heading")}
+            </Text>
+            <Text style={sheetStyles.sourceBody}>
+              {t(`stress_score.signal_explainer_${explainer.key}_source`)}
+            </Text>
+          </View>
+          <Text style={sheetStyles.weightedNote}>
+            {t("stress_score.signal_detail", {
+              count: 1,
+              value: explainer.weightedValue.toFixed(1),
+            }).replace(/^[0-9]+\s/, "")}
+          </Text>
+          <TouchableOpacity
+            style={[sheetStyles.ctaBtn, { backgroundColor: "#00C6AE" }]}
+            onPress={() => navigate(route)}
+          >
+            <Text style={sheetStyles.ctaBtnText}>
+              {t(`stress_score.signal_explainer_${explainer.key}_cta`)}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={sheetStyles.closeBtn} onPress={onClose}>
+            <Text style={sheetStyles.closeBtnText}>{t("stress_score.help_close")}</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -1045,4 +1346,95 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: TEAL,
   },
+
+  // Bucket B — chart polish: Y-axis labels + threshold bands.
+  chartFrame: { flexDirection: "row", paddingVertical: 8 },
+  chartYAxis: {
+    width: 22,
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    paddingRight: 6,
+  },
+  chartYTick: { fontSize: 9, color: "#9CA3AF" },
+  chartThreshold: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    height: 0,
+    borderTopWidth: 1,
+    borderStyle: "dashed",
+    opacity: 0.4,
+  },
+
+  // Bucket B — privacy/transparency footer.
+  privacyCard: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  privacyText: {
+    flex: 1,
+    fontSize: 11,
+    color: "#6B7280",
+    lineHeight: 16,
+    fontStyle: "italic",
+  },
+
+  // Bucket B — coach mark overlay.
+  coachOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "flex-start",
+  },
+  coachBackdrop: {
+    flex: 1,
+    alignItems: "center",
+    paddingTop: 130,
+    paddingHorizontal: 24,
+  },
+  coachCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(15,23,42,0.96)",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    maxWidth: 320,
+  },
+  coachText: { flex: 1, fontSize: 13, color: "#FFFFFF", lineHeight: 18 },
+});
+
+// Bucket B — bottom-sheet shared styles (HelpSheet + SignalExplainerSheet).
+const sheetStyles = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  sheet: { backgroundColor: "#FFFFFF", borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 30, maxHeight: "86%" },
+  handle: { alignSelf: "center", width: 36, height: 4, borderRadius: 2, backgroundColor: "#E5E7EB", marginBottom: 12 },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  title: { fontSize: 17, fontWeight: "700", color: "#0A2342" },
+  scroll: { maxHeight: 500 },
+  helpItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#F1F5F9" },
+  helpItemTitle: { fontSize: 14, fontWeight: "700", color: "#0A2342", marginBottom: 4 },
+  helpItemBody: { fontSize: 13, color: "#4B5563", lineHeight: 19 },
+
+  chipRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  scoreChip: { fontSize: 12, fontWeight: "700", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, overflow: "hidden" },
+  explainerBody: { fontSize: 13, color: "#4B5563", lineHeight: 19, marginBottom: 14 },
+
+  sourceBlock: { backgroundColor: "#F8FAFC", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#E2E8F0", marginBottom: 14 },
+  sourceHeading: { fontSize: 11, fontWeight: "700", color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 },
+  sourceBody: { fontSize: 13, color: "#4B5563", lineHeight: 18 },
+
+  weightedNote: { fontSize: 12, color: "#6B7280", marginBottom: 14, fontStyle: "italic" },
+
+  ctaBtn: { borderRadius: 12, alignItems: "center", paddingVertical: 14, marginBottom: 10 },
+  ctaBtnText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
+  closeBtn: { borderRadius: 12, alignItems: "center", paddingVertical: 14, backgroundColor: "#F1F5F9" },
+  closeBtnText: { color: "#0A2342", fontSize: 14, fontWeight: "600" },
 });
