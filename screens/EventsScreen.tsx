@@ -98,8 +98,27 @@ const HELP_TOPICS: HelpTopic[] = [
   "can_i_post",
 ];
 
+// View-event-details Bucket B.1 — HelpSheet topics for the bottom
+// sheet. Anchors what tapping "Interested" does, ticket flow, contact
+// path, and the privacy posture on the interest list.
+type SheetHelpTopic =
+  | "interested_means"
+  | "buy_ticket"
+  | "contact_organiser"
+  | "who_sees_interest";
+const SHEET_HELP_TOPICS: SheetHelpTopic[] = [
+  "interested_means",
+  "buy_ticket",
+  "contact_organiser",
+  "who_sees_interest",
+];
+
 const COACH_MARK_KEY = "@tandaxn_events_browse_coach_seen_v1";
+const SHEET_COACH_MARK_KEY = "@tandaxn_event_detail_coach_seen_v1";
 const SEARCH_DEBOUNCE_MS = 300;
+// Default duration when only event_datetime is on the row — used by
+// the Google Calendar deep link in handleAddToCalendar.
+const ADD_TO_CALENDAR_DEFAULT_HOURS = 2;
 
 // ==========================================================================
 // Helpers
@@ -462,6 +481,39 @@ export default function EventsScreen() {
     }
   };
 
+  // ── Bucket B.3 — Add-to-calendar handoff. Builds a Google Calendar
+  // TEMPLATE URL and opens it via Linking.openURL. Google Calendar's
+  // template route works in every browser; iOS users hit a one-tap
+  // "Add to Apple Calendar" affordance, Android users see the Google
+  // Calendar app prompt. Saves us an `expo-calendar`/`.ics` round-trip.
+  // Default duration is 2 hours when the row only carries a start time.
+  const handleAddToCalendar = async (event: CommunityEventRow) => {
+    try {
+      const start = new Date(event.event_datetime);
+      const end = new Date(
+        start.getTime() + ADD_TO_CALENDAR_DEFAULT_HOURS * 60 * 60 * 1000,
+      );
+      // Google's TEMPLATE expects YYYYMMDDTHHmmssZ (no separators, UTC).
+      const fmt = (d: Date) =>
+        d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+      const where = event.full_address
+        ? `${event.location_name}, ${event.full_address}`
+        : event.location_name;
+      const params = new URLSearchParams({
+        action: "TEMPLATE",
+        text: event.title,
+        dates: `${fmt(start)}/${fmt(end)}`,
+        details: event.description ?? "",
+        location: where,
+      });
+      const url = `https://calendar.google.com/calendar/render?${params.toString()}`;
+      await Linking.openURL(url);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn("[handleAddToCalendar] failed:", reason);
+    }
+  };
+
   // Bucket A.5 — skeleton pulse. One Animated.Value drives every
   // placeholder card's opacity. Runs only during the cold initial load.
   const skeletonPulse = useRef(new Animated.Value(0.5)).current;
@@ -490,6 +542,45 @@ export default function EventsScreen() {
 
   // ── Bucket B.3 — HelpSheet ───────────────────────────────────────────
   const [helpOpen, setHelpOpen] = useState(false);
+
+  // ── View-event-details Bucket B.1 — sheet HelpSheet visibility ──────
+  const [sheetHelpOpen, setSheetHelpOpen] = useState(false);
+
+  // ── View-event-details Bucket B.2 — coach mark for the Interested
+  // button. Fires the FIRST time the user opens any event's bottom
+  // sheet on this device, regardless of which event it is. Gated by
+  // its own AsyncStorage key so it survives the screen-level coach
+  // (different surface, different first-visit moment).
+  const [sheetCoachVisible, setSheetCoachVisible] = useState(false);
+  const sheetCoachSeenRef = useRef(false);
+  useEffect(() => {
+    if (!selectedEvent) return;
+    if (sheetCoachSeenRef.current) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(SHEET_COACH_MARK_KEY);
+        if (cancelled) return;
+        sheetCoachSeenRef.current = true;
+        if (!seen) setSheetCoachVisible(true);
+      } catch {
+        sheetCoachSeenRef.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedEvent]);
+  useEffect(() => {
+    if (!sheetCoachVisible) return;
+    const id = setTimeout(() => dismissSheetCoach(), 4000);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetCoachVisible]);
+  const dismissSheetCoach = useCallback(() => {
+    setSheetCoachVisible(false);
+    AsyncStorage.setItem(SHEET_COACH_MARK_KEY, "1").catch(() => undefined);
+  }, []);
 
   // ── Bucket B.4 — first-visit coach mark ──────────────────────────────
   // Render path: read AsyncStorage on mount, show banner if unset, hide
@@ -904,8 +995,9 @@ export default function EventsScreen() {
                 showsVerticalScrollIndicator={false}
               >
                 {/* View-event-details Bucket A.5 — sheet action row.
-                    Share + Report sit next to a Close affordance so the
-                    user can act on the event without dismissing first. */}
+                    Share + Help + Report sit next to a Close affordance
+                    so the user can act on the event without dismissing.
+                    Bucket B.1 inserted Help between Share and Report. */}
                 <View style={styles.sheetActionRow}>
                   <TouchableOpacity
                     onPress={() => handleShareEvent(selectedEvent)}
@@ -916,6 +1008,18 @@ export default function EventsScreen() {
                     <Ionicons
                       name="share-outline"
                       size={20}
+                      color={colors.primaryNavy}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => setSheetHelpOpen(true)}
+                    style={styles.sheetActionBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("events_sheet.help_a11y")}
+                  >
+                    <Ionicons
+                      name="help-circle-outline"
+                      size={22}
                       color={colors.primaryNavy}
                     />
                   </TouchableOpacity>
@@ -949,157 +1053,223 @@ export default function EventsScreen() {
 
                 <Text style={styles.sheetTitle}>{selectedEvent.title}</Text>
 
-                {/* Bucket A.4 — organiser attribution. Falls back to a
-                    generic label if the profile fetch is still pending,
-                    failed, or the row is missing. */}
-                <View style={styles.organiserRow}>
-                  <Ionicons
-                    name="person-outline"
-                    size={14}
-                    color={colors.textSecondary}
-                  />
-                  <Text style={styles.organiserText}>
-                    {t("events_sheet.organiser_label", {
-                      name:
-                        organiserNames[selectedEvent.user_id] ??
-                        t("events_sheet.organiser_unknown"),
-                    })}
-                  </Text>
-                </View>
+                {/* View-event-details Bucket B.4 — sectioned layout.
+                    Each SheetSectionCard is a light-bg block with a
+                    title; the body items inside reuse the existing
+                    SheetInfoRow / SheetSection / SheetContactLine
+                    sub-components but no longer rely on between-row
+                    bottom borders for visual separation. */}
 
-                {/* Bucket A.6 — Interested toggle. Renders count subtitle
-                    beneath the button. */}
-                <EventInterestRow eventId={selectedEvent.id} />
-
-                <SheetInfoRow
-                  icon="calendar-outline"
-                  label={t("community_events.label_when")}
-                  value={`${formatEventDate(selectedEvent.event_datetime)} · ${formatEventTime(selectedEvent.event_datetime)}`}
-                />
-
-                <SheetInfoRow
-                  icon="location-outline"
-                  label={t("community_events.label_where")}
-                  value={
-                    selectedEvent.full_address
-                      ? `${selectedEvent.location_name}\n${selectedEvent.full_address}`
-                      : selectedEvent.location_name
-                  }
-                />
-
-                <SheetInfoRow
-                  icon="pricetag-outline"
-                  label={t("community_events.label_price")}
-                  value={
-                    isEventFree(selectedEvent)
-                      ? t("community_events.label_free")
-                      : (selectedEvent.price_description ??
-                        `$${selectedEvent.price?.toFixed(2)}`)
-                  }
-                  valueColor={
-                    isEventFree(selectedEvent)
-                      ? colors.successText
-                      : colors.textPrimary
-                  }
-                />
-
-                {selectedEvent.age_range && (
-                  <SheetInfoRow
-                    icon="people-outline"
-                    label={t("events_screen.age_range_label")}
-                    value={selectedEvent.age_range}
-                  />
-                )}
-
-                <SheetSection
-                  title={t("community_events.modal_details_section_about")}
+                {/* About — organiser attribution + free-text body. */}
+                <SheetSectionCard
+                  title={t("events_sheet.section_about")}
                 >
+                  <View style={styles.organiserRow}>
+                    <Ionicons
+                      name="person-outline"
+                      size={14}
+                      color={colors.textSecondary}
+                    />
+                    <Text style={styles.organiserText}>
+                      {t("events_sheet.organiser_label", {
+                        name:
+                          organiserNames[selectedEvent.user_id] ??
+                          t("events_sheet.organiser_unknown"),
+                      })}
+                    </Text>
+                  </View>
                   <Text style={styles.sheetBodyText}>
                     {selectedEvent.description}
                   </Text>
-                </SheetSection>
+                </SheetSectionCard>
 
-                {selectedEvent.prizes && (
-                  <SheetSection
-                    title={t("community_events.modal_details_section_prizes")}
-                  >
-                    <Text style={styles.sheetBodyText}>
-                      {selectedEvent.prizes}
-                    </Text>
-                  </SheetSection>
-                )}
-
-                {selectedEvent.contact_info &&
-                  (selectedEvent.contact_info.phone ||
-                    selectedEvent.contact_info.email ||
-                    selectedEvent.contact_info.ticket_link) && (
-                    <SheetSection
-                      title={t(
-                        "community_events.modal_details_section_contact",
-                      )}
-                    >
-                      {selectedEvent.contact_info.phone && (
-                        <Text style={styles.sheetContactLine}>
-                          📞 {selectedEvent.contact_info.phone}
-                        </Text>
-                      )}
-                      {selectedEvent.contact_info.email && (
-                        <Text style={styles.sheetContactLine}>
-                          ✉️ {selectedEvent.contact_info.email}
-                        </Text>
-                      )}
-                      {selectedEvent.contact_info.ticket_link && (
-                        <Text style={styles.sheetContactLine}>
-                          🎟 {selectedEvent.contact_info.ticket_link}
-                        </Text>
-                      )}
-                    </SheetSection>
-                  )}
-
-                {selectedEvent.presented_by && (
-                  <SheetSection
-                    title={t(
-                      "community_events.modal_details_section_organizer",
-                    )}
-                  >
-                    <Text style={styles.sheetBodyText}>
-                      {selectedEvent.presented_by}
-                    </Text>
-                  </SheetSection>
-                )}
-
-                {/* Buy Ticket button only when a ticket link exists.
-                    The Close affordance lives in the action row at the
-                    top of the sheet; the redundant bottom Close was
-                    dropped in Bucket A.5 so the primary CTA (tickets)
-                    is the only footer button. */}
-                {selectedEvent.contact_info?.ticket_link && (
+                {/* When & Where — date/time + location + Add to calendar. */}
+                <SheetSectionCard
+                  title={t("events_sheet.section_when_where")}
+                >
+                  <SheetInfoRow
+                    icon="calendar-outline"
+                    label={t("community_events.label_when")}
+                    value={`${formatEventDate(selectedEvent.event_datetime)} · ${formatEventTime(selectedEvent.event_datetime)}`}
+                  />
+                  <SheetInfoRow
+                    icon="location-outline"
+                    label={t("community_events.label_where")}
+                    value={
+                      selectedEvent.full_address
+                        ? `${selectedEvent.location_name}\n${selectedEvent.full_address}`
+                        : selectedEvent.location_name
+                    }
+                  />
+                  {/* Bucket B.3 — Add to calendar deep link. */}
                   <TouchableOpacity
-                    style={styles.sheetTicketBtn}
-                    onPress={() => {
-                      setSelectedEvent(null);
-                      handleBuyTicket(selectedEvent.contact_info?.ticket_link);
-                    }}
+                    style={styles.addToCalendarLink}
+                    onPress={() => handleAddToCalendar(selectedEvent)}
                     accessibilityRole="button"
                   >
                     <Ionicons
-                      name="ticket-outline"
-                      size={16}
-                      color={colors.textWhite}
+                      name="calendar-clear-outline"
+                      size={14}
+                      color={colors.primaryNavy}
                     />
-                    <Text style={styles.sheetTicketBtnText}>
-                      {t("community_events.btn_buy_ticket")}
+                    <Text style={styles.addToCalendarLinkText}>
+                      {t("events_sheet.add_to_calendar")}
                     </Text>
                   </TouchableOpacity>
+                </SheetSectionCard>
+
+                {/* Pricing & Tickets — price row + ticket link + Buy CTA. */}
+                <SheetSectionCard
+                  title={t("events_sheet.section_pricing")}
+                >
+                  <SheetInfoRow
+                    icon="pricetag-outline"
+                    label={t("community_events.label_price")}
+                    value={
+                      isEventFree(selectedEvent)
+                        ? t("community_events.label_free")
+                        : (selectedEvent.price_description ??
+                          `$${selectedEvent.price?.toFixed(2)}`)
+                    }
+                    valueColor={
+                      isEventFree(selectedEvent)
+                        ? colors.successText
+                        : colors.textPrimary
+                    }
+                  />
+                  {selectedEvent.contact_info?.ticket_link && (
+                    <Text style={styles.sheetContactLine}>
+                      🎟 {selectedEvent.contact_info.ticket_link}
+                    </Text>
+                  )}
+                  {selectedEvent.contact_info?.ticket_link && (
+                    <TouchableOpacity
+                      style={styles.sheetTicketBtn}
+                      onPress={() => {
+                        setSelectedEvent(null);
+                        handleBuyTicket(
+                          selectedEvent.contact_info?.ticket_link,
+                        );
+                      }}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons
+                        name="ticket-outline"
+                        size={16}
+                        color={colors.textWhite}
+                      />
+                      <Text style={styles.sheetTicketBtnText}>
+                        {t("community_events.btn_buy_ticket")}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </SheetSectionCard>
+
+                {/* Contact — phone + email only (ticket link lives in
+                    the Pricing card above). Hidden when both are
+                    absent. */}
+                {(selectedEvent.contact_info?.phone ||
+                  selectedEvent.contact_info?.email) && (
+                  <SheetSectionCard
+                    title={t("events_sheet.section_contact")}
+                  >
+                    {selectedEvent.contact_info?.phone && (
+                      <Text style={styles.sheetContactLine}>
+                        📞 {selectedEvent.contact_info.phone}
+                      </Text>
+                    )}
+                    {selectedEvent.contact_info?.email && (
+                      <Text style={styles.sheetContactLine}>
+                        ✉️ {selectedEvent.contact_info.email}
+                      </Text>
+                    )}
+                  </SheetSectionCard>
                 )}
+
+                {/* Extras — age range / prizes / presented_by. Hidden
+                    when none are present so we don't render an empty
+                    card. */}
+                {(selectedEvent.age_range ||
+                  selectedEvent.prizes ||
+                  selectedEvent.presented_by) && (
+                  <SheetSectionCard
+                    title={t("events_sheet.section_extras")}
+                  >
+                    {selectedEvent.age_range && (
+                      <SheetInfoRow
+                        icon="people-outline"
+                        label={t("events_screen.age_range_label")}
+                        value={selectedEvent.age_range}
+                      />
+                    )}
+                    {selectedEvent.prizes && (
+                      <SheetSection
+                        title={t(
+                          "community_events.modal_details_section_prizes",
+                        )}
+                      >
+                        <Text style={styles.sheetBodyText}>
+                          {selectedEvent.prizes}
+                        </Text>
+                      </SheetSection>
+                    )}
+                    {selectedEvent.presented_by && (
+                      <SheetSection
+                        title={t(
+                          "community_events.modal_details_section_organizer",
+                        )}
+                      >
+                        <Text style={styles.sheetBodyText}>
+                          {selectedEvent.presented_by}
+                        </Text>
+                      </SheetSection>
+                    )}
+                  </SheetSectionCard>
+                )}
+
+                {/* Interest — Bucket A.6 toggle + Bucket B.2 coach mark
+                    pointing at it. Coach renders only the first time
+                    the user opens any sheet on this device. */}
+                <SheetSectionCard
+                  title={t("events_sheet.section_interest")}
+                >
+                  <EventInterestRow eventId={selectedEvent.id} />
+                  {sheetCoachVisible && (
+                    <Pressable
+                      onPress={dismissSheetCoach}
+                      style={styles.sheetCoachBanner}
+                      accessibilityRole="button"
+                      accessibilityHint={t("events_sheet.coach_dismiss_a11y")}
+                    >
+                      <Ionicons
+                        name="bulb-outline"
+                        size={16}
+                        color={colors.textWhite}
+                      />
+                      <Text style={styles.sheetCoachText}>
+                        {t("events_sheet.coach_tip")}
+                      </Text>
+                      <Ionicons name="close" size={14} color={colors.textWhite} />
+                    </Pressable>
+                  )}
+                </SheetSectionCard>
               </ScrollView>
             )}
           </Pressable>
         </Pressable>
       </Modal>
 
-      {/* Bucket B.3 — HelpSheet */}
+      {/* Bucket B.3 — HelpSheet (browse-list level) */}
       <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} t={t} />
+
+      {/* View-event-details Bucket B.1 — HelpSheet (sheet level). Lives
+          outside the bottom-sheet Modal so it can render on top of the
+          sheet without animation clashes. */}
+      <SheetHelpSheet
+        visible={sheetHelpOpen}
+        onClose={() => setSheetHelpOpen(false)}
+        t={t}
+      />
     </SafeAreaView>
   );
 }
@@ -1470,6 +1640,79 @@ function SheetSection({
       <Text style={styles.sheetSectionTitle}>{title}</Text>
       {children}
     </View>
+  );
+}
+
+// View-event-details Bucket B.4 — section card wrapper. Light-bg block
+// with a header title; replaces the previous between-row bottom borders
+// as the primary grouping affordance.
+function SheetSectionCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={styles.sheetSectionCard}>
+      <Text style={styles.sheetSectionCardTitle}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+// View-event-details Bucket B.1 — HelpSheet for the bottom sheet. Same
+// shape as the screen-level HelpSheet but uses the events_sheet.help_*
+// topic keys.
+function SheetHelpSheet({
+  visible,
+  onClose,
+  t,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  t: TFunction;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.helpBackdrop} onPress={onClose}>
+        <Pressable style={styles.helpSheet} onPress={() => undefined}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.helpHeaderRow}>
+            <Text style={styles.helpTitle}>
+              {t("events_sheet.help_sheet_title")}
+            </Text>
+            <TouchableOpacity
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel={t("events_sheet.help_close")}
+            >
+              <Ionicons name="close" size={22} color={colors.primaryNavy} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={styles.helpScroll}
+          >
+            {SHEET_HELP_TOPICS.map((topic) => (
+              <View key={topic} style={styles.helpItem}>
+                <Text style={styles.helpItemTitle}>
+                  {t(`events_sheet.help_${topic}_title`)}
+                </Text>
+                <Text style={styles.helpItemBody}>
+                  {t(`events_sheet.help_${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -1928,6 +2171,62 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     color: colors.textSecondary,
+  },
+
+  // View-event-details Bucket B.4 — section card wrapper.
+  sheetSectionCard: {
+    backgroundColor: "#F7F8FA",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  sheetSectionCardTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.textSecondary,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
+
+  // Bucket B.3 — Add-to-calendar inline link, under the location row.
+  addToCalendarLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  addToCalendarLinkText: {
+    color: colors.primaryNavy,
+    fontSize: 13,
+    fontWeight: "700",
+    textDecorationLine: "underline",
+  },
+
+  // Bucket B.2 — sheet-internal coach mark banner. Sits inside the
+  // Interest section card so the arrow points at the toggle directly
+  // above. Visually distinct from the screen-level coach banner so
+  // overlapping firsts (extremely rare but possible on a brand-new
+  // device) don't collide.
+  sheetCoachBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.primaryNavy,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  sheetCoachText: {
+    flex: 1,
+    color: colors.textWhite,
+    fontSize: 12,
+    fontWeight: "600",
   },
   sheetInfoRow: {
     flexDirection: "row",
