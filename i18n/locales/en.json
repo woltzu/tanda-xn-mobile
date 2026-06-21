@@ -4285,6 +4285,14 @@
     "notification_application_status_title": "Loan application {{status}}",
     "notification_application_status_body": "Your loan application has been {{status}}."
   },
+  "community": {
+    "notification_post_created_title": "Post shared",
+    "notification_post_created_body": "Your post is now live in the community.",
+    "notification_post_liked_title": "Post liked",
+    "notification_post_liked_body": "{{liker}} liked your post.",
+    "notification_post_commented_title": "New comment",
+    "notification_post_commented_body": "{{commenter}} commented on your post."
+  },
   "honor": {
     "notification_tier_change_title": "Honor Score tier updated",
     "notification_tier_change_body": "Your Honor Score has moved from {{old_tier}} to {{new_tier}}.",

@@ -107,6 +107,18 @@ export const linkingConfig = {
       // loan_application_status notifications (migration 220) route
       // straight to the profile. userId optional; absent = own profile.
       CreditProfile: "credit/:userId?",
+
+      // Post to Community — Bucket C of the Post to Community review.
+      // The community_post_created / community_post_liked /
+      // community_post_commented notifications (migration 221) deep-link
+      // straight to a post via the existing PostDetail route registered
+      // above at `dreams/post/:postId`. PostDetail renders any
+      // feed_posts row regardless of type, so a community-post-specific
+      // alias here is intentionally NOT registered — React Navigation
+      // linking only accepts one path per screen, and overloading
+      // PostDetail with a second path would silently overwrite the
+      // existing dream-feed path. Notification handlers should build
+      // the deep link as `/dreams/post/<id>` for any post type.
     },
   },
 };

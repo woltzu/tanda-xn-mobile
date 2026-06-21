@@ -513,6 +513,24 @@ export class NotificationPriorityEngine {
     }
   }
 
+  /**
+   * Post to Community Bucket C — map the notifications.type values that
+   * migration 221's feed-posts community triggers emit onto the abstract
+   * NotificationType. These are social engagement events (post created,
+   * liked, commented), not money or risk events, so they all map to
+   * "coaching_goals" alongside other low-friction nudges.
+   */
+  static categoryForCommunityNotification(dbType: string): NotificationType | null {
+    switch (dbType) {
+      case "community_post_created":
+      case "community_post_liked":
+      case "community_post_commented":
+        return "coaching_goals";
+      default:
+        return null;
+    }
+  }
+
   /** Time sensitivity: closer deadline = higher score. */
   private static calculateTimeSensitivity(data: Record<string, any>): number {
     const hoursUntilDue = data.hours_until_due ?? data.hoursUntilDue;

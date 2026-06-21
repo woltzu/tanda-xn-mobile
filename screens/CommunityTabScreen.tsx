@@ -41,6 +41,7 @@ import {
 } from '../hooks/useCommunityFeatures';
 import { useFeed } from '../context/FeedContext';
 import FeedPostCard from '../components/FeedPostCard';
+import { useEventTracker } from '../hooks/useEventTracker';
 
 // Post to Community Bucket B — AsyncStorage gate for the first-visit
 // coach mark on the Community section. Versioned so we can re-prompt
@@ -237,6 +238,11 @@ const CommunityTabScreen: React.FC = () => {
     () => feedPosts.filter((p) => p.type === 'community').slice(0, 3),
     [feedPosts],
   );
+
+  // Post to Community Bucket C — telemetry for the Community section.
+  // Fires only on tap (no mount event; the Community tab is the home
+  // surface and its mount is too noisy for a useful "viewed" count).
+  const { track } = useEventTracker();
 
   // Post to Community Bucket B — first-visit coach mark pointing at the
   // Community section's (+). Same Animated.Value + AsyncStorage gate
@@ -519,11 +525,25 @@ const CommunityTabScreen: React.FC = () => {
   // composer and a "See all" link into the dedicated CommunityFeed.
   // Empty state CTAs straight into the composer.
   const renderCommunityPosts = () => {
-    const openFeed = () => navigation.navigate(Routes.CommunityFeed as never);
+    const openFeed = () => {
+      track({
+        eventType: 'community.see_all_tapped',
+        eventCategory: 'community',
+        eventAction: 'tapped',
+      });
+      navigation.navigate(Routes.CommunityFeed as never);
+    };
     const openCreate = () =>
       navigation.navigate(Routes.PostToCommunity as never);
-    const openPost = (postId: string) =>
+    const openPost = (postId: string) => {
+      track({
+        eventType: 'community.feed_post_tapped',
+        eventCategory: 'community',
+        eventAction: 'tapped',
+        eventLabel: postId,
+      });
       navigation.navigate(Routes.PostDetail as never, { postId } as never);
+    };
     const openAuthor = (userId: string) =>
       navigation.navigate('UserDreamProfile' as never, { userId } as never);
 

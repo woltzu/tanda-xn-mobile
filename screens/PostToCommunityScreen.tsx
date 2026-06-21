@@ -22,7 +22,7 @@
 // can re-upload without re-picking.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -46,6 +46,7 @@ import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
 import { useFeed, FeedPost } from "../context/FeedContext";
+import { useEventTracker } from "../hooks/useEventTracker";
 import { showToast } from "../components/Toast";
 import { uploadToBucket } from "../utils/image";
 
@@ -90,6 +91,20 @@ export default function PostToCommunityScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
+  // Bucket C — telemetry. One-shot mount fire so a re-render can't
+  // double-emit.
+  const { track } = useEventTracker();
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: "community.post_screen_viewed",
+      eventCategory: "community",
+      eventAction: "viewed",
+    });
+  }, [track]);
+
   // ── Image picker ────────────────────────────────────────────────────────────
   const handlePickImage = async () => {
     setPicking(true);
@@ -109,6 +124,11 @@ export default function PostToCommunityScreen() {
       });
       if (!result.canceled && result.assets?.[0]?.uri) {
         setMediaUri(result.assets[0].uri);
+        track({
+          eventType: "community.image_picked",
+          eventCategory: "community",
+          eventAction: "picked",
+        });
       }
     } finally {
       setPicking(false);
@@ -165,6 +185,12 @@ export default function PostToCommunityScreen() {
       return;
     }
 
+    track({
+      eventType: "community.post_submitted",
+      eventCategory: "community",
+      eventAction: "submitted",
+      eventValue: { has_image: hasImage, body_length: trimmed.length },
+    });
     showToast(t("post_to_community.alert_posted_body"), "success");
     navigation.goBack();
 
@@ -202,7 +228,14 @@ export default function PostToCommunityScreen() {
               {t("post_to_community.header_title")}
             </Text>
             <TouchableOpacity
-              onPress={() => setHelpOpen(true)}
+              onPress={() => {
+                setHelpOpen(true);
+                track({
+                  eventType: "community.help_opened",
+                  eventCategory: "community",
+                  eventAction: "opened",
+                });
+              }}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityRole="button"
               accessibilityLabel={t("post_to_community.help_button_a11y")}

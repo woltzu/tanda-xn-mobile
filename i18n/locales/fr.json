@@ -4285,6 +4285,14 @@
     "notification_application_status_title": "Demande de prêt {{status}}",
     "notification_application_status_body": "Votre demande de prêt a été {{status}}."
   },
+  "community": {
+    "notification_post_created_title": "Publication partagée",
+    "notification_post_created_body": "Votre publication est maintenant visible dans la communauté.",
+    "notification_post_liked_title": "Publication aimée",
+    "notification_post_liked_body": "{{liker}} a aimé votre publication.",
+    "notification_post_commented_title": "Nouveau commentaire",
+    "notification_post_commented_body": "{{commenter}} a commenté votre publication."
+  },
   "honor": {
     "notification_tier_change_title": "Palier Score d'honneur mis à jour",
     "notification_tier_change_body": "Votre Score d'honneur est passé de {{old_tier}} à {{new_tier}}.",
