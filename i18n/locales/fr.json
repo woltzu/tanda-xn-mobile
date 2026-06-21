@@ -3544,7 +3544,20 @@
     "success_toast": "Rêve publié !",
     "success_toast_with_image": "Rêve publié — l'affiche se téléverse…",
     "goal_suggest_chip": "Partager les progrès de {{goal}} ?",
-    "goal_suggest_prefill": "Dernière mise à jour sur {{goal}} : "
+    "goal_suggest_prefill": "Dernière mise à jour sur {{goal}} : ",
+    "draft_restored": "Brouillon restauré",
+    "draft_discard_btn": "Supprimer",
+    "draft_discard_title": "Supprimer ce brouillon ?",
+    "draft_discard_body": "Vous perdrez le texte, l'image et tout objectif ou cercle associé.",
+    "draft_keep": "Continuer la rédaction",
+    "draft_discard_confirm": "Supprimer",
+    "hashtag_tip": "Astuce : ajoutez des #hashtags dans votre message — nous les détectons automatiquement.",
+    "media_remove_a11y": "Retirer l'image",
+    "image_uploading": "Téléversement…",
+    "image_uploaded": "Image téléversée",
+    "image_upload_failed_short": "Échec du téléversement",
+    "image_retry": "Réessayer",
+    "image_skip": "Ignorer"
   },
   "post_detail": {
     "alert_error_title": "Erreur",

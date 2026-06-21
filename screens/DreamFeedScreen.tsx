@@ -312,7 +312,7 @@ export default function DreamFeedScreen() {
           style={styles.emptyButton}
           onPress={() => navigation.navigate("CreateDreamPost")}
         >
-          <Ionicons name="videocam" size={18} color="#FFFFFF" />
+          <Ionicons name="add" size={18} color="#FFFFFF" />
           <Text style={styles.emptyButtonText}>{t("dream_feed.empty_for_you_btn")}</Text>
         </TouchableOpacity>
       </View>

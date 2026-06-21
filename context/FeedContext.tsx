@@ -220,7 +220,6 @@ type FeedContextType = {
   createDreamPost: (
     content: string,
     imageUrl?: string,
-    amount?: number,
     visibility?: FeedVisibility,
     metadata?: Record<string, any>,
     relatedId?: string,
@@ -553,7 +552,6 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
   const createDreamPost = async (
     content: string,
     imageUrl?: string,
-    amount?: number,
     visibility: FeedVisibility = "public",
     metadata: Record<string, any> = {},
     relatedId?: string,
@@ -566,6 +564,10 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
     // Ensure the user has a profile row (fixes FK constraint error)
     await ensureProfile();
 
+    // CDP Bucket A.5 — the `amount` arg was legacy 4-step-wizard residue.
+    // No screen has surfaced an amount input for dream posts since the
+    // P1 single-screen rewrite, so the param is dropped and the column
+    // is always written as null.
     const { data, error: insertError } = await supabase
       .from("feed_posts")
       .insert({
@@ -574,7 +576,7 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
         content,
         image_url: imageUrl || null,
         image_upload_status: imageUploadStatus,
-        amount: amount || null,
+        amount: null,
         visibility,
         is_auto: false,
         metadata,

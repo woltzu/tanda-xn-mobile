@@ -168,7 +168,6 @@ export default function PostToCommunityScreen() {
       createdPost = await createDreamPost(
         trimmed,
         undefined,
-        undefined,
         "public",
         metadata,
         undefined,

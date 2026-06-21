@@ -12,7 +12,7 @@
 //      user's active goals + circles. One tap links the post.
 //   4. Media picker (image only; the prior video flow is dropped — keeping
 //      the screen focused on the most-common case).
-//   5. "More options ▾" disclosure → visibility, location, hashtags.
+//   5. "More options ▾" disclosure → visibility, location.
 //   6. Post → optimistic insert with `image_upload_status = 'pending'`
 //      (or `'completed'` if no image), navigation back, and a
 //      fire-and-forget background upload that PATCHes the row via
@@ -20,12 +20,25 @@
 //      A failed upload surfaces a "Retry upload" pill on the post card
 //      (FeedPostCard) — see FeedContext + migration 150.
 //
+// CDP Bucket A (2026-06-21):
+//   • A.1 Debounced AsyncStorage draft (caption + attachment + media +
+//         visibility + location). Restored-pill UI with discard confirm.
+//   • A.2 Image downscale to 1600px via expo-image-manipulator before
+//         the upload kicks off (mirrors CreateEventScreen).
+//   • A.3 Inline ImageStatusPill on the picker — idle / uploading /
+//         uploaded / failed + Retry / Skip. The status survives until
+//         the user navigates away.
+//   • A.4 hashtagsText field is dropped; the server-side
+//         extract_hashtags trigger (migration 159) is the only source
+//         of truth. A static tip replaces the input.
+//   • A.5 createDreamPost no longer accepts an `amount` arg.
+//
 // Shared image helpers come from utils/image.ts (downscale + bucket
 // upload). The retry path stashes the local URI in AsyncStorage keyed by
 // post id so the author can re-upload without re-picking.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -47,6 +60,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
 import { useFeed, FeedVisibility, FeedPost } from "../context/FeedContext";
@@ -54,7 +68,7 @@ import { useSavings, SavingsGoal } from "../context/SavingsContext";
 import { useCircles, Circle } from "../context/CirclesContext";
 import { showToast } from "../components/Toast";
 import { uploadToBucket } from "../utils/image";
-import { colors, radius, typography, spacing } from "../theme/tokens";
+import { colors } from "../theme/tokens";
 
 // ══════════════════════════════════════════════════════════════════════════
 // Constants
@@ -63,7 +77,52 @@ import { colors, radius, typography, spacing } from "../theme/tokens";
 const FEED_IMAGES_BUCKET = "feed-images";
 const RETRY_URI_KEY_PREFIX = "@tandaxn_dream_post_retry_uri:";
 
+// CDP Bucket A.1 — draft saving.
+const DRAFT_KEY_PREFIX = "@tandaxn_dream_post_draft_v1:";
+const DRAFT_DEBOUNCE_MS = 500;
+
+// CDP Bucket A.2 — image downscaling target.
+const MAX_IMAGE_WIDTH_PX = 1600;
+
 type AttachKind = "goal" | "circle";
+
+// CDP Bucket A.3 — upload state machine for the inline status pill.
+type ImageUploadState = "idle" | "uploading" | "uploaded" | "failed";
+
+// CDP Bucket A.1 — serialised draft shape. Only the fields the user
+// can hand-edit; not the upload state or the preview-only metadata.
+type DraftV1 = {
+  v: 1;
+  caption: string;
+  mediaUri: string | null;
+  visibility: FeedVisibility;
+  location: string;
+  selectedGoalId: string | null;
+  selectedCircleId: string | null;
+};
+
+// ══════════════════════════════════════════════════════════════════════════
+// Helpers
+// ══════════════════════════════════════════════════════════════════════════
+
+// CDP Bucket A.2 — downscale phone-camera shots before the background
+// upload. Falls back to the original URI on any manipulator error so a
+// downscale failure never blocks the post.
+async function downscaleIfLarge(uri: string): Promise<string> {
+  try {
+    const out = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: MAX_IMAGE_WIDTH_PX } }],
+      {
+        compress: 0.85,
+        format: ImageManipulator.SaveFormat.JPEG,
+      },
+    );
+    return out.uri;
+  } catch {
+    return uri;
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // Screen
@@ -83,7 +142,6 @@ export default function CreateDreamPostScreen() {
   const [mediaUri, setMediaUri] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<FeedVisibility>("public");
   const [location, setLocation] = useState("");
-  const [hashtagsText, setHashtagsText] = useState("");
   const [selectedGoal, setSelectedGoal] = useState<SavingsGoal | null>(null);
   const [selectedCircle, setSelectedCircle] = useState<Circle | null>(null);
 
@@ -93,6 +151,20 @@ export default function CreateDreamPostScreen() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [picking, setPicking] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // CDP Bucket A.3 — upload status machine for the inline pill.
+  // Tracks the most-recent upload attempt for the currently-staged
+  // image (pre-submit) AND the in-flight background upload after
+  // submit. publishedPostIdRef is the post we should patch when a
+  // post-submit Retry succeeds.
+  const [uploadStatus, setUploadStatus] = useState<ImageUploadState>("idle");
+  const publishedPostIdRef = useRef<string | null>(null);
+
+  // CDP Bucket A.1 — draft hydration / save guards.
+  const [draftRestored, setDraftRestored] = useState(false);
+  const hydratedRef = useRef(false);
+  const publishedRef = useRef(false);
+  const draftKey = user?.id ? DRAFT_KEY_PREFIX + user.id : null;
 
   const activeGoals = useMemo(() => getActiveGoals(), [getActiveGoals]);
 
@@ -126,6 +198,130 @@ export default function CreateDreamPostScreen() {
     [myCircles],
   );
 
+  // ── CDP Bucket A.1 — hydrate the draft once goals + circles load ────
+  // We defer hydration until the goal / circle lists are populated so a
+  // saved selectedGoalId can resolve to the live SavingsGoal object on
+  // the first paint, instead of a flash-no-attachment frame.
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    if (!draftKey) return;
+    if (activeGoals.length === 0 && activeCircles.length === 0) {
+      // Nothing to resolve against; still try to hydrate text fields.
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(draftKey);
+        if (cancelled || !raw) {
+          hydratedRef.current = true;
+          return;
+        }
+        const draft = JSON.parse(raw) as DraftV1;
+        if (draft.v !== 1) {
+          hydratedRef.current = true;
+          return;
+        }
+        const hasContent =
+          (draft.caption?.length ?? 0) > 0 ||
+          !!draft.mediaUri ||
+          (draft.location?.length ?? 0) > 0 ||
+          !!draft.selectedGoalId ||
+          !!draft.selectedCircleId;
+        if (!hasContent) {
+          hydratedRef.current = true;
+          return;
+        }
+        setCaption(draft.caption ?? "");
+        setMediaUri(draft.mediaUri ?? null);
+        setVisibility(draft.visibility ?? "public");
+        setLocation(draft.location ?? "");
+        if (draft.selectedGoalId) {
+          const g = activeGoals.find((x) => x.id === draft.selectedGoalId);
+          if (g) setSelectedGoal(g);
+        }
+        if (draft.selectedCircleId) {
+          const c = activeCircles.find((x) => x.id === draft.selectedCircleId);
+          if (c) setSelectedCircle(c);
+        }
+        setDraftRestored(true);
+      } catch {
+        // Corrupt draft → ignore and continue.
+      } finally {
+        hydratedRef.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [draftKey, activeGoals, activeCircles]);
+
+  // ── CDP Bucket A.1 — debounced save. Skips writes until hydration
+  // has happened so we don't overwrite an existing draft with a fresh
+  // blank state on the first render.
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    if (!draftKey) return;
+    if (publishedRef.current) return;
+    const handle = setTimeout(() => {
+      const draft: DraftV1 = {
+        v: 1,
+        caption,
+        mediaUri,
+        visibility,
+        location,
+        selectedGoalId: selectedGoal?.id ?? null,
+        selectedCircleId: selectedCircle?.id ?? null,
+      };
+      const hasContent =
+        caption.length > 0 ||
+        !!mediaUri ||
+        location.length > 0 ||
+        !!selectedGoal ||
+        !!selectedCircle;
+      if (hasContent) {
+        AsyncStorage.setItem(draftKey, JSON.stringify(draft)).catch(() => {});
+      } else {
+        AsyncStorage.removeItem(draftKey).catch(() => {});
+      }
+    }, DRAFT_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [
+    draftKey,
+    caption,
+    mediaUri,
+    visibility,
+    location,
+    selectedGoal,
+    selectedCircle,
+  ]);
+
+  const handleDiscardDraft = useCallback(() => {
+    Alert.alert(
+      t("create_dream.draft_discard_title"),
+      t("create_dream.draft_discard_body"),
+      [
+        { text: t("create_dream.draft_keep"), style: "cancel" },
+        {
+          text: t("create_dream.draft_discard_confirm"),
+          style: "destructive",
+          onPress: () => {
+            setCaption("");
+            setMediaUri(null);
+            setVisibility("public");
+            setLocation("");
+            setSelectedGoal(null);
+            setSelectedCircle(null);
+            setUploadStatus("idle");
+            setDraftRestored(false);
+            if (draftKey) {
+              AsyncStorage.removeItem(draftKey).catch(() => {});
+            }
+          },
+        },
+      ],
+    );
+  }, [t, draftKey]);
+
   // ── Example-prompt chips ──────────────────────────────────────────────
   const promptChips = useMemo(
     () => [
@@ -140,6 +336,9 @@ export default function CreateDreamPostScreen() {
   );
 
   // ── Image picker ──────────────────────────────────────────────────────
+  // CDP Bucket A.2 — downscale picked URI to MAX_IMAGE_WIDTH_PX before
+  // it lands in state. The status pill resets to idle on each pick so a
+  // prior "failed" badge doesn't ghost into the new selection.
   const handlePickImage = async () => {
     setPicking(true);
     try {
@@ -157,11 +356,50 @@ export default function CreateDreamPostScreen() {
         allowsEditing: false,
       });
       if (!result.canceled && result.assets?.[0]?.uri) {
-        setMediaUri(result.assets[0].uri);
+        const downscaled = await downscaleIfLarge(result.assets[0].uri);
+        setMediaUri(downscaled);
+        setUploadStatus("idle");
       }
     } finally {
       setPicking(false);
     }
+  };
+
+  // CDP Bucket A.3 — × remove on the image preview. Clears the staged
+  // image and resets the status pill.
+  const handleRemoveImage = () => {
+    setMediaUri(null);
+    setUploadStatus("idle");
+  };
+
+  // CDP Bucket A.3 — Retry hookup for the failed-upload pill. If the
+  // post has already been published (publishedPostIdRef set), re-kick
+  // the background upload against that post; otherwise it's a no-op
+  // since pre-submit "failure" can't happen (uploads only start after
+  // publish).
+  const handleRetryUpload = () => {
+    if (!mediaUri || !user?.id) return;
+    const postId = publishedPostIdRef.current;
+    if (!postId) return;
+    setUploadStatus("uploading");
+    kickOffUpload(postId, mediaUri, user.id, {
+      updateDreamPostImage,
+      markDreamPostImageFailed,
+      onStatus: setUploadStatus,
+      t,
+    });
+  };
+
+  // Skip = drop the local URI from state AND clear the published post's
+  // pending status so the FeedPostCard stops showing a Retry chip.
+  const handleSkipUpload = () => {
+    const postId = publishedPostIdRef.current;
+    if (postId) {
+      markDreamPostImageFailed(postId).catch(() => undefined);
+      AsyncStorage.removeItem(RETRY_URI_KEY_PREFIX + postId).catch(() => {});
+    }
+    setMediaUri(null);
+    setUploadStatus("idle");
   };
 
   // ── Visibility help ───────────────────────────────────────────────────
@@ -194,6 +432,10 @@ export default function CreateDreamPostScreen() {
   };
 
   // ── Build metadata for both the live preview and the insert payload ──
+  // CDP Bucket A.4 — hashtags are no longer collected here; the
+  // server-side extract_hashtags trigger reads them out of `content`
+  // on INSERT, so any metadata.hashtags we sent would be ignored
+  // anyway. The static tip below the caption explains the convention.
   const metadata = useMemo(() => {
     const m: Record<string, any> = {};
     if (mediaUri) m.mediaType = "image";
@@ -216,13 +458,8 @@ export default function CreateDreamPostScreen() {
     }
     const trimmedLocation = location.trim();
     if (trimmedLocation) m.location = trimmedLocation;
-    const tags = hashtagsText
-      .split(/[,\s]+/)
-      .map((s) => s.trim().replace(/^#/, ""))
-      .filter(Boolean);
-    if (tags.length > 0) m.hashtags = tags;
     return m;
-  }, [mediaUri, selectedGoal, selectedCircle, location, hashtagsText]);
+  }, [mediaUri, selectedGoal, selectedCircle, location]);
 
   // ── Submit (optimistic insert + background upload) ────────────────────
   const handlePost = async () => {
@@ -257,7 +494,6 @@ export default function CreateDreamPostScreen() {
       createdPost = await createDreamPost(
         captionTrimmed,
         undefined,
-        undefined,
         visibility,
         metadata,
         relatedId,
@@ -271,6 +507,15 @@ export default function CreateDreamPostScreen() {
       return;
     }
 
+    // CDP Bucket A.1 — publish succeeded. Mark published so the save
+    // effect doesn't race a final write, and clear the draft.
+    publishedRef.current = true;
+    if (draftKey) {
+      AsyncStorage.removeItem(draftKey).catch(() => {});
+    }
+
+    publishedPostIdRef.current = createdPost.id;
+
     // Navigate back immediately — the upload runs in the background.
     showToast(
       hasImage
@@ -281,6 +526,7 @@ export default function CreateDreamPostScreen() {
     navigation.goBack();
 
     if (hasImage && mediaUri) {
+      setUploadStatus("uploading");
       // Best-effort: stash the local URI so a retry can re-upload without
       // re-picking. Swallow AsyncStorage errors — they're non-fatal.
       AsyncStorage.setItem(
@@ -290,6 +536,7 @@ export default function CreateDreamPostScreen() {
       kickOffUpload(createdPost.id, mediaUri, user.id, {
         updateDreamPostImage,
         markDreamPostImageFailed,
+        onStatus: setUploadStatus,
         t,
       });
     }
@@ -347,6 +594,28 @@ export default function CreateDreamPostScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* CDP Bucket A.1 — restored-draft banner. */}
+          {draftRestored && (
+            <View style={styles.draftPill}>
+              <Ionicons
+                name="checkmark-circle-outline"
+                size={14}
+                color="#0A2342"
+              />
+              <Text style={styles.draftPillText}>
+                {t("create_dream.draft_restored")}
+              </Text>
+              <TouchableOpacity
+                onPress={handleDiscardDraft}
+                accessibilityRole="button"
+              >
+                <Text style={styles.draftPillDiscardText}>
+                  {t("create_dream.draft_discard_btn")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* ── Live preview ──────────────────────────────────────────── */}
           <Text style={styles.sectionLabel}>
             {t("create_dream.preview_label")}
@@ -406,6 +675,13 @@ export default function CreateDreamPostScreen() {
             textAlignVertical="top"
             autoFocus
           />
+          {/* CDP Bucket A.4 — replaces the dropped hashtagsText input.
+              The server-side extract_hashtags trigger reads tokens out
+              of `content` on INSERT, so a separate field would just be
+              ignored. */}
+          <Text style={styles.hashtagTip}>
+            {t("create_dream.hashtag_tip")}
+          </Text>
 
           {/* ── Attach goal / circle ──────────────────────────────────── */}
           <Text style={styles.sectionLabel}>
@@ -447,15 +723,29 @@ export default function CreateDreamPostScreen() {
           </Text>
           {mediaUri ? (
             <View>
-              <Image
-                source={{ uri: mediaUri }}
-                style={styles.mediaPreview}
-                resizeMode="cover"
-              />
+              <View style={styles.mediaPreviewWrap}>
+                <Image
+                  source={{ uri: mediaUri }}
+                  style={styles.mediaPreview}
+                  resizeMode="cover"
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.mediaRemoveBtn,
+                    uploadStatus === "uploading" && { opacity: 0.5 },
+                  ]}
+                  onPress={handleRemoveImage}
+                  disabled={uploadStatus === "uploading"}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("create_dream.media_remove_a11y")}
+                >
+                  <Ionicons name="close" size={16} color={colors.textWhite} />
+                </TouchableOpacity>
+              </View>
               <TouchableOpacity
                 style={styles.mediaBtn}
                 onPress={handlePickImage}
-                disabled={picking}
+                disabled={picking || uploadStatus === "uploading"}
                 accessibilityRole="button"
               >
                 <Ionicons
@@ -489,6 +779,18 @@ export default function CreateDreamPostScreen() {
               </Text>
             </TouchableOpacity>
           )}
+
+          {/* CDP Bucket A.3 — inline upload-status pill. Idle is a no-op;
+              other states paint a status bar with Retry / Skip when
+              the upload has failed. */}
+          {mediaUri && uploadStatus !== "idle" ? (
+            <ImageStatusPill
+              status={uploadStatus}
+              onRetry={handleRetryUpload}
+              onSkip={handleSkipUpload}
+              t={t}
+            />
+          ) : null}
 
           {/* ── More options ─────────────────────────────────────────── */}
           <TouchableOpacity
@@ -572,18 +874,6 @@ export default function CreateDreamPostScreen() {
                 onChangeText={setLocation}
                 placeholder={t("create_dream.location_placeholder")}
                 placeholderTextColor={colors.textSecondary}
-              />
-
-              <Text style={styles.fieldLabel}>
-                {t("create_dream.hashtags_label")}
-              </Text>
-              <TextInput
-                style={styles.input}
-                value={hashtagsText}
-                onChangeText={setHashtagsText}
-                placeholder={t("create_dream.hashtags_placeholder")}
-                placeholderTextColor={colors.textSecondary}
-                autoCapitalize="none"
               />
             </View>
           )}
@@ -738,6 +1028,11 @@ export default function CreateDreamPostScreen() {
 // patches image_url + image_upload_status='completed'; on failure marks
 // 'failed' so FeedPostCard surfaces the Retry pill (and the local URI
 // stays cached in AsyncStorage for the retry handler).
+//
+// CDP Bucket A.3 — onStatus lets the inline pill on this screen track
+// the upload while the user is still here (most of the time the user
+// has already navigated back; the callback is a no-op once the screen
+// unmounts, but cheap to keep).
 // ══════════════════════════════════════════════════════════════════════════
 
 function kickOffUpload(
@@ -747,6 +1042,7 @@ function kickOffUpload(
   deps: {
     updateDreamPostImage: (id: string, url: string) => Promise<void>;
     markDreamPostImageFailed: (id: string) => Promise<void>;
+    onStatus: (status: ImageUploadState) => void;
     t: (key: string) => string;
   },
 ) {
@@ -758,17 +1054,79 @@ function kickOffUpload(
     );
     if (error || !publicUrl) {
       await deps.markDreamPostImageFailed(postId);
+      deps.onStatus("failed");
       return;
     }
     try {
       await deps.updateDreamPostImage(postId, publicUrl);
       AsyncStorage.removeItem(RETRY_URI_KEY_PREFIX + postId).catch(() => {});
+      deps.onStatus("uploaded");
     } catch {
       await deps.markDreamPostImageFailed(postId);
+      deps.onStatus("failed");
     }
   })().catch(() => {
     deps.markDreamPostImageFailed(postId).catch(() => {});
+    deps.onStatus("failed");
   });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ImageStatusPill — CDP Bucket A.3
+// ══════════════════════════════════════════════════════════════════════════
+// Mirrors the CreateEventScreen pattern. Idle is filtered out by the
+// caller so the pill only renders for the meaningful states.
+
+function ImageStatusPill({
+  status,
+  onRetry,
+  onSkip,
+  t,
+}: {
+  status: ImageUploadState;
+  onRetry: () => void;
+  onSkip: () => void;
+  t: (key: string, opts?: any) => string;
+}) {
+  if (status === "uploading") {
+    return (
+      <View style={[styles.uploadPill, styles.uploadPillUploading]}>
+        <ActivityIndicator size="small" color={colors.primaryNavy} />
+        <Text style={styles.uploadPillText}>
+          {t("create_dream.image_uploading")}
+        </Text>
+      </View>
+    );
+  }
+  if (status === "uploaded") {
+    return (
+      <View style={[styles.uploadPill, styles.uploadPillUploaded]}>
+        <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+        <Text style={styles.uploadPillText}>
+          {t("create_dream.image_uploaded")}
+        </Text>
+      </View>
+    );
+  }
+  // failed
+  return (
+    <View style={[styles.uploadPill, styles.uploadPillFailed]}>
+      <Ionicons name="alert-circle" size={14} color="#DC2626" />
+      <Text style={[styles.uploadPillText, { flex: 1 }]}>
+        {t("create_dream.image_upload_failed_short")}
+      </Text>
+      <TouchableOpacity onPress={onRetry} accessibilityRole="button">
+        <Text style={styles.uploadPillAction}>
+          {t("create_dream.image_retry")}
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={onSkip} accessibilityRole="button">
+        <Text style={styles.uploadPillActionMuted}>
+          {t("create_dream.image_skip")}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -936,6 +1294,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
 
+  // CDP Bucket A.1 — restored-draft pill
+  draftPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F0FDFB",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.accentTeal,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 6,
+  },
+  draftPillText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#0A2342",
+  },
+  draftPillDiscardText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.primaryNavy,
+    textDecorationLine: "underline",
+  },
+
   // Chips
   chipRow: {
     flexDirection: "row",
@@ -993,6 +1377,15 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
   },
 
+  // CDP Bucket A.4 — hashtag tip below caption
+  hashtagTip: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    fontStyle: "italic",
+    marginTop: 6,
+    paddingHorizontal: 2,
+  },
+
   // Attach goal/circle
   attachBtn: {
     flexDirection: "row",
@@ -1029,12 +1422,27 @@ const styles = StyleSheet.create({
   },
 
   // Media
+  mediaPreviewWrap: {
+    position: "relative",
+    marginBottom: 8,
+  },
   mediaPreview: {
     width: "100%",
     height: 200,
     borderRadius: 12,
     backgroundColor: colors.screenBg,
-    marginBottom: 8,
+  },
+  // CDP Bucket A.3 — × remove pill overlaid on the image preview.
+  mediaRemoveBtn: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(10,35,66,0.7)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   mediaBtn: {
     flexDirection: "row",
@@ -1051,6 +1459,47 @@ const styles = StyleSheet.create({
     color: colors.primaryNavy,
     fontWeight: "600",
     fontSize: 13,
+  },
+
+  // CDP Bucket A.3 — upload pill
+  uploadPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginTop: 8,
+    borderWidth: 1,
+  },
+  uploadPillUploading: {
+    backgroundColor: "#F3F4F6",
+    borderColor: colors.border,
+  },
+  uploadPillUploaded: {
+    backgroundColor: "#ECFDF5",
+    borderColor: "#10B981",
+  },
+  uploadPillFailed: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#DC2626",
+  },
+  uploadPillText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textPrimary,
+  },
+  uploadPillAction: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#DC2626",
+    textDecorationLine: "underline",
+  },
+  uploadPillActionMuted: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textSecondary,
+    textDecorationLine: "underline",
   },
 
   // Disclosure

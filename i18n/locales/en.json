@@ -3544,7 +3544,20 @@
     "success_toast": "Dream posted!",
     "success_toast_with_image": "Dream posted — flyer is uploading…",
     "goal_suggest_chip": "Share progress on {{goal}}?",
-    "goal_suggest_prefill": "Latest update on {{goal}}: "
+    "goal_suggest_prefill": "Latest update on {{goal}}: ",
+    "draft_restored": "We restored your draft",
+    "draft_discard_btn": "Discard",
+    "draft_discard_title": "Discard this draft?",
+    "draft_discard_body": "You'll lose the text, image and any attached goal or circle.",
+    "draft_keep": "Keep editing",
+    "draft_discard_confirm": "Discard",
+    "hashtag_tip": "Tip: add #hashtags anywhere in your caption — we'll pick them up.",
+    "media_remove_a11y": "Remove image",
+    "image_uploading": "Uploading image…",
+    "image_uploaded": "Image uploaded",
+    "image_upload_failed_short": "Upload failed",
+    "image_retry": "Retry",
+    "image_skip": "Skip"
   },
   "post_detail": {
     "alert_error_title": "Error",
