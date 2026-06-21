@@ -45,7 +45,11 @@ export type CommunityEventRow = {
   title: string;
   event_datetime: string; // ISO 8601 timestamptz
   location_name: string;
-  full_address: string;
+  // Bucket A of Create-an-event review (migration 222) dropped NOT NULL.
+  // Pre-migration rows always have a value (the screen previously fell
+  // back to location_name); post-migration rows may be null when the
+  // user leaves "Full address" empty in the More-details disclosure.
+  full_address: string | null;
   price: number | null;
   price_description: string | null;
   description: string;
@@ -69,7 +73,7 @@ export type CreateEventInput = {
   title: string;
   event_datetime: string;
   location_name: string;
-  full_address: string;
+  full_address: string | null;
   price: number | null;
   price_description: string | null;
   description: string;

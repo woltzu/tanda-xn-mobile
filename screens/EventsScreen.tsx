@@ -241,7 +241,11 @@ export default function EventsScreen() {
                 <SheetInfoRow
                   icon="location-outline"
                   label={t("community_events.label_where")}
-                  value={`${selectedEvent.location_name}\n${selectedEvent.full_address}`}
+                  value={
+                    selectedEvent.full_address
+                      ? `${selectedEvent.location_name}\n${selectedEvent.full_address}`
+                      : selectedEvent.location_name
+                  }
                 />
 
                 <SheetInfoRow
@@ -446,7 +450,9 @@ function EventCard({
           color={colors.textSecondary}
         />
         <Text style={styles.cardInfoText} numberOfLines={2}>
-          {event.location_name}, {event.full_address}
+          {event.full_address
+            ? `${event.location_name}, ${event.full_address}`
+            : event.location_name}
         </Text>
       </View>
 
