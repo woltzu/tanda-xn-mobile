@@ -53,7 +53,9 @@ import { useTranslation, type TFunction } from "react-i18next";
 import { useRoute, type RouteProp } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
+import { useEventTracker } from "../hooks/useEventTracker";
 import { Routes } from "../lib/routes";
+import { supabase } from "../lib/supabase";
 import { colors } from "../theme/tokens";
 import {
   useUpcomingEvents,
@@ -212,6 +214,20 @@ export default function EventsScreen() {
   const route = useRoute<EventsRoute>();
   const deepLinkEventId = route.params?.eventId ?? null;
 
+  // ── Bucket C.6 — telemetry. One-shot mount fire for events.list_viewed;
+  // per-action handlers below.
+  const { track } = useEventTracker();
+  const listViewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (listViewedFiredRef.current) return;
+    listViewedFiredRef.current = true;
+    track({
+      eventType: "events.list_viewed",
+      eventCategory: "events",
+      eventAction: "viewed",
+    });
+  }, [track]);
+
   // ── Bucket B.6 — past/upcoming toggle. Flips the hook query and the
   // grouping layout (single "Past events" section vs Today/This week
   // /Later). Lives in a single boolean state.
@@ -241,6 +257,23 @@ export default function EventsScreen() {
     return () => clearTimeout(id);
   }, [searchInput]);
 
+  // Bucket C.6 — events.search_used fires once per stabilised non-empty
+  // query (the same debounced value). An empty query is ignored so we
+  // don't log a no-op when the user clears the box. A useRef guard
+  // dedupes consecutive identical fires.
+  const lastTrackedSearchRef = useRef<string>("");
+  useEffect(() => {
+    if (!debouncedSearch) return;
+    if (lastTrackedSearchRef.current === debouncedSearch) return;
+    lastTrackedSearchRef.current = debouncedSearch;
+    track({
+      eventType: "events.search_used",
+      eventCategory: "events",
+      eventAction: "used",
+      eventValue: { query_length: debouncedSearch.length },
+    });
+  }, [debouncedSearch, track]);
+
   // Filter + group. The filter runs over the raw `events` array before
   // grouping so a section that ends up empty is dropped (instead of
   // rendering a "Today · 0" header with nothing under it).
@@ -262,6 +295,39 @@ export default function EventsScreen() {
     setSheetImgFailed(false);
   }, [selectedEvent]);
 
+  // ── Bucket C.3 — record_event_view fire-and-forget Set guard + Bucket
+  // C.6 events.event_opened telemetry. A view is counted at most once
+  // per event per screen lifetime; subsequent opens of the same event's
+  // bottom sheet within this session don't re-increment. The Set also
+  // persists across deep-link auto-open → manual tap on the same id.
+  const viewedRpcSentRef = useRef<Set<string>>(new Set());
+  const openEventSheet = useCallback(
+    (event: CommunityEventRow, source: "list" | "deep_link") => {
+      setSelectedEvent(event);
+      track({
+        eventType: "events.event_opened",
+        eventCategory: "events",
+        eventAction: "opened",
+        eventLabel: source,
+        eventValue: { event_id: event.id, source },
+      });
+      if (viewedRpcSentRef.current.has(event.id)) return;
+      viewedRpcSentRef.current.add(event.id);
+      supabase
+        .rpc("record_event_view", { p_event_id: event.id })
+        .then(({ error }) => {
+          if (error) {
+            console.warn(
+              "[record_event_view] rpc failed for",
+              event.id,
+              error.message,
+            );
+          }
+        });
+    },
+    [track],
+  );
+
   // Bucket A.3 — deep-link auto-open. When the user lands on this screen
   // with ?eventId=<uuid> (notification tap or in-app link), open the
   // sheet for that event as soon as possible.
@@ -277,7 +343,7 @@ export default function EventsScreen() {
     const inList = events.find((e) => e.id === deepLinkEventId);
     if (inList) {
       handledDeepLinkIdRef.current = deepLinkEventId;
-      setSelectedEvent(inList);
+      openEventSheet(inList, "deep_link");
       return;
     }
     // Wait until list has finished loading before falling back to a
@@ -288,12 +354,12 @@ export default function EventsScreen() {
       const fresh = await fetchEventById(deepLinkEventId);
       if (cancelled) return;
       handledDeepLinkIdRef.current = deepLinkEventId;
-      if (fresh) setSelectedEvent(fresh);
+      if (fresh) openEventSheet(fresh, "deep_link");
     })();
     return () => {
       cancelled = true;
     };
-  }, [deepLinkEventId, events, loading]);
+  }, [deepLinkEventId, events, loading, openEventSheet]);
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = async () => {
@@ -443,7 +509,14 @@ export default function EventsScreen() {
           </Text>
           <View style={styles.headerRightGroup}>
             <TouchableOpacity
-              onPress={() => setHelpOpen(true)}
+              onPress={() => {
+                setHelpOpen(true);
+                track({
+                  eventType: "events.help_opened",
+                  eventCategory: "events",
+                  eventAction: "opened",
+                });
+              }}
               style={styles.headerIconBtn}
               accessibilityRole="button"
               accessibilityLabel={t("events_screen.help_a11y")}
@@ -511,7 +584,15 @@ export default function EventsScreen() {
           return (
             <TouchableOpacity
               key={key}
-              onPress={() => setActiveFilter(key)}
+              onPress={() => {
+                setActiveFilter(key);
+                track({
+                  eventType: "events.filter_applied",
+                  eventCategory: "events",
+                  eventAction: "applied",
+                  eventLabel: `price_time:${key}`,
+                });
+              }}
               style={[styles.chip, active && styles.chipActive]}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
@@ -538,9 +619,15 @@ export default function EventsScreen() {
           return (
             <TouchableOpacity
               key={cat}
-              onPress={() =>
-                setActiveCategory((prev) => (prev === cat ? null : cat))
-              }
+              onPress={() => {
+                setActiveCategory((prev) => (prev === cat ? null : cat));
+                track({
+                  eventType: "events.filter_applied",
+                  eventCategory: "events",
+                  eventAction: "applied",
+                  eventLabel: `category:${cat}`,
+                });
+              }}
               style={[
                 styles.chip,
                 styles.chipCategory,
@@ -726,7 +813,7 @@ export default function EventsScreen() {
               isCategoryActive={
                 item.category !== null && item.category === activeCategory
               }
-              onDetails={() => setSelectedEvent(item)}
+              onDetails={() => openEventSheet(item, "list")}
               onBuyTicket={() => handleBuyTicket(item.contact_info?.ticket_link)}
               onCategoryTap={handleCategoryChipTap}
             />

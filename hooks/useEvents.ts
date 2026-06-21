@@ -61,6 +61,11 @@ export type CommunityEventRow = {
   created_at: string;
   // P2 (migration 158)
   category: EventCategory | null;
+  // Browse-events Bucket C (migration 224) — engagement counters. The
+  // existing-row default is 0 / null per the ADD COLUMN definition, so
+  // these are safe to read against pre-224 data via maybeSingle.
+  view_count: number;
+  last_viewed_at: string | null;
 };
 
 export type ContactInfo = {

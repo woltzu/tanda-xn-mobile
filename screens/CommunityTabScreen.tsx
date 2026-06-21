@@ -163,12 +163,25 @@ const CommunityTabScreen: React.FC = () => {
   // EventsScreen consumes, so the Community-tab teaser and the full
   // EventsScreen list reuse one network round-trip.
   //
-  // TODO(events-engagement): once `community_events` gains like_count /
-  // view_count columns, swap to a query ordered by engagement instead of
-  // chronology so the teaser highlights the most loved event, not just
-  // the next one.
+  // Browse-events Bucket C.4 — pick the next event by engagement
+  // first, recency second. Migration 224 added view_count; when every
+  // event still has the default 0 (a fresh community, or pre-224 rows
+  // before anyone has opened the sheet), the secondary sort on
+  // event_datetime ASC falls back to the original "next upcoming"
+  // behaviour without any branching.
   const { events: upcomingEvents } = useUpcomingEvents({ limit: 50 });
-  const nextEvent = upcomingEvents[0] ?? null;
+  const teaserOrdered = React.useMemo(() => {
+    return [...upcomingEvents].sort((a, b) => {
+      const va = a.view_count ?? 0;
+      const vb = b.view_count ?? 0;
+      if (vb !== va) return vb - va;
+      return (
+        new Date(a.event_datetime).getTime() -
+        new Date(b.event_datetime).getTime()
+      );
+    });
+  }, [upcomingEvents]);
+  const nextEvent = teaserOrdered[0] ?? null;
 
   // Selected community pill
   const [selectedCommunityId, setSelectedCommunityId] = useState<string>(
