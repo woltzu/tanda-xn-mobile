@@ -84,6 +84,23 @@ const DRAFT_DEBOUNCE_MS = 500;
 // CDP Bucket A.2 — image downscaling target.
 const MAX_IMAGE_WIDTH_PX = 1600;
 
+// CDP Bucket B.1 — caption length / counter thresholds.
+const CAPTION_MAX = 1000;
+const CAPTION_COUNT_SHOW_AT = 200;
+const CAPTION_COUNT_WARN_AT = CAPTION_MAX - 50;
+
+// CDP Bucket B.2 — HelpSheet topic list.
+type HelpTopic = "visibility_who" | "anonymous_means" | "how_attach" | "after_post";
+const HELP_TOPICS: HelpTopic[] = [
+  "visibility_who",
+  "anonymous_means",
+  "how_attach",
+  "after_post",
+];
+
+// CDP Bucket B.3 — first-visit coach mark.
+const COACH_MARK_KEY = "@tandaxn_create_dream_coach_seen_v1";
+
 type AttachKind = "goal" | "circle";
 
 // CDP Bucket A.3 — upload state machine for the inline status pill.
@@ -165,6 +182,49 @@ export default function CreateDreamPostScreen() {
   const hydratedRef = useRef(false);
   const publishedRef = useRef(false);
   const draftKey = user?.id ? DRAFT_KEY_PREFIX + user.id : null;
+
+  // CDP Bucket B.2 — HelpSheet visibility.
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  // CDP Bucket B.3 — first-visit coach mark. Read AsyncStorage on
+  // mount, suppress when the draft was restored (returning user, no
+  // need to re-teach), 4 s auto-dismiss + tap-to-dismiss.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    // Wait until hydration finishes so we know whether the draft was
+    // restored. The coach is for first-time posters only — a returning
+    // user with a draft already knows the form.
+    if (!hydratedRef.current) return;
+    coachCheckedRef.current = true;
+    if (draftRestored) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_MARK_KEY);
+        if (!cancelled && !seen) setCoachVisible(true);
+      } catch {
+        // AsyncStorage failure → keep coach hidden, treat as "seen".
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // hydratedRef.current isn't reactive, so we re-evaluate this on
+    // each render until the gate flips. Cheap because the body bails
+    // immediately after coachCheckedRef flips.
+  });
+  useEffect(() => {
+    if (!coachVisible) return;
+    const id = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coachVisible]);
+  const dismissCoach = useCallback(() => {
+    setCoachVisible(false);
+    AsyncStorage.setItem(COACH_MARK_KEY, "1").catch(() => undefined);
+  }, []);
 
   const activeGoals = useMemo(() => getActiveGoals(), [getActiveGoals]);
 
@@ -323,6 +383,9 @@ export default function CreateDreamPostScreen() {
   }, [t, draftKey]);
 
   // ── Example-prompt chips ──────────────────────────────────────────────
+  // CDP Bucket B.5 — six prompts. The first three are the P1/P2 set;
+  // big_purchase / celebrate / support_needed are new in B.5 and reduce
+  // blank-page paralysis by surfacing more of the common dream shapes.
   const promptChips = useMemo(
     () => [
       { key: "working", template: t("create_dream.chip_working_template") },
@@ -330,6 +393,18 @@ export default function CreateDreamPostScreen() {
       {
         key: "accountability",
         template: t("create_dream.chip_accountability_template"),
+      },
+      {
+        key: "big_purchase",
+        template: t("create_dream.chip_big_purchase_template"),
+      },
+      {
+        key: "celebrate",
+        template: t("create_dream.chip_celebrate_template"),
+      },
+      {
+        key: "support_needed",
+        template: t("create_dream.chip_support_needed_template"),
       },
     ],
     [t],
@@ -585,7 +660,19 @@ export default function CreateDreamPostScreen() {
           <Text style={styles.headerTitle}>
             {t("create_dream.header_title")}
           </Text>
-          <View style={{ width: 36 }} />
+          {/* CDP Bucket B.2 — (?) header trigger opens the HelpSheet. */}
+          <TouchableOpacity
+            onPress={() => setHelpOpen(true)}
+            style={styles.backBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t("create_dream.help_a11y")}
+          >
+            <Ionicons
+              name="help-circle-outline"
+              size={22}
+              color={colors.textWhite}
+            />
+          </TouchableOpacity>
         </LinearGradient>
 
         <ScrollView
@@ -626,6 +713,24 @@ export default function CreateDreamPostScreen() {
           <Text style={styles.sectionLabel}>
             {t("create_dream.caption_label")}
           </Text>
+          {/* CDP Bucket B.3 — first-visit coach mark. Sits above the
+              prompt chips because that's the affordance it teaches —
+              tap a chip to get started. Suppressed when a draft was
+              restored. */}
+          {coachVisible && (
+            <Pressable
+              onPress={dismissCoach}
+              style={styles.coachBanner}
+              accessibilityRole="button"
+              accessibilityHint={t("create_dream.coach_dismiss_a11y")}
+            >
+              <Ionicons name="bulb-outline" size={16} color={colors.textWhite} />
+              <Text style={styles.coachText}>
+                {t("create_dream.coach_tip")}
+              </Text>
+              <Ionicons name="close" size={14} color={colors.textWhite} />
+            </Pressable>
+          )}
           <View style={styles.chipRow}>
             {promptChips.map((c) => (
               <TouchableOpacity
@@ -674,14 +779,84 @@ export default function CreateDreamPostScreen() {
             numberOfLines={5}
             textAlignVertical="top"
             autoFocus
+            maxLength={CAPTION_MAX}
           />
-          {/* CDP Bucket A.4 — replaces the dropped hashtagsText input.
-              The server-side extract_hashtags trigger reads tokens out
-              of `content` on INSERT, so a separate field would just be
-              ignored. */}
-          <Text style={styles.hashtagTip}>
-            {t("create_dream.hashtag_tip")}
-          </Text>
+          {/* CDP Bucket B.1 — character counter. Hidden while the
+              caption is short (most posts are well under 200 chars);
+              switches to a remaining-count format at the 950 mark and
+              flips colour to red on the way to the 1000 ceiling. */}
+          {caption.length > CAPTION_COUNT_SHOW_AT && (
+            <Text
+              style={[
+                styles.captionCharCount,
+                {
+                  color:
+                    caption.length >= CAPTION_COUNT_WARN_AT
+                      ? "#EF4444"
+                      : colors.accentTeal,
+                },
+              ]}
+            >
+              {caption.length >= CAPTION_COUNT_WARN_AT
+                ? t("create_dream.char_count_left", {
+                    count: CAPTION_MAX - caption.length,
+                  })
+                : t("create_dream.char_count", {
+                    current: caption.length,
+                    max: CAPTION_MAX,
+                  })}
+            </Text>
+          )}
+
+          {/* CDP Bucket B.4 — visibility chips were inside "More
+              options" before; they're now always-visible because the
+              privacy choice is too consequential to bury one tap
+              deeper than Post. */}
+          <View style={styles.visibilityHeaderRow}>
+            <Text style={styles.sectionLabelInline}>
+              {t("create_dream.visibility_label")}
+            </Text>
+            <TouchableOpacity
+              onPress={showVisibilityHelp}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel={t("create_dream.visibility_help_title")}
+            >
+              <Ionicons
+                name="help-circle-outline"
+                size={14}
+                color={colors.textSecondary}
+              />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.visibilityRow}>
+            {(["public", "community", "anonymous"] as FeedVisibility[]).map(
+              (v) => {
+                const isActive = visibility === v;
+                return (
+                  <TouchableOpacity
+                    key={v}
+                    style={[
+                      styles.visibilityChip,
+                      isActive && styles.visibilityChipActive,
+                    ]}
+                    onPress={() => setVisibility(v)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
+                  >
+                    <Text
+                      style={[
+                        styles.visibilityChipText,
+                        isActive && styles.visibilityChipTextActive,
+                      ]}
+                    >
+                      {t(`create_dream.visibility_${v}`)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              },
+            )}
+          </View>
 
           {/* ── Attach goal / circle ──────────────────────────────────── */}
           <Text style={styles.sectionLabel}>
@@ -816,55 +991,9 @@ export default function CreateDreamPostScreen() {
 
           {moreOpen && (
             <View style={styles.moreCard}>
-              {/* Visibility */}
-              <View style={styles.fieldLabelRow}>
-                <Text style={styles.fieldLabel}>
-                  {t("create_dream.visibility_label")}
-                </Text>
-                <TouchableOpacity
-                  onPress={showVisibilityHelp}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityRole="button"
-                  accessibilityLabel={t(
-                    "create_dream.visibility_help_title",
-                  )}
-                >
-                  <Ionicons
-                    name="help-circle-outline"
-                    size={16}
-                    color={colors.textSecondary}
-                  />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.visibilityRow}>
-                {(["public", "community", "anonymous"] as FeedVisibility[]).map(
-                  (v) => {
-                    const isActive = visibility === v;
-                    return (
-                      <TouchableOpacity
-                        key={v}
-                        style={[
-                          styles.visibilityChip,
-                          isActive && styles.visibilityChipActive,
-                        ]}
-                        onPress={() => setVisibility(v)}
-                        accessibilityRole="button"
-                        accessibilityState={{ selected: isActive }}
-                      >
-                        <Text
-                          style={[
-                            styles.visibilityChipText,
-                            isActive && styles.visibilityChipTextActive,
-                          ]}
-                        >
-                          {t(`create_dream.visibility_${v}`)}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  },
-                )}
-              </View>
-
+              {/* CDP Bucket B.4 — Visibility moved out of this card.
+                  Location + the hashtag tip (formerly under the
+                  caption) live here now. */}
               <Text style={styles.fieldLabel}>
                 {t("create_dream.location_label")}
               </Text>
@@ -875,6 +1004,11 @@ export default function CreateDreamPostScreen() {
                 placeholder={t("create_dream.location_placeholder")}
                 placeholderTextColor={colors.textSecondary}
               />
+              {/* CDP Bucket A.4 — server-side extract_hashtags trigger
+                  reads tokens out of `content` on INSERT. */}
+              <Text style={styles.hashtagTip}>
+                {t("create_dream.hashtag_tip")}
+              </Text>
             </View>
           )}
         </ScrollView>
@@ -1019,7 +1153,73 @@ export default function CreateDreamPostScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* CDP Bucket B.2 — HelpSheet. Lives outside the keyboard-avoiding
+          view so it renders cleanly over the form. */}
+      <HelpSheet
+        visible={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        t={t}
+      />
     </SafeAreaView>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// HelpSheet — CDP Bucket B.2
+// ══════════════════════════════════════════════════════════════════════════
+// Four topics: who-sees-it, what-anonymous-means, how-attachments-work,
+// what-happens-after-post. Title + body per topic come from i18n.
+
+function HelpSheet({
+  visible,
+  onClose,
+  t,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  t: (key: string, opts?: any) => string;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.helpBackdrop} onPress={onClose}>
+        <Pressable style={styles.helpSheet} onPress={() => undefined}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.helpHeaderRow}>
+            <Text style={styles.helpTitle}>
+              {t("create_dream.help_sheet_title")}
+            </Text>
+            <TouchableOpacity
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel={t("create_dream.help_close")}
+            >
+              <Ionicons name="close" size={22} color={colors.primaryNavy} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={styles.helpScroll}
+          >
+            {HELP_TOPICS.map((topic) => (
+              <View key={topic} style={styles.helpItem}>
+                <Text style={styles.helpItemTitle}>
+                  {t(`create_dream.help_${topic}_title`)}
+                </Text>
+                <Text style={styles.helpItemBody}>
+                  {t(`create_dream.help_${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -1384,6 +1584,95 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     marginTop: 6,
     paddingHorizontal: 2,
+  },
+
+  // CDP Bucket B.1 — character counter
+  captionCharCount: {
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "right",
+    marginTop: 4,
+    marginBottom: 4,
+  },
+
+  // CDP Bucket B.3 — coach mark banner
+  coachBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.primaryNavy,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  coachText: {
+    flex: 1,
+    color: colors.textWhite,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
+  // CDP Bucket B.4 — inline section label that sits next to the
+  // visibility (?) trigger.
+  visibilityHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 14,
+    marginBottom: 6,
+    paddingHorizontal: 2,
+  },
+  sectionLabelInline: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+
+  // CDP Bucket B.2 — HelpSheet
+  helpBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  helpSheet: {
+    backgroundColor: colors.cardBg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 28,
+    maxHeight: "85%",
+  },
+  helpHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  helpTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.primaryNavy,
+  },
+  helpScroll: { paddingBottom: 8 },
+  helpItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  helpItemTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  helpItemBody: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 19,
   },
 
   // Attach goal/circle
