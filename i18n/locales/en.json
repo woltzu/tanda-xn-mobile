@@ -537,6 +537,8 @@
     "subtitle": "Your village, your people",
     "pill_join_more": "Join more",
     "section_new_arrivals": "New Arrivals",
+    "events_teaser_count_more_one": "+{{count}} more",
+    "events_teaser_count_more_other": "+{{count}} more",
     "see_all": "See All",
     "section_community_title": "Community",
     "section_community_see_all": "See all",
@@ -4298,6 +4300,12 @@
     "notification_created_body": "{{creator}} created '{{title}}' on {{date}}.",
     "notification_reminder_24h_title": "Event tomorrow",
     "notification_reminder_24h_body": "'{{title}}' is happening tomorrow at {{location}}."
+  },
+  "events_screen": {
+    "section_today": "Today",
+    "section_this_week": "This week",
+    "section_later": "Later",
+    "age_range_label": "Age range"
   },
   "honor": {
     "notification_tier_change_title": "Honor Score tier updated",

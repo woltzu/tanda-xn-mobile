@@ -537,6 +537,8 @@
     "subtitle": "Votre village, vos gens",
     "pill_join_more": "Rejoindre plus",
     "section_new_arrivals": "Nouveaux arrivants",
+    "events_teaser_count_more_one": "+{{count}} autre",
+    "events_teaser_count_more_other": "+{{count}} autres",
     "see_all": "Tout voir",
     "section_community_title": "Communauté",
     "section_community_see_all": "Tout voir",
@@ -4298,6 +4300,12 @@
     "notification_created_body": "{{creator}} a créé '{{title}}' le {{date}}.",
     "notification_reminder_24h_title": "Événement demain",
     "notification_reminder_24h_body": "'{{title}}' a lieu demain à {{location}}."
+  },
+  "events_screen": {
+    "section_today": "Aujourd'hui",
+    "section_this_week": "Cette semaine",
+    "section_later": "Plus tard",
+    "age_range_label": "Tranche d'âge"
   },
   "honor": {
     "notification_tier_change_title": "Palier Score d'honneur mis à jour",

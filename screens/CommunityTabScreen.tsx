@@ -28,7 +28,7 @@ import { useCommunity } from '../context/CommunityContext';
 import { useElder } from '../context/ElderContext';
 import {
   useUpcomingEvents,
-  formatEventDate,
+  formatEventDateCompact,
   formatEventTime,
 } from '../hooks/useEvents';
 import { Routes } from '../lib/routes';
@@ -615,15 +615,53 @@ const CommunityTabScreen: React.FC = () => {
     );
   };
 
-  // Compact "Upcoming Events" teaser — surfaces the first item from
-  // the shared `useUpcomingEvents` cache (see top of component). Tapping
-  // navigates to the full EventsScreen; empty state offers a direct
-  // CreateEvent shortcut.
+  // Browse-events Bucket A.6 — richer teaser. When at least one upcoming
+  // event exists, surface enough of it that the user can decide to tap
+  // without entering the full list: thumbnail (or category icon), title,
+  // category chip + short location line, compact date, and a "+N more"
+  // pill when more upcoming events exist beyond the next one. Empty
+  // state is unchanged — still a single CreateEvent shortcut.
   const renderUpcomingEvents = () => {
     const handleOpenList = () => navigation.navigate('Events' as never);
     const handleCreate = () =>
       navigation.navigate(Routes.CreateEvent as never);
 
+    if (!nextEvent) {
+      return (
+        <View style={styles.section}>
+          {renderSectionHeader(
+            t('community_events.tab_section_title'),
+            t('community_events.tab_section_link'),
+            handleOpenList,
+          )}
+          <TouchableOpacity
+            style={styles.eventsTeaserCard}
+            onPress={handleCreate}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+          >
+            <View style={styles.eventsTeaserIcon}>
+              <Ionicons
+                name="add-circle-outline"
+                size={20}
+                color="#FFFFFF"
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.eventsTeaserTitle} numberOfLines={1}>
+                {t('community_events.teaser_empty_title')}
+              </Text>
+              <Text style={styles.eventsTeaserSubtitle} numberOfLines={1}>
+                {t('community_events.teaser_empty_subtitle')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.subtitle} />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    const moreCount = upcomingEvents.length - 1;
     return (
       <View style={styles.section}>
         {renderSectionHeader(
@@ -633,34 +671,54 @@ const CommunityTabScreen: React.FC = () => {
         )}
         <TouchableOpacity
           style={styles.eventsTeaserCard}
-          onPress={nextEvent ? handleOpenList : handleCreate}
+          onPress={handleOpenList}
           activeOpacity={0.85}
           accessibilityRole="button"
         >
-          <View style={styles.eventsTeaserIcon}>
-            <Ionicons
-              name={nextEvent ? 'calendar' : 'add-circle-outline'}
-              size={20}
-              color="#FFFFFF"
+          {nextEvent.image_url ? (
+            <Image
+              source={{ uri: nextEvent.image_url }}
+              style={styles.eventsTeaserThumb}
+              resizeMode="cover"
+              accessibilityLabel={nextEvent.title}
             />
-          </View>
+          ) : (
+            <View style={styles.eventsTeaserIcon}>
+              <Ionicons name="calendar" size={20} color="#FFFFFF" />
+            </View>
+          )}
           <View style={{ flex: 1 }}>
             <Text style={styles.eventsTeaserTitle} numberOfLines={1}>
-              {nextEvent
-                ? nextEvent.title
-                : t('community_events.teaser_empty_title')}
+              {nextEvent.title}
             </Text>
             <Text style={styles.eventsTeaserSubtitle} numberOfLines={1}>
-              {nextEvent
-                ? `${formatEventDate(nextEvent.event_datetime)} · ${formatEventTime(nextEvent.event_datetime)}`
-                : t('community_events.teaser_empty_subtitle')}
+              {formatEventDateCompact(nextEvent.event_datetime)} ·{' '}
+              {formatEventTime(nextEvent.event_datetime)}
             </Text>
+            <View style={styles.eventsTeaserMetaRow}>
+              {nextEvent.category ? (
+                <View style={styles.eventsTeaserChip}>
+                  <Text style={styles.eventsTeaserChipText}>
+                    {t(`create_event.category_${nextEvent.category}`)}
+                  </Text>
+                </View>
+              ) : null}
+              <Text style={styles.eventsTeaserLocation} numberOfLines={1}>
+                {nextEvent.location_name}
+              </Text>
+            </View>
           </View>
-          <Ionicons
-            name="chevron-forward"
-            size={18}
-            color={COLORS.subtitle}
-          />
+          {moreCount > 0 ? (
+            <View style={styles.eventsTeaserMorePill}>
+              <Text style={styles.eventsTeaserMorePillText}>
+                {t('community_tab.events_teaser_count_more', {
+                  count: moreCount,
+                })}
+              </Text>
+            </View>
+          ) : (
+            <Ionicons name="chevron-forward" size={18} color={COLORS.subtitle} />
+          )}
         </TouchableOpacity>
       </View>
     );
@@ -1421,6 +1479,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Browse-events Bucket A.6 — thumbnail variant of the teaser icon
+  // slot. Same footprint as the icon so the row layout doesn't jump
+  // when an event has or lacks a flyer.
+  eventsTeaserThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#E5E7EB',
+  },
   eventsTeaserTitle: {
     fontSize: 15,
     fontWeight: '700',
@@ -1430,6 +1497,45 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.subtitle,
     marginTop: 2,
+  },
+  eventsTeaserMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  eventsTeaserChip: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 999,
+    backgroundColor: '#F0FDFB',
+    borderWidth: 1,
+    borderColor: '#00C6AE',
+  },
+  eventsTeaserChipText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#0A2342',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  eventsTeaserLocation: {
+    flex: 1,
+    fontSize: 11,
+    color: COLORS.subtitle,
+  },
+  eventsTeaserMorePill: {
+    backgroundColor: '#F0FDFB',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#00C6AE',
+  },
+  eventsTeaserMorePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0A2342',
   },
 
   // ----- Dreams teaser card -----

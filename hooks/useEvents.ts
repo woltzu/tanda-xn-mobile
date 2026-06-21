@@ -259,6 +259,28 @@ export function invalidateUpcomingEventsCache() {
   bustUpcomingCache();
 }
 
+// Browse-events Bucket A.3 — single-row fetch used by the deep-link path.
+// When the user taps a notification carrying ?eventId=<uuid> the list
+// hook may not yet have that row in its 50-item cache (e.g. the event
+// is far in the future). This helper hits the DB directly so the sheet
+// can still open on cold deep-link entry. No caching layer of its own;
+// the caller wires the result straight into setSelectedEvent.
+export async function fetchEventById(
+  id: string,
+): Promise<CommunityEventRow | null> {
+  if (!id || typeof id !== "string") return null;
+  const { data, error } = await supabase
+    .from("community_events")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    console.warn("[useEvents] fetchEventById failed:", error.message);
+    return null;
+  }
+  return (data as CommunityEventRow) ?? null;
+}
+
 // Note: the old `createEvent` + private `uploadFlyerImage` helpers were
 // removed in the P1 form-rewrite (CreateEventScreen now performs the
 // insert + downscaled background upload inline, since the optimistic
@@ -279,6 +301,22 @@ export function formatEventDate(iso: string): string {
       year: "numeric",
       month: "long",
       day: "numeric",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+// Browse-events Bucket A.7 — compact form for card rows. "Sat 20 Jun" in
+// EN, "sam. 20 juin" in FR. The long form above is still used inside the
+// bottom-sheet, where the extra width is fine and the year matters.
+export function formatEventDateCompact(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
     });
   } catch {
     return iso;

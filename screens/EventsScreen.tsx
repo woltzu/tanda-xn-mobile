@@ -7,15 +7,24 @@
 // CreateEventScreen. Tapping Details opens a bottom-sheet showing every
 // field present on the row.
 //
+// Browse-events Bucket A (2026-06-20):
+//   • A.1+A.2 — SectionList with Today / This week / Later groups.
+//   • A.3    — route.params.eventId auto-opens the bottom sheet for the
+//               event referenced by a deep link / notification.
+//   • A.4    — "Age range" label is now i18n.
+//   • A.5    — Initial load shows three skeleton cards instead of a
+//               centred spinner.
+//   • A.7    — Card date uses the compact "Sat 20 Jun" format; the long
+//               weekday/year form is preserved in the sheet.
+//
 // Migration: 137_community_events.sql.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Modal,
   Pressable,
@@ -23,19 +32,25 @@ import {
   SafeAreaView,
   StatusBar,
   Image,
-  ActivityIndicator,
   RefreshControl,
   Linking,
+  SectionList,
+  Animated,
+  Easing,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTranslation } from "react-i18next";
+import { useRoute, type RouteProp } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { colors } from "../theme/tokens";
 import {
   useUpcomingEvents,
+  fetchEventById,
   formatEventDate,
+  formatEventDateCompact,
   formatEventTime,
   isEventFree,
   type CommunityEventRow,
@@ -43,16 +58,76 @@ import {
 import ReportButton from "../components/ReportButton";
 
 // ==========================================================================
+// Helpers
+// ==========================================================================
+
+type SectionKey = "today" | "this_week" | "later";
+type EventSection = {
+  key: SectionKey;
+  titleKey: string;
+  data: CommunityEventRow[];
+};
+
+// Bucket A.1 — bucket every event into one of three time windows. Today
+// = same calendar date as `now` (local timezone). This week = tomorrow
+// through the end of Sunday (ISO week ending). Later = everything past
+// that. Sections with no events are dropped before rendering so the
+// list never renders an empty header.
+function groupEventsByBucket(events: CommunityEventRow[]): EventSection[] {
+  const now = new Date();
+
+  const todayEnd = new Date(now);
+  todayEnd.setHours(23, 59, 59, 999);
+
+  // End-of-week = upcoming Sunday at 23:59:59. JS day index: 0=Sunday,
+  // so daysUntilSunday = (7 - now.getDay()) % 7 — 0 means today already
+  // is Sunday, in which case Today and This week share the boundary.
+  const weekEnd = new Date(now);
+  const daysUntilSunday = (7 - now.getDay()) % 7;
+  weekEnd.setDate(weekEnd.getDate() + daysUntilSunday);
+  weekEnd.setHours(23, 59, 59, 999);
+
+  const today: CommunityEventRow[] = [];
+  const thisWeek: CommunityEventRow[] = [];
+  const later: CommunityEventRow[] = [];
+
+  for (const ev of events) {
+    const dt = new Date(ev.event_datetime);
+    if (dt <= todayEnd) today.push(ev);
+    else if (dt <= weekEnd) thisWeek.push(ev);
+    else later.push(ev);
+  }
+
+  return [
+    { key: "today", titleKey: "events_screen.section_today", data: today },
+    {
+      key: "this_week",
+      titleKey: "events_screen.section_this_week",
+      data: thisWeek,
+    },
+    { key: "later", titleKey: "events_screen.section_later", data: later },
+  ].filter((s) => s.data.length > 0);
+}
+
+// ==========================================================================
 // Screen
 // ==========================================================================
+
+type EventsRouteParams = { eventId?: string };
+type EventsRoute = RouteProp<Record<string, EventsRouteParams | undefined>>;
 
 export default function EventsScreen() {
   const { t } = useTranslation();
   const navigation = useTypedNavigation();
+  const route = useRoute<EventsRoute>();
+  const deepLinkEventId = route.params?.eventId ?? null;
+
   // Shared cache with CommunityTabScreen — both pass `{ limit: 50 }` so a
   // single request hydrates both surfaces. Focus refetch lives inside the
   // hook, so we no longer need a local `useFocusEffect` here.
   const { events, loading, refetch } = useUpcomingEvents({ limit: 50 });
+
+  const sections = useMemo(() => groupEventsByBucket(events), [events]);
 
   const [selectedEvent, setSelectedEvent] = useState<CommunityEventRow | null>(
     null,
@@ -61,6 +136,39 @@ export default function EventsScreen() {
   useEffect(() => {
     setSheetImgFailed(false);
   }, [selectedEvent]);
+
+  // Bucket A.3 — deep-link auto-open. When the user lands on this screen
+  // with ?eventId=<uuid> (notification tap or in-app link), open the
+  // sheet for that event as soon as possible.
+  //   1. If the id is already in the loaded list, use that row.
+  //   2. Otherwise, fall back to a single-row DB fetch.
+  // `handledDeepLinkId` makes the auto-open one-shot per id so that
+  // closing the sheet doesn't immediately re-trigger it. If the user
+  // arrives via a different id, the new id is handled afresh.
+  const handledDeepLinkIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!deepLinkEventId) return;
+    if (handledDeepLinkIdRef.current === deepLinkEventId) return;
+    const inList = events.find((e) => e.id === deepLinkEventId);
+    if (inList) {
+      handledDeepLinkIdRef.current = deepLinkEventId;
+      setSelectedEvent(inList);
+      return;
+    }
+    // Wait until list has finished loading before falling back to a
+    // direct fetch — otherwise we'd double-fetch the same row.
+    if (loading) return;
+    let cancelled = false;
+    (async () => {
+      const fresh = await fetchEventById(deepLinkEventId);
+      if (cancelled) return;
+      handledDeepLinkIdRef.current = deepLinkEventId;
+      if (fresh) setSelectedEvent(fresh);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [deepLinkEventId, events, loading]);
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = async () => {
@@ -102,102 +210,145 @@ export default function EventsScreen() {
 
   const handleCreate = () => navigation.navigate(Routes.CreateEvent);
 
+  // Bucket A.5 — skeleton pulse. One Animated.Value drives every
+  // placeholder card's opacity. Runs only during the cold initial load.
+  const skeletonPulse = useRef(new Animated.Value(0.5)).current;
+  const showSkeleton = loading && events.length === 0;
+  useEffect(() => {
+    if (!showSkeleton) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonPulse, {
+          toValue: 0.5,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [showSkeleton, skeletonPulse]);
+
+  // ── Header (reused as the SectionList sticky-ish ListHeader) ────────
+  const ListHeader = (
+    <LinearGradient
+      colors={[colors.primaryNavy, "#143654"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.header}
+    >
+      <View style={styles.headerTopRow}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.headerIconBtn}
+          accessibilityRole="button"
+          accessibilityLabel={t("common.back")}
+        >
+          <Ionicons name="arrow-back" size={22} color={colors.textWhite} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>
+          {t("community_events.header_title")}
+        </Text>
+        <TouchableOpacity
+          onPress={handleCreate}
+          style={styles.headerIconBtn}
+          accessibilityRole="button"
+          accessibilityLabel={t("community_events.header_create_a11y")}
+        >
+          <Ionicons name="add" size={26} color={colors.textWhite} />
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.headerSubtitle}>
+        {t("community_events.header_subtitle")}
+      </Text>
+    </LinearGradient>
+  );
+
+  // ── Empty / skeleton / list-body chooser ───────────────────────────
+  const renderEmpty = () => {
+    if (showSkeleton) {
+      return (
+        <View style={styles.cardsWrap}>
+          {[0, 1, 2].map((i) => (
+            <EventCardSkeleton key={i} pulse={skeletonPulse} />
+          ))}
+        </View>
+      );
+    }
+    return (
+      <View style={styles.centerState}>
+        <Ionicons
+          name="calendar-outline"
+          size={48}
+          color={colors.textSecondary}
+        />
+        <Text style={styles.emptyTitle}>
+          {t("community_events.empty_title")}
+        </Text>
+        <Text style={styles.emptySubtitle}>
+          {t("community_events.empty_subtitle")}
+        </Text>
+        <TouchableOpacity
+          style={styles.emptyCreateBtn}
+          onPress={handleCreate}
+          accessibilityRole="button"
+        >
+          <Ionicons
+            name="add-circle-outline"
+            size={16}
+            color={colors.textWhite}
+          />
+          <Text style={styles.emptyCreateBtnText}>
+            {t("community_events.empty_create_btn")}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={colors.primaryNavy} />
 
-      <ScrollView
-        style={styles.scroll}
+      {/* SectionList replaces the prior ScrollView+map. The header is
+          rendered as ListHeaderComponent so it scrolls with the list.
+          Sections derive from groupEventsByBucket and skip empty
+          windows automatically. */}
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => item.id}
+        ListHeaderComponent={ListHeader}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-      >
-        {/* ===== HEADER ===== */}
-        <LinearGradient
-          colors={[colors.primaryNavy, "#143654"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.header}
-        >
-          <View style={styles.headerTopRow}>
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              style={styles.headerIconBtn}
-              accessibilityRole="button"
-              accessibilityLabel={t("common.back")}
-            >
-              <Ionicons name="arrow-back" size={22} color={colors.textWhite} />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>
-              {t("community_events.header_title")}
+        renderSectionHeader={({ section }) => (
+          <View style={styles.sectionHeaderWrap}>
+            <Text style={styles.sectionHeaderText}>
+              {t(section.titleKey)} · {section.data.length}
             </Text>
-            <TouchableOpacity
-              onPress={handleCreate}
-              style={styles.headerIconBtn}
-              accessibilityRole="button"
-              accessibilityLabel={t("community_events.header_create_a11y")}
-            >
-              <Ionicons name="add" size={26} color={colors.textWhite} />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.headerSubtitle}>
-            {t("community_events.header_subtitle")}
-          </Text>
-        </LinearGradient>
-
-        {/* ===== CONTENT ===== */}
-        {loading && events.length === 0 ? (
-          <View style={styles.centerState}>
-            <ActivityIndicator color={colors.accentTeal} />
-            <Text style={styles.centerStateText}>
-              {t("community_events.loading")}
-            </Text>
-          </View>
-        ) : events.length === 0 ? (
-          <View style={styles.centerState}>
-            <Ionicons
-              name="calendar-outline"
-              size={48}
-              color={colors.textSecondary}
-            />
-            <Text style={styles.emptyTitle}>
-              {t("community_events.empty_title")}
-            </Text>
-            <Text style={styles.emptySubtitle}>
-              {t("community_events.empty_subtitle")}
-            </Text>
-            <TouchableOpacity
-              style={styles.emptyCreateBtn}
-              onPress={handleCreate}
-              accessibilityRole="button"
-            >
-              <Ionicons
-                name="add-circle-outline"
-                size={16}
-                color={colors.textWhite}
-              />
-              <Text style={styles.emptyCreateBtnText}>
-                {t("community_events.empty_create_btn")}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View style={styles.cardsWrap}>
-            {events.map((event) => (
-              <EventCard
-                key={event.id}
-                event={event}
-                onDetails={() => setSelectedEvent(event)}
-                onBuyTicket={() =>
-                  handleBuyTicket(event.contact_info?.ticket_link)
-                }
-              />
-            ))}
           </View>
         )}
-      </ScrollView>
+        renderItem={({ item }) => (
+          <View style={styles.itemWrap}>
+            <EventCard
+              event={item}
+              onDetails={() => setSelectedEvent(item)}
+              onBuyTicket={() => handleBuyTicket(item.contact_info?.ticket_link)}
+            />
+          </View>
+        )}
+        ListEmptyComponent={renderEmpty}
+        stickySectionHeadersEnabled={false}
+      />
 
       {/* ===== DETAILS BOTTOM SHEET ===== */}
       <Modal
@@ -267,7 +418,7 @@ export default function EventsScreen() {
                 {selectedEvent.age_range && (
                   <SheetInfoRow
                     icon="people-outline"
-                    label="Age range"
+                    label={t("events_screen.age_range_label")}
                     value={selectedEvent.age_range}
                   />
                 )}
@@ -438,7 +589,9 @@ function EventCard({
           color={colors.textSecondary}
         />
         <Text style={styles.cardInfoText}>
-          {formatEventDate(event.event_datetime)} ·{" "}
+          {/* Bucket A.7 — compact date on the card; the long form lives
+              in the bottom-sheet where horizontal space is plentiful. */}
+          {formatEventDateCompact(event.event_datetime)} ·{" "}
           {formatEventTime(event.event_datetime)}
         </Text>
       </View>
@@ -513,6 +666,37 @@ function EventCard({
 }
 
 // ==========================================================================
+// EventCardSkeleton — Bucket A.5
+// ==========================================================================
+
+function EventCardSkeleton({ pulse }: { pulse: Animated.Value }) {
+  return (
+    <Animated.View style={[styles.card, { opacity: pulse }]}>
+      <View style={styles.cardHeaderRow}>
+        <View style={styles.skeletonThumb} />
+        <View style={styles.cardTitleCol}>
+          <View style={styles.skeletonLineWide} />
+          <View style={styles.skeletonChip} />
+        </View>
+      </View>
+      <View style={[styles.cardInfoRow, { marginTop: 12 }]}>
+        <View style={styles.skeletonLineNarrow} />
+      </View>
+      <View style={styles.cardInfoRow}>
+        <View style={styles.skeletonLineNarrow} />
+      </View>
+      <View style={styles.cardInfoRow}>
+        <View style={styles.skeletonLineMedium} />
+      </View>
+      <View style={[styles.cardBtnRow, { marginTop: 14 }]}>
+        <View style={styles.skeletonBtn} />
+        <View style={styles.skeletonBtn} />
+      </View>
+    </Animated.View>
+  );
+}
+
+// ==========================================================================
 // Sheet sub-components
 // ==========================================================================
 
@@ -566,7 +750,6 @@ function SheetSection({
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.screenBg },
-  scroll: { flex: 1 },
   scrollContent: { paddingBottom: 32 },
 
   header: {
@@ -597,16 +780,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
 
+  // Bucket A.1 — SectionList section header strip.
+  sectionHeaderWrap: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 6,
+    backgroundColor: colors.screenBg,
+  },
+  sectionHeaderText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.textSecondary,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+
   centerState: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 60,
     paddingHorizontal: 32,
     gap: 10,
-  },
-  centerStateText: {
-    color: colors.textSecondary,
-    fontSize: 14,
   },
   emptyTitle: {
     fontSize: 16,
@@ -636,11 +830,11 @@ const styles = StyleSheet.create({
   },
 
   cardsWrap: { padding: 16 },
+  itemWrap: { paddingHorizontal: 16, paddingTop: 12 },
   card: {
     backgroundColor: colors.cardBg,
     borderRadius: 14,
     padding: 16,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.border,
     shadowColor: "#000",
@@ -743,6 +937,44 @@ const styles = StyleSheet.create({
     color: colors.textWhite,
     fontWeight: "700",
     fontSize: 13,
+  },
+
+  // Bucket A.5 skeleton blocks.
+  skeletonThumb: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonChip: {
+    width: 80,
+    height: 14,
+    borderRadius: 6,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonLineWide: {
+    width: "70%",
+    height: 16,
+    borderRadius: 6,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonLineMedium: {
+    width: "55%",
+    height: 12,
+    borderRadius: 5,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonLineNarrow: {
+    width: "40%",
+    height: 12,
+    borderRadius: 5,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonBtn: {
+    flex: 1,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: "#E5E7EB",
   },
 
   sheetBackdrop: {
