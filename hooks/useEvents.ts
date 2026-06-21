@@ -357,3 +357,143 @@ export function formatEventTime(iso: string): string {
 export function isEventFree(row: CommunityEventRow): boolean {
   return row.price == null || row.price === 0;
 }
+
+// ─── View-event-details Bucket A.3 — Interested / Going hook ─────────────────
+//
+// Pairs with migration 226 (public.event_interest). Returns the
+// authenticated user's status on a single event plus the public count
+// of interested + going rows.
+//
+// Status cycle (matches the toggle UI on EventsScreen's bottom sheet):
+//
+//     null → 'interested' → 'going' → 'not_going' → null
+//
+// `null` is represented by row absence — so the final hop deletes
+// rather than UPDATEs to a sentinel value. The hook handles all four
+// transitions and applies an optimistic delta to the count so the
+// "{{count}} people interested" subtitle moves in step with the tap.
+//
+// On error the optimistic state is reverted to whatever the DB
+// returned, and a console warning is logged. RLS does the rest of
+// the heavy lifting — no SECURITY DEFINER RPC is needed because the
+// public SELECT policy lets any authenticated caller count.
+
+export type EventInterestStatus = "interested" | "going" | "not_going" | null;
+
+const INTERESTED_COUNTED: ReadonlyArray<EventInterestStatus> = [
+  "interested",
+  "going",
+];
+
+function nextStatus(prev: EventInterestStatus): EventInterestStatus {
+  switch (prev) {
+    case null:
+      return "interested";
+    case "interested":
+      return "going";
+    case "going":
+      return "not_going";
+    case "not_going":
+      return null;
+  }
+}
+
+export function useEventInterest(eventId: string | null | undefined): {
+  status: EventInterestStatus;
+  count: number;
+  loading: boolean;
+  cycleStatus: () => Promise<void>;
+} {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const [status, setStatus] = useState<EventInterestStatus>(null);
+  const [count, setCount] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // Refetch helper so cycleStatus can reconcile after a write.
+  const refresh = useCallback(async () => {
+    if (!eventId) {
+      setStatus(null);
+      setCount(0);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    // Two cheap reads, parallel.
+    const [{ data: rows, error: rowsErr }, { count: cnt, error: cntErr }] =
+      await Promise.all([
+        userId
+          ? supabase
+              .from("event_interest")
+              .select("status")
+              .eq("event_id", eventId)
+              .eq("user_id", userId)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        supabase
+          .from("event_interest")
+          .select("id", { count: "exact", head: true })
+          .eq("event_id", eventId)
+          .in("status", INTERESTED_COUNTED.filter(Boolean) as string[]),
+      ]);
+    if (rowsErr) {
+      console.warn("[useEventInterest] status read failed:", rowsErr.message);
+    }
+    if (cntErr) {
+      console.warn("[useEventInterest] count read failed:", cntErr.message);
+    }
+    setStatus(
+      (rows && (rows as { status: EventInterestStatus }).status) ?? null,
+    );
+    setCount(typeof cnt === "number" ? cnt : 0);
+    setLoading(false);
+  }, [eventId, userId]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const cycleStatus = useCallback(async () => {
+    if (!eventId || !userId) return;
+
+    const prev = status;
+    const next = nextStatus(prev);
+
+    // Optimistic delta: did the row's "is counted" membership flip?
+    const prevCounted = INTERESTED_COUNTED.includes(prev);
+    const nextCounted = INTERESTED_COUNTED.includes(next);
+    const delta = (nextCounted ? 1 : 0) - (prevCounted ? 1 : 0);
+    setStatus(next);
+    setCount((c) => Math.max(0, c + delta));
+
+    try {
+      if (next === null) {
+        const { error } = await supabase
+          .from("event_interest")
+          .delete()
+          .eq("event_id", eventId)
+          .eq("user_id", userId);
+        if (error) throw error;
+      } else if (prev === null) {
+        const { error } = await supabase
+          .from("event_interest")
+          .insert({ event_id: eventId, user_id: userId, status: next });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("event_interest")
+          .update({ status: next })
+          .eq("event_id", eventId)
+          .eq("user_id", userId);
+        if (error) throw error;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("[useEventInterest] cycle failed:", message);
+      // Reconcile against the DB so the UI doesn't drift.
+      await refresh();
+    }
+  }, [eventId, userId, status, refresh]);
+
+  return { status, count, loading, cycleStatus };
+}

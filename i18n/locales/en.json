@@ -4301,6 +4301,19 @@
     "notification_reminder_24h_title": "Event tomorrow",
     "notification_reminder_24h_body": "'{{title}}' is happening tomorrow at {{location}}."
   },
+  "events_sheet": {
+    "organiser_label": "Posted by {{name}}",
+    "organiser_unknown": "Unknown organiser",
+    "share_a11y": "Share this event",
+    "share_title": "Check out {{title}}!",
+    "share_message": "{{title}} on {{date}} at {{location}} — {{url}}",
+    "interested_button_default": "👍 Interested",
+    "interested_button_active": "✅ Interested",
+    "going_button_active": "🎉 Going!",
+    "not_going_button": "Not going",
+    "interested_count_one": "{{count}} person interested",
+    "interested_count_other": "{{count}} people interested"
+  },
   "events_screen": {
     "section_today": "Today",
     "section_this_week": "This week",

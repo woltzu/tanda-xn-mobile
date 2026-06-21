@@ -46,6 +46,7 @@ import {
   Easing,
   ScrollView,
   TextInput,
+  Share,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -59,6 +60,7 @@ import { supabase } from "../lib/supabase";
 import { colors } from "../theme/tokens";
 import {
   useUpcomingEvents,
+  useEventInterest,
   fetchEventById,
   formatEventDate,
   formatEventDateCompact,
@@ -295,6 +297,15 @@ export default function EventsScreen() {
     setSheetImgFailed(false);
   }, [selectedEvent]);
 
+  // ── View-event-details Bucket A.4 — organiser-name cache. The
+  // profiles row for each event creator is fetched once per screen
+  // lifetime and cached in a Map<userId, full_name | null>. The map
+  // doubles as the request-dedupe set: a second open of the same
+  // event won't re-fire the network call.
+  const [organiserNames, setOrganiserNames] = useState<
+    Record<string, string | null>
+  >({});
+
   // ── Bucket C.3 — record_event_view fire-and-forget Set guard + Bucket
   // C.6 events.event_opened telemetry. A view is counted at most once
   // per event per screen lifetime; subsequent opens of the same event's
@@ -311,21 +322,46 @@ export default function EventsScreen() {
         eventLabel: source,
         eventValue: { event_id: event.id, source },
       });
-      if (viewedRpcSentRef.current.has(event.id)) return;
-      viewedRpcSentRef.current.add(event.id);
-      supabase
-        .rpc("record_event_view", { p_event_id: event.id })
-        .then(({ error }) => {
-          if (error) {
-            console.warn(
-              "[record_event_view] rpc failed for",
-              event.id,
-              error.message,
-            );
-          }
-        });
+      if (!viewedRpcSentRef.current.has(event.id)) {
+        viewedRpcSentRef.current.add(event.id);
+        supabase
+          .rpc("record_event_view", { p_event_id: event.id })
+          .then(({ error }) => {
+            if (error) {
+              console.warn(
+                "[record_event_view] rpc failed for",
+                event.id,
+                error.message,
+              );
+            }
+          });
+      }
+      // Bucket A.4 — fetch the organiser profile lazily, once per
+      // session. The dedupe is "does the map already have a key for
+      // this user_id" — `null` is a valid memoised result for users
+      // whose profile row is missing or fetch failed.
+      if (
+        event.user_id &&
+        !Object.prototype.hasOwnProperty.call(organiserNames, event.user_id)
+      ) {
+        const uid = event.user_id;
+        supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", uid)
+          .maybeSingle()
+          .then(({ data, error }) => {
+            if (error) {
+              console.warn("[organiser-fetch] failed:", error.message);
+            }
+            setOrganiserNames((prev) => ({
+              ...prev,
+              [uid]: data?.full_name ?? null,
+            }));
+          });
+      }
     },
-    [track],
+    [track, organiserNames],
   );
 
   // Bucket A.3 — deep-link auto-open. When the user lands on this screen
@@ -400,6 +436,31 @@ export default function EventsScreen() {
   };
 
   const handleCreate = () => navigation.navigate(Routes.CreateEvent);
+
+  // ── Bucket A.5 — Share an event via the native share sheet. The web
+  // prefix matches lib/deepLinking.ts so the link round-trips back
+  // into the app on tap. If a ticket link is present we append it so
+  // the recipient can buy directly from the share message.
+  const handleShareEvent = async (event: CommunityEventRow) => {
+    const url = `https://v0-tanda-xn.vercel.app/event/${event.id}`;
+    const dateLabel = `${formatEventDateCompact(event.event_datetime)} · ${formatEventTime(event.event_datetime)}`;
+    const message = t("events_sheet.share_message", {
+      title: event.title,
+      date: dateLabel,
+      location: event.location_name,
+      url,
+    });
+    try {
+      await Share.share({
+        title: t("events_sheet.share_title", { title: event.title }),
+        message,
+        url,
+      });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      console.warn("[handleShareEvent] failed:", reason);
+    }
+  };
 
   // Bucket A.5 — skeleton pulse. One Animated.Value drives every
   // placeholder card's opacity. Runs only during the cold initial load.
@@ -842,6 +903,38 @@ export default function EventsScreen() {
                 style={{ maxHeight: "90%" }}
                 showsVerticalScrollIndicator={false}
               >
+                {/* View-event-details Bucket A.5 — sheet action row.
+                    Share + Report sit next to a Close affordance so the
+                    user can act on the event without dismissing first. */}
+                <View style={styles.sheetActionRow}>
+                  <TouchableOpacity
+                    onPress={() => handleShareEvent(selectedEvent)}
+                    style={styles.sheetActionBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("events_sheet.share_a11y")}
+                  >
+                    <Ionicons
+                      name="share-outline"
+                      size={20}
+                      color={colors.primaryNavy}
+                    />
+                  </TouchableOpacity>
+                  <ReportButton
+                    kind="content"
+                    contentType="event"
+                    targetId={selectedEvent.id}
+                    ownerUserId={selectedEvent.user_id}
+                  />
+                  <TouchableOpacity
+                    onPress={() => setSelectedEvent(null)}
+                    style={styles.sheetActionBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel={t("community_events.btn_close")}
+                  >
+                    <Ionicons name="close" size={22} color={colors.primaryNavy} />
+                  </TouchableOpacity>
+                </View>
+
                 {/* Flyer banner */}
                 {selectedEvent.image_url && !sheetImgFailed ? (
                   <Image
@@ -855,6 +948,28 @@ export default function EventsScreen() {
                 ) : null}
 
                 <Text style={styles.sheetTitle}>{selectedEvent.title}</Text>
+
+                {/* Bucket A.4 — organiser attribution. Falls back to a
+                    generic label if the profile fetch is still pending,
+                    failed, or the row is missing. */}
+                <View style={styles.organiserRow}>
+                  <Ionicons
+                    name="person-outline"
+                    size={14}
+                    color={colors.textSecondary}
+                  />
+                  <Text style={styles.organiserText}>
+                    {t("events_sheet.organiser_label", {
+                      name:
+                        organiserNames[selectedEvent.user_id] ??
+                        t("events_sheet.organiser_unknown"),
+                    })}
+                  </Text>
+                </View>
+
+                {/* Bucket A.6 — Interested toggle. Renders count subtitle
+                    beneath the button. */}
+                <EventInterestRow eventId={selectedEvent.id} />
 
                 <SheetInfoRow
                   icon="calendar-outline"
@@ -953,7 +1068,11 @@ export default function EventsScreen() {
                   </SheetSection>
                 )}
 
-                {/* Buy Ticket button only when a ticket link exists. */}
+                {/* Buy Ticket button only when a ticket link exists.
+                    The Close affordance lives in the action row at the
+                    top of the sheet; the redundant bottom Close was
+                    dropped in Bucket A.5 so the primary CTA (tickets)
+                    is the only footer button. */}
                 {selectedEvent.contact_info?.ticket_link && (
                   <TouchableOpacity
                     style={styles.sheetTicketBtn}
@@ -973,16 +1092,6 @@ export default function EventsScreen() {
                     </Text>
                   </TouchableOpacity>
                 )}
-
-                <TouchableOpacity
-                  style={styles.sheetCloseBtn}
-                  onPress={() => setSelectedEvent(null)}
-                  accessibilityRole="button"
-                >
-                  <Text style={styles.sheetCloseBtnText}>
-                    {t("community_events.btn_close")}
-                  </Text>
-                </TouchableOpacity>
               </ScrollView>
             )}
           </Pressable>
@@ -1160,6 +1269,71 @@ function EventCard({
           </TouchableOpacity>
         )}
       </View>
+    </View>
+  );
+}
+
+// ==========================================================================
+// EventInterestRow — View-event-details Bucket A.6
+// ==========================================================================
+//
+// One-button cycle that walks the user through null → interested → going
+// → not_going → null. Renders a subtitle with the public count of
+// interested + going rows. Optimistic delta is handled inside
+// useEventInterest so this component stays presentational.
+
+function EventInterestRow({ eventId }: { eventId: string }) {
+  const { t } = useTranslation();
+  const { status, count, loading, cycleStatus } = useEventInterest(eventId);
+
+  // Lookup table for the per-status button look. Keeps the JSX small.
+  const variant = (() => {
+    switch (status) {
+      case "interested":
+        return {
+          style: styles.interestBtnInterested,
+          textStyle: styles.interestBtnTextLight,
+          label: t("events_sheet.interested_button_active"),
+        };
+      case "going":
+        return {
+          style: styles.interestBtnGoing,
+          textStyle: styles.interestBtnTextLight,
+          label: t("events_sheet.going_button_active"),
+        };
+      case "not_going":
+        return {
+          style: styles.interestBtnNotGoing,
+          textStyle: styles.interestBtnTextDark,
+          label: t("events_sheet.not_going_button"),
+        };
+      case null:
+      default:
+        return {
+          style: styles.interestBtnDefault,
+          textStyle: styles.interestBtnTextDark,
+          label: t("events_sheet.interested_button_default"),
+        };
+    }
+  })();
+
+  return (
+    <View style={styles.interestRow}>
+      <TouchableOpacity
+        onPress={cycleStatus}
+        disabled={loading}
+        style={[styles.interestBtn, variant.style, loading && { opacity: 0.6 }]}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: loading, selected: status !== null }}
+        accessibilityLabel={variant.label}
+      >
+        <Text style={[styles.interestBtnText, variant.textStyle]}>
+          {variant.label}
+        </Text>
+      </TouchableOpacity>
+      <Text style={styles.interestCountText}>
+        {t("events_sheet.interested_count", { count })}
+      </Text>
     </View>
   );
 }
@@ -1679,7 +1853,81 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.textPrimary,
     lineHeight: 24,
+    marginBottom: 8,
+  },
+
+  // View-event-details Bucket A.5 — action row above the banner.
+  sheetActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 4,
+    marginBottom: 8,
+  },
+  sheetActionBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 18,
+  },
+
+  // Bucket A.4 — organiser row above the description.
+  organiserRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     marginBottom: 12,
+  },
+  organiserText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: "600",
+  },
+
+  // Bucket A.6 — Interested toggle row.
+  interestRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 14,
+  },
+  interestBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  interestBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  interestBtnTextLight: {
+    color: colors.textWhite,
+  },
+  interestBtnTextDark: {
+    color: colors.primaryNavy,
+  },
+  interestBtnDefault: {
+    backgroundColor: colors.cardBg,
+    borderColor: colors.primaryNavy,
+  },
+  interestBtnInterested: {
+    backgroundColor: colors.accentTeal,
+    borderColor: colors.accentTeal,
+  },
+  interestBtnGoing: {
+    backgroundColor: colors.successText,
+    borderColor: colors.successText,
+  },
+  interestBtnNotGoing: {
+    backgroundColor: colors.cardBg,
+    borderColor: colors.border,
+  },
+  interestCountText: {
+    flex: 1,
+    fontSize: 12,
+    color: colors.textSecondary,
   },
   sheetInfoRow: {
     flexDirection: "row",

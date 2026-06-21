@@ -4301,6 +4301,19 @@
     "notification_reminder_24h_title": "Événement demain",
     "notification_reminder_24h_body": "'{{title}}' a lieu demain à {{location}}."
   },
+  "events_sheet": {
+    "organiser_label": "Publié par {{name}}",
+    "organiser_unknown": "Organisateur inconnu",
+    "share_a11y": "Partager cet événement",
+    "share_title": "Découvrez {{title}} !",
+    "share_message": "{{title}} le {{date}} à {{location}} — {{url}}",
+    "interested_button_default": "👍 Intéressé(e)",
+    "interested_button_active": "✅ Intéressé(e)",
+    "going_button_active": "🎉 J'y vais !",
+    "not_going_button": "Je n'y vais pas",
+    "interested_count_one": "{{count}} personne intéressée",
+    "interested_count_other": "{{count}} personnes intéressées"
+  },
   "events_screen": {
     "section_today": "Aujourd'hui",
     "section_this_week": "Cette semaine",
