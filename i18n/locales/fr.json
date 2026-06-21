@@ -4329,6 +4329,10 @@
     "notification_post_commented_title": "Nouveau commentaire",
     "notification_post_commented_body": "{{commenter}} a commenté votre publication."
   },
+  "dream": {
+    "notification_supported_title": "{{supporter}} soutient votre rêve",
+    "notification_supported_body": "Ils croient en votre objectif — allez voir !"
+  },
   "event": {
     "notification_created_title": "Nouvel événement dans votre communauté",
     "notification_created_body": "{{creator}} a créé '{{title}}' le {{date}}.",

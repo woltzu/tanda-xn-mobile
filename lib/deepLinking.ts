@@ -73,6 +73,12 @@ export const linkingConfig = {
       DreamFeed: "dreams",
       PostDetail: "dreams/post/:postId",
       UserDreamProfile: "dreams/user/:userId",
+      // Create-a-dream-post Bucket C.5 — deep link to the composer.
+      // Lets the dream_post_supported notification (or a future
+      // "share an update" nudge) route straight into the create flow.
+      // No params today; future iterations can carry a template key
+      // to pre-fill the caption.
+      CreateDreamPost: "dreams/create",
 
       // Wallet / Profile / Settings (root Stack screens)
       WalletMain: "wallet",

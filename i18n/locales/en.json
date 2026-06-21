@@ -4329,6 +4329,10 @@
     "notification_post_commented_title": "New comment",
     "notification_post_commented_body": "{{commenter}} commented on your post."
   },
+  "dream": {
+    "notification_supported_title": "{{supporter}} supports your dream",
+    "notification_supported_body": "They believe in your goal – check it out!"
+  },
   "event": {
     "notification_created_title": "New event in your community",
     "notification_created_body": "{{creator}} created '{{title}}' on {{date}}.",

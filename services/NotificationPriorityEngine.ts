@@ -549,6 +549,21 @@ export class NotificationPriorityEngine {
     }
   }
 
+  /**
+   * Create-a-dream-post Bucket C — map the notifications.type values
+   * emitted by migration 228's dream_post_support_notify trigger onto
+   * the abstract NotificationType. Social-support nudge, same shape
+   * as the event / community families above.
+   */
+  static categoryForDreamNotification(dbType: string): NotificationType | null {
+    switch (dbType) {
+      case "dream_post_supported":
+        return "coaching_goals";
+      default:
+        return null;
+    }
+  }
+
   /** Time sensitivity: closer deadline = higher score. */
   private static calculateTimeSensitivity(data: Record<string, any>): number {
     const hoursUntilDue = data.hours_until_due ?? data.hoursUntilDue;

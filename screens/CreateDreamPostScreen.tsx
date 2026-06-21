@@ -68,6 +68,7 @@ import { useSavings, SavingsGoal } from "../context/SavingsContext";
 import { useCircles, Circle } from "../context/CirclesContext";
 import { showToast } from "../components/Toast";
 import { uploadToBucket } from "../utils/image";
+import { useEventTracker } from "../hooks/useEventTracker";
 import { colors } from "../theme/tokens";
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -153,6 +154,20 @@ export default function CreateDreamPostScreen() {
   const { myCircles } = useCircles();
   const { createDreamPost, updateDreamPostImage, markDreamPostImageFailed } =
     useFeed();
+
+  // CDP Bucket C.4 — telemetry. One-shot mount fire for
+  // dream_post.create_screen_viewed; per-action handlers below.
+  const { track } = useEventTracker();
+  const screenViewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (screenViewedFiredRef.current) return;
+    screenViewedFiredRef.current = true;
+    track({
+      eventType: "dream_post.create_screen_viewed",
+      eventCategory: "dream_post",
+      eventAction: "viewed",
+    });
+  }, [track]);
 
   // ── Form state ────────────────────────────────────────────────────────
   const [caption, setCaption] = useState("");
@@ -304,6 +319,12 @@ export default function CreateDreamPostScreen() {
           if (c) setSelectedCircle(c);
         }
         setDraftRestored(true);
+        // CDP Bucket C.4 — dream_post.draft_restored.
+        track({
+          eventType: "dream_post.draft_restored",
+          eventCategory: "dream_post",
+          eventAction: "draft_restored",
+        });
       } catch {
         // Corrupt draft → ignore and continue.
       } finally {
@@ -434,6 +455,14 @@ export default function CreateDreamPostScreen() {
         const downscaled = await downscaleIfLarge(result.assets[0].uri);
         setMediaUri(downscaled);
         setUploadStatus("idle");
+        // CDP Bucket C.4 — dream_post.image_picked. Fires on every
+        // successful pick (including replaces) — that's the signal
+        // we want for funnel analysis.
+        track({
+          eventType: "dream_post.image_picked",
+          eventCategory: "dream_post",
+          eventAction: "image_picked",
+        });
       }
     } finally {
       setPicking(false);
@@ -495,11 +524,26 @@ export default function CreateDreamPostScreen() {
     setSelectedGoal(g);
     setSelectedCircle(null);
     setAttachSheetOpen(false);
+    // CDP Bucket C.4 — dream_post.goal_attached (eventLabel = 'goal').
+    track({
+      eventType: "dream_post.goal_attached",
+      eventCategory: "dream_post",
+      eventAction: "goal_attached",
+      eventLabel: "goal",
+      eventValue: { goal_id: g.id },
+    });
   };
   const handlePickCircle = (c: Circle) => {
     setSelectedCircle(c);
     setSelectedGoal(null);
     setAttachSheetOpen(false);
+    track({
+      eventType: "dream_post.goal_attached",
+      eventCategory: "dream_post",
+      eventAction: "goal_attached",
+      eventLabel: "circle",
+      eventValue: { circle_id: c.id },
+    });
   };
   const handleClearAttachment = () => {
     setSelectedGoal(null);
@@ -591,6 +635,20 @@ export default function CreateDreamPostScreen() {
 
     publishedPostIdRef.current = createdPost.id;
 
+    // CDP Bucket C.4 — dream_post.published. Fires on the success path
+    // only; the alert branches above bail before this point.
+    track({
+      eventType: "dream_post.published",
+      eventCategory: "dream_post",
+      eventAction: "published",
+      eventValue: {
+        has_image: hasImage,
+        has_attachment: !!relatedId,
+        visibility,
+        body_length: captionTrimmed.length,
+      },
+    });
+
     // Navigate back immediately — the upload runs in the background.
     showToast(
       hasImage
@@ -662,7 +720,15 @@ export default function CreateDreamPostScreen() {
           </Text>
           {/* CDP Bucket B.2 — (?) header trigger opens the HelpSheet. */}
           <TouchableOpacity
-            onPress={() => setHelpOpen(true)}
+            onPress={() => {
+              setHelpOpen(true);
+              // CDP Bucket C.4 — dream_post.help_opened.
+              track({
+                eventType: "dream_post.help_opened",
+                eventCategory: "dream_post",
+                eventAction: "opened",
+              });
+            }}
             style={styles.backBtn}
             accessibilityRole="button"
             accessibilityLabel={t("create_dream.help_a11y")}
@@ -736,7 +802,18 @@ export default function CreateDreamPostScreen() {
               <TouchableOpacity
                 key={c.key}
                 style={styles.chip}
-                onPress={() => setCaption(c.template)}
+                onPress={() => {
+                  setCaption(c.template);
+                  // CDP Bucket C.4 — dream_post.template_used. Label
+                  // carries the chip key so we can rank which prompts
+                  // actually convert into posts.
+                  track({
+                    eventType: "dream_post.template_used",
+                    eventCategory: "dream_post",
+                    eventAction: "template_used",
+                    eventLabel: c.key,
+                  });
+                }}
                 accessibilityRole="button"
                 accessibilityLabel={t(`create_dream.chip_${c.key}_label`)}
               >
