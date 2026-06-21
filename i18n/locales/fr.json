@@ -4293,6 +4293,12 @@
     "notification_post_commented_title": "Nouveau commentaire",
     "notification_post_commented_body": "{{commenter}} a commenté votre publication."
   },
+  "event": {
+    "notification_created_title": "Nouvel événement dans votre communauté",
+    "notification_created_body": "{{creator}} a créé '{{title}}' le {{date}}.",
+    "notification_reminder_24h_title": "Événement demain",
+    "notification_reminder_24h_body": "'{{title}}' a lieu demain à {{location}}."
+  },
   "honor": {
     "notification_tier_change_title": "Palier Score d'honneur mis à jour",
     "notification_tier_change_body": "Votre Score d'honneur est passé de {{old_tier}} à {{new_tier}}.",

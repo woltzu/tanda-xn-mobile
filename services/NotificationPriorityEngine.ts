@@ -531,6 +531,24 @@ export class NotificationPriorityEngine {
     }
   }
 
+  /**
+   * Create-an-event Bucket C — map the notifications.type values that
+   * migration 223 emits onto the abstract NotificationType. event_created
+   * is the fan-out a member receives when someone in their community
+   * publishes an event; event_reminder_24h is the future T-1 day reminder
+   * (cron not yet scheduled). Both are social / coaching nudges, not
+   * money-critical.
+   */
+  static categoryForEventNotification(dbType: string): NotificationType | null {
+    switch (dbType) {
+      case "event_created":
+      case "event_reminder_24h":
+        return "coaching_goals";
+      default:
+        return null;
+    }
+  }
+
   /** Time sensitivity: closer deadline = higher score. */
   private static calculateTimeSensitivity(data: Record<string, any>): number {
     const hoursUntilDue = data.hours_until_due ?? data.hoursUntilDue;

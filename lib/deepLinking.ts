@@ -119,6 +119,15 @@ export const linkingConfig = {
       // PostDetail with a second path would silently overwrite the
       // existing dream-feed path. Notification handlers should build
       // the deep link as `/dreams/post/<id>` for any post type.
+
+      // Create an event — Bucket C of the Create an event review. Lets
+      // the event_created (migration 223) and future event_reminder_24h
+      // notifications route straight to the events list. eventId is
+      // optional; current EventsScreen does not yet auto-open the
+      // bottom sheet for a specific event — that's a tracked follow-up.
+      // The route is registered at root level (mirroring CommunityHub)
+      // so the URL loads even when the user isn't on the Community tab.
+      Events: "event/:eventId?",
     },
   },
 };

@@ -53,6 +53,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useAuth } from "../context/AuthContext";
+import { useEventTracker } from "../hooks/useEventTracker";
 import { colors } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
 import { showToast } from "../components/Toast";
@@ -201,6 +202,20 @@ export default function CreateEventScreen() {
   const { t } = useTranslation();
   const navigation = useTypedNavigation();
   const { user } = useAuth();
+
+  // Bucket C — telemetry. One-shot mount fire for create_screen_viewed;
+  // the per-action events fire from the relevant handlers below.
+  const { track } = useEventTracker();
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: "event.create_screen_viewed",
+      eventCategory: "event",
+      eventAction: "viewed",
+    });
+  }, [track]);
 
   // ── Inline tip (first-visit) ────────────────────────────────────────────
   // Bucket B — single-line inline card replaces the v1 2-slide modal.
@@ -393,6 +408,11 @@ export default function CreateEventScreen() {
           setCategory((draft.category ?? null) as EventCategory | null);
         }
         setDraftRestored(true);
+        track({
+          eventType: "event.draft_restored",
+          eventCategory: "event",
+          eventAction: "restored",
+        });
       } catch {
         // Corrupt draft — silently drop it.
         AsyncStorage.removeItem(draftKey).catch(() => undefined);
@@ -519,6 +539,12 @@ export default function CreateEventScreen() {
       // Clear stale validation so the seeded title doesn't show red
       // borders on the next blur.
       setTouched({ title: false, description: false, location: locationEmpty });
+      track({
+        eventType: "event.template_picked",
+        eventCategory: "event",
+        eventAction: "picked",
+        eventLabel: key,
+      });
     };
     if (title.trim() !== "" || description.trim() !== "") {
       Alert.alert(
@@ -542,6 +568,12 @@ export default function CreateEventScreen() {
   // Alert.alert is the cheapest correct surface here; no extra modal
   // state required. Title is the field label; body is the tooltip copy.
   const showTooltip = (field: "title" | "description" | "ticket_link" | "age_range" | "presented_by") => {
+    track({
+      eventType: "event.help_opened",
+      eventCategory: "event",
+      eventAction: "opened",
+      eventLabel: field,
+    });
     Alert.alert(
       t(`create_event.field_${field === "ticket_link" ? "ticket_link" : field === "age_range" ? "age_range" : field === "presented_by" ? "presented_by" : field}`),
       t(`create_event.tooltip_${field}`),
@@ -589,6 +621,11 @@ export default function CreateEventScreen() {
         // Picking a new image after a failed upload resets the status
         // back to idle so the next submit kicks off a fresh upload.
         setImageStatus("idle");
+        track({
+          eventType: "event.image_picked",
+          eventCategory: "event",
+          eventAction: "picked",
+        });
       }
     } finally {
       setPicking(false);
@@ -731,6 +768,23 @@ export default function CreateEventScreen() {
 
     // Bucket A — clear the saved draft now that the event has landed.
     clearDraft();
+
+    // Bucket C — fire the publish event once the row landed. The screen
+    // may still kick off a background image upload below; the published
+    // event captures the form shape at the point of insert.
+    track({
+      eventType: "event.published",
+      eventCategory: "event",
+      eventAction: "published",
+      eventLabel: category ?? "other",
+      eventValue: {
+        has_image: !!imageLocalUri,
+        has_ticket_link: !!ticketTrimmed,
+        category: category ?? null,
+        is_free: isFree,
+        body_length: description.trim().length,
+      },
+    });
 
     // Bucket A — image upload is now state-machine driven. We kick off
     // the upload from the screen rather than navigating away, so the
