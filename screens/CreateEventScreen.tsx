@@ -69,12 +69,34 @@ import {
 // Constants + helpers
 // ==========================================================================
 
-const COACH_MARK_KEY = "@tandaxn_event_create_seen_v1";
+// Bucket B (2026-06-20): the v1 key gated a 2-slide modal coach mark.
+// The replacement inline-tip card lives on a fresh key so users who
+// already dismissed v1 still see the new tip once.
+const COACH_MARK_KEY = "@tandaxn_event_create_seen_v2";
 const DRAFT_KEY_PREFIX = "@tandaxn_event_draft_v1:";
 const RETRY_URI_KEY_PREFIX = "@tandaxn_event_flyer_retry_uri:";
 const MAX_IMAGE_WIDTH_PX = 1600;
 const TICKET_URL_RE = /^https?:\/\//i;
 const DRAFT_DEBOUNCE_MS = 500;
+const DESCRIPTION_MAX = 2000;
+const DESCRIPTION_COUNT_SHOW_AT = 200;
+const DESCRIPTION_COUNT_WARN_AT = DESCRIPTION_MAX - 50;
+
+// Bucket B — quick-fill templates. Each template seeds title +
+// category + description + isFree=true. The 5 categories align 1:1
+// with EVENT_CATEGORIES so the chip mapping is direct.
+type TemplateKey = "birthday" | "wedding" | "concert" | "community" | "business";
+const TEMPLATES: ReadonlyArray<{
+  key: TemplateKey;
+  emoji: string;
+  category: EventCategory;
+}> = [
+  { key: "birthday",  emoji: "\u{1F389}", category: "birthday"  },
+  { key: "wedding",   emoji: "\u{1F48D}", category: "wedding"   },
+  { key: "concert",   emoji: "\u{1F3B5}", category: "concert"   },
+  { key: "community", emoji: "\u{1F91D}", category: "community" },
+  { key: "business",  emoji: "\u{1F4BC}", category: "business"  },
+];
 
 function combineDateAndTime(date: Date, time: Date): Date {
   const combined = new Date(date);
@@ -180,27 +202,35 @@ export default function CreateEventScreen() {
   const navigation = useTypedNavigation();
   const { user } = useAuth();
 
-  // ── Coach mark (first-visit) ────────────────────────────────────────────
-  const [coachVisible, setCoachVisible] = useState(false);
-  const [coachSlide, setCoachSlide] = useState(0);
+  // ── Inline tip (first-visit) ────────────────────────────────────────────
+  // Bucket B — single-line inline card replaces the v1 2-slide modal.
+  // Auto-dismiss after 4 s OR on tap of "Got it". The v2 key means
+  // users who dismissed v1 still see the new tip once.
+  const [inlineTipVisible, setInlineTipVisible] = useState(false);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const seen = await AsyncStorage.getItem(COACH_MARK_KEY);
-        if (!cancelled && seen !== "1") setCoachVisible(true);
+        if (!cancelled && seen !== "1") setInlineTipVisible(true);
       } catch {
-        /* AsyncStorage failure is non-fatal — silently skip the modal. */
+        /* AsyncStorage failure is non-fatal — silently skip the tip. */
       }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
-  const dismissCoach = () => {
-    setCoachVisible(false);
+  const dismissInlineTip = () => {
+    setInlineTipVisible(false);
     AsyncStorage.setItem(COACH_MARK_KEY, "1").catch(() => undefined);
   };
+  useEffect(() => {
+    if (!inlineTipVisible) return;
+    const tid = setTimeout(() => dismissInlineTip(), 4000);
+    return () => clearTimeout(tid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inlineTipVisible]);
 
   // ── Form state ─────────────────────────────────────────────────────────
   const [title, setTitle] = useState("");
@@ -468,6 +498,56 @@ export default function CreateEventScreen() {
     );
   };
 
+  // ── Bucket B — Quick-fill templates ────────────────────────────────────
+  // Seeds title + category + description + isFree (true) from the picked
+  // template. If the user has already typed a title or description, gate
+  // the overwrite behind a confirmation alert.
+  const applyTemplate = (key: TemplateKey) => {
+    const cfg = TEMPLATES.find((tt) => tt.key === key);
+    if (!cfg) return;
+    const seed = {
+      title: t(`create_event.template_${key}_seed_title`),
+      description: t(`create_event.template_${key}_seed_body`),
+      category: cfg.category,
+    };
+    const apply = () => {
+      setTitle(seed.title);
+      setDescription(seed.description);
+      setCategory(seed.category);
+      setCategoryAutoSet(false);
+      setIsFree(true);
+      // Clear stale validation so the seeded title doesn't show red
+      // borders on the next blur.
+      setTouched({ title: false, description: false, location: locationEmpty });
+    };
+    if (title.trim() !== "" || description.trim() !== "") {
+      Alert.alert(
+        t("create_event.template_confirm_overwrite_title"),
+        t("create_event.template_confirm_overwrite_body"),
+        [
+          { text: t("create_event.draft_discard_cancel"), style: "cancel" },
+          {
+            text: t("create_event.draft_discard_confirm"),
+            style: "destructive",
+            onPress: apply,
+          },
+        ],
+      );
+    } else {
+      apply();
+    }
+  };
+
+  // ── Bucket B — Per-field tooltips ──────────────────────────────────────
+  // Alert.alert is the cheapest correct surface here; no extra modal
+  // state required. Title is the field label; body is the tooltip copy.
+  const showTooltip = (field: "title" | "description" | "ticket_link" | "age_range" | "presented_by") => {
+    Alert.alert(
+      t(`create_event.field_${field === "ticket_link" ? "ticket_link" : field === "age_range" ? "age_range" : field === "presented_by" ? "presented_by" : field}`),
+      t(`create_event.tooltip_${field}`),
+    );
+  };
+
   // ── Smart date chips (Tonight / Tomorrow / This Friday / This Saturday) ─
   const chips = useMemo(() => {
     const today = new Date();
@@ -565,6 +645,12 @@ export default function CreateEventScreen() {
   const showTitleError = touched.title && titleEmpty;
   const showDescriptionError = touched.description && descriptionEmpty;
   const showLocationError = touched.location && locationEmpty;
+
+  // Bucket B — description char count visibility + warning state.
+  const descCount = description.length;
+  const descShowCount = descCount > DESCRIPTION_COUNT_SHOW_AT;
+  const descRemaining = DESCRIPTION_MAX - descCount;
+  const descLow = descCount >= DESCRIPTION_COUNT_WARN_AT;
 
   // ── Submit (optimistic insert + background upload) ─────────────────────
   const handleSubmit = async () => {
@@ -732,6 +818,52 @@ export default function CreateEventScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Bucket B — Inline tip card (first visit). Replaces the v1
+            2-slide modal coach. Auto-dismisses in 4 s or on tap. */}
+        {inlineTipVisible ? (
+          <View style={styles.inlineTip}>
+            <Ionicons name="bulb-outline" size={16} color={colors.accentTeal} />
+            <Text style={styles.inlineTipText}>
+              {t("create_event.inline_tip")}
+            </Text>
+            <TouchableOpacity
+              onPress={dismissInlineTip}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              accessibilityRole="button"
+            >
+              <Text style={styles.inlineTipAction}>
+                {t("create_event.coach_got_it")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {/* Bucket B — Quick-fill templates. Sits ABOVE the image card so
+            it's the first thing a fresh-form user sees. Templates seed
+            title / category / description / isFree; an overwrite alert
+            gates the seed if the user has already typed. */}
+        <View style={styles.templatesWrap}>
+          <Text style={styles.templatesTitle}>
+            {t("create_event.templates_title")}
+          </Text>
+          <View style={styles.templatesRow}>
+            {TEMPLATES.map((tpl) => (
+              <TouchableOpacity
+                key={tpl.key}
+                style={styles.templateChip}
+                onPress={() => applyTemplate(tpl.key)}
+                accessibilityRole="button"
+                accessibilityLabel={t(`create_event.template_${tpl.key}`)}
+              >
+                <Text style={styles.templateChipEmoji}>{tpl.emoji}</Text>
+                <Text style={styles.templateChipText}>
+                  {t(`create_event.template_${tpl.key}`)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {/* Bucket A — Restored-from-draft pill. Only shown when the
             mount-time restore loaded any saved fields. */}
         {draftRestored ? (
@@ -821,7 +953,12 @@ export default function CreateEventScreen() {
         {/* ===== ESSENTIALS ===== */}
         <SectionHeader text={t("create_event.section_essentials")} />
         <View style={styles.card}>
-          <FieldLabel text={t("create_event.field_title")} required />
+          <FieldLabel
+            text={t("create_event.field_title")}
+            required
+            onInfo={() => showTooltip("title")}
+            infoA11yLabel={t("create_event.tooltip_a11y")}
+          />
           <TextInput
             style={[styles.input, showTitleError && styles.inputError]}
             value={title}
@@ -871,7 +1008,12 @@ export default function CreateEventScreen() {
             </Text>
           ) : null}
 
-          <FieldLabel text={t("create_event.field_description")} required />
+          <FieldLabel
+            text={t("create_event.field_description")}
+            required
+            onInfo={() => showTooltip("description")}
+            infoA11yLabel={t("create_event.tooltip_a11y")}
+          />
           <TextInput
             style={[
               styles.input,
@@ -885,11 +1027,27 @@ export default function CreateEventScreen() {
             placeholderTextColor={colors.textSecondary}
             multiline
             numberOfLines={4}
+            maxLength={DESCRIPTION_MAX}
             textAlignVertical="top"
           />
           {showDescriptionError ? (
             <Text style={styles.helperError}>
               {t("create_event.validation_description_missing")}
+            </Text>
+          ) : null}
+          {descShowCount ? (
+            <Text
+              style={[
+                styles.charCount,
+                { color: descLow ? "#EF4444" : colors.accentTeal },
+              ]}
+            >
+              {descLow
+                ? t("create_event.char_count_left", { count: descRemaining })
+                : t("create_event.char_count", {
+                    current: descCount,
+                    max: DESCRIPTION_MAX,
+                  })}
             </Text>
           ) : null}
 
@@ -1086,7 +1244,11 @@ export default function CreateEventScreen() {
             </>
           )}
 
-          <FieldLabel text={t("create_event.field_ticket_link")} />
+          <FieldLabel
+            text={t("create_event.field_ticket_link")}
+            onInfo={() => showTooltip("ticket_link")}
+            infoA11yLabel={t("create_event.tooltip_a11y")}
+          />
           <TextInput
             style={styles.input}
             value={ticketLink}
@@ -1130,7 +1292,11 @@ export default function CreateEventScreen() {
               placeholderTextColor={colors.textSecondary}
             />
 
-            <FieldLabel text={t("create_event.field_age_range")} />
+            <FieldLabel
+              text={t("create_event.field_age_range")}
+              onInfo={() => showTooltip("age_range")}
+              infoA11yLabel={t("create_event.tooltip_a11y")}
+            />
             <TextInput
               style={styles.input}
               value={ageRange}
@@ -1148,7 +1314,11 @@ export default function CreateEventScreen() {
               placeholderTextColor={colors.textSecondary}
             />
 
-            <FieldLabel text={t("create_event.field_presented_by")} />
+            <FieldLabel
+              text={t("create_event.field_presented_by")}
+              onInfo={() => showTooltip("presented_by")}
+              infoA11yLabel={t("create_event.tooltip_a11y")}
+            />
             <TextInput
               style={styles.input}
               value={presentedBy}
@@ -1180,6 +1350,110 @@ export default function CreateEventScreen() {
           </View>
         )}
 
+        {/* Bucket B — Live preview card. Mirrors the EventsScreen card
+            so the user sees what they're about to publish. Renders only
+            when the title is non-empty; before that, the form fields
+            themselves are the better preview. */}
+        {title.trim() !== "" ? (
+          <View style={styles.previewWrap}>
+            <Text style={styles.previewLabel}>
+              {t("create_event.preview_label")}
+            </Text>
+            <View style={styles.previewCard}>
+              {imageLocalUri ? (
+                <Image
+                  source={{ uri: imageLocalUri }}
+                  style={styles.previewThumb}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.previewThumb,
+                    {
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: colors.screenBg,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name="image-outline"
+                    size={20}
+                    color={colors.textSecondary}
+                  />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <View style={styles.previewHeaderRow}>
+                  <Text style={styles.previewTitle} numberOfLines={2}>
+                    {title.trim()}
+                  </Text>
+                  {category ? (
+                    <View style={styles.previewCategoryChip}>
+                      <Text style={styles.previewCategoryChipText}>
+                        {t(`create_event.category_${category}`)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+                <View style={styles.previewMetaRow}>
+                  <Ionicons
+                    name="calendar-outline"
+                    size={12}
+                    color={colors.textSecondary}
+                  />
+                  <Text style={styles.previewMetaText}>
+                    {date.toLocaleDateString(undefined, {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                    {" · "}
+                    {time.toLocaleTimeString(undefined, {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </Text>
+                </View>
+                <View style={styles.previewMetaRow}>
+                  <Ionicons
+                    name="location-outline"
+                    size={12}
+                    color={colors.textSecondary}
+                  />
+                  <Text style={styles.previewMetaText} numberOfLines={1}>
+                    {locationName.trim() ||
+                      t("create_event.preview_no_location")}
+                  </Text>
+                </View>
+                <View style={styles.previewMetaRow}>
+                  <Ionicons
+                    name="pricetag-outline"
+                    size={12}
+                    color={isFree ? "#10B981" : colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.previewMetaText,
+                      isFree && {
+                        color: "#10B981",
+                        fontWeight: "700",
+                      },
+                    ]}
+                  >
+                    {isFree
+                      ? t("create_event.preview_free")
+                      : priceUsd.trim() !== ""
+                        ? `$${priceUsd.trim()}`
+                        : t("create_event.preview_paid")}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        ) : null}
+
         {/* ===== SUBMIT ===== */}
         <TouchableOpacity
           style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
@@ -1209,72 +1483,10 @@ export default function CreateEventScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* ===== COACH MARK ===== */}
-      <Modal
-        visible={coachVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={dismissCoach}
-      >
-        <View style={styles.coachBackdrop}>
-          <View style={styles.coachCard}>
-            <Ionicons
-              name={coachSlide === 0 ? "create-outline" : "ticket-outline"}
-              size={36}
-              color={colors.accentTeal}
-              style={{ marginBottom: 14 }}
-            />
-            <Text style={styles.coachTitle}>
-              {t(`create_event.coach_slide${coachSlide + 1}_title`)}
-            </Text>
-            <Text style={styles.coachBody}>
-              {t(`create_event.coach_slide${coachSlide + 1}_body`)}
-            </Text>
-            <View style={styles.coachDots}>
-              <View
-                style={[
-                  styles.coachDot,
-                  coachSlide === 0 && styles.coachDotActive,
-                ]}
-              />
-              <View
-                style={[
-                  styles.coachDot,
-                  coachSlide === 1 && styles.coachDotActive,
-                ]}
-              />
-            </View>
-            <View style={styles.coachActions}>
-              <TouchableOpacity
-                onPress={dismissCoach}
-                style={styles.coachSkipBtn}
-                accessibilityRole="button"
-              >
-                <Text style={styles.coachSkipText}>
-                  {t("create_event.coach_skip")}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => {
-                  if (coachSlide === 1) {
-                    dismissCoach();
-                  } else {
-                    setCoachSlide(1);
-                  }
-                }}
-                style={styles.coachPrimaryBtn}
-                accessibilityRole="button"
-              >
-                <Text style={styles.coachPrimaryText}>
-                  {coachSlide === 1
-                    ? t("create_event.coach_got_it")
-                    : t("create_event.coach_next")}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Bucket B (2026-06-20): the 2-slide modal coach mark was
+          replaced by the inline tip card at the top of the form.
+          Keeping the `Modal` import would now be dead — let
+          ESLint flag it on the next sweep. */}
     </SafeAreaView>
   );
 }
@@ -1349,14 +1561,35 @@ function SectionHeader({ text }: { text: string }) {
 function FieldLabel({
   text,
   required,
+  onInfo,
+  infoA11yLabel,
 }: {
   text: string;
   required?: boolean;
+  // Bucket B — when present, renders a small ⓘ glyph at the end of the
+  // label row. Tap opens a per-field tooltip alert.
+  onInfo?: () => void;
+  infoA11yLabel?: string;
 }) {
   return (
     <View style={styles.fieldLabelRow}>
       <Text style={styles.fieldLabelText}>{text}</Text>
       {required ? <Text style={styles.fieldLabelRequired}>*</Text> : null}
+      {onInfo ? (
+        <TouchableOpacity
+          onPress={onInfo}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          accessibilityRole="button"
+          accessibilityLabel={infoA11yLabel}
+          style={styles.fieldLabelInfoBtn}
+        >
+          <Ionicons
+            name="information-circle-outline"
+            size={14}
+            color={colors.textSecondary}
+          />
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -1479,6 +1712,123 @@ const styles = StyleSheet.create({
     color: colors.errorText,
     fontWeight: "700",
   },
+  // Bucket B — ⓘ tooltip glyph at the end of certain field labels.
+  fieldLabelInfoBtn: {
+    marginLeft: 2,
+    paddingLeft: 2,
+  },
+
+  // Bucket B — description character count
+  charCount: {
+    fontSize: 11,
+    textAlign: "right",
+    marginTop: 4,
+    fontWeight: "600",
+  },
+
+  // Bucket B — first-visit inline tip card (replaces the 2-slide modal)
+  inlineTip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#F0FDFB",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: colors.accentTeal,
+    marginBottom: 12,
+  },
+  inlineTipText: { flex: 1, fontSize: 12, color: colors.primaryNavy, lineHeight: 17 },
+  inlineTipAction: { fontSize: 12, color: colors.accentTeal, fontWeight: "700" },
+
+  // Bucket B — quick-fill templates
+  templatesWrap: { marginBottom: 12 },
+  templatesTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  templatesRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  templateChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.cardBg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  templateChipEmoji: { fontSize: 14 },
+  templateChipText: { fontSize: 12, fontWeight: "700", color: colors.primaryNavy },
+
+  // Bucket B — live preview card (compact mirror of EventsScreen card)
+  previewWrap: { marginTop: 18 },
+  previewLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginBottom: 6,
+    paddingHorizontal: 4,
+  },
+  previewCard: {
+    flexDirection: "row",
+    gap: 12,
+    backgroundColor: colors.cardBg,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.accentTeal,
+  },
+  previewThumb: {
+    width: 70,
+    height: 70,
+    borderRadius: 8,
+    backgroundColor: colors.screenBg,
+  },
+  previewHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    marginBottom: 6,
+  },
+  previewTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  previewCategoryChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: "#F3F4F6",
+  },
+  previewCategoryChipText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.primaryNavy,
+    textTransform: "uppercase",
+  },
+  previewMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 3,
+  },
+  previewMetaText: { fontSize: 11, color: colors.textSecondary },
 
   input: {
     backgroundColor: colors.screenBg,
