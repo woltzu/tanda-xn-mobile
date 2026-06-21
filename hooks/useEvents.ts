@@ -170,7 +170,15 @@ function bustUpcomingCache() {
   upcomingCache = null;
 }
 
-export function useUpcomingEvents(options?: { limit?: number }): {
+export function useUpcomingEvents(options?: {
+  limit?: number;
+  // Browse-events Bucket B.6 — when true, flips the predicate so the
+  // hook returns events whose start time is in the past, ordered most
+  // recent first. Cache entry is keyed separately so toggling the flag
+  // doesn't poison the upcoming-events cache for callers that don't
+  // pass it. Default false (preserves existing behaviour).
+  showPast?: boolean;
+}): {
   events: CommunityEventRow[];
   loading: boolean;
   error: string | null;
@@ -179,7 +187,8 @@ export function useUpcomingEvents(options?: { limit?: number }): {
   const { user } = useAuth();
   const userId = user?.id ?? "anon";
   const limit = options?.limit;
-  const cacheKey = `${userId}:${limit ?? "all"}`;
+  const showPast = options?.showPast === true;
+  const cacheKey = `${userId}:${limit ?? "all"}:${showPast ? "past" : "upcoming"}`;
 
   const seed =
     upcomingCache && upcomingCache.key === cacheKey
@@ -207,11 +216,16 @@ export function useUpcomingEvents(options?: { limit?: number }): {
     }
 
     const nowIso = new Date().toISOString();
-    let query = supabase
-      .from("community_events")
-      .select("*")
-      .gte("event_datetime", nowIso)
-      .order("event_datetime", { ascending: true });
+    let query = supabase.from("community_events").select("*");
+    if (showPast) {
+      query = query
+        .lte("event_datetime", nowIso)
+        .order("event_datetime", { ascending: false });
+    } else {
+      query = query
+        .gte("event_datetime", nowIso)
+        .order("event_datetime", { ascending: true });
+    }
     if (typeof limit === "number") query = query.limit(limit);
 
     const { data, error: qErr } = await query;
@@ -229,7 +243,7 @@ export function useUpcomingEvents(options?: { limit?: number }): {
       setEvents(fresh);
     }
     setLoading(false);
-  }, [cacheKey, limit]);
+  }, [cacheKey, limit, showPast]);
 
   // Initial fetch on mount (or whenever the cache key changes).
   useEffect(() => {
