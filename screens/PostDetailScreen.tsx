@@ -142,6 +142,78 @@ export default function PostDetailScreen() {
     loadPostAndComments();
   }, [postId]);
 
+  // VDF Bucket A.1 (2026-06-21) — Realtime: subscribe to feed_comments
+  // INSERTs filtered to this post so a friend's comment appears live
+  // without a back-out-and-back-in.
+  //
+  // Dedupe by id: addComment's optimistic path already appends the
+  // local author's new row, then the same INSERT round-trips back via
+  // realtime. Skipping the append AND the commentsCount bump when the
+  // id is already present prevents the over-count + duplicate UI.
+  //
+  // The realtime payload only carries the raw row — no joined profile
+  // — so we re-select with the profile join (mirrors the feed_posts
+  // pattern in FeedContext.tsx:478-490). The extra round-trip is
+  // acceptable for the rate of comment INSERTs.
+  useEffect(() => {
+    if (!postId) return;
+    let cancelled = false;
+    const channel = supabase
+      .channel(`post-detail-comments-${postId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "feed_comments",
+          filter: `post_id=eq.${postId}`,
+        },
+        async (payload) => {
+          const insertedId = (payload.new as { id?: string })?.id;
+          if (!insertedId) return;
+          const { data, error } = await supabase
+            .from("feed_comments")
+            .select(`
+              *,
+              profiles!feed_comments_user_id_fkey (
+                full_name,
+                avatar_url
+              )
+            `)
+            .eq("id", insertedId)
+            .single();
+          if (cancelled) return;
+          if (error || !data) return;
+          const row = data as any;
+          const newComment: FeedComment = {
+            id: row.id,
+            postId: row.post_id,
+            userId: row.user_id,
+            content: row.content,
+            createdAt: row.created_at,
+            authorName: row.profiles?.full_name || "Anonymous",
+            authorAvatar: row.profiles?.avatar_url || undefined,
+          };
+          let appended = false;
+          setComments((prev) => {
+            if (prev.some((c) => c.id === newComment.id)) return prev;
+            appended = true;
+            return [...prev, newComment];
+          });
+          if (appended) {
+            setPost((prev) =>
+              prev ? { ...prev, commentsCount: prev.commentsCount + 1 } : prev,
+            );
+          }
+        },
+      )
+      .subscribe();
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [postId]);
+
   // After post loads, fetch journey timeline for own goal posts
   useEffect(() => {
     if (post && isOwnPost && post.relatedId) {
