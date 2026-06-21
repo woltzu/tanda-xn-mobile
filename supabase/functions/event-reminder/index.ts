@@ -16,6 +16,11 @@
 //      has no community_id column today, so this is a bounded
 //      approximation. A future column on community_events would let
 //      us scope to the exact community the event was posted to.
+//   3. View-event-details Bucket C.3 — every user who marked
+//      'interested' or 'going' on the event via the event_interest
+//      table (migration 226). Idempotency below dedupes against
+//      both prior cron runs AND against the creator+community fan-out
+//      so the same user never gets two reminders.
 //
 // Idempotency: `(user_id, type, data->>'event_id')` — same shape used
 //   by notify_event_created in migration 223 so duplicate inserts are
@@ -177,6 +182,28 @@ serve(async (req: Request) => {
       membersByCommunity.get(m.community_id)!.add(m.user_id);
     }
 
+    // Bucket C.3 — pull interested/going rows for every event in the
+    // window. Single round-trip via .in() on the event_id list.
+    const eventIds = rows.map((r) => r.id);
+    const { data: interestRows, error: intErr } = await supabase
+      .from("event_interest")
+      .select("event_id, user_id")
+      .in("event_id", eventIds)
+      .in("status", ["interested", "going"]);
+    if (intErr) return fail(started, intErr.message);
+
+    // event → Set<interestedUserId>
+    const interestedByEvent = new Map<string, Set<string>>();
+    for (const r of (interestRows ?? []) as {
+      event_id: string;
+      user_id: string;
+    }[]) {
+      if (!interestedByEvent.has(r.event_id)) {
+        interestedByEvent.set(r.event_id, new Set());
+      }
+      interestedByEvent.get(r.event_id)!.add(r.user_id);
+    }
+
     let notified = 0;
     let skipped_idempotent = 0;
 
@@ -190,6 +217,12 @@ serve(async (req: Request) => {
           if (!members) continue;
           for (const uid of members) recipients.add(uid);
         }
+      }
+      // Union in everyone who marked interest or going. Set semantics
+      // ensure a user counted once via membership isn't double-counted.
+      const interested = interestedByEvent.get(ev.id);
+      if (interested) {
+        for (const uid of interested) recipients.add(uid);
       }
 
       const whenLabel = formatWhen(ev.event_datetime);

@@ -461,6 +461,13 @@ export default function EventsScreen() {
   // into the app on tap. If a ticket link is present we append it so
   // the recipient can buy directly from the share message.
   const handleShareEvent = async (event: CommunityEventRow) => {
+    // Bucket C.5 — event_detail.share_tapped.
+    track({
+      eventType: "event_detail.share_tapped",
+      eventCategory: "events",
+      eventAction: "share_tapped",
+      eventValue: { event_id: event.id },
+    });
     const url = `https://v0-tanda-xn.vercel.app/event/${event.id}`;
     const dateLabel = `${formatEventDateCompact(event.event_datetime)} · ${formatEventTime(event.event_datetime)}`;
     const message = t("events_sheet.share_message", {
@@ -487,7 +494,14 @@ export default function EventsScreen() {
   // "Add to Apple Calendar" affordance, Android users see the Google
   // Calendar app prompt. Saves us an `expo-calendar`/`.ics` round-trip.
   // Default duration is 2 hours when the row only carries a start time.
+  // Bucket C.5 — fires event_detail.calendar_added telemetry.
   const handleAddToCalendar = async (event: CommunityEventRow) => {
+    track({
+      eventType: "event_detail.calendar_added",
+      eventCategory: "events",
+      eventAction: "calendar_added",
+      eventValue: { event_id: event.id },
+    });
     try {
       const start = new Date(event.event_datetime);
       const end = new Date(
@@ -1012,7 +1026,16 @@ export default function EventsScreen() {
                     />
                   </TouchableOpacity>
                   <TouchableOpacity
-                    onPress={() => setSheetHelpOpen(true)}
+                    onPress={() => {
+                      setSheetHelpOpen(true);
+                      // Bucket C.5 — event_detail.help_opened.
+                      track({
+                        eventType: "event_detail.help_opened",
+                        eventCategory: "events",
+                        eventAction: "opened",
+                        eventValue: { event_id: selectedEvent.id },
+                      });
+                    }}
                     style={styles.sheetActionBtn}
                     accessibilityRole="button"
                     accessibilityLabel={t("events_sheet.help_a11y")}
@@ -1028,6 +1051,15 @@ export default function EventsScreen() {
                     contentType="event"
                     targetId={selectedEvent.id}
                     ownerUserId={selectedEvent.user_id}
+                    onOpen={() => {
+                      // Bucket C.5 — event_detail.report_tapped.
+                      track({
+                        eventType: "event_detail.report_tapped",
+                        eventCategory: "events",
+                        eventAction: "report_tapped",
+                        eventValue: { event_id: selectedEvent.id },
+                      });
+                    }}
                   />
                   <TouchableOpacity
                     onPress={() => setSelectedEvent(null)}
@@ -1454,7 +1486,23 @@ function EventCard({
 
 function EventInterestRow({ eventId }: { eventId: string }) {
   const { t } = useTranslation();
+  const { track } = useEventTracker();
   const { status, count, loading, cycleStatus } = useEventInterest(eventId);
+
+  // Bucket C.5 — event_detail.interested_tapped. Logged before the
+  // cycle so we capture the FROM status (the next status is just
+  // derivable from it). Avoids a useEffect race against the post-cycle
+  // state update.
+  const handleTap = () => {
+    track({
+      eventType: "event_detail.interested_tapped",
+      eventCategory: "events",
+      eventAction: "interested_tapped",
+      eventLabel: status ?? "null",
+      eventValue: { event_id: eventId, from_status: status ?? null },
+    });
+    cycleStatus();
+  };
 
   // Lookup table for the per-status button look. Keeps the JSX small.
   const variant = (() => {
@@ -1490,7 +1538,7 @@ function EventInterestRow({ eventId }: { eventId: string }) {
   return (
     <View style={styles.interestRow}>
       <TouchableOpacity
-        onPress={cycleStatus}
+        onPress={handleTap}
         disabled={loading}
         style={[styles.interestBtn, variant.style, loading && { opacity: 0.6 }]}
         accessibilityRole="button"

@@ -4299,7 +4299,9 @@
     "notification_created_title": "Nouvel événement dans votre communauté",
     "notification_created_body": "{{creator}} a créé '{{title}}' le {{date}}.",
     "notification_reminder_24h_title": "Événement demain",
-    "notification_reminder_24h_body": "'{{title}}' a lieu demain à {{location}}."
+    "notification_reminder_24h_body": "'{{title}}' a lieu demain à {{location}}.",
+    "notification_interest_title": "Quelqu'un est intéressé par votre événement",
+    "notification_interest_body": "{{user_name}} est intéressé(e) par '{{event_title}}'."
   },
   "events_sheet": {
     "organiser_label": "Publié par {{name}}",

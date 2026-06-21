@@ -74,6 +74,11 @@ type Props = {
   ownerUserId?: string;
   compact?: boolean;
   variant?: "icon" | "text";
+  // Optional callback fired when the user taps the trigger and the
+  // report sheet opens. Lets callers log a `*.report_tapped` telemetry
+  // event without having to wrap the button. Wired by EventsScreen
+  // (View-event-details Bucket C.5).
+  onOpen?: () => void;
 };
 
 export default function ReportButton({
@@ -83,6 +88,7 @@ export default function ReportButton({
   ownerUserId,
   compact = false,
   variant = "icon",
+  onOpen,
 }: Props) {
   const { user } = useAuth();
   const { t } = useTranslation();
@@ -168,7 +174,10 @@ export default function ReportButton({
   return (
     <>
       <TouchableOpacity
-        onPress={() => setOpen(true)}
+        onPress={() => {
+          setOpen(true);
+          onOpen?.();
+        }}
         style={compact ? styles.triggerCompact : styles.trigger}
         accessibilityRole="button"
         accessibilityLabel={t("moderation.report_btn")}
