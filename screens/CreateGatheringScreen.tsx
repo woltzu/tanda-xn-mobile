@@ -2,21 +2,39 @@
 // screens/CreateGatheringScreen.tsx — Host a gathering (community-scoped form)
 // ══════════════════════════════════════════════════════════════════════════════
 //
-// HG Bucket A (2026-06-21) — critical fixes pass:
+// HG Bucket A (2026-06-21) — critical fixes:
 //   A.1 Real @react-native-community/datetimepicker (was freeform
-//       TextInputs that crashed `new Date(...).toISOString()` on
-//       malformed strings).
+//       TextInputs that crashed on malformed strings).
 //   A.2 Future-date guard (block submit when startsAt <= now+5min).
 //   A.3 AsyncStorage draft auto-save with restored-pill UI + discard
-//       confirm. Mirrors CDP / CE patterns.
-//   A.4 EVENT_TYPES labels + descriptions moved to i18n. Loop
-//       variable renamed from `t` so it stops shadowing the
-//       useTranslation hook.
+//       confirm.
+//   A.4 EVENT_TYPES → i18n. Loop variable renamed `t → ev` to stop
+//       shadowing useTranslation.
 //   A.5 Submit-button copy i18n'd.
 //   A.6 Native Alert success → showToast + immediate goBack.
 //   A.7 locationName required when !isVirtual (inline pill).
-//   A.8 organizerFirstName fallback chain: metadata → full_name →
-//       email prefix → "Member".
+//   A.8 organizerFirstName fallback chain.
+//
+// HG Bucket B (2026-06-21) — UX clarity:
+//   B.1 Inline HelpSheet (4 topics) + (?) header trigger.
+//   B.2 First-visit coach mark over the event-type strip
+//       (@tandaxn_create_gathering_coach_seen_v1). 4 s auto-dismiss
+//       + tap-to-dismiss. Suppressed when a draft was restored —
+//       returning users don't need to be re-taught.
+//   B.3 Character counters on title (max 80) and description
+//       (max 1000). Hidden while short, switch to "X left" at the
+//       warn threshold, flip red on the ceiling.
+//   B.4 Live preview card above Submit. Renders once the title
+//       has at least 3 chars — gives "post-and-regret" friction
+//       reduction without committing the user to a full visual
+//       fidelity component.
+//   B.5 Conditional Max-attendees row when eventType ===
+//       'elder_session'. Stored as a string in state so the user
+//       can backspace freely; coerced to Number on submit, falling
+//       back to MAX_ATTENDEES_DEFAULT if blank.
+//   B.6 ⓘ icons next to Family-welcome and Add-to-memory switches
+//       open a quick Alert tooltip — strictly more discoverable
+//       than the muted hint copy they replace.
 // ══════════════════════════════════════════════════════════════════════════════
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -31,6 +49,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Switch,
+  Modal,
+  Pressable,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -48,13 +68,36 @@ import { showToast } from "../components/Toast";
 
 const DRAFT_KEY_PREFIX = "@tandaxn_gathering_draft_v1:";
 const DRAFT_DEBOUNCE_MS = 500;
-// HG Bucket A.2 — give the picker default-now value a 30-min lead so a
-// user opening the screen at 14:55 doesn't get a default of 14:55 (past
-// by the time they tap Submit).
+// HG Bucket A.2 — picker default-now lead so the guard doesn't trip
+// the moment the screen opens.
 const DEFAULT_LEAD_MIN = 30;
-// 5-minute floor in the future-date guard — submitting "in 1 minute"
-// will fail the check too.
 const FUTURE_GUARD_MIN = 5;
+
+// HG Bucket B.2 — first-visit coach mark gate.
+const COACH_MARK_KEY = "@tandaxn_create_gathering_coach_seen_v1";
+
+// HG Bucket B.3 — title counter thresholds.
+const TITLE_MAX = 80;
+const TITLE_COUNT_SHOW_AT = 50;
+const TITLE_COUNT_WARN_AT = TITLE_MAX - 10; // 70
+
+// HG Bucket B.3 — description counter thresholds.
+const DESC_MAX = 1000;
+const DESC_COUNT_SHOW_AT = 200;
+const DESC_COUNT_WARN_AT = DESC_MAX - 200; // 800
+
+// HG Bucket B.5 — default attendees for an elder session.
+const MAX_ATTENDEES_DEFAULT = 10;
+
+// HG Bucket B.1 — HelpSheet topic list. Strings come from i18n; this
+// is just the ordering.
+type HelpTopic = "what_vs_event" | "add_to_memory" | "who_sees" | "rsvp";
+const HELP_TOPICS: HelpTopic[] = [
+  "what_vs_event",
+  "add_to_memory",
+  "who_sees",
+  "rsvp",
+];
 
 const EVENT_TYPE_KEYS: ReadonlyArray<{
   key: GatheringType;
@@ -72,22 +115,22 @@ type DraftV1 = {
   eventType: GatheringType;
   title: string;
   description: string;
-  dateIso: string | null;  // serialised Date or null
+  dateIso: string | null;
   timeIso: string | null;
   isVirtual: boolean;
   locationName: string;
   virtualLink: string;
   isFamilyWelcome: boolean;
   addToMemory: boolean;
+  // HG Bucket B.5 — persisted as string (matches TextInput value
+  // shape; empty string survives the round-trip cleanly).
+  maxAttendees: string;
 };
 
 // ══════════════════════════════════════════════════════════════════════════
 // Helpers
 // ══════════════════════════════════════════════════════════════════════════
 
-// Combine a date-only Date (Y/M/D meaningful) with a time-only Date
-// (H/M meaningful) into a single Date. Mirrors the CreateEventScreen
-// pattern.
 function combineDateAndTime(date: Date, time: Date): Date {
   const d = new Date(date);
   d.setHours(time.getHours(), time.getMinutes(), 0, 0);
@@ -124,15 +167,20 @@ export default function CreateGatheringScreen() {
   const [locationName, setLocationName] = useState("");
   const [isFamilyWelcome, setIsFamilyWelcome] = useState(false);
   const [addToMemory, setAddToMemory] = useState(false);
+  // HG Bucket B.5
+  const [maxAttendees, setMaxAttendees] = useState<string>(
+    String(MAX_ATTENDEES_DEFAULT),
+  );
 
   // ── UI state ──────────────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [showDateTimePicker, setShowDateTimePicker] = useState(false);
+  // HG Bucket B.1
+  const [helpOpen, setHelpOpen] = useState(false);
 
-  // HG Bucket A.4 — i18n-resolved EVENT_TYPES list. The loop variable
-  // below is `ev` (not `t`) so the useTranslation t() stays in scope.
+  // ── i18n-resolved event types (HG Bucket A.4) ─────────────────────────
   const EVENT_TYPES = useMemo(
     () =>
       EVENT_TYPE_KEYS.map(({ key, icon, color }) => ({
@@ -145,10 +193,7 @@ export default function CreateGatheringScreen() {
     [t],
   );
 
-  // ── Future-date guard (A.2) ───────────────────────────────────────────
-  // Computed every render — cheap, and the picker state changes drive
-  // it naturally. The 5-minute floor catches "submitting at 14:59 for
-  // 14:59" cases.
+  // ── Computed validation state ─────────────────────────────────────────
   const startsAt = useMemo(() => combineDateAndTime(date, time), [date, time]);
   const startsAtPast = useMemo(() => {
     const floor = new Date();
@@ -156,7 +201,6 @@ export default function CreateGatheringScreen() {
     return startsAt.getTime() <= floor.getTime();
   }, [startsAt]);
 
-  // ── Location guard (A.7) ──────────────────────────────────────────────
   const locationMissing =
     !isVirtual && locationName.trim().length === 0;
 
@@ -167,7 +211,7 @@ export default function CreateGatheringScreen() {
     !locationMissing &&
     !!communityId;
 
-  // ── Draft auto-save (A.3) ─────────────────────────────────────────────
+  // ── Draft auto-save (HG Bucket A.3) ───────────────────────────────────
   const [draftRestored, setDraftRestored] = useState(false);
   const hydratedRef = useRef(false);
   const publishedRef = useRef(false);
@@ -211,9 +255,10 @@ export default function CreateGatheringScreen() {
         setVirtualLink(draft.virtualLink ?? "");
         setIsFamilyWelcome(draft.isFamilyWelcome ?? false);
         setAddToMemory(draft.addToMemory ?? false);
+        if (draft.maxAttendees) setMaxAttendees(draft.maxAttendees);
         setDraftRestored(true);
       } catch {
-        // Corrupt draft → ignore and continue.
+        // Corrupt draft → ignore.
       } finally {
         hydratedRef.current = true;
       }
@@ -223,8 +268,6 @@ export default function CreateGatheringScreen() {
     };
   }, [draftKey]);
 
-  // Debounced save. Skips writes until hydration completes so a fresh
-  // empty mount doesn't overwrite an existing draft.
   useEffect(() => {
     if (!hydratedRef.current) return;
     if (!draftKey) return;
@@ -242,6 +285,7 @@ export default function CreateGatheringScreen() {
         virtualLink,
         isFamilyWelcome,
         addToMemory,
+        maxAttendees,
       };
       const hasContent =
         title.length > 0 ||
@@ -267,7 +311,44 @@ export default function CreateGatheringScreen() {
     virtualLink,
     isFamilyWelcome,
     addToMemory,
+    maxAttendees,
   ]);
+
+  // ── Coach mark (HG Bucket B.2) ────────────────────────────────────────
+  // Read AsyncStorage after hydration finishes so we know whether the
+  // draft restored. The coach mark is for fresh first-time users only —
+  // a returning user who already has a draft already knows the form.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    if (!hydratedRef.current) return;
+    coachCheckedRef.current = true;
+    if (draftRestored) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_MARK_KEY);
+        if (!cancelled && !seen) setCoachVisible(true);
+      } catch {
+        // AsyncStorage failure → keep hidden, treat as "seen".
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // The effect re-evaluates on each render until coachCheckedRef
+    // flips; the body bails immediately after.
+  });
+  const dismissCoach = useCallback(() => {
+    setCoachVisible(false);
+    AsyncStorage.setItem(COACH_MARK_KEY, "1").catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (!coachVisible) return;
+    const id = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(id);
+  }, [coachVisible, dismissCoach]);
 
   const handleDiscardDraft = useCallback(() => {
     Alert.alert(
@@ -289,6 +370,7 @@ export default function CreateGatheringScreen() {
             setVirtualLink("");
             setIsFamilyWelcome(false);
             setAddToMemory(false);
+            setMaxAttendees(String(MAX_ATTENDEES_DEFAULT));
             setDraftRestored(false);
             if (draftKey) {
               AsyncStorage.removeItem(draftKey).catch(() => {});
@@ -320,15 +402,20 @@ export default function CreateGatheringScreen() {
 
     setSubmitting(true);
     try {
-      // HG Bucket A.8 — organiser name fallback chain. user_metadata
-      // is the canonical write target on sign-up; full_name lands on
-      // the profile row; the email prefix is a final hedge before
-      // "Member".
       const organizerFirstName: string =
         (user as any)?.user_metadata?.first_name ??
         (user as any)?.full_name?.split(" ")[0] ??
         (user as any)?.email?.split("@")[0] ??
         "Member";
+
+      // HG Bucket B.5 — only send maxAttendees on elder sessions.
+      // Coerce to Number, fall back to default if blank/non-numeric.
+      let parsedMaxAttendees: number | undefined;
+      if (eventType === "elder_session") {
+        const n = Number(maxAttendees);
+        parsedMaxAttendees =
+          Number.isFinite(n) && n > 0 ? Math.floor(n) : MAX_ATTENDEES_DEFAULT;
+      }
 
       await createGathering({
         communityId,
@@ -343,6 +430,7 @@ export default function CreateGatheringScreen() {
         addToMemory,
         organizerFirstName,
         organizerOrigin: (user as any)?.user_metadata?.origin_country,
+        maxAttendees: parsedMaxAttendees,
       });
 
       publishedRef.current = true;
@@ -352,9 +440,6 @@ export default function CreateGatheringScreen() {
       showToast(t("create_gathering.success"), "success");
       navigation.goBack();
     } catch (err: any) {
-      // HG Bucket A.6 — toast instead of a blocking Alert. Raw err
-      // message is acceptable here; a future bucket can map common
-      // PG/Supabase codes to nicer copy.
       showToast(
         err?.message ?? t("create_gathering.alert_failed_create"),
         "error",
@@ -363,6 +448,49 @@ export default function CreateGatheringScreen() {
       setSubmitting(false);
     }
   };
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Derived UI helpers
+  // ══════════════════════════════════════════════════════════════════════
+
+  const showTitleCount = title.length > TITLE_COUNT_SHOW_AT;
+  const titleNearMax = title.length >= TITLE_COUNT_WARN_AT;
+  const titleAtMax = title.length >= TITLE_MAX;
+
+  const showDescCount = description.length > DESC_COUNT_SHOW_AT;
+  const descNearMax = description.length >= DESC_COUNT_WARN_AT;
+  const descAtMax = description.length >= DESC_MAX;
+
+  // HG Bucket B.4 — preview gate.
+  const showPreview = title.trim().length >= 3;
+  const previewType = EVENT_TYPES.find((e) => e.key === eventType) ?? EVENT_TYPES[0];
+  const previewOrganizerFirstName: string =
+    (user as any)?.user_metadata?.first_name ??
+    (user as any)?.full_name?.split(" ")[0] ??
+    (user as any)?.email?.split("@")[0] ??
+    "Member";
+  const previewWhen = startsAt.toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const previewWhere = isVirtual
+    ? t("create_gathering.preview_virtual")
+    : locationName.trim() || t("create_gathering.preview_location_tba");
+
+  // HG Bucket B.6 — tooltip handlers.
+  const showFamilyTip = () =>
+    Alert.alert(
+      t("final_polish.creategathering_families_welcome"),
+      t("create_gathering.family_welcome_tip"),
+    );
+  const showMemoryTip = () =>
+    Alert.alert(
+      t("final_polish.creategathering_add_to_community_memory"),
+      t("create_gathering.add_to_memory_tip"),
+    );
 
   // ══════════════════════════════════════════════════════════════════════
   // Render
@@ -377,7 +505,15 @@ export default function CreateGatheringScreen() {
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("create_gathering.header_title")}</Text>
-          <View style={styles.placeholder} />
+          {/* HG Bucket B.1 — (?) trigger replaces the spacer. */}
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setHelpOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t("create_gathering.help.title")}
+          >
+            <Ionicons name="help-circle-outline" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
         </View>
       </LinearGradient>
 
@@ -403,6 +539,21 @@ export default function CreateGatheringScreen() {
 
           {/* Event Type Selection */}
           <Text style={styles.sectionLabel}>{t("create_gathering.section_event_type")}</Text>
+          {/* HG Bucket B.2 — coach mark over the event-type strip. */}
+          {coachVisible && (
+            <Pressable
+              onPress={dismissCoach}
+              style={styles.coachBanner}
+              accessibilityRole="button"
+              accessibilityLabel={t("create_gathering.coach.dismiss")}
+            >
+              <Ionicons name="bulb-outline" size={16} color="#FFFFFF" />
+              <Text style={styles.coachText}>
+                {t("create_gathering.coach.title")}
+              </Text>
+              <Ionicons name="close" size={14} color="#FFFFFF" />
+            </Pressable>
+          )}
           <View style={styles.typeGrid}>
             {EVENT_TYPES.map((ev) => (
               <TouchableOpacity
@@ -430,7 +581,31 @@ export default function CreateGatheringScreen() {
             placeholderTextColor="#9CA3AF"
             value={title}
             onChangeText={setTitle}
+            maxLength={TITLE_MAX}
           />
+          {showTitleCount && (
+            <Text
+              style={[
+                styles.charCount,
+                {
+                  color: titleAtMax
+                    ? "#EF4444"
+                    : titleNearMax
+                      ? "#F59E0B"
+                      : "#00C6AE",
+                },
+              ]}
+            >
+              {titleNearMax
+                ? t("create_gathering.char_count_left", {
+                    count: TITLE_MAX - title.length,
+                  })
+                : t("create_gathering.char_count", {
+                    current: title.length,
+                    max: TITLE_MAX,
+                  })}
+            </Text>
+          )}
           <TextInput
             style={[styles.input, styles.inputMultiline]}
             placeholder={t("create_gathering.placeholder_description")}
@@ -438,7 +613,49 @@ export default function CreateGatheringScreen() {
             value={description}
             onChangeText={setDescription}
             multiline
+            maxLength={DESC_MAX}
           />
+          {showDescCount && (
+            <Text
+              style={[
+                styles.charCount,
+                {
+                  color: descAtMax
+                    ? "#EF4444"
+                    : descNearMax
+                      ? "#F59E0B"
+                      : "#00C6AE",
+                },
+              ]}
+            >
+              {descNearMax
+                ? t("create_gathering.char_count_left", {
+                    count: DESC_MAX - description.length,
+                  })
+                : t("create_gathering.char_count", {
+                    current: description.length,
+                    max: DESC_MAX,
+                  })}
+            </Text>
+          )}
+
+          {/* HG Bucket B.5 — Max attendees only for elder_session. */}
+          {eventType === "elder_session" && (
+            <>
+              <Text style={styles.subSectionLabel}>
+                {t("create_gathering.max_attendees_label")}
+              </Text>
+              <TextInput
+                style={styles.input}
+                placeholder={t("create_gathering.max_attendees_placeholder")}
+                placeholderTextColor="#9CA3AF"
+                value={maxAttendees}
+                onChangeText={(v) => setMaxAttendees(v.replace(/[^0-9]/g, ""))}
+                keyboardType="numeric"
+                maxLength={3}
+              />
+            </>
+          )}
 
           {/* Date & Time — HG Bucket A.1 */}
           <Text style={styles.sectionLabel}>{t("final_polish.creategathering_when")}</Text>
@@ -571,20 +788,92 @@ export default function CreateGatheringScreen() {
 
           {/* Options */}
           <Text style={styles.sectionLabel}>{t("final_polish.creategathering_options")}</Text>
+          {/* HG Bucket B.6 — Family welcome row with ⓘ tooltip. */}
           <View style={styles.switchRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.switchLabel}>{t("final_polish.creategathering_families_welcome")}</Text>
-              <Text style={styles.switchHint}>{t("final_polish.creategathering_let_members_know_they_can_bring_family")}</Text>
+            <View style={styles.switchLabelWrap}>
+              <Text style={styles.switchLabel}>
+                {t("final_polish.creategathering_families_welcome")}
+              </Text>
+              <TouchableOpacity
+                onPress={showFamilyTip}
+                accessibilityRole="button"
+                accessibilityLabel={t("create_gathering.family_welcome_tip")}
+                style={styles.infoIconBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="information-circle-outline" size={16} color="#0A2342" />
+              </TouchableOpacity>
             </View>
             <Switch value={isFamilyWelcome} onValueChange={setIsFamilyWelcome} trackColor={{ true: "#00C6AE" }} />
           </View>
           <View style={styles.switchRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.switchLabel}>{t("final_polish.creategathering_add_to_community_memory")}</Text>
-              <Text style={styles.switchHint}>{t("final_polish.creategathering_archive_this_event_after_it_happens")}</Text>
+            <View style={styles.switchLabelWrap}>
+              <Text style={styles.switchLabel}>
+                {t("final_polish.creategathering_add_to_community_memory")}
+              </Text>
+              <TouchableOpacity
+                onPress={showMemoryTip}
+                accessibilityRole="button"
+                accessibilityLabel={t("create_gathering.add_to_memory_tip")}
+                style={styles.infoIconBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Ionicons name="information-circle-outline" size={16} color="#0A2342" />
+              </TouchableOpacity>
             </View>
             <Switch value={addToMemory} onValueChange={setAddToMemory} trackColor={{ true: "#00C6AE" }} />
           </View>
+
+          {/* HG Bucket B.4 — live preview card. */}
+          {showPreview && (
+            <View style={styles.previewWrap}>
+              <Text style={styles.previewLabel}>
+                {t("create_gathering.preview_label")}
+              </Text>
+              <View style={styles.previewCard}>
+                <View
+                  style={[
+                    styles.previewTypePill,
+                    { backgroundColor: previewType.color + "20" },
+                  ]}
+                >
+                  <Ionicons
+                    name={previewType.icon as any}
+                    size={12}
+                    color={previewType.color}
+                  />
+                  <Text
+                    style={[styles.previewTypeText, { color: previewType.color }]}
+                  >
+                    {previewType.label}
+                  </Text>
+                </View>
+                <Text style={styles.previewTitle} numberOfLines={2}>
+                  {title.trim()}
+                </Text>
+                <View style={styles.previewMetaRow}>
+                  <Ionicons name="time-outline" size={13} color="#6B7280" />
+                  <Text style={styles.previewMetaText}>{previewWhen}</Text>
+                </View>
+                <View style={styles.previewMetaRow}>
+                  <Ionicons
+                    name={isVirtual ? "videocam-outline" : "location-outline"}
+                    size={13}
+                    color="#6B7280"
+                  />
+                  <Text style={styles.previewMetaText}>{previewWhere}</Text>
+                </View>
+                <View style={styles.previewMetaRow}>
+                  <Ionicons name="person-outline" size={13} color="#6B7280" />
+                  <Text style={styles.previewMetaText}>
+                    {t("create_gathering.preview_organizer", {
+                      name: previewOrganizerFirstName,
+                    })}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
 
           {/* Submit */}
           <TouchableOpacity
@@ -603,7 +892,72 @@ export default function CreateGatheringScreen() {
           <View style={{ height: 40 }} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* HG Bucket B.1 — HelpSheet renders outside the keyboard-avoiding
+          view so it overlays cleanly. */}
+      <HelpSheet
+        visible={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        t={t}
+      />
     </View>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// HelpSheet — HG Bucket B.1
+// ══════════════════════════════════════════════════════════════════════════
+// Four topics: gathering vs event, add to memory, who sees, RSVPs.
+
+function HelpSheet({
+  visible,
+  onClose,
+  t,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  t: (key: string, opts?: any) => string;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.helpBackdrop} onPress={onClose}>
+        <Pressable style={styles.helpSheet} onPress={() => undefined}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.helpHeaderRow}>
+            <Text style={styles.helpTitle}>
+              {t("create_gathering.help.title")}
+            </Text>
+            <TouchableOpacity
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel={t("create_gathering.help.close")}
+            >
+              <Ionicons name="close" size={22} color="#0A2342" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={styles.helpScroll}
+          >
+            {HELP_TOPICS.map((topic) => (
+              <View key={topic} style={styles.helpItem}>
+                <Text style={styles.helpItemTitle}>
+                  {t(`create_gathering.help.topic_${topic}`)}
+                </Text>
+                <Text style={styles.helpItemBody}>
+                  {t(`create_gathering.help.topic_${topic}_desc`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -616,8 +970,9 @@ const styles = StyleSheet.create({
   placeholder: { width: 40 },
   content: { flex: 1, padding: 20 },
   sectionLabel: { fontSize: 15, fontWeight: "600", color: "#0A2342", marginBottom: 10, marginTop: 20 },
+  subSectionLabel: { fontSize: 13, fontWeight: "600", color: "#0A2342", marginBottom: 6, marginTop: 4 },
 
-  // HG Bucket A.3 — restored-draft pill
+  // HG Bucket A.3
   draftPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -643,6 +998,24 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
 
+  // HG Bucket B.2 — coach mark banner
+  coachBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#0A2342",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  coachText: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
   typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   typeCard: { width: "48%", backgroundColor: "#FFFFFF", borderRadius: 14, padding: 14, borderWidth: 2, borderColor: "#E5E7EB", alignItems: "center" },
   typeIcon: { width: 48, height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", marginBottom: 8 },
@@ -659,10 +1032,130 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     paddingHorizontal: 4,
   },
+  // HG Bucket B.3 — char counter
+  charCount: {
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "right",
+    marginTop: -6,
+    marginBottom: 10,
+    paddingRight: 4,
+  },
   dateRow: { flexDirection: "row", gap: 10 },
   switchRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#FFFFFF", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: "#E5E7EB", marginBottom: 10 },
   switchLabel: { fontSize: 14, fontWeight: "500", color: "#0A2342" },
+  switchLabelWrap: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   switchHint: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  infoIconBtn: {
+    padding: 2,
+  },
   createBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#00C6AE", borderRadius: 14, paddingVertical: 16, marginTop: 24 },
   createBtnText: { fontSize: 16, fontWeight: "700", color: "#FFFFFF" },
+
+  // HG Bucket B.4 — live preview
+  previewWrap: {
+    marginTop: 24,
+  },
+  previewLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
+  previewCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    gap: 6,
+  },
+  previewTypePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    marginBottom: 4,
+  },
+  previewTypeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  previewTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 4,
+  },
+  previewMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  previewMetaText: {
+    fontSize: 12,
+    color: "#6B7280",
+  },
+
+  // HG Bucket B.1 — HelpSheet
+  helpBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  helpSheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 28,
+    maxHeight: "85%",
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#E5E7EB",
+    marginBottom: 12,
+  },
+  helpHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  helpTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0A2342",
+  },
+  helpScroll: { paddingBottom: 8 },
+  helpItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  helpItemTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginBottom: 4,
+  },
+  helpItemBody: {
+    fontSize: 13,
+    color: "#6B7280",
+    lineHeight: 19,
+  },
 });

@@ -4964,7 +4964,33 @@
     "draft_discard_title": "Discard draft?",
     "draft_discard_body": "Your saved gathering details will be cleared.",
     "draft_keep": "Keep",
-    "draft_discard_confirm": "Discard"
+    "draft_discard_confirm": "Discard",
+    "help": {
+      "title": "About gatherings",
+      "close": "Close",
+      "topic_what_vs_event": "What's a gathering vs an event?",
+      "topic_what_vs_event_desc": "Gatherings are casual, member-led meet-ups — coffee, a circle catch-up, a service swap. Events (on the Events tab) are more structured, often ticketed or templated for larger crowds.",
+      "topic_add_to_memory": "What does Add to Memory do?",
+      "topic_add_to_memory_desc": "Pinning to your community's Memory keeps the gathering visible in the timeline after it ends, so newer members can see what's happened before.",
+      "topic_who_sees": "Who sees the gathering?",
+      "topic_who_sees_desc": "Members of this community see it in the Gatherings list and on the Community tab. Circle-type gatherings are highlighted to circle members first.",
+      "topic_rsvp": "How do RSVPs work?",
+      "topic_rsvp_desc": "Members can say they're going (RSVPs are tracked) so you know roughly how many to plan for. A richer attendee list view is coming soon."
+    },
+    "coach": {
+      "title": "Pick the type of gathering — it helps members know what to expect.",
+      "dismiss": "Dismiss"
+    },
+    "char_count": "{{current}} / {{max}}",
+    "char_count_left": "{{count}} left",
+    "max_attendees_label": "Max attendees",
+    "max_attendees_placeholder": "10",
+    "family_welcome_tip": "Family welcome means children and extended family are invited to this gathering.",
+    "add_to_memory_tip": "This gathering will be saved in the community's memory timeline, even after it ends.",
+    "preview_label": "Preview",
+    "preview_virtual": "Virtual",
+    "preview_location_tba": "Location TBA",
+    "preview_organizer": "Hosted by {{name}}"
   },
   "near_you": {
     "alert_error_title": "Error",

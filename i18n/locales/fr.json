@@ -4964,7 +4964,33 @@
     "draft_discard_title": "Supprimer le brouillon ?",
     "draft_discard_body": "Les détails enregistrés du rassemblement seront effacés.",
     "draft_keep": "Garder",
-    "draft_discard_confirm": "Supprimer"
+    "draft_discard_confirm": "Supprimer",
+    "help": {
+      "title": "À propos des rassemblements",
+      "close": "Fermer",
+      "topic_what_vs_event": "Rassemblement ou événement ?",
+      "topic_what_vs_event_desc": "Les rassemblements sont décontractés et portés par les membres — un café, une réunion de cercle, un échange de services. Les événements (onglet Événements) sont plus structurés, souvent payants ou modèles pour de plus grands publics.",
+      "topic_add_to_memory": "Que fait Ajouter à la mémoire ?",
+      "topic_add_to_memory_desc": "Épingler à la mémoire de votre communauté garde le rassemblement visible dans la chronologie après sa fin, pour que les nouveaux membres voient ce qui s'est passé.",
+      "topic_who_sees": "Qui voit le rassemblement ?",
+      "topic_who_sees_desc": "Les membres de cette communauté le voient dans la liste Rassemblements et sur l'onglet Communauté. Les rassemblements de type cercle sont mis en avant pour les membres du cercle.",
+      "topic_rsvp": "Comment fonctionnent les RSVP ?",
+      "topic_rsvp_desc": "Les membres peuvent indiquer leur présence (les RSVP sont suivis) pour que vous sachiez combien prévoir. Une vue détaillée des participants arrive bientôt."
+    },
+    "coach": {
+      "title": "Choisissez le type de rassemblement — cela aide les membres à savoir à quoi s'attendre.",
+      "dismiss": "Fermer"
+    },
+    "char_count": "{{current}} / {{max}}",
+    "char_count_left": "{{count}} restant(s)",
+    "max_attendees_label": "Participants max",
+    "max_attendees_placeholder": "10",
+    "family_welcome_tip": "« Familles bienvenues » signifie que les enfants et la famille élargie sont invités à ce rassemblement.",
+    "add_to_memory_tip": "Ce rassemblement sera conservé dans la chronologie mémoire de la communauté, même après sa fin.",
+    "preview_label": "Aperçu",
+    "preview_virtual": "Virtuel",
+    "preview_location_tba": "Lieu à confirmer",
+    "preview_organizer": "Organisé par {{name}}"
   },
   "near_you": {
     "alert_error_title": "Erreur",
