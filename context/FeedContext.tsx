@@ -818,38 +818,68 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // Add a comment to a post
+  // Add a comment to a post.
+  //
+  // VDF Bucket A.2 (2026-06-21) — true optimistic + rollback pattern
+  // (mirrors toggleLike). The count is bumped synchronously so the
+  // user's tap feels instant; if the insert errors out the count is
+  // restored to its pre-tap value so the UI never carries a stale +1.
+  //
+  // PostDetailScreen keeps its own local `post` state populated via
+  // getPostById, so its commentsCount comes from the DB-trigger-
+  // maintained column — independent of this FeedContext snapshot. The
+  // rollback here covers the in-feed FeedPostCard counter.
   const addComment = async (postId: string, content: string): Promise<FeedComment> => {
     if (!user?.id) throw new Error("Must be logged in to comment");
 
     bustFeedCache();
-    const { data, error: insertError } = await supabase
-      .from("feed_comments")
-      .insert({
-        post_id: postId,
-        user_id: user.id,
-        content,
-      })
-      .select(`
-        *,
-        profiles!feed_comments_user_id_fkey (
-          full_name,
-          avatar_url
-        )
-      `)
-      .single();
 
-    if (insertError) {
-      console.error("Error adding comment:", insertError);
-      throw new Error(insertError.message);
-    }
-
-    // Update comment count optimistically
+    // Snapshot the pre-tap count for this post, then optimistically
+    // increment. Captured before setPosts fires so we restore the
+    // true prior value on error, not a post-increment derivative.
+    const previousCount =
+      posts.find((p) => p.id === postId)?.commentsCount ?? 0;
     setPosts((prev) =>
       prev.map((p) =>
-        p.id === postId ? { ...p, commentsCount: p.commentsCount + 1 } : p
-      )
+        p.id === postId
+          ? { ...p, commentsCount: p.commentsCount + 1 }
+          : p,
+      ),
     );
+
+    let data: any;
+    try {
+      const result = await supabase
+        .from("feed_comments")
+        .insert({
+          post_id: postId,
+          user_id: user.id,
+          content,
+        })
+        .select(`
+          *,
+          profiles!feed_comments_user_id_fkey (
+            full_name,
+            avatar_url
+          )
+        `)
+        .single();
+      if (result.error) throw result.error;
+      data = result.data;
+    } catch (err) {
+      // Rollback: restore the pre-tap count for this post. The cache
+      // remains busted from the top of the function so a focus refetch
+      // after the failure reads fresh state from the DB anyway.
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, commentsCount: previousCount }
+            : p,
+        ),
+      );
+      console.error("Error adding comment:", err);
+      throw err instanceof Error ? err : new Error(String(err));
+    }
 
     return rowToComment(data as any);
   };
