@@ -18,7 +18,7 @@
 // (replaced the legacy CirclesScreen in App.tsx).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   View,
@@ -29,6 +29,8 @@ import {
   SafeAreaView,
   StatusBar,
   Switch,
+  Modal,
+  Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -47,6 +49,8 @@ import {
 import { usePartialPlanSummary } from "../hooks/usePartialContribution";
 import { useConflictAlertSummary } from "../hooks/useConflictAlertSummary";
 import { useAuth } from "../context/AuthContext";
+import { useMyPayoutPosition } from "../hooks/useMyPayoutPosition";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // ==========================================================================
 // Mock data — to be replaced with real API feeds in later steps.
@@ -92,11 +96,13 @@ function healthColor(score: number): string {
 // user's pool entry status + global active count via useSubstitutePoolEntry
 // and useSubstitutePoolSummary below — no toggle.
 
-// Contribution & Payout group mocks.
-const mockPayout = {
-  position: 2,
-  total: 6,
-};
+// payout_position Bucket B (2026-06-21): mockPayout = { position: 2,
+// total: 6 } was deleted. The card now reads the user's real
+// circle_members.position + active member count via
+// useMyPayoutPosition(myCircles[0]?.id) below. The hook returns a
+// discriminated union so the status pill can render "You are #X of Y"
+// when assigned, "Position pending" when joined-but-not-yet-numbered,
+// and an empty state when the user has no circles.
 
 // Partial Contribution Bucket A: legacy mockPartial array deleted. The
 // feature is a global member-action triggered from a specific cycle's
@@ -276,8 +282,15 @@ export default function CirclesV2Screen() {
       circleId: myCircles[0]?.id,
     });
   const handleOpenSubstitute = () => navigation.navigate(Routes.SubstitutePool);
+  // payout_position Bucket B: pass the user's first active circle id
+  // instead of the hardcoded DEFAULT_CIRCLE_ID = "family-circle-1" mock.
+  // Mirrors the Insurance/Conflict/Partial pattern. The downstream
+  // DynamicPayout screen handles undefined circleId with its own empty
+  // state.
   const handleOpenPayout = () =>
-    navigation.navigate(Routes.DynamicPayout, { circleId: DEFAULT_CIRCLE_ID });
+    navigation.navigate(Routes.DynamicPayout, {
+      circleId: myCircles[0]?.id ?? DEFAULT_CIRCLE_ID,
+    });
   // Partial Contribution Bucket A: navigate with the user's first active
   // circle id, not the mock DEFAULT_CIRCLE_ID. The screen resolves the
   // active cycle on mount so cycleId can stay omitted.
@@ -369,6 +382,69 @@ export default function CirclesV2Screen() {
   // with a real active-plan count across all circles. Drives the FeatureCard
   // status row + body line below.
   const { activeCount: partialActiveCount } = usePartialPlanSummary(user?.id);
+
+  // payout_position Bucket B.1 — real payout position for the user's first
+  // active circle. Same focus-on-first-circle pattern as Insurance /
+  // Conflict / Partial above. The hook returns a 3-state union so the
+  // status pill can switch between assigned / pending / no-circle.
+  const payoutPositionCircleId = myCircles[0]?.id;
+  const payoutPosition = useMyPayoutPosition(payoutPositionCircleId);
+
+  // payout_position Bucket B.2 — inline explainer sheet for "How positions
+  // are decided." Mirrors the InsurancePool / PartialContribution Bucket B
+  // pattern. No full HelpSheet rebuild on CircleDetailScreen for now.
+  const [positionHelpOpen, setPositionHelpOpen] = useState(false);
+
+  // payout_position Bucket B.3 — first-visit coach mark over the payout
+  // card. Only fires when the user actually has a position assigned (kind
+  // === 'assigned') so we're not nudging on an empty/pending pill. 4 s
+  // auto-dismiss + tap-to-dismiss. AsyncStorage gates one-shot.
+  const POSITION_COACH_KEY = "@tandaxn_position_coach_seen_v1";
+  const [positionCoachVisible, setPositionCoachVisible] = useState(false);
+  const positionCoachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (positionCoachCheckedRef.current) return;
+    if (payoutPosition.kind !== "assigned") return;
+    positionCoachCheckedRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(POSITION_COACH_KEY);
+        if (!cancelled && !seen) setPositionCoachVisible(true);
+      } catch {
+        // AsyncStorage failure → keep hidden, treat as seen.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [payoutPosition.kind]);
+  const dismissPositionCoach = useCallback(() => {
+    setPositionCoachVisible(false);
+    AsyncStorage.setItem(POSITION_COACH_KEY, "1").catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (!positionCoachVisible) return;
+    const id = setTimeout(() => dismissPositionCoach(), 4000);
+    return () => clearTimeout(id);
+  }, [positionCoachVisible, dismissPositionCoach]);
+
+  // Resolved status label for the payout FeatureCard. Three states:
+  //   assigned → "You are #X of Y"
+  //   pending  → "Position pending"
+  //   none     → undefined (FeatureCard renders no pill)
+  const payoutStatusLabel: string | undefined = useMemo(() => {
+    if (payoutPosition.kind === "assigned") {
+      return t("circles_screen.payout_position_status", {
+        position: payoutPosition.position,
+        total: payoutPosition.total,
+      });
+    }
+    if (payoutPosition.kind === "pending") {
+      return t("circles_screen.payout_position_pending");
+    }
+    return undefined;
+  }, [payoutPosition, t]);
 
   // Conflict Alerts Bucket A: real open-dispute + escalated-monitor counts
   // across all of the user's circles. mostRecent surfaces the freshest row
@@ -826,20 +902,58 @@ export default function CirclesV2Screen() {
         </View>
 
         {/* ----- Payout Ordering ----- */}
+        {/* payout_position Bucket B.3 — first-visit coach mark over the
+            payout card. Visible only when position is assigned. */}
+        {positionCoachVisible && (
+          <Pressable
+            onPress={dismissPositionCoach}
+            style={styles.positionCoachBanner}
+            accessibilityRole="button"
+            accessibilityLabel={t("circles_screen.payout_coach_dismiss")}
+          >
+            <Ionicons name="bulb-outline" size={16} color={colors.textWhite} />
+            <Text style={styles.positionCoachText}>
+              {t("circles_screen.payout_coach_position")}
+            </Text>
+            <Ionicons name="close" size={14} color={colors.textWhite} />
+          </Pressable>
+        )}
         <FeatureCard
           icon="list-outline"
           iconColor={colors.accentTeal}
           title={t("circles_screen.payout_title")}
           description={t("circles_screen.payout_description")}
-          statusLabel={t("circles_screen.payout_position_status", {
-            position: mockPayout.position,
-            total: mockPayout.total,
-          })}
-          statusColor={colors.primaryNavy}
+          statusLabel={payoutStatusLabel}
+          statusColor={
+            payoutPosition.kind === "pending"
+              ? colors.textSecondary
+              : colors.primaryNavy
+          }
           ctaLabel={t("circles_screen.payout_cta")}
           ctaIcon="arrow-forward"
           onCta={handleOpenPayout}
-        />
+        >
+          {/* payout_position Bucket B.2 — inline ⓘ trigger for the
+              "How positions are decided" explainer sheet. Sits in the
+              FeatureCard's children slot so it reads as part of the
+              card without needing a new ⓘ prop on FeatureCardProps. */}
+          <TouchableOpacity
+            style={styles.positionHelpRow}
+            onPress={() => setPositionHelpOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t("circles_screen.payout_help_open")}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Ionicons
+              name="information-circle-outline"
+              size={14}
+              color={colors.textSecondary}
+            />
+            <Text style={styles.positionHelpRowText}>
+              {t("circles_screen.payout_help_open")}
+            </Text>
+          </TouchableOpacity>
+        </FeatureCard>
 
         {/* ----- Partial Contribution ----- */}
         {/* Bucket A: no per-circle toggles — partial contribution is a
@@ -981,7 +1095,62 @@ export default function CirclesV2Screen() {
           onCta={handleOpenAdvanceStatus}
         />
       </ScrollView>
+
+      {/* payout_position Bucket B.2 — explainer sheet rendered outside
+          the ScrollView so it overlays cleanly. */}
+      <PayoutPositionHelpSheet
+        visible={positionHelpOpen}
+        onClose={() => setPositionHelpOpen(false)}
+        t={t}
+      />
     </SafeAreaView>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// PayoutPositionHelpSheet — payout_position Bucket B.2
+// ══════════════════════════════════════════════════════════════════════════
+// Single-topic inline modal: "How are positions decided?" Mirrors the
+// CDP / Insurance / Partial Bucket B explainer pattern — Modal + backdrop
+// + sheet handle. One topic block; no per-screen HelpSheet header trigger
+// since FeatureCard doesn't have a (?) slot.
+function PayoutPositionHelpSheet({
+  visible,
+  onClose,
+  t,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  t: (key: string, opts?: any) => string;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.positionHelpBackdrop} onPress={onClose}>
+        <Pressable style={styles.positionHelpSheet} onPress={() => undefined}>
+          <View style={styles.positionHelpHandle} />
+          <View style={styles.positionHelpHeaderRow}>
+            <Text style={styles.positionHelpTitle}>
+              {t("circles_screen.payout_help_title")}
+            </Text>
+            <TouchableOpacity
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel={t("circles_screen.payout_help_close")}
+            >
+              <Ionicons name="close" size={22} color={colors.primaryNavy} />
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.positionHelpBody}>
+            {t("circles_screen.payout_help_body")}
+          </Text>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -1421,5 +1590,78 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     width: 28,
     textAlign: "right",
+  },
+
+  // payout_position Bucket B.3 — coach mark banner
+  positionCoachBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.primaryNavy,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginBottom: 8,
+  },
+  positionCoachText: {
+    flex: 1,
+    color: colors.textWhite,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
+  // payout_position Bucket B.2 — inline ⓘ row inside FeatureCard children
+  positionHelpRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 6,
+  },
+  positionHelpRowText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontWeight: "500",
+    textDecorationLine: "underline",
+  },
+
+  // payout_position Bucket B.2 — explainer modal
+  positionHelpBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  positionHelpSheet: {
+    backgroundColor: colors.cardBg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 28,
+    maxHeight: "70%",
+  },
+  positionHelpHandle: {
+    alignSelf: "center",
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: 12,
+  },
+  positionHelpHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  positionHelpTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: colors.primaryNavy,
+    flex: 1,
+  },
+  positionHelpBody: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 21,
   },
 });
