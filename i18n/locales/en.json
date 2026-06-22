@@ -3411,7 +3411,17 @@
     "tooltip_refund": "Choose how refunds are handled if a participant cancels.",
     "tooltip_requirements": "Documents or information participants must provide before joining.",
     "review_shareable_preview": "Shareable preview",
-    "review_add_itinerary_hint": "After publishing, you can add a full itinerary with days and activities from the dashboard."
+    "review_add_itinerary_hint": "After publishing, you can add a full itinerary with days and activities from the dashboard.",
+    "notification_published_title": "Trip published: {{trip_name}}",
+    "notification_published_body": "Your trip is now live for booking!",
+    "notification_participant_joined_title": "New participant joined!",
+    "notification_participant_joined_body": "{{participant_name}} has joined your trip.",
+    "notification_payment_due_title": "Payment due tomorrow",
+    "notification_payment_due_body": "Your payment of ${{amount}} for {{trip_name}} is due tomorrow.",
+    "notification_payment_late_title": "Payment overdue",
+    "notification_payment_late_body": "Your payment of ${{amount}} for {{trip_name}} is now overdue.",
+    "notification_itinerary_updated_title": "Itinerary updated",
+    "notification_itinerary_updated_body": "The itinerary for {{trip_name}} has been updated."
   },
   "participant_manager": {
     "header_title": "Participants",

@@ -27,6 +27,7 @@ import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useCreateTripWizard } from '../hooks/useTripOrganizer';
 import { useFormKeyboardOffset } from '../hooks/useFormKeyboardOffset';
 import { useFormDraft } from '../hooks/useFormDraft';
+import { useEventTracker } from '../hooks/useEventTracker';
 import {
   TripOrganizerEngine,
   type PaymentFrequency,
@@ -1065,6 +1066,32 @@ const CreateTripWizardScreen: React.FC = () => {
   const scrollRef = useRef<ScrollView>(null);
   const [currentStep, setCurrentStep] = useState(0);
 
+  // C.4 — telemetry. Fire-and-forget through useEventTracker, same pattern
+  // as CreateGatheringScreen (HG Bucket C.4). One-shot screen_viewed via
+  // a ref so re-renders don't double-fire.
+  const { track } = useEventTracker();
+  const screenViewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (screenViewedFiredRef.current) return;
+    screenViewedFiredRef.current = true;
+    track({
+      eventType: 'trip_wizard.screen_viewed',
+      eventCategory: 'trip' as any,
+      eventAction: 'viewed',
+      eventLabel: route.params?.mode === 'edit' ? 'edit' : 'create',
+    });
+  }, [track, route.params?.mode]);
+  // Fire step_viewed whenever currentStep changes. Skipping the initial
+  // render is a deliberate non-goal — Step 0 is itself a step view.
+  useEffect(() => {
+    track({
+      eventType: 'trip_wizard.step_viewed',
+      eventCategory: 'trip' as any,
+      eventAction: 'step_viewed',
+      eventValue: { step: currentStep },
+    });
+  }, [currentStep, track]);
+
   const { offset: keyboardOffset, measure: measureChrome, clear: clearChrome } = useFormKeyboardOffset();
 
   // Edit mode: /CreateTripWizard?tripId=...&mode=edit
@@ -1160,7 +1187,13 @@ const CreateTripWizardScreen: React.FC = () => {
   const dismissCoach = useCallback(() => {
     setCoachVisible(false);
     AsyncStorage.setItem(COACH_MARK_KEY, '1').catch(() => undefined);
-  }, []);
+    // C.4 — fires for both tap-dismiss and 4s auto-dismiss.
+    track({
+      eventType: 'trip_wizard.coach_dismissed',
+      eventCategory: 'trip' as any,
+      eventAction: 'coach_dismissed',
+    });
+  }, [track]);
   useEffect(() => {
     if (!coachVisible) return;
     const id = setTimeout(() => dismissCoach(), 4000);
@@ -1437,6 +1470,15 @@ const CreateTripWizardScreen: React.FC = () => {
 
   const goNext = () => {
     if (currentStep < TOTAL_STEPS - 1) {
+      // C.4 — step_completed fires the moment the user advances. The
+      // value carried is the step that was just completed (not the next
+      // one), so funnel charts read naturally as "step 0 completed → ...".
+      track({
+        eventType: 'trip_wizard.step_completed',
+        eventCategory: 'trip' as any,
+        eventAction: 'step_completed',
+        eventValue: { step: currentStep },
+      });
       setCurrentStep((s) => s + 1);
       scrollRef.current?.scrollTo({ y: 0, animated: true });
     }
@@ -1534,6 +1576,14 @@ const CreateTripWizardScreen: React.FC = () => {
         console.log('[CreateTripWizard] edit-mode saveDraft → updateTrip start');
         await TripOrganizerEngine.updateTrip(editTripId, tripData);
         console.log('[CreateTripWizard] edit-mode saveDraft → updateTrip done');
+        // C.4 — same draft_saved event in edit mode; the label tags it
+        // so dashboards can split create vs edit funnels.
+        track({
+          eventType: 'trip_wizard.draft_saved',
+          eventCategory: 'trip' as any,
+          eventAction: 'draft_saved',
+          eventLabel: 'edit',
+        });
         // Edits are now persisted server-side — wipe the AsyncStorage shadow.
         clearStoredFormState();
         Alert.alert('Changes saved', 'Your trip has been updated.');
@@ -1541,6 +1591,13 @@ const CreateTripWizardScreen: React.FC = () => {
       }
 
       await wizard?.saveDraft?.(tripData);
+      // C.4 — draft_saved fires after a successful server-side write.
+      track({
+        eventType: 'trip_wizard.draft_saved',
+        eventCategory: 'trip' as any,
+        eventAction: 'draft_saved',
+        eventLabel: isEditMode ? 'edit' : 'create',
+      });
       // Trip now exists server-side as a draft — the user can resume from
       // the dashboard via the real DB row, no need to keep the local shadow.
       clearStoredFormState();
@@ -1629,6 +1686,23 @@ const CreateTripWizardScreen: React.FC = () => {
 
       const resolvedTripId = tripId ?? 'new';
 
+      // C.4 — published. Carries the three shape booleans + payment_type
+      // so funnel queries can split by configuration without re-joining.
+      track({
+        eventType: 'trip_wizard.published',
+        eventCategory: 'trip' as any,
+        eventAction: 'published',
+        eventLabel: formData.payment_type,
+        eventValue: {
+          trip_id: resolvedTripId,
+          payment_type: formData.payment_type,
+          has_deposit: formData.deposit_required,
+          has_requirements:
+            formData.requirements.some((r) => r.enabled) ||
+            formData.custom_requirements.length > 0,
+        },
+      });
+
       // Trip is published — wipe the AsyncStorage shadow.
       clearStoredFormState();
 
@@ -1673,7 +1747,16 @@ const CreateTripWizardScreen: React.FC = () => {
           {/* B.1 — Help (?) icon, opens the inline HelpSheet. Sits to the
               left of the close button so the close stays in the corner. */}
           <TouchableOpacity
-            onPress={() => setHelpOpen(true)}
+            onPress={() => {
+              // C.4 — help_opened.
+              track({
+                eventType: 'trip_wizard.help_opened',
+                eventCategory: 'trip' as any,
+                eventAction: 'help_opened',
+                eventValue: { step: currentStep },
+              });
+              setHelpOpen(true);
+            }}
             style={styles.headerBtn}
             accessibilityRole="button"
             accessibilityLabel={t('create_trip.help_title')}

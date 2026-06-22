@@ -3411,7 +3411,17 @@
     "tooltip_refund": "Choisissez comment les remboursements sont gérés si un participant annule.",
     "tooltip_requirements": "Documents ou informations que les participants doivent fournir avant de rejoindre.",
     "review_shareable_preview": "Aperçu partageable",
-    "review_add_itinerary_hint": "Après la publication, vous pouvez ajouter un itinéraire complet avec jours et activités depuis le tableau de bord."
+    "review_add_itinerary_hint": "Après la publication, vous pouvez ajouter un itinéraire complet avec jours et activités depuis le tableau de bord.",
+    "notification_published_title": "Voyage publié : {{trip_name}}",
+    "notification_published_body": "Votre voyage est maintenant disponible à la réservation !",
+    "notification_participant_joined_title": "Nouveau participant !",
+    "notification_participant_joined_body": "{{participant_name}} a rejoint votre voyage.",
+    "notification_payment_due_title": "Paiement dû demain",
+    "notification_payment_due_body": "Votre paiement de {{amount}}$ pour {{trip_name}} est dû demain.",
+    "notification_payment_late_title": "Paiement en retard",
+    "notification_payment_late_body": "Votre paiement de {{amount}}$ pour {{trip_name}} est maintenant en retard.",
+    "notification_itinerary_updated_title": "Itinéraire mis à jour",
+    "notification_itinerary_updated_body": "L'itinéraire de {{trip_name}} a été mis à jour."
   },
   "participant_manager": {
     "header_title": "Participants",

@@ -634,6 +634,31 @@ export class NotificationPriorityEngine {
     }
   }
 
+  /**
+   * Trip Wizard Bucket C — map the notifications.type values that migration
+   * 238's five trip triggers emit onto the abstract NotificationType.
+   *
+   * Split routing by impact:
+   *   • trip_payment_due / trip_payment_late → payment_critical (the
+   *     participant owes money on a fixed deadline; same bucket as
+   *     contribution_due / late_grace).
+   *   • trip_published / trip_participant_joined / trip_itinerary_updated
+   *     → coaching_goals (informational nudges; no immediate $ impact).
+   */
+  static categoryForTripNotification(dbType: string): NotificationType | null {
+    switch (dbType) {
+      case "trip_payment_due":
+      case "trip_payment_late":
+        return "payment_critical";
+      case "trip_published":
+      case "trip_participant_joined":
+      case "trip_itinerary_updated":
+        return "coaching_goals";
+      default:
+        return null;
+    }
+  }
+
   /** Time sensitivity: closer deadline = higher score. */
   private static calculateTimeSensitivity(data: Record<string, any>): number {
     const hoursUntilDue = data.hours_until_due ?? data.hoursUntilDue;
