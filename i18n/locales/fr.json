@@ -8,7 +8,9 @@
     "received_amount": "Montant",
     "received_from": "De",
     "received_view_wallet": "Voir le portefeuille",
-    "received_view_circle": "Voir le cercle"
+    "received_view_circle": "Voir le cercle",
+    "notification_position_assigned_title": "Votre position de paiement",
+    "notification_position_assigned_body": "Vous êtes n°{{position}} sur {{total_members}} dans {{circle_name}}."
   },
   "payout_history": {
     "title": "Historique des paiements",

@@ -582,6 +582,24 @@ export class NotificationPriorityEngine {
     }
   }
 
+  /**
+   * payout_position audit Bucket A — map the notifications.type value
+   * emitted by migration 233's notify_payout_position_assigned trigger
+   * onto the abstract NotificationType. Position assignment is high-
+   * stakes (it determines when the user gets paid out of the circle's
+   * rotation), so this lands in payment_critical — not the coaching
+   * bucket — so the dispatcher gives it ranking priority over social
+   * nudges.
+   */
+  static categoryForPayoutPositionNotification(dbType: string): NotificationType | null {
+    switch (dbType) {
+      case "payout_position_assigned":
+        return "payment_critical";
+      default:
+        return null;
+    }
+  }
+
   /** Time sensitivity: closer deadline = higher score. */
   private static calculateTimeSensitivity(data: Record<string, any>): number {
     const hoursUntilDue = data.hours_until_due ?? data.hoursUntilDue;

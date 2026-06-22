@@ -8,7 +8,9 @@
     "received_amount": "Amount",
     "received_from": "From",
     "received_view_wallet": "View wallet",
-    "received_view_circle": "View circle"
+    "received_view_circle": "View circle",
+    "notification_position_assigned_title": "Your payout position",
+    "notification_position_assigned_body": "You are #{{position}} of {{total_members}} in {{circle_name}}."
   },
   "payout_history": {
     "title": "Payout history",

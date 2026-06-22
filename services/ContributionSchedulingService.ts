@@ -262,8 +262,12 @@ export class ContributionSchedulingService {
     for (let round = 1; round <= totalRounds; round++) {
       const dueDate = this.calculateRoundDueDate(startDate, frequency, round);
 
-      // Find recipient for this round (by payout_position)
-      const recipient = activeMembers.find((m: any) => m.payout_position === round);
+      // Find recipient for this round (by circle_members.position).
+      // Migration 233 (2026-06-21) made `position` the canonical column;
+      // `payout_position` was deprecated as part of the payout_position
+      // audit Bucket A — it had been NULL on all 17 prod rows because
+      // nothing ever wrote to it.
+      const recipient = activeMembers.find((m: any) => m.position === round);
       const payoutAmount = contributionAmount * activeMembers.length;
 
       // Create schedule record
@@ -362,8 +366,9 @@ export class ContributionSchedulingService {
       throw new Error(`Schedule for round ${roundNumber} already exists`);
     }
 
-    // Find recipient
-    const recipient = activeMembers.find((m: any) => m.payout_position === roundNumber);
+    // Find recipient by canonical `position` column — see scheduleRound
+    // above for the rationale (migration 233).
+    const recipient = activeMembers.find((m: any) => m.position === roundNumber);
     const payoutAmount = contributionAmount * activeMembers.length;
 
     // Create schedule
@@ -889,7 +894,10 @@ export class ContributionSchedulingService {
 
     const { data: member } = await supabase
       .from("circle_members")
-      .select("payout_position, payout_received")
+      // Migration 233 — `position` is now the canonical payout-position
+      // column. `payout_position` is deprecated and being dropped in a
+      // follow-up after 1–2 weeks of stable `position` reads.
+      .select("position, payout_received")
       .eq("user_id", userId)
       .eq("circle_id", circleId)
       .single();
@@ -929,7 +937,7 @@ export class ContributionSchedulingService {
       ...stats,
       nextDueDate: nextPending?.due_date || null,
       nextDueAmount: nextPending ? parseFloat(nextPending.amount) : 0,
-      payoutPosition: member?.payout_position || null,
+      payoutPosition: (member as any)?.position ?? null,
       payoutReceived: member?.payout_received || false,
     };
   }
