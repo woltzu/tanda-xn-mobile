@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, RefreshControl,
+  Modal, Pressable,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -28,6 +29,13 @@ import {
   useCycleSubstitutions,
   type CycleSubstitutionRow,
 } from "../hooks/useCycleSubstitutions";
+// Substitution Visibility B.1 — action banners. useAuth provides current
+// user; useAdminSubstitutionQueue returns admin_pending records only for
+// circles the user moderates, so its presence-by-circle-and-cycle is
+// itself the admin-role check (no parallel "is admin" probe needed).
+import { useAuth } from "../context/AuthContext";
+import { useAdminSubstitutionQueue } from "../hooks/useSubstituteMember";
+import { Routes } from "../lib/routes";
 
 type RouteParams = { circleId: string; cycleId: string };
 
@@ -97,7 +105,7 @@ export default function CycleDetailScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<{ params: RouteParams }, "params">>();
-  const { cycleId } = route.params;
+  const { cycleId, circleId } = route.params;
 
   // The detail screen owns its own cycle fetch (the parent's useCurrentCycle
   // only returns the active cycle). One-shot read by id with the same
@@ -181,6 +189,27 @@ export default function CycleDetailScreen() {
     return m;
   }, [substitutionRows]);
 
+  // ── Substitution Visibility B.1 — action-needed banners ───────────────
+  // Reuse useAdminSubstitutionQueue: the engine method that backs it
+  // returns rows ONLY for circles the user moderates, so item presence
+  // for the current cycle is itself the admin gate. Empty queue ⇒ either
+  // the user isn't an admin anywhere or there are no admin_pending rows.
+  const { user } = useAuth();
+  const { items: adminQueue } = useAdminSubstitutionQueue(user?.id);
+
+  // ── Substitution Visibility B.2 — explainer modal state ───────────────
+  // Tapping a member row with an active substitution opens a small
+  // bottom-sheet Modal showing the names + status + countdown.
+  const [explainerSub, setExplainerSub] =
+    useState<CycleSubstitutionRow | null>(null);
+
+  // ── Substitution Visibility B.3 — HelpSheet visibility ────────────────
+  // CycleDetailScreen had no existing HelpSheet — adding a single-topic
+  // sheet ("What is a substitution?"), reusing the (?) trigger pattern
+  // from CDP B.2 / HG B.1. Keeping it scoped to one topic for now; later
+  // buckets can expand if more help topics emerge.
+  const [helpOpen, setHelpOpen] = useState(false);
+
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -205,6 +234,27 @@ export default function CycleDetailScreen() {
   const stateMeta = cycle
     ? CYCLE_STATUS_META[cycle.status] ?? CYCLE_STATUS_FALLBACK
     : CYCLE_STATUS_FALLBACK;
+
+  // ── Substitution Visibility B.1 — derived banner visibility ───────────
+  // Gate everything on cycle still being active. A completed cycle is
+  // history; even if a stale admin_pending row somehow lingers, we
+  // don't want to surface it as "action needed" on a finished cycle.
+  const cycleIsActive = cycle ? cycle.status !== "completed" : false;
+  const substituteBannerVisible =
+    cycleIsActive &&
+    !!user?.id &&
+    substitutionRows.some(
+      (r) =>
+        r.status === "pending_confirmation" &&
+        r.substitute_member_id === user.id,
+    );
+  const adminBannerVisible =
+    cycleIsActive &&
+    adminQueue.some(
+      (item) =>
+        item.record.circleId === circleId &&
+        item.record.entryCycleId === cycleId,
+    );
 
   // ── Loading / not-found gates ───────────────────────────────────────────
   if (loading && !cycle && !refreshing) {
@@ -239,7 +289,17 @@ export default function CycleDetailScreen() {
           <Text style={styles.headerTitle}>
             {t("cycle_timeline.cycle_label", { n: cycle.cycle_number })}
           </Text>
-          <View style={{ width: 40 }} />
+          {/* Substitution Visibility B.3 — (?) trigger replaces the
+              header spacer. Opens the single-topic HelpSheet about
+              substitutions. */}
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => setHelpOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t("cycle_timeline.help_substitution_title")}
+          >
+            <Ionicons name="help-circle-outline" size={22} color="#FFF" />
+          </TouchableOpacity>
         </View>
         <View style={styles.stateChipRow}>
           <View style={[styles.stateChip, { backgroundColor: `${stateMeta.color}30`, borderColor: stateMeta.color }]}>
@@ -319,6 +379,54 @@ export default function CycleDetailScreen() {
         </View>
 
         {/* Members */}
+        {/* Substitution Visibility B.1 — action banners. Substitute banner
+            wins ordering when both fire because the 48 h substitute clock
+            runs first chronologically; in practice rare for both to apply
+            to the same user since the same user can't be both the offered
+            substitute AND the circle admin for the same record. */}
+        {substituteBannerVisible && (
+          <TouchableOpacity
+            style={[styles.actionBanner, styles.actionBannerSubstitute]}
+            onPress={() => navigation.navigate(Routes.SubstitutePool as any)}
+            accessibilityRole="button"
+          >
+            <Ionicons name="person-add-outline" size={22} color="#1E3A8A" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionBannerTitle}>
+                {t("cycle_timeline.banner_substitute_title")}
+              </Text>
+              <Text style={styles.actionBannerBody}>
+                {t("cycle_timeline.banner_substitute_body")}
+              </Text>
+            </View>
+            <Text style={styles.actionBannerCta}>
+              {t("cycle_timeline.banner_substitute_cta")}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color="#1E3A8A" />
+          </TouchableOpacity>
+        )}
+        {adminBannerVisible && (
+          <TouchableOpacity
+            style={[styles.actionBanner, styles.actionBannerAdmin]}
+            onPress={() => navigation.navigate(Routes.SubstitutePool as any)}
+            accessibilityRole="button"
+          >
+            <Ionicons name="shield-checkmark-outline" size={22} color="#A16207" />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.actionBannerTitle, { color: "#A16207" }]}>
+                {t("cycle_timeline.banner_admin_title")}
+              </Text>
+              <Text style={[styles.actionBannerBody, { color: "#A16207" }]}>
+                {t("cycle_timeline.banner_admin_body")}
+              </Text>
+            </View>
+            <Text style={[styles.actionBannerCta, { color: "#A16207" }]}>
+              {t("cycle_timeline.banner_admin_cta")}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color="#A16207" />
+          </TouchableOpacity>
+        )}
+
         <Text style={styles.sectionTitle}>{t("cycle_timeline.detail_members_title")}</Text>
         {contributions.length === 0 ? (
           <View style={[styles.card, styles.emptyCard]}>
@@ -346,8 +454,22 @@ export default function CycleDetailScreen() {
                 : sub.status === "pending_confirmation"
                   ? { bg: `${COLORS.yellow}15`, fg: "#A16207", border: COLORS.yellow }
                   : { bg: `${COLORS.blue}15`, fg: "#1E3A8A", border: COLORS.blue };
+            // Substitution Visibility B.2 — wrap in TouchableOpacity when
+            // an active substitution exists for this member; tap opens
+            // the explainer modal. Without a sub, the row stays a plain
+            // <View> so unaffected rows don't pick up a pressed style.
+            const RowWrapper: any = sub ? TouchableOpacity : View;
+            const rowProps = sub
+              ? {
+                  onPress: () => setExplainerSub(sub),
+                  accessibilityRole: "button" as const,
+                  accessibilityLabel: t(
+                    "cycle_timeline.substitution_explainer_title",
+                  ),
+                }
+              : {};
             return (
-              <View key={member.id ?? i} style={styles.memberCard}>
+              <RowWrapper key={member.id ?? i} style={styles.memberCard} {...rowProps}>
                 <View style={[styles.statusIcon, { backgroundColor: meta.bg }]}>
                   <Ionicons name={meta.icon} size={16} color={meta.fg} />
                 </View>
@@ -399,7 +521,7 @@ export default function CycleDetailScreen() {
                   )}
                 </View>
                 <Text style={styles.memberAmount}>{formatDollars(amount)}</Text>
-              </View>
+              </RowWrapper>
             );
           })
         )}
@@ -442,6 +564,109 @@ export default function CycleDetailScreen() {
 
         <View style={{ height: 32 }} />
       </ScrollView>
+
+      {/* Substitution Visibility B.3 — single-topic HelpSheet. */}
+      <Modal
+        visible={helpOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setHelpOpen(false)}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={() => setHelpOpen(false)}>
+          <Pressable style={styles.sheetCard} onPress={() => undefined}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeaderRow}>
+              <Text style={styles.sheetTitle}>
+                {t("cycle_timeline.help_substitution_title")}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setHelpOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel={t("cycle_timeline.substitution_explainer_close")}
+              >
+                <Ionicons name="close" size={22} color={COLORS.navy} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.sheetBody}>
+              {t("cycle_timeline.help_substitution_body")}
+            </Text>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Substitution Visibility B.2 — per-member tap explainer. */}
+      <Modal
+        visible={explainerSub !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setExplainerSub(null)}
+      >
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setExplainerSub(null)}
+        >
+          <Pressable style={styles.sheetCard} onPress={() => undefined}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeaderRow}>
+              <Text style={styles.sheetTitle}>
+                {t("cycle_timeline.substitution_explainer_title")}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setExplainerSub(null)}
+                accessibilityRole="button"
+                accessibilityLabel={t("cycle_timeline.substitution_explainer_close")}
+              >
+                <Ionicons name="close" size={22} color={COLORS.navy} />
+              </TouchableOpacity>
+            </View>
+            {explainerSub && (
+              <>
+                <View style={styles.sheetMetaRow}>
+                  <Text style={styles.sheetMetaLabel}>
+                    {t("cycle_timeline.substitution_explainer_original")}
+                  </Text>
+                  <Text style={styles.sheetMetaValue}>
+                    {explainerSub.exiting_member_name}
+                  </Text>
+                </View>
+                <View style={styles.sheetMetaRow}>
+                  <Text style={styles.sheetMetaLabel}>
+                    {t("cycle_timeline.substitution_explainer_substitute")}
+                  </Text>
+                  <Text style={styles.sheetMetaValue}>
+                    {explainerSub.substitute_member_name}
+                  </Text>
+                </View>
+                <View style={styles.sheetMetaRow}>
+                  <Text style={styles.sheetMetaLabel}>
+                    {t("cycle_timeline.substitution_explainer_status")}
+                  </Text>
+                  <Text style={styles.sheetMetaValue}>
+                    {t(`cycle_timeline.substitution_${explainerSub.status}`, {
+                      substitute: explainerSub.substitute_member_name,
+                    })}
+                  </Text>
+                </View>
+                {explainerSub.hours_remaining_for_actor != null && (
+                  <View style={styles.sheetMetaRow}>
+                    <Text style={styles.sheetMetaLabel}>
+                      {t("cycle_timeline.substitution_explainer_time_left")}
+                    </Text>
+                    <Text style={styles.sheetMetaValue}>
+                      {t("cycle_timeline.substitution_hours_left", {
+                        count: explainerSub.hours_remaining_for_actor,
+                      })}
+                    </Text>
+                  </View>
+                )}
+                <Text style={[styles.sheetBody, { marginTop: 12 }]}>
+                  {t("cycle_timeline.substitution_explainer_body")}
+                </Text>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -555,6 +780,103 @@ const styles = StyleSheet.create({
   eventType: { fontSize: 13, fontWeight: "600", color: COLORS.navy, textTransform: "capitalize" },
   eventMeta: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
   eventAmount: { fontSize: 13, fontWeight: "700", color: COLORS.teal },
+
+  // Substitution Visibility B.1 — action-needed banners
+  actionBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  actionBannerSubstitute: {
+    backgroundColor: `${COLORS.blue}10`,
+    borderColor: COLORS.blue,
+  },
+  actionBannerAdmin: {
+    backgroundColor: `${COLORS.yellow}15`,
+    borderColor: COLORS.yellow,
+  },
+  actionBannerTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1E3A8A",
+    marginBottom: 2,
+  },
+  actionBannerBody: {
+    fontSize: 12,
+    color: "#1E3A8A",
+  },
+  actionBannerCta: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#1E3A8A",
+    textDecorationLine: "underline",
+  },
+
+  // Substitution Visibility B.2 + B.3 — shared bottom-sheet pattern
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  sheetCard: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 28,
+    maxHeight: "80%",
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.border,
+    marginBottom: 12,
+  },
+  sheetHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  sheetTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: COLORS.navy,
+    flex: 1,
+  },
+  sheetBody: {
+    fontSize: 14,
+    color: COLORS.muted,
+    lineHeight: 21,
+  },
+  sheetMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  sheetMetaLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.muted,
+  },
+  sheetMetaValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: COLORS.navy,
+    textAlign: "right",
+    flexShrink: 1,
+    marginLeft: 12,
+  },
 
   // Substitution Visibility A.3 — overlay badge under the member status pill
   substitutionBadge: {
