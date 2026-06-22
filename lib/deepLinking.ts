@@ -154,6 +154,16 @@ export const linkingConfig = {
       // communityId is absent. The route is registered at root level
       // so the URL loads regardless of which tab the user is on.
       CreateGathering: "gatherings/create/:communityId?",
+
+      // Trip public page — Bucket A.5 of the Create-a-trip wizard audit.
+      // The wizard generates a `shareable_slug` on publish (migration 066
+      // added the slug column + unique index). Sharing that URL needs a
+      // route on this side to land on TripPublicPage with the slug
+      // parameter. App.tsx registers `TripPublicPage` accepting
+      // { slug?: string; tripId?: string } — slug is what we use here.
+      // Bucket C will add organizer/participant/payment notifications
+      // that deep-link into this same path.
+      TripPublicPage: "trip/:slug",
     },
   },
 };

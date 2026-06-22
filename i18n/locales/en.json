@@ -3371,7 +3371,20 @@
     "alert_permission_body": "TandaXn needs photo library access to set a trip cover. Please grant permission in your device settings.",
     "alert_could_not_pick_title": "Could not pick photo",
     "alert_could_not_load_title": "Could not load trip",
-    "alert_please_try_again": "Please try again."
+    "alert_please_try_again": "Please try again.",
+    "validation_required_field": "This field is required.",
+    "validation_invalid_date": "Please select a valid date.",
+    "validation_end_before_start": "End date must be on or after the start date.",
+    "validation_max_participants": "Enter a number of seats greater than zero.",
+    "validation_price": "Enter a price greater than zero.",
+    "validation_deposit_exceeds_price": "Deposit cannot be larger than the price per person.",
+    "validation_refund_cutoff": "Cutoff must be a whole number of days (0 or more).",
+    "validation_publish_blocked_title": "Almost there",
+    "validation_publish_blocked_body": "Please fix the highlighted fields before publishing.",
+    "label_refund_cutoff": "Refund cutoff (days before trip starts)",
+    "placeholder_refund_cutoff": "7",
+    "hint_refund_cutoff": "Participants cancelling within this window forfeit the refund.",
+    "hint_refund_cutoff_none": "No refunds — cutoff doesn't apply."
   },
   "participant_manager": {
     "header_title": "Participants",

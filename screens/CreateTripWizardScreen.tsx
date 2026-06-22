@@ -67,6 +67,11 @@ interface TripFormData {
   deposit_required: boolean;
   deposit_amount: string;
   refund_policy: string;
+  // A.3 — explicit cutoff in days (column on trips, previously not exposed).
+  // Stored as a string for TextInput; '' means "not specified" and becomes
+  // null on save. The picker resets this to '0' when the user chooses
+  // "No refunds" so the saved row is self-consistent.
+  refund_cutoff_days: string;
   requirements: RequirementItem[];
   custom_requirements: string[];
   messaging_mode: boolean;
@@ -161,11 +166,19 @@ const FormInput: React.FC<{
   placeholder?: string;
   multiline?: boolean;
   keyboardType?: 'default' | 'numeric';
-}> = ({ label, value, onChangeText, placeholder, multiline, keyboardType }) => (
+  // A.1 — optional inline error rendered below the field; the border is
+  // tinted red when set so the user can scan the form and spot the
+  // remaining required gaps at a glance.
+  error?: string;
+}> = ({ label, value, onChangeText, placeholder, multiline, keyboardType, error }) => (
   <View style={styles.inputGroup}>
     <Text style={styles.inputLabel}>{label}</Text>
     <TextInput
-      style={[styles.textInput, multiline && styles.textInputMultiline]}
+      style={[
+        styles.textInput,
+        multiline && styles.textInputMultiline,
+        error ? styles.textInputError : null,
+      ]}
       value={value}
       onChangeText={onChangeText}
       placeholder={placeholder ?? ''}
@@ -173,6 +186,7 @@ const FormInput: React.FC<{
       multiline={multiline}
       keyboardType={keyboardType}
     />
+    {error ? <Text style={styles.fieldErrorText}>{error}</Text> : null}
   </View>
 );
 
@@ -212,7 +226,8 @@ const DatePickerField: React.FC<{
   label: string;
   value: string;
   onChange: (dateStr: string) => void;
-}> = ({ label, value, onChange }) => {
+  error?: string;
+}> = ({ label, value, onChange, error }) => {
   const { t } = useTranslation();
   // Web: the native <input type="date"> emits YYYY-MM-DD verbatim, matching
   // toISODate() on iOS/Android. @react-native-community/datetimepicker has
@@ -228,7 +243,7 @@ const DatePickerField: React.FC<{
           onChange: (e: any) => onChange(e?.target?.value ?? ''),
           style: {
             backgroundColor: '#FFFFFF',
-            border: `1px solid ${colors.border}`,
+            border: `1px solid ${error ? '#DC2626' : colors.border}`,
             borderRadius: radius.small,
             padding: `12px ${spacing.md}px`,
             fontSize: typography.body,
@@ -239,6 +254,7 @@ const DatePickerField: React.FC<{
             outlineColor: TEAL,
           },
         })}
+        {error ? <Text style={styles.fieldErrorText}>{error}</Text> : null}
       </View>
     );
   }
@@ -264,7 +280,7 @@ const DatePickerField: React.FC<{
     <View style={styles.inputGroup}>
       <Text style={styles.inputLabel}>{label}</Text>
       <TouchableOpacity
-        style={styles.textInput}
+        style={[styles.textInput, error ? styles.textInputError : null]}
         onPress={() => {
           if (value) setTempDate(new Date(value + 'T00:00:00'));
           setShowPicker(true);
@@ -275,6 +291,7 @@ const DatePickerField: React.FC<{
           {value ? formatDateFriendly(value) : 'Select date'}
         </Text>
       </TouchableOpacity>
+      {error ? <Text style={styles.fieldErrorText}>{error}</Text> : null}
       {/* iOS picker renders in a bottom-sheet Modal so the spinner escapes
           the half-width Start/End Date column it lives in — the column was
           clipping month/day/year columns of the spinner. Modal is a
@@ -436,7 +453,8 @@ const StepBasics: React.FC<{
   uploadingCover: boolean;
   onPickCoverNative: () => void;
   onWebCoverFile: (file: File) => void;
-}> = ({ data, update, uploadingCover, onPickCoverNative, onWebCoverFile }) => {
+  errors: Record<string, string>;
+}> = ({ data, update, uploadingCover, onPickCoverNative, onWebCoverFile, errors }) => {
   const { t } = useTranslation();
   return (
   <View>
@@ -447,17 +465,17 @@ const StepBasics: React.FC<{
       onWebFile={onWebCoverFile}
     />
     <SectionLabel label="Trip Details" />
-    <FormInput label={t("create_trip_wizard.label_trip_name")} value={data.trip_name} onChangeText={(v) => update({ trip_name: v })} placeholder={t("create_trip_wizard.placeholder_trip_name")} />
-    <FormInput label={t("create_trip_wizard.label_destination")} value={data.destination} onChangeText={(v) => update({ destination: v })} placeholder={t("create_trip_wizard.placeholder_destination")} />
+    <FormInput label={t("create_trip_wizard.label_trip_name")} value={data.trip_name} onChangeText={(v) => update({ trip_name: v })} placeholder={t("create_trip_wizard.placeholder_trip_name")} error={errors.trip_name} />
+    <FormInput label={t("create_trip_wizard.label_destination")} value={data.destination} onChangeText={(v) => update({ destination: v })} placeholder={t("create_trip_wizard.placeholder_destination")} error={errors.destination} />
     <View style={styles.row}>
       <View style={{ flex: 1, marginRight: spacing.sm }}>
-        <DatePickerField label="Start Date" value={data.start_date} onChange={(v) => update({ start_date: v })} />
+        <DatePickerField label="Start Date" value={data.start_date} onChange={(v) => update({ start_date: v })} error={errors.start_date} />
       </View>
       <View style={{ flex: 1, marginLeft: spacing.sm }}>
-        <DatePickerField label="End Date" value={data.end_date} onChange={(v) => update({ end_date: v })} />
+        <DatePickerField label="End Date" value={data.end_date} onChange={(v) => update({ end_date: v })} error={errors.end_date} />
       </View>
     </View>
-    <FormInput label={t("create_trip_wizard.label_max_participants")} value={data.max_participants} onChangeText={(v) => update({ max_participants: v })} placeholder={t("create_trip_wizard.placeholder_max_participants")} keyboardType="numeric" />
+    <FormInput label={t("create_trip_wizard.label_max_participants")} value={data.max_participants} onChangeText={(v) => update({ max_participants: v })} placeholder={t("create_trip_wizard.placeholder_max_participants")} keyboardType="numeric" error={errors.max_participants} />
     <FormInput label={t("create_trip_wizard.label_tagline")} value={data.tagline} onChangeText={(v) => update({ tagline: v })} placeholder={t("create_trip_wizard.placeholder_tagline")} />
     <FormInput label={t("create_trip_wizard.label_description")} value={data.description} onChangeText={(v) => update({ description: v })} placeholder={t("create_trip_wizard.placeholder_description")} multiline />
     <FormInput label={t("create_trip_wizard.label_whats_included")} value={data.whats_included} onChangeText={(v) => update({ whats_included: v })} placeholder={t("create_trip_wizard.placeholder_whats_included")} multiline />
@@ -540,8 +558,14 @@ const FREQUENCY_OPTIONS: { value: PaymentFrequency; label: string }[] = [
 const StepPayment: React.FC<{
   data: TripFormData;
   update: (partial: Partial<TripFormData>) => void;
-}> = ({ data, update }) => {
+  errors: Record<string, string>;
+}> = ({ data, update, errors }) => {
+  const { t } = useTranslation();
   const [showPolicyPicker, setShowPolicyPicker] = useState(false);
+  // A.3 — "No refunds" forces cutoff to 0 (semantic: no window matters); any
+  // other policy keeps the user's input. The hint flips to a soft note in
+  // the no-refunds case so the field doesn't look like a leftover.
+  const refundIsNone = mapRefundPolicyToDB(data.refund_policy) === 'none';
 
   // Live preview values for the installment plan (when applicable).
   const previewPrice = parseFloat(data.price_per_person) || 0;
@@ -557,7 +581,7 @@ const StepPayment: React.FC<{
   return (
     <View>
       <SectionLabel label="Pricing" />
-      <FormInput label="Price Per Person ($)" value={data.price_per_person} onChangeText={(v) => update({ price_per_person: v })} placeholder="1800" keyboardType="numeric" />
+      <FormInput label="Price Per Person ($)" value={data.price_per_person} onChangeText={(v) => update({ price_per_person: v })} placeholder="1800" keyboardType="numeric" error={errors.price_per_person} />
 
       <SectionLabel label="Payment Type" />
       <View style={styles.toggleButtonRow}>
@@ -637,7 +661,7 @@ const StepPayment: React.FC<{
 
       <ToggleRow label="Deposit Required" value={data.deposit_required} onValueChange={(v) => update({ deposit_required: v })} />
       {data.deposit_required && (
-        <FormInput label="Deposit Amount ($)" value={data.deposit_amount} onChangeText={(v) => update({ deposit_amount: v })} placeholder="300" keyboardType="numeric" />
+        <FormInput label="Deposit Amount ($)" value={data.deposit_amount} onChangeText={(v) => update({ deposit_amount: v })} placeholder="300" keyboardType="numeric" error={errors.deposit_amount} />
       )}
 
       <SectionLabel label="Refund Policy" />
@@ -653,7 +677,14 @@ const StepPayment: React.FC<{
             <TouchableOpacity
               key={policy}
               style={styles.dropdownItem}
-              onPress={() => { update({ refund_policy: policy }); setShowPolicyPicker(false); }}
+              onPress={() => {
+                // A.3 — flipping to "No refunds" zeroes the cutoff so the
+                // saved row stays self-consistent. Other selections keep
+                // whatever cutoff the organizer already typed.
+                const nextCutoff = policy === 'No refunds' ? '0' : data.refund_cutoff_days;
+                update({ refund_policy: policy, refund_cutoff_days: nextCutoff });
+                setShowPolicyPicker(false);
+              }}
             >
               <Text style={[styles.dropdownItemText, data.refund_policy === policy && { color: TEAL, fontWeight: typography.semibold }]}>
                 {policy}
@@ -661,6 +692,29 @@ const StepPayment: React.FC<{
             </TouchableOpacity>
           ))}
         </View>
+      )}
+
+      {/* A.3 — refund cutoff days. Hidden when "No refunds" picked (the
+          stored value stays at '0' so the DB column reflects the choice). */}
+      {data.refund_policy && !refundIsNone && (
+        <View style={{ marginTop: spacing.md }}>
+          <FormInput
+            label={t("create_trip_wizard.label_refund_cutoff")}
+            value={data.refund_cutoff_days}
+            onChangeText={(v) => update({ refund_cutoff_days: v.replace(/[^0-9]/g, '') })}
+            placeholder={t("create_trip_wizard.placeholder_refund_cutoff")}
+            keyboardType="numeric"
+            error={errors.refund_cutoff_days}
+          />
+          <Text style={styles.refundCutoffHint}>
+            {t("create_trip_wizard.hint_refund_cutoff")}
+          </Text>
+        </View>
+      )}
+      {data.refund_policy && refundIsNone && (
+        <Text style={styles.refundCutoffHint}>
+          {t("create_trip_wizard.hint_refund_cutoff_none")}
+        </Text>
       )}
     </View>
   );
@@ -921,6 +975,7 @@ const CreateTripWizardScreen: React.FC = () => {
     deposit_required: false,
     deposit_amount: '',
     refund_policy: '',
+    refund_cutoff_days: '7',
     requirements: [...DEFAULT_REQUIREMENTS],
     custom_requirements: [],
     messaging_mode: true,
@@ -930,8 +985,73 @@ const CreateTripWizardScreen: React.FC = () => {
     notify_itinerary: false,
   });
 
+  // A.1 — inline per-field error map, keyed by form field name. Cleared
+  // when the user edits the field so corrections are visible immediately
+  // without a re-press of Publish.
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
   const updateForm = (partial: Partial<TripFormData>) => {
     setFormData((prev) => ({ ...prev, ...partial }));
+    // Clear any errors targeting fields the user just touched.
+    const touched = Object.keys(partial);
+    if (touched.length > 0) {
+      setFieldErrors((prev) => {
+        if (!touched.some((k) => prev[k])) return prev;
+        const next = { ...prev };
+        for (const k of touched) delete next[k];
+        return next;
+      });
+    }
+  };
+
+  // Run all required-field + range checks. Returns the populated error
+  // map; an empty object means "ready to publish". i18n keys are scoped
+  // under create_trip_wizard.* so the strings flow EN/FR.
+  const validateForPublish = (): Record<string, string> => {
+    const errs: Record<string, string> = {};
+    const required = t('create_trip_wizard.validation_required_field');
+    if (!formData.trip_name?.trim()) errs.trip_name = required;
+    if (!formData.destination?.trim()) errs.destination = required;
+    if (!formData.start_date) {
+      errs.start_date = t('create_trip_wizard.validation_invalid_date');
+    }
+    if (!formData.end_date) {
+      errs.end_date = t('create_trip_wizard.validation_invalid_date');
+    }
+    // Cross-field: end on or after start. Only check if both parse — the
+    // single-field checks above already flag missing values.
+    if (formData.start_date && formData.end_date) {
+      const s = new Date(formData.start_date + 'T00:00:00').getTime();
+      const e = new Date(formData.end_date + 'T00:00:00').getTime();
+      if (Number.isFinite(s) && Number.isFinite(e) && e < s) {
+        errs.end_date = t('create_trip_wizard.validation_end_before_start');
+      }
+    }
+    const maxN = parseInt(formData.max_participants, 10);
+    if (!formData.max_participants || !Number.isFinite(maxN) || maxN <= 0) {
+      errs.max_participants = t('create_trip_wizard.validation_max_participants');
+    }
+    const priceN = parseFloat(formData.price_per_person);
+    if (!formData.price_per_person || !Number.isFinite(priceN) || priceN <= 0) {
+      errs.price_per_person = t('create_trip_wizard.validation_price');
+    }
+    if (formData.deposit_required) {
+      const dep = parseFloat(formData.deposit_amount);
+      if (!formData.deposit_amount || !Number.isFinite(dep) || dep <= 0) {
+        errs.deposit_amount = t('create_trip_wizard.validation_required_field');
+      } else if (Number.isFinite(priceN) && dep > priceN) {
+        errs.deposit_amount = t('create_trip_wizard.validation_deposit_exceeds_price');
+      }
+    }
+    // Cutoff is only meaningful when refunds are offered; we still allow
+    // 0 as a valid value (= no grace window). Anything non-integer is bad.
+    if (formData.refund_policy && mapRefundPolicyToDB(formData.refund_policy) !== 'none') {
+      const cutoffN = parseInt(formData.refund_cutoff_days, 10);
+      if (formData.refund_cutoff_days !== '' && (!Number.isFinite(cutoffN) || cutoffN < 0)) {
+        errs.refund_cutoff_days = t('create_trip_wizard.validation_refund_cutoff');
+      }
+    }
+    return errs;
   };
 
   // ── Local form draft persistence ────────────────────────────────────────
@@ -1115,6 +1235,11 @@ const CreateTripWizardScreen: React.FC = () => {
           deposit_required: !!(trip as any).depositCents,
           deposit_amount: (trip as any).depositCents ? String((trip as any).depositCents) : '',
           refund_policy: mapRefundPolicyFromDB((trip as any).refundPolicy),
+          // Hydrate cutoff from the DB. Falls back to '' (placeholder shows)
+          // when null; the existing default value of '7' only seeds new trips.
+          refund_cutoff_days: (trip as any).refundCutoffDays != null
+            ? String((trip as any).refundCutoffDays)
+            : '',
           messaging_mode: (trip as any).messagingMode !== 'organizer_only',
           requirements: hydratedRequirements,
           custom_requirements: hydratedCustom,
@@ -1200,6 +1325,13 @@ const CreateTripWizardScreen: React.FC = () => {
           : null,
       depositCents: formData.deposit_amount ? parseFloat(formData.deposit_amount) : 0,
       refundPolicy: mapRefundPolicyToDB(formData.refund_policy),
+      // A.3 — persist refund_cutoff_days (already a column on trips). Empty
+      // input or a non-numeric blob both serialize to null so the DB CHECK
+      // (>=0) is never violated.
+      refundCutoffDays: (() => {
+        const n = parseInt(formData.refund_cutoff_days, 10);
+        return Number.isFinite(n) && n >= 0 ? n : null;
+      })(),
       messagingMode: formData.messaging_mode ? 'group' : 'organizer_only',
       requiredDocuments,
     } as any;
@@ -1242,8 +1374,47 @@ const CreateTripWizardScreen: React.FC = () => {
     }
   };
 
+  // Pick the lowest step containing a flagged field so the user lands on
+  // the right page after a failed publish. Keeps the publish CTA on Step 3
+  // (Review) honest — pressing it never silently swallows the error.
+  const stepForErrorKey = (key: string): number => {
+    if (
+      key === 'trip_name' ||
+      key === 'destination' ||
+      key === 'start_date' ||
+      key === 'end_date' ||
+      key === 'max_participants'
+    ) return 0;
+    if (
+      key === 'price_per_person' ||
+      key === 'deposit_amount' ||
+      key === 'refund_cutoff_days'
+    ) return 1;
+    return 0;
+  };
+
   const publish = async () => {
     try {
+      // A.1 — gate the publish path on the full required-field check. If
+      // anything fails, we surface inline red text under each field AND
+      // jump the wizard to the earliest step holding an error so the user
+      // can actually see the highlighted rows.
+      const errors = validateForPublish();
+      if (Object.keys(errors).length > 0) {
+        setFieldErrors(errors);
+        const firstStep = Math.min(...Object.keys(errors).map(stepForErrorKey));
+        if (Number.isFinite(firstStep) && firstStep !== currentStep) {
+          setCurrentStep(firstStep);
+          scrollRef.current?.scrollTo({ y: 0, animated: true });
+        }
+        Alert.alert(
+          t('create_trip_wizard.validation_publish_blocked_title'),
+          t('create_trip_wizard.validation_publish_blocked_body')
+        );
+        return;
+      }
+      setFieldErrors({});
+
       const tripData = buildTripData();
       console.log('[CreateTripWizard] publish pressed', {
         isEditMode,
@@ -1303,8 +1474,8 @@ const CreateTripWizardScreen: React.FC = () => {
 
   const renderStep = () => {
     switch (currentStep) {
-      case 0: return <StepBasics data={formData} update={updateForm} uploadingCover={uploadingCover} onPickCoverNative={pickCoverPhotoNative} onWebCoverFile={handleWebCoverFile} />;
-      case 1: return <StepPayment data={formData} update={updateForm} />;
+      case 0: return <StepBasics data={formData} update={updateForm} uploadingCover={uploadingCover} onPickCoverNative={pickCoverPhotoNative} onWebCoverFile={handleWebCoverFile} errors={fieldErrors} />;
+      case 1: return <StepPayment data={formData} update={updateForm} errors={fieldErrors} />;
       case 2: return <StepRequirements data={formData} update={updateForm} />;
       case 3: return <StepReview data={formData} onPublish={publish} onSaveDraft={saveDraft} isEditMode={isEditMode} />;
       default: return null;
@@ -1499,6 +1670,26 @@ const styles = StyleSheet.create({
   textInputMultiline: {
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  // A.1 — red border when a field is flagged. Matches the inline error
+  // text below the input so the eye finds the failing row at a glance.
+  textInputError: {
+    borderColor: '#DC2626',
+  },
+  fieldErrorText: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#DC2626',
+    fontWeight: '500',
+  },
+  // A.3 — soft hint under the refund cutoff input. Different from
+  // fieldErrorText (which is the validation error) so the user can see
+  // the explanation even when the field is valid.
+  refundCutoffHint: {
+    marginTop: 4,
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 16,
   },
   row: {
     flexDirection: 'row',

@@ -66,6 +66,9 @@ export interface Trip {
   slug: string | null;
   messagingMode: MessagingMode;
   refundPolicy: RefundPolicy;
+  // A.3 — explicit cutoff window in days. Null when the wizard hasn't set
+  // it (legacy rows, or organizer picked "No refunds" which seeds 0).
+  refundCutoffDays: number | null;
   whatsIncluded: string | null;
   whatsExcluded: string | null;
   registrationDeadline: string | null;
@@ -231,6 +234,9 @@ function mapTrip(row: any): Trip {
     slug: row.slug ?? row.shareable_slug,
     messagingMode: row.messaging_mode ?? 'organizer_only',
     refundPolicy: row.refund_policy ?? 'none',
+    refundCutoffDays: row.refund_cutoff_days == null
+      ? null
+      : (Number.isFinite(Number(row.refund_cutoff_days)) ? Number(row.refund_cutoff_days) : null),
     whatsIncluded: row.whats_included ?? null,
     whatsExcluded: row.whats_excluded ?? null,
     registrationDeadline: row.registration_deadline ?? null,
@@ -399,6 +405,7 @@ export class TripOrganizerEngine {
         status: 'draft',
         messaging_mode: data.messagingMode ?? 'organizer_only',
         refund_policy: data.refundPolicy ?? 'none',
+        refund_cutoff_days: data.refundCutoffDays ?? null,
         whats_included: data.whatsIncluded ?? null,
         whats_excluded: data.whatsExcluded ?? null,
         registration_deadline: nullIfBlank(data.registrationDeadline),
@@ -463,6 +470,7 @@ export class TripOrganizerEngine {
     }
     if (data.messagingMode !== undefined) update.messaging_mode = data.messagingMode;
     if (data.refundPolicy !== undefined) update.refund_policy = data.refundPolicy;
+    if (data.refundCutoffDays !== undefined) update.refund_cutoff_days = data.refundCutoffDays;
     if (data.whatsIncluded !== undefined) update.whats_included = data.whatsIncluded;
     if (data.whatsExcluded !== undefined) update.whats_excluded = data.whatsExcluded;
     if (data.registrationDeadline !== undefined) update.registration_deadline = nullIfBlank(data.registrationDeadline);
@@ -976,6 +984,53 @@ export class TripOrganizerEngine {
   // ═══════════════════════════════════════════════════════════════════════════
   // GROUP 5: PAYMENTS
   // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * A.2b — Create a Stripe PaymentIntent for a trip deposit or installment.
+   *
+   * Thin wrapper around the `create-trip-payment-intent` Edge Function so
+   * downstream consumers (TripPaymentScreen for participants joining a
+   * trip; future organizer-side checkout) don't have to know about the
+   * Supabase `functions.invoke` shape. Returns the clientSecret + the
+   * PI id; the actual PaymentSheet UI lives in the screen that drives the
+   * intent — this method only stages the intent.
+   *
+   * `amountCents` MUST already be in the smallest currency unit; we don't
+   * silently scale it. `purpose` defaults to 'trip_deposit' but accepts
+   * 'trip_installment' / 'trip_full_payment' so the webhook can route the
+   * succeeded event to the right trip_payments.payment_type later.
+   */
+  static async createPaymentIntent(opts: {
+    tripId: string;
+    amountCents: number;
+    purpose?: 'trip_deposit' | 'trip_installment' | 'trip_full_payment';
+    currency?: string;
+  }): Promise<{ clientSecret: string; paymentIntentId: string }> {
+    if (!opts.tripId) throw new Error('tripId is required.');
+    if (!Number.isInteger(opts.amountCents) || opts.amountCents < 50) {
+      throw new Error('amountCents must be an integer ≥ 50 (Stripe minimum).');
+    }
+    const { data, error } = await supabase.functions.invoke(
+      'create-trip-payment-intent',
+      {
+        body: {
+          trip_id: opts.tripId,
+          amount: opts.amountCents,
+          purpose: opts.purpose ?? 'trip_deposit',
+          currency: opts.currency ?? 'usd',
+        },
+      },
+    );
+    if (error) {
+      throw new Error(`Failed to create trip payment intent: ${error.message}`);
+    }
+    const clientSecret = (data as any)?.clientSecret;
+    const paymentIntentId = (data as any)?.paymentIntentId;
+    if (!clientSecret || !paymentIntentId) {
+      throw new Error('Edge Function returned no client secret.');
+    }
+    return { clientSecret, paymentIntentId };
+  }
 
   /** Record a payment for a participant */
   static async recordPayment(participantId: string, data: Partial<TripPayment>): Promise<TripPayment> {

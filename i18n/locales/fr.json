@@ -3371,7 +3371,20 @@
     "alert_permission_body": "TandaXn a besoin de l'accès à la photothèque pour définir une couverture de voyage. Veuillez accorder la permission dans les paramètres de votre appareil.",
     "alert_could_not_pick_title": "Impossible de choisir la photo",
     "alert_could_not_load_title": "Impossible de charger le voyage",
-    "alert_please_try_again": "Veuillez réessayer."
+    "alert_please_try_again": "Veuillez réessayer.",
+    "validation_required_field": "Ce champ est obligatoire.",
+    "validation_invalid_date": "Veuillez sélectionner une date valide.",
+    "validation_end_before_start": "La date de fin doit être après la date de début.",
+    "validation_max_participants": "Saisissez un nombre de places supérieur à zéro.",
+    "validation_price": "Saisissez un prix supérieur à zéro.",
+    "validation_deposit_exceeds_price": "L'acompte ne peut pas dépasser le prix par personne.",
+    "validation_refund_cutoff": "Le délai doit être un nombre entier de jours (0 ou plus).",
+    "validation_publish_blocked_title": "Presque fini",
+    "validation_publish_blocked_body": "Veuillez corriger les champs surlignés avant de publier.",
+    "label_refund_cutoff": "Délai de remboursement (jours avant le départ)",
+    "placeholder_refund_cutoff": "7",
+    "hint_refund_cutoff": "Les participants qui annulent dans cette fenêtre perdent le remboursement.",
+    "hint_refund_cutoff_none": "Aucun remboursement — le délai ne s'applique pas."
   },
   "participant_manager": {
     "header_title": "Participants",
