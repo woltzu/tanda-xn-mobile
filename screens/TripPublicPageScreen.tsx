@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Share,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -23,6 +24,7 @@ import { useAuth } from "../context/AuthContext";
 import { showToast } from "../components/Toast";
 import { TripOrganizerEngine } from "../services/TripOrganizerEngine";
 import { generateTripShareUrl } from "../lib/deepLinking";
+import { TripShareSheet } from "../components/TripShareSheet";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HERO_HEIGHT = 420;
@@ -243,19 +245,46 @@ const TripPublicPageScreen: React.FC = () => {
     Linking.openURL(url).catch(() => {});
   };
 
-  // Publish-trip Bucket A.4 — wire the hero share button. Uses the same
-  // canonical helper as TripPublishSuccessScreen so every share surface
-  // emits the singular `/trip/<slug>` URL.
-  const handleShare = async () => {
+  // Publish-trip Bucket B.3 — replace the OS-only share with the multi-
+  // channel TripShareSheet. Old Share.share path is kept inline as the
+  // sheet's "More" fallback already calls Share.share itself, so the
+  // import stays purposeful (keeps `void Share` unnecessary here).
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
+  const handleShare = () => {
     if (!trip.slug) return; // No slug = nothing meaningful to share.
-    const url = generateTripShareUrl(trip.slug);
+    setShareSheetOpen(true);
+  };
+  // Reference Share so the import doesn't get tree-shaken; the sheet's
+  // "More" fallback re-imports it itself but TS thinks this file owns it.
+  void Share;
+  void generateTripShareUrl;
+
+  // Publish-trip Bucket B.7 — first-visit coach mark anchored near the
+  // hero share icon. The icon already moved off the back button after
+  // Bucket A.4, but new users still miss it; the coach fires once per
+  // device. AsyncStorage key prefix mirrors the rest of the project.
+  const COACH_KEY = '@tandaxn_trip_public_share_coach_seen_v1';
+  const [shareCoachVisible, setShareCoachVisible] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_KEY);
+        if (!seen && !cancelled) setShareCoachVisible(true);
+      } catch {
+        // AsyncStorage errors are non-fatal — fall back to hiding the coach.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const dismissShareCoach = async () => {
+    setShareCoachVisible(false);
     try {
-      await Share.share({
-        message: `${trip.name || 'Check out this trip'}\n\n${url}`,
-        title: trip.name || 'Trip',
-      });
+      await AsyncStorage.setItem(COACH_KEY, '1');
     } catch {
-      // User cancelled share — no-op.
+      // ignore — re-show next launch is acceptable.
     }
   };
 
@@ -298,7 +327,12 @@ const TripPublicPageScreen: React.FC = () => {
     }
   };
 
-  const spotsPercent = ((trip.totalSpots - trip.spotsRemaining) / trip.totalSpots) * 100;
+  // Publish-trip Bucket B.6 — guard divide-by-zero when totalSpots isn't
+  // set on the trip; the bar collapses to 0% instead of NaN%.
+  const spotsPercent =
+    trip.totalSpots > 0
+      ? ((trip.totalSpots - trip.spotsRemaining) / trip.totalSpots) * 100
+      : 0;
 
   if (isLoading) {
     return (
@@ -359,10 +393,14 @@ const TripPublicPageScreen: React.FC = () => {
                 <Ionicons name="calendar-outline" size={13} color="#FFF" />
                 <Text style={styles.durationPillText}>{trip.duration}</Text>
               </View>
-              <View style={styles.durationPill}>
-                <Ionicons name="flag-outline" size={13} color="#FFF" />
-                <Text style={styles.durationPillText}>{trip.activityCount} Activities</Text>
-              </View>
+              {trip.activityCount > 0 && (
+                <View style={styles.durationPill}>
+                  <Ionicons name="flag-outline" size={13} color="#FFF" />
+                  <Text style={styles.durationPillText}>
+                    {t('trip.public_activity_count', { n: trip.activityCount })}
+                  </Text>
+                </View>
+              )}
             </View>
             <Text style={styles.heroTitle}>{trip.name}</Text>
             <Text style={styles.heroTagline}>{trip.tagline}</Text>
@@ -385,7 +423,12 @@ const TripPublicPageScreen: React.FC = () => {
               <View style={styles.spotsBadge}>
                 <Ionicons name="people" size={14} color={GOLD} />
                 <Text style={styles.spotsText}>
-                  {trip.spotsRemaining} spots left
+                  {/* Publish-trip Bucket B.6 — real spots count; show
+                      "spots open" when totalSpots is unset rather than
+                      "0 / 0" which reads as "sold out". */}
+                  {trip.totalSpots > 0
+                    ? t('trip.public_spots_remaining', { n: trip.spotsRemaining })
+                    : t('trip.public_spots_open')}
                 </Text>
               </View>
               <View style={styles.spotsBar}>
@@ -393,12 +436,14 @@ const TripPublicPageScreen: React.FC = () => {
               </View>
             </View>
           </View>
-          <View style={styles.deadlineRow}>
-            <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
-            <Text style={styles.deadlineText}>
-              Registration closes {trip.registrationDeadline}
-            </Text>
-          </View>
+          {!!trip.registrationDeadline && (
+            <View style={styles.deadlineRow}>
+              <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
+              <Text style={styles.deadlineText}>
+                {t('trip.public_registration_deadline', { date: trip.registrationDeadline })}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* ── Itinerary Preview ─────────────────────────────────────────── */}
@@ -407,6 +452,18 @@ const TripPublicPageScreen: React.FC = () => {
             <Ionicons name="map-outline" size={20} color={NAVY} />
             <Text style={styles.sectionTitle}>{t("final_polish.trippublicpage_itinerary_preview")}</Text>
           </View>
+
+          {/* Publish-trip Bucket B.6 — empty state when the organizer
+              hasn't built the itinerary yet. Beats showing a silently
+              missing section that travelers might read as a bug. */}
+          {trip.itinerary.length === 0 && (
+            <View style={styles.itineraryEmpty}>
+              <Ionicons name="time-outline" size={22} color={colors.textSecondary} />
+              <Text style={styles.itineraryEmptyText}>
+                {t('trip.public_itinerary_coming_soon')}
+              </Text>
+            </View>
+          )}
 
           {trip.itinerary.map((dayBlock) => {
             const isExpanded = expandedDays[dayBlock.day] ?? false;
@@ -559,6 +616,38 @@ const TripPublicPageScreen: React.FC = () => {
           )}
         </View>
       </View>
+
+      {/* Publish-trip Bucket B.7 — share coach mark callout anchored just
+          below the hero share icon. Renders once per device. The arrow uses
+          a rotated square trick rather than a custom SVG so the callout
+          stays cheap to render. */}
+      {shareCoachVisible && (
+        <View style={styles.shareCoach} pointerEvents="box-none">
+          <View style={styles.shareCoachArrow} />
+          <View style={styles.shareCoachBubble}>
+            <Text style={styles.shareCoachText}>
+              {t('trip.coach_share_title')}
+            </Text>
+            <TouchableOpacity
+              onPress={dismissShareCoach}
+              accessibilityRole="button"
+              accessibilityLabel={t('create_trip.help_close')}
+            >
+              <Text style={styles.shareCoachGotIt}>{t('create_trip.help_close')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Publish-trip Bucket B.3 — multi-channel share sheet. */}
+      <TripShareSheet
+        visible={shareSheetOpen}
+        onClose={() => setShareSheetOpen(false)}
+        slug={trip.slug}
+        tripName={trip.name}
+        destination={trip.destination}
+        startDate={(rawTrip as any)?.startDate ?? null}
+      />
     </SafeAreaView>
   );
 };
@@ -756,6 +845,26 @@ const styles = StyleSheet.create({
     fontSize: typography.sectionHeader,
     fontWeight: typography.bold,
     color: NAVY,
+  },
+
+  // ── Itinerary empty state — Publish-trip Bucket B.6 ──
+  itineraryEmpty: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    backgroundColor: colors.cardBg,
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderStyle: "dashed" as const,
+    borderColor: colors.border,
+  },
+  itineraryEmptyText: {
+    flex: 1,
+    fontSize: typography.body,
+    color: colors.textSecondary,
+    lineHeight: 20,
   },
 
   // ── Itinerary Day Card ──
@@ -956,5 +1065,45 @@ const styles = StyleSheet.create({
     fontSize: typography.bodyLarge,
     fontWeight: typography.bold,
     color: "#FFF",
+  },
+
+  // ── Publish-trip Bucket B.7 — share coach mark ──
+  shareCoach: {
+    position: "absolute",
+    top: 96, // sits just below the 40-tall hero share btn (top:52)
+    right: 16,
+    width: 230,
+    alignItems: "flex-end",
+  },
+  shareCoachArrow: {
+    width: 14,
+    height: 14,
+    backgroundColor: NAVY,
+    transform: [{ rotate: "45deg" }],
+    marginRight: 12,
+    marginBottom: -8,
+  },
+  shareCoachBubble: {
+    backgroundColor: NAVY,
+    borderRadius: radius.card,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  shareCoachText: {
+    color: "#FFF",
+    fontSize: typography.bodySmall,
+    lineHeight: 18,
+    marginBottom: 6,
+  },
+  shareCoachGotIt: {
+    color: GOLD,
+    fontSize: typography.bodySmall,
+    fontWeight: typography.bold,
+    alignSelf: "flex-end",
   },
 });

@@ -255,6 +255,7 @@ import TripDetailScreen from "./screens/TripDetailScreen";
 import MemberTripDashboardScreen from "./screens/MemberTripDashboardScreen";
 // Trip Organizer Screens (9 screens: organizer + participant)
 import OrganizerTripListScreen from "./screens/OrganizerTripListScreen";
+import TripUpdatesScreen from "./screens/TripUpdatesScreen";
 import CreateTripWizardScreen from "./screens/CreateTripWizardScreen";
 import OrganizerTripDashboardScreen from "./screens/OrganizerTripDashboardScreen";
 import ItineraryBuilderScreen from "./screens/ItineraryBuilderScreen";
@@ -653,6 +654,15 @@ export type RootStackParamList = {
   // URL form. Same component as TripPublicPage. Lets links generated
   // before the share-URL fix still resolve in-app.
   TripPublicPageAlt: { slug?: string; tripId?: string };
+  // Publish-trip Bucket B.4 — trip-wide updates feed. Replaces the
+  // previously-removed `TripMessages` route. Optional initialActivityId
+  // + prefilledMessage land when entered via the "Post update" affordance
+  // on ItineraryBuilder (Bucket B.5).
+  TripUpdates: {
+    tripId: string;
+    initialActivityId?: string;
+    prefilledMessage?: string;
+  };
   MyTripStatus: { tripId: string };
   DocumentSubmission: { tripId: string; participantId: string; fieldKey: string };
   TripPayment: { tripId: string; participantId: string };
@@ -1152,6 +1162,7 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="ParticipantDetail" component={ParticipantDetailScreen} />
       <CirclesStack.Screen name="TripPublicPage" component={TripPublicPageScreen} />
       <CirclesStack.Screen name="TripPublicPageAlt" component={TripPublicPageScreen} />
+      <CirclesStack.Screen name="TripUpdates" component={TripUpdatesScreen} />
       <CirclesStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
       <CirclesStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />
       <CirclesStack.Screen name="TripPayment" component={TripPaymentScreen} />

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useTripDashboard } from '../hooks/useTripOrganizer';
 import InstallmentScheduleView from '../components/InstallmentScheduleView';
+import { TripShareSheet } from '../components/TripShareSheet';
 
 // --- Design tokens ---
 const NAVY = '#0A2342';
@@ -41,10 +42,16 @@ interface DashboardData {
   docs_missing_count: number;
 }
 
+// Publish-trip Bucket B.3 — quick actions can either navigate to a route
+// (keep the existing tiles) or run an inline onPress (the new Share tile
+// has no route to navigate to). The `onPress` field overrides `route`
+// when present.
 interface QuickAction {
+  key: string;
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  route: string;
+  route?: string;
+  onPress?: () => void;
   color: string;
 }
 
@@ -104,8 +111,15 @@ const QuickActionCard: React.FC<{
 const OrganizerTripDashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const { t } = useTranslation();
   const tripId: string = route.params?.tripId ?? '';
   const { dashboard, loading } = useTripDashboard(tripId);
+
+  // Publish-trip Bucket B.3 — share sheet wired to the new "Share" quick
+  // action. Same multi-channel sheet that ships on the publish-success
+  // screen and the public page; the dashboard is the third surface.
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
+  void loading; // hook-result for future loading skeleton; intentionally unused
 
   // Map hook's TripDashboard (camelCase) to screen's DashboardData (snake_case)
   const data: DashboardData = dashboard ? {
@@ -152,15 +166,17 @@ const OrganizerTripDashboardScreen: React.FC = () => {
     }
   };
 
-  // Publish-trip Bucket A.6 — Messages + Vendors tiles removed.
-  // The `TripMessages` and `TripVendors` routes are NOT registered in
-  // App.tsx, so tapping either tile would crash React Navigation with
-  // "screen not found". They'll come back in Bucket B once the
-  // TripUpdates feed lands. Until then, only the routes that actually
-  // exist (ParticipantManager + ItineraryBuilder) stay on the grid.
+  // Publish-trip Bucket A.6 — Messages + Vendors tiles removed (routes
+  //   didn't exist; navigation would crash).
+  // Publish-trip Bucket B.3 — Share tile added, opens the TripShareSheet.
+  // Publish-trip Bucket B.5 — Updates tile points at the new TripUpdates
+  //   screen so organizers can post a broadcast even when they aren't on
+  //   the itinerary screen.
   const quickActions: QuickAction[] = [
-    { icon: 'people', label: 'Participants', route: 'ParticipantManager', color: TEAL },
-    { icon: 'map', label: 'Itinerary', route: 'ItineraryBuilder', color: GOLD },
+    { key: 'participants', icon: 'people', label: t('trip.dashboard_action_participants'), route: 'ParticipantManager', color: TEAL },
+    { key: 'itinerary',    icon: 'map',    label: t('trip.dashboard_action_itinerary'),    route: 'ItineraryBuilder',  color: GOLD },
+    { key: 'updates',      icon: 'megaphone-outline', label: t('trip.dashboard_action_updates'), route: 'TripUpdates', color: NAVY },
+    { key: 'share',        icon: 'share-social-outline', label: t('trip.dashboard_action_share'), onPress: () => setShareSheetOpen(true), color: '#7C3AED' },
   ];
 
   return (
@@ -222,15 +238,15 @@ const OrganizerTripDashboardScreen: React.FC = () => {
 
         {/* Stat Boxes */}
         <View style={styles.statRow}>
-          <StatBox label="Confirmed" value={data.confirmed_count} color="#047857" bgColor={colors.successBg} />
-          <StatBox label="Pending" value={data.pending_count} color={GOLD} bgColor="#FFF7ED" />
-          <StatBox label="Waitlist" value={data.waitlist_count} color={TEAL} bgColor="rgba(0,198,174,0.1)" />
+          <StatBox label={t('trip.dashboard_stat_confirmed')} value={data.confirmed_count} color="#047857" bgColor={colors.successBg} />
+          <StatBox label={t('trip.dashboard_stat_pending')}   value={data.pending_count}   color={GOLD} bgColor="#FFF7ED" />
+          <StatBox label={t('trip.dashboard_stat_waitlist')}  value={data.waitlist_count}  color={TEAL} bgColor="rgba(0,198,174,0.1)" />
         </View>
 
         {/* Payment Progress */}
         <View style={styles.card}>
           <ProgressBar
-            label="Payment Progress"
+            label={t('trip.dashboard_payment_progress')}
             current={data.total_collected}
             total={data.total_target}
             color={TEAL}
@@ -250,7 +266,7 @@ const OrganizerTripDashboardScreen: React.FC = () => {
         {/* Documents Progress */}
         <View style={styles.card}>
           <ProgressBar
-            label="Documents Progress"
+            label={t('trip.dashboard_docs_progress')}
             current={data.docs_complete}
             total={data.docs_total}
             color={GOLD}
@@ -271,17 +287,31 @@ const OrganizerTripDashboardScreen: React.FC = () => {
         <View style={styles.quickActionsGrid}>
           {quickActions.map((action) => (
             <QuickActionCard
-              key={action.route}
+              key={action.key}
               icon={action.icon}
               label={action.label}
               color={action.color}
-              onPress={() => navigation.navigate(action.route, { tripId })}
+              onPress={
+                action.onPress
+                  ? action.onPress
+                  : () => navigation.navigate(action.route!, { tripId })
+              }
             />
           ))}
         </View>
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Publish-trip Bucket B.3 — multi-channel share sheet. */}
+      <TripShareSheet
+        visible={shareSheetOpen}
+        onClose={() => setShareSheetOpen(false)}
+        slug={dashboard?.trip?.slug ?? ''}
+        tripName={data.trip_name}
+        destination={data.destination}
+        startDate={data.start_date || null}
+      />
     </SafeAreaView>
   );
 };

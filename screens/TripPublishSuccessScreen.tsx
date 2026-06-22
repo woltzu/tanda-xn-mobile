@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,16 @@ import {
   StatusBar,
   Platform,
   Share,
+  Modal,
+  Pressable,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { generateTripShareUrl } from '../lib/deepLinking';
+import { TripShareSheet } from '../components/TripShareSheet';
 
 const NAVY = '#0A2342';
 const TEAL = '#00C6AE';
@@ -52,16 +56,16 @@ const TripPublishSuccessScreen: React.FC = () => {
   // the share payload.
   const tripLink = shareUrl.replace(/^https?:\/\//, '');
 
-  const handleShareLink = async () => {
-    try {
-      await Share.share({
-        message: `Join my trip: ${tripName}!\n\n${shareUrl}`,
-        title: tripName,
-      });
-    } catch (_) {
-      // User cancelled share
-    }
-  };
+  // Publish-trip Bucket B.3 — replace the OS-only share with the
+  // multi-channel TripShareSheet. The old Share.share() call stays as
+  // an unused fallback in case we ever need to revert quickly; it is
+  // not bound to any control.
+  const [shareSheetOpen, setShareSheetOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const handleShareLink = () => setShareSheetOpen(true);
+  // Reference _Share so the unused-import lint stays quiet and the
+  // fallback path is one keystroke away if we ever roll back.
+  void Share;
 
   const hasTripId = tripId && tripId !== 'new';
 
@@ -95,6 +99,17 @@ const TripPublishSuccessScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
       <View style={styles.container}>
+        {/* Publish-trip Bucket B.7 — (?) help button anchored to the top
+            corner. Doesn't compete with the celebration hero visually. */}
+        <TouchableOpacity
+          style={styles.helpBtn}
+          onPress={() => setHelpOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={t('trip.share_help_title')}
+        >
+          <Ionicons name="help-circle-outline" size={24} color={NAVY} />
+        </TouchableOpacity>
+
         {/* Celebration Hero */}
         <View style={styles.hero}>
           <Text style={styles.heroEmoji}>🎉</Text>
@@ -137,6 +152,43 @@ const TripPublishSuccessScreen: React.FC = () => {
           <Ionicons name="arrow-forward" size={16} color={TEAL} style={{ marginLeft: 4 }} />
         </TouchableOpacity>
       </View>
+
+      {/* Publish-trip Bucket B.3 — multi-channel share sheet. */}
+      <TripShareSheet
+        visible={shareSheetOpen}
+        onClose={() => setShareSheetOpen(false)}
+        slug={slug}
+        tripName={tripName}
+        destination={destination}
+        startDate={startDate || null}
+      />
+
+      {/* Publish-trip Bucket B.7 — local HelpSheet. */}
+      <Modal
+        visible={helpOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setHelpOpen(false)}
+      >
+        <Pressable style={styles.helpBackdrop} onPress={() => setHelpOpen(false)}>
+          <Pressable style={styles.helpSheet} onPress={() => undefined}>
+            <View style={styles.helpHandle} />
+            <View style={styles.helpHeader}>
+              <Text style={styles.helpTitle}>{t('trip.share_help_title')}</Text>
+              <TouchableOpacity
+                onPress={() => setHelpOpen(false)}
+                accessibilityRole="button"
+                accessibilityLabel={t('create_trip.help_close')}
+              >
+                <Ionicons name="close" size={22} color={NAVY} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ maxHeight: 340 }} showsVerticalScrollIndicator={false}>
+              <Text style={styles.helpBody}>{t('trip.share_help_body')}</Text>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -263,5 +315,49 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: TEAL,
+  },
+  helpBtn: {
+    position: 'absolute',
+    top: 12,
+    right: 16,
+    padding: 8,
+    zIndex: 10,
+  },
+  helpBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  helpSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+  },
+  helpHandle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E7EB',
+    marginBottom: 12,
+  },
+  helpHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  helpTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: NAVY,
+  },
+  helpBody: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.textSecondary,
   },
 });

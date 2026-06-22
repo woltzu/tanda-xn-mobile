@@ -115,22 +115,46 @@ const EMPTY_FORM: Omit<ModalForm, 'dayId'> = {
 };
 
 // --- Activity Row ---
+// Publish-trip Bucket B.5 — the row now carries a "Post update" affordance
+// that hands off to TripUpdates with the activity context pre-filled. The
+// parent passes `onPostUpdate` so the row stays stateless. The original
+// pencil icon still opens the editor when the body of the row is tapped.
 const ActivityRow: React.FC<{
   activity: TripActivity;
   onEdit: () => void;
-}> = ({ activity, onEdit }) => (
-  <TouchableOpacity style={styles.activityRow} onPress={onEdit} activeOpacity={0.6}>
-    <Text style={styles.activityTime}>{formatTimeDisplay(activity.startTime)}</Text>
-    <Text style={styles.activityEmoji}>{getCategoryEmoji(activity.categoryTag)}</Text>
-    <View style={styles.activityInfo}>
-      <Text style={styles.activityName} numberOfLines={1}>{activity.title}</Text>
-      {!!activity.description && (
-        <Text style={styles.activityDesc} numberOfLines={1}>{activity.description}</Text>
-      )}
+  onPostUpdate: () => void;
+}> = ({ activity, onEdit, onPostUpdate }) => {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.activityRow}>
+      <TouchableOpacity
+        style={styles.activityRowBody}
+        onPress={onEdit}
+        activeOpacity={0.6}
+      >
+        <Text style={styles.activityTime}>{formatTimeDisplay(activity.startTime)}</Text>
+        <Text style={styles.activityEmoji}>{getCategoryEmoji(activity.categoryTag)}</Text>
+        <View style={styles.activityInfo}>
+          <Text style={styles.activityName} numberOfLines={1}>{activity.title}</Text>
+          {!!activity.description && (
+            <Text style={styles.activityDesc} numberOfLines={1}>{activity.description}</Text>
+          )}
+        </View>
+        <Ionicons name="create-outline" size={16} color={colors.textSecondary} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.postUpdateBtn}
+        onPress={onPostUpdate}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={t('itinerary_builder.post_update_label')}
+      >
+        <Ionicons name="megaphone-outline" size={14} color={TEAL} />
+        <Text style={styles.postUpdateBtnText}>{t('itinerary_builder.post_update_label')}</Text>
+      </TouchableOpacity>
     </View>
-    <Ionicons name="create-outline" size={16} color={colors.textSecondary} />
-  </TouchableOpacity>
-);
+  );
+};
 
 // --- Day Card (uses local state for title to avoid keyboard dismiss on each keystroke) ---
 const DayCard: React.FC<{
@@ -138,8 +162,9 @@ const DayCard: React.FC<{
   onSaveTitle: (title: string) => void;
   onAddActivity: () => void;
   onEditActivity: (activity: TripActivity) => void;
+  onPostUpdateForActivity: (activity: TripActivity) => void;
   onDeleteDay: () => void;
-}> = ({ day, onSaveTitle, onAddActivity, onEditActivity, onDeleteDay }) => {
+}> = ({ day, onSaveTitle, onAddActivity, onEditActivity, onPostUpdateForActivity, onDeleteDay }) => {
   const { t } = useTranslation();
   const [localTitle, setLocalTitle] = useState(day.title ?? '');
 
@@ -161,7 +186,12 @@ const DayCard: React.FC<{
         placeholderTextColor="#9CA3AF"
       />
       {day.activities.map((act) => (
-        <ActivityRow key={act.id} activity={act} onEdit={() => onEditActivity(act)} />
+        <ActivityRow
+          key={act.id}
+          activity={act}
+          onEdit={() => onEditActivity(act)}
+          onPostUpdate={() => onPostUpdateForActivity(act)}
+        />
       ))}
       <TouchableOpacity style={styles.addActivityBtn} onPress={onAddActivity} activeOpacity={0.7}>
         <Ionicons name="add-circle-outline" size={20} color={TEAL} />
@@ -530,6 +560,19 @@ const ItineraryBuilderScreen: React.FC = () => {
                 onSaveTitle={(title) => handleUpdateDayTitle(day.id, title)}
                 onAddActivity={() => openAddModal(day.id, day.activities)}
                 onEditActivity={(activity) => openEditModal(day.id, activity)}
+                onPostUpdateForActivity={(activity) => {
+                  // Publish-trip Bucket B.5 — hop into TripUpdates with the
+                  // activity context pre-filled. The screen reads
+                  // `prefilledMessage` into its composer and pins
+                  // `initialActivityId` so the saved row gets the FK.
+                  navigation.navigate('TripUpdates', {
+                    tripId,
+                    initialActivityId: activity.id,
+                    prefilledMessage: t('itinerary_builder.post_update_prefill', {
+                      activity: activity.title,
+                    }),
+                  });
+                }}
                 onDeleteDay={() => handleDeleteDay(day.id)}
               />
             ))
@@ -654,12 +697,34 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   // --- Activity Row ---
+  // Publish-trip Bucket B.5 — outer wrapper now stacks the editor strip
+  // and the "Post update" pill vertically; the inner row keeps the
+  // original horizontal layout.
   activityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: '#F3F4F6',
+  },
+  activityRowBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  postUpdateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    marginTop: 6,
+    marginLeft: 80, // line up under the activityInfo column (72 time + 8 emoji-gap)
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(0,198,174,0.10)',
+    borderRadius: radius.pill,
+  },
+  postUpdateBtnText: {
+    fontSize: typography.label,
+    fontWeight: typography.semibold,
+    color: TEAL,
   },
   activityTime: {
     fontSize: typography.bodySmall,

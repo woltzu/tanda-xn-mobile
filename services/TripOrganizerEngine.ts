@@ -167,6 +167,11 @@ export interface TripMessage {
   body: string;
   readAt: string | null;
   createdAt: string;
+  // Publish-trip Bucket B.5 — optional FK to trip_activities, set when a
+  // message is posted *about* a specific itinerary activity (e.g. via
+  // the "Post update" button on ItineraryBuilderScreen). Null for
+  // generic trip-wide broadcasts. Column added by migration 239.
+  activityId: string | null;
 }
 
 export interface TripDashboard {
@@ -346,6 +351,7 @@ function mapMessage(row: any): TripMessage {
     senderId: row.sender_id,
     recipientId: row.recipient_id,
     recipientType: row.recipient_type ?? 'all',
+    activityId: row.activity_id ?? null,
     body: row.message_body ?? row.body,
     readAt: row.read_at,
     createdAt: row.sent_at ?? row.created_at,
@@ -1277,7 +1283,15 @@ export class TripOrganizerEngine {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /** Send a broadcast message to all trip participants */
-  static async sendBroadcast(tripId: string, senderId: string, body: string): Promise<TripMessage> {
+  static async sendBroadcast(
+    tripId: string,
+    senderId: string,
+    body: string,
+    // Publish-trip Bucket B.5 — optional FK to a trip_activities row when
+    // the broadcast is posted *about* a specific itinerary activity. Null
+    // for plain trip-wide updates (the historical behaviour).
+    activityId?: string | null
+  ): Promise<TripMessage> {
     const { data: row, error } = await supabase
       .from("trip_messages")
       .insert({
@@ -1286,6 +1300,7 @@ export class TripOrganizerEngine {
         recipient_id: null,
         recipient_type: 'all',
         message_body: body,
+        activity_id: activityId ?? null,
       })
       .select()
       .single();
