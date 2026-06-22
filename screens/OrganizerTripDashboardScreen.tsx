@@ -152,11 +152,15 @@ const OrganizerTripDashboardScreen: React.FC = () => {
     }
   };
 
+  // Publish-trip Bucket A.6 — Messages + Vendors tiles removed.
+  // The `TripMessages` and `TripVendors` routes are NOT registered in
+  // App.tsx, so tapping either tile would crash React Navigation with
+  // "screen not found". They'll come back in Bucket B once the
+  // TripUpdates feed lands. Until then, only the routes that actually
+  // exist (ParticipantManager + ItineraryBuilder) stay on the grid.
   const quickActions: QuickAction[] = [
     { icon: 'people', label: 'Participants', route: 'ParticipantManager', color: TEAL },
     { icon: 'map', label: 'Itinerary', route: 'ItineraryBuilder', color: GOLD },
-    { icon: 'chatbubbles', label: 'Messages', route: 'TripMessages', color: NAVY },
-    { icon: 'storefront', label: 'Vendors', route: 'TripVendors', color: '#7C3AED' },
   ];
 
   return (

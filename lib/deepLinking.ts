@@ -164,9 +164,27 @@ export const linkingConfig = {
       // Bucket C will add organizer/participant/payment notifications
       // that deep-link into this same path.
       TripPublicPage: "trip/:slug",
+      // Publish-trip Bucket A.1 — alias for the plural URL form.
+      // TripPublishSuccessScreen historically generated share links with
+      // `tandaxn.com/trips/${slug}` (plural). Any link already shared in
+      // the wild from before A.2 would dead-end if we don't catch it.
+      // Same screen component, different route name so React Navigation
+      // accepts both linking entries (one URL pattern per route name).
+      // `generateTripShareUrl` below emits the singular form going forward.
+      TripPublicPageAlt: "trips/:slug",
     },
   },
 };
+
+// ─── Trip share URLs ─────────────────────────────────────────────────────────
+// Publish-trip Bucket A.1 — single canonical builder used by every share
+// surface (TripPublishSuccessScreen, TripPublicPage hero, future
+// OrganizerTripDashboard share tile). Emits the singular `/trip/<slug>`
+// path so the link resolves via the `TripPublicPage` linking entry above.
+// The plural form is still accepted on incoming traffic via `TripPublicPageAlt`.
+export function generateTripShareUrl(slug: string): string {
+  return `${WEB_LINK_PREFIXES[0]}/trip/${slug}`;
+}
 
 // Parse invite URL and extract data
 export function parseInviteUrl(url: string): InviteData | null {

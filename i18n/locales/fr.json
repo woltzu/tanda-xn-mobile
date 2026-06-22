@@ -3421,7 +3421,26 @@
     "notification_payment_late_title": "Paiement en retard",
     "notification_payment_late_body": "Votre paiement de {{amount}}$ pour {{trip_name}} est maintenant en retard.",
     "notification_itinerary_updated_title": "Itinéraire mis à jour",
-    "notification_itinerary_updated_body": "L'itinéraire de {{trip_name}} a été mis à jour."
+    "notification_itinerary_updated_body": "L'itinéraire de {{trip_name}} a été mis à jour.",
+    "joined_success": "Vous avez rejoint le voyage !",
+    "waitlist_success": "Ajouté à la liste d'attente. Nous vous préviendrons dès qu'une place se libère.",
+    "join_error": "Impossible de rejoindre le voyage. Veuillez réessayer.",
+    "joining": "Inscription en cours…",
+    "organizer_label": "Vous êtes l'organisateur",
+    "share_button_label": "Partager ce voyage"
+  },
+  "my_trip_status": {
+    "empty_title": "Vous n'avez pas encore rejoint ce voyage",
+    "empty_body": "Touchez ci-dessous pour ouvrir la page du voyage et vous inscrire.",
+    "empty_cta": "Voir la page du voyage",
+    "checklist_deposit": "Acompte",
+    "checklist_deposit_pending": "Pas encore payé",
+    "checklist_submission_verified": "Vérifié",
+    "checklist_submission_pending": "En attente de vérification",
+    "checklist_final_payment": "Paiement final",
+    "checklist_paid_in_full": "Payé en totalité",
+    "checklist_remaining": "restant",
+    "checklist_action_pay": "Payer maintenant"
   },
   "participant_manager": {
     "header_title": "Participants",

@@ -649,6 +649,10 @@ export type RootStackParamList = {
   ParticipantManager: { tripId: string };
   ParticipantDetail: { tripId: string; participantId: string };
   TripPublicPage: { slug?: string; tripId?: string };
+  // Publish-trip Bucket A.1 — alias route for the plural `trips/:slug`
+  // URL form. Same component as TripPublicPage. Lets links generated
+  // before the share-URL fix still resolve in-app.
+  TripPublicPageAlt: { slug?: string; tripId?: string };
   MyTripStatus: { tripId: string };
   DocumentSubmission: { tripId: string; participantId: string; fieldKey: string };
   TripPayment: { tripId: string; participantId: string };
@@ -1147,6 +1151,7 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="ParticipantManager" component={ParticipantManagerScreen} />
       <CirclesStack.Screen name="ParticipantDetail" component={ParticipantDetailScreen} />
       <CirclesStack.Screen name="TripPublicPage" component={TripPublicPageScreen} />
+      <CirclesStack.Screen name="TripPublicPageAlt" component={TripPublicPageScreen} />
       <CirclesStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
       <CirclesStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />
       <CirclesStack.Screen name="TripPayment" component={TripPaymentScreen} />

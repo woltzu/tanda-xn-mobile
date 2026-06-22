@@ -3421,7 +3421,26 @@
     "notification_payment_late_title": "Payment overdue",
     "notification_payment_late_body": "Your payment of ${{amount}} for {{trip_name}} is now overdue.",
     "notification_itinerary_updated_title": "Itinerary updated",
-    "notification_itinerary_updated_body": "The itinerary for {{trip_name}} has been updated."
+    "notification_itinerary_updated_body": "The itinerary for {{trip_name}} has been updated.",
+    "joined_success": "You've joined the trip!",
+    "waitlist_success": "Added to the waitlist. We'll let you know when a spot opens.",
+    "join_error": "Could not join the trip. Please try again.",
+    "joining": "Joining…",
+    "organizer_label": "You're the organizer",
+    "share_button_label": "Share this trip"
+  },
+  "my_trip_status": {
+    "empty_title": "You haven't joined this trip yet",
+    "empty_body": "Tap below to open the trip page and register.",
+    "empty_cta": "View trip page",
+    "checklist_deposit": "Deposit",
+    "checklist_deposit_pending": "Not paid yet",
+    "checklist_submission_verified": "Verified",
+    "checklist_submission_pending": "Awaiting review",
+    "checklist_final_payment": "Final payment",
+    "checklist_paid_in_full": "Paid in full",
+    "checklist_remaining": "remaining",
+    "checklist_action_pay": "Pay now"
   },
   "participant_manager": {
     "header_title": "Participants",

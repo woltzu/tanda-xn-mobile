@@ -786,12 +786,40 @@ export class TripOrganizerEngine {
         status: participantStatus,
         payment_status: 'unpaid',
         total_paid: 0,
-        joined_at: new Date().toISOString(),
+        // Publish-trip Bucket A.3 — the live column is `registered_at`
+        // (per migration 065); the previous `joined_at` key didn't exist
+        // and every INSERT would have errored with
+        // "column \"joined_at\" of relation \"trip_participants\" does not exist".
+        registered_at: new Date().toISOString(),
       })
       .select()
       .single();
     if (error) throw new Error(`Failed to register for trip: ${error.message}`);
     return mapParticipant(row);
+  }
+
+  /**
+   * Publish-trip Bucket A — find a user's participant row for a given trip,
+   * or null when they haven't joined yet. Used by useMyTripStatus which
+   * referenced this method by name but never had an implementation. With
+   * the method missing, every consumer would throw on first call.
+   */
+  static async findParticipant(
+    tripId: string,
+    userId: string
+  ): Promise<TripParticipant | null> {
+    if (!tripId || !userId) return null;
+    const { data: row, error } = await supabase
+      .from("trip_participants")
+      .select("*")
+      .eq("trip_id", tripId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) {
+      console.warn('[TripOrganizerEngine.findParticipant] lookup failed:', error.message);
+      return null;
+    }
+    return row ? mapParticipant(row) : null;
   }
 
   /** Confirm a participant */

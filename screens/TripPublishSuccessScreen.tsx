@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from '../theme/tokens';
+import { generateTripShareUrl } from '../lib/deepLinking';
 
 const NAVY = '#0A2342';
 const TEAL = '#00C6AE';
@@ -41,12 +42,20 @@ const TripPublishSuccessScreen: React.FC = () => {
     .replace(/\s+/g, '-')
     .substring(0, 60);
 
-  const tripLink = `tandaxn.com/trips/${slug}`;
+  // Publish-trip Bucket A.2 — canonical share URL (singular `/trip/<slug>`).
+  // Before this fix we built `tandaxn.com/trips/${slug}` (plural) which
+  // didn't match the `trip/:slug` deep-link route from Bucket A.5 of the
+  // wizard audit, so the shared link wouldn't open the public page
+  // in-app. `generateTripShareUrl` is the single source of truth.
+  const shareUrl = generateTripShareUrl(slug);
+  // Strip the protocol for the visual chip; the full URL still goes into
+  // the share payload.
+  const tripLink = shareUrl.replace(/^https?:\/\//, '');
 
   const handleShareLink = async () => {
     try {
       await Share.share({
-        message: `Join my trip: ${tripName}!\n\nhttps://${tripLink}`,
+        message: `Join my trip: ${tripName}!\n\n${shareUrl}`,
         title: tripName,
       });
     } catch (_) {

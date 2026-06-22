@@ -11,6 +11,7 @@ import {
   Linking,
   StatusBar,
   ActivityIndicator,
+  Share,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -18,6 +19,10 @@ import { useTranslation } from "react-i18next";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { usePublicTrip } from "../hooks/useTripOrganizer";
+import { useAuth } from "../context/AuthContext";
+import { showToast } from "../components/Toast";
+import { TripOrganizerEngine } from "../services/TripOrganizerEngine";
+import { generateTripShareUrl } from "../lib/deepLinking";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HERO_HEIGHT = 420;
@@ -130,7 +135,11 @@ const TripPublicPageScreen: React.FC = () => {
   // Hook fetches by slug (published) or falls back to tripId (draft preview)
   const hookResult = usePublicTrip(slug, tripId);
   const { t } = useTranslation();
+  const { user } = useAuth();
   const rawTrip = hookResult?.trip;
+  // Publish-trip Bucket A.4 — Join state. We block double-taps and reflect
+  // the in-flight call status in the sticky CTA label.
+  const [joining, setJoining] = useState(false);
 
   // Calculate duration in days from start/end dates
   const calcDurationDays = (startStr?: string | null, endStr?: string | null): number => {
@@ -160,6 +169,11 @@ const TripPublicPageScreen: React.FC = () => {
       return dateStr;
     }
   };
+
+  // Publish-trip Bucket A.4 — MOCK_TRIP is DEV-only. Production builds with
+  // a missing trip should fall through to the loading spinner / empty state
+  // path rather than silently rendering "Abidjan Summer 2026" placeholders.
+  const useMockFallback = __DEV__;
 
   // Map from Trip + days to TripData format
   const trip: TripData = rawTrip ? {
@@ -191,8 +205,33 @@ const TripPublicPageScreen: React.FC = () => {
     })),
     included: splitList((rawTrip as any).whatsIncluded),
     excluded: splitList((rawTrip as any).whatsExcluded),
-  } : MOCK_TRIP;
+  } : (useMockFallback ? MOCK_TRIP : {
+    // Production fallback: a zeroed-out shape so the loading/empty state
+    // path renders sensibly while the hook resolves.
+    id: '',
+    slug: slug,
+    name: '',
+    tagline: '',
+    destination: '',
+    coverImage: undefined,
+    duration: '',
+    activityCount: 0,
+    pricePerPerson: 0,
+    spotsRemaining: 0,
+    totalSpots: 0,
+    registrationDeadline: '',
+    itinerary: [],
+    included: [],
+    excluded: [],
+  });
   const isLoading = hookResult?.loading ?? false;
+
+  // Publish-trip Bucket A.4 — organizer detection. The Join CTA is only
+  // useful for non-organizer viewers. Driven off the real Trip's
+  // `organizerId` field, which is present once usePublicTrip resolves.
+  const organizerId = (rawTrip as any)?.organizerId;
+  const isOrganizer = !!user?.id && !!organizerId && user.id === organizerId;
+  const resolvedTripId = trip.id || tripId;
 
   const [expandedDays, setExpandedDays] = useState<Record<number, boolean>>({});
 
@@ -202,6 +241,61 @@ const TripPublicPageScreen: React.FC = () => {
 
   const openMaps = (url: string) => {
     Linking.openURL(url).catch(() => {});
+  };
+
+  // Publish-trip Bucket A.4 — wire the hero share button. Uses the same
+  // canonical helper as TripPublishSuccessScreen so every share surface
+  // emits the singular `/trip/<slug>` URL.
+  const handleShare = async () => {
+    if (!trip.slug) return; // No slug = nothing meaningful to share.
+    const url = generateTripShareUrl(trip.slug);
+    try {
+      await Share.share({
+        message: `${trip.name || 'Check out this trip'}\n\n${url}`,
+        title: trip.name || 'Trip',
+      });
+    } catch {
+      // User cancelled share — no-op.
+    }
+  };
+
+  // Publish-trip Bucket A.4 — wire the Join CTA. Previously the button
+  // navigated to MyTripStatus WITHOUT inserting a trip_participants row,
+  // so the user thought they'd joined but no DB row ever landed. Now:
+  //   • require auth (route to Login with a soft returnTo hint),
+  //   • call registerForTrip,
+  //   • toast on success / waitlist / error,
+  //   • navigate to MyTripStatus only after the row exists.
+  const handleJoin = async () => {
+    if (!resolvedTripId) {
+      showToast(t('trip.join_error'), 'error');
+      return;
+    }
+    if (!user?.id) {
+      // Login screen's params are not strongly-typed here; the returnTo
+      // hint is a soft contract Login can pick up later (no breaking
+      // change to the existing Login if it ignores the param).
+      navigation.navigate('Login' as never, {
+        returnTo: 'TripPublicPage',
+        returnParams: { slug, tripId: resolvedTripId },
+      } as never);
+      return;
+    }
+    setJoining(true);
+    try {
+      const participant = await TripOrganizerEngine.registerForTrip(resolvedTripId, user.id);
+      if (participant.status === 'waitlist') {
+        showToast(t('trip.waitlist_success'), 'success');
+      } else {
+        showToast(t('trip.joined_success'), 'success');
+      }
+      navigation.navigate('MyTripStatus' as never, { tripId: resolvedTripId } as never);
+    } catch (err: any) {
+      console.error('[TripPublicPage] registerForTrip failed:', err);
+      showToast(err?.message || t('trip.join_error'), 'error');
+    } finally {
+      setJoining(false);
+    }
   };
 
   const spotsPercent = ((trip.totalSpots - trip.spotsRemaining) / trip.totalSpots) * 100;
@@ -247,8 +341,14 @@ const TripPublicPageScreen: React.FC = () => {
             <Ionicons name="arrow-back" size={22} color="#FFF" />
           </TouchableOpacity>
 
-          {/* Share button */}
-          <TouchableOpacity style={styles.heroShareBtn}>
+          {/* Share button — Publish-trip Bucket A.4 wires the onPress that
+              was missing. The icon was visually present but inert. */}
+          <TouchableOpacity
+            style={styles.heroShareBtn}
+            onPress={handleShare}
+            accessibilityRole="button"
+            accessibilityLabel={t('trip.share_button_label')}
+          >
             <Ionicons name="share-outline" size={20} color="#FFF" />
           </TouchableOpacity>
 
@@ -421,7 +521,12 @@ const TripPublicPageScreen: React.FC = () => {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* ── Sticky CTA ──────────────────────────────────────────────────── */}
+      {/* ── Sticky CTA — Publish-trip Bucket A.4 ────────────────────────── */}
+      {/* Organizers see a passive label instead of the Join CTA — they
+          already own the trip, so registering would be nonsensical and
+          would be blocked by trip_participants RLS anyway. Everyone else
+          gets the real wired Join button. The button is disabled while
+          the registerForTrip call is in flight. */}
       <View style={styles.stickyCta}>
         <View style={styles.stickyCtaInner}>
           <View>
@@ -430,16 +535,28 @@ const TripPublicPageScreen: React.FC = () => {
             </Text>
             <Text style={styles.stickyPriceSub}>per person</Text>
           </View>
-          <TouchableOpacity
-            style={styles.joinButton}
-            activeOpacity={0.85}
-            onPress={() =>
-              navigation.navigate("MyTripStatus", { tripId: trip.id })
-            }
-          >
-            <Text style={styles.joinButtonText}>{t("final_polish.trippublicpage_join_this_trip")}</Text>
-            <Ionicons name="arrow-forward" size={18} color="#FFF" />
-          </TouchableOpacity>
+          {isOrganizer ? (
+            <View style={[styles.joinButton, { backgroundColor: colors.textSecondary }]}>
+              <Ionicons name="ribbon-outline" size={18} color="#FFF" />
+              <Text style={styles.joinButtonText}>{t('trip.organizer_label')}</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.joinButton, joining && { opacity: 0.6 }]}
+              activeOpacity={0.85}
+              disabled={joining}
+              onPress={handleJoin}
+            >
+              <Text style={styles.joinButtonText}>
+                {joining ? t('trip.joining') : t('final_polish.trippublicpage_join_this_trip')}
+              </Text>
+              {joining ? (
+                <ActivityIndicator size="small" color="#FFF" style={{ marginLeft: 6 }} />
+              ) : (
+                <Ionicons name="arrow-forward" size={18} color="#FFF" />
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </SafeAreaView>
