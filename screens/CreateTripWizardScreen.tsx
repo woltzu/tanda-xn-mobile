@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,12 +15,14 @@ import {
   ActivityIndicator,
   Image,
   Modal,
+  Pressable,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useCreateTripWizard } from '../hooks/useTripOrganizer';
 import { useFormKeyboardOffset } from '../hooks/useFormKeyboardOffset';
@@ -46,6 +48,27 @@ const STEP_NAME_KEYS = [
   'create_trip_wizard.step_payment',
   'create_trip_wizard.step_requirements',
   'create_trip_wizard.step_review',
+];
+
+// B.2 — first-visit coach mark gate. Same AsyncStorage prefix as the other
+// recent B-bucket coach marks (substitute, partial, conflict, etc.) so a
+// reset of one feature key doesn't dump the others.
+const COACH_MARK_KEY = '@tandaxn_trip_wizard_coach_seen_v1';
+
+// B.1 — HelpSheet topic list. Strings come from i18n; this is just the
+// ordering so the topics render in a deterministic sequence.
+type HelpTopic =
+  | 'what'
+  | 'pricing'
+  | 'refund'
+  | 'documents'
+  | 'publish';
+const HELP_TOPICS: HelpTopic[] = [
+  'what',
+  'pricing',
+  'refund',
+  'documents',
+  'publish',
 ];
 
 // --- Types ---
@@ -142,18 +165,78 @@ const mapRefundPolicyFromDB = (db?: string | null): string => {
 
 // --- Sub-components ---
 
-const StepIndicator: React.FC<{ currentStep: number }> = ({ currentStep }) => (
-  <View style={styles.stepIndicatorRow}>
-    {Array.from({ length: TOTAL_STEPS }).map((_, i) => {
-      let bg = '#D1D5DB';
-      if (i < currentStep) bg = TEAL;
-      if (i === currentStep) bg = GOLD;
-      return (
-        <View key={i} style={[styles.stepDot, { backgroundColor: bg }]} />
-      );
-    })}
-  </View>
-);
+// B.3 — Tappable step indicator (backward only). Dots at index < currentStep
+// jump back to that step; the current dot is a no-op; forward dots are
+// disabled because we don't bypass per-step validation. Each dot is a
+// real <TouchableOpacity> so screen readers expose the role correctly.
+const StepIndicator: React.FC<{
+  currentStep: number;
+  onJumpTo: (step: number) => void;
+}> = ({ currentStep, onJumpTo }) => {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.stepIndicatorRow}>
+      {Array.from({ length: TOTAL_STEPS }).map((_, i) => {
+        let bg = '#D1D5DB';
+        if (i < currentStep) bg = TEAL;
+        if (i === currentStep) bg = GOLD;
+        const canJump = i < currentStep;
+        return (
+          <TouchableOpacity
+            key={i}
+            onPress={canJump ? () => onJumpTo(i) : undefined}
+            disabled={!canJump}
+            activeOpacity={canJump ? 0.6 : 1}
+            accessibilityRole={canJump ? 'button' : 'image'}
+            accessibilityLabel={t('create_trip.step_jump_label', {
+              current: i + 1,
+              total: TOTAL_STEPS,
+            })}
+            // The dot itself is small; expand the hit area so a tap on the
+            // gap between dots still lands on the nearest dot.
+            hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }}
+          >
+            <View style={[styles.stepDot, { backgroundColor: bg }]} />
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+};
+
+// B.4 — Inline ⓘ icon next to a section/field label. Tap opens an
+// Alert.alert with the explainer, same lightweight pattern used by other
+// recent B-bucket screens (gathering, partial, conflict).
+const LabelWithInfo: React.FC<{
+  label: string;
+  tooltipTitle: string;
+  tooltipBody: string;
+  // Reused inside SectionLabel and FormInput labels.
+  variant?: 'section' | 'inline';
+}> = ({ label, tooltipTitle, tooltipBody, variant = 'section' }) => {
+  const { t } = useTranslation();
+  return (
+    <View style={[
+      styles.labelWithInfoRow,
+      variant === 'section' && styles.labelWithInfoRowSection,
+    ]}>
+      <Text style={variant === 'section' ? styles.sectionLabel : styles.inputLabel}>
+        {label}
+      </Text>
+      <TouchableOpacity
+        onPress={() => Alert.alert(tooltipTitle, tooltipBody, [
+          { text: t('create_trip.help_close') },
+        ])}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityRole="button"
+        accessibilityLabel={tooltipTitle}
+        style={styles.labelInfoIcon}
+      >
+        <Ionicons name="information-circle-outline" size={16} color={TEAL} />
+      </TouchableOpacity>
+    </View>
+  );
+};
 
 const SectionLabel: React.FC<{ label: string }> = ({ label }) => (
   <Text style={styles.sectionLabel}>{label}</Text>
@@ -580,7 +663,12 @@ const StepPayment: React.FC<{
 
   return (
     <View>
-      <SectionLabel label="Pricing" />
+      {/* B.4 — Pricing section header gains an ⓘ tooltip. */}
+      <LabelWithInfo
+        label={t('create_trip_wizard.section_pricing')}
+        tooltipTitle={t('create_trip_wizard.section_pricing')}
+        tooltipBody={t('create_trip.tooltip_price')}
+      />
       <FormInput label="Price Per Person ($)" value={data.price_per_person} onChangeText={(v) => update({ price_per_person: v })} placeholder="1800" keyboardType="numeric" error={errors.price_per_person} />
 
       <SectionLabel label="Payment Type" />
@@ -659,12 +747,23 @@ const StepPayment: React.FC<{
         </>
       )}
 
+      {/* B.4 — Deposit tooltip rendered above the toggle row. */}
+      <LabelWithInfo
+        label={t('create_trip_wizard.section_deposit')}
+        tooltipTitle={t('create_trip_wizard.section_deposit')}
+        tooltipBody={t('create_trip.tooltip_deposit')}
+      />
       <ToggleRow label="Deposit Required" value={data.deposit_required} onValueChange={(v) => update({ deposit_required: v })} />
       {data.deposit_required && (
         <FormInput label="Deposit Amount ($)" value={data.deposit_amount} onChangeText={(v) => update({ deposit_amount: v })} placeholder="300" keyboardType="numeric" error={errors.deposit_amount} />
       )}
 
-      <SectionLabel label="Refund Policy" />
+      {/* B.4 — Refund policy tooltip. */}
+      <LabelWithInfo
+        label={t('create_trip_wizard.section_refund_policy')}
+        tooltipTitle={t('create_trip_wizard.section_refund_policy')}
+        tooltipBody={t('create_trip.tooltip_refund')}
+      />
       <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowPolicyPicker(!showPolicyPicker)}>
         <Text style={[styles.dropdownBtnText, !data.refund_policy && { color: '#9CA3AF' }]}>
           {data.refund_policy || 'Select refund policy'}
@@ -744,7 +843,12 @@ const StepRequirements: React.FC<{
 
   return (
     <View>
-      <SectionLabel label="Required Documents & Info" />
+      {/* B.4 — Requirements section tooltip. */}
+      <LabelWithInfo
+        label={t('create_trip_wizard.section_requirements')}
+        tooltipTitle={t('create_trip_wizard.section_requirements')}
+        tooltipBody={t('create_trip.tooltip_requirements')}
+      />
       {data.requirements.map((req) => (
         <TouchableOpacity key={req.id} style={styles.checkRow} onPress={() => toggleRequirement(req.id)}>
           <Ionicons
@@ -857,8 +961,28 @@ const StepReview: React.FC<{
       <Text style={styles.reviewHeading}>{t("create_trip_wizard.review_heading")}</Text>
       <Text style={styles.reviewSubheading}>Step 4 of 4 — Review before going live</Text>
 
-      {/* Summary card */}
+      {/* B.5 — "Shareable preview" label sits above the summary card so the
+          user understands the card is a mock of what their share URL will
+          render. Updates live as they edit other steps. */}
+      <Text style={styles.shareablePreviewLabel}>
+        {t('create_trip.review_shareable_preview')}
+      </Text>
+
+      {/* Summary card — Bucket B.5 doubles as the shareable-page mock. */}
       <View style={styles.reviewCard}>
+        {/* B.5 — Cover thumbnail when set, otherwise a placeholder strip.
+            Mirrors what TripPublicPage will show at the top of its hero. */}
+        {data.cover_photo_url ? (
+          <Image
+            source={{ uri: data.cover_photo_url }}
+            style={styles.shareablePreviewCover}
+            resizeMode="cover"
+          />
+        ) : (
+          <View style={[styles.shareablePreviewCover, styles.shareablePreviewCoverPlaceholder]}>
+            <Ionicons name="image-outline" size={32} color="#9CA3AF" />
+          </View>
+        )}
         <View style={styles.reviewCardHeader}>
           <Text style={styles.reviewTripName}>✈️ {data.trip_name || 'Untitled Trip'}</Text>
           <View style={styles.reviewDraftPill}>
@@ -874,6 +998,14 @@ const StepReview: React.FC<{
           <Text style={styles.reviewMetaItem}>{enabledReqs.length + data.custom_requirements.length} requirements</Text>
         </View>
       </View>
+
+      {/* B.5 — Add-itinerary hint. The existing itinerary alert below
+          fires when the trip ships with no day-by-day plan, but is fairly
+          terse; this richer line explicitly tells the organizer they can
+          add the itinerary post-publish from the dashboard. */}
+      <Text style={styles.addItineraryHint}>
+        {t('create_trip.review_add_itinerary_hint')}
+      </Text>
 
       {/* Itinerary not built alert */}
       <View style={styles.itineraryAlert}>
@@ -989,6 +1121,51 @@ const CreateTripWizardScreen: React.FC = () => {
   // when the user edits the field so corrections are visible immediately
   // without a re-press of Publish.
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // B.1 — HelpSheet visibility.
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  // B.2 — Coach mark. Gated on:
+  //   • not in edit mode (organizer already knows the wizard),
+  //   • not currently restoring a server-side draft (the restore banner
+  //     handles that surface and a second banner would clutter Step 0),
+  //   • AsyncStorage hasn't seen the key.
+  // Once visible, auto-dismisses after 4 s and on tap.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachCheckedRef = useRef(false);
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    // Wait until the hydration phase has settled — coach during a loading
+    // banner would land at the same time as the spinner.
+    if (hydrating) return;
+    coachCheckedRef.current = true;
+    // Edit-mode users have already seen the wizard once; the coach mark
+    // is for first-time creators only.
+    if (isEditMode) return;
+    // If a local form-draft restore banner is on screen and not yet
+    // dismissed, defer the coach mark — they'd compete for attention.
+    // The user can re-trigger it via the (?) icon anyway.
+    if (hasStoredFormState && !bannerDismissed) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_MARK_KEY);
+        if (!cancelled && !seen) setCoachVisible(true);
+      } catch {
+        // AsyncStorage failure → treat as seen, don't block.
+      }
+    })();
+    return () => { cancelled = true; };
+  });
+  const dismissCoach = useCallback(() => {
+    setCoachVisible(false);
+    AsyncStorage.setItem(COACH_MARK_KEY, '1').catch(() => undefined);
+  }, []);
+  useEffect(() => {
+    if (!coachVisible) return;
+    const id = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(id);
+  }, [coachVisible, dismissCoach]);
 
   const updateForm = (partial: Partial<TripFormData>) => {
     setFormData((prev) => ({ ...prev, ...partial }));
@@ -1492,14 +1669,38 @@ const CreateTripWizardScreen: React.FC = () => {
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{isEditMode ? 'Edit Trip' : 'Trip Setup'}</Text>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
-          <Ionicons name="close" size={24} color={colors.textSecondary} />
-        </TouchableOpacity>
+        <View style={styles.headerRightCluster}>
+          {/* B.1 — Help (?) icon, opens the inline HelpSheet. Sits to the
+              left of the close button so the close stays in the corner. */}
+          <TouchableOpacity
+            onPress={() => setHelpOpen(true)}
+            style={styles.headerBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t('create_trip.help_title')}
+          >
+            <Ionicons name="help-circle-outline" size={24} color={NAVY} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+            <Ionicons name="close" size={24} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Step Indicator */}
       <View style={styles.stepSection} onLayout={measureChrome('stepSection')}>
-        <StepIndicator currentStep={currentStep} />
+        {/* B.3 — Dots are tappable to jump back to any prior step. The
+            forward direction is still gated by goNext (validation lives
+            in the publish path, not the next button — Bucket C would tie
+            forward validation per-step). */}
+        <StepIndicator
+          currentStep={currentStep}
+          onJumpTo={(target) => {
+            if (target < currentStep) {
+              setCurrentStep(target);
+              scrollRef.current?.scrollTo({ y: 0, animated: true });
+            }
+          }}
+        />
         <Text style={styles.stepCounter}>
           Step {currentStep + 1} of {TOTAL_STEPS} — {t(STEP_NAME_KEYS[currentStep])}
         </Text>
@@ -1556,9 +1757,36 @@ const CreateTripWizardScreen: React.FC = () => {
             </View>
           )}
 
+          {/* B.2 — First-visit coach banner. Only on Step 0 so it doesn't
+              follow the user through the whole flow. Tappable; auto
+              dismisses after 4 s via the effect above. */}
+          {coachVisible && currentStep === 0 && (
+            <Pressable
+              onPress={dismissCoach}
+              style={styles.coachBanner}
+              accessibilityRole="button"
+              accessibilityLabel={t('create_trip.coach_dismiss')}
+            >
+              <Ionicons name="bulb-outline" size={16} color="#FFFFFF" />
+              <Text style={styles.coachText}>
+                {t('create_trip.coach_title')}
+              </Text>
+              <Ionicons name="close" size={14} color="#FFFFFF" />
+            </Pressable>
+          )}
+
           {renderStep()}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* B.1 — HelpSheet rendered as a sibling of the KeyboardAvoidingView
+          so it overlays everything (including the footer + step indicator)
+          when open. */}
+      <HelpSheet
+        visible={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        t={t}
+      />
 
       {/* Footer */}
       <View style={styles.footer}>
@@ -1580,6 +1808,63 @@ const CreateTripWizardScreen: React.FC = () => {
 };
 
 export default CreateTripWizardScreen;
+
+// ══════════════════════════════════════════════════════════════════════════
+// HelpSheet — B.1
+// ══════════════════════════════════════════════════════════════════════════
+// 5 topics ordered to mirror the wizard flow: what → pricing → refund →
+// documents → publish. Lives outside the main component so the modal
+// renders cleanly above the keyboard-avoiding view.
+
+function HelpSheet({
+  visible,
+  onClose,
+  t,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  t: (key: string, opts?: any) => string;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.helpBackdrop} onPress={onClose}>
+        <Pressable style={styles.helpSheet} onPress={() => undefined}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.helpHeaderRow}>
+            <Text style={styles.helpTitle}>{t('create_trip.help_title')}</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel={t('create_trip.help_close')}
+            >
+              <Ionicons name="close" size={22} color={NAVY} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={styles.helpScroll}
+          >
+            {HELP_TOPICS.map((topic) => (
+              <View key={topic} style={styles.helpItem}>
+                <Text style={styles.helpItemTitle}>
+                  {t(`create_trip.help_topic_${topic}`)}
+                </Text>
+                <Text style={styles.helpItemBody}>
+                  {t(`create_trip.help_topic_${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
 
 // --- Styles ---
 
@@ -2191,5 +2476,131 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: typography.body,
     fontWeight: typography.semibold,
+  },
+
+  // ─── B.1 (?) header cluster ─────────────────────────────────────────────
+  // The right side of the header now holds two icons (help + close)
+  // instead of one; cluster them in a row so the spacing matches the
+  // single-icon arrangement on the left.
+  headerRightCluster: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
+  // ─── B.2 coach mark banner ──────────────────────────────────────────────
+  coachBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: NAVY,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginBottom: spacing.md,
+  },
+  coachText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600' as const,
+  },
+
+  // ─── B.4 LabelWithInfo row ──────────────────────────────────────────────
+  labelWithInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  // Section variant uses the spacing.lg gap that SectionLabel relies on;
+  // inline variant matches FormInput labels.
+  labelWithInfoRowSection: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  labelInfoIcon: {
+    marginLeft: 6,
+    padding: 2,
+  },
+
+  // ─── B.5 Shareable preview ──────────────────────────────────────────────
+  shareablePreviewLabel: {
+    fontSize: typography.bodySmall,
+    fontWeight: typography.semibold,
+    color: colors.textSecondary,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  shareablePreviewCover: {
+    width: '100%',
+    height: 140,
+    borderRadius: radius.small,
+    marginBottom: spacing.md,
+    backgroundColor: '#F3F4F6',
+  },
+  shareablePreviewCoverPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addItineraryHint: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    lineHeight: 17,
+    paddingHorizontal: 4,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+    fontStyle: 'italic',
+  },
+
+  // ─── B.1 HelpSheet ──────────────────────────────────────────────────────
+  helpBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'flex-end',
+  },
+  helpSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 28,
+    maxHeight: '85%',
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E7EB',
+    marginBottom: 12,
+  },
+  helpHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  helpTitle: {
+    fontSize: 17,
+    fontWeight: '700' as const,
+    color: NAVY,
+  },
+  helpScroll: { paddingBottom: 8 },
+  helpItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  helpItemTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: NAVY,
+    marginBottom: 4,
+  },
+  helpItemBody: {
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 19,
   },
 });
