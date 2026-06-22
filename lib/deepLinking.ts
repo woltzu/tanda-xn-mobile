@@ -142,6 +142,18 @@ export const linkingConfig = {
       // The route is registered at root level (mirroring CommunityHub)
       // so the URL loads even when the user isn't on the Community tab.
       Events: "event/:eventId?",
+
+      // Host a gathering — Bucket C of the Host-a-gathering review. Lets
+      // future notifications (gathering_created via migration 231,
+      // gathering_reminder_24h via migration 232's cron + Edge Function)
+      // route the user straight into the create flow. communityId is
+      // optional — if a push payload omits it, the screen treats the
+      // empty string as missing and createGathering will short-circuit
+      // (showToast on the empty-communityId guard). Future iteration
+      // can route the deep link to a CommunityPicker first when the
+      // communityId is absent. The route is registered at root level
+      // so the URL loads regardless of which tab the user is on.
+      CreateGathering: "gatherings/create/:communityId?",
     },
   },
 };

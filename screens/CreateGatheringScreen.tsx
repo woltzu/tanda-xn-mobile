@@ -61,6 +61,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/AuthContext";
 import { useGatherings, GatheringType } from "../hooks/useCommunityFeatures";
 import { showToast } from "../components/Toast";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 // ══════════════════════════════════════════════════════════════════════════
 // Constants
@@ -155,6 +156,18 @@ export default function CreateGatheringScreen() {
   const communityId = (route.params as any)?.communityId ?? "";
   const { user } = useAuth();
   const { createGathering } = useGatherings(communityId);
+  // HG Bucket C.4 — telemetry.
+  const { track } = useEventTracker();
+  const screenViewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (screenViewedFiredRef.current) return;
+    screenViewedFiredRef.current = true;
+    track({
+      eventType: "gathering.create_screen_viewed",
+      eventCategory: "gathering",
+      eventAction: "viewed",
+    });
+  }, [track]);
 
   // ── Form state ────────────────────────────────────────────────────────
   const [eventType, setEventType] = useState<GatheringType>("community");
@@ -257,6 +270,13 @@ export default function CreateGatheringScreen() {
         setAddToMemory(draft.addToMemory ?? false);
         if (draft.maxAttendees) setMaxAttendees(draft.maxAttendees);
         setDraftRestored(true);
+        // HG Bucket C.4 — telemetry: draft hydration restored a user's
+        // in-progress gathering.
+        track({
+          eventType: "gathering.draft_restored",
+          eventCategory: "gathering",
+          eventAction: "draft_restored",
+        });
       } catch {
         // Corrupt draft → ignore.
       } finally {
@@ -343,7 +363,13 @@ export default function CreateGatheringScreen() {
   const dismissCoach = useCallback(() => {
     setCoachVisible(false);
     AsyncStorage.setItem(COACH_MARK_KEY, "1").catch(() => undefined);
-  }, []);
+    // HG Bucket C.4 — fires on both 4s auto-dismiss and tap dismiss.
+    track({
+      eventType: "gathering.coach_dismissed",
+      eventCategory: "gathering",
+      eventAction: "coach_dismissed",
+    });
+  }, [track]);
   useEffect(() => {
     if (!coachVisible) return;
     const id = setTimeout(() => dismissCoach(), 4000);
@@ -437,6 +463,23 @@ export default function CreateGatheringScreen() {
       if (draftKey) {
         AsyncStorage.removeItem(draftKey).catch(() => {});
       }
+      // HG Bucket C.4 — published. eventValue carries the booleans + type
+      // so we can rank "what shape of gathering wins" without joining
+      // back to community_gatherings.
+      track({
+        eventType: "gathering.published",
+        eventCategory: "gathering" as any,
+        eventAction: "published",
+        eventLabel: eventType,
+        eventValue: {
+          type: eventType,
+          has_location: !isVirtual && locationName.trim().length > 0,
+          has_description: description.trim().length > 0,
+          is_virtual: isVirtual,
+          family_welcome: isFamilyWelcome,
+          add_to_memory: addToMemory,
+        },
+      });
       showToast(t("create_gathering.success"), "success");
       navigation.goBack();
     } catch (err: any) {
@@ -508,7 +551,15 @@ export default function CreateGatheringScreen() {
           {/* HG Bucket B.1 — (?) trigger replaces the spacer. */}
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => setHelpOpen(true)}
+            onPress={() => {
+              setHelpOpen(true);
+              // HG Bucket C.4 — help_opened
+              track({
+                eventType: "gathering.help_opened",
+                eventCategory: "gathering",
+                eventAction: "opened",
+              });
+            }}
             accessibilityRole="button"
             accessibilityLabel={t("create_gathering.help.title")}
           >
@@ -562,7 +613,16 @@ export default function CreateGatheringScreen() {
                   styles.typeCard,
                   eventType === ev.key && { borderColor: ev.color, backgroundColor: ev.color + "10" },
                 ]}
-                onPress={() => setEventType(ev.key)}
+                onPress={() => {
+                  setEventType(ev.key);
+                  // HG Bucket C.4 — type_picked
+                  track({
+                    eventType: "gathering.type_picked",
+                    eventCategory: "gathering",
+                    eventAction: "type_picked",
+                    eventLabel: ev.key,
+                  });
+                }}
               >
                 <View style={[styles.typeIcon, { backgroundColor: ev.color + "20" }]}>
                   <Ionicons name={ev.icon as any} size={24} color={ev.color} />
@@ -759,7 +819,20 @@ export default function CreateGatheringScreen() {
           <Text style={styles.sectionLabel}>{t("create_gathering.section_where")}</Text>
           <View style={styles.switchRow}>
             <Text style={styles.switchLabel}>{t("create_gathering.switch_virtual")}</Text>
-            <Switch value={isVirtual} onValueChange={setIsVirtual} trackColor={{ true: "#00C6AE" }} />
+            <Switch
+              value={isVirtual}
+              onValueChange={(v) => {
+                setIsVirtual(v);
+                // HG Bucket C.4 — virtual_toggled
+                track({
+                  eventType: "gathering.virtual_toggled",
+                  eventCategory: "gathering",
+                  eventAction: "virtual_toggled",
+                  eventLabel: v ? "virtual" : "in_person",
+                });
+              }}
+              trackColor={{ true: "#00C6AE" }}
+            />
           </View>
           {isVirtual ? (
             <TextInput

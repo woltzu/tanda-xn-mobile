@@ -564,6 +564,24 @@ export class NotificationPriorityEngine {
     }
   }
 
+  /**
+   * Host-a-gathering Bucket C — map the notifications.type values that
+   * migration 231's notify_gathering_created trigger and the
+   * gathering-reminder Edge Function (cron via migration 232) emit onto
+   * the abstract NotificationType. Same coaching_goals bucket the event
+   * family lives in — these are RSVP / community-engagement nudges, not
+   * payment-critical alerts.
+   */
+  static categoryForGatheringNotification(dbType: string): NotificationType | null {
+    switch (dbType) {
+      case "gathering_created":
+      case "gathering_reminder_24h":
+        return "coaching_goals";
+      default:
+        return null;
+    }
+  }
+
   /** Time sensitivity: closer deadline = higher score. */
   private static calculateTimeSensitivity(data: Record<string, any>): number {
     const hoursUntilDue = data.hours_until_due ?? data.hoursUntilDue;

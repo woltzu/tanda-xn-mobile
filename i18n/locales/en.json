@@ -4404,6 +4404,12 @@
     "notification_interest_title": "Someone is interested in your event",
     "notification_interest_body": "{{user_name}} is interested in '{{event_title}}'."
   },
+  "gathering": {
+    "notification_created_title": "New gathering: {{title}}",
+    "notification_created_body": "Join {{organizer}}'s gathering on {{date}}.",
+    "notification_reminder_24h_title": "Your gathering is tomorrow",
+    "notification_reminder_24h_body": "'{{title}}' is happening tomorrow at {{location}}."
+  },
   "events_sheet": {
     "organiser_label": "Posted by {{name}}",
     "organiser_unknown": "Unknown organiser",
