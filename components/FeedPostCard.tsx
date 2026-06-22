@@ -4,9 +4,13 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   ActivityIndicator,
 } from "react-native";
+// VDF Bucket B.5 (2026-06-21) — expo-image replaces raw react-native
+// Image for the post body image, avatars, and overlay glyphs.
+// cachePolicy="memory-disk" trims feed re-renders dramatically.
+// Note: prop is `contentFit` (not `resizeMode`) on expo-image.
+import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { FeedPost, FeedPostType } from "../context/FeedContext";
@@ -45,18 +49,22 @@ const getXnScoreTier = (score: number): { color: string; label: string; icon: st
   return { color: "#DC2626", label: "New", icon: "alert-circle" };
 };
 
-// Post type configurations — Blueprint vocabulary
-const POST_TYPE_CONFIG: Record<FeedPostType, { emoji: string; label: string; color: string }> = {
-  dream: { emoji: "\u{2728}", label: "Dream", color: "#8B5CF6" },
-  milestone: { emoji: "\u{1F3C6}", label: "Savings Milestone", color: "#F59E0B" },
-  contribution: { emoji: "\u{1F4B0}", label: "Streak Update", color: "#10B981" },
-  goal_created: { emoji: "\u{1F3AF}", label: "New Goal", color: "#3B82F6" },
-  goal_reached: { emoji: "\u{1F389}", label: "Dream Achieved!", color: "#10B981" },
-  circle_joined: { emoji: "\u{1F91D}", label: "Group Win", color: "#6366F1" },
-  payout_received: { emoji: "\u{1F4B8}", label: "Payout", color: "#059669" },
-  xn_level_up: { emoji: "\u{2B06}\u{FE0F}", label: "Level Up", color: "#EC4899" },
+// VDF Bucket B.2 (2026-06-21) — POST_TYPE_CONFIG no longer carries the
+// label string. The label is resolved per render via
+// t(`dream_feed.post_type.${type}`) so EN/FR copy is centralised in
+// the locale files. Emoji + brand color stay here because they're
+// presentation tokens, not translatable text.
+const POST_TYPE_CONFIG: Record<FeedPostType, { emoji: string; color: string }> = {
+  dream: { emoji: "\u{2728}", color: "#8B5CF6" },
+  milestone: { emoji: "\u{1F3C6}", color: "#F59E0B" },
+  contribution: { emoji: "\u{1F4B0}", color: "#10B981" },
+  goal_created: { emoji: "\u{1F3AF}", color: "#3B82F6" },
+  goal_reached: { emoji: "\u{1F389}", color: "#10B981" },
+  circle_joined: { emoji: "\u{1F91D}", color: "#6366F1" },
+  payout_received: { emoji: "\u{1F4B8}", color: "#059669" },
+  xn_level_up: { emoji: "\u{2B06}\u{FE0F}", color: "#EC4899" },
   // Post to Community Bucket A — member-authored community update.
-  community: { emoji: "\u{1F4AC}", label: "Community", color: "#3B82F6" },
+  community: { emoji: "\u{1F4AC}", color: "#3B82F6" },
 };
 
 // Format relative time
@@ -138,22 +146,27 @@ export default function FeedPostCard({
 
           {/* Floating side action buttons — TandaXn engagement */}
           <View style={styles.sideActions}>
-            {/* I Saved Too — or save count on own post */}
+            {/* VDF Bucket B.4 — Cheer (heart-equivalent). The
+                wallet glyph keeps the visual continuity but the
+                copy is now "Cheer" / "Cheered" — "Support" is
+                reserved for the money flow below. */}
             <TouchableOpacity
               style={styles.sideBtn}
               onPress={() => onLike(post.id)}
             >
               <View style={[styles.sideBtnCircle, isLiked && { backgroundColor: "rgba(0, 198, 174, 0.3)" }]}>
                 <Ionicons
-                  name={isLiked ? "wallet" : "wallet-outline"}
+                  name={isLiked ? "heart" : "heart-outline"}
                   size={24}
                   color={isLiked ? colors.accentTeal : "#FFFFFF"}
                 />
               </View>
               <Text style={[styles.sideBtnCount, isLiked && { color: colors.accentTeal }]}>
-                {isOwnPost
-                  ? (post.likesCount > 0 ? post.likesCount : "Saves")
-                  : (post.likesCount > 0 ? post.likesCount : "Saved")}
+                {post.likesCount > 0
+                  ? post.likesCount
+                  : isLiked
+                    ? t("dream_feed.card.cheered")
+                    : t("dream_feed.card.cheer")}
               </Text>
             </TouchableOpacity>
 
@@ -166,7 +179,9 @@ export default function FeedPostCard({
                 <Ionicons name="chatbubble-outline" size={22} color="#FFFFFF" />
               </View>
               <Text style={styles.sideBtnCount}>
-                {post.commentsCount > 0 ? post.commentsCount : "Comment"}
+                {post.commentsCount > 0
+                  ? post.commentsCount
+                  : t("dream_feed.card.comment")}
               </Text>
             </TouchableOpacity>
 
@@ -178,7 +193,9 @@ export default function FeedPostCard({
               <View style={styles.sideBtnCircle}>
                 <Ionicons name="copy-outline" size={22} color="#FFFFFF" />
               </View>
-              <Text style={styles.sideBtnCount}>Clone</Text>
+              <Text style={styles.sideBtnCount}>
+                {t("dream_feed.card.clone")}
+              </Text>
             </TouchableOpacity>
 
             {/* Join Circle / Support — only for others' goal/circle posts */}
@@ -191,7 +208,9 @@ export default function FeedPostCard({
                   <Ionicons name="hand-left" size={20} color="#FFFFFF" />
                 </View>
                 <Text style={styles.sideBtnCount}>
-                  {hasCircleProgress ? "Join" : "Support"}
+                  {hasCircleProgress
+                    ? t("dream_feed.card.join")
+                    : t("dream_feed.card.support")}
                 </Text>
               </TouchableOpacity>
             )}
@@ -204,10 +223,12 @@ export default function FeedPostCard({
               <View style={styles.sideBtnCircle}>
                 <Ionicons name="arrow-redo" size={20} color="#FFFFFF" />
               </View>
-              <Text style={styles.sideBtnCount}>Share</Text>
+              <Text style={styles.sideBtnCount}>
+                {t("dream_feed.card.share")}
+              </Text>
             </TouchableOpacity>
 
-            {/* Save for later */}
+            {/* Bookmark for later */}
             {onSave && (
               <TouchableOpacity
                 style={styles.sideBtn}
@@ -221,7 +242,9 @@ export default function FeedPostCard({
                   />
                 </View>
                 <Text style={[styles.sideBtnCount, isSaved && { color: "#F59E0B" }]}>
-                  {isSaved ? "Saved" : "Save"}
+                  {isSaved
+                    ? t("dream_feed.card.bookmarked")
+                    : t("dream_feed.card.bookmark")}
                 </Text>
               </TouchableOpacity>
             )}
@@ -245,7 +268,12 @@ export default function FeedPostCard({
             <View style={styles.videoOverlayAuthor}>
               <View style={styles.videoOverlayAvatar}>
                 {post.authorAvatar && !isAnonymous ? (
-                  <Image source={{ uri: post.authorAvatar }} style={styles.videoOverlayAvatarImg} />
+                  <Image
+                    source={{ uri: post.authorAvatar }}
+                    style={styles.videoOverlayAvatarImg}
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                  />
                 ) : (
                   <Text style={styles.videoOverlayAvatarText}>
                     {isAnonymous && !isOwnPost ? "?" : displayName.charAt(0).toUpperCase()}
@@ -327,7 +355,12 @@ export default function FeedPostCard({
         >
           <View style={styles.avatar}>
             {post.authorAvatar && !isAnonymous ? (
-              <Image source={{ uri: post.authorAvatar }} style={styles.avatarImage} />
+              <Image
+                source={{ uri: post.authorAvatar }}
+                style={styles.avatarImage}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+              />
             ) : (
               <Text style={styles.avatarText}>
                 {isAnonymous && !isOwnPost ? "?" : displayName.charAt(0).toUpperCase()}
@@ -364,7 +397,9 @@ export default function FeedPostCard({
         <View style={styles.headerRight}>
           <View style={[styles.typeBadge, { backgroundColor: config.color + "15" }]}>
             <Text style={styles.typeBadgeEmoji}>{config.emoji}</Text>
-            <Text style={[styles.typeBadgeText, { color: config.color }]}>{config.label}</Text>
+            <Text style={[styles.typeBadgeText, { color: config.color }]}>
+              {t(`dream_feed.post_type.${post.type}`)}
+            </Text>
           </View>
           <ReportButton
             kind="content"
@@ -480,7 +515,9 @@ export default function FeedPostCard({
         <Image
           source={{ uri: post.imageUrl }}
           style={styles.postImage}
-          resizeMode="cover"
+          contentFit="cover"
+          cachePolicy="memory-disk"
+          transition={200}
         />
       )}
 
@@ -545,37 +582,50 @@ export default function FeedPostCard({
             <Ionicons name="hand-left" size={16} color="#FFFFFF" />
           </View>
           <Text style={styles.supportText}>
-            {hasGoalProgress ? "Support this Dream" : "Join this Circle"}
+            {hasGoalProgress
+              ? t("dream_feed.card.support_dream")
+              : t("dream_feed.card.join_circle")}
           </Text>
           <Ionicons name="chevron-forward" size={16} color={colors.accentTeal} />
         </TouchableOpacity>
       )}
 
-      {/* Footer — engagement actions */}
+      {/* Footer — engagement actions. VDF Bucket B.2 + B.4: footer
+          labels are now i18n-driven and the heart-equivalent is
+          labelled "Cheer" / "Cheered" (was "Saved" / "I Saved Too"
+          which conflicted with the bookmark + the money-support
+          flow). The icon swaps wallet → heart to make the semantic
+          obvious. */}
       <View style={styles.footer}>
         <TouchableOpacity style={styles.actionButton} onPress={() => onLike(post.id)}>
           <Ionicons
-            name={isLiked ? "wallet" : "wallet-outline"}
+            name={isLiked ? "heart" : "heart-outline"}
             size={20}
             color={isLiked ? colors.accentTeal : colors.textSecondary}
           />
           <Text style={[styles.actionText, isLiked && { color: colors.accentTeal }]}>
-            {isOwnPost
-              ? (post.likesCount > 0 ? `${post.likesCount} saves` : "0 saves")
-              : (post.likesCount > 0 ? `${post.likesCount} saved` : "I Saved Too")}
+            {post.likesCount > 0
+              ? t("dream_feed.card.cheer_count", { count: post.likesCount })
+              : isLiked
+                ? t("dream_feed.card.cheered")
+                : t("dream_feed.card.cheer")}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton} onPress={() => onComment(post.id)}>
           <Ionicons name="chatbubble-outline" size={18} color={colors.textSecondary} />
           <Text style={styles.actionText}>
-            {post.commentsCount > 0 ? `${post.commentsCount} comments` : "Comment"}
+            {post.commentsCount > 0
+              ? t("dream_feed.card.comment_count", { count: post.commentsCount })
+              : t("dream_feed.card.comment")}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton} onPress={() => onClonePlan?.(post)}>
           <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
-          <Text style={styles.actionText}>Clone Goal</Text>
+          <Text style={styles.actionText}>
+            {t("dream_feed.card.clone_goal")}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.actionButton, { marginRight: spacing.md }]} onPress={() => onAccountability?.(post)}>
@@ -593,7 +643,9 @@ export default function FeedPostCard({
               color={isSaved ? "#F59E0B" : colors.textSecondary}
             />
             {isSaved && (
-              <Text style={[styles.actionText, { color: "#F59E0B" }]}>Saved</Text>
+              <Text style={[styles.actionText, { color: "#F59E0B" }]}>
+                {t("dream_feed.card.bookmarked")}
+              </Text>
             )}
           </TouchableOpacity>
         )}
@@ -601,7 +653,7 @@ export default function FeedPostCard({
         {post.isAuto && (
           <View style={styles.autoIndicator}>
             <Ionicons name="flash-outline" size={14} color={colors.textSecondary} />
-            <Text style={styles.autoText}>Auto</Text>
+            <Text style={styles.autoText}>{t("dream_feed.card.auto")}</Text>
           </View>
         )}
       </View>

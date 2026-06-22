@@ -3493,7 +3493,70 @@
     "coach_slide2_body": "Touchez Soutenir pour contribuer, Commentaires pour encourager, ou Cloner pour démarrer votre propre version.",
     "coach_skip": "Passer",
     "coach_next": "Suivant",
-    "coach_got_it": "Compris"
+    "coach_got_it": "Compris",
+    "help": {
+      "title": "Comment fonctionne le Fil de rêves",
+      "close": "Fermer",
+      "what_is_dream_title": "Qu'est-ce qu'un Rêve ?",
+      "what_is_dream_body": "Un Rêve est un objectif sur lequel un membre travaille — économiser pour un mariage, rembourser un prêt, apprendre une nouvelle compétence. Vous voyez les Rêves de votre réseau et du fil public.",
+      "what_is_support_title": "Que signifie « Soutenir » ?",
+      "what_is_support_body": "Toucher Soutenir sur un Rêve lié à un objectif ouvre un transfert d'argent — vous contribuez à l'épargne du rêveur. Sur un Rêve lié à un cercle, Soutenir devient « Rejoindre ».",
+      "what_is_cheer_title": "Comment encourager ou commenter ?",
+      "what_is_cheer_body": "Le cœur, c'est Encourager — un signe gratuit qui incrémente le compteur et prévient l'auteur. La bulle ouvre le détail du post pour commenter.",
+      "who_sees_title": "Qui voit mes Rêves ?",
+      "who_sees_body": "Les Rêves Publics sont visibles par tout le monde. Les Rêves Communautés ne sont visibles que pour les membres de vos communautés. Les Rêves Anonymes apparaissent publiquement mais sans votre nom."
+    },
+    "card": {
+      "cheer": "Encourager",
+      "cheered": "Encouragé",
+      "cheer_count_one": "1 encouragement",
+      "cheer_count_other": "{{count}} encouragements",
+      "comment": "Commenter",
+      "comment_count_one": "1 commentaire",
+      "comment_count_other": "{{count}} commentaires",
+      "clone": "Cloner",
+      "clone_goal": "Cloner l'objectif",
+      "support": "Soutenir",
+      "support_dream": "Soutenir ce rêve",
+      "join": "Rejoindre",
+      "join_circle": "Rejoindre ce cercle",
+      "share": "Partager",
+      "bookmark": "Enregistrer",
+      "bookmarked": "Enregistré",
+      "auto": "Auto"
+    },
+    "post_type": {
+      "dream": "Rêve",
+      "milestone": "Étape d'épargne",
+      "contribution": "Mise à jour",
+      "goal_created": "Nouvel objectif",
+      "goal_reached": "Rêve atteint !",
+      "circle_joined": "Victoire collective",
+      "payout_received": "Paiement",
+      "xn_level_up": "Niveau supérieur",
+      "community": "Communauté"
+    }
+  },
+  "dream_post": {
+    "detail": {
+      "comments_section": "Commentaires ({{count}})",
+      "comments_section_own": "Commentaires & Soutien ({{count}})",
+      "journey_one": "Mon parcours (1 mise à jour)",
+      "journey_other": "Mon parcours ({{count}} mises à jour)",
+      "no_comments": "Aucun commentaire pour l'instant. Soyez le premier à apporter votre soutien !",
+      "no_comments_own": "Pas encore de commentaires. Vos supporters peuvent vous encourager ici !",
+      "comment_added": "Commentaire ajouté !",
+      "commitment_posted": "Engagement publié !",
+      "comment_failed": "Échec de l'ajout du commentaire",
+      "post_deleted": "Publication supprimée",
+      "post_delete_failed": "Échec de la suppression",
+      "clone_start": "Démarrage d'un objectif similaire !",
+      "clone_create": "Créez votre propre version !"
+    },
+    "comment": {
+      "char_count": "{{current}} / {{max}}",
+      "char_remaining": "{{count}} restants"
+    }
   },
   "create_dream": {
     "header_title": "Partager un rêve",

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,9 +11,11 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Image,
   Share,
 } from "react-native";
+// VDF Bucket B.5 — expo-image replaces react-native Image. Same import
+// site for both code paths (own-post + others') below.
+import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import {
   useNavigation,
@@ -37,8 +39,19 @@ import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
 
 type PostDetailRouteParams = {
-  PostDetail: { postId: string };
+  // VDF Bucket B.3 (2026-06-21) — focusComment='1' tells the screen to
+  // autoFocus the comment input on mount. Used by the comment icon on
+  // FeedPostCard (was a separate DreamPostCommentsScreen route before
+  // B.7), by push-notification deep links for new comments, and by
+  // any "reply to" affordance.
+  PostDetail: { postId: string; focusComment?: string };
 };
+
+// VDF Bucket B.3 — comment-input char-count thresholds. 280 (Twitter-
+// ish) is generous for a feed comment without inviting essays.
+const COMMENT_MAX = 280;
+const COMMENT_COUNT_SHOW_AT = 100;
+const COMMENT_COUNT_WARN_AT = COMMENT_MAX - 30;
 
 // Helper: format date for journey timeline
 const formatJourneyDate = (dateStr: string): string => {
@@ -65,8 +78,31 @@ export default function PostDetailScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<RouteProp<PostDetailRouteParams, "PostDetail">>();
   const { t } = useTranslation();
-  const { postId } = route.params;
+  const { postId, focusComment } = route.params;
   const { user } = useAuth();
+
+  // VDF Bucket B.3 — comment-input ref + autoFocus flag. focusComment
+  // is passed by the comment icon on FeedPostCard (post-B.7 the
+  // single comments entry point) and by push-notification deep
+  // links from the dream_post_supported notification family. We
+  // fire the focus() in an effect (not via autoFocus prop) so the
+  // request lands AFTER the keyboard-avoiding view + sticky footer
+  // settle on first paint.
+  const commentInputRef = useRef<TextInput | null>(null);
+  const shouldFocusComment = focusComment === "1";
+  const focusRequestedRef = useRef(false);
+  useEffect(() => {
+    if (!shouldFocusComment) return;
+    if (focusRequestedRef.current) return;
+    if (isLoading) return;
+    focusRequestedRef.current = true;
+    // requestAnimationFrame gives the sticky comment input one frame
+    // to mount before we steal focus to it.
+    const id = requestAnimationFrame(() => {
+      commentInputRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [shouldFocusComment, isLoading]);
   const {
     getPostById,
     getComments,
@@ -99,12 +135,12 @@ export default function PostDetailScreen() {
         clonedTargetAmount: m.targetAmount || undefined,
         clonedEmoji: m.goalEmoji || undefined,
       });
-      showToast("Starting a similar goal!", "success");
+      showToast(t("dream_post.detail.clone_start"), "success");
     } else {
       navigation.navigate("CreateGoal", {});
-      showToast("Create your own version!", "success");
+      showToast(t("dream_post.detail.clone_create"), "success");
     }
-  }, [navigation]);
+  }, [navigation, t]);
 
   const handleAccountability = useCallback(async (p: FeedPost) => {
     try {
@@ -300,7 +336,14 @@ export default function PostDetailScreen() {
       const newComment = await addComment(postId, commentText.trim());
       setComments((prev) => [...prev, newComment]);
       setCommentText("");
-      showToast(isOwnPost ? "Comment added!" : "Commitment posted!", "success");
+      showToast(
+        t(
+          isOwnPost
+            ? "dream_post.detail.comment_added"
+            : "dream_post.detail.commitment_posted",
+        ),
+        "success",
+      );
       // VDF Bucket A.4 — the explicit getPostById refetch here was
       // needed to sync commentsCount after the optimistic addComment.
       // A.1's realtime feed_comments subscription + the focus refetch
@@ -308,7 +351,7 @@ export default function PostDetailScreen() {
       // PostDetail's local +1 in the realtime handler so dropping
       // this round-trip keeps the count fresh without an extra read.
     } catch (err) {
-      showToast("Failed to add comment", "error");
+      showToast(t("dream_post.detail.comment_failed"), "error");
       Alert.alert(t("post_detail.alert_error_title"), t("post_detail.alert_failed_add_comment"));
     } finally {
       setIsSubmitting(false);
@@ -326,10 +369,10 @@ export default function PostDetailScreen() {
         onPress: async () => {
           try {
             await deletePost(postId);
-            showToast("Post deleted", "info");
+            showToast(t("dream_post.detail.post_deleted"), "info");
             navigation.goBack();
           } catch (err) {
-            showToast("Failed to delete post", "error");
+            showToast(t("dream_post.detail.post_delete_failed"), "error");
             Alert.alert(t("post_detail.alert_error_title"), t("post_detail.alert_failed_delete"));
           }
         },
@@ -479,7 +522,9 @@ export default function PostDetailScreen() {
                   <Image
                     source={{ uri: post.imageUrl }}
                     style={styles.standalonePostImage}
-                    resizeMode="cover"
+                    contentFit="cover"
+                    cachePolicy="memory-disk"
+                    transition={200}
                   />
                 )}
                 {meta.location && (
@@ -496,7 +541,7 @@ export default function PostDetailScreen() {
               <View style={styles.journeySectionHeader}>
                 <Ionicons name="time-outline" size={18} color={colors.textPrimary} />
                 <Text style={styles.journeySectionTitle}>
-                  My Journey ({timelineData.length} update{timelineData.length !== 1 ? "s" : ""})
+                  {t("dream_post.detail.journey", { count: timelineData.length })}
                 </Text>
               </View>
 
@@ -602,12 +647,14 @@ export default function PostDetailScreen() {
             {/* Comments Section */}
             <View style={styles.commentsSection}>
               <Text style={styles.commentsSectionTitle}>
-                Comments & Support ({comments.length})
+                {t("dream_post.detail.comments_section_own", {
+                  count: comments.length,
+                })}
               </Text>
               {comments.length === 0 ? (
                 <View style={styles.noComments}>
                   <Text style={styles.noCommentsText}>
-                    No comments yet. Your supporters can cheer you on here!
+                    {t("dream_post.detail.no_comments_own")}
                   </Text>
                 </View>
               ) : (
@@ -624,16 +671,41 @@ export default function PostDetailScreen() {
             <View style={{ height: 80 }} />
           </ScrollView>
 
-          {/* Comment Input */}
+          {/* Comment Input — VDF B.3 wires ref + 280 max + char counter. */}
           <View style={styles.commentInputContainer}>
-            <TextInput
-              style={styles.commentInput}
-              placeholder={t("post_detail.placeholder_comment")}
-              placeholderTextColor={colors.textSecondary}
-              value={commentText}
-              onChangeText={setCommentText}
-              maxLength={300}
-            />
+            <View style={styles.commentInputCol}>
+              <TextInput
+                ref={commentInputRef}
+                style={styles.commentInput}
+                placeholder={t("post_detail.placeholder_comment")}
+                placeholderTextColor={colors.textSecondary}
+                value={commentText}
+                onChangeText={setCommentText}
+                maxLength={COMMENT_MAX}
+              />
+              {commentText.length > COMMENT_COUNT_SHOW_AT && (
+                <Text
+                  style={[
+                    styles.commentCharCount,
+                    {
+                      color:
+                        commentText.length >= COMMENT_COUNT_WARN_AT
+                          ? "#EF4444"
+                          : colors.accentTeal,
+                    },
+                  ]}
+                >
+                  {commentText.length >= COMMENT_COUNT_WARN_AT
+                    ? t("dream_post.comment.char_remaining", {
+                        count: COMMENT_MAX - commentText.length,
+                      })
+                    : t("dream_post.comment.char_count", {
+                        current: commentText.length,
+                        max: COMMENT_MAX,
+                      })}
+                </Text>
+              )}
+            </View>
             <TouchableOpacity
               style={[
                 styles.sendButton,
@@ -687,7 +759,12 @@ export default function PostDetailScreen() {
               const updated = await getPostById(id);
               if (updated) setPost(updated);
             }}
-            onComment={(id) => navigation.navigate("PostComments" as any, { postId: id })}
+            onComment={(id) =>
+              navigation.navigate("PostDetail", {
+                postId: id,
+                focusComment: "1",
+              })
+            }
             onPress={() => {}}
             onAuthorPress={(userId) =>
               navigation.navigate("UserDreamProfile", { userId })
@@ -791,12 +868,14 @@ export default function PostDetailScreen() {
           {/* Comments Section */}
           <View style={styles.commentsSection}>
             <Text style={styles.commentsSectionTitle}>
-              Comments ({comments.length})
+              {t("dream_post.detail.comments_section", {
+                count: comments.length,
+              })}
             </Text>
             {comments.length === 0 ? (
               <View style={styles.noComments}>
                 <Text style={styles.noCommentsText}>
-                  No comments yet. Be the first to show support!
+                  {t("dream_post.detail.no_comments")}
                 </Text>
               </View>
             ) : (
@@ -813,16 +892,41 @@ export default function PostDetailScreen() {
           <View style={{ height: 80 }} />
         </ScrollView>
 
-        {/* Comment Input */}
+        {/* Comment Input — VDF B.3 wires ref + 280 max + char counter. */}
         <View style={styles.commentInputContainer}>
-          <TextInput
-            style={styles.commentInput}
-            placeholder={t("post_detail.placeholder_support")}
-            placeholderTextColor={colors.textSecondary}
-            value={commentText}
-            onChangeText={setCommentText}
-            maxLength={300}
-          />
+          <View style={styles.commentInputCol}>
+            <TextInput
+              ref={commentInputRef}
+              style={styles.commentInput}
+              placeholder={t("post_detail.placeholder_support")}
+              placeholderTextColor={colors.textSecondary}
+              value={commentText}
+              onChangeText={setCommentText}
+              maxLength={COMMENT_MAX}
+            />
+            {commentText.length > COMMENT_COUNT_SHOW_AT && (
+              <Text
+                style={[
+                  styles.commentCharCount,
+                  {
+                    color:
+                      commentText.length >= COMMENT_COUNT_WARN_AT
+                        ? "#EF4444"
+                        : colors.accentTeal,
+                  },
+                ]}
+              >
+                {commentText.length >= COMMENT_COUNT_WARN_AT
+                  ? t("dream_post.comment.char_remaining", {
+                      count: COMMENT_MAX - commentText.length,
+                    })
+                  : t("dream_post.comment.char_count", {
+                      current: commentText.length,
+                      max: COMMENT_MAX,
+                    })}
+              </Text>
+            )}
+          </View>
           <TouchableOpacity
             style={[
               styles.sendButton,
@@ -1295,16 +1399,28 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  commentInput: {
+  // VDF Bucket B.3 — input + char counter share a column so the
+  // sticky footer height stays stable while the count appears /
+  // disappears.
+  commentInputCol: {
     flex: 1,
+    marginRight: spacing.sm,
+  },
+  commentInput: {
     fontSize: typography.body,
     color: colors.textPrimary,
     backgroundColor: colors.screenBg,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    marginRight: spacing.sm,
     maxHeight: 80,
+  },
+  commentCharCount: {
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "right",
+    marginTop: 4,
+    paddingRight: spacing.md,
   },
   sendButton: {
     width: 36,

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,10 @@ import {
   Share,
   Platform,
   Modal,
+  Pressable,
+  ScrollView,
+  Animated,
+  Easing,
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -31,6 +35,15 @@ import { colors, radius, typography, spacing } from "../theme/tokens";
 const COACH_MARK_KEY = "@tandaxn_dream_feed_seen_v1";
 const RETRY_URI_KEY_PREFIX = "@tandaxn_dream_post_retry_uri:";
 const FEED_IMAGES_BUCKET = "feed-images";
+
+// VDF Bucket B.1 — HelpSheet topics for the (?) header trigger.
+type HelpTopic = "what_is_dream" | "what_is_support" | "what_is_cheer" | "who_sees";
+const HELP_TOPICS: HelpTopic[] = [
+  "what_is_dream",
+  "what_is_support",
+  "what_is_cheer",
+  "who_sees",
+];
 
 type DreamFeedNavigationProp = StackNavigationProp<any>;
 
@@ -69,6 +82,37 @@ export default function DreamFeedScreen() {
       refetchFeed();
     }, [refetchFeed]),
   );
+
+  // VDF Bucket B.1 — HelpSheet visibility.
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  // VDF Bucket B.6 — skeleton pulse driver. Shared Animated.Value
+  // keeps the placeholder cards in lock-step. Runs only during the
+  // cold initial load (matches the WalletScreen + BrowseEvents
+  // patterns).
+  const skeletonPulse = useRef(new Animated.Value(0.5)).current;
+  const showSkeleton = isLoading && posts.length === 0;
+  useEffect(() => {
+    if (!showSkeleton) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(skeletonPulse, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(skeletonPulse, {
+          toValue: 0.5,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [showSkeleton, skeletonPulse]);
 
   // ── First-visit coach mark ──────────────────────────────────────────
   const [coachVisible, setCoachVisible] = useState(false);
@@ -153,8 +197,12 @@ export default function DreamFeedScreen() {
     navigation.navigate("PostDetail", { postId });
   };
 
+  // VDF Bucket B.7 — DreamPostCommentsScreen was a duplicate of the
+  // inline comments rendered by PostDetailScreen. Comment icon now
+  // routes to PostDetail with focusComment='1' so the input auto-
+  // focuses with the keyboard up.
   const handleCommentPress = (postId: string) => {
-    navigation.navigate("PostComments", { postId });
+    navigation.navigate("PostDetail", { postId, focusComment: "1" });
   };
 
   const handleAuthorPress = (userId: string) => {
@@ -339,6 +387,21 @@ export default function DreamFeedScreen() {
           >
             <Ionicons name="person-outline" size={20} color={colors.accentTeal} />
           </TouchableOpacity>
+          {/* VDF Bucket B.1 — HelpSheet trigger. Recurrent access to
+              the same 4 topics the 2-slide first-visit coach covers,
+              for returning users who want a refresher. */}
+          <TouchableOpacity
+            style={styles.helpButton}
+            onPress={() => setHelpOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t("dream_feed.help.title")}
+          >
+            <Ionicons
+              name="help-circle-outline"
+              size={22}
+              color={colors.textPrimary}
+            />
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.settingsButton}
             onPress={() => navigation.navigate("FeedSettings")}
@@ -376,11 +439,14 @@ export default function DreamFeedScreen() {
         ))}
       </View>
 
-      {/* Feed */}
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.accentTeal} />
-          <Text style={styles.loadingText}>{t("dream_feed.loading_text")}</Text>
+      {/* Feed. VDF Bucket B.6 — cold load renders 3 skeleton cards
+          instead of a centred spinner; layout stays stable as data
+          lands. */}
+      {showSkeleton ? (
+        <View style={styles.skeletonWrap}>
+          {[0, 1, 2].map((i) => (
+            <FeedSkeletonCard key={i} pulse={skeletonPulse} />
+          ))}
         </View>
       ) : (
         <FlatList
@@ -495,9 +561,135 @@ export default function DreamFeedScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* VDF Bucket B.1 — HelpSheet. Modal slides from bottom, backdrop
+          tap dismisses. Four topics keyed by HELP_TOPICS. */}
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} t={t} />
     </SafeAreaView>
   );
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// HelpSheet — VDF Bucket B.1
+// ════════════════════════════════════════════════════════════════════════════
+function HelpSheet({
+  visible,
+  onClose,
+  t,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  t: (key: string, opts?: any) => string;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={helpStyles.backdrop} onPress={onClose}>
+        <Pressable style={helpStyles.sheet} onPress={() => undefined}>
+          <View style={helpStyles.handle} />
+          <View style={helpStyles.headerRow}>
+            <Text style={helpStyles.title}>{t("dream_feed.help.title")}</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel={t("dream_feed.help.close")}
+            >
+              <Ionicons name="close" size={22} color={colors.primaryNavy} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {HELP_TOPICS.map((topic) => (
+              <View key={topic} style={helpStyles.item}>
+                <Text style={helpStyles.itemTitle}>
+                  {t(`dream_feed.help.${topic}_title`)}
+                </Text>
+                <Text style={helpStyles.itemBody}>
+                  {t(`dream_feed.help.${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// FeedSkeletonCard — VDF Bucket B.6
+// ════════════════════════════════════════════════════════════════════════════
+// Pulsing placeholder that approximates the FeedPostCard footprint —
+// avatar row, content block, image area, footer row — so the layout
+// doesn't jump when real data lands.
+function FeedSkeletonCard({ pulse }: { pulse: Animated.Value }) {
+  return (
+    <Animated.View style={[styles.skeletonCard, { opacity: pulse }]}>
+      <View style={styles.skeletonHeaderRow}>
+        <View style={styles.skeletonAvatar} />
+        <View style={{ flex: 1 }}>
+          <View style={styles.skeletonLineWide} />
+          <View style={styles.skeletonLineNarrow} />
+        </View>
+      </View>
+      <View style={styles.skeletonLineFull} />
+      <View style={styles.skeletonLineFull} />
+      <View style={styles.skeletonImage} />
+      <View style={styles.skeletonFooter}>
+        <View style={styles.skeletonChip} />
+        <View style={styles.skeletonChip} />
+        <View style={styles.skeletonChip} />
+      </View>
+    </Animated.View>
+  );
+}
+
+const helpStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: colors.cardBg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 28,
+    maxHeight: "85%",
+  },
+  handle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: 14,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  title: { fontSize: 17, fontWeight: "700", color: colors.primaryNavy },
+  item: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  itemTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  itemBody: { fontSize: 13, color: colors.textSecondary, lineHeight: 19 },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -536,6 +728,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  // VDF Bucket B.1 — (?) help button. Same footprint as the other
+  // header buttons; neutral navy tint to read as "info" not "action".
+  helpButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.navyTintBg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   settingsButton: {
     width: 36,
     height: 36,
@@ -543,6 +745,71 @@ const styles = StyleSheet.create({
     backgroundColor: colors.navyTintBg,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  // VDF Bucket B.6 — skeleton card styles.
+  skeletonWrap: { paddingTop: spacing.md },
+  skeletonCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: radius.card,
+    padding: spacing.lg,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  skeletonHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: spacing.md,
+  },
+  skeletonAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonLineWide: {
+    width: "60%",
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#E5E7EB",
+    marginBottom: 6,
+  },
+  skeletonLineNarrow: {
+    width: "30%",
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#E5E7EB",
+  },
+  skeletonLineFull: {
+    width: "100%",
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#E5E7EB",
+    marginBottom: 8,
+  },
+  skeletonImage: {
+    width: "100%",
+    height: 160,
+    borderRadius: 10,
+    backgroundColor: "#E5E7EB",
+    marginTop: 4,
+    marginBottom: 12,
+  },
+  skeletonFooter: {
+    flexDirection: "row",
+    gap: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  skeletonChip: {
+    width: 60,
+    height: 16,
+    borderRadius: 6,
+    backgroundColor: "#E5E7EB",
   },
 
   // Filter Tabs

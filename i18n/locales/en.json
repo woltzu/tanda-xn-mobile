@@ -3493,7 +3493,70 @@
     "coach_slide2_body": "Tap Support to chip in, Comments to encourage, or Clone to start your own version of a dream.",
     "coach_skip": "Skip",
     "coach_next": "Next",
-    "coach_got_it": "Got it"
+    "coach_got_it": "Got it",
+    "help": {
+      "title": "How the Dream Feed works",
+      "close": "Close",
+      "what_is_dream_title": "What is a Dream?",
+      "what_is_dream_body": "A Dream is a goal a community member is working toward — saving for a wedding, paying off a loan, learning a new skill. You see Dreams from people in your circles and from the broader public feed.",
+      "what_is_support_title": "What does \"Support\" mean?",
+      "what_is_support_body": "Tapping Support on a goal-linked Dream opens a money-transfer flow — you contribute toward the dreamer's savings goal. On a circle-linked Dream, Support becomes \"Join\" and walks you into the circle.",
+      "what_is_cheer_title": "How do I cheer or comment?",
+      "what_is_cheer_body": "The heart icon is Cheer — a free encouragement that bumps the cheer count and notifies the author. The chat-bubble opens the post details where you can comment.",
+      "who_sees_title": "Who sees my own Dreams?",
+      "who_sees_body": "Public Dreams appear to everyone. Communities-only Dreams are visible only to members of the communities you've joined. Anonymous Dreams appear publicly but hide your name."
+    },
+    "card": {
+      "cheer": "Cheer",
+      "cheered": "Cheered",
+      "cheer_count_one": "1 cheer",
+      "cheer_count_other": "{{count}} cheers",
+      "comment": "Comment",
+      "comment_count_one": "1 comment",
+      "comment_count_other": "{{count}} comments",
+      "clone": "Clone",
+      "clone_goal": "Clone Goal",
+      "support": "Support",
+      "support_dream": "Support this Dream",
+      "join": "Join",
+      "join_circle": "Join this Circle",
+      "share": "Share",
+      "bookmark": "Save",
+      "bookmarked": "Saved",
+      "auto": "Auto"
+    },
+    "post_type": {
+      "dream": "Dream",
+      "milestone": "Savings Milestone",
+      "contribution": "Streak Update",
+      "goal_created": "New Goal",
+      "goal_reached": "Dream Achieved!",
+      "circle_joined": "Group Win",
+      "payout_received": "Payout",
+      "xn_level_up": "Level Up",
+      "community": "Community"
+    }
+  },
+  "dream_post": {
+    "detail": {
+      "comments_section": "Comments ({{count}})",
+      "comments_section_own": "Comments & Support ({{count}})",
+      "journey_one": "My Journey (1 update)",
+      "journey_other": "My Journey ({{count}} updates)",
+      "no_comments": "No comments yet. Be the first to show support!",
+      "no_comments_own": "No comments yet. Your supporters can cheer you on here!",
+      "comment_added": "Comment added!",
+      "commitment_posted": "Commitment posted!",
+      "comment_failed": "Failed to add comment",
+      "post_deleted": "Post deleted",
+      "post_delete_failed": "Failed to delete post",
+      "clone_start": "Starting a similar goal!",
+      "clone_create": "Create your own version!"
+    },
+    "comment": {
+      "char_count": "{{current}} / {{max}}",
+      "char_remaining": "{{count}} left"
+    }
   },
   "create_dream": {
     "header_title": "Share a Dream",

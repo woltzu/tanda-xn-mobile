@@ -213,7 +213,9 @@ export const Routes = {
   PaymentReminder: "PaymentReminder",
   PersonalInfo: "PersonalInfo",
   PositionSwap: "PositionSwap",
-  PostComments: "PostComments",
+  // VDF B.7 (2026-06-21) — PostComments route deleted along with
+  // DreamPostCommentsScreen. The comment icon now routes to
+  // PostDetail with `focusComment: '1'`.
   PostDetail: "PostDetail",
   PostToCommunity: "PostToCommunity",
   PrivacySettings: "PrivacySettings",

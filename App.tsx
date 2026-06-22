@@ -224,7 +224,9 @@ import CircleVisualizerScreen from "./screens/CircleVisualizerScreen";
 import DreamFeedScreen from "./screens/DreamFeedScreen";
 import CreateDreamPostScreen from "./screens/CreateDreamPostScreen";
 import PostDetailScreen from "./screens/PostDetailScreen";
-import DreamPostCommentsScreen from "./screens/DreamPostCommentsScreen";
+// VDF B.7 (2026-06-21) — DreamPostCommentsScreen deleted; the comment
+// icon now routes to PostDetail with focusComment='1' (single comment
+// surface, sticky comment input there is the only path).
 import UserDreamProfileScreen from "./screens/UserDreamProfileScreen";
 import FeedSettingsScreen from "./screens/FeedSettingsScreen";
 import SupportDreamScreen from "./screens/SupportDreamScreen";
@@ -1209,7 +1211,6 @@ function CommunityStackScreen() {
       <CommunityStack.Screen name="CreateEvent" component={CreateEventScreen} />
       <CommunityStack.Screen name="DreamFeed" component={DreamFeedScreen} />
       <CommunityStack.Screen name="CreateDreamPost" component={CreateDreamPostScreen} />
-      <CommunityStack.Screen name="PostComments" component={DreamPostCommentsScreen} />
       <CommunityStack.Screen name="UserDreamProfile" component={UserDreamProfileScreen} />
       <CommunityStack.Screen name="SupportDream" component={SupportDreamScreen} />
       <CommunityStack.Screen name="CommunityBrowser" component={CommunityBrowserScreen} />
