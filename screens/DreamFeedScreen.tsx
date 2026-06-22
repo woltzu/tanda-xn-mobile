@@ -390,7 +390,17 @@ export default function DreamFeedScreen() {
           contentContainerStyle={styles.feedContent}
           showsVerticalScrollIndicator={false}
           onEndReached={() => {
-            if (activeFilter === "for_you" && hasMore && !isLoadingMore) {
+            // VDF Bucket A.9 (2026-06-21) — pagination on all tabs.
+            // The Following + Trending tabs are client-side filters
+            // over the same underlying feed_posts query (see
+            // useFilteredFeed), so the lt-cursor in FeedContext is
+            // shared. Continuing pagination just pulls more raw rows
+            // into the filterable pool; each tab re-applies its
+            // filter to the now-larger slice. The Trending tab
+            // currently ranks by likes within the loaded window —
+            // until A.3's server-side trending score lands, "load
+            // more" simply widens the eligible pool.
+            if (hasMore && !isLoadingMore) {
               fetchMorePosts();
             }
           }}
@@ -408,13 +418,15 @@ export default function DreamFeedScreen() {
         />
       )}
 
-      {/* FAB: Create Post */}
+      {/* FAB: Create Post — VDF A.5 (2026-06-21) videocam → add. P1
+          dropped the video flow; the empty-state icon was fixed in
+          CDP A.7 but this FAB instance was missed. */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => navigation.navigate("CreateDreamPost")}
         activeOpacity={0.8}
       >
-        <Ionicons name="videocam" size={24} color="#FFFFFF" />
+        <Ionicons name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
 
       {/* First-visit coach mark — AsyncStorage-gated 2-slide overlay. */}

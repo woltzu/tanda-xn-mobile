@@ -118,7 +118,10 @@ type FeedCommentRow = {
 // Helpers
 // ============================================
 
-const rowToPost = (row: FeedPostRow): FeedPost => ({
+// Exported for screens that read feed_posts rows directly (e.g.
+// PostDetailScreen's journey-timeline branch) so the snake_case →
+// camelCase mapping has a single source of truth. VDF Bucket A.6.
+export const rowToPost = (row: FeedPostRow): FeedPost => ({
   id: row.id,
   userId: row.user_id,
   type: row.type as FeedPostType,
@@ -476,23 +479,27 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
           table: "feed_posts",
         },
         async (payload) => {
-          // Fetch the full post with profile data
-          const { data } = await supabase
-            .from("feed_posts")
-            .select(`
-              *,
-              profiles!feed_posts_user_id_fkey (
-                full_name,
-                avatar_url
-              )
-            `)
-            .eq("id", (payload.new as any).id)
-            .single();
-
-          if (data) {
-            const newPost = rowToPost(data as any);
-            setPosts((prev) => [newPost, ...prev]);
-          }
+          // VDF Bucket A.8 — payload.new already carries the feed_posts
+          // row. Fetch only the joined profile so a single round-trip
+          // gets us a complete FeedPost (was a full re-select of
+          // feed_posts + profile join before).
+          const row = payload.new as FeedPostRow & { user_id?: string };
+          if (!row?.id || !row?.user_id) return;
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("full_name, avatar_url, xn_score")
+            .eq("id", row.user_id)
+            .maybeSingle();
+          const newPost = rowToPost({
+            ...row,
+            profiles: profile ?? undefined,
+          } as FeedPostRow);
+          // Dedupe — local optimistic-insert callers don't append to
+          // posts themselves, but a future caller that does would
+          // otherwise produce a duplicate when realtime echoes back.
+          setPosts((prev) =>
+            prev.some((p) => p.id === newPost.id) ? prev : [newPost, ...prev],
+          );
         }
       )
       .on(

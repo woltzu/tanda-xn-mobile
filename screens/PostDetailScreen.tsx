@@ -15,9 +15,19 @@ import {
   Share,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import {
+  useNavigation,
+  useRoute,
+  useFocusEffect,
+  RouteProp,
+} from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
-import { useFeed, FeedPost, FeedComment } from "../context/FeedContext";
+import {
+  useFeed,
+  rowToPost,
+  FeedPost,
+  FeedComment,
+} from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
 import FeedPostCard from "../components/FeedPostCard";
 import FeedCommentItem from "../components/FeedCommentItem";
@@ -138,9 +148,35 @@ export default function PostDetailScreen() {
     }
   }, [navigation]);
 
-  useEffect(() => {
-    loadPostAndComments();
-  }, [postId]);
+  // VDF Bucket A.4 (2026-06-21) — useFocusEffect replaces useEffect so
+  // a return to this screen (e.g. after navigating away to comment on
+  // another post via the journey timeline's PostDetail.push and then
+  // back) re-reads the post + comments. Pairs with A.1's realtime
+  // feed_comments subscription: realtime catches new comments while
+  // the user is on the screen; the focus refetch catches anything
+  // that landed while they were elsewhere.
+  //
+  // The cancelled flag prevents setState after unmount when the focus
+  // ↔ unfocus transition races the async DB reads.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      (async () => {
+        setIsLoading(true);
+        const [fetchedPost, fetchedComments] = await Promise.all([
+          getPostById(postId),
+          getComments(postId),
+        ]);
+        if (cancelled) return;
+        setPost(fetchedPost);
+        setComments(fetchedComments);
+        setIsLoading(false);
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [postId, getPostById, getComments]),
+  );
 
   // VDF Bucket A.1 (2026-06-21) — Realtime: subscribe to feed_comments
   // INSERTs filtered to this post so a friend's comment appears live
@@ -221,16 +257,8 @@ export default function PostDetailScreen() {
     }
   }, [post?.id, isOwnPost]);
 
-  const loadPostAndComments = async () => {
-    setIsLoading(true);
-    const [fetchedPost, fetchedComments] = await Promise.all([
-      getPostById(postId),
-      getComments(postId),
-    ]);
-    setPost(fetchedPost);
-    setComments(fetchedComments);
-    setIsLoading(false);
-  };
+  // loadPostAndComments was inlined into the useFocusEffect above
+  // (VDF A.4) so the cancelled-flag guard sits with the async work.
 
   // Fetch all posts by this user related to the same goal/circle
   const fetchJourneyPosts = async () => {
@@ -251,26 +279,12 @@ export default function PostDetailScreen() {
         .order("created_at", { ascending: false })
         .limit(50);
 
+      // VDF Bucket A.6 (2026-06-21) — single source of truth. Was an
+      // inline snake_case → camelCase mapping that drifted from
+      // FeedContext.rowToPost and silently dropped hashtags +
+      // imageUploadStatus.
       if (data && data.length > 0) {
-        const posts: FeedPost[] = data.map((row: any) => ({
-          id: row.id,
-          userId: row.user_id,
-          type: row.type,
-          content: row.content,
-          imageUrl: row.image_url || undefined,
-          amount: row.amount || undefined,
-          currency: row.currency,
-          visibility: row.visibility,
-          relatedId: row.related_id || undefined,
-          relatedType: row.related_type || undefined,
-          metadata: row.metadata || {},
-          likesCount: row.likes_count,
-          commentsCount: row.comments_count,
-          isAuto: row.is_auto,
-          createdAt: row.created_at,
-          authorName: row.profiles?.full_name || "Anonymous",
-          authorAvatar: row.profiles?.avatar_url || undefined,
-        }));
+        const posts: FeedPost[] = data.map((row: any) => rowToPost(row));
         setJourneyPosts(posts);
       }
     } catch (err) {
@@ -287,8 +301,12 @@ export default function PostDetailScreen() {
       setComments((prev) => [...prev, newComment]);
       setCommentText("");
       showToast(isOwnPost ? "Comment added!" : "Commitment posted!", "success");
-      const updatedPost = await getPostById(postId);
-      if (updatedPost) setPost(updatedPost);
+      // VDF Bucket A.4 — the explicit getPostById refetch here was
+      // needed to sync commentsCount after the optimistic addComment.
+      // A.1's realtime feed_comments subscription + the focus refetch
+      // both cover that ground now; the comment-count bump comes from
+      // PostDetail's local +1 in the realtime handler so dropping
+      // this round-trip keeps the count fresh without an extra read.
     } catch (err) {
       showToast("Failed to add comment", "error");
       Alert.alert(t("post_detail.alert_error_title"), t("post_detail.alert_failed_add_comment"));

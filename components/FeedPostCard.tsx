@@ -527,14 +527,12 @@ export default function FeedPostCard({
         </View>
       )}
 
-      {/* Hashtags */}
-      {meta.hashtags && meta.hashtags.length > 0 && (
-        <View style={styles.hashtagsRow}>
-          {meta.hashtags.map((tag: string, idx: number) => (
-            <Text key={idx} style={styles.hashtagText}>#{tag}</Text>
-          ))}
-        </View>
-      )}
+      {/* VDF Bucket A.7 (2026-06-21) — legacy `meta.hashtags` render
+          dropped. The trigger-maintained `post.hashtags` column is
+          the single source of truth and is rendered as chips above.
+          Two style blocks named `hashtagsRow` used to silently
+          shadow each other; the second one + the matching
+          `hashtagText` style were removed below. */}
 
       {/* Support CTA */}
       {(hasGoalProgress || hasCircleProgress) && !isOwnPost && onSupport && (
@@ -1094,17 +1092,10 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: colors.textSecondary,
   },
-  hashtagsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-    marginBottom: spacing.sm,
-  },
-  hashtagText: {
-    fontSize: typography.caption,
-    color: colors.accentTeal,
-    fontWeight: typography.semibold as any,
-  },
+  // VDF A.7 — duplicate `hashtagsRow` + `hashtagText` styles removed.
+  // The remaining chip styles `hashtagsRow` / `hashtagChip` /
+  // `hashtagChipText` (defined further up) drive the single
+  // post.hashtags render path.
   supportCTA: {
     flexDirection: "row",
     alignItems: "center",
