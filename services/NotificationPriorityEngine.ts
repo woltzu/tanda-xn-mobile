@@ -600,6 +600,40 @@ export class NotificationPriorityEngine {
     }
   }
 
+  /**
+   * Substitution Visibility Bucket C — map the notifications.type values
+   * emitted by migration 208's notify_substitution_state_change trigger
+   * onto the abstract NotificationType. All substitution states land in
+   * payment_critical: each one carries a hard 48 h / 24 h deadline OR
+   * announces a settled change that directly affects who is in the
+   * payout rotation.
+   *
+   * Both the actual DB types AND the spec's labels are mapped, so the
+   * dispatcher routes correctly regardless of which set of names a
+   * future trigger ends up emitting:
+   *
+   *   actual (migration 208)            | spec literal
+   *   ----------------------------------|---------------------
+   *   substitution_offer                | substitution_offered
+   *   substitution_admin_pending        | (same)
+   *   substitution_completed            | substitution_approved
+   *   substitution_declined             | (same) + substitution_expired
+   */
+  static categoryForSubstitutionNotification(dbType: string): NotificationType | null {
+    switch (dbType) {
+      case "substitution_offer":
+      case "substitution_offered":
+      case "substitution_admin_pending":
+      case "substitution_completed":
+      case "substitution_approved":
+      case "substitution_declined":
+      case "substitution_expired":
+        return "payment_critical";
+      default:
+        return null;
+    }
+  }
+
   /** Time sensitivity: closer deadline = higher score. */
   private static calculateTimeSensitivity(data: Record<string, any>): number {
     const hoursUntilDue = data.hours_until_due ?? data.hoursUntilDue;

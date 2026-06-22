@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, RefreshControl,
@@ -36,6 +36,8 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { useAdminSubstitutionQueue } from "../hooks/useSubstituteMember";
 import { Routes } from "../lib/routes";
+// Substitution Visibility C.2 — telemetry on the new surfaces.
+import { useEventTracker } from "../hooks/useEventTracker";
 
 type RouteParams = { circleId: string; cycleId: string };
 
@@ -196,6 +198,25 @@ export default function CycleDetailScreen() {
   // the user isn't an admin anywhere or there are no admin_pending rows.
   const { user } = useAuth();
   const { items: adminQueue } = useAdminSubstitutionQueue(user?.id);
+  // Substitution Visibility C.2 — telemetry. Ref-guarded one-shot fires
+  // when this cycle has at least one active substitution row (any state).
+  const { track } = useEventTracker();
+  const subsTimelineViewedRef = useRef(false);
+  useEffect(() => {
+    if (subsTimelineViewedRef.current) return;
+    if (substitutionRows.length === 0) return;
+    subsTimelineViewedRef.current = true;
+    track({
+      eventType: "substitution.timeline_card_viewed",
+      eventCategory: "circle" as any,
+      eventAction: "viewed",
+      eventValue: {
+        cycle_id: cycleId,
+        circle_id: circleId,
+        active_count: substitutionRows.length,
+      },
+    });
+  }, [substitutionRows, track, cycleId, circleId]);
 
   // ── Substitution Visibility B.2 — explainer modal state ───────────────
   // Tapping a member row with an active substitution opens a small
@@ -294,7 +315,16 @@ export default function CycleDetailScreen() {
               substitutions. */}
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => setHelpOpen(true)}
+            onPress={() => {
+              setHelpOpen(true);
+              // Substitution Visibility C.2 — help_opened.
+              track({
+                eventType: "substitution.help_opened",
+                eventCategory: "circle" as any,
+                eventAction: "opened",
+                eventValue: { cycle_id: cycleId, circle_id: circleId },
+              });
+            }}
             accessibilityRole="button"
             accessibilityLabel={t("cycle_timeline.help_substitution_title")}
           >
@@ -387,7 +417,17 @@ export default function CycleDetailScreen() {
         {substituteBannerVisible && (
           <TouchableOpacity
             style={[styles.actionBanner, styles.actionBannerSubstitute]}
-            onPress={() => navigation.navigate(Routes.SubstitutePool as any)}
+            onPress={() => {
+              // Substitution Visibility C.2 — action_banner_tapped (substitute).
+              track({
+                eventType: "substitution.action_banner_tapped",
+                eventCategory: "circle" as any,
+                eventAction: "tapped",
+                eventLabel: "substitute",
+                eventValue: { cycle_id: cycleId, circle_id: circleId },
+              });
+              navigation.navigate(Routes.SubstitutePool as any);
+            }}
             accessibilityRole="button"
           >
             <Ionicons name="person-add-outline" size={22} color="#1E3A8A" />
@@ -408,7 +448,17 @@ export default function CycleDetailScreen() {
         {adminBannerVisible && (
           <TouchableOpacity
             style={[styles.actionBanner, styles.actionBannerAdmin]}
-            onPress={() => navigation.navigate(Routes.SubstitutePool as any)}
+            onPress={() => {
+              // Substitution Visibility C.2 — action_banner_tapped (admin).
+              track({
+                eventType: "substitution.action_banner_tapped",
+                eventCategory: "circle" as any,
+                eventAction: "tapped",
+                eventLabel: "admin",
+                eventValue: { cycle_id: cycleId, circle_id: circleId },
+              });
+              navigation.navigate(Routes.SubstitutePool as any);
+            }}
             accessibilityRole="button"
           >
             <Ionicons name="shield-checkmark-outline" size={22} color="#A16207" />
@@ -461,7 +511,21 @@ export default function CycleDetailScreen() {
             const RowWrapper: any = sub ? TouchableOpacity : View;
             const rowProps = sub
               ? {
-                  onPress: () => setExplainerSub(sub),
+                  onPress: () => {
+                    setExplainerSub(sub);
+                    // Substitution Visibility C.2 — explainer_opened.
+                    track({
+                      eventType: "substitution.explainer_opened",
+                      eventCategory: "circle" as any,
+                      eventAction: "opened",
+                      eventLabel: sub.status,
+                      eventValue: {
+                        cycle_id: cycleId,
+                        circle_id: circleId,
+                        substitution_id: sub.substitution_id,
+                      },
+                    });
+                  },
                   accessibilityRole: "button" as const,
                   accessibilityLabel: t(
                     "cycle_timeline.substitution_explainer_title",
