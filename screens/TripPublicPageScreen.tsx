@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import { showToast } from "../components/Toast";
 import { TripOrganizerEngine } from "../services/TripOrganizerEngine";
 import { generateTripShareUrl } from "../lib/deepLinking";
 import { TripShareSheet } from "../components/TripShareSheet";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const HERO_HEIGHT = 420;
@@ -138,6 +139,7 @@ const TripPublicPageScreen: React.FC = () => {
   const hookResult = usePublicTrip(slug, tripId);
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { track } = useEventTracker();
   const rawTrip = hookResult?.trip;
   // Publish-trip Bucket A.4 — Join state. We block double-taps and reflect
   // the in-flight call status in the sticky CTA label.
@@ -296,6 +298,16 @@ const TripPublicPageScreen: React.FC = () => {
   //   • toast on success / waitlist / error,
   //   • navigate to MyTripStatus only after the row exists.
   const handleJoin = async () => {
+    // Publish-trip Bucket C.1 — fire `trip.join_attempted` before any
+    // validation so we can measure the funnel drop-off between
+    // page_viewed → join_attempted → joined.
+    track({
+      eventType: 'trip.join_attempted',
+      eventCategory: 'cross_border',
+      eventAction: 'submit',
+      eventLabel: 'trip_join_cta',
+      eventValue: { trip_id: resolvedTripId || null, slug },
+    });
     if (!resolvedTripId) {
       showToast(t('trip.join_error'), 'error');
       return;
@@ -313,6 +325,20 @@ const TripPublicPageScreen: React.FC = () => {
     setJoining(true);
     try {
       const participant = await TripOrganizerEngine.registerForTrip(resolvedTripId, user.id);
+      // Publish-trip Bucket C.1 — `trip.joined` on success. Waitlist is
+      // a separate user intent ("interested but couldn't") so we mark it
+      // with `was_waitlist=true` rather than minting a different event.
+      track({
+        eventType: 'trip.joined',
+        eventCategory: 'cross_border',
+        eventAction: 'success',
+        eventLabel: participant.status === 'waitlist' ? 'waitlist' : 'confirmed',
+        eventValue: {
+          trip_id: resolvedTripId,
+          slug,
+          was_waitlist: participant.status === 'waitlist',
+        },
+      });
       if (participant.status === 'waitlist') {
         showToast(t('trip.waitlist_success'), 'success');
       } else {
@@ -326,6 +352,27 @@ const TripPublicPageScreen: React.FC = () => {
       setJoining(false);
     }
   };
+
+  // Publish-trip Bucket C.1 — `trip.public_page_viewed` fires once per
+  // logical visit. Gated on `rawTrip` so we wait for the hook to resolve
+  // and capture the real `is_organizer` flag instead of guessing while
+  // organizerId is still null.
+  const pageViewFiredRef = useRef(false);
+  useEffect(() => {
+    if (!rawTrip || pageViewFiredRef.current) return;
+    pageViewFiredRef.current = true;
+    track({
+      eventType: 'trip.public_page_viewed',
+      eventCategory: 'cross_border',
+      eventAction: 'view',
+      eventLabel: 'trip_public_page',
+      eventValue: {
+        trip_id: rawTrip.id,
+        slug: rawTrip.slug ?? slug,
+        is_organizer: isOrganizer,
+      },
+    });
+  }, [rawTrip, isOrganizer, slug, track]);
 
   // Publish-trip Bucket B.6 — guard divide-by-zero when totalSpots isn't
   // set on the trip; the bar collapses to 0% instead of NaN%.
@@ -647,6 +694,7 @@ const TripPublicPageScreen: React.FC = () => {
         tripName={trip.name}
         destination={trip.destination}
         startDate={(rawTrip as any)?.startDate ?? null}
+        tripId={resolvedTripId || null}
       />
     </SafeAreaView>
   );

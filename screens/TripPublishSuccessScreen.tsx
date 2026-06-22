@@ -161,6 +161,7 @@ const TripPublishSuccessScreen: React.FC = () => {
         tripName={tripName}
         destination={destination}
         startDate={startDate || null}
+        tripId={hasTripId ? tripId : null}
       />
 
       {/* Publish-trip Bucket B.7 — local HelpSheet. */}

@@ -3422,6 +3422,8 @@
     "notification_payment_late_body": "Your payment of ${{amount}} for {{trip_name}} is now overdue.",
     "notification_itinerary_updated_title": "Itinerary updated",
     "notification_itinerary_updated_body": "The itinerary for {{trip_name}} has been updated.",
+    "notification_update_posted_title": "Trip update: {{trip_name}}",
+    "notification_update_posted_body": "{{sender_name}} posted: {{preview}}",
     "joined_success": "You've joined the trip!",
     "waitlist_success": "Added to the waitlist. We'll let you know when a spot opens.",
     "join_error": "Could not join the trip. Please try again.",

@@ -18,7 +18,7 @@
 // full URL with hashtags).
 // ══════════════════════════════════════════════════════════════════════════
 
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -36,6 +36,7 @@ import * as Clipboard from 'expo-clipboard';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { generateTripShareUrl } from '../lib/deepLinking';
 import { showToast } from './Toast';
+import { useEventTracker } from '../hooks/useEventTracker';
 
 const NAVY = '#0A2342';
 
@@ -65,6 +66,11 @@ interface TripShareSheetProps {
   destination: string;
   // ISO date string; passed through to template variables.
   startDate?: string | null;
+  // Publish-trip Bucket C.1 — tripId is optional in this prop list because
+  // some entry points (the public page without tripId in the route) still
+  // open the sheet purely from slug. When present, every telemetry event
+  // gets enriched with it so funnel analytics can join back to the trip.
+  tripId?: string | null;
 }
 
 export function TripShareSheet({
@@ -74,8 +80,43 @@ export function TripShareSheet({
   tripName,
   destination,
   startDate,
+  tripId,
 }: TripShareSheetProps) {
   const { t } = useTranslation();
+  const { track } = useEventTracker();
+
+  // Publish-trip Bucket C.1 — fire `trip.share_opened` exactly once per
+  // visible->hidden cycle. The Modal mounts even when hidden, so we gate
+  // on `visible` changing to true and reset when it flips false.
+  const openedFiredRef = useRef(false);
+  useEffect(() => {
+    if (visible && !openedFiredRef.current) {
+      openedFiredRef.current = true;
+      track({
+        eventType: 'trip.share_opened',
+        eventCategory: 'cross_border',
+        eventAction: 'open',
+        eventLabel: 'trip_share_sheet',
+        eventValue: { trip_id: tripId ?? null, slug: slug ?? null },
+      });
+    }
+    if (!visible) {
+      openedFiredRef.current = false;
+    }
+  }, [visible, tripId, slug, track]);
+
+  // Telemetry helper for channel taps. Fires before the channel-specific
+  // handler runs so we capture the user intent even if the deep-link/
+  // web-intent fallback throws.
+  const trackChannel = (channel: Channel) => {
+    track({
+      eventType: 'trip.share_channel_selected',
+      eventCategory: 'cross_border',
+      eventAction: 'select',
+      eventLabel: channel,
+      eventValue: { trip_id: tripId ?? null, slug: slug ?? null, channel },
+    });
+  };
 
   // Generate the canonical share URL once per render. generateTripShareUrl
   // emits the singular `/trip/<slug>` form (Bucket A.1) so all channels
@@ -101,6 +142,7 @@ export function TripShareSheet({
 
   const handleCopy = async () => {
     if (!shareUrl) return;
+    trackChannel('copy');
     try {
       await Clipboard.setStringAsync(shareUrl);
       showToast(t('trip.share_copy_success'), 'success');
@@ -134,6 +176,7 @@ export function TripShareSheet({
   };
 
   const handleInstagram = () => {
+    trackChannel('instagram');
     const msg = messageFor('instagram');
     // Instagram doesn't support a public web share intent; the deep link
     // opens the Stories composer. If the app isn't installed, route to
@@ -146,6 +189,7 @@ export function TripShareSheet({
   };
 
   const handleTikTok = () => {
+    trackChannel('tiktok');
     const msg = messageFor('tiktok');
     return openWithFallback(
       `tiktok://share?text=${encodeURIComponent(msg)}`,
@@ -155,6 +199,7 @@ export function TripShareSheet({
   };
 
   const handleX = () => {
+    trackChannel('x');
     const msg = messageFor('x');
     return openWithFallback(
       `twitter://post?message=${encodeURIComponent(msg)}`,
@@ -164,6 +209,7 @@ export function TripShareSheet({
   };
 
   const handleFacebook = () => {
+    trackChannel('facebook');
     const msg = messageFor('facebook');
     // Facebook's `quote` parameter is only honoured when a real URL is
     // also passed via `u`. We pass both so the share dialog pre-fills
@@ -176,6 +222,7 @@ export function TripShareSheet({
   };
 
   const handleMore = async () => {
+    trackChannel('more');
     try {
       await Share.share({
         message: messageFor('more'),

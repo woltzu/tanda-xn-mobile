@@ -41,6 +41,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTripDashboard, useItineraryBuilder } from '../hooks/useTripOrganizer';
 import { supabase } from '../lib/supabase';
 import { showToast } from '../components/Toast';
+import { useEventTracker } from '../hooks/useEventTracker';
 
 const NAVY = '#0A2342';
 const TEAL = '#00C6AE';
@@ -89,6 +90,22 @@ const TripUpdatesScreen: React.FC = () => {
   const [profiles, setProfiles] = useState<Record<string, ProfileLite>>({});
   const [composer, setComposer] = useState(prefilledMessage);
   const [sending, setSending] = useState(false);
+
+  // Publish-trip Bucket C.1 — telemetry. `update_viewed` fires once on
+  // mount per session; `update_posted` fires after a successful send.
+  const { track } = useEventTracker();
+  const viewFiredRef = useRef(false);
+  useEffect(() => {
+    if (!tripId || viewFiredRef.current) return;
+    viewFiredRef.current = true;
+    track({
+      eventType: 'trip.update_viewed',
+      eventCategory: 'cross_border',
+      eventAction: 'view',
+      eventLabel: 'trip_updates_screen',
+      eventValue: { trip_id: tripId },
+    });
+  }, [tripId, track]);
 
   // Initial fetch + realtime subscribe.
   useEffect(() => {
@@ -180,13 +197,26 @@ const TripUpdatesScreen: React.FC = () => {
       // Realtime will deliver the row; clear the composer either way.
       setComposer('');
       showToast(t('trip_updates.send_success'), 'success');
+      // Publish-trip Bucket C.1 — fire after the engine returns so we
+      // only count durable posts (no optimistic-but-failed inserts).
+      track({
+        eventType: 'trip.update_posted',
+        eventCategory: 'cross_border',
+        eventAction: 'submit',
+        eventLabel: initialActivityId ? 'activity_update' : 'broadcast_update',
+        eventValue: {
+          trip_id: tripId,
+          has_activity: !!initialActivityId,
+          message_length: body.length,
+        },
+      });
     } catch (err: any) {
       console.warn('[TripUpdatesScreen] send failed:', err);
       showToast(err?.message || t('trip_updates.send_error'), 'error');
     } finally {
       setSending(false);
     }
-  }, [composer, user?.id, tripId, initialActivityId, t]);
+  }, [composer, user?.id, tripId, initialActivityId, t, track]);
 
   const renderActivityChip = (activityId: string | null) => {
     if (!activityId) return null;

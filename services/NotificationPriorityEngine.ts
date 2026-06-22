@@ -653,6 +653,11 @@ export class NotificationPriorityEngine {
       case "trip_published":
       case "trip_participant_joined":
       case "trip_itinerary_updated":
+      // Publish-trip Bucket C.4 — broadcast updates are informational
+      // nudges from the organizer to the travellers. Same priority bucket
+      // as itinerary-updated; no immediate dollar impact, but high-value
+      // context the user wants in their daily digest, not on push.
+      case "trip_update_posted":
         return "coaching_goals";
       default:
         return null;

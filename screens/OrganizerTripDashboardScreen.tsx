@@ -311,6 +311,7 @@ const OrganizerTripDashboardScreen: React.FC = () => {
         tripName={data.trip_name}
         destination={data.destination}
         startDate={data.start_date || null}
+        tripId={tripId || null}
       />
     </SafeAreaView>
   );
