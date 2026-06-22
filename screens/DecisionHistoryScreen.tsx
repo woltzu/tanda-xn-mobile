@@ -28,7 +28,7 @@ import {
   SafeAreaView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -149,10 +149,20 @@ function fmtDate(iso: string): string {
 
 export default function DecisionHistoryScreen() {
   const navigation = useNavigation();
+  const route = useRoute();
   const { t } = useTranslation();
   const { user } = useAuth();
+  // payout_position Bucket C.5 — accept an initialDecisionType seed via
+  // route params so callers (e.g. CirclesV2Screen "View AI decision" CTA)
+  // can land here pre-filtered to a specific decision_type. Undefined →
+  // default 'all', same as before this param existed.
+  const initialDecisionType =
+    ((route.params as any)?.initialDecisionType as DecisionType | undefined) ??
+    undefined;
   const [windowFilter, setWindowFilter] = useState<Window>("30d");
-  const [typeFilter, setTypeFilter] = useState<DecisionType | "all">("all");
+  const [typeFilter, setTypeFilter] = useState<DecisionType | "all">(
+    initialDecisionType ?? "all",
+  );
   const [refreshing, setRefreshing] = useState(false);
 
   const filters = useMemo(() => {

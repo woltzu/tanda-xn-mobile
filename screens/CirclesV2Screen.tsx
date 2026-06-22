@@ -390,6 +390,28 @@ export default function CirclesV2Screen() {
   const payoutPositionCircleId = myCircles[0]?.id;
   const payoutPosition = useMyPayoutPosition(payoutPositionCircleId);
 
+  // payout_position Bucket C.1 — one-shot 'payout_position.viewed' the
+  // first time we render the assigned pill. We DON'T fire on 'pending'
+  // or 'none' because the goal is to measure "users who saw their real
+  // position," not "users who landed on the screen." Ref-guarded so it
+  // can't double-fire if the hook re-resolves.
+  const hasTrackedPositionViewedRef = useRef(false);
+  useEffect(() => {
+    if (hasTrackedPositionViewedRef.current) return;
+    if (payoutPosition.kind !== "assigned") return;
+    hasTrackedPositionViewedRef.current = true;
+    track({
+      eventType: "payout_position.viewed",
+      eventCategory: "circle" as any,
+      eventAction: "viewed",
+      eventValue: {
+        position: payoutPosition.position,
+        total: payoutPosition.total,
+        circle_id: payoutPositionCircleId,
+      },
+    });
+  }, [payoutPosition, payoutPositionCircleId, track]);
+
   // payout_position Bucket B.2 — inline explainer sheet for "How positions
   // are decided." Mirrors the InsurancePool / PartialContribution Bucket B
   // pattern. No full HelpSheet rebuild on CircleDetailScreen for now.
@@ -422,7 +444,14 @@ export default function CirclesV2Screen() {
   const dismissPositionCoach = useCallback(() => {
     setPositionCoachVisible(false);
     AsyncStorage.setItem(POSITION_COACH_KEY, "1").catch(() => undefined);
-  }, []);
+    // payout_position Bucket C.4 — fires on both 4 s auto-dismiss and
+    // tap-dismiss since both paths flow through this callback.
+    track({
+      eventType: "payout_position.coach_dismissed",
+      eventCategory: "circle" as any,
+      eventAction: "dismissed",
+    });
+  }, [track]);
   useEffect(() => {
     if (!positionCoachVisible) return;
     const id = setTimeout(() => dismissPositionCoach(), 4000);
@@ -939,7 +968,15 @@ export default function CirclesV2Screen() {
               card without needing a new ⓘ prop on FeatureCardProps. */}
           <TouchableOpacity
             style={styles.positionHelpRow}
-            onPress={() => setPositionHelpOpen(true)}
+            onPress={() => {
+              setPositionHelpOpen(true);
+              // payout_position Bucket C.3 — help_opened.
+              track({
+                eventType: "payout_position.help_opened",
+                eventCategory: "circle" as any,
+                eventAction: "opened",
+              });
+            }}
             accessibilityRole="button"
             accessibilityLabel={t("circles_screen.payout_help_open")}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -953,6 +990,39 @@ export default function CirclesV2Screen() {
               {t("circles_screen.payout_help_open")}
             </Text>
           </TouchableOpacity>
+          {/* payout_position Bucket C.2 + C.5 — "View AI decision" CTA
+              renders only when the user has an assigned position (the
+              row only makes sense once a decision exists). Navigates to
+              DecisionHistory pre-filtered to decision_type='payout_position'
+              via the route-param seed added to DecisionHistoryScreen. */}
+          {payoutPosition.kind === "assigned" && (
+            <TouchableOpacity
+              style={styles.positionHelpRow}
+              onPress={() => {
+                track({
+                  eventType: "payout_position.ai_decision_viewed",
+                  eventCategory: "circle" as any,
+                  eventAction: "opened",
+                  eventValue: { circle_id: payoutPositionCircleId },
+                });
+                navigation.navigate(Routes.DecisionHistory, {
+                  initialDecisionType: "payout_position",
+                } as any);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={t("circles_screen.payout_view_ai_decision")}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons
+                name="sparkles-outline"
+                size={14}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.positionHelpRowText}>
+                {t("circles_screen.payout_view_ai_decision")}
+              </Text>
+            </TouchableOpacity>
+          )}
         </FeatureCard>
 
         {/* ----- Partial Contribution ----- */}

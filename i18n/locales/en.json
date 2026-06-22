@@ -7873,6 +7873,7 @@
     "payout_help_body": "When your circle is full, each member is assigned a number from 1 to N. The lowest numbers get paid out first; later numbers wait longer cycles. Default ordering is the order people joined, but your circle organiser can run an AI optimisation that re-orders by fairness and stability signals. You can also swap your position with another member who agrees.",
     "payout_coach_position": "Your payout position determines when you receive your share. Lower numbers get paid earlier in each cycle.",
     "payout_coach_dismiss": "Dismiss",
+    "payout_view_ai_decision": "View AI decision",
     "partial_title": "Partial Contribution",
     "partial_description": "Pay part of your contribution now and split the rest over the next two cycles.",
     "partial_per_circle_label": "PER-CIRCLE RULES",
