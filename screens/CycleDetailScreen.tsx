@@ -19,6 +19,15 @@ import type {
 import type {
   ContributionStatus,
 } from "../services/CycleProgressionEngine";
+// Substitution Visibility A.3 — overlay active substitution_records rows
+// (pending_confirmation / confirmed / admin_pending) onto the per-member
+// contribution list so members + admins see in-flight substitutions in
+// the natural cycle-context flow instead of needing to navigate to
+// SubstitutePoolScreen.
+import {
+  useCycleSubstitutions,
+  type CycleSubstitutionRow,
+} from "../hooks/useCycleSubstitutions";
 
 type RouteParams = { circleId: string; cycleId: string };
 
@@ -153,6 +162,24 @@ export default function CycleDetailScreen() {
   const { contributions, loading: contribLoading, error: contribError } = useCycleContributions(cycleId);
   const { events, loading: eventsLoading } = useCycleEvents(cycleId, 30);
   const { summary } = useCycleStatusSummary(cycleId);
+  // Substitution Visibility A.3 — fetch non-terminal substitutions for this
+  // cycle (migration 235). Returned rows are keyed off
+  // entry_cycle_id = p_cycle_id and limited to pending_confirmation /
+  // confirmed / admin_pending. Empty array when no in-flight subs exist.
+  const { rows: substitutionRows } = useCycleSubstitutions(cycleId);
+  // Build a Map<exiting_member_id → substitution_row> for O(1) lookup
+  // inside the per-member render. exiting_member_id is the original
+  // circle_members.user_id, which is what `contributions[].user_id`
+  // already carries — so matching is direct.
+  const substitutionByExitingMember = useMemo<
+    Map<string, CycleSubstitutionRow>
+  >(() => {
+    const m = new Map<string, CycleSubstitutionRow>();
+    for (const row of substitutionRows) {
+      m.set(row.exiting_member_id, row);
+    }
+    return m;
+  }, [substitutionRows]);
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
@@ -306,6 +333,19 @@ export default function CycleDetailScreen() {
               member.contributed_amount && Number(member.contributed_amount) > 0
                 ? member.contributed_amount
                 : (member.expected_amount ?? cycle.circle?.contribution_amount ?? 0);
+            // Substitution Visibility A.3 — pull the active sub row for
+            // this original member (if any). Colour palette per actor:
+            //   pending_confirmation → amber (substitute's 48 h clock)
+            //   confirmed            → blue  (trigger-only flip pending)
+            //   admin_pending        → red   (admin's 24 h clock)
+            const sub = substitutionByExitingMember.get(member.user_id);
+            const subColors = !sub
+              ? null
+              : sub.status === "admin_pending"
+                ? { bg: `${COLORS.red}15`, fg: "#991B1B", border: COLORS.red }
+                : sub.status === "pending_confirmation"
+                  ? { bg: `${COLORS.yellow}15`, fg: "#A16207", border: COLORS.yellow }
+                  : { bg: `${COLORS.blue}15`, fg: "#1E3A8A", border: COLORS.blue };
             return (
               <View key={member.id ?? i} style={styles.memberCard}>
                 <View style={[styles.statusIcon, { backgroundColor: meta.bg }]}>
@@ -320,6 +360,43 @@ export default function CycleDetailScreen() {
                       {t(meta.labelKey)}
                     </Text>
                   </View>
+                  {sub && subColors && (
+                    <View
+                      style={[
+                        styles.substitutionBadge,
+                        {
+                          backgroundColor: subColors.bg,
+                          borderColor: subColors.border,
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name="swap-horizontal-outline"
+                        size={12}
+                        color={subColors.fg}
+                      />
+                      <Text
+                        style={[styles.substitutionBadgeText, { color: subColors.fg }]}
+                        numberOfLines={2}
+                      >
+                        {t(`cycle_timeline.substitution_${sub.status}`, {
+                          substitute: sub.substitute_member_name,
+                        })}
+                      </Text>
+                      {sub.hours_remaining_for_actor != null && (
+                        <Text
+                          style={[
+                            styles.substitutionCountdown,
+                            { color: subColors.fg },
+                          ]}
+                        >
+                          {t("cycle_timeline.substitution_hours_left", {
+                            count: sub.hours_remaining_for_actor,
+                          })}
+                        </Text>
+                      )}
+                    </View>
+                  )}
                 </View>
                 <Text style={styles.memberAmount}>{formatDollars(amount)}</Text>
               </View>
@@ -478,4 +555,28 @@ const styles = StyleSheet.create({
   eventType: { fontSize: 13, fontWeight: "600", color: COLORS.navy, textTransform: "capitalize" },
   eventMeta: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
   eventAmount: { fontSize: 13, fontWeight: "700", color: COLORS.teal },
+
+  // Substitution Visibility A.3 — overlay badge under the member status pill
+  substitutionBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+  },
+  substitutionBadgeText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  substitutionCountdown: {
+    fontSize: 11,
+    fontWeight: "700",
+    marginLeft: 4,
+  },
 });
