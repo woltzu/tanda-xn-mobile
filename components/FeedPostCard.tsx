@@ -14,6 +14,7 @@ import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { FeedPost, FeedPostType } from "../context/FeedContext";
+import { useEventTracker } from "../hooks/useEventTracker";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import VideoPlayer from "./VideoPlayer";
 import ReportButton from "./ReportButton";
@@ -100,7 +101,78 @@ export default function FeedPostCard({
   onRetryUpload,
 }: FeedPostCardProps) {
   const { t } = useTranslation();
+  const { track } = useEventTracker();
   const config = POST_TYPE_CONFIG[post.type] || POST_TYPE_CONFIG.dream;
+
+  // VDF Bucket C.2 — telemetry wrappers around the prop callbacks.
+  // The card is rendered everywhere in the feed surfaces (feed list,
+  // PostDetail, UserDreamProfile) so the events fire wherever the
+  // user actually interacts with a post.
+  const trackedOnLike = () => {
+    track({
+      eventType: isLiked ? "dream_feed.unliked" : "dream_feed.liked",
+      eventCategory: "dream_feed",
+      eventAction: isLiked ? "unliked" : "liked",
+      eventValue: { post_id: post.id, target: "like" },
+    });
+    onLike(post.id);
+  };
+  const trackedOnSave = () => {
+    if (!onSave) return;
+    track({
+      eventType: isSaved ? "dream_feed.unsaved" : "dream_feed.saved",
+      eventCategory: "dream_feed",
+      eventAction: isSaved ? "unsaved" : "saved",
+      eventValue: { post_id: post.id },
+    });
+    onSave(post.id);
+  };
+  const trackedOnSupport = () => {
+    if (!onSupport) return;
+    const meta = post.metadata || {};
+    const kind: "circle" | "goal" | "none" =
+      meta.circleId || meta.circleName
+        ? "circle"
+        : meta.goalName
+          ? "goal"
+          : "none";
+    track({
+      eventType: "dream_feed.support_tapped",
+      eventCategory: "dream_feed",
+      eventAction: "support_tapped",
+      eventLabel: kind,
+      eventValue: { post_id: post.id, kind },
+    });
+    onSupport(post);
+  };
+  const trackedOnClone = () => {
+    if (!onClonePlan) return;
+    track({
+      eventType: "dream_feed.clone_tapped",
+      eventCategory: "dream_feed",
+      eventAction: "clone_tapped",
+      eventValue: { post_id: post.id },
+    });
+    onClonePlan(post);
+  };
+  const trackedOnShare = () => {
+    if (!onAccountability) return;
+    track({
+      eventType: "dream_feed.share_tapped",
+      eventCategory: "dream_feed",
+      eventAction: "share_tapped",
+      eventValue: { post_id: post.id },
+    });
+    onAccountability(post);
+  };
+  const trackedOnReportOpen = () => {
+    track({
+      eventType: "dream_feed.report_tapped",
+      eventCategory: "dream_feed",
+      eventAction: "report_tapped",
+      eventValue: { post_id: post.id },
+    });
+  };
   const isAnonymous = post.visibility === "anonymous";
   const isOwnPost = post.userId === currentUserId;
   const displayName = isAnonymous && !isOwnPost ? "Anonymous Member" : post.authorName;
@@ -152,7 +224,7 @@ export default function FeedPostCard({
                 reserved for the money flow below. */}
             <TouchableOpacity
               style={styles.sideBtn}
-              onPress={() => onLike(post.id)}
+              onPress={trackedOnLike}
             >
               <View style={[styles.sideBtnCircle, isLiked && { backgroundColor: "rgba(0, 198, 174, 0.3)" }]}>
                 <Ionicons
@@ -188,7 +260,7 @@ export default function FeedPostCard({
             {/* Clone Goal — start a similar dream */}
             <TouchableOpacity
               style={styles.sideBtn}
-              onPress={() => onClonePlan?.(post)}
+              onPress={trackedOnClone}
             >
               <View style={styles.sideBtnCircle}>
                 <Ionicons name="copy-outline" size={22} color="#FFFFFF" />
@@ -202,7 +274,7 @@ export default function FeedPostCard({
             {(hasGoalProgress || hasCircleProgress) && !isOwnPost && onSupport && (
               <TouchableOpacity
                 style={styles.sideBtn}
-                onPress={() => onSupport(post)}
+                onPress={trackedOnSupport}
               >
                 <View style={[styles.sideBtnCircle, { backgroundColor: colors.accentTeal }]}>
                   <Ionicons name="hand-left" size={20} color="#FFFFFF" />
@@ -218,7 +290,7 @@ export default function FeedPostCard({
             {/* Share */}
             <TouchableOpacity
               style={styles.sideBtn}
-              onPress={() => onAccountability?.(post)}
+              onPress={trackedOnShare}
             >
               <View style={styles.sideBtnCircle}>
                 <Ionicons name="arrow-redo" size={20} color="#FFFFFF" />
@@ -232,7 +304,7 @@ export default function FeedPostCard({
             {onSave && (
               <TouchableOpacity
                 style={styles.sideBtn}
-                onPress={() => onSave(post.id)}
+                onPress={trackedOnSave}
               >
                 <View style={[styles.sideBtnCircle, isSaved && { backgroundColor: "rgba(245, 158, 11, 0.3)" }]}>
                   <Ionicons
@@ -258,6 +330,7 @@ export default function FeedPostCard({
                   contentType="dream_post"
                   targetId={post.id}
                   ownerUserId={post.userId}
+                  onOpen={trackedOnReportOpen}
                 />
               </View>
             </View>
@@ -406,6 +479,7 @@ export default function FeedPostCard({
             contentType="dream_post"
             targetId={post.id}
             ownerUserId={post.userId}
+            onOpen={trackedOnReportOpen}
           />
         </View>
       </View>
@@ -575,7 +649,7 @@ export default function FeedPostCard({
       {(hasGoalProgress || hasCircleProgress) && !isOwnPost && onSupport && (
         <TouchableOpacity
           style={styles.supportCTA}
-          onPress={() => onSupport(post)}
+          onPress={trackedOnSupport}
           activeOpacity={0.7}
         >
           <View style={styles.supportIcon}>
@@ -597,7 +671,7 @@ export default function FeedPostCard({
           flow). The icon swaps wallet → heart to make the semantic
           obvious. */}
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.actionButton} onPress={() => onLike(post.id)}>
+        <TouchableOpacity style={styles.actionButton} onPress={trackedOnLike}>
           <Ionicons
             name={isLiked ? "heart" : "heart-outline"}
             size={20}
@@ -621,21 +695,21 @@ export default function FeedPostCard({
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton} onPress={() => onClonePlan?.(post)}>
+        <TouchableOpacity style={styles.actionButton} onPress={trackedOnClone}>
           <Ionicons name="copy-outline" size={18} color={colors.textSecondary} />
           <Text style={styles.actionText}>
             {t("dream_feed.card.clone_goal")}
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.actionButton, { marginRight: spacing.md }]} onPress={() => onAccountability?.(post)}>
+        <TouchableOpacity style={[styles.actionButton, { marginRight: spacing.md }]} onPress={trackedOnShare}>
           <Ionicons name="arrow-redo" size={18} color={colors.textSecondary} />
         </TouchableOpacity>
 
         {onSave && (
           <TouchableOpacity
             style={[styles.actionButton, { marginRight: 0, marginLeft: "auto" }]}
-            onPress={() => onSave(post.id)}
+            onPress={trackedOnSave}
           >
             <Ionicons
               name={isSaved ? "bookmark" : "bookmark-outline"}

@@ -27,6 +27,7 @@ import { useFeed, FeedPost } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
 import { useCircles } from "../context/CirclesContext";
 import { useFilteredFeed, FeedFilter } from "../hooks/useFilteredFeed";
+import { useEventTracker } from "../hooks/useEventTracker";
 import FeedPostCard from "../components/FeedPostCard";
 import { showToast } from "../components/Toast";
 import { uploadToBucket } from "../utils/image";
@@ -72,7 +73,28 @@ export default function DreamFeedScreen() {
     refetchFeed,
     updateDreamPostImage,
     markDreamPostImageFailed,
+    // VDF Bucket C.5 — trending data pool, server-ranked via the
+    // get_trending_dreams RPC.
+    trendingPosts,
+    isLoadingTrending,
+    isLoadingTrendingMore,
+    trendingHasMore,
+    fetchTrendingPosts,
   } = useFeed();
+
+  // VDF Bucket C.1 — telemetry. One-shot mount fire for
+  // dream_feed.viewed; per-action handlers below.
+  const { track } = useEventTracker();
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: "dream_feed.viewed",
+      eventCategory: "dream_feed",
+      eventAction: "viewed",
+    });
+  }, [track]);
 
   // Cache-aware refetch on focus — uses the 5-minute in-memory cache so
   // tab-switching is cheap. Pull-to-refresh still busts the cache via
@@ -187,13 +209,48 @@ export default function DreamFeedScreen() {
   const [activeFilter, setActiveFilter] = useState<FeedFilter>("for_you");
   const filteredPosts = useFilteredFeed(posts, activeFilter, networkUserIds);
 
+  // VDF Bucket C.5 — Trending tab is server-ranked. The other two
+  // tabs (For You / Following) stay on the chronological feed +
+  // useFilteredFeed client filter.
+  const displayedPosts =
+    activeFilter === "trending" ? trendingPosts : filteredPosts;
+  const showTrendingSpinner =
+    activeFilter === "trending" && isLoadingTrending && trendingPosts.length === 0;
+
+  // Initial trending fetch when the user first switches to / lands
+  // on the Trending tab. Subsequent visits skip if data is loaded.
+  useEffect(() => {
+    if (activeFilter !== "trending") return;
+    if (trendingPosts.length > 0) return;
+    fetchTrendingPosts({ reset: true });
+  }, [activeFilter, trendingPosts.length, fetchTrendingPosts]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refreshFeed();
+    // VDF Bucket C.1 — refresh_pulled telemetry.
+    track({
+      eventType: "dream_feed.refresh_pulled",
+      eventCategory: "dream_feed",
+      eventAction: "refresh_pulled",
+      eventLabel: activeFilter,
+    });
+    if (activeFilter === "trending") {
+      await fetchTrendingPosts({ reset: true });
+    } else {
+      await refreshFeed();
+    }
     setRefreshing(false);
-  }, [refreshFeed]);
+  }, [refreshFeed, activeFilter, fetchTrendingPosts, track]);
 
   const handlePostPress = (postId: string) => {
+    // VDF Bucket C.1 — post_opened (card tap).
+    track({
+      eventType: "dream_feed.post_opened",
+      eventCategory: "dream_feed",
+      eventAction: "opened",
+      eventLabel: "card_tap",
+      eventValue: { post_id: postId, source: "card_tap" },
+    });
     navigation.navigate("PostDetail", { postId });
   };
 
@@ -202,6 +259,14 @@ export default function DreamFeedScreen() {
   // routes to PostDetail with focusComment='1' so the input auto-
   // focuses with the keyboard up.
   const handleCommentPress = (postId: string) => {
+    // VDF Bucket C.1 — post_opened (comment tap).
+    track({
+      eventType: "dream_feed.post_opened",
+      eventCategory: "dream_feed",
+      eventAction: "opened",
+      eventLabel: "comment_tap",
+      eventValue: { post_id: postId, source: "comment_tap" },
+    });
     navigation.navigate("PostDetail", { postId, focusComment: "1" });
   };
 
@@ -276,7 +341,53 @@ export default function DreamFeedScreen() {
 
   const handleFilterChange = (filter: FeedFilter) => {
     setActiveFilter(filter);
+    // VDF Bucket C.1 — tab_changed telemetry.
+    track({
+      eventType: "dream_feed.tab_changed",
+      eventCategory: "dream_feed",
+      eventAction: "tab_changed",
+      eventLabel: filter,
+    });
   };
+
+  // VDF Bucket C.1 — scroll_depth telemetry. Debounced at 500 ms;
+  // fires once per quartile crossed (25 / 50 / 75 / 100) per session
+  // for the active filter. A Set tracks crossed milestones so a user
+  // bouncing past 75% doesn't re-fire on the way back.
+  const scrollMilestonesFiredRef = useRef<Set<number>>(new Set());
+  const scrollDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleScroll = useCallback(
+    (e: { nativeEvent: { contentOffset: { y: number }; layoutMeasurement: { height: number }; contentSize: { height: number } } }) => {
+      const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+      const viewable = contentOffset.y + layoutMeasurement.height;
+      const total = Math.max(contentSize.height, 1);
+      const pct = Math.min(100, Math.round((viewable / total) * 100));
+      const bucket =
+        pct >= 100 ? 100 : pct >= 75 ? 75 : pct >= 50 ? 50 : pct >= 25 ? 25 : 0;
+      if (bucket === 0) return;
+      if (scrollMilestonesFiredRef.current.has(bucket)) return;
+      if (scrollDebounceRef.current) {
+        clearTimeout(scrollDebounceRef.current);
+      }
+      scrollDebounceRef.current = setTimeout(() => {
+        if (scrollMilestonesFiredRef.current.has(bucket)) return;
+        scrollMilestonesFiredRef.current.add(bucket);
+        track({
+          eventType: "dream_feed.scroll_depth",
+          eventCategory: "dream_feed",
+          eventAction: "scroll",
+          eventLabel: `${bucket}`,
+          eventValue: { depth: bucket, tab: activeFilter },
+        });
+      }, 500);
+    },
+    [track, activeFilter],
+  );
+  useEffect(() => {
+    return () => {
+      if (scrollDebounceRef.current) clearTimeout(scrollDebounceRef.current);
+    };
+  }, []);
 
   const renderPost = ({ item }: { item: FeedPost }) => (
     <FeedPostCard
@@ -298,7 +409,9 @@ export default function DreamFeedScreen() {
   );
 
   const renderFooter = () => {
-    if (!isLoadingMore) return null;
+    const showMoreSpinner =
+      activeFilter === "trending" ? isLoadingTrendingMore : isLoadingMore;
+    if (!showMoreSpinner) return null;
     return (
       <View style={styles.loadingMore}>
         <ActivityIndicator size="small" color={colors.accentTeal} />
@@ -441,8 +554,8 @@ export default function DreamFeedScreen() {
 
       {/* Feed. VDF Bucket B.6 — cold load renders 3 skeleton cards
           instead of a centred spinner; layout stays stable as data
-          lands. */}
-      {showSkeleton ? (
+          lands. C.5 — trending uses its own loading flag. */}
+      {showSkeleton || showTrendingSpinner ? (
         <View style={styles.skeletonWrap}>
           {[0, 1, 2].map((i) => (
             <FeedSkeletonCard key={i} pulse={skeletonPulse} />
@@ -450,24 +563,25 @@ export default function DreamFeedScreen() {
         </View>
       ) : (
         <FlatList
-          data={filteredPosts}
+          data={displayedPosts}
           renderItem={renderPost}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.feedContent}
           showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={250}
           onEndReached={() => {
-            // VDF Bucket A.9 (2026-06-21) — pagination on all tabs.
-            // The Following + Trending tabs are client-side filters
-            // over the same underlying feed_posts query (see
-            // useFilteredFeed), so the lt-cursor in FeedContext is
-            // shared. Continuing pagination just pulls more raw rows
-            // into the filterable pool; each tab re-applies its
-            // filter to the now-larger slice. The Trending tab
-            // currently ranks by likes within the loaded window —
-            // until A.3's server-side trending score lands, "load
-            // more" simply widens the eligible pool.
-            if (hasMore && !isLoadingMore) {
-              fetchMorePosts();
+            // VDF Bucket C.5 — Trending paginates through the RPC
+            // offset cursor; For You / Following share the
+            // chronological lt-cursor in FeedContext.
+            if (activeFilter === "trending") {
+              if (trendingHasMore && !isLoadingTrendingMore) {
+                fetchTrendingPosts();
+              }
+            } else {
+              if (hasMore && !isLoadingMore) {
+                fetchMorePosts();
+              }
             }
           }}
           onEndReachedThreshold={0.3}

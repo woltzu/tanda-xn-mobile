@@ -220,6 +220,14 @@ type FeedContextType = {
   savedPostIds: Set<string>;
   fetchFeed: () => Promise<void>;
   fetchMorePosts: () => Promise<void>;
+  // VDF Bucket C.5 — server-side trending. Separate state pool from
+  // the chronological `posts` array because the rankings drift hour-
+  // to-hour and the rows aren't necessarily in the For-You window.
+  trendingPosts: FeedPost[];
+  isLoadingTrending: boolean;
+  isLoadingTrendingMore: boolean;
+  trendingHasMore: boolean;
+  fetchTrendingPosts: (opts?: { reset?: boolean }) => Promise<void>;
   createDreamPost: (
     content: string,
     imageUrl?: string,
@@ -286,6 +294,64 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
   const [savedPostIds, setSavedPostIds] = useState<Set<string>>(new Set());
   const profileEnsured = useRef(false);
   const lastCreatedAt = useRef<string | null>(null);
+
+  // VDF Bucket C.5 — trending state pool. Server-ranked via the
+  // get_trending_dreams RPC (migration 230). Pagination is offset-
+  // based since the score order isn't a stable cursor (a post that
+  // jumped 5 ranks between fetches would otherwise repeat).
+  const TRENDING_PAGE_SIZE = 20;
+  const [trendingPosts, setTrendingPosts] = useState<FeedPost[]>([]);
+  const [isLoadingTrending, setIsLoadingTrending] = useState(false);
+  const [isLoadingTrendingMore, setIsLoadingTrendingMore] = useState(false);
+  const [trendingHasMore, setTrendingHasMore] = useState(true);
+  const trendingOffsetRef = useRef(0);
+
+  const fetchTrendingPosts = useCallback(
+    async (opts?: { reset?: boolean }) => {
+      const reset = opts?.reset === true;
+      if (!session) return;
+      if (reset) {
+        trendingOffsetRef.current = 0;
+        setTrendingHasMore(true);
+        setIsLoadingTrending(true);
+      } else {
+        if (!trendingHasMore || isLoadingTrendingMore) return;
+        setIsLoadingTrendingMore(true);
+      }
+      try {
+        const { data, error: rpcErr } = await supabase.rpc(
+          "get_trending_dreams",
+          {
+            p_limit: TRENDING_PAGE_SIZE,
+            p_offset: trendingOffsetRef.current,
+          },
+        );
+        if (rpcErr) {
+          console.warn("[fetchTrendingPosts] rpc failed:", rpcErr.message);
+          return;
+        }
+        const rows = (data || []) as FeedPostRow[];
+        const mapped = rows.map((row) => rowToPost(row));
+        if (reset) {
+          setTrendingPosts(mapped);
+        } else {
+          setTrendingPosts((prev) => {
+            // Dedupe — server reranks between calls so a row from
+            // page 0 could re-appear on page 1.
+            const seen = new Set(prev.map((p) => p.id));
+            const fresh = mapped.filter((p) => !seen.has(p.id));
+            return [...prev, ...fresh];
+          });
+        }
+        trendingOffsetRef.current += rows.length;
+        setTrendingHasMore(rows.length === TRENDING_PAGE_SIZE);
+      } finally {
+        setIsLoadingTrending(false);
+        setIsLoadingTrendingMore(false);
+      }
+    },
+    [session, trendingHasMore, isLoadingTrendingMore],
+  );
 
   // Ensure the current auth user has a matching profiles row.
   // Calls the DB function first; if it doesn't exist yet, falls back to direct upsert.
@@ -997,6 +1063,11 @@ export const FeedProvider = ({ children }: { children: ReactNode }) => {
         savedPostIds,
         fetchFeed,
         fetchMorePosts,
+        trendingPosts,
+        isLoadingTrending,
+        isLoadingTrendingMore,
+        trendingHasMore,
+        fetchTrendingPosts,
         createDreamPost,
         updateDreamPostImage,
         markDreamPostImageFailed,

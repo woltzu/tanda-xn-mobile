@@ -31,6 +31,7 @@ import {
   FeedComment,
 } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
+import { useEventTracker } from "../hooks/useEventTracker";
 import FeedPostCard from "../components/FeedPostCard";
 import FeedCommentItem from "../components/FeedCommentItem";
 import VideoPlayer from "../components/VideoPlayer";
@@ -80,6 +81,7 @@ export default function PostDetailScreen() {
   const { t } = useTranslation();
   const { postId, focusComment } = route.params;
   const { user } = useAuth();
+  const { track } = useEventTracker();
 
   // VDF Bucket B.3 — comment-input ref + autoFocus flag. focusComment
   // is passed by the comment icon on FeedPostCard (post-B.7 the
@@ -123,6 +125,23 @@ export default function PostDetailScreen() {
 
   const isOwnPost = post?.userId === user?.id;
   const meta = post?.metadata || {};
+
+  // VDF Bucket C.3 — dream_post.viewed. Fires once per postId per
+  // mount once the post has loaded (so is_own is accurate). useFocus
+  // refetches re-run with the same postId; the ref dedupes them
+  // until the postId itself changes.
+  const viewedFiredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!post) return;
+    if (viewedFiredRef.current === post.id) return;
+    viewedFiredRef.current = post.id;
+    track({
+      eventType: "dream_post.viewed",
+      eventCategory: "dream_post",
+      eventAction: "viewed",
+      eventValue: { post_id: post.id, is_own: post.userId === user?.id },
+    });
+  }, [post, user?.id, track]);
   const hasGoalProgress = meta.targetAmount && meta.currentBalance !== undefined;
   const hasCircleProgress = meta.circleName && meta.progress !== undefined;
 
@@ -333,9 +352,18 @@ export default function PostDetailScreen() {
 
     try {
       setIsSubmitting(true);
-      const newComment = await addComment(postId, commentText.trim());
+      const trimmed = commentText.trim();
+      const newComment = await addComment(postId, trimmed);
       setComments((prev) => [...prev, newComment]);
       setCommentText("");
+      // VDF Bucket C.3 — comment_submitted (success path only; the
+      // catch below leaves it un-tracked).
+      track({
+        eventType: "dream_post.comment_submitted",
+        eventCategory: "dream_post",
+        eventAction: "comment_submitted",
+        eventValue: { post_id: postId, length: trimmed.length },
+      });
       showToast(
         t(
           isOwnPost
@@ -369,6 +397,13 @@ export default function PostDetailScreen() {
         onPress: async () => {
           try {
             await deletePost(postId);
+            // VDF Bucket C.3 — dream_post.deleted (success path).
+            track({
+              eventType: "dream_post.deleted",
+              eventCategory: "dream_post",
+              eventAction: "deleted",
+              eventValue: { post_id: postId },
+            });
             showToast(t("dream_post.detail.post_deleted"), "info");
             navigation.goBack();
           } catch (err) {

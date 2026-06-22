@@ -71,6 +71,14 @@ export const linkingConfig = {
       // putting them top-level here means /dreams URLs load without a tab bar.
       // If you want the tab bar visible, nest these under MainTabs.Home.screens later.)
       DreamFeed: "dreams",
+      // PostDetail accepts an optional `?focusComment=1` query string —
+      // React Navigation's linking auto-merges query params into route
+      // params alongside the :postId path param, so a notification
+      // CTA like `dreams/post/abc123?focusComment=1` lands on
+      // PostDetail with { postId: 'abc123', focusComment: '1' }
+      // without any extra parser code. PostDetailScreen reads it via
+      // route.params.focusComment (VDF Bucket B.3) to autoFocus the
+      // sticky comment input on mount.
       PostDetail: "dreams/post/:postId",
       UserDreamProfile: "dreams/user/:userId",
       // Create-a-dream-post Bucket C.5 — deep link to the composer.
