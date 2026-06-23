@@ -193,6 +193,35 @@ export interface TripMessage {
   activityId: string | null;
 }
 
+// ─── Leave-review Bucket A.3 — review shapes ────────────────────────────────
+export interface TripReview {
+  id: string;
+  tripId: string;
+  tripParticipantId: string;
+  organizerId: string;
+  reviewerId: string;
+  rating: number;
+  reviewText: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TripActivityReview {
+  id: string;
+  tripActivityId: string;
+  tripParticipantId: string;
+  reviewerId: string;
+  rating: number;
+  reviewText: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MyTripReviewBundle {
+  organizerReview: TripReview | null;
+  activityReviews: TripActivityReview[];
+}
+
 export interface TripDashboard {
   trip: Trip;
   participants: TripParticipant[];
@@ -374,6 +403,34 @@ function mapVendor(row: any): TripVendor {
     costCents: parseFloat(row.amount_paid) || 0,
     notes: row.notes,
     isPaid: (parseFloat(row.amount_paid) || 0) > 0,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+// Leave-review Bucket A.3 — review row mappers.
+function mapTripReview(row: any): TripReview {
+  return {
+    id: row.id,
+    tripId: row.trip_id,
+    tripParticipantId: row.trip_participant_id,
+    organizerId: row.organizer_id,
+    reviewerId: row.reviewer_id,
+    rating: row.rating,
+    reviewText: row.review_text,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapTripActivityReview(row: any): TripActivityReview {
+  return {
+    id: row.id,
+    tripActivityId: row.trip_activity_id,
+    tripParticipantId: row.trip_participant_id,
+    reviewerId: row.reviewer_id,
+    rating: row.rating,
+    reviewText: row.review_text,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -1025,6 +1082,53 @@ export class TripOrganizerEngine {
       submissions: (subRows ?? []).map(mapSubmission),
       payments: (payRows ?? []).map(mapPayment),
     };
+  }
+
+  // ─── Leave-review Bucket A.3 ────────────────────────────────────────────
+  /** Fetch the participant's organizer review + per-activity reviews. */
+  static async getMyReview(participantId: string): Promise<MyTripReviewBundle> {
+    const [orgRes, actRes] = await Promise.all([
+      supabase
+        .from("trip_reviews")
+        .select("*")
+        .eq("trip_participant_id", participantId)
+        .maybeSingle(),
+      supabase
+        .from("trip_activity_reviews")
+        .select("*")
+        .eq("trip_participant_id", participantId),
+    ]);
+    if (orgRes.error) throw new Error(`Failed to fetch organizer review: ${orgRes.error.message}`);
+    if (actRes.error) throw new Error(`Failed to fetch activity reviews: ${actRes.error.message}`);
+    return {
+      organizerReview: orgRes.data ? mapTripReview(orgRes.data) : null,
+      activityReviews: (actRes.data ?? []).map(mapTripActivityReview),
+    };
+  }
+
+  /** Submit the organizer review + optional per-activity reviews via RPC. */
+  static async submitReview(
+    participantId: string,
+    organizerRating: number,
+    organizerReviewText: string | null,
+    activityRatings: Array<{ activityId: string; rating: number; text: string | null }> | null,
+  ): Promise<string> {
+    const payload =
+      activityRatings && activityRatings.length > 0
+        ? activityRatings.map((ar) => ({
+            activity_id: ar.activityId,
+            rating: ar.rating,
+            text: ar.text,
+          }))
+        : null;
+    const { data, error } = await supabase.rpc("submit_trip_review", {
+      p_participant_id: participantId,
+      p_organizer_rating: organizerRating,
+      p_organizer_review_text: organizerReviewText,
+      p_activity_ratings: payload,
+    });
+    if (error) throw new Error(error.message);
+    return data as string;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

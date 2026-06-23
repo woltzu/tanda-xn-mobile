@@ -8339,6 +8339,30 @@
     "payment_paid_in_full": "Payé intégralement",
     "payment_refunded": "Remboursé"
   },
+  "leave_review": {
+    "title": "Évaluer le voyage",
+    "untitled_trip": "Voyage sans titre",
+    "organizer_prompt": "Comment s'est passée votre expérience avec l'organisateur ?",
+    "organizer_comment_placeholder": "Partagez votre avis (facultatif)",
+    "itinerary_section_title": "Évaluer l'itinéraire",
+    "itinerary_empty": "L'organisateur n'a pas ajouté d'itinéraire pour ce voyage.",
+    "day_label": "Jour {{number}}",
+    "day_empty": "Aucune activité pour cette journée.",
+    "activity_rating_placeholder": "Commentaire (facultatif)",
+    "submit_button": "Envoyer l'évaluation",
+    "submitting": "Envoi en cours…",
+    "success_toast": "Votre évaluation a été envoyée !",
+    "error_toast": "Échec de l'envoi. Veuillez réessayer.",
+    "already_reviewed": "Vous avez déjà évalué ce voyage.",
+    "banner_cta": "Évaluer ce voyage",
+    "reviewed_chip": "✓ Évalué",
+    "guard_missing": "Impossible de trouver ce voyage ou votre participation.",
+    "guard_not_eligible": "Vous pourrez laisser une évaluation une fois le voyage terminé."
+  },
+  "trip": {
+    "reviews_rating": "{{count}} avis",
+    "reviews_rating_one": "{{count}} avis"
+  },
   "final_polish": {
     "activesessions_this_device": "CET APPAREIL",
     "activesessions_active_now": "Actif maintenant",

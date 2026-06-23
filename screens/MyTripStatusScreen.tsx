@@ -19,6 +19,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { useMyTripStatus, usePublicTrip, useItineraryBuilder } from "../hooks/useTripOrganizer";
+import { useMyTripReview } from "../hooks/useMyTripReview";
 import { useAuth } from "../context/AuthContext";
 import { useEventTracker } from "../hooks/useEventTracker";
 import InstallmentScheduleView from "../components/InstallmentScheduleView";
@@ -116,6 +117,9 @@ const MyTripStatusScreen: React.FC = () => {
   const { track } = useEventTracker();
   const viewTrackedRef = useRef(false);
   const [itineraryExpanded, setItineraryExpanded] = useState(true);
+
+  // ── Leave-review Bucket A.6 — eligibility-driven banner / chip.
+  const reviewState = useMyTripReview(trip ?? null, participant);
 
   useEffect(() => {
     if (!tripId) return;
@@ -546,6 +550,36 @@ const MyTripStatusScreen: React.FC = () => {
             </View>
             <Ionicons name="chevron-forward" size={18} color={GOLD} />
           </TouchableOpacity>
+        )}
+
+        {/* ── Leave-review Bucket A.6 — banner / reviewed chip ─────────── */}
+        {reviewState.eligible && !reviewState.alreadyReviewed && (
+          <TouchableOpacity
+            style={styles.reviewBanner}
+            activeOpacity={0.85}
+            onPress={() =>
+              navigation.navigate('LeaveReview', {
+                participantId: participant.id,
+                tripId: data.id,
+              })
+            }
+          >
+            <Ionicons name="star-outline" size={20} color={TEAL} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.reviewBannerText}>
+                {t('leave_review.banner_cta')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={TEAL} />
+          </TouchableOpacity>
+        )}
+        {reviewState.alreadyReviewed && (
+          <View style={styles.reviewedChip}>
+            <Ionicons name="checkmark-circle" size={16} color={GREEN} />
+            <Text style={styles.reviewedChipText}>
+              {t('leave_review.reviewed_chip')}
+            </Text>
+          </View>
         )}
 
         {/* ── Trip Mini Hero ──────────────────────────────────────────── */}
@@ -1725,6 +1759,44 @@ const styles = StyleSheet.create({
     color: TEAL,
     fontWeight: typography.semibold,
     textAlign: 'right',
+  },
+
+  // ── Leave-review Bucket A.6 — banner / reviewed chip ────────────────
+  reviewBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(0,198,174,0.10)',
+    borderRadius: radius.small,
+    borderLeftWidth: 3,
+    borderLeftColor: TEAL,
+  },
+  reviewBannerText: {
+    fontSize: typography.body,
+    color: TEAL,
+    fontWeight: typography.semibold,
+    flex: 1,
+  },
+  reviewedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: GREEN_BG,
+    borderRadius: radius.pill,
+  },
+  reviewedChipText: {
+    fontSize: typography.label,
+    color: GREEN,
+    fontWeight: typography.bold,
   },
 
   // Bucket C.4 — collapsible itinerary header row.

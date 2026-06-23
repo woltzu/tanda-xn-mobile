@@ -8339,6 +8339,30 @@
     "payment_paid_in_full": "Paid in full",
     "payment_refunded": "Refunded"
   },
+  "leave_review": {
+    "title": "Rate your trip",
+    "untitled_trip": "Untitled trip",
+    "organizer_prompt": "How was your experience with the organizer?",
+    "organizer_comment_placeholder": "Share your feedback (optional)",
+    "itinerary_section_title": "Rate the itinerary",
+    "itinerary_empty": "The organizer didn't add an itinerary for this trip.",
+    "day_label": "Day {{number}}",
+    "day_empty": "No activities for this day.",
+    "activity_rating_placeholder": "Feedback (optional)",
+    "submit_button": "Submit review",
+    "submitting": "Submitting…",
+    "success_toast": "Your review has been submitted!",
+    "error_toast": "Failed to submit review. Please try again.",
+    "already_reviewed": "You've already reviewed this trip.",
+    "banner_cta": "Rate your trip",
+    "reviewed_chip": "✓ Reviewed",
+    "guard_missing": "We couldn't find this trip or your participation in it.",
+    "guard_not_eligible": "You can leave a review once the trip has ended."
+  },
+  "trip": {
+    "reviews_rating": "{{count}} reviews",
+    "reviews_rating_one": "{{count}} review"
+  },
   "final_polish": {
     "activesessions_this_device": "THIS DEVICE",
     "activesessions_active_now": "Active now",
