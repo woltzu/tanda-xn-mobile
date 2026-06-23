@@ -10,7 +10,7 @@
 // Empty state nudges the first reviewer; loading state shows a spinner.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -32,6 +32,7 @@ import {
   type TripReviewWithReviewer,
 } from "../services/TripOrganizerEngine";
 import StarRatingDisplay from "../components/StarRatingDisplay";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
@@ -46,6 +47,11 @@ const TripReviewsScreen: React.FC = () => {
   const [items, setItems] = useState<TripReviewWithReviewer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Bucket C.4 — fire screen_viewed once per mount, after the first
+  // fetch resolves so review_count is meaningful.
+  const { track } = useEventTracker();
+  const viewTrackedRef = useRef(false);
 
   const fetchReviews = useCallback(async () => {
     if (!tripId) {
@@ -68,6 +74,16 @@ const TripReviewsScreen: React.FC = () => {
   useEffect(() => {
     fetchReviews();
   }, [fetchReviews]);
+
+  useEffect(() => {
+    if (viewTrackedRef.current) return;
+    if (loading) return;
+    viewTrackedRef.current = true;
+    track({
+      name: "trip_reviews.screen_viewed",
+      properties: { trip_id: tripId, review_count: items.length },
+    });
+  }, [loading, items.length, tripId, track]);
 
   const renderItem = ({ item }: { item: TripReviewWithReviewer }) => {
     const reviewerLabel =

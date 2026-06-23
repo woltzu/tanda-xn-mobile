@@ -219,6 +219,11 @@ const MyTripsScreen: React.FC = () => {
                 activeOpacity={0.7}
                 onPress={(e) => {
                   e.stopPropagation?.();
+                  // Bucket C.4 — rate-trip badge tap.
+                  track({
+                    name: "trip_review.badge_tapped",
+                    properties: { trip_id: item.trip.id },
+                  });
                   navigation.navigate("LeaveReview", {
                     participantId: item.participantId,
                     tripId: item.trip.id,

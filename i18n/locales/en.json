@@ -8373,7 +8373,11 @@
   },
   "trip": {
     "reviews_rating": "{{count}} reviews",
-    "reviews_rating_one": "{{count}} review"
+    "reviews_rating_one": "{{count}} review",
+    "notification_review_reminder_title": "How was {{trip_name}}?",
+    "notification_review_reminder_body": "Your trip ended recently. Leave a review to help the community!",
+    "notification_review_submitted_title": "New review for {{trip_name}}",
+    "notification_review_submitted_body": "{{reviewer_name}} rated you {{rating}} stars. See what they said."
   },
   "trip_reviews": {
     "title": "Trip reviews",

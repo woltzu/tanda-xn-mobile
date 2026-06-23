@@ -687,6 +687,12 @@ export class NotificationPriorityEngine {
       // dollar deduction — informational nudge bucket alongside
       // trip_participant_joined / trip_seat_released.
       case "trip_participant_confirmed":
+      // Leave-review Bucket C.3 — review prompts. Both the participant-side
+      // reminder (3-14 days after trip end) and the organizer-side
+      // submission notification are informational; no deadline, no dollar
+      // impact. Same bucket as the other trip-side nudges.
+      case "trip_review_reminder":
+      case "trip_review_submitted":
         return "coaching_goals";
       default:
         return null;

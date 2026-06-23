@@ -557,12 +557,17 @@ const MyTripStatusScreen: React.FC = () => {
           <TouchableOpacity
             style={styles.reviewBanner}
             activeOpacity={0.85}
-            onPress={() =>
+            onPress={() => {
+              // Bucket C.4 — banner tap.
+              track({
+                name: 'trip_review.banner_tapped',
+                properties: { trip_id: data.id },
+              });
               navigation.navigate('LeaveReview', {
                 participantId: participant.id,
                 tripId: data.id,
-              })
-            }
+              });
+            }}
           >
             <Ionicons name="star-outline" size={20} color={TEAL} />
             <View style={{ flex: 1 }}>

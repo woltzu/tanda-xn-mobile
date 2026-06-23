@@ -8373,7 +8373,11 @@
   },
   "trip": {
     "reviews_rating": "{{count}} avis",
-    "reviews_rating_one": "{{count}} avis"
+    "reviews_rating_one": "{{count}} avis",
+    "notification_review_reminder_title": "Comment était {{trip_name}} ?",
+    "notification_review_reminder_body": "Votre voyage vient de se terminer. Laissez une évaluation pour aider la communauté !",
+    "notification_review_submitted_title": "Nouvel avis pour {{trip_name}}",
+    "notification_review_submitted_body": "{{reviewer_name}} vous a donné {{rating}} étoiles. Découvrez ce qu'ils ont dit."
   },
   "trip_reviews": {
     "title": "Avis sur le voyage",

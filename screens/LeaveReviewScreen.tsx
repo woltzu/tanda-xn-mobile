@@ -41,6 +41,7 @@ import {
   useItineraryBuilder,
 } from "../hooks/useTripOrganizer";
 import { useMyTripReview } from "../hooks/useMyTripReview";
+import { useEventTracker } from "../hooks/useEventTracker";
 import StarRatingInput from "../components/StarRatingInput";
 import { showToast } from "../components/Toast";
 
@@ -91,6 +92,21 @@ const LeaveReviewScreen: React.FC = () => {
   const [helpOpen, setHelpOpen] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
 
+  // Leave-review Bucket C.4 — telemetry. screen_viewed fires once per mount
+  // after the participant resolves so the event always carries the
+  // participant_id/trip_id pair we want to slice on.
+  const { track } = useEventTracker();
+  const viewTrackedRef = React.useRef(false);
+  useEffect(() => {
+    if (viewTrackedRef.current) return;
+    if (!participant) return;
+    viewTrackedRef.current = true;
+    track({
+      name: "trip_review.screen_viewed",
+      properties: { participant_id: participant.id, trip_id: tripId },
+    });
+  }, [participant, tripId, track]);
+
   useEffect(() => {
     // Show the coach once eligibility is confirmed (so we don't flash it
     // on the loading / guard renders).
@@ -129,6 +145,20 @@ const LeaveReviewScreen: React.FC = () => {
       ...prev,
       [activityId]: { ...(prev[activityId] ?? { text: "" }), rating },
     }));
+    // Bucket C.4 — activity-section star tap.
+    track({
+      name: "trip_review.star_tapped",
+      properties: { section: "activity", rating, activity_id: activityId, trip_id: tripId },
+    });
+  };
+
+  const handleOrgRating = (rating: number) => {
+    setOrgRating(rating);
+    // Bucket C.4 — organizer-section star tap.
+    track({
+      name: "trip_review.star_tapped",
+      properties: { section: "organizer", rating, trip_id: tripId },
+    });
   };
 
   const setActivityText = (activityId: string, text: string) => {
@@ -152,16 +182,38 @@ const LeaveReviewScreen: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
+    // Bucket C.4 — submit_attempted is fire-once per tap; succeed/fail
+    // follow with the same correlation id (trip_id).
+    track({
+      name: "trip_review.submit_attempted",
+      properties: { trip_id: tripId, rating: orgRating, activity_count: activityPayload.length },
+    });
     try {
       await reviewState.submit(
         orgRating,
         orgComment.trim() || null,
         activityPayload.length > 0 ? activityPayload : null,
       );
+      track({
+        name: "trip_review.submit_succeeded",
+        properties: {
+          trip_id: tripId,
+          rating: orgRating,
+          has_activity_reviews: activityPayload.length > 0,
+        },
+      });
       showToast(t("leave_review.success_toast"), "success");
       // Land back on MyTripStatus where the banner has now flipped.
       navigation.navigate("MyTripStatus", { tripId });
     } catch (err: any) {
+      // Sanitise: strip the JS prefix and keep only the first line of the
+      // postgres exception so we never leak SQL fragments into telemetry.
+      const raw = (err?.message ?? "").toString();
+      const sanitized = raw.split("\n")[0].slice(0, 200);
+      track({
+        name: "trip_review.submit_failed",
+        properties: { trip_id: tripId, error_message: sanitized },
+      });
       const msg =
         err?.message?.includes("Review already submitted")
           ? t("leave_review.already_reviewed")
@@ -256,7 +308,7 @@ const LeaveReviewScreen: React.FC = () => {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>{t("leave_review.organizer_prompt")}</Text>
           <View style={styles.starsRowWrap}>
-            <StarRatingInput value={orgRating} onChange={setOrgRating} size={36} />
+            <StarRatingInput value={orgRating} onChange={handleOrgRating} size={36} />
           </View>
           <TextInput
             style={styles.textArea}
