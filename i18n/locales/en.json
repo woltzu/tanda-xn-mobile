@@ -3518,6 +3518,28 @@
     "itinerary_empty": "The organizer hasn't added an itinerary yet.",
     "itinerary_day": "Day {{number}}",
     "itinerary_day_empty": "No activities planned yet.",
+    "overdue_warning": "You have an overdue payment. Please pay it as soon as possible to avoid cancellation.",
+    "overdue_chip": "Overdue",
+    "updates_teaser_title": "Latest updates",
+    "updates_teaser_see_all": "See all",
+    "updates_teaser_empty": "No updates yet.",
+    "help": {
+      "title": "About this trip",
+      "close": "Close",
+      "topic_status_title": "What does my status mean?",
+      "topic_status_body": "Confirmed means your spot is secured — the deposit landed and the organizer added you. Pending means you've registered but haven't paid your deposit yet, so the spot isn't held. Waitlist means the trip is full but you'll be promoted automatically if someone drops. Cancelled means your spot was released — contact the organizer if this is unexpected.",
+      "topic_payment_title": "Payment timeline",
+      "topic_payment_body": "Most trips ask for a deposit upfront to lock your spot, followed by installments leading up to departure, with the balance due before the trip. If you miss a due date, you'll see an overdue warning. Two consecutive missed payments can result in your spot being released — pay as soon as you can or message the organizer.",
+      "topic_documents_title": "Documents",
+      "topic_documents_body": "Each trip may require documents like a passport copy, emergency contact, or a signed liability waiver. Tap any row in your checklist to upload. The organizer reviews each submission before it shows as verified.",
+      "topic_refunds_title": "Refunds and cancellations",
+      "topic_refunds_body": "Refund rules are set by each trip's organizer and are visible on the public trip page before you join. If you need to cancel, message the organizer first. Refunds (when offered) are processed back to your original payment method and may take a few business days to appear."
+    },
+    "coach": {
+      "title": "Your trip dashboard",
+      "body": "Track your payments, itinerary, and status here. Pay your deposit to confirm your spot.",
+      "dismiss": "Got it"
+    },
     "payment_type_deposit": "Deposit",
     "payment_type_installment": "Installment",
     "payment_type_full": "Full payment"

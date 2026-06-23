@@ -3518,6 +3518,28 @@
     "itinerary_empty": "L'organisateur n'a pas encore ajouté d'itinéraire.",
     "itinerary_day": "Jour {{number}}",
     "itinerary_day_empty": "Aucune activité prévue pour l'instant.",
+    "overdue_warning": "Vous avez un paiement en retard. Réglez-le dès que possible pour éviter une annulation.",
+    "overdue_chip": "En retard",
+    "updates_teaser_title": "Dernières mises à jour",
+    "updates_teaser_see_all": "Tout voir",
+    "updates_teaser_empty": "Aucune mise à jour pour l'instant.",
+    "help": {
+      "title": "À propos de ce voyage",
+      "close": "Fermer",
+      "topic_status_title": "Que signifie mon statut ?",
+      "topic_status_body": "Confirmé : votre place est garantie — l'acompte a été reçu et l'organisateur vous a ajouté. En attente : vous êtes inscrit mais n'avez pas encore versé d'acompte, donc la place n'est pas réservée. Liste d'attente : le voyage est complet, mais vous serez promu automatiquement si quelqu'un se désiste. Annulé : votre place a été libérée — contactez l'organisateur si cela vous surprend.",
+      "topic_payment_title": "Calendrier de paiement",
+      "topic_payment_body": "La plupart des voyages demandent un acompte initial pour réserver la place, suivi de mensualités jusqu'au départ, avec le solde à régler avant le voyage. Si vous manquez une échéance, un avertissement de retard s'affiche. Deux paiements manqués consécutifs peuvent entraîner la libération de votre place — payez dès que possible ou contactez l'organisateur.",
+      "topic_documents_title": "Documents",
+      "topic_documents_body": "Chaque voyage peut exiger des documents tels qu'une copie de passeport, un contact d'urgence ou une décharge signée. Tapez sur une ligne de votre liste pour téléverser. L'organisateur examine chaque soumission avant qu'elle ne soit marquée comme vérifiée.",
+      "topic_refunds_title": "Remboursements et annulations",
+      "topic_refunds_body": "Les règles de remboursement sont définies par l'organisateur et visibles sur la page publique du voyage avant l'inscription. Si vous devez annuler, contactez d'abord l'organisateur. Les remboursements (lorsqu'ils sont proposés) sont versés sur votre moyen de paiement initial et peuvent prendre quelques jours ouvrables."
+    },
+    "coach": {
+      "title": "Votre tableau de bord voyage",
+      "body": "Suivez ici vos paiements, votre itinéraire et votre statut. Réglez votre acompte pour confirmer votre place.",
+      "dismiss": "Compris"
+    },
     "payment_type_deposit": "Acompte",
     "payment_type_installment": "Versement",
     "payment_type_full": "Paiement intégral"

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,15 +8,23 @@ import {
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
+  Modal,
+  Pressable,
+  ImageBackground,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { useMyTripStatus, usePublicTrip, useItineraryBuilder } from "../hooks/useTripOrganizer";
 import { useAuth } from "../context/AuthContext";
 import InstallmentScheduleView from "../components/InstallmentScheduleView";
+import { TripOrganizerEngine, TripMessage } from "../services/TripOrganizerEngine";
+
+// Bucket B.2 — first-visit coach mark gate.
+const COACH_KEY = "@tandaxn_my_trip_status_coach_seen_v1";
 
 const GOLD = "#E8A842";
 const TEAL = colors.accentTeal;
@@ -93,6 +101,66 @@ const MyTripStatusScreen: React.FC = () => {
   const submissions = myStatus.submissions ?? [];
   const trip = publicTrip?.trip;
   const isLoading = myStatus.loading || publicTrip?.loading;
+
+  // ── Bucket B.1 — HelpSheet visibility + B.2 — first-visit coach mark.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [coachOpen, setCoachOpen] = useState(false);
+
+  // ── Bucket B.4 — recent broadcasts teaser.
+  const [recentUpdates, setRecentUpdates] = useState<TripMessage[]>([]);
+  const [updatesLoading, setUpdatesLoading] = useState(true);
+
+  useEffect(() => {
+    if (!tripId) return;
+    let cancelled = false;
+    setUpdatesLoading(true);
+    TripOrganizerEngine.getTripMessages(tripId, 'all')
+      .then((rows) => {
+        if (cancelled) return;
+        // Newest-first; keep two for the teaser.
+        const sorted = [...rows].sort((a, b) =>
+          (b.createdAt ?? '').localeCompare(a.createdAt ?? '')
+        );
+        setRecentUpdates(sorted.slice(0, 2));
+      })
+      .catch(() => {
+        if (!cancelled) setRecentUpdates([]);
+      })
+      .finally(() => {
+        if (!cancelled) setUpdatesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tripId]);
+
+  // Coach: only after the participant resolves, and not for cancelled.
+  useEffect(() => {
+    if (!participant) return;
+    if (participant.status === 'cancelled') return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_KEY);
+        if (seen) return;
+        setCoachOpen(true);
+        timer = setTimeout(() => {
+          setCoachOpen(false);
+          AsyncStorage.setItem(COACH_KEY, '1').catch(() => undefined);
+        }, 4000);
+      } catch {
+        // AsyncStorage unavailable — silently skip.
+      }
+    })();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [participant]);
+
+  const dismissCoach = () => {
+    setCoachOpen(false);
+    AsyncStorage.setItem(COACH_KEY, '1').catch(() => undefined);
+  };
 
   if (isLoading) {
     return (
@@ -176,7 +244,14 @@ const MyTripStatusScreen: React.FC = () => {
             <Ionicons name="arrow-back" size={24} color={NAVY} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("screen_headers.my_trip_status")}</Text>
-          <View style={styles.headerBtn} />
+          <TouchableOpacity
+            onPress={() => setHelpOpen(true)}
+            style={styles.headerBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t('my_trip_status.help.title')}
+          >
+            <Ionicons name="help-circle-outline" size={24} color={NAVY} />
+          </TouchableOpacity>
         </View>
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <View style={styles.cancelledBanner}>
@@ -223,6 +298,7 @@ const MyTripStatusScreen: React.FC = () => {
             </LinearGradient>
           </View>
         </ScrollView>
+        <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} t={t} />
       </SafeAreaView>
     );
   }
@@ -299,18 +375,24 @@ const MyTripStatusScreen: React.FC = () => {
 
   const statusCfg = STATUS_CONFIG[data.status];
 
-  // Join-trip Bucket B.3 — payment status chip config. Derives from the
-  // canonical participant.paymentStatus and falls back to "pending" when
-  // unpaid + still pending registration. We treat any pending trip_payment
-  // row with a due_date in the past as overdue so the chip can flag it.
-  const hasOverdue = payments.some(
-    (p) =>
-      p.status === "pending" &&
-      // mapPayment exposes `paidAt` and `createdAt`; we treat
-      // (createdAt + 1 day) as a placeholder due-window stand-in if the
-      // engine ever stamps a real due_date we should switch to it.
-      false, // disabled until trip_payments carries a real per-row due_date
+  // Bucket B.5 — real overdue detection.
+  // trip_payments rows don't carry a per-row due_date, but the trip's
+  // installmentSchedule does. The participant is overdue when the cumulative
+  // amount due (sum of all installments whose due_date is on or before today)
+  // exceeds what they've actually paid in. Same rule the
+  // InstallmentScheduleView uses to flag a row red.
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const overdueInstallments = (trip?.installmentSchedule?.installments ?? []).filter(
+    (i) => i.due_date && i.due_date <= todayIso,
   );
+  const cumulativePastDue = overdueInstallments.reduce(
+    (sum, i) => sum + (i.amount_cents || 0),
+    0,
+  );
+  const hasOverdue =
+    !isPaidInFull &&
+    overdueInstallments.length > 0 &&
+    totalPaid < cumulativePastDue;
   const paymentChipConfig = (() => {
     if (isPaidInFull) {
       return {
@@ -383,7 +465,14 @@ const MyTripStatusScreen: React.FC = () => {
             <Ionicons name="arrow-back" size={24} color={NAVY} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("screen_headers.my_trip_status")}</Text>
-          <View style={styles.headerBtn} />
+          <TouchableOpacity
+            onPress={() => setHelpOpen(true)}
+            style={styles.headerBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t('my_trip_status.help.title')}
+          >
+            <Ionicons name="help-circle-outline" size={24} color={NAVY} />
+          </TouchableOpacity>
         </View>
 
         {/* ── Status Banner — A.8 i18n template ────────────────────────── */}
@@ -422,29 +511,69 @@ const MyTripStatusScreen: React.FC = () => {
         )}
 
         {/* ── Trip Mini Hero ──────────────────────────────────────────── */}
+        {/* Bucket B.3 — when the trip has a cover photo, render it as the
+            background with a dark overlay so the text stays legible; fall
+            back to the navy gradient when there's no image. */}
         <View style={styles.miniHero}>
-          <LinearGradient
-            colors={[NAVY, "#143A6B"]}
-            style={styles.miniHeroGradient}
-          >
-            <Text style={styles.miniHeroName}>{data.name}</Text>
-            <View style={styles.miniHeroMeta}>
-              <View style={styles.miniHeroMetaItem}>
-                <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.7)" />
-                <Text style={styles.miniHeroMetaText}>{data.destination}</Text>
+          {trip?.coverPhotoUrl ? (
+            <ImageBackground
+              source={{ uri: trip.coverPhotoUrl }}
+              style={styles.miniHeroGradient}
+              imageStyle={styles.miniHeroImage}
+              resizeMode="cover"
+            >
+              <View style={styles.miniHeroOverlay} />
+              <Text style={styles.miniHeroName}>{data.name}</Text>
+              <View style={styles.miniHeroMeta}>
+                <View style={styles.miniHeroMetaItem}>
+                  <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.85)" />
+                  <Text style={styles.miniHeroMetaText}>{data.destination}</Text>
+                </View>
+                <View style={styles.miniHeroMetaItem}>
+                  <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.85)" />
+                  <Text style={styles.miniHeroMetaText}>{data.dates}</Text>
+                </View>
               </View>
-              <View style={styles.miniHeroMetaItem}>
-                <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.7)" />
-                <Text style={styles.miniHeroMetaText}>{data.dates}</Text>
+              <View style={[styles.statusPill, { backgroundColor: statusCfg.bgColor }]}>
+                <Text style={[styles.statusPillText, { color: statusCfg.textColor }]}>
+                  {t(statusCfg.labelKey)}
+                </Text>
               </View>
-            </View>
-            <View style={[styles.statusPill, { backgroundColor: statusCfg.bgColor }]}>
-              <Text style={[styles.statusPillText, { color: statusCfg.textColor }]}>
-                {t(statusCfg.labelKey)}
-              </Text>
-            </View>
-          </LinearGradient>
+            </ImageBackground>
+          ) : (
+            <LinearGradient
+              colors={[NAVY, "#143A6B"]}
+              style={styles.miniHeroGradient}
+            >
+              <Text style={styles.miniHeroName}>{data.name}</Text>
+              <View style={styles.miniHeroMeta}>
+                <View style={styles.miniHeroMetaItem}>
+                  <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.miniHeroMetaText}>{data.destination}</Text>
+                </View>
+                <View style={styles.miniHeroMetaItem}>
+                  <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.miniHeroMetaText}>{data.dates}</Text>
+                </View>
+              </View>
+              <View style={[styles.statusPill, { backgroundColor: statusCfg.bgColor }]}>
+                <Text style={[styles.statusPillText, { color: statusCfg.textColor }]}>
+                  {t(statusCfg.labelKey)}
+                </Text>
+              </View>
+            </LinearGradient>
+          )}
         </View>
+
+        {/* ── Bucket B.5 — Overdue warning banner ─────────────────────── */}
+        {hasOverdue && (
+          <View style={styles.overdueBanner}>
+            <Ionicons name="alert-circle" size={20} color={RED} />
+            <Text style={styles.overdueBannerText}>
+              {t('my_trip_status.overdue_warning')}
+            </Text>
+          </View>
+        )}
 
         {/* ── Payment Progress ────────────────────────────────────────── */}
         {/* Join-trip Bucket B.3 — added an explicit status chip + final-due
@@ -452,7 +581,15 @@ const MyTripStatusScreen: React.FC = () => {
             shows the next installment's due date if one is pending. */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
-            <Text style={styles.cardTitle}>{t("final_polish.mytripstatus_payment_progress")}</Text>
+            <View style={styles.cardTitleRow}>
+              <Text style={styles.cardTitle}>{t("final_polish.mytripstatus_payment_progress")}</Text>
+              {hasOverdue && (
+                <View style={styles.overdueChip}>
+                  <Ionicons name="alert-circle" size={10} color={RED} />
+                  <Text style={styles.overdueChipText}>{t('my_trip_status.overdue_chip')}</Text>
+                </View>
+              )}
+            </View>
             <Text style={styles.paymentPercent}>{paymentPercent}%</Text>
           </View>
           <View style={styles.progressBar}>
@@ -558,6 +695,62 @@ const MyTripStatusScreen: React.FC = () => {
             )}
           </View>
         )}
+
+        {/* ── Bucket B.4 — Trip updates teaser ──────────────────────────
+            Surfaces the latest 2 broadcast messages from the organizer.
+            Tapping the card or "See all" routes to TripUpdatesScreen
+            (the full feed shipped in Publish-trip Bucket B). Hidden
+            while loading; an empty state explains there's nothing yet. */}
+        <View style={styles.sectionContainer}>
+          <View style={styles.updatesHeaderRow}>
+            <Text style={styles.sectionTitle}>
+              {t('my_trip_status.updates_teaser_title')}
+            </Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('TripUpdates', { tripId: data.id })}
+              accessibilityRole="button"
+            >
+              <Text style={styles.updatesSeeAll}>
+                {t('my_trip_status.updates_teaser_see_all')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.updatesCard}>
+            {updatesLoading ? (
+              <View style={styles.updatesEmpty}>
+                <ActivityIndicator size="small" color={TEAL} />
+              </View>
+            ) : recentUpdates.length === 0 ? (
+              <Text style={styles.updatesEmptyText}>
+                {t('my_trip_status.updates_teaser_empty')}
+              </Text>
+            ) : (
+              recentUpdates.map((msg, idx) => (
+                <TouchableOpacity
+                  key={msg.id}
+                  style={[
+                    styles.updateRow,
+                    idx < recentUpdates.length - 1 && styles.updateRowBorder,
+                  ]}
+                  onPress={() => navigation.navigate('TripUpdates', { tripId: data.id })}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.updateBullet}>
+                    <Ionicons name="megaphone" size={14} color={TEAL} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.updateBody} numberOfLines={2}>
+                      {msg.body}
+                    </Text>
+                    <Text style={styles.updateMeta}>
+                      {formatDueDate(msg.createdAt ?? null)}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+          </View>
+        </View>
 
         {/* ── Alert Banner ────────────────────────────────────────────── */}
         {data.alertMessage && (
@@ -695,7 +888,83 @@ const MyTripStatusScreen: React.FC = () => {
           )}
         </View>
       </ScrollView>
+
+      {/* ── Bucket B.2 — first-visit coach mark overlay. ─────────────── */}
+      {coachOpen && (
+        <Pressable style={styles.coachOverlay} onPress={dismissCoach}>
+          <View style={styles.coachCard}>
+            <View style={styles.coachTitleRow}>
+              <Ionicons name="information-circle" size={18} color={TEAL} />
+              <Text style={styles.coachTitle}>
+                {t('my_trip_status.coach.title')}
+              </Text>
+            </View>
+            <Text style={styles.coachBody}>
+              {t('my_trip_status.coach.body')}
+            </Text>
+            <Text style={styles.coachDismiss}>
+              {t('my_trip_status.coach.dismiss')}
+            </Text>
+          </View>
+        </Pressable>
+      )}
+
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} t={t} />
     </SafeAreaView>
+  );
+};
+
+// ── Bucket B.1 — HelpSheet (4 topics) ────────────────────────────────────────
+const HELP_TOPICS = [
+  { key: 'status', icon: 'flag-outline' as const },
+  { key: 'payment', icon: 'card-outline' as const },
+  { key: 'documents', icon: 'document-outline' as const },
+  { key: 'refunds', icon: 'return-down-back-outline' as const },
+];
+
+const HelpSheet: React.FC<{
+  visible: boolean;
+  onClose: () => void;
+  t: (key: string) => string;
+}> = ({ visible, onClose, t }) => {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+        <Pressable style={styles.sheetCard} onPress={() => undefined}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeaderRow}>
+            <Text style={styles.sheetTitle}>{t('my_trip_status.help.title')}</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel={t('my_trip_status.help.close')}
+            >
+              <Ionicons name="close" size={22} color={NAVY} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.sheetScroll}>
+            {HELP_TOPICS.map((topic) => (
+              <View key={topic.key} style={styles.helpTopic}>
+                <View style={styles.helpTopicHeader}>
+                  <Ionicons name={topic.icon} size={18} color={TEAL} />
+                  <Text style={styles.helpTopicTitle}>
+                    {t(`my_trip_status.help.topic_${topic.key}_title`)}
+                  </Text>
+                </View>
+                <Text style={styles.helpTopicBody}>
+                  {t(`my_trip_status.help.topic_${topic.key}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 };
 
@@ -1198,5 +1467,224 @@ const styles = StyleSheet.create({
     fontSize: typography.label,
     color: colors.textSecondary,
     fontStyle: 'italic',
+  },
+
+  // ── Bucket B.3 — cover image variant of mini-hero ────────────────────
+  miniHeroImage: {
+    borderRadius: radius.card,
+  },
+  miniHeroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(11, 39, 80, 0.55)',
+    borderRadius: radius.card,
+  },
+
+  // ── Bucket B.5 — overdue banner + chip ───────────────────────────────
+  overdueBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 14,
+    backgroundColor: RED_BG,
+    borderRadius: radius.small,
+    borderLeftWidth: 3,
+    borderLeftColor: RED,
+  },
+  overdueBannerText: {
+    flex: 1,
+    fontSize: typography.body,
+    color: RED,
+    fontWeight: typography.semibold,
+    lineHeight: 20,
+  },
+  cardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  overdueChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: RED_BG,
+  },
+  overdueChipText: {
+    fontSize: 10,
+    color: RED,
+    fontWeight: typography.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  // ── Bucket B.4 — updates teaser ──────────────────────────────────────
+  updatesHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  updatesSeeAll: {
+    fontSize: typography.bodySmall,
+    color: TEAL,
+    fontWeight: typography.semibold,
+  },
+  updatesCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: radius.card,
+    overflow: 'hidden',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  updatesEmpty: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  updatesEmptyText: {
+    fontSize: typography.bodySmall,
+    color: colors.textSecondary,
+    padding: 16,
+    textAlign: 'center',
+  },
+  updateRow: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 14,
+    alignItems: 'flex-start',
+  },
+  updateRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  updateBullet: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,198,174,0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  updateBody: {
+    fontSize: typography.body,
+    color: NAVY,
+    fontWeight: typography.medium,
+    lineHeight: 20,
+  },
+  updateMeta: {
+    fontSize: typography.label,
+    color: colors.textSecondary,
+    marginTop: 4,
+  },
+
+  // ── Bucket B.2 — coach mark ──────────────────────────────────────────
+  coachOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(11, 39, 80, 0.55)',
+    justifyContent: 'flex-end',
+    padding: 16,
+    paddingBottom: 40,
+  },
+  coachCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.card,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  coachTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  coachTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: NAVY,
+  },
+  coachBody: {
+    fontSize: typography.bodySmall,
+    color: NAVY,
+    lineHeight: 20,
+  },
+  coachDismiss: {
+    marginTop: 10,
+    fontSize: typography.label,
+    color: TEAL,
+    fontWeight: typography.semibold,
+    textAlign: 'right',
+  },
+
+  // ── Bucket B.1 — HelpSheet ───────────────────────────────────────────
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(11, 39, 80, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  sheetCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 32,
+    maxHeight: '85%',
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: 12,
+  },
+  sheetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sheetTitle: {
+    fontSize: typography.sectionHeader,
+    fontWeight: typography.bold,
+    color: NAVY,
+    flex: 1,
+  },
+  sheetScroll: {
+    maxHeight: '90%',
+  },
+  helpTopic: {
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  helpTopicHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  helpTopicTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: NAVY,
+  },
+  helpTopicBody: {
+    fontSize: typography.bodySmall,
+    color: NAVY,
+    lineHeight: 20,
   },
 });
