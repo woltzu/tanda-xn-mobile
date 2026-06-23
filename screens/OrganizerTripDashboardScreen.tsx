@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,14 +9,24 @@ import {
   StatusBar,
   ImageBackground,
   Platform,
+  Modal,
+  Pressable,
+  Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTranslation } from "react-i18next";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useTripDashboard } from '../hooks/useTripOrganizer';
 import InstallmentScheduleView from '../components/InstallmentScheduleView';
 import { TripShareSheet } from '../components/TripShareSheet';
+
+// View-trip-dashboard B.1 — HelpSheet topics. B.4 — coach mark
+// AsyncStorage key (versioned suffix for future re-prompts).
+type HelpTopic = 'stats' | 'lifecycle' | 'quick_actions' | 'editing';
+const HELP_TOPICS: HelpTopic[] = ['stats', 'lifecycle', 'quick_actions', 'editing'];
+const DASHBOARD_COACH_KEY = '@tandaxn_trip_dashboard_coach_seen_v1';
 
 // --- Design tokens ---
 const NAVY = '#0A2342';
@@ -128,6 +138,13 @@ const OrganizerTripDashboardScreen: React.FC = () => {
   // the screen.
   const showSkeleton = loading && !dashboard;
 
+  // B.1 — HelpSheet state. B.4 — first-visit coach mark on the quick
+  // actions row; AsyncStorage-gated + auto-dismiss after 4s.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachOpacity = useRef(new Animated.Value(0)).current;
+  const coachCheckedRef = useRef(false);
+
   // Map hook's TripDashboard (camelCase) to screen's DashboardData (snake_case)
   const data: DashboardData = dashboard ? {
     trip_name: dashboard.trip?.name ?? t('trip_dashboard.untitled_trip'),
@@ -162,6 +179,56 @@ const OrganizerTripDashboardScreen: React.FC = () => {
   const totalActiveParticipants =
     data.confirmed_count + data.pending_count + data.waitlist_count;
   const showEmptyState = !showSkeleton && totalActiveParticipants === 0;
+
+  // B.4 — coach mark gating. Only show when:
+  //   1) data is loaded (not skeleton),
+  //   2) at least one participant exists (the coach points at quick
+  //      actions which feel relevant only once there's data to act on),
+  //   3) AsyncStorage hasn't seen the key yet.
+  // Fades in on mount, auto-dismisses at 4s, or on tap.
+  useEffect(() => {
+    if (coachCheckedRef.current) return;
+    if (showSkeleton || showEmptyState) return;
+    coachCheckedRef.current = true;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(DASHBOARD_COACH_KEY);
+        if (seen) return;
+        setCoachVisible(true);
+        Animated.timing(coachOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+      } catch {
+        // AsyncStorage unavailable → silently skip the coach.
+      }
+    })();
+  }, [showSkeleton, showEmptyState, coachOpacity]);
+
+  const dismissCoach = useCallback(() => {
+    Animated.timing(coachOpacity, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: true,
+    }).start(() => setCoachVisible(false));
+    AsyncStorage.setItem(DASHBOARD_COACH_KEY, '1').catch(() => undefined);
+  }, [coachOpacity]);
+
+  useEffect(() => {
+    if (!coachVisible) return;
+    const tid = setTimeout(() => dismissCoach(), 4000);
+    return () => clearTimeout(tid);
+  }, [coachVisible, dismissCoach]);
+
+  // B.5 — revenue card values pulled from dashboard.paymentSummary.
+  // Engine extended in this bucket to surface totalRefunded. All values
+  // are dollars (engine consistently exposes dollars per A.1 fix).
+  const revenueCollected = dashboard?.paymentSummary?.totalCollected ?? 0;
+  const revenueExpected = dashboard?.paymentSummary?.totalExpected ?? 0;
+  const revenuePending = Math.max(0, revenueExpected - revenueCollected);
+  const revenueRefunded = dashboard?.paymentSummary?.totalRefunded ?? 0;
+  const hasAnyRevenue = revenueExpected > 0 || revenueCollected > 0 || revenueRefunded > 0;
 
   const formatDateRange = (): string => {
     try {
@@ -247,12 +314,23 @@ const OrganizerTripDashboardScreen: React.FC = () => {
               <TouchableOpacity onPress={() => navigation.goBack()} style={styles.heroBtn}>
                 <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => navigation.navigate('CreateTripWizard', { tripId, mode: 'edit' })}
-                style={styles.heroBtn}
-              >
-                <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {/* B.1 — (?) help trigger sits beside the settings icon. */}
+                <TouchableOpacity
+                  onPress={() => setHelpOpen(true)}
+                  style={styles.heroBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('trip_dashboard.help_open_a11y')}
+                >
+                  <Ionicons name="help-circle-outline" size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => navigation.navigate('CreateTripWizard', { tripId, mode: 'edit' })}
+                  style={styles.heroBtn}
+                >
+                  <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Trip info */}
@@ -326,6 +404,57 @@ const OrganizerTripDashboardScreen: React.FC = () => {
           />
         </View>
 
+        {/* B.5 — Revenue summary card. Engine exposes collected,
+            expected, refunded; pending is computed. Empty fallback when
+            no payments / no expected total exist. */}
+        <View style={styles.card}>
+          <Text style={styles.revenueTitle}>
+            {t('trip_dashboard.revenue_title')}
+          </Text>
+          {hasAnyRevenue ? (
+            <View>
+              <View style={styles.revenueRow}>
+                <Text style={styles.revenueLabel}>
+                  {t('trip_dashboard.revenue_collected')}
+                </Text>
+                <Text style={[styles.revenueValue, { color: '#047857' }]}>
+                  ${revenueCollected.toFixed(2)}
+                </Text>
+              </View>
+              <View style={styles.revenueRow}>
+                <Text style={styles.revenueLabel}>
+                  {t('trip_dashboard.revenue_expected')}
+                </Text>
+                <Text style={styles.revenueValue}>
+                  ${revenueExpected.toFixed(2)}
+                </Text>
+              </View>
+              <View style={styles.revenueRow}>
+                <Text style={styles.revenueLabel}>
+                  {t('trip_dashboard.revenue_pending')}
+                </Text>
+                <Text style={[styles.revenueValue, { color: GOLD }]}>
+                  ${revenuePending.toFixed(2)}
+                </Text>
+              </View>
+              {revenueRefunded > 0 && (
+                <View style={styles.revenueRow}>
+                  <Text style={styles.revenueLabel}>
+                    {t('trip_dashboard.revenue_refunded')}
+                  </Text>
+                  <Text style={[styles.revenueValue, { color: '#7E22CE' }]}>
+                    ${revenueRefunded.toFixed(2)}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            <Text style={styles.revenueEmpty}>
+              {t('trip_dashboard.revenue_empty')}
+            </Text>
+          )}
+        </View>
+
         {/* Payment Schedule (organizer view: no per-row status badges) */}
         <View style={styles.scheduleWrap}>
           <Text style={styles.sectionTitle}>{t("final_polish.organizertripdashboard_payment_schedule")}</Text>
@@ -362,6 +491,26 @@ const OrganizerTripDashboardScreen: React.FC = () => {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* B.1 — HelpSheet overlay (mounted outside ScrollView). */}
+      <DashboardHelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} />
+
+      {/* B.4 — coach mark overlay pointing at the quick actions row. */}
+      {coachVisible && (
+        <Animated.View
+          style={[styles.coachOverlay, { opacity: coachOpacity }]}
+          pointerEvents="box-none"
+        >
+          <Pressable
+            style={styles.coachCard}
+            onPress={dismissCoach}
+            accessibilityRole="button"
+          >
+            <Ionicons name="sparkles-outline" size={20} color={TEAL} />
+            <Text style={styles.coachText}>{t('trip_dashboard.coach_title')}</Text>
+          </Pressable>
+        </Animated.View>
+      )}
 
       {/* Publish-trip Bucket B.3 — multi-channel share sheet. */}
       <TripShareSheet
@@ -645,5 +794,165 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     fontWeight: typography.semibold,
     color: NAVY,
+  },
+  // B.5 — revenue card rows
+  revenueTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: NAVY,
+    marginBottom: spacing.md,
+  },
+  revenueRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  revenueLabel: {
+    fontSize: typography.body,
+    color: colors.textSecondary,
+  },
+  revenueValue: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: NAVY,
+  },
+  revenueEmpty: {
+    fontSize: typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  // B.4 — coach mark
+  coachOverlay: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 24,
+  },
+  coachCard: {
+    backgroundColor: NAVY,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  coachText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+    flex: 1,
+    lineHeight: 18,
+  },
+});
+
+// ─── B.1 — HelpSheet (4 topics: stats, lifecycle, quick actions,
+//          editing after publish). Same modal pattern as the other
+//          HelpSheets in this app.
+// ───────────────────────────────────────────────────────────────────────
+function DashboardHelpSheet({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>
+            {t('trip_dashboard.help_sheet_title')}
+          </Text>
+          <ScrollView style={{ maxHeight: 420 }}>
+            {HELP_TOPICS.map((key, idx) => (
+              <View
+                key={key}
+                style={[
+                  sheetStyles.helpItem,
+                  idx === HELP_TOPICS.length - 1 && sheetStyles.helpItemLast,
+                ]}
+              >
+                <Text style={sheetStyles.helpItemTitle}>
+                  {t(`trip_dashboard.help_${key}_title`)}
+                </Text>
+                <Text style={sheetStyles.body}>
+                  {t(`trip_dashboard.help_${key}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+          <TouchableOpacity style={sheetStyles.closeBtn} onPress={onClose}>
+            <Text style={sheetStyles.closeBtnText}>
+              {t('trip_dashboard.help_close')}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const sheetStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: colors.border,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: NAVY,
+    marginBottom: 12,
+  },
+  body: {
+    fontSize: 13,
+    color: NAVY,
+    lineHeight: 19,
+  },
+  helpItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  helpItemLast: { borderBottomWidth: 0 },
+  helpItemTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: NAVY,
+    marginBottom: 4,
+  },
+  closeBtn: {
+    backgroundColor: NAVY,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  closeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

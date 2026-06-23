@@ -192,6 +192,10 @@ export interface TripDashboard {
     totalExpected: number;
     totalCollected: number;
     outstanding: number;
+    // View-trip-dashboard B.5 — sum of trip_payments.status='refunded'
+    // across this trip's participants. Lets the revenue card surface
+    // refunds without an extra round-trip.
+    totalRefunded: number;
   };
 }
 
@@ -609,6 +613,7 @@ export class TripOrganizerEngine {
     // Fetch payment totals (trip_payments joins through trip_participants)
     const participantIds = participants.map(p => p.id);
     let totalCollected = 0;
+    let totalRefunded = 0;
 
     if (participantIds.length > 0) {
       const { data: paymentRows, error: payError } = await supabase
@@ -618,6 +623,11 @@ export class TripOrganizerEngine {
       if (!payError && paymentRows) {
         totalCollected = paymentRows
           .filter(p => p.status === 'succeeded')
+          .reduce((sum: number, p: any) => sum + (parseFloat(p.amount) || 0), 0);
+        // View-trip-dashboard B.5 — refunded sum lives alongside the
+        // succeeded sum since both come from the same paymentRows fetch.
+        totalRefunded = paymentRows
+          .filter(p => p.status === 'refunded')
           .reduce((sum: number, p: any) => sum + (parseFloat(p.amount) || 0), 0);
       }
     }
@@ -633,6 +643,7 @@ export class TripOrganizerEngine {
         totalExpected,
         totalCollected,
         outstanding: totalExpected - totalCollected,
+        totalRefunded,
       },
     };
   }
@@ -1569,6 +1580,27 @@ export class TripOrganizerEngine {
   // ═══════════════════════════════════════════════════════════════════════════
   // GROUP 9: REALTIME SUBSCRIPTIONS
   // ═══════════════════════════════════════════════════════════════════════════
+
+  // View-trip-dashboard B.7 — single-participant subscriber.
+  // ParticipantDetailScreen uses this to react to confirm/cancel/payment
+  // events happening on the one row it renders. The existing
+  // subscribeToParticipants is trip-scoped and would over-fire here.
+  /** Subscribe to changes on ONE participant row */
+  static subscribeToParticipant(participantId: string, callback: (payload: any) => void) {
+    return supabase
+      .channel(`trip-participant-${participantId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trip_participants',
+          filter: `id=eq.${participantId}`,
+        },
+        callback,
+      )
+      .subscribe();
+  }
 
   /** Subscribe to participant changes for a trip */
   static subscribeToParticipants(tripId: string, callback: (payload: any) => void) {

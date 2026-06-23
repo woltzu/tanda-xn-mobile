@@ -33,6 +33,10 @@ import {
   SafeAreaView,
   StatusBar,
   Platform,
+  Modal,
+  Pressable,
+  TextInput,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute } from '@react-navigation/native';
@@ -43,6 +47,16 @@ import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useParticipantManager } from '../hooks/useTripOrganizer';
 import { supabase } from '../lib/supabase';
 import type { TripParticipant } from '../services/TripOrganizerEngine';
+
+// View-trip-dashboard B.2 — HelpSheet topics + B.6 — sort options.
+type HelpTopic = 'tabs' | 'payment_statuses' | 'what_tap_does' | 'cancellations';
+type SortKey = 'name_asc' | 'name_desc' | 'registered_newest' | 'registered_oldest';
+const SORT_OPTIONS: { key: SortKey; labelKey: string }[] = [
+  { key: 'registered_newest', labelKey: 'participant_manager.sort_registered_newest' },
+  { key: 'registered_oldest', labelKey: 'participant_manager.sort_registered_oldest' },
+  { key: 'name_asc',          labelKey: 'participant_manager.sort_name_asc' },
+  { key: 'name_desc',         labelKey: 'participant_manager.sort_name_desc' },
+];
 
 // --- Design tokens ---
 const NAVY = '#0A2342';
@@ -122,6 +136,13 @@ const ParticipantManagerScreen: React.FC = () => {
   const tripId: string = route.params?.tripId ?? '';
   const { participants, loading } = useParticipantManager(tripId);
   const [activeFilter, setActiveFilter] = useState<FilterTab>('confirmed');
+  // B.2 — HelpSheet open state. B.6 — search query (raw input) + sort key
+  // + small popover for picking sort. Search filters on the resolved
+  // display name; sort orders by name or registration date.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('registered_newest');
+  const [sortOpen, setSortOpen] = useState(false);
 
   // ── Bulk profile lookup ────────────────────────────────────────────────
   // Engine's getParticipants doesn't join profiles (user_id → auth.users,
@@ -170,10 +191,37 @@ const ParticipantManagerScreen: React.FC = () => {
     [allParticipants],
   );
 
-  const filteredParticipants = useMemo(
-    () => allParticipants.filter((p) => p.status === activeFilter),
-    [allParticipants, activeFilter],
-  );
+  // B.6 — combine status filter + name search + sort. Name search is
+  // case-insensitive substring on the resolved display name. Sort runs
+  // last so it sees the search-filtered slice and stays cheap.
+  const filteredParticipants = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const base = allParticipants.filter((p) => p.status === activeFilter);
+    const searched = q
+      ? base.filter((p) => {
+          const name = (nameMap[p.userId] ?? '').toLowerCase();
+          return name.includes(q);
+        })
+      : base;
+    const cmpName = (a: TripParticipant, b: TripParticipant) =>
+      (nameMap[a.userId] ?? '').localeCompare(nameMap[b.userId] ?? '', undefined, {
+        sensitivity: 'base',
+      });
+    const cmpRegistered = (a: TripParticipant, b: TripParticipant) => {
+      const at = new Date(a.joinedAt).getTime() || 0;
+      const bt = new Date(b.joinedAt).getTime() || 0;
+      return at - bt;
+    };
+    const sorted = [...searched];
+    switch (sortKey) {
+      case 'name_asc':            sorted.sort(cmpName); break;
+      case 'name_desc':           sorted.sort((a, b) => -cmpName(a, b)); break;
+      case 'registered_oldest':   sorted.sort(cmpRegistered); break;
+      case 'registered_newest':
+      default:                    sorted.sort((a, b) => -cmpRegistered(a, b)); break;
+    }
+    return sorted;
+  }, [allParticipants, activeFilter, searchQuery, sortKey, nameMap]);
 
   const navigateToDetail = useCallback(
     (participantId: string) => {
@@ -298,7 +346,14 @@ const ParticipantManagerScreen: React.FC = () => {
             <Text style={styles.countBadgeText}>{allParticipants.length}</Text>
           </View>
         </View>
-        <View style={styles.headerBtn} />
+        <TouchableOpacity
+          style={styles.headerBtn}
+          onPress={() => setHelpOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={t('participant_manager.help_open_a11y')}
+        >
+          <Ionicons name="help-circle-outline" size={24} color={NAVY} />
+        </TouchableOpacity>
       </View>
 
       {/* Filter Tabs — 4 tabs at flex:1 each. A.4 added cancelled. */}
@@ -341,6 +396,38 @@ const ParticipantManagerScreen: React.FC = () => {
         })}
       </View>
 
+      {/* B.6 — search box + sort selector. Compact row so we don't
+          push the list down too far. The clear-button appears once the
+          user types something. */}
+      <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <Ionicons name="search" size={16} color={GRAY} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={t('participant_manager.search_placeholder')}
+            placeholderTextColor={GRAY}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={16} color={GRAY} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          style={styles.sortBtn}
+          onPress={() => setSortOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={t('participant_manager.sort_open_a11y')}
+        >
+          <Ionicons name="swap-vertical" size={16} color={NAVY} />
+        </TouchableOpacity>
+      </View>
+
       {/* Participant List */}
       <FlatList
         data={filteredParticipants}
@@ -349,12 +436,213 @@ const ParticipantManagerScreen: React.FC = () => {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={!loading ? <EmptyFilterState /> : null}
+        keyboardShouldPersistTaps="handled"
+      />
+
+      {/* B.2 — HelpSheet (4 topics: tabs, payment statuses, what tap
+          does, cancellations). */}
+      <ManagerHelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} />
+
+      {/* B.6 — sort options popover. */}
+      <SortSheet
+        visible={sortOpen}
+        current={sortKey}
+        onSelect={(k) => {
+          setSortKey(k);
+          setSortOpen(false);
+        }}
+        onClose={() => setSortOpen(false)}
       />
     </SafeAreaView>
   );
 };
 
 export default ParticipantManagerScreen;
+
+// ─── B.2 — HelpSheet (4 topics: tabs / payment statuses / what tap
+//          does / cancellations). Same modal pattern as the
+//          ParticipantDetail and InsurancePool HelpSheets.
+// ──────────────────────────────────────────────────────────────────────
+const MANAGER_HELP_TOPICS: HelpTopic[] = [
+  'tabs',
+  'payment_statuses',
+  'what_tap_does',
+  'cancellations',
+];
+
+function ManagerHelpSheet({
+  visible,
+  onClose,
+}: {
+  visible: boolean;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>
+            {t('participant_manager.help_sheet_title')}
+          </Text>
+          <ScrollView style={{ maxHeight: 420 }}>
+            {MANAGER_HELP_TOPICS.map((key, idx) => (
+              <View
+                key={key}
+                style={[
+                  sheetStyles.helpItem,
+                  idx === MANAGER_HELP_TOPICS.length - 1 && sheetStyles.helpItemLast,
+                ]}
+              >
+                <Text style={sheetStyles.helpItemTitle}>
+                  {t(`participant_manager.help_${key}_title`)}
+                </Text>
+                <Text style={sheetStyles.body}>
+                  {t(`participant_manager.help_${key}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+          <TouchableOpacity style={sheetStyles.closeBtn} onPress={onClose}>
+            <Text style={sheetStyles.closeBtnText}>
+              {t('participant_manager.help_close')}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ─── B.6 — SortSheet. Tiny picker with the 4 sort options. Each row
+//          highlights the currently-selected key with a checkmark.
+// ──────────────────────────────────────────────────────────────────────
+function SortSheet({
+  visible,
+  current,
+  onSelect,
+  onClose,
+}: {
+  visible: boolean;
+  current: SortKey;
+  onSelect: (k: SortKey) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>
+            {t('participant_manager.sort_sheet_title')}
+          </Text>
+          {SORT_OPTIONS.map((opt, idx) => {
+            const active = opt.key === current;
+            return (
+              <TouchableOpacity
+                key={opt.key}
+                style={[
+                  sheetStyles.sortRow,
+                  idx === SORT_OPTIONS.length - 1 && sheetStyles.sortRowLast,
+                ]}
+                onPress={() => onSelect(opt.key)}
+              >
+                <Text
+                  style={[
+                    sheetStyles.sortRowText,
+                    active && { color: TEAL, fontWeight: '700' },
+                  ]}
+                >
+                  {t(opt.labelKey)}
+                </Text>
+                {active && <Ionicons name="checkmark" size={18} color={TEAL} />}
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity style={sheetStyles.closeBtn} onPress={onClose}>
+            <Text style={sheetStyles.closeBtnText}>
+              {t('participant_manager.help_close')}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ─── Shared sheet styles (matches InsurancePoolScreen pattern). ──────
+const sheetStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: colors.border,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 14,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: NAVY,
+    marginBottom: 12,
+  },
+  body: {
+    fontSize: 13,
+    color: NAVY,
+    lineHeight: 19,
+  },
+  helpItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  helpItemLast: { borderBottomWidth: 0 },
+  helpItemTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: NAVY,
+    marginBottom: 4,
+  },
+  sortRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  sortRowLast: { borderBottomWidth: 0 },
+  sortRowText: {
+    fontSize: 14,
+    color: NAVY,
+  },
+  closeBtn: {
+    backgroundColor: NAVY,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  closeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+});
 
 // --- Styles ---
 const styles = StyleSheet.create({
@@ -483,6 +771,40 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     fontSize: typography.label,
     fontWeight: typography.semibold,
+  },
+
+  // B.6 — search + sort row, sits above the FlatList.
+  searchRow: {
+    flexDirection: 'row',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: 4,
+    gap: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  searchBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: radius.pill,
+    paddingHorizontal: 12,
+    height: 36,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: typography.body,
+    color: NAVY,
+    padding: 0,
+  },
+  sortBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Empty state

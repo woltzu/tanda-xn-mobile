@@ -38,9 +38,10 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
-  Alert,
   ActivityIndicator,
   RefreshControl,
+  Modal,
+  Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRoute, RouteProp } from "@react-navigation/native";
@@ -49,10 +50,18 @@ import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useParticipantDetail } from "../hooks/useTripOrganizer";
 import { supabase } from "../lib/supabase";
-import type {
-  TripSubmission,
-  TripPayment,
+import { showToast } from "../components/Toast";
+import {
+  TripOrganizerEngine,
+  type TripSubmission,
+  type TripPayment,
 } from "../services/TripOrganizerEngine";
+
+// View-trip-dashboard B.3 — HelpSheet topics for the (?) header button.
+// Four topics: confirm vs cancel impact, refund policy, doc verification,
+// payment timeline. Each maps to a participant_detail.help_<topic>_*
+// pair in en/fr.json.
+type HelpTopic = "confirm_vs_cancel" | "refunds" | "doc_verification" | "payment_timeline";
 
 const NAVY = "#0A2342";
 const TEAL = "#00C6AE";
@@ -120,6 +129,13 @@ export default function ParticipantDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [fullName, setFullName] = useState<string | null>(null);
   const [actionInFlight, setActionInFlight] = useState<"confirm" | "cancel" | null>(null);
+  // View-trip-dashboard B.3 — HelpSheet topic (null = closed).
+  const [helpTopic, setHelpTopic] = useState<HelpTopic | null>(null);
+  // View-trip-dashboard B.8 — slide-up action sheet replaces Alert.alert
+  // for confirm/cancel. `null` = no sheet; "confirm" / "cancel" =
+  // intent. The action sheet calls the in-flight handler when
+  // primary-tapped, then closes itself.
+  const [pendingAction, setPendingAction] = useState<"confirm" | "cancel" | null>(null);
 
   // ── Name enrichment: one-shot profile lookup ──────────────────────────
   useEffect(() => {
@@ -139,6 +155,32 @@ export default function ParticipantDetailScreen() {
     };
   }, [participant?.userId]);
 
+  // View-trip-dashboard B.7 — realtime subscription on this one
+  // participant row + their payments. When the participant pays
+  // (webhook flips paymentStatus) or is server-side cancelled (auto-
+  // release cron at 48h, migration 242), the dashboard reflects it
+  // without pull-to-refresh. The detail hook does NOT subscribe today,
+  // so we wire two channels here and refresh on either event.
+  useEffect(() => {
+    if (!participantId) return;
+    const participantChannel = TripOrganizerEngine.subscribeToParticipant(
+      participantId,
+      () => {
+        refresh();
+      },
+    );
+    const paymentsChannel = TripOrganizerEngine.subscribeToPayments(
+      participantId,
+      () => {
+        refresh();
+      },
+    );
+    return () => {
+      participantChannel?.unsubscribe?.();
+      paymentsChannel?.unsubscribe?.();
+    };
+  }, [participantId, refresh]);
+
   // ── Pull-to-refresh ───────────────────────────────────────────────────
   const onPullRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -150,62 +192,36 @@ export default function ParticipantDetailScreen() {
   }, [refresh]);
 
   // ── Actions ───────────────────────────────────────────────────────────
-  // View-trip-dashboard Bucket A.3 — every string i18n'd. The Alert
-  // buttons are paired (cancel/confirm vs keep/cancel-destructive) so
-  // they live under participant_detail.confirm_* / cancel_*.
-  const handleConfirm = () => {
-    Alert.alert(
-      t("participant_detail.confirm_title"),
-      t("participant_detail.confirm_body"),
-      [
-        { text: t("participant_detail.confirm_action_cancel"), style: "cancel" },
-        {
-          text: t("participant_detail.confirm_action_confirm"),
-          onPress: async () => {
-            setActionInFlight("confirm");
-            try {
-              await confirm();
-              navigation.goBack();
-            } catch (err: any) {
-              Alert.alert(
-                t("participant_detail.error_could_not_confirm"),
-                err?.message ?? t("participant_detail.error_try_again"),
-              );
-            } finally {
-              setActionInFlight(null);
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  const handleCancel = () => {
-    Alert.alert(
-      t("participant_detail.cancel_title"),
-      t("participant_detail.cancel_body"),
-      [
-        { text: t("participant_detail.cancel_action_keep"), style: "cancel" },
-        {
-          text: t("participant_detail.cancel_action_cancel"),
-          style: "destructive",
-          onPress: async () => {
-            setActionInFlight("cancel");
-            try {
-              await cancel();
-              navigation.goBack();
-            } catch (err: any) {
-              Alert.alert(
-                t("participant_detail.error_could_not_cancel"),
-                err?.message ?? t("participant_detail.error_try_again"),
-              );
-            } finally {
-              setActionInFlight(null);
-            }
-          },
-        },
-      ],
-    );
+  // View-trip-dashboard B.8 — the buttons just open the action sheet; the
+  // sheet's primary button runs the actual confirm/cancel mutation. Toast
+  // on success/failure (no more Alert.alert).
+  const runPendingAction = async () => {
+    if (!pendingAction) return;
+    const kind = pendingAction;
+    setActionInFlight(kind);
+    setPendingAction(null);
+    try {
+      if (kind === "confirm") {
+        await confirm();
+        showToast(t("participant_detail.toast_confirmed"), "success");
+      } else {
+        await cancel();
+        showToast(t("participant_detail.toast_cancelled"), "success");
+      }
+      navigation.goBack();
+    } catch (err: any) {
+      showToast(
+        err?.message ??
+          t(
+            kind === "confirm"
+              ? "participant_detail.error_could_not_confirm"
+              : "participant_detail.error_could_not_cancel",
+          ),
+        "error",
+      );
+    } finally {
+      setActionInFlight(null);
+    }
   };
 
   const openDocument = (submission: TripSubmission) => {
@@ -465,6 +481,8 @@ export default function ParticipantDetailScreen() {
         onBack={() => navigation.goBack()}
         title={displayName}
         a11yLabel={t("participant_detail.back_a11y")}
+        onHelp={() => setHelpTopic("confirm_vs_cancel")}
+        helpA11yLabel={t("participant_detail.help_open_a11y")}
       />
 
       <ScrollView
@@ -562,7 +580,7 @@ export default function ParticipantDetailScreen() {
             {isPending && (
               <TouchableOpacity
                 style={[styles.btnPrimary, isBusy && styles.btnDisabled]}
-                onPress={handleConfirm}
+                onPress={() => setPendingAction("confirm")}
                 disabled={isBusy}
                 accessibilityRole="button"
               >
@@ -580,7 +598,7 @@ export default function ParticipantDetailScreen() {
             )}
             <TouchableOpacity
               style={[styles.btnDanger, isBusy && styles.btnDisabled]}
-              onPress={handleCancel}
+              onPress={() => setPendingAction("cancel")}
               disabled={isBusy}
               accessibilityRole="button"
             >
@@ -609,6 +627,21 @@ export default function ParticipantDetailScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* B.3 — HelpSheet, mounted outside ScrollView so it overlays. */}
+      <ParticipantHelpSheet
+        topic={helpTopic}
+        onClose={() => setHelpTopic(null)}
+      />
+
+      {/* B.8 — Action confirm sheet replaces Alert.alert. */}
+      <ActionConfirmSheet
+        kind={pendingAction}
+        displayName={displayName}
+        onClose={() => setPendingAction(null)}
+        onConfirm={runPendingAction}
+        busy={isBusy}
+      />
     </SafeAreaView>
   );
 }
@@ -619,10 +652,17 @@ function HeaderBar({
   onBack,
   title,
   a11yLabel,
+  onHelp,
+  helpA11yLabel,
 }: {
   onBack: () => void;
   title: string;
   a11yLabel: string;
+  // View-trip-dashboard B.3 — optional (?) header trigger. When absent
+  // (e.g. loading/error/not-found states), the right slot stays as a
+  // spacer so the title remains centered.
+  onHelp?: () => void;
+  helpA11yLabel?: string;
 }) {
   return (
     <View style={styles.header}>
@@ -637,7 +677,18 @@ function HeaderBar({
       <Text style={styles.headerTitle} numberOfLines={1}>
         {title}
       </Text>
-      <View style={styles.headerSpacer} />
+      {onHelp ? (
+        <TouchableOpacity
+          style={styles.helpButton}
+          onPress={onHelp}
+          accessibilityRole="button"
+          accessibilityLabel={helpA11yLabel ?? ""}
+        >
+          <Ionicons name="help-circle-outline" size={24} color={NAVY} />
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.headerSpacer} />
+      )}
     </View>
   );
 }
@@ -656,6 +707,193 @@ function SectionHeader({ title, count }: { title: string; count: number }) {
     </View>
   );
 }
+
+// ── B.3 — HelpSheet (4 topics: confirm/cancel impact, refunds, doc
+//        verification, payment timeline). Same modal pattern as the
+//        InsurancePoolScreen HelpSheet but with its own copy.
+// ─────────────────────────────────────────────────────────────────────────
+const HELP_TOPICS: HelpTopic[] = [
+  "confirm_vs_cancel",
+  "refunds",
+  "doc_verification",
+  "payment_timeline",
+];
+
+function ParticipantHelpSheet({
+  topic,
+  onClose,
+}: {
+  topic: HelpTopic | null;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const visible = topic != null;
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>
+            {t("participant_detail.help_sheet_title")}
+          </Text>
+          <ScrollView style={{ maxHeight: 420 }}>
+            {HELP_TOPICS.map((key, idx) => (
+              <View
+                key={key}
+                style={[
+                  sheetStyles.helpItem,
+                  idx === HELP_TOPICS.length - 1 && sheetStyles.helpItemLast,
+                ]}
+              >
+                <Text style={sheetStyles.helpItemTitle}>
+                  {t(`participant_detail.help_${key}_title`)}
+                </Text>
+                <Text style={sheetStyles.body}>
+                  {t(`participant_detail.help_${key}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+          <TouchableOpacity style={sheetStyles.closeBtn} onPress={onClose}>
+            <Text style={sheetStyles.closeBtnText}>
+              {t("participant_detail.help_close")}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ── B.8 — ActionConfirmSheet. Slide-up bottom sheet replacing Alert.alert
+//        for confirm/cancel destructive actions. Primary button styled
+//        per intent (teal for confirm, red for cancel); secondary stays
+//        neutral. Spec for copy lives under participant_detail.confirm_*
+//        / cancel_* — same keys the old Alert flow used.
+// ─────────────────────────────────────────────────────────────────────────
+function ActionConfirmSheet({
+  kind,
+  displayName,
+  onClose,
+  onConfirm,
+  busy,
+}: {
+  kind: "confirm" | "cancel" | null;
+  displayName: string;
+  onClose: () => void;
+  onConfirm: () => void;
+  busy: boolean;
+}) {
+  const { t } = useTranslation();
+  const visible = kind != null;
+  const isConfirm = kind === "confirm";
+  const titleKey = isConfirm ? "confirm_title" : "cancel_title";
+  const bodyKey = isConfirm ? "confirm_body" : "cancel_body";
+  const primaryKey = isConfirm ? "confirm_action_confirm" : "cancel_action_cancel";
+  const secondaryKey = isConfirm ? "confirm_action_cancel" : "cancel_action_keep";
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={sheetStyles.backdrop} onPress={onClose}>
+        <Pressable style={sheetStyles.sheet} onPress={() => {}}>
+          <View style={sheetStyles.handle} />
+          <Text style={sheetStyles.title}>{t(`participant_detail.${titleKey}`)}</Text>
+          <Text style={[sheetStyles.body, { marginBottom: 18 }]}>
+            {t(`participant_detail.${bodyKey}`)}
+            {displayName ? `\n\n— ${displayName}` : ""}
+          </Text>
+          <TouchableOpacity
+            style={[
+              styles.btnPrimary,
+              !isConfirm && { backgroundColor: RED },
+              busy && styles.btnDisabled,
+              { marginBottom: 10 },
+            ]}
+            onPress={onConfirm}
+            disabled={busy}
+            accessibilityRole="button"
+          >
+            <Ionicons
+              name={isConfirm ? "checkmark-circle" : "close-circle"}
+              size={18}
+              color="#FFFFFF"
+            />
+            <Text style={styles.btnPrimaryText}>{t(`participant_detail.${primaryKey}`)}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.btnDanger, { borderColor: BORDER }]}
+            onPress={onClose}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.btnDangerText, { color: NAVY }]}>
+              {t(`participant_detail.${secondaryKey}`)}
+            </Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ── B.3 / B.8 — shared sheet styles. Matches the InsurancePoolScreen
+//        sheet styling (dark backdrop, top-rounded sheet, handle bar).
+// ─────────────────────────────────────────────────────────────────────────
+const sheetStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    padding: 20,
+    paddingBottom: 36,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: BORDER,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 14,
+  },
+  title: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: NAVY,
+    marginBottom: 12,
+  },
+  body: {
+    fontSize: 13,
+    color: NAVY,
+    lineHeight: 19,
+  },
+  helpItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  helpItemLast: { borderBottomWidth: 0 },
+  helpItemTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: NAVY,
+    marginBottom: 4,
+  },
+  closeBtn: {
+    backgroundColor: NAVY,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  closeBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+});
 
 // ── Styles ───────────────────────────────────────────────────────────────
 
@@ -680,6 +918,7 @@ const styles = StyleSheet.create({
     color: NAVY,
   },
   headerSpacer: { width: 44 },
+  helpButton: { minWidth: 44, paddingVertical: 4, alignItems: "flex-end" },
 
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 },
