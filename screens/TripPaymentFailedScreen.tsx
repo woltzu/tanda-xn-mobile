@@ -15,7 +15,7 @@
 //                     localized strings.
 // ══════════════════════════════════════════════════════════════════════════
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -28,6 +28,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { colors, radius, typography } from "../theme/tokens";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 const NAVY = colors.primaryNavy;
 const RED = "#DC2626";
@@ -63,9 +64,34 @@ const TripPaymentFailedScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { t } = useTranslation();
+  const { track } = useEventTracker();
 
   const tripId: string | undefined = route.params?.tripId;
   const participantId: string | undefined = route.params?.participantId;
+  const rawError: string | undefined = route.params?.errorMessage;
+
+  // Join-trip Bucket C.1 — fire once on mount; ref-guarded so a
+  // re-render (e.g. theme switch) doesn't double-count. We pass the
+  // sanitised body so the event is searchable by friendly reason.
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    viewedFiredRef.current = true;
+    const sanitised = (rawError || "")
+      .replace(/(pi|seti|cus|src|tok|ch)_[a-zA-Z0-9_]+/g, "<id>")
+      .slice(0, 200);
+    track({
+      eventType: "trip_payment.failed_screen_viewed",
+      eventCategory: "cross_border",
+      eventAction: "view",
+      eventLabel: "trip_payment_failed_screen",
+      eventValue: {
+        trip_id: tripId ?? null,
+        participant_id: participantId ?? null,
+        raw_error: sanitised,
+      },
+    });
+  }, [tripId, participantId, rawError, track]);
   // Bucket B.4 — friendly localised body when Stripe sent a known code,
   // else fall back to the generic failure_default. The raw message is
   // still preserved in the unknown-code path for diagnosability.

@@ -58,6 +58,7 @@ import type { Trip, TripParticipant, TripPayment } from "../services/TripOrganiz
 import { useAuth } from "../context/AuthContext";
 import { usePayment } from "../context/PaymentContext";
 import { showToast } from "../components/Toast";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 // Join-trip Bucket B.1 — HelpSheet topic ids. Order mirrors what a first-
 // time payer asks in order: what am I paying for → what's the fee →
@@ -117,6 +118,10 @@ const TripPaymentScreen: React.FC = () => {
   const [coachVisible, setCoachVisible] = useState(false);
   const coachOpacity = useRef(new Animated.Value(0)).current;
   const coachTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Join-trip Bucket C.1 — telemetry.
+  const { track } = useEventTracker();
+  const openedFiredRef = useRef(false);
 
   // Refresh helper — used both for the initial mount and after a
   // PaymentSheet returns success (the screen needs to render the new
@@ -196,6 +201,27 @@ const TripPaymentScreen: React.FC = () => {
     AsyncStorage.setItem(COACH_SEEN_KEY, "1").catch(() => undefined);
   };
 
+  // Join-trip Bucket C.1 — `trip_payment.opened` fires once per session
+  // after participant + trip resolve. Gated on participant so we have a
+  // real payment_status to attach; gated on trip so the deposit-option
+  // flag is meaningful.
+  useEffect(() => {
+    if (!participant || !trip || openedFiredRef.current) return;
+    openedFiredRef.current = true;
+    track({
+      eventType: "trip_payment.opened",
+      eventCategory: "cross_border",
+      eventAction: "view",
+      eventLabel: "trip_payment_screen",
+      eventValue: {
+        trip_id: trip.id,
+        participant_id: participant.id,
+        payment_status: participant.paymentStatus,
+        is_deposit_available: (trip.depositCents ?? 0) > 0,
+      },
+    });
+  }, [participant, trip, track]);
+
   // ── Derived amounts (all in DOLLARS to match the DB column unit) ─────
   // The Trip type's `*Cents` fields are a misnomer — mapTrip reads them
   // from DECIMAL DOLLARS columns (price_per_person, deposit_amount), so
@@ -250,6 +276,21 @@ const TripPaymentScreen: React.FC = () => {
         participantId: participant.id,
         paymentType: choice,
       });
+      // Join-trip Bucket C.1 — fire intent_created after the EF returns
+      // a clientSecret. amount is in dollars to match the user-facing UI
+      // and the trip_payments.amount column unit.
+      track({
+        eventType: "trip_payment.intent_created",
+        eventCategory: "cross_border",
+        eventAction: "create",
+        eventLabel: choice,
+        eventValue: {
+          trip_id: trip.id,
+          participant_id: participant.id,
+          amount: chargeDollars,
+          payment_type: choice,
+        },
+      });
 
       // Step 2: present the PaymentSheet. usePayment().presentPaymentSheet
       // initializes the sheet (merchantDisplayName etc.) AND presents it
@@ -257,6 +298,26 @@ const TripPaymentScreen: React.FC = () => {
       // { success, error? }.
       const result = await presentPaymentSheet(clientSecret);
       if (!result.success) {
+        // Join-trip Bucket C.1 — sanitise the Stripe message before
+        // putting it into telemetry: keep the first 200 chars and strip
+        // out anything that looks like a token / id so PII or PI ids
+        // don't leak. (Stripe's message rarely contains PII, but the
+        // safer default is the truncation.)
+        const sanitised = (result.error || "")
+          .replace(/(pi|seti|cus|src|tok|ch)_[a-zA-Z0-9_]+/g, "<id>")
+          .slice(0, 200);
+        track({
+          eventType: "trip_payment.failed",
+          eventCategory: "cross_border",
+          eventAction: "failure",
+          eventLabel: "payment_sheet_error",
+          eventValue: {
+            trip_id: trip.id,
+            participant_id: participant.id,
+            error_code: "payment_sheet_error",
+            error_message: sanitised,
+          },
+        });
         navigation.replace("TripPaymentFailed", {
           tripId: trip.id,
           participantId: participant.id,
@@ -264,6 +325,22 @@ const TripPaymentScreen: React.FC = () => {
         });
         return;
       }
+
+      // Join-trip Bucket C.1 — payment confirmed by Stripe. Fire BEFORE
+      // navigate so the event lands even if the navigation transition
+      // unmounts the screen mid-flush.
+      track({
+        eventType: "trip_payment.confirmed",
+        eventCategory: "cross_border",
+        eventAction: "success",
+        eventLabel: choice,
+        eventValue: {
+          trip_id: trip.id,
+          participant_id: participant.id,
+          amount: chargeDollars,
+          payment_type: choice,
+        },
+      });
 
       // Step 3: PaymentSheet confirmed. The succeeded webhook may race
       // ahead of us; refetch the participant so the success screen has
@@ -279,6 +356,23 @@ const TripPaymentScreen: React.FC = () => {
       });
     } catch (err: any) {
       console.warn("[TripPaymentScreen] pay failed:", err);
+      // Sanitise + truncate the error text before telemetry; same rule
+      // as the payment-sheet error path above.
+      const sanitised = String(err?.message || "")
+        .replace(/(pi|seti|cus|src|tok|ch)_[a-zA-Z0-9_]+/g, "<id>")
+        .slice(0, 200);
+      track({
+        eventType: "trip_payment.failed",
+        eventCategory: "cross_border",
+        eventAction: "failure",
+        eventLabel: "exception",
+        eventValue: {
+          trip_id: trip?.id ?? null,
+          participant_id: participant?.id ?? null,
+          error_code: "exception",
+          error_message: sanitised,
+        },
+      });
       navigation.replace("TripPaymentFailed", {
         tripId: trip?.id,
         participantId: participant?.id,
@@ -286,6 +380,26 @@ const TripPaymentScreen: React.FC = () => {
       });
     } finally {
       setProcessing(false);
+    }
+  };
+
+  // Join-trip Bucket C.1 — `method_selected` fires when the user changes
+  // the toggle. We wrap setChoice so the call sites stay one-liner.
+  const selectChoice = (next: PaymentChoice) => {
+    if (next === choice) return;
+    setChoice(next);
+    if (trip) {
+      track({
+        eventType: "trip_payment.method_selected",
+        eventCategory: "cross_border",
+        eventAction: "select",
+        eventLabel: next,
+        eventValue: {
+          trip_id: trip.id,
+          participant_id: participant?.id ?? null,
+          method: next,
+        },
+      });
     }
   };
 
@@ -421,7 +535,7 @@ const TripPaymentScreen: React.FC = () => {
             <Text style={styles.toggleTitle}>{t("trip_payment.toggle_title")}</Text>
             <TouchableOpacity
               style={[styles.choiceRow, choice === "deposit" && styles.choiceRowActive]}
-              onPress={() => setChoice("deposit")}
+              onPress={() => selectChoice("deposit")}
               activeOpacity={0.7}
             >
               <View style={[styles.radio, choice === "deposit" && styles.radioActive]}>
@@ -433,7 +547,7 @@ const TripPaymentScreen: React.FC = () => {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.choiceRow, choice === "full" && styles.choiceRowActive]}
-              onPress={() => setChoice("full")}
+              onPress={() => selectChoice("full")}
               activeOpacity={0.7}
             >
               <View style={[styles.radio, choice === "full" && styles.radioActive]}>

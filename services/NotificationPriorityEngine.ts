@@ -658,7 +658,24 @@ export class NotificationPriorityEngine {
       // as itinerary-updated; no immediate dollar impact, but high-value
       // context the user wants in their daily digest, not on push.
       case "trip_update_posted":
+      // Join-trip Bucket C.4 — waitlist member just got promoted to
+      // pending. Action-required but not deadline-bound (the 48h clock
+      // doesn't start over for them); same bucket as the join-side
+      // informational nudges.
+      case "trip_seat_released":
         return "coaching_goals";
+      // Join-trip Bucket C.4 — organizer-side positive event: a
+      // participant just paid. Social/structural news, not a direct
+      // dollar deadline on the organizer; route as circle_events so it
+      // lands alongside other "something happened in your trip" pings.
+      case "trip_participant_paid":
+        return "circle_events";
+      // Join-trip Bucket C.4 — daily cron-driven nudge for unpaid
+      // participants approaching the 48h auto-release deadline. Same
+      // tier as trip_payment_due — the seat will be released if they
+      // don't act, so this is a dollar+deadline event.
+      case "trip_payment_reminder_unpaid":
+        return "payment_critical";
       default:
         return null;
     }

@@ -18,7 +18,7 @@
 // back into the (now-paid) TripPayment screen.
 // ══════════════════════════════════════════════════════════════════════════
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -31,6 +31,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, CommonActions } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { colors, radius, typography } from "../theme/tokens";
+import { useEventTracker } from "../hooks/useEventTracker";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
@@ -46,9 +47,32 @@ const TripPaymentSuccessScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { t } = useTranslation();
+  const { track } = useEventTracker();
 
   const tripId: string = route.params?.tripId ?? "";
+  const participantId: string | undefined = route.params?.participantId;
   const amountDollars: number = route.params?.amountDollars ?? 0;
+  const paymentType: string | undefined = route.params?.paymentType;
+
+  // Join-trip Bucket C.1 — fire once on mount. Ref-guarded so a
+  // re-render (theme switch, etc.) doesn't double-count.
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: "trip_payment.success_screen_viewed",
+      eventCategory: "cross_border",
+      eventAction: "view",
+      eventLabel: paymentType ?? "unknown",
+      eventValue: {
+        trip_id: tripId,
+        participant_id: participantId ?? null,
+        amount: amountDollars,
+        payment_type: paymentType ?? null,
+      },
+    });
+  }, [tripId, participantId, amountDollars, paymentType, track]);
 
   const goToStatus = () => {
     // Reset the back stack so the success screen and the (now-stale)
