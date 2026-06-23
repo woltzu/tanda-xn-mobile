@@ -25,6 +25,10 @@ const GOLD = '#E8A842';
 const BG = '#F5F7FA';
 
 // --- Types ---
+// View-trip-dashboard A.7 — `docs_complete`/`docs_total`/`docs_missing_count`
+// were hardcoded to 0 (the hook doesn't expose docs aggregates). Dropped
+// the fields entirely along with the dead progress bar + alert banner so
+// the dashboard doesn't lie about state it can't compute.
 interface DashboardData {
   trip_name: string;
   destination: string;
@@ -37,9 +41,6 @@ interface DashboardData {
   waitlist_count: number;
   total_collected: number;
   total_target: number;
-  docs_complete: number;
-  docs_total: number;
-  docs_missing_count: number;
 }
 
 // Publish-trip Bucket B.3 — quick actions can either navigate to a route
@@ -119,11 +120,17 @@ const OrganizerTripDashboardScreen: React.FC = () => {
   // action. Same multi-channel sheet that ships on the publish-success
   // screen and the public page; the dashboard is the third surface.
   const [shareSheetOpen, setShareSheetOpen] = useState(false);
-  void loading; // hook-result for future loading skeleton; intentionally unused
+
+  // View-trip-dashboard A.6 — render a skeleton while the first fetch is
+  // in flight. The hook returns `loading=true, dashboard=null` on cold
+  // load; once data lands `loading` flips back to false. We gate on
+  // `loading && !dashboard` so that subsequent refreshes don't blank
+  // the screen.
+  const showSkeleton = loading && !dashboard;
 
   // Map hook's TripDashboard (camelCase) to screen's DashboardData (snake_case)
   const data: DashboardData = dashboard ? {
-    trip_name: dashboard.trip?.name ?? 'Untitled Trip',
+    trip_name: dashboard.trip?.name ?? t('trip_dashboard.untitled_trip'),
     destination: dashboard.trip?.destination ?? '',
     cover_image_url: dashboard.trip?.coverPhotoUrl ?? undefined,
     start_date: dashboard.trip?.startDate ?? '',
@@ -134,11 +141,8 @@ const OrganizerTripDashboardScreen: React.FC = () => {
     waitlist_count: dashboard.stats?.waitlist ?? 0,
     total_collected: dashboard.paymentSummary?.totalCollected ?? 0,
     total_target: dashboard.paymentSummary?.totalExpected ?? 0,
-    docs_complete: 0,
-    docs_total: 0,
-    docs_missing_count: 0,
   } : {
-    trip_name: 'Loading...',
+    trip_name: '',
     destination: '',
     cover_image_url: undefined,
     start_date: '',
@@ -149,10 +153,15 @@ const OrganizerTripDashboardScreen: React.FC = () => {
     waitlist_count: 0,
     total_collected: 0,
     total_target: 0,
-    docs_complete: 0,
-    docs_total: 0,
-    docs_missing_count: 0,
   };
+
+  // View-trip-dashboard A.8 — empty-state gate. Shown when the trip has
+  // zero seats accounted for across all statuses (i.e. no one has joined
+  // and no one is waitlisted). Cancelled rows are intentionally excluded
+  // — a cancelled-only roster is functionally empty for the organizer.
+  const totalActiveParticipants =
+    data.confirmed_count + data.pending_count + data.waitlist_count;
+  const showEmptyState = !showSkeleton && totalActiveParticipants === 0;
 
   const formatDateRange = (): string => {
     try {
@@ -178,6 +187,48 @@ const OrganizerTripDashboardScreen: React.FC = () => {
     { key: 'updates',      icon: 'megaphone-outline', label: t('trip.dashboard_action_updates'), route: 'TripUpdates', color: NAVY },
     { key: 'share',        icon: 'share-social-outline', label: t('trip.dashboard_action_share'), onPress: () => setShareSheetOpen(true), color: '#7C3AED' },
   ];
+
+  // View-trip-dashboard A.6 — skeleton state. Mirrors the dashboard's
+  // layout shape so the page doesn't visually jump when data lands.
+  if (showSkeleton) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          {/* Hero placeholder */}
+          <View style={[styles.hero, styles.skeletonHero]}>
+            <View style={styles.heroHeader}>
+              <TouchableOpacity onPress={() => navigation.goBack()} style={styles.heroBtn}>
+                <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+              <View style={styles.heroBtn} />
+            </View>
+            <View style={[styles.heroContent, { gap: 8 }]}>
+              <View style={[styles.skeletonBlock, { width: '70%', height: 24 }]} />
+              <View style={[styles.skeletonBlock, { width: '50%', height: 16 }]} />
+              <View style={[styles.skeletonBlock, { width: '40%', height: 12 }]} />
+            </View>
+          </View>
+          {/* Stats placeholder */}
+          <View style={styles.statRow}>
+            <View style={[styles.statBox, styles.skeletonStat]} />
+            <View style={[styles.statBox, styles.skeletonStat]} />
+            <View style={[styles.statBox, styles.skeletonStat]} />
+          </View>
+          {/* Cards placeholders */}
+          <View style={[styles.card, { height: 86 }]}>
+            <View style={[styles.skeletonBlock, { width: '40%', height: 14, marginBottom: 12 }]} />
+            <View style={[styles.skeletonBlock, { width: '100%', height: 8 }]} />
+          </View>
+          <View style={[styles.card, { height: 110 }]}>
+            <View style={[styles.skeletonBlock, { width: '50%', height: 14, marginBottom: 12 }]} />
+            <View style={[styles.skeletonBlock, { width: '100%', height: 12, marginBottom: 8 }]} />
+            <View style={[styles.skeletonBlock, { width: '80%', height: 12 }]} />
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -243,6 +294,27 @@ const OrganizerTripDashboardScreen: React.FC = () => {
           <StatBox label={t('trip.dashboard_stat_waitlist')}  value={data.waitlist_count}  color={TEAL} bgColor="rgba(0,198,174,0.1)" />
         </View>
 
+        {/* View-trip-dashboard A.8 — empty-state card. Shown when no one
+            has joined or is waitlisted; opens the existing TripShareSheet
+            so the organizer has one obvious next step. */}
+        {showEmptyState && (
+          <View style={styles.emptyCard}>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="people-outline" size={32} color={TEAL} />
+            </View>
+            <Text style={styles.emptyTitle}>{t('trip_dashboard.empty_title')}</Text>
+            <Text style={styles.emptyBody}>{t('trip_dashboard.empty_body')}</Text>
+            <TouchableOpacity
+              style={styles.emptyCta}
+              activeOpacity={0.85}
+              onPress={() => setShareSheetOpen(true)}
+            >
+              <Ionicons name="share-social-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.emptyCtaText}>{t('trip_dashboard.empty_cta')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Payment Progress */}
         <View style={styles.card}>
           <ProgressBar
@@ -263,24 +335,12 @@ const OrganizerTripDashboardScreen: React.FC = () => {
           />
         </View>
 
-        {/* Documents Progress */}
-        <View style={styles.card}>
-          <ProgressBar
-            label={t('trip.dashboard_docs_progress')}
-            current={data.docs_complete}
-            total={data.docs_total}
-            color={GOLD}
-          />
-        </View>
-
-        {/* Alert Banner */}
-        {data.docs_missing_count > 0 && (
-          <View style={styles.alertBanner}>
-            <Text style={styles.alertText}>
-              {'\u26A0'} {data.docs_missing_count} participant{data.docs_missing_count > 1 ? 's' : ''} missing docs
-            </Text>
-          </View>
-        )}
+        {/* View-trip-dashboard A.7 \u2014 dropped the docs progress bar +
+            "X participants missing docs" alert. Both depended on
+            data.docs_complete/docs_total which the hook never populates;
+            the bar always read 0/0 and the alert never fired. Will be
+            reinstated when the dashboard hook starts aggregating
+            trip_participant_submissions. */}
 
         {/* Quick Actions */}
         <Text style={styles.sectionTitle}>{t("final_polish.organizertripdashboard_quick_actions")}</Text>
@@ -478,20 +538,67 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'right',
   },
-  // Alert
-  alertBanner: {
+  // View-trip-dashboard A.6 — skeleton blocks.
+  skeletonHero: { backgroundColor: NAVY },
+  skeletonBlock: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 6,
+  },
+  skeletonStat: {
+    backgroundColor: '#E5E7EB',
+    height: 76,
+  },
+  // View-trip-dashboard A.8 — empty-state card.
+  emptyCard: {
+    backgroundColor: '#FFFFFF',
     marginHorizontal: spacing.lg,
     marginBottom: spacing.md,
-    backgroundColor: '#FEF3C7',
-    borderRadius: radius.small,
-    padding: spacing.md,
-    borderLeftWidth: 4,
-    borderLeftColor: GOLD,
+    borderRadius: radius.card,
+    padding: spacing.xl,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  alertText: {
+  emptyIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(0,198,174,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+  },
+  emptyTitle: {
+    fontSize: typography.bodyLarge,
+    fontWeight: typography.bold,
+    color: NAVY,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  emptyBody: {
     fontSize: typography.body,
-    fontWeight: typography.medium,
-    color: '#92400E',
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+    lineHeight: 20,
+  },
+  emptyCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: TEAL,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: radius.button,
+  },
+  emptyCtaText: {
+    color: '#FFFFFF',
+    fontSize: typography.body,
+    fontWeight: typography.bold,
   },
   // Quick Actions
   sectionTitle: {

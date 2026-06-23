@@ -114,6 +114,10 @@ export interface TripParticipant {
   joinedAt: string;
   confirmedAt: string | null;
   cancelledAt: string | null;
+  // View-trip-dashboard Bucket A.5 — surface the boolean docs flag that's
+  // been on the schema since migration 065 but was never exposed. The
+  // ParticipantManager status row uses it for the docs badge.
+  documentsComplete: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -293,6 +297,7 @@ function mapParticipant(row: any): TripParticipant {
     joinedAt: row.registered_at ?? row.joined_at,
     confirmedAt: row.confirmed_at,
     cancelledAt: row.cancelled_at,
+    documentsComplete: row.documents_complete ?? false,
     createdAt: row.registered_at ?? row.created_at,
     updatedAt: row.updated_at ?? row.registered_at,
   };
