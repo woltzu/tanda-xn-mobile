@@ -675,7 +675,19 @@ export class NotificationPriorityEngine {
       // tier as trip_payment_due — the seat will be released if they
       // don't act, so this is a dollar+deadline event.
       case "trip_payment_reminder_unpaid":
+      // View-trip-dashboard C.2 — cancelled type can have refund
+      // implications (manual refund still required, see migration 243
+      // body for the participant-facing copy). Both participant and
+      // organizer recipients route through the same payment-critical
+      // bucket so push delivery prioritises it.
+      case "trip_participant_cancelled":
         return "payment_critical";
+      // View-trip-dashboard C.2 — confirmed-by-organizer is the
+      // participant's positive "you're in" signal. No deadline, no
+      // dollar deduction — informational nudge bucket alongside
+      // trip_participant_joined / trip_seat_released.
+      case "trip_participant_confirmed":
+        return "coaching_goals";
       default:
         return null;
     }

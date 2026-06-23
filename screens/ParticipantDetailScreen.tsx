@@ -29,7 +29,7 @@
 // `payments: TripPayment[]` by the engine. No new API code.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -49,6 +49,7 @@ import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useParticipantDetail } from "../hooks/useTripOrganizer";
+import { useEventTracker } from "../hooks/useEventTracker";
 import { supabase } from "../lib/supabase";
 import { showToast } from "../components/Toast";
 import {
@@ -129,6 +130,21 @@ export default function ParticipantDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [fullName, setFullName] = useState<string | null>(null);
   const [actionInFlight, setActionInFlight] = useState<"confirm" | "cancel" | null>(null);
+  // C.3 — telemetry. Viewed one-shot on mount, plus per-action events.
+  const { track } = useEventTracker();
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    if (!participantId) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: "participant_detail.viewed",
+      eventCategory: "cross_border",
+      eventAction: "view",
+      eventLabel: "participant_detail",
+      eventValue: { trip_id: tripId, participant_id: participantId },
+    });
+  }, [participantId, tripId, track]);
   // View-trip-dashboard B.3 — HelpSheet topic (null = closed).
   const [helpTopic, setHelpTopic] = useState<HelpTopic | null>(null);
   // View-trip-dashboard B.8 — slide-up action sheet replaces Alert.alert
@@ -225,6 +241,13 @@ export default function ParticipantDetailScreen() {
   };
 
   const openDocument = (submission: TripSubmission) => {
+    track({
+      eventType: "participant_detail.document_opened",
+      eventCategory: "cross_border",
+      eventAction: "open",
+      eventLabel: submission.fieldKey,
+      eventValue: { trip_id: tripId, participant_id: participantId },
+    });
     navigation.navigate(Routes.DocumentSubmission, {
       tripId,
       participantId,
@@ -580,7 +603,16 @@ export default function ParticipantDetailScreen() {
             {isPending && (
               <TouchableOpacity
                 style={[styles.btnPrimary, isBusy && styles.btnDisabled]}
-                onPress={() => setPendingAction("confirm")}
+                onPress={() => {
+                  track({
+                    eventType: "participant_detail.confirm_tapped",
+                    eventCategory: "cross_border",
+                    eventAction: "tap",
+                    eventLabel: "confirm_button",
+                    eventValue: { trip_id: tripId, participant_id: participantId },
+                  });
+                  setPendingAction("confirm");
+                }}
                 disabled={isBusy}
                 accessibilityRole="button"
               >
@@ -598,7 +630,16 @@ export default function ParticipantDetailScreen() {
             )}
             <TouchableOpacity
               style={[styles.btnDanger, isBusy && styles.btnDisabled]}
-              onPress={() => setPendingAction("cancel")}
+              onPress={() => {
+                track({
+                  eventType: "participant_detail.cancel_tapped",
+                  eventCategory: "cross_border",
+                  eventAction: "tap",
+                  eventLabel: "cancel_button",
+                  eventValue: { trip_id: tripId, participant_id: participantId },
+                });
+                setPendingAction("cancel");
+              }}
               disabled={isBusy}
               accessibilityRole="button"
             >

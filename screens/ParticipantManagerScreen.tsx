@@ -45,6 +45,7 @@ import { useTypedNavigation } from '../hooks/useTypedNavigation';
 import { Routes } from '../lib/routes';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useParticipantManager } from '../hooks/useTripOrganizer';
+import { useEventTracker } from '../hooks/useEventTracker';
 import { supabase } from '../lib/supabase';
 import type { TripParticipant } from '../services/TripOrganizerEngine';
 
@@ -144,6 +145,39 @@ const ParticipantManagerScreen: React.FC = () => {
   const [sortKey, setSortKey] = useState<SortKey>('registered_newest');
   const [sortOpen, setSortOpen] = useState(false);
 
+  // C.3 — telemetry. Viewed one-shot, tab switches, row taps, search
+  // (debounced to avoid one event per keystroke).
+  const { track } = useEventTracker();
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    if (!tripId) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: 'participant_manager.viewed',
+      eventCategory: 'cross_border',
+      eventAction: 'view',
+      eventLabel: 'participant_manager',
+      eventValue: { trip_id: tripId },
+    });
+  }, [tripId, track]);
+
+  // Debounced search-used event. Fires 600ms after the last keystroke
+  // with the query length (not the query string — keeps PII out).
+  useEffect(() => {
+    if (!searchQuery) return;
+    const tid = setTimeout(() => {
+      track({
+        eventType: 'participant_manager.search_used',
+        eventCategory: 'cross_border',
+        eventAction: 'search',
+        eventLabel: 'participant_manager_search',
+        eventValue: { trip_id: tripId, query_length: searchQuery.length },
+      });
+    }, 600);
+    return () => clearTimeout(tid);
+  }, [searchQuery, tripId, track]);
+
   // ── Bulk profile lookup ────────────────────────────────────────────────
   // Engine's getParticipants doesn't join profiles (user_id → auth.users,
   // no FK to public.profiles). Fetch the name map once per participant
@@ -225,9 +259,16 @@ const ParticipantManagerScreen: React.FC = () => {
 
   const navigateToDetail = useCallback(
     (participantId: string) => {
+      track({
+        eventType: 'participant_manager.participant_row_tapped',
+        eventCategory: 'cross_border',
+        eventAction: 'tap',
+        eventLabel: 'participant_row',
+        eventValue: { trip_id: tripId, participant_id: participantId },
+      });
       navigation.navigate(Routes.ParticipantDetail, { tripId, participantId });
     },
-    [navigation, tripId],
+    [navigation, tripId, track],
   );
 
   // ── Sub-components (closure over t + nameMap) ──────────────────────────
@@ -364,7 +405,16 @@ const ParticipantManagerScreen: React.FC = () => {
             <TouchableOpacity
               key={tab.key}
               style={[styles.filterTab, isActive && { borderBottomColor: tab.color }]}
-              onPress={() => setActiveFilter(tab.key)}
+              onPress={() => {
+                setActiveFilter(tab.key);
+                track({
+                  eventType: 'participant_manager.tab_switched',
+                  eventCategory: 'cross_border',
+                  eventAction: 'tap',
+                  eventLabel: tab.key,
+                  eventValue: { trip_id: tripId },
+                });
+              }}
               activeOpacity={0.7}
             >
               <Text

@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useTripDashboard } from '../hooks/useTripOrganizer';
+import { useEventTracker } from '../hooks/useEventTracker';
 import InstallmentScheduleView from '../components/InstallmentScheduleView';
 import { TripShareSheet } from '../components/TripShareSheet';
 
@@ -145,6 +146,23 @@ const OrganizerTripDashboardScreen: React.FC = () => {
   const coachOpacity = useRef(new Animated.Value(0)).current;
   const coachCheckedRef = useRef(false);
 
+  // View-trip-dashboard C.3 — telemetry. One-shot viewed event on cold
+  // mount (gated on tripId so we don't fire for missing-route cases).
+  const { track } = useEventTracker();
+  const viewedFiredRef = useRef(false);
+  useEffect(() => {
+    if (viewedFiredRef.current) return;
+    if (!tripId) return;
+    viewedFiredRef.current = true;
+    track({
+      eventType: 'trip_dashboard.viewed',
+      eventCategory: 'cross_border',
+      eventAction: 'view',
+      eventLabel: 'organizer_trip_dashboard',
+      eventValue: { trip_id: tripId },
+    });
+  }, [tripId, track]);
+
   // Map hook's TripDashboard (camelCase) to screen's DashboardData (snake_case)
   const data: DashboardData = dashboard ? {
     trip_name: dashboard.trip?.name ?? t('trip_dashboard.untitled_trip'),
@@ -252,7 +270,16 @@ const OrganizerTripDashboardScreen: React.FC = () => {
     { key: 'participants', icon: 'people', label: t('trip.dashboard_action_participants'), route: 'ParticipantManager', color: TEAL },
     { key: 'itinerary',    icon: 'map',    label: t('trip.dashboard_action_itinerary'),    route: 'ItineraryBuilder',  color: GOLD },
     { key: 'updates',      icon: 'megaphone-outline', label: t('trip.dashboard_action_updates'), route: 'TripUpdates', color: NAVY },
-    { key: 'share',        icon: 'share-social-outline', label: t('trip.dashboard_action_share'), onPress: () => setShareSheetOpen(true), color: '#7C3AED' },
+    { key: 'share',        icon: 'share-social-outline', label: t('trip.dashboard_action_share'), onPress: () => {
+        track({
+          eventType: 'trip_dashboard.share_opened',
+          eventCategory: 'cross_border',
+          eventAction: 'open',
+          eventLabel: 'trip_dashboard_share',
+          eventValue: { trip_id: tripId },
+        });
+        setShareSheetOpen(true);
+      }, color: '#7C3AED' },
   ];
 
   // View-trip-dashboard A.6 — skeleton state. Mirrors the dashboard's
@@ -325,7 +352,16 @@ const OrganizerTripDashboardScreen: React.FC = () => {
                   <Ionicons name="help-circle-outline" size={24} color="#FFFFFF" />
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => navigation.navigate('CreateTripWizard', { tripId, mode: 'edit' })}
+                  onPress={() => {
+                    track({
+                      eventType: 'trip_dashboard.edit_tapped',
+                      eventCategory: 'cross_border',
+                      eventAction: 'tap',
+                      eventLabel: 'edit_trip',
+                      eventValue: { trip_id: tripId },
+                    });
+                    navigation.navigate('CreateTripWizard', { tripId, mode: 'edit' });
+                  }}
                   style={styles.heroBtn}
                 >
                   <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
@@ -355,10 +391,19 @@ const OrganizerTripDashboardScreen: React.FC = () => {
         <TouchableOpacity
           style={styles.viewPublicBtn}
           activeOpacity={0.7}
-          onPress={() => navigation.navigate('TripPublicPage', {
-            tripId,
-            slug: dashboard?.trip?.slug,
-          })}
+          onPress={() => {
+            track({
+              eventType: 'trip_dashboard.public_page_opened',
+              eventCategory: 'cross_border',
+              eventAction: 'tap',
+              eventLabel: 'view_public_page',
+              eventValue: { trip_id: tripId },
+            });
+            navigation.navigate('TripPublicPage', {
+              tripId,
+              slug: dashboard?.trip?.slug,
+            });
+          }}
         >
           <Ionicons name="eye-outline" size={18} color={TEAL} />
           <Text style={styles.viewPublicText}>{t("final_polish.organizertripdashboard_view_public_page")}</Text>
@@ -480,11 +525,24 @@ const OrganizerTripDashboardScreen: React.FC = () => {
               icon={action.icon}
               label={action.label}
               color={action.color}
-              onPress={
-                action.onPress
-                  ? action.onPress
-                  : () => navigation.navigate(action.route!, { tripId })
-              }
+              onPress={() => {
+                // C.3 — every quick-action tap goes through here so the
+                // event fires uniformly. Share's inner onPress also
+                // fires share_opened, which is fine — they're distinct
+                // funnels.
+                track({
+                  eventType: 'trip_dashboard.quick_action_tapped',
+                  eventCategory: 'cross_border',
+                  eventAction: 'tap',
+                  eventLabel: action.key,
+                  eventValue: { trip_id: tripId },
+                });
+                if (action.onPress) {
+                  action.onPress();
+                } else if (action.route) {
+                  navigation.navigate(action.route, { tripId });
+                }
+              }}
             />
           ))}
         </View>
