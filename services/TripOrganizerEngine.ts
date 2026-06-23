@@ -76,6 +76,11 @@ export interface Trip {
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  // Leave-review Bucket A.1 — aggregate columns recomputed by trigger on
+  // trip_reviews INSERT/UPDATE/DELETE. ratingAvg is null when there are no
+  // reviews yet (reviewCount === 0) so the UI can render an empty state.
+  ratingAvg: number | null;
+  reviewCount: number;
 }
 
 export interface TripDay {
@@ -116,6 +121,12 @@ export interface TripWithParticipantStatus {
   paymentStatus: PaymentStatus;
   totalPaidCents: number;
   joinedAt: string;
+  // Leave-review Bucket B.3 — flags surfaced on MyTripsScreen cards so we
+  // can render the "Rate trip" badge (eligible + not reviewed yet) or the
+  // green "✓ Reviewed" badge (already submitted). Both derive from data
+  // already loaded with the trip list — no extra round-trip per card.
+  eligibleForReview: boolean;
+  alreadyReviewed: boolean;
 }
 
 export interface TripParticipant {
@@ -222,6 +233,13 @@ export interface MyTripReviewBundle {
   activityReviews: TripActivityReview[];
 }
 
+// Leave-review Bucket B.2 — review row joined with reviewer profile (name +
+// avatar). Returned by getTripReviews for the public TripReviewsScreen.
+export interface TripReviewWithReviewer extends TripReview {
+  reviewerName: string | null;
+  reviewerAvatarUrl: string | null;
+}
+
 export interface TripDashboard {
   trip: Trip;
   participants: TripParticipant[];
@@ -301,6 +319,8 @@ function mapTrip(row: any): Trip {
     publishedAt: null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    ratingAvg: row.rating_avg == null ? null : Number(row.rating_avg),
+    reviewCount: Number(row.review_count ?? 0),
   };
 }
 
@@ -663,18 +683,43 @@ export class TripOrganizerEngine {
       throw new Error(`Failed to fetch participant trips: ${error.message}`);
     }
 
+    // Leave-review Bucket B.3 — one extra round-trip to learn which of the
+    // user's participant rows have an existing trip_reviews entry. Avoids
+    // N+1 by collecting all participant ids first and IN()-querying.
+    const participantIds = (rows ?? [])
+      .filter((r: any) => r.trips)
+      .map((r: any) => r.id as string);
+    let reviewedSet = new Set<string>();
+    if (participantIds.length > 0) {
+      const { data: reviewedRows } = await supabase
+        .from("trip_reviews")
+        .select("trip_participant_id")
+        .in("trip_participant_id", participantIds);
+      reviewedSet = new Set(
+        (reviewedRows ?? []).map((r: any) => r.trip_participant_id as string),
+      );
+    }
+    const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
     const items: TripWithParticipantStatus[] = (rows ?? [])
       // Skip rows where the joined trip is missing (orphaned participant
       // pointing at a deleted trip).
       .filter((row: any) => row.trips)
-      .map((row: any): TripWithParticipantStatus => ({
-        trip: mapTrip(row.trips),
-        participantId: row.id,
-        participantStatus: (row.status ?? 'pending') as ParticipantStatus,
-        paymentStatus: (row.payment_status ?? 'unpaid') as PaymentStatus,
-        totalPaidCents: parseFloat(row.total_paid) || 0,
-        joinedAt: row.registered_at,
-      }));
+      .map((row: any): TripWithParticipantStatus => {
+        const trip = mapTrip(row.trips);
+        const status = (row.status ?? 'pending') as ParticipantStatus;
+        const tripEnded = !!trip.endDate && trip.endDate < todayStr;
+        return {
+          trip,
+          participantId: row.id,
+          participantStatus: status,
+          paymentStatus: (row.payment_status ?? 'unpaid') as PaymentStatus,
+          totalPaidCents: parseFloat(row.total_paid) || 0,
+          joinedAt: row.registered_at,
+          eligibleForReview: tripEnded && status === 'confirmed',
+          alreadyReviewed: reviewedSet.has(row.id),
+        };
+      });
 
     return items.sort((a, b) => {
       const aDate = a.trip.startDate
@@ -1082,6 +1127,26 @@ export class TripOrganizerEngine {
       submissions: (subRows ?? []).map(mapSubmission),
       payments: (payRows ?? []).map(mapPayment),
     };
+  }
+
+  // ─── Leave-review Bucket B.2 ────────────────────────────────────────────
+  /** Fetch all reviews for a trip, newest first, with reviewer profile. */
+  static async getTripReviews(tripId: string): Promise<TripReviewWithReviewer[]> {
+    const { data, error } = await supabase
+      .from("trip_reviews")
+      .select(`
+        id, trip_id, trip_participant_id, organizer_id, reviewer_id,
+        rating, review_text, created_at, updated_at,
+        reviewer:reviewer_id ( id, full_name, avatar_url )
+      `)
+      .eq("trip_id", tripId)
+      .order("created_at", { ascending: false });
+    if (error) throw new Error(`Failed to fetch trip reviews: ${error.message}`);
+    return (data ?? []).map((row: any) => ({
+      ...mapTripReview(row),
+      reviewerName: row.reviewer?.full_name ?? null,
+      reviewerAvatarUrl: row.reviewer?.avatar_url ?? null,
+    }));
   }
 
   // ─── Leave-review Bucket A.3 ────────────────────────────────────────────

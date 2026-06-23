@@ -15,7 +15,7 @@
 // handle direct deep-link entry.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -26,8 +26,11 @@ import {
   StatusBar,
   ActivityIndicator,
   TextInput,
+  Modal,
+  Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from "../theme/tokens";
@@ -48,6 +51,9 @@ const GREEN_BG = "#ECFDF5";
 
 const ORG_MAX = 280;
 const ACT_MAX = 140;
+
+// Leave-review Bucket B.5 — first-visit coach mark gate.
+const COACH_KEY = "@tandaxn_leave_review_coach_seen_v1";
 
 const LeaveReviewScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -80,6 +86,40 @@ const LeaveReviewScreen: React.FC = () => {
   const [actStates, setActStates] = useState<
     Record<string, { rating: number; text: string }>
   >({});
+
+  // Leave-review Bucket B.4 + B.5 — HelpSheet + coach mark state.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [coachOpen, setCoachOpen] = useState(false);
+
+  useEffect(() => {
+    // Show the coach once eligibility is confirmed (so we don't flash it
+    // on the loading / guard renders).
+    if (!participant || reviewState.alreadyReviewed || !reviewState.eligible) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_KEY);
+        if (seen) return;
+        setCoachOpen(true);
+        timer = setTimeout(() => {
+          setCoachOpen(false);
+          AsyncStorage.setItem(COACH_KEY, "1").catch(() => undefined);
+        }, 4000);
+      } catch {
+        // AsyncStorage unavailable — silently skip.
+      }
+    })();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [participant, reviewState.alreadyReviewed, reviewState.eligible]);
+
+  const dismissCoach = () => {
+    setCoachOpen(false);
+    AsyncStorage.setItem(COACH_KEY, "1").catch(() => undefined);
+  };
 
   const isBusy =
     myStatus.loading || publicTrip?.loading || reviewState.isLoading;
@@ -145,7 +185,7 @@ const LeaveReviewScreen: React.FC = () => {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
-        <Header onBack={() => navigation.goBack()} t={t} />
+        <Header onBack={() => navigation.goBack()} t={t} onHelp={() => setHelpOpen(true)} />
         <View style={styles.guardContainer}>
           <Ionicons name="alert-circle-outline" size={36} color={colors.textSecondary} />
           <Text style={styles.guardText}>{t("leave_review.guard_missing")}</Text>
@@ -158,7 +198,7 @@ const LeaveReviewScreen: React.FC = () => {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
-        <Header onBack={() => navigation.goBack()} t={t} />
+        <Header onBack={() => navigation.goBack()} t={t} onHelp={() => setHelpOpen(true)} />
         <View style={styles.guardContainer}>
           <Ionicons name="checkmark-circle" size={36} color={GREEN} />
           <Text style={styles.guardText}>{t("leave_review.already_reviewed")}</Text>
@@ -171,7 +211,7 @@ const LeaveReviewScreen: React.FC = () => {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
-        <Header onBack={() => navigation.goBack()} t={t} />
+        <Header onBack={() => navigation.goBack()} t={t} onHelp={() => setHelpOpen(true)} />
         <View style={styles.guardContainer}>
           <Ionicons name="time-outline" size={36} color={colors.textSecondary} />
           <Text style={styles.guardText}>{t("leave_review.guard_not_eligible")}</Text>
@@ -317,21 +357,99 @@ const LeaveReviewScreen: React.FC = () => {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Leave-review Bucket B.5 — first-visit coach mark. Anchored near the
+          organizer-rating stars; dismiss on tap or after 4s. Suppressed in
+          guard renders (handled by useEffect gates). */}
+      {coachOpen && (
+        <Pressable style={styles.coachOverlay} onPress={dismissCoach}>
+          <View style={styles.coachCard}>
+            <View style={styles.coachTitleRow}>
+              <Ionicons name="star" size={18} color="#F59E0B" />
+              <Text style={styles.coachTitle}>{t("leave_review.coach_title")}</Text>
+            </View>
+            <Text style={styles.coachDismiss}>{t("leave_review.coach_dismiss")}</Text>
+          </View>
+        </Pressable>
+      )}
+
+      {/* Leave-review Bucket B.4 — 3-topic HelpSheet. */}
+      <HelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} t={t} />
     </SafeAreaView>
   );
 };
 
+// ── Leave-review Bucket B.4 — HelpSheet (3 topics) ──────────────────────────
+const HELP_TOPICS = [
+  { key: "how", icon: "star-outline" as const },
+  { key: "feedback", icon: "create-outline" as const },
+  { key: "public", icon: "eye-outline" as const },
+];
+
+const HelpSheet: React.FC<{
+  visible: boolean;
+  onClose: () => void;
+  t: (key: string) => string;
+}> = ({ visible, onClose, t }) => {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.sheetBackdrop} onPress={onClose}>
+        <Pressable style={styles.sheetCard} onPress={() => undefined}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeaderRow}>
+            <Text style={styles.sheetTitle}>{t("leave_review.help_title")}</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel={t("leave_review.help_close")}
+            >
+              <Ionicons name="close" size={22} color={NAVY} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.sheetScroll}>
+            {HELP_TOPICS.map((topic) => (
+              <View key={topic.key} style={styles.helpTopic}>
+                <View style={styles.helpTopicHeader}>
+                  <Ionicons name={topic.icon} size={18} color={TEAL} />
+                  <Text style={styles.helpTopicTitle}>
+                    {t(`leave_review.help_topic_${topic.key}`)}
+                  </Text>
+                </View>
+                <Text style={styles.helpTopicBody}>
+                  {t(`leave_review.help_topic_${topic.key}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+};
+
 // Header shared across guard + main render.
-const Header: React.FC<{ onBack: () => void; t: (k: string) => string }> = ({
-  onBack,
-  t,
-}) => (
+const Header: React.FC<{
+  onBack: () => void;
+  t: (k: string) => string;
+  onHelp?: () => void;
+}> = ({ onBack, t, onHelp }) => (
   <View style={styles.header}>
     <TouchableOpacity onPress={onBack} style={styles.headerBtn}>
       <Ionicons name="arrow-back" size={24} color={NAVY} />
     </TouchableOpacity>
     <Text style={styles.headerTitle}>{t("leave_review.title")}</Text>
-    <View style={styles.headerBtn} />
+    {onHelp ? (
+      <TouchableOpacity
+        onPress={onHelp}
+        style={styles.headerBtn}
+        accessibilityRole="button"
+        accessibilityLabel={t("leave_review.help_title")}
+      >
+        <Ionicons name="help-circle-outline" size={24} color={NAVY} />
+      </TouchableOpacity>
+    ) : (
+      <View style={styles.headerBtn} />
+    )}
   </View>
 );
 
@@ -485,6 +603,105 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: "center",
     lineHeight: 22,
+  },
+
+  // ── Leave-review Bucket B.5 — coach mark ────────────────────────────────
+  coachOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(11, 39, 80, 0.55)",
+    justifyContent: "flex-end",
+    padding: spacing.lg,
+    paddingBottom: 40,
+  },
+  coachCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: radius.card,
+    padding: 18,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  coachTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  coachTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: NAVY,
+    flex: 1,
+    lineHeight: 22,
+  },
+  coachDismiss: {
+    marginTop: 10,
+    fontSize: typography.label,
+    color: TEAL,
+    fontWeight: typography.semibold,
+    textAlign: "right",
+  },
+
+  // ── Leave-review Bucket B.4 — HelpSheet ─────────────────────────────────
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(11, 39, 80, 0.55)",
+    justifyContent: "flex-end",
+  },
+  sheetCard: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 32,
+    maxHeight: "85%",
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: 12,
+  },
+  sheetHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  sheetTitle: {
+    fontSize: typography.sectionHeader,
+    fontWeight: typography.bold,
+    color: NAVY,
+    flex: 1,
+  },
+  sheetScroll: {
+    maxHeight: "90%",
+  },
+  helpTopic: {
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  helpTopicHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  helpTopicTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: NAVY,
+  },
+  helpTopicBody: {
+    fontSize: typography.bodySmall,
+    color: NAVY,
+    lineHeight: 20,
   },
 });
 

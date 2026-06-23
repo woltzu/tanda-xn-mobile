@@ -192,6 +192,7 @@ export const Routes = {
   DiscoverCircles: "DiscoverCircles",
   MediationTools: "MediationTools",
   LeaveReview: "LeaveReview",
+  TripReviews: "TripReviews",
   MoodInsights: "MoodInsights",
   MyTrips: "MyTrips",
   MyTripStatus: "MyTripStatus",

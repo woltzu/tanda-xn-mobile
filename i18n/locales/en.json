@@ -8337,7 +8337,9 @@
     "payment_deposit_paid": "Deposit paid",
     "payment_partial": "Partial",
     "payment_paid_in_full": "Paid in full",
-    "payment_refunded": "Refunded"
+    "payment_refunded": "Refunded",
+    "rate_badge": "Rate trip",
+    "reviewed_badge": "✓ Reviewed"
   },
   "leave_review": {
     "title": "Rate your trip",
@@ -8357,11 +8359,27 @@
     "banner_cta": "Rate your trip",
     "reviewed_chip": "✓ Reviewed",
     "guard_missing": "We couldn't find this trip or your participation in it.",
-    "guard_not_eligible": "You can leave a review once the trip has ended."
+    "guard_not_eligible": "You can leave a review once the trip has ended.",
+    "help_title": "Review guide",
+    "help_close": "Close",
+    "help_topic_how": "How to rate",
+    "help_topic_how_body": "Tap the stars to give a rating from 1 (poor) to 5 (excellent). The first star is the lowest rating; the fifth is the highest.",
+    "help_topic_feedback": "What feedback helps?",
+    "help_topic_feedback_body": "Be constructive and specific. Mention what you enjoyed and what could be improved — concrete examples help organizers grow and help future participants choose.",
+    "help_topic_public": "What happens to my review?",
+    "help_topic_public_body": "Your review is public and appears on the trip's page. The organizer will see it. Reviews can't be edited after they're submitted, so take a moment before you tap Submit.",
+    "coach_title": "Tap the stars to rate the organizer. Your honest feedback helps the community.",
+    "coach_dismiss": "Got it"
   },
   "trip": {
     "reviews_rating": "{{count}} reviews",
     "reviews_rating_one": "{{count}} review"
+  },
+  "trip_reviews": {
+    "title": "Trip reviews",
+    "empty": "No reviews yet for this trip. Be the first to leave one!",
+    "no_reviews_inline": "No reviews yet",
+    "anonymous_reviewer": "Anonymous"
   },
   "final_polish": {
     "activesessions_this_device": "THIS DEVICE",

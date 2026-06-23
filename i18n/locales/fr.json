@@ -8337,7 +8337,9 @@
     "payment_deposit_paid": "Acompte payé",
     "payment_partial": "Partiel",
     "payment_paid_in_full": "Payé intégralement",
-    "payment_refunded": "Remboursé"
+    "payment_refunded": "Remboursé",
+    "rate_badge": "Évaluer",
+    "reviewed_badge": "✓ Évalué"
   },
   "leave_review": {
     "title": "Évaluer le voyage",
@@ -8357,11 +8359,27 @@
     "banner_cta": "Évaluer ce voyage",
     "reviewed_chip": "✓ Évalué",
     "guard_missing": "Impossible de trouver ce voyage ou votre participation.",
-    "guard_not_eligible": "Vous pourrez laisser une évaluation une fois le voyage terminé."
+    "guard_not_eligible": "Vous pourrez laisser une évaluation une fois le voyage terminé.",
+    "help_title": "Guide d'évaluation",
+    "help_close": "Fermer",
+    "help_topic_how": "Comment noter",
+    "help_topic_how_body": "Tapez sur les étoiles pour donner une note de 1 (médiocre) à 5 (excellent). La première étoile correspond à la note la plus basse, la cinquième à la plus haute.",
+    "help_topic_feedback": "Quel commentaire est utile ?",
+    "help_topic_feedback_body": "Soyez constructif et précis. Mentionnez ce que vous avez apprécié et ce qui pourrait être amélioré — des exemples concrets aident l'organisateur à progresser et orientent les futurs participants.",
+    "help_topic_public": "Que devient mon évaluation ?",
+    "help_topic_public_body": "Votre évaluation est publique et apparaît sur la page du voyage. L'organisateur la verra. Une fois envoyée, l'évaluation ne peut plus être modifiée — prenez un instant avant de toucher Envoyer.",
+    "coach_title": "Tapez sur les étoiles pour noter l'organisateur. Vos retours sincères aident la communauté.",
+    "coach_dismiss": "Compris"
   },
   "trip": {
     "reviews_rating": "{{count}} avis",
     "reviews_rating_one": "{{count}} avis"
+  },
+  "trip_reviews": {
+    "title": "Avis sur le voyage",
+    "empty": "Aucun avis pour l'instant. Soyez le premier à en laisser un !",
+    "no_reviews_inline": "Aucun avis",
+    "anonymous_reviewer": "Anonyme"
   },
   "final_polish": {
     "activesessions_this_device": "CET APPAREIL",

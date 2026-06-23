@@ -205,6 +205,32 @@ const MyTripsScreen: React.FC = () => {
                 {t(paymentCfg.labelKey)}
               </Text>
             </View>
+            {/* Leave-review Bucket B.3 — review CTA / acknowledgement. */}
+            {item.alreadyReviewed ? (
+              <View style={[styles.paymentChip, styles.reviewedBadge]}>
+                <Ionicons name="checkmark-circle" size={12} color={GREEN} />
+                <Text style={[styles.paymentChipText, { color: GREEN }]}>
+                  {t("my_trips.reviewed_badge")}
+                </Text>
+              </View>
+            ) : item.eligibleForReview ? (
+              <TouchableOpacity
+                style={[styles.paymentChip, styles.rateBadge]}
+                activeOpacity={0.7}
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  navigation.navigate("LeaveReview", {
+                    participantId: item.participantId,
+                    tripId: item.trip.id,
+                  });
+                }}
+              >
+                <Ionicons name="star" size={12} color="#B45309" />
+                <Text style={[styles.paymentChipText, { color: "#B45309" }]}>
+                  {t("my_trips.rate_badge")}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
       </TouchableOpacity>
@@ -360,9 +386,19 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   paymentChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: radius.pill,
+  },
+  // Leave-review Bucket B.3 — orange "Rate trip" CTA + green "✓ Reviewed".
+  rateBadge: {
+    backgroundColor: "#FEF3C7",
+  },
+  reviewedBadge: {
+    backgroundColor: "#D1FAE5",
   },
   paymentChipText: {
     fontSize: typography.label,

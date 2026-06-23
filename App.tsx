@@ -266,6 +266,7 @@ import TripPublicPageScreen from "./screens/TripPublicPageScreen";
 import MyTripStatusScreen from "./screens/MyTripStatusScreen";
 import MyTripsScreen from "./screens/MyTripsScreen";
 import LeaveReviewScreen from "./screens/LeaveReviewScreen";
+import TripReviewsScreen from "./screens/TripReviewsScreen";
 import DocumentSubmissionScreen from "./screens/DocumentSubmissionScreen";
 import TripPaymentScreen from "./screens/TripPaymentScreen";
 import TripPaymentSuccessScreen from "./screens/TripPaymentSuccessScreen";
@@ -672,6 +673,8 @@ export type RootStackParamList = {
   MyTrips: undefined;
   // Leave-review Bucket A.7 — post-trip review screen.
   LeaveReview: { participantId: string; tripId: string };
+  // Leave-review Bucket B.2 — public list of reviews for a trip.
+  TripReviews: { tripId: string };
   DocumentSubmission: { tripId: string; participantId: string; fieldKey: string };
   // Join-trip Bucket A.4 — TripPayment now accepts an optional paymentType
   // so MyTripStatus can route directly into the deposit or full-payment
@@ -1190,6 +1193,7 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
       <CirclesStack.Screen name="MyTrips" component={MyTripsScreen} />
       <CirclesStack.Screen name="LeaveReview" component={LeaveReviewScreen} />
+      <CirclesStack.Screen name="TripReviews" component={TripReviewsScreen} />
       <CirclesStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />
       <CirclesStack.Screen name="TripPayment" component={TripPaymentScreen} />
       <CirclesStack.Screen name="TripPaymentSuccess" component={TripPaymentSuccessScreen} />

@@ -23,6 +23,7 @@ import { usePublicTrip } from "../hooks/useTripOrganizer";
 import { useAuth } from "../context/AuthContext";
 import { showToast } from "../components/Toast";
 import { TripOrganizerEngine } from "../services/TripOrganizerEngine";
+import StarRatingDisplay from "../components/StarRatingDisplay";
 import { generateTripShareUrl } from "../lib/deepLinking";
 import { TripShareSheet } from "../components/TripShareSheet";
 import { useEventTracker } from "../hooks/useEventTracker";
@@ -451,6 +452,35 @@ const TripPublicPageScreen: React.FC = () => {
             </View>
             <Text style={styles.heroTitle}>{trip.name}</Text>
             <Text style={styles.heroTagline}>{trip.tagline}</Text>
+            {/* Leave-review Bucket B.1 — rating badge under the hero title.
+                Tap → TripReviewsScreen with the full review list. When the
+                trip has zero reviews we render a muted "No reviews yet"
+                line instead so the surface stays informative without
+                pretending there's a 0★ rating. */}
+            {rawTrip && (rawTrip as any).reviewCount > 0 ? (
+              <TouchableOpacity
+                style={styles.ratingBadge}
+                onPress={() =>
+                  navigation.navigate('TripReviews', { tripId: rawTrip.id })
+                }
+                activeOpacity={0.7}
+                accessibilityRole="button"
+              >
+                <StarRatingDisplay
+                  rating={(rawTrip as any).ratingAvg ?? 0}
+                  count={(rawTrip as any).reviewCount}
+                  size={14}
+                  showCount
+                  textOnly
+                  color="#FFFFFF"
+                />
+                <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.8)" />
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.ratingBadgeEmpty}>
+                {t('trip_reviews.no_reviews_inline')}
+              </Text>
+            )}
           </View>
         </View>
 
@@ -792,6 +822,25 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     color: "rgba(255,255,255,0.8)",
     lineHeight: 20,
+  },
+
+  // Leave-review Bucket B.1 — rating badge under hero title.
+  ratingBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    marginTop: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    borderRadius: 999,
+  },
+  ratingBadgeEmpty: {
+    marginTop: 10,
+    fontSize: typography.label,
+    color: "rgba(255,255,255,0.6)",
+    fontWeight: typography.medium,
   },
 
   // ── Price Card ──
