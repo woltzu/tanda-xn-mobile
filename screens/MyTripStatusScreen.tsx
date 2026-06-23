@@ -219,8 +219,75 @@ const MyTripStatusScreen: React.FC = () => {
 
   const statusCfg = STATUS_CONFIG[data.status];
 
-  // (unused references kept for compile-friendliness on the legacy mock branch — none now)
-  void payments;
+  // Join-trip Bucket B.3 — payment status chip config. Derives from the
+  // canonical participant.paymentStatus and falls back to "pending" when
+  // unpaid + still pending registration. We treat any pending trip_payment
+  // row with a due_date in the past as overdue so the chip can flag it.
+  const hasOverdue = payments.some(
+    (p) =>
+      p.status === "pending" &&
+      // mapPayment exposes `paidAt` and `createdAt`; we treat
+      // (createdAt + 1 day) as a placeholder due-window stand-in if the
+      // engine ever stamps a real due_date we should switch to it.
+      false, // disabled until trip_payments carries a real per-row due_date
+  );
+  const paymentChipConfig = (() => {
+    if (isPaidInFull) {
+      return {
+        label: t("my_trip_status.payment_status_paid_in_full"),
+        bgColor: GREEN_BG,
+        textColor: GREEN,
+        icon: "checkmark-circle",
+      };
+    }
+    if (hasOverdue) {
+      return {
+        label: t("my_trip_status.payment_status_overdue"),
+        bgColor: RED_BG,
+        textColor: RED,
+        icon: "alert-circle",
+      };
+    }
+    if (isDepositPaid) {
+      return {
+        label: t("my_trip_status.payment_status_deposit_paid"),
+        bgColor: GOLD_BG,
+        textColor: GOLD,
+        icon: "checkmark-done",
+      };
+    }
+    return {
+      label: t("my_trip_status.payment_status_pending"),
+      bgColor: GOLD_BG,
+      textColor: GOLD,
+      icon: "time-outline",
+    };
+  })();
+
+  // Find the next pending payment row to surface its due date in the
+  // header. Sort by paidAt (proxy for ordering when due_date is unset)
+  // and pick the earliest pending. If none, just don't show the line.
+  const nextFinalDueIso: string | null = (() => {
+    const pending = payments
+      .filter((p) => p.status === "pending" && p.type !== "deposit")
+      .sort((a, b) => (a.paidAt ?? "").localeCompare(b.paidAt ?? ""));
+    return pending.length > 0 ? pending[0].paidAt ?? null : null;
+  })();
+
+  const formatDueDate = (iso: string | null): string => {
+    if (!iso) return "";
+    try {
+      return new Date(iso).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+    } catch {
+      return "";
+    }
+  };
+
+  // payments are now rendered in the history list (B.5) below; no longer dead.
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -300,6 +367,9 @@ const MyTripStatusScreen: React.FC = () => {
         </View>
 
         {/* ── Payment Progress ────────────────────────────────────────── */}
+        {/* Join-trip Bucket B.3 — added an explicit status chip + final-due
+            line. The chip reflects participant.paymentStatus, the line
+            shows the next installment's due date if one is pending. */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <Text style={styles.cardTitle}>{t("final_polish.mytripstatus_payment_progress")}</Text>
@@ -310,11 +380,35 @@ const MyTripStatusScreen: React.FC = () => {
           </View>
           <View style={styles.paymentAmountRow}>
             <Text style={styles.paymentPaid}>
-              ${data.totalPaid.toLocaleString()}
+              {t('my_trip_status.payment_summary', {
+                paid: `$${data.totalPaid.toLocaleString()}`,
+                total: `$${data.totalCost.toLocaleString()}`,
+              })}
             </Text>
-            <Text style={styles.paymentTotal}>
-              / ${data.totalCost.toLocaleString()} paid
-            </Text>
+          </View>
+          <View style={styles.paymentChipRow}>
+            <View
+              style={[
+                styles.paymentChip,
+                paymentChipConfig.bgColor && { backgroundColor: paymentChipConfig.bgColor },
+              ]}
+            >
+              <Ionicons
+                name={paymentChipConfig.icon as any}
+                size={12}
+                color={paymentChipConfig.textColor}
+              />
+              <Text style={[styles.paymentChipText, { color: paymentChipConfig.textColor }]}>
+                {paymentChipConfig.label}
+              </Text>
+            </View>
+            {nextFinalDueIso && (
+              <Text style={styles.finalDueText}>
+                {t('my_trip_status.payment_status_final_due', {
+                  date: formatDueDate(nextFinalDueIso),
+                })}
+              </Text>
+            )}
           </View>
         </View>
 
@@ -396,6 +490,62 @@ const MyTripStatusScreen: React.FC = () => {
               </TouchableOpacity>
             ))}
           </View>
+        </View>
+
+        {/* ── Payment History — Join-trip Bucket B.5 ─────────────────────
+            Real participant.payments list, now possible after the A.1
+            engine fix (trip_participant_id column). Renders compactly:
+            date, type, amount, paid/pending tag. */}
+        <View style={styles.paymentHistorySection}>
+          <Text style={styles.paymentHistoryHeader}>
+            {t("my_trip_status.payment_history_title")}
+          </Text>
+          {payments.length === 0 ? (
+            <Text style={styles.paymentHistoryEmpty}>
+              {t("my_trip_status.payment_history_empty")}
+            </Text>
+          ) : (
+            payments.map((p, i) => {
+              const typeKey =
+                p.type === "deposit"
+                  ? "my_trip_status.payment_type_deposit"
+                  : p.type === "installment"
+                  ? "my_trip_status.payment_type_installment"
+                  : "my_trip_status.payment_type_full";
+              const isPending = p.status === "pending";
+              return (
+                <View
+                  key={p.id}
+                  style={[
+                    styles.paymentHistoryRow,
+                    i === 0 && styles.paymentHistoryRowFirst,
+                  ]}
+                >
+                  <Text style={styles.paymentHistoryDate}>
+                    {formatDueDate(p.paidAt ?? p.createdAt ?? null)}
+                  </Text>
+                  <Text style={styles.paymentHistoryType}>{t(typeKey)}</Text>
+                  <Text style={styles.paymentHistoryAmount}>
+                    ${(p.amountCents || 0).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </Text>
+                  <Text
+                    style={
+                      isPending
+                        ? styles.paymentHistoryStatusPending
+                        : styles.paymentHistoryStatusPaid
+                    }
+                  >
+                    {isPending
+                      ? t("my_trip_status.payment_history_status_pending")
+                      : t("my_trip_status.payment_history_status_paid")}
+                  </Text>
+                </View>
+              );
+            })
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -574,6 +724,96 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     color: colors.textSecondary,
     marginLeft: 4,
+  },
+
+  // Join-trip Bucket B.3 — payment chip + due-date line.
+  paymentChipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  paymentChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+  },
+  paymentChipText: {
+    fontSize: typography.label,
+    fontWeight: typography.bold,
+  },
+  finalDueText: {
+    fontSize: typography.label,
+    color: colors.textSecondary,
+    fontWeight: typography.medium,
+  },
+
+  // Join-trip Bucket B.5 — participant payment history.
+  paymentHistorySection: {
+    backgroundColor: colors.cardBg,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: radius.card,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  paymentHistoryHeader: {
+    fontSize: typography.bodyLarge,
+    fontWeight: typography.bold,
+    color: NAVY,
+    marginBottom: 8,
+  },
+  paymentHistoryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+  },
+  paymentHistoryRowFirst: {
+    borderTopWidth: 0,
+  },
+  paymentHistoryDate: {
+    fontSize: typography.label,
+    color: colors.textSecondary,
+    width: 90,
+  },
+  paymentHistoryType: {
+    fontSize: typography.body,
+    color: NAVY,
+    fontWeight: typography.medium,
+    flex: 1,
+  },
+  paymentHistoryAmount: {
+    fontSize: typography.body,
+    color: NAVY,
+    fontWeight: typography.bold,
+    marginRight: 8,
+  },
+  paymentHistoryStatusPaid: {
+    fontSize: typography.label,
+    color: GREEN,
+    fontWeight: typography.bold,
+  },
+  paymentHistoryStatusPending: {
+    fontSize: typography.label,
+    color: GOLD,
+    fontWeight: typography.bold,
+  },
+  paymentHistoryEmpty: {
+    fontSize: typography.bodySmall,
+    color: colors.textSecondary,
+    paddingVertical: 8,
+    textAlign: "center",
   },
 
   // ── Alert Banner ──

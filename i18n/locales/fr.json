@@ -3483,7 +3483,20 @@
     "checklist_final_payment": "Paiement final",
     "checklist_paid_in_full": "Payé en totalité",
     "checklist_remaining": "restant",
-    "checklist_action_pay": "Payer maintenant"
+    "checklist_action_pay": "Payer maintenant",
+    "payment_summary": "{{paid}} sur {{total}} payé",
+    "payment_status_paid_in_full": "Payé intégralement",
+    "payment_status_deposit_paid": "Acompte payé",
+    "payment_status_pending": "En attente",
+    "payment_status_overdue": "En retard",
+    "payment_status_final_due": "Solde dû le {{date}}",
+    "payment_history_title": "Historique des paiements",
+    "payment_history_empty": "Aucun paiement pour l'instant.",
+    "payment_history_status_paid": "Payé",
+    "payment_history_status_pending": "En attente",
+    "payment_type_deposit": "Acompte",
+    "payment_type_installment": "Versement",
+    "payment_type_full": "Paiement intégral"
   },
   "participant_manager": {
     "header_title": "Participants",
@@ -7216,7 +7229,29 @@
     "missing_participant": "Impossible de charger votre inscription au voyage.",
     "missing_context": "Les détails du voyage ne sont pas encore chargés. Veuillez réessayer.",
     "load_error": "Impossible de charger vos détails de paiement.",
-    "amount_too_small": "Le montant du paiement doit être d'au moins 0,50 $."
+    "amount_too_small": "Le montant du paiement doit être d'au moins 0,50 $.",
+    "help": {
+      "title": "À propos de ce paiement",
+      "close": "Fermer",
+      "topic_deposit_vs_full": "Acompte ou paiement intégral",
+      "topic_deposit_vs_full_body": "Payer l'acompte réserve votre place et confirme votre inscription. Payer le montant total règle tout le voyage d'un coup, plus rien à régler ensuite. Vous pouvez aussi revenir payer le solde avant le départ.",
+      "topic_processing_fee": "Frais de traitement",
+      "topic_processing_fee_body": "TandaXn n'ajoute aucun frais au prix du voyage. Stripe traite le paiement par carte de façon sécurisée et applique son tarif standard à l'organisateur — jamais à vous.",
+      "topic_refund_policy": "Politique de remboursement",
+      "topic_refund_policy_body": "Chaque voyage a ses propres règles d'annulation et de remboursement fixées par l'organisateur. Consultez la page du voyage ou contactez l'organisateur avant de payer si vous avez un doute. Les contestations Stripe restent disponibles si une transaction ne correspond pas à ce que vous attendiez.",
+      "topic_after_pay": "Que se passe-t-il après le paiement ?",
+      "topic_after_pay_body": "Votre inscription passe en confirmée, l'organisateur est notifié immédiatement, et vous voyez l'itinéraire complet plus les mises à jour publiées. Si vous n'avez payé que l'acompte, le solde restant apparaît sur l'écran Mon voyage."
+    },
+    "coach": {
+      "title": "Choisissez combien payer maintenant — l'acompte réserve votre place, le paiement intégral règle tout.",
+      "dismiss": "Compris"
+    },
+    "failure_card_declined": "Votre carte a été refusée. Essayez une autre carte ou contactez votre banque.",
+    "failure_insufficient_funds": "Fonds insuffisants. Veuillez utiliser un autre mode de paiement.",
+    "failure_expired_card": "Votre carte a expiré. Mettez à jour vos coordonnées de paiement.",
+    "failure_incorrect_cvc": "Code de sécurité incorrect. Veuillez vérifier et réessayer.",
+    "failure_processing_error": "Une erreur est survenue. Réessayez dans quelques minutes.",
+    "failure_default": "Le paiement a échoué. Veuillez réessayer ou contacter l'assistance."
   },
   "circle_invite_v2": {
     "error_title": "Invitation invalide",

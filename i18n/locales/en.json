@@ -3483,7 +3483,20 @@
     "checklist_final_payment": "Final payment",
     "checklist_paid_in_full": "Paid in full",
     "checklist_remaining": "remaining",
-    "checklist_action_pay": "Pay now"
+    "checklist_action_pay": "Pay now",
+    "payment_summary": "{{paid}} of {{total}} paid",
+    "payment_status_paid_in_full": "Paid in full",
+    "payment_status_deposit_paid": "Deposit paid",
+    "payment_status_pending": "Pending",
+    "payment_status_overdue": "Overdue",
+    "payment_status_final_due": "Final due: {{date}}",
+    "payment_history_title": "Payment history",
+    "payment_history_empty": "No payments yet.",
+    "payment_history_status_paid": "Paid",
+    "payment_history_status_pending": "Pending",
+    "payment_type_deposit": "Deposit",
+    "payment_type_installment": "Installment",
+    "payment_type_full": "Full payment"
   },
   "participant_manager": {
     "header_title": "Participants",
@@ -7216,7 +7229,29 @@
     "missing_participant": "We couldn't load your trip registration.",
     "missing_context": "Trip details aren't loaded yet. Please try again.",
     "load_error": "We couldn't load your payment details.",
-    "amount_too_small": "Payment amount must be at least $0.50."
+    "amount_too_small": "Payment amount must be at least $0.50.",
+    "help": {
+      "title": "About this payment",
+      "close": "Close",
+      "topic_deposit_vs_full": "Deposit vs Full Payment",
+      "topic_deposit_vs_full_body": "Paying the deposit secures your spot on the trip and confirms your registration. Paying the full amount settles the entire trip cost up front so you have nothing left to pay later. You can always come back and pay the balance before the trip starts.",
+      "topic_processing_fee": "Processing Fee",
+      "topic_processing_fee_body": "TandaXn doesn't add a fee on top of the trip price. Stripe processes the card payment securely and charges its standard rate to the trip organizer — never to you.",
+      "topic_refund_policy": "Refund Policy",
+      "topic_refund_policy_body": "Each trip has its own cancellation and refund rules set by the organizer. Check the trip page or message the organizer before paying if you're unsure. Stripe-side disputes are also available if a charge doesn't match what you expected.",
+      "topic_after_pay": "What happens after I pay?",
+      "topic_after_pay_body": "Your registration flips to confirmed, the organizer is notified instantly, and you'll see the full itinerary plus any trip updates posted by the organizer. If you only paid the deposit, your remaining balance shows on the My Trip Status screen."
+    },
+    "coach": {
+      "title": "Choose how much to pay now — deposit holds your spot, full payment settles everything.",
+      "dismiss": "Got it"
+    },
+    "failure_card_declined": "Your card was declined. Please try a different card or contact your bank.",
+    "failure_insufficient_funds": "Insufficient funds. Please use another payment method.",
+    "failure_expired_card": "Your card has expired. Please update your payment details.",
+    "failure_incorrect_cvc": "Incorrect security code. Please check and try again.",
+    "failure_processing_error": "Something went wrong. Please try again in a few minutes.",
+    "failure_default": "Payment failed. Please try again or contact support."
   },
   "circle_invite_v2": {
     "error_title": "Invalid Invite",

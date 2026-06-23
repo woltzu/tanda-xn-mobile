@@ -33,7 +33,7 @@
 // user to the right post-flow screen.
 // ══════════════════════════════════════════════════════════════════════════
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -44,8 +44,12 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  Modal,
+  Pressable,
+  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from "../theme/tokens";
@@ -54,6 +58,18 @@ import type { Trip, TripParticipant, TripPayment } from "../services/TripOrganiz
 import { useAuth } from "../context/AuthContext";
 import { usePayment } from "../context/PaymentContext";
 import { showToast } from "../components/Toast";
+
+// Join-trip Bucket B.1 — HelpSheet topic ids. Order mirrors what a first-
+// time payer asks in order: what am I paying for → what's the fee →
+// can I get my money back → what changes after.
+const HELP_TOPICS = [
+  "deposit_vs_full",
+  "processing_fee",
+  "refund_policy",
+  "after_pay",
+] as const;
+
+const COACH_SEEN_KEY = "@tandaxn_trip_payment_coach_seen_v1";
 
 const GOLD = "#E8A842";
 const GOLD_BG = "rgba(232,168,66,0.1)";
@@ -91,6 +107,17 @@ const TripPaymentScreen: React.FC = () => {
   const [choice, setChoice] = useState<PaymentChoice>(incomingPaymentType);
   const [processing, setProcessing] = useState(false);
 
+  // Join-trip Bucket B.1 — HelpSheet visibility.
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  // Join-trip Bucket B.2 — first-visit coach mark anchored to the
+  // deposit/full toggle. Suppressed when the user is paying a final
+  // balance (paymentStatus already promoted past 'unpaid'), since the
+  // toggle isn't meaningfully a choice in that case.
+  const [coachVisible, setCoachVisible] = useState(false);
+  const coachOpacity = useRef(new Animated.Value(0)).current;
+  const coachTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Refresh helper — used both for the initial mount and after a
   // PaymentSheet returns success (the screen needs to render the new
   // payment_status before we navigate to the success screen).
@@ -120,6 +147,54 @@ const TripPaymentScreen: React.FC = () => {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participantId]);
+
+  // Coach-mark gating + fade-out. Runs once participant resolves so we
+  // can read paymentStatus before deciding to show. Auto-dismiss after
+  // 4 s with a 250 ms fade; tap-anywhere also dismisses. The flag is
+  // stamped in AsyncStorage on dismiss so the coach never reappears.
+  useEffect(() => {
+    if (!participant) return;
+    // Don't coach users who've already paid the deposit — they've seen
+    // the toggle on a prior visit (or simply don't need it for the
+    // remaining-balance payment).
+    if (participant.paymentStatus !== "unpaid") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const seen = await AsyncStorage.getItem(COACH_SEEN_KEY);
+        if (cancelled || seen) return;
+        setCoachVisible(true);
+        Animated.timing(coachOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }).start();
+        coachTimeoutRef.current = setTimeout(() => {
+          dismissCoach();
+        }, 4000);
+      } catch {
+        /* AsyncStorage errors are non-fatal — fall back to hiding the coach. */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (coachTimeoutRef.current) clearTimeout(coachTimeoutRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participant?.paymentStatus, participant?.id]);
+
+  const dismissCoach = () => {
+    if (coachTimeoutRef.current) {
+      clearTimeout(coachTimeoutRef.current);
+      coachTimeoutRef.current = null;
+    }
+    Animated.timing(coachOpacity, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => setCoachVisible(false));
+    AsyncStorage.setItem(COACH_SEEN_KEY, "1").catch(() => undefined);
+  };
 
   // ── Derived amounts (all in DOLLARS to match the DB column unit) ─────
   // The Trip type's `*Cents` fields are a misnomer — mapTrip reads them
@@ -231,7 +306,15 @@ const TripPaymentScreen: React.FC = () => {
             <Ionicons name="arrow-back" size={24} color={NAVY} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("trip_payment.title")}</Text>
-          <View style={styles.headerBtn} />
+          {/* Join-trip Bucket B.1 — (?) HelpSheet trigger. */}
+          <TouchableOpacity
+            onPress={() => setHelpOpen(true)}
+            style={styles.headerBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t("trip_payment.help.title")}
+          >
+            <Ionicons name="help-circle-outline" size={24} color={NAVY} />
+          </TouchableOpacity>
         </View>
         <View style={styles.centered}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.textSecondary} />
@@ -252,7 +335,15 @@ const TripPaymentScreen: React.FC = () => {
             <Ionicons name="arrow-back" size={24} color={NAVY} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("trip_payment.title")}</Text>
-          <View style={styles.headerBtn} />
+          {/* Join-trip Bucket B.1 — (?) HelpSheet trigger. */}
+          <TouchableOpacity
+            onPress={() => setHelpOpen(true)}
+            style={styles.headerBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t("trip_payment.help.title")}
+          >
+            <Ionicons name="help-circle-outline" size={24} color={NAVY} />
+          </TouchableOpacity>
         </View>
         <View style={styles.centered}>
           <Ionicons name="checkmark-circle" size={56} color={GREEN} />
@@ -300,6 +391,33 @@ const TripPaymentScreen: React.FC = () => {
         {/* Deposit / full toggle */}
         {hasDepositOption && participant?.paymentStatus === "unpaid" && (
           <View style={styles.toggleCard}>
+            {/* Join-trip Bucket B.2 — coach mark anchored above the toggle.
+                Renders only on first-visit when payment_status='unpaid'.
+                The bubble's tail (rotated square) sits just below the
+                title and points at the deposit radio row. */}
+            {coachVisible && (
+              <Animated.View
+                style={[styles.coachWrap, { opacity: coachOpacity }]}
+                pointerEvents="box-none"
+              >
+                <TouchableOpacity
+                  style={styles.coachBubble}
+                  activeOpacity={0.9}
+                  onPress={dismissCoach}
+                  accessibilityRole="button"
+                  accessibilityLabel={t("trip_payment.coach.dismiss")}
+                >
+                  <Ionicons
+                    name="bulb-outline"
+                    size={16}
+                    color="#FFF"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.coachText}>{t("trip_payment.coach.title")}</Text>
+                </TouchableOpacity>
+                <View style={styles.coachTail} />
+              </Animated.View>
+            )}
             <Text style={styles.toggleTitle}>{t("trip_payment.toggle_title")}</Text>
             <TouchableOpacity
               style={[styles.choiceRow, choice === "deposit" && styles.choiceRowActive]}
@@ -368,6 +486,11 @@ const TripPaymentScreen: React.FC = () => {
         )}
       </ScrollView>
 
+      {/* Join-trip Bucket B.1 — HelpSheet rendered as a sibling of the
+          ScrollView so the modal can size full-screen without being
+          constrained by the scroll container. */}
+      <TripPaymentHelpSheet visible={helpOpen} onClose={() => setHelpOpen(false)} t={t} />
+
       {/* Pay button */}
       <View style={styles.bottomBar}>
         <TouchableOpacity
@@ -402,6 +525,60 @@ export default TripPaymentScreen;
 // in a later bucket).
 void useMemo;
 void showToast;
+
+// ══════════════════════════════════════════════════════════════════════════
+// TripPaymentHelpSheet — Join-trip Bucket B.1
+// ══════════════════════════════════════════════════════════════════════════
+// 4 topics: deposit-vs-full, processing fee, refund policy, what changes
+// after I pay. Mirrors the inline-HelpSheet pattern from
+// CreateTripWizardScreen so users get a consistent feel across the trip
+// flow.
+function TripPaymentHelpSheet({
+  visible,
+  onClose,
+  t,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  t: (key: string, opts?: any) => string;
+}) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.helpBackdrop} onPress={onClose}>
+        <Pressable style={styles.helpSheet} onPress={() => undefined}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.helpHeaderRow}>
+            <Text style={styles.helpTitle}>{t("trip_payment.help.title")}</Text>
+            <TouchableOpacity
+              onPress={onClose}
+              accessibilityRole="button"
+              accessibilityLabel={t("trip_payment.help.close")}
+            >
+              <Ionicons name="close" size={22} color={NAVY} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.helpScroll}>
+            {HELP_TOPICS.map((topic) => (
+              <View key={topic} style={styles.helpItem}>
+                <Text style={styles.helpItemTitle}>
+                  {t(`trip_payment.help.topic_${topic}`)}
+                </Text>
+                <Text style={styles.helpItemBody}>
+                  {t(`trip_payment.help.topic_${topic}_body`)}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.screenBg },
@@ -585,4 +762,96 @@ const styles = StyleSheet.create({
   },
 
   _gold_bg_keep: { backgroundColor: GOLD_BG },
+
+  // ── Coach mark — Bucket B.2 ──
+  // The wrap is absolutely positioned over the toggle card so the bubble
+  // floats above the title. The tail is a small rotated square that
+  // visually anchors the bubble to the radio rows below.
+  coachWrap: {
+    position: "absolute",
+    top: -56,
+    left: 12,
+    right: 12,
+    alignItems: "center",
+    zIndex: 10,
+  },
+  coachBubble: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: NAVY,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: radius.card,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+    maxWidth: "100%",
+  },
+  coachText: {
+    color: "#FFF",
+    fontSize: typography.bodySmall,
+    fontWeight: typography.medium,
+    flexShrink: 1,
+  },
+  coachTail: {
+    width: 12,
+    height: 12,
+    backgroundColor: NAVY,
+    transform: [{ rotate: "45deg" }],
+    marginTop: -6,
+  },
+
+  // ── HelpSheet — Bucket B.1 ──
+  helpBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  helpSheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: spacing.xl,
+    maxHeight: "80%",
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#E5E7EB",
+    marginBottom: 12,
+  },
+  helpHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  helpTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: NAVY,
+  },
+  helpScroll: { paddingBottom: 8 },
+  helpItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  helpItemTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: NAVY,
+    marginBottom: 4,
+  },
+  helpItemBody: {
+    fontSize: typography.bodySmall,
+    color: colors.textSecondary,
+    lineHeight: 19,
+  },
 });

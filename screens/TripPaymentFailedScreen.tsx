@@ -32,6 +32,33 @@ import { colors, radius, typography } from "../theme/tokens";
 const NAVY = colors.primaryNavy;
 const RED = "#DC2626";
 
+// Join-trip Bucket B.4 — Stripe decline-code → i18n-key map. Stripe
+// returns either the canonical decline_code (preferred) or a high-level
+// error code; both end up in the message we receive. We pattern-match
+// the most common cases and fall back to the generic message. Anything
+// we don't recognise still shows the raw Stripe message verbatim so the
+// user (or support) can still act on it.
+const STRIPE_FRIENDLY_KEY: Array<[RegExp, string]> = [
+  [/card[\s_]?declined|do[\s_]?not[\s_]?honor/i, "trip_payment.failure_card_declined"],
+  [/insufficient[\s_]?funds/i, "trip_payment.failure_insufficient_funds"],
+  [/expired[\s_]?card/i, "trip_payment.failure_expired_card"],
+  [/incorrect[\s_]?cvc|invalid[\s_]?cvc/i, "trip_payment.failure_incorrect_cvc"],
+  [/processing[\s_]?error|try[\s_]?again[\s_]?later/i, "trip_payment.failure_processing_error"],
+];
+
+function friendlyStripeMessage(
+  raw: string | undefined,
+  t: (k: string) => string,
+): string {
+  if (!raw) return t("trip_payment.failure_default");
+  for (const [re, key] of STRIPE_FRIENDLY_KEY) {
+    if (re.test(raw)) return t(key);
+  }
+  // Unknown code — surface the raw Stripe message so support has the
+  // signal; the default key wraps it for context.
+  return t("trip_payment.failed_body").replace("{{error}}", raw);
+}
+
 const TripPaymentFailedScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
@@ -39,8 +66,13 @@ const TripPaymentFailedScreen: React.FC = () => {
 
   const tripId: string | undefined = route.params?.tripId;
   const participantId: string | undefined = route.params?.participantId;
-  const errorMessage: string =
-    route.params?.errorMessage || t("trip_payment.failed_default");
+  // Bucket B.4 — friendly localised body when Stripe sent a known code,
+  // else fall back to the generic failure_default. The raw message is
+  // still preserved in the unknown-code path for diagnosability.
+  const errorMessage: string = friendlyStripeMessage(
+    route.params?.errorMessage,
+    t,
+  );
 
   const handleRetry = () => {
     // Replace so the failed screen doesn't sit in the back stack.
