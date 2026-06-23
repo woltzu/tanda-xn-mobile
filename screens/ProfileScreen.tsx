@@ -338,6 +338,10 @@ export default function ProfileScreen() {
         // breakdown + canonical tier ladder).
         { icon: "ribbon-outline", label: t("profile.item_honor_system"), onPress: () => navigation.navigate("HonorScoreOverview") },
         { icon: "hand-right-outline", label: t("profile.item_vouch"), onPress: () => navigation.navigate("VouchMember") },
+        // Member-trip-status Bucket A.3 — participants need a back-door
+        // entry to their joined trips. Sits in the trust section since
+        // it's a "your commitments" surface, not a discovery one.
+        { icon: "briefcase-outline", label: t("profile.item_my_trips"), onPress: () => navigation.navigate("MyTrips") },
       ],
     },
     // Verified Provider Network (Phase 1A). Single row that switches

@@ -14,8 +14,9 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, radius, typography, spacing } from "../theme/tokens";
-import { useMyTripStatus, usePublicTrip } from "../hooks/useTripOrganizer";
+import { useMyTripStatus, usePublicTrip, useItineraryBuilder } from "../hooks/useTripOrganizer";
 import { useAuth } from "../context/AuthContext";
+import InstallmentScheduleView from "../components/InstallmentScheduleView";
 
 const GOLD = "#E8A842";
 const TEAL = colors.accentTeal;
@@ -27,7 +28,11 @@ const RED = "#DC2626";
 const RED_BG = "#FEF2F2";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-type TripStatus = "confirmed" | "pending" | "waitlist";
+// Member-trip-status Bucket A.6 — added `cancelled` so the screen can
+// branch into a dedicated cancelled banner state instead of silently
+// rendering "pending" copy + a checklist asking for money on a trip the
+// user has been removed from.
+type TripStatus = "confirmed" | "pending" | "waitlist" | "cancelled";
 
 interface ChecklistItem {
   id: string;
@@ -53,10 +58,15 @@ interface TripStatusData {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-const STATUS_CONFIG: Record<TripStatus, { label: string; bgColor: string; textColor: string; icon: string }> = {
-  confirmed: { label: "Confirmed", bgColor: GREEN_BG, textColor: GREEN, icon: "checkmark-circle" },
-  pending: { label: "Pending", bgColor: GOLD_BG, textColor: GOLD, icon: "time" },
-  waitlist: { label: "Waitlist", bgColor: "rgba(0,198,174,0.1)", textColor: TEAL, icon: "hourglass" },
+// Member-trip-status Bucket A.8 — labelKey resolves to t() at render
+// time. `cancelled` now has its own entry instead of being mapped to
+// pending. Icon stays generic; the cancelled-state screen renders its
+// own banner with explicit copy.
+const STATUS_CONFIG: Record<TripStatus, { labelKey: string; bgColor: string; textColor: string; icon: string }> = {
+  confirmed: { labelKey: "my_trip_status.status_confirmed", bgColor: GREEN_BG, textColor: GREEN, icon: "checkmark-circle" },
+  pending:   { labelKey: "my_trip_status.status_pending",   bgColor: GOLD_BG,  textColor: GOLD,  icon: "time" },
+  waitlist:  { labelKey: "my_trip_status.status_waitlist",  bgColor: "rgba(0,198,174,0.1)", textColor: TEAL, icon: "hourglass" },
+  cancelled: { labelKey: "my_trip_status.status_cancelled", bgColor: RED_BG,   textColor: RED,   icon: "close-circle" },
 };
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -72,8 +82,11 @@ const MyTripStatusScreen: React.FC = () => {
   // every render fell through to the MOCK_STATUS fallback even when
   // a user had really joined. The fallback is now gone entirely.
   const { user } = useAuth();
+  // A.7 — useMyTripStatus now subscribes to participant + payment realtime.
   const myStatus = useMyTripStatus(tripId, user?.id ?? '');
   const publicTrip = usePublicTrip('', tripId);
+  // A.4 — fetch itinerary days + activities. read-only for participants.
+  const itinerary = useItineraryBuilder(tripId);
 
   const participant = myStatus.participant;
   const payments = myStatus.payments ?? [];
@@ -124,11 +137,13 @@ const MyTripStatusScreen: React.FC = () => {
     );
   }
 
-  // Map participant.status → screen TripStatus union. "cancelled" lands
-  // in pending visually for now (rare path; B/C can split).
+  // Map participant.status → screen TripStatus union. A.6 splits
+  // cancelled out so it can short-circuit to its own dedicated render
+  // (no checklist, no payment progress, no "pay your deposit" nudge).
   const participantStatus: TripStatus =
     participant.status === 'confirmed' ? 'confirmed'
     : participant.status === 'waitlist' ? 'waitlist'
+    : participant.status === 'cancelled' ? 'cancelled'
     : 'pending';
 
   // Derived trip metadata. priceCents is the schema name even though it
@@ -146,6 +161,71 @@ const MyTripStatusScreen: React.FC = () => {
       return '';
     }
   };
+
+  // ── A.6 — Cancelled fast-path ─────────────────────────────────────────
+  // Migration 243 (View-trip-dashboard C.1) actively cancels participants
+  // via the 48h auto-release cron — this branch now has live traffic.
+  // Render a focused screen: header + cancelled banner + minimal hero. No
+  // checklist, no payment CTAs, no installment schedule.
+  if (participantStatus === 'cancelled') {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+            <Ionicons name="arrow-back" size={24} color={NAVY} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t("screen_headers.my_trip_status")}</Text>
+          <View style={styles.headerBtn} />
+        </View>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.cancelledBanner}>
+            <Ionicons name="close-circle" size={22} color={RED} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cancelledBannerTitle}>
+                {t("my_trip_status.cancelled_banner_title")}
+              </Text>
+              <Text style={styles.cancelledBannerBody}>
+                {t("my_trip_status.cancelled_banner_body")}
+              </Text>
+              {participant.cancellationReason ? (
+                <Text style={styles.cancelledBannerReason}>
+                  {t("my_trip_status.cancelled_reason", {
+                    reason: participant.cancellationReason,
+                  })}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+
+          <View style={styles.miniHero}>
+            <LinearGradient colors={[NAVY, "#143A6B"]} style={styles.miniHeroGradient}>
+              <Text style={styles.miniHeroName}>{tripName || t('my_trips.untitled_trip')}</Text>
+              <View style={styles.miniHeroMeta}>
+                {destination ? (
+                  <View style={styles.miniHeroMetaItem}>
+                    <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.7)" />
+                    <Text style={styles.miniHeroMetaText}>{destination}</Text>
+                  </View>
+                ) : null}
+                {formatDateRange() ? (
+                  <View style={styles.miniHeroMetaItem}>
+                    <Ionicons name="calendar-outline" size={14} color="rgba(255,255,255,0.7)" />
+                    <Text style={styles.miniHeroMetaText}>{formatDateRange()}</Text>
+                  </View>
+                ) : null}
+              </View>
+              <View style={[styles.statusPill, { backgroundColor: RED_BG }]}>
+                <Text style={[styles.statusPillText, { color: RED }]}>
+                  {t("my_trip_status.status_cancelled")}
+                </Text>
+              </View>
+            </LinearGradient>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   const totalCost = trip?.priceCents ?? 0;
   const totalPaid = participant.totalPaidCents ?? 0;
@@ -306,11 +386,11 @@ const MyTripStatusScreen: React.FC = () => {
           <View style={styles.headerBtn} />
         </View>
 
-        {/* ── Status Banner ───────────────────────────────────────────── */}
+        {/* ── Status Banner — A.8 i18n template ────────────────────────── */}
         <View style={[styles.statusBanner, { backgroundColor: statusCfg.bgColor }]}>
           <Ionicons name={statusCfg.icon as any} size={20} color={statusCfg.textColor} />
           <Text style={[styles.statusBannerText, { color: statusCfg.textColor }]}>
-            Registration {statusCfg.label}
+            {t('my_trip_status.registration_status', { status: t(statusCfg.labelKey) })}
           </Text>
         </View>
 
@@ -360,7 +440,7 @@ const MyTripStatusScreen: React.FC = () => {
             </View>
             <View style={[styles.statusPill, { backgroundColor: statusCfg.bgColor }]}>
               <Text style={[styles.statusPillText, { color: statusCfg.textColor }]}>
-                {statusCfg.label}
+                {t(statusCfg.labelKey)}
               </Text>
             </View>
           </LinearGradient>
@@ -411,6 +491,73 @@ const MyTripStatusScreen: React.FC = () => {
             )}
           </View>
         </View>
+
+        {/* ── A.5 — Installment schedule ──────────────────────────────
+            Reuses the same component the organizer dashboard renders.
+            showStatus=true so each installment row reports paid /
+            upcoming / overdue based on the participant's trip_payments
+            history. The component handles its own empty state. */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>
+            {t('my_trip_status.payment_schedule_title')}
+          </Text>
+          <InstallmentScheduleView
+            schedule={trip?.installmentSchedule}
+            payments={payments as any}
+            showStatus
+          />
+        </View>
+
+        {/* ── A.4 — Itinerary ─────────────────────────────────────────
+            Read-only render of trip_days + trip_activities for
+            participants. Hidden when itinerary is still loading; falls
+            back to an empty-state line when the organizer hasn't added
+            anything yet. */}
+        {!itinerary.loading && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionTitle}>
+              {t('my_trip_status.itinerary_title')}
+            </Text>
+            {itinerary.days.length === 0 ? (
+              <View style={styles.itineraryEmpty}>
+                <Ionicons name="map-outline" size={32} color={colors.textSecondary} />
+                <Text style={styles.itineraryEmptyText}>
+                  {t('my_trip_status.itinerary_empty')}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.itineraryList}>
+                {itinerary.days.map((day, idx) => (
+                  <View key={day.id} style={[styles.itineraryDay, idx > 0 && styles.itineraryDayBorder]}>
+                    <Text style={styles.itineraryDayTitle}>
+                      {t('my_trip_status.itinerary_day', { number: idx + 1 })}
+                      {day.title ? ` — ${day.title}` : ''}
+                    </Text>
+                    {day.activities.length === 0 ? (
+                      <Text style={styles.itineraryActivityMuted}>
+                        {t('my_trip_status.itinerary_day_empty')}
+                      </Text>
+                    ) : (
+                      day.activities.map((act) => (
+                        <View key={act.id} style={styles.itineraryActivityRow}>
+                          <View style={styles.itineraryActivityBullet} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.itineraryActivityTitle}>
+                              {act.title}
+                            </Text>
+                            <Text style={styles.itineraryActivityMeta}>
+                              {[act.startTime, act.location].filter(Boolean).join(' · ') || act.categoryTag}
+                            </Text>
+                          </View>
+                        </View>
+                      ))
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* ── Alert Banner ────────────────────────────────────────────── */}
         {data.alertMessage && (
@@ -955,5 +1102,101 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: typography.body,
     fontWeight: typography.semibold,
+  },
+
+  // ── A.6 — cancelled banner ─────────────────────────────────────────
+  cancelledBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 16,
+    backgroundColor: RED_BG,
+    borderRadius: radius.card,
+    borderLeftWidth: 4,
+    borderLeftColor: RED,
+  },
+  cancelledBannerTitle: {
+    fontSize: typography.bodyLarge,
+    fontWeight: typography.bold,
+    color: RED,
+    marginBottom: 4,
+  },
+  cancelledBannerBody: {
+    fontSize: typography.body,
+    color: NAVY,
+    lineHeight: 20,
+  },
+  cancelledBannerReason: {
+    fontSize: typography.bodySmall,
+    color: colors.textSecondary,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+
+  // ── A.4 — itinerary section ────────────────────────────────────────
+  itineraryEmpty: {
+    backgroundColor: colors.cardBg,
+    borderRadius: radius.card,
+    paddingVertical: 24,
+    alignItems: 'center',
+    gap: 8,
+  },
+  itineraryEmptyText: {
+    fontSize: typography.body,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  itineraryList: {
+    backgroundColor: colors.cardBg,
+    borderRadius: radius.card,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  itineraryDay: {
+    padding: 16,
+  },
+  itineraryDayBorder: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  itineraryDayTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: NAVY,
+    marginBottom: 10,
+  },
+  itineraryActivityRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    paddingVertical: 6,
+  },
+  itineraryActivityBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: TEAL,
+    marginTop: 8,
+  },
+  itineraryActivityTitle: {
+    fontSize: typography.body,
+    color: NAVY,
+    fontWeight: typography.semibold,
+  },
+  itineraryActivityMeta: {
+    fontSize: typography.label,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  itineraryActivityMuted: {
+    fontSize: typography.label,
+    color: colors.textSecondary,
+    fontStyle: 'italic',
   },
 });

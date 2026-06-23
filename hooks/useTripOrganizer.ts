@@ -635,7 +635,11 @@ export function usePublicTrip(slug: string, tripId?: string) {
 // │  10. useMyTripStatus — Participant's own trip status                     │
 // └──────────────────────────────────────────────────────────────────────────┘
 
-export function useMyTripStatus(tripId: string, userId: string) {
+export function useMyTripStatus(
+  tripId: string,
+  userId: string,
+  subscribe: boolean = true,
+) {
   const [participant, setParticipant] = useState<TripParticipant | null>(null);
   const [payments, setPayments] = useState<TripPayment[]>([]);
   const [submissions, setSubmissions] = useState<TripSubmission[]>([]);
@@ -667,6 +671,27 @@ export function useMyTripStatus(tripId: string, userId: string) {
   }, [tripId, userId]);
 
   useEffect(() => { fetch(); }, [fetch]);
+
+  // Member-trip-status Bucket A.7 — realtime subscriptions for status +
+  // payment changes. Reuses TripOrganizerEngine helpers added in
+  // View-trip-dashboard Bucket B.7. When the organizer flips status
+  // (confirm/cancel) or a payment lands (Stripe webhook RPC), refresh
+  // the participant view without pull-to-refresh.
+  useEffect(() => {
+    if (!subscribe) return;
+    const pid = participant?.id;
+    if (!pid) return;
+    const partCh = TripOrganizerEngine.subscribeToParticipant(pid, () => {
+      fetch();
+    });
+    const payCh = TripOrganizerEngine.subscribeToPayments(pid, () => {
+      fetch();
+    });
+    return () => {
+      partCh?.unsubscribe?.();
+      payCh?.unsubscribe?.();
+    };
+  }, [subscribe, participant?.id, fetch]);
 
   return { participant, payments, submissions, loading, error, refresh: fetch };
 }

@@ -251,8 +251,9 @@ import ProviderProfileSetupScreen from "./screens/ProviderProfileSetupScreen";
 import ProviderVerificationScreen from "./screens/ProviderVerificationScreen";
 import CreateTripListingScreen from "./screens/CreateTripListingScreen";
 import ProviderTripDashboardScreen from "./screens/ProviderTripDashboardScreen";
-import TripDetailScreen from "./screens/TripDetailScreen";
-import MemberTripDashboardScreen from "./screens/MemberTripDashboardScreen";
+// Member-trip-status Bucket A.9 — TripDetailScreen + MemberTripDashboardScreen
+// were V0-port scaffolding with mock data, imported but never registered or
+// navigated to. Files deleted alongside this import cleanup.
 // Trip Organizer Screens (9 screens: organizer + participant)
 import OrganizerTripListScreen from "./screens/OrganizerTripListScreen";
 import TripUpdatesScreen from "./screens/TripUpdatesScreen";
@@ -263,6 +264,7 @@ import ParticipantManagerScreen from "./screens/ParticipantManagerScreen";
 import ParticipantDetailScreen from "./screens/ParticipantDetailScreen";
 import TripPublicPageScreen from "./screens/TripPublicPageScreen";
 import MyTripStatusScreen from "./screens/MyTripStatusScreen";
+import MyTripsScreen from "./screens/MyTripsScreen";
 import DocumentSubmissionScreen from "./screens/DocumentSubmissionScreen";
 import TripPaymentScreen from "./screens/TripPaymentScreen";
 import TripPaymentSuccessScreen from "./screens/TripPaymentSuccessScreen";
@@ -642,8 +644,7 @@ export type RootStackParamList = {
   ProviderVerification: undefined;
   CreateTripListing: undefined;
   ProviderTripDashboard: undefined;
-  TripDetail: { tripId: string };
-  MemberTripDashboard: { tripId: string };
+  // TripDetail + MemberTripDashboard removed in Member-trip-status A.9.
   // Trip Organizer Screens
   OrganizerTripList: undefined;
   CreateTripWizard: { tripId?: string; initialStep?: number };
@@ -666,6 +667,8 @@ export type RootStackParamList = {
     prefilledMessage?: string;
   };
   MyTripStatus: { tripId: string };
+  // Member-trip-status Bucket A.2 — participant trip list.
+  MyTrips: undefined;
   DocumentSubmission: { tripId: string; participantId: string; fieldKey: string };
   // Join-trip Bucket A.4 — TripPayment now accepts an optional paymentType
   // so MyTripStatus can route directly into the deposit or full-payment
@@ -1182,6 +1185,7 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="TripPublicPageAlt" component={TripPublicPageScreen} />
       <CirclesStack.Screen name="TripUpdates" component={TripUpdatesScreen} />
       <CirclesStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
+      <CirclesStack.Screen name="MyTrips" component={MyTripsScreen} />
       <CirclesStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />
       <CirclesStack.Screen name="TripPayment" component={TripPaymentScreen} />
       <CirclesStack.Screen name="TripPaymentSuccess" component={TripPaymentSuccessScreen} />

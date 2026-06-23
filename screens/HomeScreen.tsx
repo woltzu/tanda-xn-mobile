@@ -825,6 +825,12 @@ export default function HomeScreen() {
   const handleCreateGoal = () => {
     navigation.navigate(Routes.GoalCreateExpress);
   };
+  // Member-trip-status Bucket A.3 — entry into the new MyTripsScreen.
+  // Sits alongside the Goals card buttons as a quiet link row, since
+  // trips are a commitment-style surface (like goals) for the user.
+  const handleOpenMyTrips = () => {
+    navigation.navigate(Routes.MyTrips);
+  };
   const handleOpenCircleBreakdown = () => {
     setShowCircleSheet(true);
   };
@@ -1422,6 +1428,20 @@ export default function HomeScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Member-trip-status Bucket A.3 — quiet entry row to the
+              participant trip list. Single-tap nav to MyTripsScreen.
+              Chevron + briefcase icon to set it apart visually from the
+              goals action buttons above. */}
+          <TouchableOpacity
+            style={styles.myTripsRow}
+            onPress={handleOpenMyTrips}
+            accessibilityRole="button"
+          >
+            <Ionicons name="briefcase-outline" size={18} color={colors.primaryNavy} />
+            <Text style={styles.myTripsRowText}>{t("home_screen.my_trips_tile")}</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
         </View>
 
         {/* ===== ADVANCES CARD =====
@@ -2517,6 +2537,24 @@ const styles = StyleSheet.create({
   },
   goalsButtonFlex: {
     flex: 1,
+  },
+  // Member-trip-status Bucket A.3 — quiet "My Trips" entry row sits
+  // directly under the goals action buttons.
+  myTripsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  myTripsRowText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.primaryNavy,
   },
 
   // ----- Activity -----

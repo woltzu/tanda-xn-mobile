@@ -103,6 +103,21 @@ export interface TripActivity {
   updatedAt: string;
 }
 
+/**
+ * Member-trip-status Bucket A.1 — return shape for `getParticipantTrips`.
+ * Pairs the trip metadata with the caller's per-trip participant status
+ * so MyTripsScreen can render status/payment chips inline without a
+ * follow-up fetch.
+ */
+export interface TripWithParticipantStatus {
+  trip: Trip;
+  participantId: string;
+  participantStatus: ParticipantStatus;
+  paymentStatus: PaymentStatus;
+  totalPaidCents: number;
+  joinedAt: string;
+}
+
 export interface TripParticipant {
   id: string;
   tripId: string;
@@ -564,6 +579,55 @@ export class TripOrganizerEngine {
       .order("created_at", { ascending: false });
     if (error) throw new Error(`Failed to fetch organizer trips: ${error.message}`);
     return (rows ?? []).map(mapTrip);
+  }
+
+  /**
+   * Member-trip-status Bucket A.1 — return every trip the user has a
+   * trip_participants row for, paired with their per-trip status. Used
+   * by MyTripsScreen so participants can find their joined trips. Sorted
+   * by trips.start_date ascending (upcoming first) with no-date trips at
+   * the end. Includes cancelled rows so the Cancelled tab on a future
+   * filtered view has data; the screen can split if needed.
+   */
+  static async getParticipantTrips(userId: string): Promise<TripWithParticipantStatus[]> {
+    const { data: rows, error } = await supabase
+      .from("trip_participants")
+      .select(`
+        id,
+        status,
+        payment_status,
+        total_paid,
+        registered_at,
+        trips ( * )
+      `)
+      .eq("user_id", userId)
+      .order("registered_at", { ascending: false });
+    if (error) {
+      throw new Error(`Failed to fetch participant trips: ${error.message}`);
+    }
+
+    const items: TripWithParticipantStatus[] = (rows ?? [])
+      // Skip rows where the joined trip is missing (orphaned participant
+      // pointing at a deleted trip).
+      .filter((row: any) => row.trips)
+      .map((row: any): TripWithParticipantStatus => ({
+        trip: mapTrip(row.trips),
+        participantId: row.id,
+        participantStatus: (row.status ?? 'pending') as ParticipantStatus,
+        paymentStatus: (row.payment_status ?? 'unpaid') as PaymentStatus,
+        totalPaidCents: parseFloat(row.total_paid) || 0,
+        joinedAt: row.registered_at,
+      }));
+
+    return items.sort((a, b) => {
+      const aDate = a.trip.startDate
+        ? new Date(a.trip.startDate).getTime()
+        : Number.POSITIVE_INFINITY;
+      const bDate = b.trip.startDate
+        ? new Date(b.trip.startDate).getTime()
+        : Number.POSITIVE_INFINITY;
+      return aDate - bDate;
+    });
   }
 
   /**
