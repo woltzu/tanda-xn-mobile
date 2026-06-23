@@ -77,6 +77,11 @@ Deno.serve(async (req) => {
     amount?: unknown;
     currency?: unknown;
     purpose?: unknown;
+    // Join-trip Bucket A.3 — participant_id + payment_type are stamped
+    // into PI metadata so the webhook's record_trip_payment_succeeded
+    // RPC can credit the right row without re-deriving it from auth.
+    participant_id?: unknown;
+    payment_type?: unknown;
   };
   try {
     body = await req.json();
@@ -94,6 +99,30 @@ Deno.serve(async (req) => {
     );
   }
   const tripId = tripIdRaw;
+
+  // Join-trip Bucket A.3 — participant_id is optional (organizer pre-pay
+  // flows have no participant row yet) but when present it must be a UUID.
+  const participantIdRaw =
+    typeof body.participant_id === "string" ? body.participant_id : "";
+  let participantId: string | null = null;
+  if (participantIdRaw) {
+    if (!UUID_RE.test(participantIdRaw)) {
+      return jsonResponse(
+        { error: "participant_id must be a valid UUID when provided" },
+        400,
+      );
+    }
+    participantId = participantIdRaw;
+  }
+
+  // Payment type defaults to 'full'; the RPC's CHECK already enforces the
+  // allowed set, but we constrain it here so the metadata stays clean.
+  const PAYMENT_TYPES = new Set(["deposit", "installment", "full"]);
+  const paymentType =
+    typeof body.payment_type === "string" &&
+    PAYMENT_TYPES.has(body.payment_type)
+      ? body.payment_type
+      : "full";
 
   const amount = body.amount;
   // Stripe rejects < 50¢ on USD; reject early so the user sees a clear
@@ -145,13 +174,22 @@ Deno.serve(async (req) => {
   }
 
   // ─── 4. Create PaymentIntent on Stripe ─────────────────────────────────
+  // Join-trip Bucket A.3 — metadata now carries trip_participant_id +
+  // payment_type so the stripe-webhook can call
+  // record_trip_payment_succeeded() without any additional lookups. Both
+  // are optional at the EF boundary (participant_id only present for
+  // participant-driven payments; payment_type defaults to 'full').
   const idempotencyKey = crypto.randomUUID();
   const metadata: Record<string, string> = {
     user_id: user.id,
     type: purpose,
     trip_id: tripId,
     organizer_id: trip.organizer_id,
+    payment_type: paymentType,
   };
+  if (participantId) {
+    metadata.trip_participant_id = participantId;
+  }
   const description = `Trip ${purpose} ${tripId}`;
 
   let intent: Stripe.PaymentIntent;

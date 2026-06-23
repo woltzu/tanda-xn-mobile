@@ -160,6 +160,15 @@ const MyTripStatusScreen: React.FC = () => {
   //   • submissions[] (trip_participant_submissions) → per-field
   //     completion. Unknown fields render generic labels.
   //   • payments[] → "final payment" remaining amount.
+  // Join-trip Bucket A.5 — the deposit row was previously a status badge
+  // with no actionScreen, so an unpaid participant had no path from
+  // MyTripStatus to TripPayment. Wire it to TripPayment with
+  // paymentType='deposit' when the participant is unpaid; the screen
+  // resolves the deposit amount from the trip itself.
+  const isUnpaid = participant.paymentStatus === 'unpaid';
+  const isDepositPaid = participant.paymentStatus === 'deposit_paid' || participant.paymentStatus === 'partial';
+  const isPaidInFull = participant.paymentStatus === 'paid_in_full' || (totalCost > 0 && totalPaid >= totalCost);
+
   const data: TripStatusData = {
     id: trip?.id ?? tripId,
     name: tripName || 'Untitled Trip',
@@ -174,14 +183,16 @@ const MyTripStatusScreen: React.FC = () => {
         id: 'deposit',
         label: t('my_trip_status.checklist_deposit'),
         detail:
-          participant.paymentStatus === 'deposit_paid'
-            || participant.paymentStatus === 'partial'
-            || participant.paymentStatus === 'paid_in_full'
-              ? `$${totalPaid.toLocaleString()}`
-              : t('my_trip_status.checklist_deposit_pending'),
-        completed:
-          participant.paymentStatus !== 'unpaid'
-          && totalPaid > 0,
+          isPaidInFull || isDepositPaid
+            ? `$${totalPaid.toLocaleString()}`
+            : t('my_trip_status.checklist_deposit_pending'),
+        completed: isPaidInFull || isDepositPaid,
+        actionLabel: isUnpaid ? t('my_trip_status.checklist_action_pay') : undefined,
+        actionScreen: isUnpaid ? 'TripPayment' : undefined,
+        actionParams: isUnpaid
+          ? { participantId: participant.id, paymentType: 'deposit' }
+          : undefined,
+        urgent: isUnpaid,
       },
       ...submissions.map((s): ChecklistItem => ({
         id: s.id,
@@ -195,19 +206,13 @@ const MyTripStatusScreen: React.FC = () => {
         id: 'final_payment',
         label: t('my_trip_status.checklist_final_payment'),
         detail:
-          totalPaid >= totalCost && totalCost > 0
+          isPaidInFull
             ? t('my_trip_status.checklist_paid_in_full')
             : `$${Math.max(0, totalCost - totalPaid).toLocaleString()} ${t('my_trip_status.checklist_remaining')}`,
-        completed: totalCost > 0 && totalPaid >= totalCost,
-        actionLabel:
-          totalPaid >= totalCost
-            ? undefined
-            : t('my_trip_status.checklist_action_pay'),
-        actionScreen:
-          totalPaid >= totalCost
-            ? undefined
-            : 'TripPayment',
-        actionParams: { participantId: participant.id },
+        completed: isPaidInFull,
+        actionLabel: isPaidInFull ? undefined : t('my_trip_status.checklist_action_pay'),
+        actionScreen: isPaidInFull ? undefined : 'TripPayment',
+        actionParams: { participantId: participant.id, paymentType: 'full' },
       },
     ],
   };
@@ -241,6 +246,33 @@ const MyTripStatusScreen: React.FC = () => {
             Registration {statusCfg.label}
           </Text>
         </View>
+
+        {/* Join-trip Bucket A.5 — explicit "pay your deposit" nudge for
+            anyone still unpaid. Without this, a freshly-registered user
+            sees "Registration Pending" and no instruction to do anything;
+            the checklist deposit row also points to TripPayment, but a
+            dedicated banner makes the next step unmissable. */}
+        {isUnpaid && (
+          <TouchableOpacity
+            style={styles.depositBanner}
+            activeOpacity={0.85}
+            onPress={() =>
+              navigation.navigate('TripPayment', {
+                tripId: data.id,
+                participantId: participant.id,
+                paymentType: 'deposit',
+              })
+            }
+          >
+            <Ionicons name="card-outline" size={20} color={GOLD} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.depositBannerText}>
+                {t('trip_payment.deposit_confirmation_banner')}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={GOLD} />
+          </TouchableOpacity>
+        )}
 
         {/* ── Trip Mini Hero ──────────────────────────────────────────── */}
         <View style={styles.miniHero}>
@@ -407,6 +439,27 @@ const styles = StyleSheet.create({
     fontSize: typography.sectionHeader,
     fontWeight: typography.bold,
     color: NAVY,
+  },
+
+  // Join-trip Bucket A.5 — deposit nudge banner.
+  depositBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: GOLD_BG,
+    borderRadius: radius.small,
+    borderLeftWidth: 3,
+    borderLeftColor: GOLD,
+  },
+  depositBannerText: {
+    fontSize: typography.body,
+    color: GOLD,
+    fontWeight: typography.semibold,
+    flex: 1,
   },
 
   // ── Status Banner ──

@@ -314,12 +314,23 @@ function mapSubmission(row: any): TripSubmission {
 }
 
 function mapPayment(row: any): TripPayment {
+  // Join-trip Bucket A.4 — fix three latent column mis-mappings that
+  // shipped with the original mapper:
+  //   • participant_id → trip_participant_id (real column per migration 065)
+  //   • trip_id        → no such column on trip_payments; derive from
+  //                      the joined participant if a consumer needs it
+  //   • amount_cents   → amount (DECIMAL dollars per migration 065).
+  //     The field name `amountCents` is a misnomer carried across the
+  //     trip codebase; we store the dollar value here so downstream
+  //     screens that already render it as dollars (MyTripStatusScreen,
+  //     TripPaymentScreen) stay consistent.
+  //   • type           → payment_type (column name)
   return {
     id: row.id,
-    participantId: row.participant_id,
+    participantId: row.trip_participant_id ?? row.participant_id,
     tripId: row.trip_id,
-    amountCents: row.amount_cents,
-    type: row.type,
+    amountCents: parseFloat(row.amount) || 0,
+    type: row.payment_type ?? row.type,
     status: row.status ?? 'pending',
     reference: row.reference,
     note: row.note,
@@ -544,6 +555,22 @@ export class TripOrganizerEngine {
       .order("created_at", { ascending: false });
     if (error) throw new Error(`Failed to fetch organizer trips: ${error.message}`);
     return (rows ?? []).map(mapTrip);
+  }
+
+  /**
+   * Join-trip Bucket A.4 — fetch a single trip row mapped through mapTrip
+   * (so consumers get camelCase fields + decimal-typed money). TripPaymentScreen
+   * needs the trip's price + deposit info but doesn't need the full
+   * dashboard payload (which would also pull participants + payments).
+   */
+  static async getTripById(tripId: string): Promise<Trip> {
+    const { data: row, error } = await supabase
+      .from("trips")
+      .select("*")
+      .eq("id", tripId)
+      .single();
+    if (error) throw new Error(`Failed to fetch trip: ${error.message}`);
+    return mapTrip(row);
   }
 
   /** Get full trip dashboard with participants stats and payment summary */
@@ -845,14 +872,20 @@ export class TripOrganizerEngine {
   }
 
   /** Cancel a participant with optional reason */
+  // Join-trip Bucket A.1 fix #3 — the previous version wrote to a
+  // `cancelled_at` column that doesn't exist on trip_participants in
+  // migration 065's schema, so every cancel call errored. Migration 241
+  // (this bucket) adds the column going forward; we keep writing it so
+  // post-migration calls fill the audit field, but it's listed below
+  // `updated_at` to make the new dependency explicit.
   static async cancelParticipant(participantId: string, reason?: string): Promise<TripParticipant> {
     const { data: row, error } = await supabase
       .from("trip_participants")
       .update({
         status: 'cancelled',
         cancellation_reason: reason ?? null,
-        cancelled_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        cancelled_at: new Date().toISOString(),
       })
       .eq("id", participantId)
       .select()
@@ -897,10 +930,13 @@ export class TripOrganizerEngine {
     if (subError) throw new Error(`Failed to fetch submissions: ${subError.message}`);
 
     // Fetch payments
+    // Join-trip Bucket A.1 fix #1 — column is `trip_participant_id`
+    // (per migration 065), not `participant_id`. Previous query errored
+    // silently and the screen rendered empty.
     const { data: payRows, error: payError } = await supabase
       .from("trip_payments")
       .select("*")
-      .eq("participant_id", participantId)
+      .eq("trip_participant_id", participantId)
       .order("created_at", { ascending: false });
     if (payError) throw new Error(`Failed to fetch payments: ${payError.message}`);
 
@@ -1039,6 +1075,12 @@ export class TripOrganizerEngine {
     amountCents: number;
     purpose?: 'trip_deposit' | 'trip_installment' | 'trip_full_payment';
     currency?: string;
+    // Join-trip Bucket A.4 — participant-paid flows pass the participant id
+    // so the webhook can credit the right row, and payment_type so
+    // record_trip_payment_succeeded writes the correct trip_payments.payment_type
+    // (deposit | installment | full).
+    participantId?: string;
+    paymentType?: 'deposit' | 'installment' | 'full';
   }): Promise<{ clientSecret: string; paymentIntentId: string }> {
     if (!opts.tripId) throw new Error('tripId is required.');
     if (!Number.isInteger(opts.amountCents) || opts.amountCents < 50) {
@@ -1052,6 +1094,8 @@ export class TripOrganizerEngine {
           amount: opts.amountCents,
           purpose: opts.purpose ?? 'trip_deposit',
           currency: opts.currency ?? 'usd',
+          participant_id: opts.participantId ?? null,
+          payment_type: opts.paymentType ?? 'full',
         },
       },
     );
@@ -1067,12 +1111,27 @@ export class TripOrganizerEngine {
   }
 
   /** Record a payment for a participant */
+  // Join-trip Bucket A.1 fix #4 — the previous version wrote `data.amountCents`
+  // straight into `trip_payments.amount`, but the column is DECIMAL(10,2)
+  // dollars (per migration 065). A $100 charge silently recorded as
+  // $10,000.00 and rolled into total_paid the same way, instantly
+  // flipping the participant to paid_in_full. Conversion is cents/100
+  // at every write boundary now. The succeeded-path participant rollup
+  // also uses the dollar value to stay consistent with the column.
+  //
+  // Note: in production the webhook-driven RPC `record_trip_payment_succeeded`
+  // (migration 241) is the canonical path for succeeded rows because it
+  // runs server-side with SECURITY DEFINER. This method stays as a
+  // client-side fallback / utility — kept consistent so callers that hit
+  // it don't double-count or unit-shift.
   static async recordPayment(participantId: string, data: Partial<TripPayment>): Promise<TripPayment> {
+    const amountCents = data.amountCents ?? 0;
+    const amountDollars = amountCents / 100;
     const { data: row, error } = await supabase
       .from("trip_payments")
       .insert({
         trip_participant_id: participantId,
-        amount: data.amountCents ?? 0,
+        amount: amountDollars,
         payment_type: data.type ?? 'full',
         status: data.status ?? 'pending',
         paid_at: data.paidAt ?? new Date().toISOString(),
@@ -1089,7 +1148,8 @@ export class TripOrganizerEngine {
         .eq("id", participantId)
         .single();
       if (!partError && participant) {
-        const newTotal = (participant.total_paid ?? 0) + (data.amountCents ?? 0);
+        const prevTotal = parseFloat(participant.total_paid as any) || 0;
+        const newTotal = prevTotal + amountDollars;
 
         // Determine new payment status
         const { data: trip } = await supabase
@@ -1124,11 +1184,14 @@ export class TripOrganizerEngine {
   }
 
   /** Get payment history for a participant */
+  // Join-trip Bucket A.1 fix #2 — same `participant_id` → `trip_participant_id`
+  // bug as getParticipantDetail. useTripPayment.fetch() routes through here,
+  // so TripPaymentScreen rendered an empty payments list for every user.
   static async getPaymentHistory(participantId: string): Promise<TripPayment[]> {
     const { data: rows, error } = await supabase
       .from("trip_payments")
       .select("*")
-      .eq("participant_id", participantId)
+      .eq("trip_participant_id", participantId)
       .order("created_at", { ascending: false });
     if (error) throw new Error(`Failed to fetch payment history: ${error.message}`);
     return (rows ?? []).map(mapPayment);

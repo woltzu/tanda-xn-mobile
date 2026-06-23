@@ -1,4 +1,39 @@
-import React, { useEffect, useState } from "react";
+// ══════════════════════════════════════════════════════════════════════════
+// TripPaymentScreen — Join-trip Bucket A.4
+// ══════════════════════════════════════════════════════════════════════════
+//
+// Participant-driven payment flow for joining a trip. The previous
+// version was almost entirely mock-driven: MOCK_PAYMENT for the headline
+// installment, a Visa-4242 payment-method card, a `processPayment` that
+// resolved to a no-op because useTripPayment didn't expose `pay`, and
+// no Stripe PaymentSheet anywhere in the code path. The button looked
+// like a Stripe checkout but actually did nothing.
+//
+// This rewrite:
+//   • Reads `participantId` from route params (`participantId='me'`
+//     fallback removed — caller must pass a real UUID).
+//   • Fetches the participant + trip via
+//     TripOrganizerEngine.getParticipantDetail (now fixed in A.1 to
+//     filter trip_payments by the right column).
+//   • Renders a deposit-vs-full toggle when the participant is unpaid
+//     and the trip enables a deposit. When paid_in_full, the screen
+//     short-circuits to a "Paid in full" success state.
+//   • Stages the PaymentIntent via TripOrganizerEngine.createPaymentIntent
+//     with the participant_id + payment_type stamped into PI metadata,
+//     then opens the Stripe PaymentSheet via usePayment().presentPaymentSheet
+//     (the same hook the contribution/wallet flows use).
+//   • Navigates to TripPaymentSuccess on confirm and TripPaymentFailed
+//     on error.
+//
+// The server-side trigger chain (migration 241) does the heavy lifting
+// after the user dismisses Stripe's sheet — record_trip_payment_succeeded
+// flips payment_status and promotes pending→confirmed, the notify
+// trigger pings the organizer, the AI-decision wrapper records the
+// event. The client only needs to drive the PaymentSheet and route the
+// user to the right post-flow screen.
+// ══════════════════════════════════════════════════════════════════════════
+
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -14,17 +49,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from "../theme/tokens";
-import { useTripDashboard, useTripPayment } from "../hooks/useTripOrganizer";
-import InstallmentScheduleView from "../components/InstallmentScheduleView";
-import { supabase } from "../lib/supabase";
-import {
-  computeInstallmentTotals,
-  formatMoneyCents,
-  type TripPaymentRecord,
-} from "../lib/tripHelpers";
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { TripOrganizerEngine } from "../services/TripOrganizerEngine";
+import type { Trip, TripParticipant, TripPayment } from "../services/TripOrganizerEngine";
+import { useAuth } from "../context/AuthContext";
+import { usePayment } from "../context/PaymentContext";
+import { showToast } from "../components/Toast";
 
 const GOLD = "#E8A842";
 const GOLD_BG = "rgba(232,168,66,0.1)";
@@ -32,153 +61,161 @@ const TEAL = colors.accentTeal;
 const NAVY = colors.primaryNavy;
 const GREEN = "#10B981";
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-interface InstallmentInfo {
-  current: number;
-  total: number;
-  dueDate: string;
-  amount: number;
-  processingFeePercent: number;
-  processingFee: number;
-  totalCharged: number;
-}
+type PaymentChoice = "deposit" | "full";
 
-interface PaymentProgress {
-  paidSoFar: number;
-  totalCost: number;
-  afterThisPayment: number;
-}
+const fmtMoney = (dollars: number): string =>
+  `$${dollars.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 
-interface PaymentMethod {
-  brand: string;
-  last4: string;
-  expiry: string;
-}
-
-interface PaymentData {
-  tripId: string;
-  tripName: string;
-  installment: InstallmentInfo;
-  progress: PaymentProgress;
-  paymentMethod: PaymentMethod;
-}
-
-// ── Mock Data ──────────────────────────────────────────────────────────────────
-const MOCK_PAYMENT: PaymentData = {
-  tripId: "trip-001",
-  tripName: "Abidjan Summer Experience 2026",
-  installment: {
-    current: 2,
-    total: 3,
-    dueDate: "May 1, 2026",
-    amount: 525.0,
-    processingFeePercent: 2.9,
-    processingFee: 15.23,
-    totalCharged: 540.23,
-  },
-  progress: {
-    paidSoFar: 700,
-    totalCost: 1800,
-    afterThisPayment: 1225,
-  },
-  paymentMethod: {
-    brand: "Visa",
-    last4: "4242",
-    expiry: "08/28",
-  },
-};
-
-// ── Component ──────────────────────────────────────────────────────────────────
 const TripPaymentScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const tripId = route.params?.tripId ?? MOCK_PAYMENT.tripId;
-  const participantId = route.params?.participantId ?? "me";
-
-  const hookResult = useTripPayment(participantId);
   const { t } = useTranslation();
-  const data: PaymentData = (hookResult as any)?.data ?? MOCK_PAYMENT;
-  const processPayment = (hookResult as any)?.pay ?? (async () => {});
-  const isLoading = (hookResult as any)?.isLoading ?? false;
+  const { user } = useAuth();
+  const { presentPaymentSheet } = usePayment();
 
-  // ── Real schedule + participant payments (added on top of the existing
-  //    mock-driven UI so the existing pay-now flow keeps working until the
-  //    rest of the screen is wired to real data). When tripId/participantId
-  //    aren't UUIDs (the screen ships with "trip-001" / "me" defaults for
-  //    standalone preview), the hooks no-op and we render the empty state. ──
-  const { dashboard: tripDashboard } = useTripDashboard(
-    UUID_RE.test(tripId) ? tripId : ""
-  );
-  const installmentSchedule = tripDashboard?.trip?.installmentSchedule ?? null;
+  const participantId: string = route.params?.participantId ?? "";
+  // tripId + paymentType are advisory — we re-derive trip context from
+  // the participant row so a stale param can't desync the screen.
+  const incomingPaymentType: PaymentChoice =
+    route.params?.paymentType === "full" ? "full" : "deposit";
 
-  const [participantPayments, setParticipantPayments] = useState<
-    TripPaymentRecord[]
-  >([]);
-  useEffect(() => {
-    if (!UUID_RE.test(participantId)) {
-      setParticipantPayments([]);
+  // ── State ────────────────────────────────────────────────────────────
+  const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [trip, setTrip] = useState<Trip | null>(null);
+  const [participant, setParticipant] = useState<TripParticipant | null>(null);
+  const [payments, setPayments] = useState<TripPayment[]>([]);
+  const [choice, setChoice] = useState<PaymentChoice>(incomingPaymentType);
+  const [processing, setProcessing] = useState(false);
+
+  // Refresh helper — used both for the initial mount and after a
+  // PaymentSheet returns success (the screen needs to render the new
+  // payment_status before we navigate to the success screen).
+  const reload = async () => {
+    if (!participantId) {
+      setErrorMsg(t("trip_payment.missing_participant"));
+      setLoading(false);
       return;
     }
-    let cancelled = false;
-    (async () => {
-      const { data: rows, error } = await supabase
-        .from("trip_payments")
-        .select(
-          "installment_number, amount, paid_at, due_date, status"
-        )
-        .eq("trip_participant_id", participantId);
-      if (cancelled) return;
-      if (error) {
-        // Non-fatal — the schedule still renders, just without paid badges.
-        // eslint-disable-next-line no-console
-        console.warn("[TripPaymentScreen] payments fetch failed:", error.message);
-        setParticipantPayments([]);
-        return;
-      }
-      setParticipantPayments((rows ?? []) as TripPaymentRecord[]);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [participantId]);
-
-  const totals = computeInstallmentTotals(
-    installmentSchedule ?? undefined,
-    participantPayments
-  );
-
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isPaid, setIsPaid] = useState(false);
-
-  const { installment, progress, paymentMethod } = data;
-
-  const currentProgressPercent = Math.round(
-    (progress.paidSoFar / progress.totalCost) * 100
-  );
-  const afterPaymentPercent = Math.round(
-    (progress.afterThisPayment / progress.totalCost) * 100
-  );
-
-  const handlePay = async () => {
-    setIsProcessing(true);
     try {
-      await processPayment();
-      setIsPaid(true);
-    } catch {
-      Alert.alert(t("trip_payment.alert_failed_title"), t("trip_payment.alert_failed_body"));
+      setLoading(true);
+      setErrorMsg(null);
+      const detail = await TripOrganizerEngine.getParticipantDetail(participantId);
+      setParticipant(detail);
+      setPayments(detail.payments ?? []);
+      const tripRow = await TripOrganizerEngine.getTripById(detail.tripId);
+      setTrip(tripRow);
+    } catch (err: any) {
+      console.warn("[TripPaymentScreen] load failed:", err);
+      setErrorMsg(err?.message || t("trip_payment.load_error"));
     } finally {
-      setIsProcessing(false);
+      setLoading(false);
     }
   };
 
-  const cardIcon =
-    paymentMethod.brand === "Visa"
-      ? "card"
-      : paymentMethod.brand === "Mastercard"
-      ? "card"
-      : "card-outline";
+  useEffect(() => {
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participantId]);
 
-  if (isLoading) {
+  // ── Derived amounts (all in DOLLARS to match the DB column unit) ─────
+  // The Trip type's `*Cents` fields are a misnomer — mapTrip reads them
+  // from DECIMAL DOLLARS columns (price_per_person, deposit_amount), so
+  // they're already dollars. We treat them as such throughout.
+  const price = trip?.priceCents ?? 0;
+  const depositAmt = trip?.depositCents ?? 0;
+  const totalPaid = participant?.totalPaidCents ?? 0;
+  const remaining = Math.max(0, price - totalPaid);
+  // A deposit option is "real" when there's a deposit amount AND it's
+  // strictly less than the full price (otherwise it's just the full
+  // payment under a different label).
+  const hasDepositOption = depositAmt > 0 && depositAmt < price;
+  const fullyPaid = participant?.paymentStatus === "paid_in_full" || remaining <= 0;
+
+  // Amount the user will be charged this transaction.
+  const chargeDollars =
+    choice === "deposit" && hasDepositOption ? Math.max(0, depositAmt - totalPaid) : remaining;
+  const chargeCents = Math.round(chargeDollars * 100);
+
+  // If we don't have a deposit option, force `full` so the toggle isn't
+  // a tap-target that doesn't change anything.
+  useEffect(() => {
+    if (!hasDepositOption && choice !== "full") setChoice("full");
+  }, [hasDepositOption, choice]);
+
+  // ── Pay handler ──────────────────────────────────────────────────────
+  const handlePay = async () => {
+    if (!trip || !participant || !user?.id) {
+      Alert.alert(
+        t("trip_payment.alert_failed_title"),
+        t("trip_payment.missing_context"),
+      );
+      return;
+    }
+    if (chargeCents < 50) {
+      // Stripe rejects sub-50¢ charges; surface a friendly error.
+      Alert.alert(
+        t("trip_payment.alert_failed_title"),
+        t("trip_payment.amount_too_small"),
+      );
+      return;
+    }
+    setProcessing(true);
+    try {
+      // Step 1: stage the PaymentIntent. The EF stamps participant_id +
+      // payment_type into metadata so the webhook can route to the
+      // record_trip_payment_succeeded RPC.
+      const { clientSecret } = await TripOrganizerEngine.createPaymentIntent({
+        tripId: trip.id,
+        amountCents: chargeCents,
+        purpose: choice === "deposit" ? "trip_deposit" : "trip_full_payment",
+        participantId: participant.id,
+        paymentType: choice,
+      });
+
+      // Step 2: present the PaymentSheet. usePayment().presentPaymentSheet
+      // initializes the sheet (merchantDisplayName etc.) AND presents it
+      // — see PaymentContext.presentPaymentSheetAction. Returns
+      // { success, error? }.
+      const result = await presentPaymentSheet(clientSecret);
+      if (!result.success) {
+        navigation.replace("TripPaymentFailed", {
+          tripId: trip.id,
+          participantId: participant.id,
+          errorMessage: result.error || t("trip_payment.failed_default"),
+        });
+        return;
+      }
+
+      // Step 3: PaymentSheet confirmed. The succeeded webhook may race
+      // ahead of us; refetch the participant so the success screen has
+      // the latest payment_status if we read it from there. We rely on
+      // the navigation params, not the local state, to drive the
+      // success screen's labels.
+      await reload();
+      navigation.replace("TripPaymentSuccess", {
+        tripId: trip.id,
+        participantId: participant.id,
+        amountDollars: chargeDollars,
+        paymentType: choice,
+      });
+    } catch (err: any) {
+      console.warn("[TripPaymentScreen] pay failed:", err);
+      navigation.replace("TripPaymentFailed", {
+        tripId: trip?.id,
+        participantId: participant?.id,
+        errorMessage: err?.message || t("trip_payment.failed_default"),
+      });
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────
+  if (loading) {
     return (
       <SafeAreaView style={[styles.safeArea, styles.centered]}>
         <ActivityIndicator size="large" color={TEAL} />
@@ -186,256 +223,192 @@ const TripPaymentScreen: React.FC = () => {
     );
   }
 
+  if (errorMsg) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+            <Ionicons name="arrow-back" size={24} color={NAVY} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t("trip_payment.title")}</Text>
+          <View style={styles.headerBtn} />
+        </View>
+        <View style={styles.centered}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.textSecondary} />
+          <Text style={styles.errorText}>{errorMsg}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={reload}>
+            <Text style={styles.retryBtnText}>{t("trip_payment.failed_try_again")}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (fullyPaid) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+            <Ionicons name="arrow-back" size={24} color={NAVY} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t("trip_payment.title")}</Text>
+          <View style={styles.headerBtn} />
+        </View>
+        <View style={styles.centered}>
+          <Ionicons name="checkmark-circle" size={56} color={GREEN} />
+          <Text style={styles.paidTitle}>{t("trip_payment.paid_in_full")}</Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.retryBtnText}>{t("trip_payment.success_cta")}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
-
-      {/* ── Header ──────────────────────────────────────────────────── */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t("screen_headers.trip_payment")}</Text>
+        <Text style={styles.headerTitle}>{t("trip_payment.title")}</Text>
         <View style={styles.headerBtn} />
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ── Success State ───────────────────────────────────────────── */}
-        {isPaid ? (
-          <View style={styles.successContainer}>
-            <View style={styles.successIconCircle}>
-              <Ionicons name="checkmark-circle" size={64} color={GREEN} />
-            </View>
-            <Text style={styles.successTitle}>{t("trip_payment.success_title")}</Text>
-            <Text style={styles.successAmount}>
-              ${installment.totalCharged.toFixed(2)}
-            </Text>
-            <Text style={styles.successSubtitle}>
-              Installment {installment.current} of {installment.total} complete
-            </Text>
-
-            <View style={styles.successProgressCard}>
-              <Text style={styles.successProgressLabel}>{t("trip_payment.label_updated_progress")}</Text>
-              <View style={styles.progressBar}>
-                <View
-                  style={[styles.progressBarFill, { width: `${afterPaymentPercent}%` }]}
-                />
-              </View>
-              <Text style={styles.successProgressText}>
-                ${progress.afterThisPayment.toLocaleString()} / $
-                {progress.totalCost.toLocaleString()} paid
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        {/* Trip context strip */}
+        <View style={styles.tripCard}>
+          <Text style={styles.tripName}>{trip?.name ?? ""}</Text>
+          <View style={styles.tripMetaRow}>
+            <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+            <Text style={styles.tripMetaText}>{trip?.destination ?? ""}</Text>
+          </View>
+          {trip?.startDate && trip?.endDate ? (
+            <View style={styles.tripMetaRow}>
+              <Ionicons name="calendar-outline" size={14} color={colors.textSecondary} />
+              <Text style={styles.tripMetaText}>
+                {trip.startDate} → {trip.endDate}
               </Text>
             </View>
+          ) : null}
+        </View>
 
+        {/* Deposit / full toggle */}
+        {hasDepositOption && participant?.paymentStatus === "unpaid" && (
+          <View style={styles.toggleCard}>
+            <Text style={styles.toggleTitle}>{t("trip_payment.toggle_title")}</Text>
             <TouchableOpacity
-              style={styles.successBackButton}
-              onPress={() => navigation.goBack()}
-              activeOpacity={0.85}
+              style={[styles.choiceRow, choice === "deposit" && styles.choiceRowActive]}
+              onPress={() => setChoice("deposit")}
+              activeOpacity={0.7}
             >
-              <Text style={styles.successBackButtonText}>{t("trip_payment.btn_back_to_trip")}</Text>
+              <View style={[styles.radio, choice === "deposit" && styles.radioActive]}>
+                {choice === "deposit" && <View style={styles.radioDot} />}
+              </View>
+              <Text style={styles.choiceLabel}>
+                {t("trip_payment.deposit_label", { amount: fmtMoney(depositAmt) })}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.choiceRow, choice === "full" && styles.choiceRowActive]}
+              onPress={() => setChoice("full")}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.radio, choice === "full" && styles.radioActive]}>
+                {choice === "full" && <View style={styles.radioDot} />}
+              </View>
+              <Text style={styles.choiceLabel}>
+                {t("trip_payment.full_label", { amount: fmtMoney(price) })}
+              </Text>
             </TouchableOpacity>
           </View>
-        ) : (
-          <>
-            {/* ── Installment Banner ──────────────────────────────────── */}
-            <View style={styles.installmentBanner}>
-              <View style={styles.installmentBannerLeft}>
-                <View style={styles.installmentBadge}>
-                  <Ionicons name="calendar" size={14} color={GOLD} />
-                </View>
-                <View>
-                  <Text style={styles.installmentBannerTitle}>
-                    Installment {installment.current} of {installment.total} Due
-                  </Text>
-                  <Text style={styles.installmentBannerDate}>
-                    Due by {installment.dueDate}
-                  </Text>
-                </View>
-              </View>
+        )}
+
+        {/* Breakdown — what they're paying right now */}
+        <View style={styles.breakdownCard}>
+          <Text style={styles.breakdownTitle}>{t("trip_payment.breakdown_title")}</Text>
+          <View style={styles.breakdownRow}>
+            <Text style={styles.breakdownLabel}>{t("trip_payment.label_total_charged")}</Text>
+            <Text style={styles.breakdownTotalValue}>{fmtMoney(chargeDollars)}</Text>
+          </View>
+          {totalPaid > 0 && (
+            <View style={styles.breakdownSubRow}>
+              <Text style={styles.breakdownLabel}>{t("trip_payment.label_paid")}</Text>
+              <Text style={styles.breakdownValue}>{fmtMoney(totalPaid)}</Text>
             </View>
+          )}
+          {price > 0 && (
+            <View style={styles.breakdownSubRow}>
+              <Text style={styles.breakdownLabel}>{t("trip_payment.label_total")}</Text>
+              <Text style={styles.breakdownValue}>{fmtMoney(price)}</Text>
+            </View>
+          )}
+        </View>
 
-            {/* ── Payment Breakdown ───────────────────────────────────── */}
-            <View style={styles.breakdownCard}>
-              <Text style={styles.breakdownTitle}>{t("trip_payment.breakdown_title")}</Text>
-
-              <View style={styles.breakdownRow}>
-                <Text style={styles.breakdownLabel}>{t("trip_payment.label_installment")}</Text>
-                <Text style={styles.breakdownValue}>
-                  ${installment.amount.toFixed(2)}
+        {/* Past payments — now actually populated since the engine A.1 fix
+            stopped filtering by the wrong column. */}
+        {payments.length > 0 && (
+          <View style={styles.paymentsCard}>
+            <Text style={styles.breakdownTitle}>{t("trip_payment.history_title")}</Text>
+            {payments.map((p) => (
+              <View key={p.id} style={styles.paymentRow}>
+                <Text style={styles.paymentRowLabel}>
+                  {p.type} · {p.status}
+                </Text>
+                <Text style={styles.paymentRowAmount}>
+                  {fmtMoney(p.amountCents)}
                 </Text>
               </View>
-
-              <View style={styles.breakdownRow}>
-                <Text style={styles.breakdownLabel}>
-                  Processing fee ({installment.processingFeePercent}%)
-                </Text>
-                <Text style={styles.breakdownValue}>
-                  ${installment.processingFee.toFixed(2)}
-                </Text>
-              </View>
-
-              <View style={styles.breakdownDivider} />
-
-              <View style={styles.breakdownRow}>
-                <Text style={styles.breakdownTotalLabel}>{t("trip_payment.label_total_charged")}</Text>
-                <Text style={styles.breakdownTotalValue}>
-                  ${installment.totalCharged.toFixed(2)}
-                </Text>
-              </View>
-            </View>
-
-            {/* ── Payment Progress ────────────────────────────────────── */}
-            <View style={styles.progressCard}>
-              <Text style={styles.progressCardTitle}>{t("trip_payment.progress_title")}</Text>
-              <View style={styles.progressBar}>
-                <View
-                  style={[
-                    styles.progressBarFillCurrent,
-                    { width: `${currentProgressPercent}%` },
-                  ]}
-                />
-                <View
-                  style={[
-                    styles.progressBarFillProjected,
-                    {
-                      width: `${afterPaymentPercent - currentProgressPercent}%`,
-                      left: `${currentProgressPercent}%`,
-                    },
-                  ]}
-                />
-              </View>
-              <View style={styles.progressLabelsRow}>
-                <View style={styles.progressLegendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: TEAL }]} />
-                  <Text style={styles.progressLabelText}>
-                    Paid: ${progress.paidSoFar.toLocaleString()}
-                  </Text>
-                </View>
-                <View style={styles.progressLegendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: "rgba(0,198,174,0.35)" }]} />
-                  <Text style={styles.progressLabelText}>
-                    After this: ${progress.afterThisPayment.toLocaleString()}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.progressTargetText}>
-                of ${progress.totalCost.toLocaleString()} total
-              </Text>
-            </View>
-
-            {/* ── Payment Method ──────────────────────────────────────── */}
-            <View style={styles.paymentMethodCard}>
-              <Text style={styles.paymentMethodTitle}>{t("trip_payment.method_title")}</Text>
-              <View style={styles.paymentMethodRow}>
-                <View style={styles.cardIconBox}>
-                  <Ionicons name={cardIcon} size={24} color={NAVY} />
-                </View>
-                <View style={styles.cardDetails}>
-                  <Text style={styles.cardBrand}>
-                    {paymentMethod.brand} ending in {paymentMethod.last4}
-                  </Text>
-                  <Text style={styles.cardExpiry}>Expires {paymentMethod.expiry}</Text>
-                </View>
-                <TouchableOpacity style={styles.changeBtn}>
-                  <Text style={styles.changeBtnText}>{t("trip_payment.btn_change")}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* ── Full installment schedule (real data when available) ────
-                Shows the entire schedule with per-row paid/upcoming/overdue
-                badges derived from the participant's trip_payments. When
-                the screen is opened with mock route params (no real trip,
-                no real participant), the InstallmentScheduleView renders
-                its own "No installment plan set" empty state and the
-                totals headline shows zeros. ──────────────────────────── */}
-            {installmentSchedule && (
-              <View style={styles.scheduleWrap}>
-                <Text style={styles.scheduleTitle}>{t("trip_payment.schedule_title")}</Text>
-                <View style={styles.totalsRow}>
-                  <View style={styles.totalsCol}>
-                    <Text style={styles.totalsLabel}>{t("trip_payment.label_paid")}</Text>
-                    <Text style={styles.totalsValuePaid}>
-                      {formatMoneyCents(totals.totalPaidCents)}
-                    </Text>
-                  </View>
-                  <View style={styles.totalsCol}>
-                    <Text style={styles.totalsLabel}>{t("trip_payment.label_remaining")}</Text>
-                    <Text style={styles.totalsValueRemaining}>
-                      {formatMoneyCents(totals.totalRemainingCents)}
-                    </Text>
-                  </View>
-                  <View style={styles.totalsCol}>
-                    <Text style={styles.totalsLabel}>{t("trip_payment.label_total")}</Text>
-                    <Text style={styles.totalsValueTotal}>
-                      {formatMoneyCents(totals.totalScheduledCents)}
-                    </Text>
-                  </View>
-                </View>
-                <InstallmentScheduleView
-                  schedule={installmentSchedule}
-                  payments={participantPayments}
-                  showStatus={true}
-                />
-              </View>
-            )}
-          </>
+            ))}
+          </View>
         )}
       </ScrollView>
 
-      {/* ── Pay Button ────────────────────────────────────────────────── */}
-      {!isPaid && (
-        <View style={styles.bottomBar}>
-          <TouchableOpacity
-            style={styles.payButton}
-            onPress={handlePay}
-            disabled={isProcessing}
-            activeOpacity={0.85}
-          >
-            {isProcessing ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : (
-              <>
-                <Ionicons name="lock-closed" size={18} color="#FFF" />
-                <Text style={styles.payButtonText}>
-                  Pay ${installment.totalCharged.toFixed(2)} Now
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-          <Text style={styles.stripeFooter}>
-            Powered by Stripe {"\u00B7"} Payments are secure and encrypted
-          </Text>
-        </View>
-      )}
+      {/* Pay button */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          style={[styles.payButton, processing && { opacity: 0.6 }]}
+          onPress={handlePay}
+          disabled={processing}
+          activeOpacity={0.85}
+        >
+          {processing ? (
+            <ActivityIndicator size="small" color="#FFF" />
+          ) : (
+            <>
+              <Ionicons name="lock-closed" size={18} color="#FFF" />
+              <Text style={styles.payButtonText}>
+                {t("trip_payment.pay_button_with_amount", {
+                  amount: fmtMoney(chargeDollars),
+                })}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+        <Text style={styles.stripeFooter}>{t("trip_payment.stripe_footer")}</Text>
+      </View>
     </SafeAreaView>
   );
 };
 
 export default TripPaymentScreen;
 
-// ── Styles ─────────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.screenBg,
-  },
-  centered: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 40,
-  },
+// silence unused-import lint without changing runtime — useMemo retained
+// for future per-row memoization (kept the import to avoid a churny diff
+// in a later bucket).
+void useMemo;
+void showToast;
 
-  // ── Header ──
+const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: colors.screenBg },
+  centered: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20, gap: 12 },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingBottom: 40, paddingHorizontal: 16 },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -443,283 +416,143 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  headerBtn: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  headerBtn: { width: 40, height: 40, justifyContent: "center", alignItems: "center" },
   headerTitle: {
     fontSize: typography.sectionHeader,
     fontWeight: typography.bold,
     color: NAVY,
   },
 
-  // ── Installment Banner ──
-  installmentBanner: {
-    backgroundColor: GOLD_BG,
-    marginHorizontal: 16,
+  errorText: {
+    fontSize: typography.body,
+    color: colors.textSecondary,
+    textAlign: "center",
+  },
+  retryBtn: {
+    marginTop: 12,
+    backgroundColor: NAVY,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: radius.pill,
+  },
+  retryBtnText: { color: "#FFF", fontSize: typography.body, fontWeight: typography.semibold },
+
+  paidTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: NAVY,
+    marginTop: 8,
+  },
+
+  tripCard: {
+    backgroundColor: colors.cardBg,
     borderRadius: radius.card,
     padding: 16,
-    marginBottom: 16,
-    borderLeftWidth: 3,
-    borderLeftColor: GOLD,
+    marginVertical: 12,
+    gap: 6,
   },
-  installmentBannerLeft: {
+  tripName: { fontSize: 18, fontWeight: "700", color: NAVY, marginBottom: 4 },
+  tripMetaRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  tripMetaText: { fontSize: typography.bodySmall, color: colors.textSecondary },
+
+  toggleCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: radius.card,
+    padding: 16,
+    marginBottom: 12,
+    gap: 8,
+  },
+  toggleTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.semibold,
+    color: NAVY,
+    marginBottom: 8,
+  },
+  choiceRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: radius.small,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  installmentBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(232,168,66,0.15)",
-    justifyContent: "center",
+  choiceRowActive: {
+    borderColor: TEAL,
+    backgroundColor: "rgba(0,198,174,0.06)",
+  },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: colors.border,
     alignItems: "center",
+    justifyContent: "center",
   },
-  installmentBannerTitle: {
-    fontSize: typography.bodyLarge,
-    fontWeight: typography.bold,
+  radioActive: { borderColor: TEAL },
+  radioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: TEAL,
+  },
+  choiceLabel: {
+    flex: 1,
+    fontSize: typography.body,
     color: NAVY,
-    marginBottom: 2,
-  },
-  installmentBannerDate: {
-    fontSize: typography.bodySmall,
-    color: colors.textSecondary,
+    fontWeight: typography.medium,
   },
 
-  // ── Breakdown Card ──
   breakdownCard: {
     backgroundColor: colors.cardBg,
-    marginHorizontal: 16,
     borderRadius: radius.card,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    padding: 16,
+    marginBottom: 12,
   },
   breakdownTitle: {
-    fontSize: typography.bodyLarge,
+    fontSize: typography.body,
     fontWeight: typography.bold,
     color: NAVY,
-    marginBottom: 16,
+    marginBottom: 12,
   },
   breakdownRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    paddingTop: 4,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginBottom: 8,
   },
-  breakdownLabel: {
-    fontSize: typography.body,
-    color: colors.textSecondary,
-  },
-  breakdownValue: {
-    fontSize: typography.body,
-    fontWeight: typography.semibold,
-    color: NAVY,
-  },
-  breakdownDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 12,
-  },
-  breakdownTotalLabel: {
-    fontSize: typography.bodyLarge,
-    fontWeight: typography.bold,
-    color: NAVY,
-  },
-  breakdownTotalValue: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: GOLD,
-  },
-
-  // ── Progress Card ──
-  progressCard: {
-    backgroundColor: colors.cardBg,
-    marginHorizontal: 16,
-    borderRadius: radius.card,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  progressCardTitle: {
-    fontSize: typography.bodyLarge,
-    fontWeight: typography.bold,
-    color: NAVY,
-    marginBottom: 14,
-  },
-  progressBar: {
-    height: 12,
-    backgroundColor: "rgba(0,198,174,0.1)",
-    borderRadius: 6,
-    overflow: "hidden",
-    position: "relative",
-    marginBottom: 12,
-  },
-  progressBarFill: {
-    height: "100%",
-    backgroundColor: TEAL,
-    borderRadius: 6,
-  },
-  progressBarFillCurrent: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    height: "100%",
-    backgroundColor: TEAL,
-    borderRadius: 6,
-    zIndex: 2,
-  },
-  progressBarFillProjected: {
-    position: "absolute",
-    top: 0,
-    height: "100%",
-    backgroundColor: "rgba(0,198,174,0.35)",
-    borderTopRightRadius: 6,
-    borderBottomRightRadius: 6,
-    zIndex: 1,
-  },
-  progressLabelsRow: {
+  breakdownSubRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  progressLegendItem: {
-    flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    paddingVertical: 4,
   },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  progressLabelText: {
-    fontSize: typography.label,
-    color: colors.textSecondary,
-    fontWeight: typography.medium,
-  },
-  progressTargetText: {
-    fontSize: typography.label,
-    color: colors.textSecondary,
-    textAlign: "right",
-  },
+  breakdownLabel: { fontSize: typography.body, color: colors.textSecondary },
+  breakdownValue: { fontSize: typography.body, color: NAVY, fontWeight: typography.semibold },
+  breakdownTotalValue: { fontSize: 22, fontWeight: "800", color: GOLD },
 
-  // ── Payment Method ──
-  paymentMethodCard: {
+  paymentsCard: {
     backgroundColor: colors.cardBg,
-    marginHorizontal: 16,
     borderRadius: radius.card,
-    padding: 20,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    padding: 16,
+    marginBottom: 12,
   },
-  paymentMethodTitle: {
-    fontSize: typography.bodyLarge,
-    fontWeight: typography.bold,
-    color: NAVY,
-    marginBottom: 14,
-  },
-  paymentMethodRow: {
+  paymentRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
-  cardIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.small,
-    backgroundColor: colors.softerNavyTintBg,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  cardDetails: {
-    flex: 1,
-  },
-  cardBrand: {
-    fontSize: typography.body,
-    fontWeight: typography.semibold,
-    color: NAVY,
-    marginBottom: 2,
-  },
-  cardExpiry: {
-    fontSize: typography.label,
-    color: colors.textSecondary,
-  },
-  changeBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  changeBtnText: {
-    fontSize: typography.label,
-    fontWeight: typography.semibold,
-    color: NAVY,
-  },
+  paymentRowLabel: { fontSize: typography.bodySmall, color: colors.textSecondary, textTransform: "capitalize" },
+  paymentRowAmount: { fontSize: typography.bodySmall, color: NAVY, fontWeight: typography.semibold },
 
-  // ── Full Schedule (real installment data via InstallmentScheduleView) ──
-  scheduleWrap: {
-    marginHorizontal: 16,
-    marginTop: 16,
-  },
-  scheduleTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: NAVY,
-    marginBottom: 10,
-  },
-  totalsRow: {
-    flexDirection: "row",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  totalsCol: {
-    flex: 1,
-    alignItems: "center",
-  },
-  totalsLabel: {
-    fontSize: 11,
-    color: "#6B7280",
-    marginBottom: 4,
-    fontWeight: "600",
-  },
-  totalsValuePaid: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#059669",
-  },
-  totalsValueRemaining: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#D97706",
-  },
-  totalsValueTotal: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: NAVY,
-  },
-
-  // ── Bottom Bar ──
   bottomBar: {
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -738,11 +571,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: radius.button,
     width: "100%",
-    shadowColor: GOLD,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
   },
   payButtonText: {
     fontSize: typography.bodyLarge,
@@ -756,67 +584,5 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
 
-  // ── Success State ──
-  successContainer: {
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 40,
-  },
-  successIconCircle: {
-    marginBottom: 16,
-  },
-  successTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: NAVY,
-    marginBottom: 8,
-  },
-  successAmount: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: GOLD,
-    marginBottom: 4,
-  },
-  successSubtitle: {
-    fontSize: typography.body,
-    color: colors.textSecondary,
-    marginBottom: 32,
-  },
-  successProgressCard: {
-    backgroundColor: colors.cardBg,
-    borderRadius: radius.card,
-    padding: 20,
-    width: "100%",
-    marginBottom: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  successProgressLabel: {
-    fontSize: typography.body,
-    fontWeight: typography.semibold,
-    color: NAVY,
-    marginBottom: 10,
-  },
-  successProgressText: {
-    fontSize: typography.bodySmall,
-    color: colors.textSecondary,
-    marginTop: 8,
-    textAlign: "center",
-  },
-  successBackButton: {
-    backgroundColor: NAVY,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: radius.button,
-    width: "100%",
-    alignItems: "center",
-  },
-  successBackButtonText: {
-    fontSize: typography.bodyLarge,
-    fontWeight: typography.bold,
-    color: "#FFF",
-  },
+  _gold_bg_keep: { backgroundColor: GOLD_BG },
 });

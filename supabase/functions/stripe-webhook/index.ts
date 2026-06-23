@@ -209,6 +209,58 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── Trip-payment side-effects: succeeded → record_trip_payment_succeeded ──
+    // Join-trip Bucket A.3 — three trip_* purposes routed through the
+    // central RPC (migration 241). The RPC is idempotent on
+    // (stripe_payment_intent_id) so Stripe retries land on the
+    // duplicate-event ack above OR the RPC's own replay branch — either
+    // way we don't double-credit. The RPC also handles
+    // pending→confirmed promotion when the deposit threshold is crossed
+    // and computes payment_status from the recomputed total.
+    //
+    // We DON'T re-derive participant_id from the user — the EF that
+    // staged the PI already wrote metadata.trip_participant_id, so the
+    // RPC just reads it back. PIs created before A.3 (none in prod —
+    // this is fresh code) without participant metadata would raise
+    // inside the RPC, get logged, and the webhook would still record
+    // the event for forensics.
+    if (
+      event.type === "payment_intent.succeeded" &&
+      typeof pi.metadata?.type === "string" &&
+      pi.metadata.type.startsWith("trip_")
+    ) {
+      const { data: rpcResult, error: rpcErr } = await supabase.rpc(
+        "record_trip_payment_succeeded",
+        {
+          p_payment_intent_id: pi.id,
+          // The RPC reads metadata + the top-level amount from the
+          // payload itself, so we pass the whole PI object as JSONB.
+          p_pi_payload: pi as unknown as Record<string, unknown>,
+        }
+      );
+
+      if (rpcErr) {
+        processingError = `record_trip_payment_succeeded RPC error: ${rpcErr.message}`;
+        console.error("[stripe-webhook]", processingError);
+      } else if (rpcResult?.idempotent_replay) {
+        console.log(
+          "[stripe-webhook] record_trip_payment_succeeded idempotent replay for PI",
+          pi.id
+        );
+      } else {
+        console.log(
+          "[stripe-webhook] record_trip_payment_succeeded succeeded for PI",
+          pi.id,
+          "→ payment_id =",
+          rpcResult?.payment_id,
+          ", new_payment_status =",
+          rpcResult?.new_payment_status,
+          ", promoted_to_confirmed =",
+          rpcResult?.promoted_to_confirmed
+        );
+      }
+    }
+
     // ── .processing → record a pending savings_transactions row ───────────
     // Mirrors the .succeeded block's metadata-extraction shape so the two
     // branches are easy to read side by side. record_pending_goal_deposit

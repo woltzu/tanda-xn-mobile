@@ -265,6 +265,8 @@ import TripPublicPageScreen from "./screens/TripPublicPageScreen";
 import MyTripStatusScreen from "./screens/MyTripStatusScreen";
 import DocumentSubmissionScreen from "./screens/DocumentSubmissionScreen";
 import TripPaymentScreen from "./screens/TripPaymentScreen";
+import TripPaymentSuccessScreen from "./screens/TripPaymentSuccessScreen";
+import TripPaymentFailedScreen from "./screens/TripPaymentFailedScreen";
 import TripPublishSuccessScreen from "./screens/TripPublishSuccessScreen";
 import ActivityEditorScreen from "./screens/ActivityEditorScreen";
 import WebViewScreen from "./screens/WebViewScreen";
@@ -665,7 +667,23 @@ export type RootStackParamList = {
   };
   MyTripStatus: { tripId: string };
   DocumentSubmission: { tripId: string; participantId: string; fieldKey: string };
-  TripPayment: { tripId: string; participantId: string };
+  // Join-trip Bucket A.4 — TripPayment now accepts an optional paymentType
+  // so MyTripStatus can route directly into the deposit or full-payment
+  // flow without re-prompting the user.
+  TripPayment: { tripId: string; participantId: string; paymentType?: 'deposit' | 'full' | 'installment' };
+  // Join-trip Bucket A.6 — new success/failed screens for the Stripe
+  // PaymentSheet round-trip.
+  TripPaymentSuccess: {
+    tripId: string;
+    participantId: string;
+    amountDollars: number;
+    paymentType: 'deposit' | 'full' | 'installment';
+  };
+  TripPaymentFailed: {
+    tripId?: string;
+    participantId?: string;
+    errorMessage?: string;
+  };
   TripPublishSuccess: { tripName?: string; destination?: string; startDate?: string; endDate?: string; tripId: string };
   ActivityEditor: { tripId: string; dayId?: string; activityId?: string; existingData?: any };
   // Feature Screens (AI Engines + Circle Management)
@@ -1166,6 +1184,8 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
       <CirclesStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />
       <CirclesStack.Screen name="TripPayment" component={TripPaymentScreen} />
+      <CirclesStack.Screen name="TripPaymentSuccess" component={TripPaymentSuccessScreen} />
+      <CirclesStack.Screen name="TripPaymentFailed" component={TripPaymentFailedScreen} />
       <CirclesStack.Screen name="TripPublishSuccess" component={TripPublishSuccessScreen} />
       <CirclesStack.Screen name="ActivityEditor" component={ActivityEditorScreen} />
     </CirclesStack.Navigator>
