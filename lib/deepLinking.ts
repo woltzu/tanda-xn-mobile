@@ -164,6 +164,11 @@ export const linkingConfig = {
       // Bucket C will add organizer/participant/payment notifications
       // that deep-link into this same path.
       TripPublicPage: "trip/:slug",
+      // Member-trip-status Bucket C.5 — deep link to a participant's trip
+      // dashboard. trip_payment_due / trip_payment_late /
+      // trip_payment_reminder_unpaid / trip_participant_confirmed pushes
+      // can now route the user straight to their own status screen.
+      MyTripStatus: "trips/my/:tripId",
       // Publish-trip Bucket A.1 — alias for the plural URL form.
       // TripPublishSuccessScreen historically generated share links with
       // `tandaxn.com/trips/${slug}` (plural). Any link already shared in

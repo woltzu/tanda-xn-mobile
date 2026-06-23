@@ -17,7 +17,7 @@
 // HomeScreen "My Trips" tile and the Profile row added in A.3.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -36,6 +36,7 @@ import { useTranslation } from "react-i18next";
 import { LinearGradient } from "expo-linear-gradient";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { useAuth } from "../context/AuthContext";
+import { useEventTracker } from "../hooks/useEventTracker";
 import {
   TripOrganizerEngine,
   type TripWithParticipantStatus,
@@ -94,11 +95,20 @@ const MyTripsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { track } = useEventTracker();
 
   const [items, setItems] = useState<TripWithParticipantStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Bucket C.3 — one-shot list_viewed per mount.
+  const viewTrackedRef = useRef(false);
+  useEffect(() => {
+    if (viewTrackedRef.current) return;
+    viewTrackedRef.current = true;
+    track({ name: 'my_trips.list_viewed' });
+  }, [track]);
 
   const fetchTrips = useCallback(async () => {
     if (!user?.id) {
@@ -128,10 +138,15 @@ const MyTripsScreen: React.FC = () => {
   }, [fetchTrips]);
 
   const navigateToTrip = useCallback(
-    (tripId: string) => {
+    (tripId: string, participantStatus: ParticipantStatus) => {
+      // Bucket C.3 — row tap event.
+      track({
+        name: 'my_trips.trip_row_tapped',
+        properties: { trip_id: tripId, participant_status: participantStatus },
+      });
       navigation.navigate("MyTripStatus", { tripId });
     },
-    [navigation],
+    [navigation, track],
   );
 
   // Render one card per trip.
@@ -146,7 +161,7 @@ const MyTripsScreen: React.FC = () => {
       <TouchableOpacity
         style={styles.card}
         activeOpacity={0.85}
-        onPress={() => navigateToTrip(item.trip.id)}
+        onPress={() => navigateToTrip(item.trip.id, item.participantStatus)}
       >
         {cover ? (
           <ImageBackground source={{ uri: cover }} style={styles.cover} imageStyle={styles.coverImage}>

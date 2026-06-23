@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { useMyTripStatus, usePublicTrip, useItineraryBuilder } from "../hooks/useTripOrganizer";
 import { useAuth } from "../context/AuthContext";
+import { useEventTracker } from "../hooks/useEventTracker";
 import InstallmentScheduleView from "../components/InstallmentScheduleView";
 import { TripOrganizerEngine, TripMessage } from "../services/TripOrganizerEngine";
 
@@ -110,6 +111,12 @@ const MyTripStatusScreen: React.FC = () => {
   const [recentUpdates, setRecentUpdates] = useState<TripMessage[]>([]);
   const [updatesLoading, setUpdatesLoading] = useState(true);
 
+  // ── Bucket C.4 — telemetry. Itinerary is collapsible (default expanded)
+  // so we can fire `itinerary_expanded` when the user re-opens it.
+  const { track } = useEventTracker();
+  const viewTrackedRef = useRef(false);
+  const [itineraryExpanded, setItineraryExpanded] = useState(true);
+
   useEffect(() => {
     if (!tripId) return;
     let cancelled = false;
@@ -160,7 +167,26 @@ const MyTripStatusScreen: React.FC = () => {
   const dismissCoach = () => {
     setCoachOpen(false);
     AsyncStorage.setItem(COACH_KEY, '1').catch(() => undefined);
+    // Bucket C.4 — coach_dismissed.
+    track({ name: 'my_trip_status.coach_dismissed', properties: { trip_id: tripId } });
   };
+
+  // Bucket C.4 — open help with telemetry.
+  const openHelp = () => {
+    setHelpOpen(true);
+    track({ name: 'my_trip_status.help_opened', properties: { trip_id: tripId } });
+  };
+
+  // Bucket C.4 — fire `viewed` once per mount, once the participant is resolved.
+  useEffect(() => {
+    if (viewTrackedRef.current) return;
+    if (!participant) return;
+    viewTrackedRef.current = true;
+    track({
+      name: 'my_trip_status.viewed',
+      properties: { trip_id: tripId, participant_status: participant.status ?? 'pending' },
+    });
+  }, [participant, tripId, track]);
 
   if (isLoading) {
     return (
@@ -245,7 +271,7 @@ const MyTripStatusScreen: React.FC = () => {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("screen_headers.my_trip_status")}</Text>
           <TouchableOpacity
-            onPress={() => setHelpOpen(true)}
+            onPress={openHelp}
             style={styles.headerBtn}
             accessibilityRole="button"
             accessibilityLabel={t('my_trip_status.help.title')}
@@ -357,6 +383,13 @@ const MyTripStatusScreen: React.FC = () => {
           ? t('my_trip_status.checklist_submission_verified')
           : t('my_trip_status.checklist_submission_pending'),
         completed: s.verified,
+        // Bucket C.4 — wire unverified submissions to the upload screen so
+        // the row is actually tappable (previously rendered but inert), and
+        // the `document_tapped` telemetry has a real surface.
+        actionScreen: s.verified ? undefined : 'DocumentSubmission',
+        actionParams: s.verified
+          ? undefined
+          : { participantId: participant.id, fieldKey: s.fieldKey },
       })),
       {
         id: 'final_payment',
@@ -466,7 +499,7 @@ const MyTripStatusScreen: React.FC = () => {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("screen_headers.my_trip_status")}</Text>
           <TouchableOpacity
-            onPress={() => setHelpOpen(true)}
+            onPress={openHelp}
             style={styles.headerBtn}
             accessibilityRole="button"
             accessibilityLabel={t('my_trip_status.help.title')}
@@ -492,13 +525,18 @@ const MyTripStatusScreen: React.FC = () => {
           <TouchableOpacity
             style={styles.depositBanner}
             activeOpacity={0.85}
-            onPress={() =>
+            onPress={() => {
+              // Bucket C.4 — deposit-banner payment tap.
+              track({
+                name: 'my_trip_status.payment_tapped',
+                properties: { trip_id: data.id, payment_type: 'deposit' },
+              });
               navigation.navigate('TripPayment', {
                 tripId: data.id,
                 participantId: participant.id,
                 paymentType: 'deposit',
-              })
-            }
+              });
+            }}
           >
             <Ionicons name="card-outline" size={20} color={GOLD} />
             <View style={{ flex: 1 }}>
@@ -652,9 +690,37 @@ const MyTripStatusScreen: React.FC = () => {
             anything yet. */}
         {!itinerary.loading && (
           <View style={styles.sectionContainer}>
-            <Text style={styles.sectionTitle}>
-              {t('my_trip_status.itinerary_title')}
-            </Text>
+            {/* Bucket C.4 — collapsible toggle; fires `itinerary_expanded`
+                when the user re-opens the section after collapsing it. */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={styles.itinerarySectionHeader}
+              onPress={() => {
+                setItineraryExpanded((prev) => {
+                  const next = !prev;
+                  if (next) {
+                    track({
+                      name: 'my_trip_status.itinerary_expanded',
+                      properties: { trip_id: data.id },
+                    });
+                  }
+                  return next;
+                });
+              }}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: itineraryExpanded }}
+            >
+              <Text style={styles.sectionTitle}>
+                {t('my_trip_status.itinerary_title')}
+              </Text>
+              <Ionicons
+                name={itineraryExpanded ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color={NAVY}
+              />
+            </TouchableOpacity>
+            {itineraryExpanded && (
+            <>
             {itinerary.days.length === 0 ? (
               <View style={styles.itineraryEmpty}>
                 <Ionicons name="map-outline" size={32} color={colors.textSecondary} />
@@ -693,6 +759,8 @@ const MyTripStatusScreen: React.FC = () => {
                 ))}
               </View>
             )}
+            </>
+            )}
           </View>
         )}
 
@@ -707,7 +775,14 @@ const MyTripStatusScreen: React.FC = () => {
               {t('my_trip_status.updates_teaser_title')}
             </Text>
             <TouchableOpacity
-              onPress={() => navigation.navigate('TripUpdates', { tripId: data.id })}
+              onPress={() => {
+                // Bucket C.4 — updates teaser tap.
+                track({
+                  name: 'my_trip_status.updates_teaser_tapped',
+                  properties: { trip_id: data.id },
+                });
+                navigation.navigate('TripUpdates', { tripId: data.id });
+              }}
               accessibilityRole="button"
             >
               <Text style={styles.updatesSeeAll}>
@@ -732,7 +807,14 @@ const MyTripStatusScreen: React.FC = () => {
                     styles.updateRow,
                     idx < recentUpdates.length - 1 && styles.updateRowBorder,
                   ]}
-                  onPress={() => navigation.navigate('TripUpdates', { tripId: data.id })}
+                  onPress={() => {
+                // Bucket C.4 — updates teaser tap.
+                track({
+                  name: 'my_trip_status.updates_teaser_tapped',
+                  properties: { trip_id: data.id },
+                });
+                navigation.navigate('TripUpdates', { tripId: data.id });
+              }}
                   activeOpacity={0.7}
                 >
                   <View style={styles.updateBullet}>
@@ -773,13 +855,30 @@ const MyTripStatusScreen: React.FC = () => {
                 ]}
                 activeOpacity={item.actionScreen ? 0.6 : 1}
                 onPress={() => {
-                  if (item.actionScreen) {
-                    navigation.navigate(item.actionScreen, {
-                      tripId: data.id,
-                      participantId: "me",
-                      ...item.actionParams,
+                  if (!item.actionScreen) return;
+                  // Bucket C.4 — payment vs document telemetry split.
+                  if (item.actionScreen === 'TripPayment') {
+                    track({
+                      name: 'my_trip_status.payment_tapped',
+                      properties: {
+                        trip_id: data.id,
+                        payment_type: item.actionParams?.paymentType ?? 'unknown',
+                      },
+                    });
+                  } else if (item.actionScreen === 'DocumentSubmission') {
+                    track({
+                      name: 'my_trip_status.document_tapped',
+                      properties: {
+                        trip_id: data.id,
+                        document_type: item.actionParams?.fieldKey ?? item.id,
+                      },
                     });
                   }
+                  navigation.navigate(item.actionScreen, {
+                    tripId: data.id,
+                    participantId: "me",
+                    ...item.actionParams,
+                  });
                 }}
               >
                 <View style={styles.checklistLeft}>
@@ -1626,6 +1725,14 @@ const styles = StyleSheet.create({
     color: TEAL,
     fontWeight: typography.semibold,
     textAlign: 'right',
+  },
+
+  // Bucket C.4 — collapsible itinerary header row.
+  itinerarySectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
 
   // ── Bucket B.1 — HelpSheet ───────────────────────────────────────────
