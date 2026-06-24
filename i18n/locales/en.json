@@ -8341,6 +8341,13 @@
     "rate_badge": "Rate trip",
     "reviewed_badge": "✓ Reviewed"
   },
+  "exposure": {
+    "join_blocked_title": "Exposure limit reached",
+    "join_blocked": "You can't join this circle yet — the total pot ({{pot}}) exceeds your current exposure limit ({{cap}}). Complete more cycles or get an elder vouch to raise your tier.",
+    "create_blocked": "Total pot {{pot}} exceeds your {{cap}} exposure limit. Lower the contribution or member count, or wait until you've earned a higher tier.",
+    "tier_label": "Your tier: {{tier}} · max exposure {{amount}}",
+    "tier_unknown": "Unknown tier"
+  },
   "leave_review": {
     "title": "Rate your trip",
     "untitled_trip": "Untitled trip",

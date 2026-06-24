@@ -8341,6 +8341,13 @@
     "rate_badge": "Évaluer",
     "reviewed_badge": "✓ Évalué"
   },
+  "exposure": {
+    "join_blocked_title": "Limite d'exposition atteinte",
+    "join_blocked": "Vous ne pouvez pas encore rejoindre ce cercle — la cagnotte totale ({{pot}}) dépasse votre limite actuelle ({{cap}}). Complétez plus de cycles ou obtenez la caution d'un aîné pour augmenter votre niveau.",
+    "create_blocked": "La cagnotte totale {{pot}} dépasse votre limite d'exposition de {{cap}}. Réduisez la contribution ou le nombre de membres, ou attendez un niveau supérieur.",
+    "tier_label": "Votre niveau : {{tier}} · exposition max {{amount}}",
+    "tier_unknown": "Niveau inconnu"
+  },
   "leave_review": {
     "title": "Évaluer le voyage",
     "untitled_trip": "Voyage sans titre",

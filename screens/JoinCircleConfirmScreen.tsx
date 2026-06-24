@@ -23,6 +23,7 @@ import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
 import { useEventTracker } from "../hooks/useEventTracker";
+import { useExposureCap } from "../hooks/useExposureCap";
 
 type JoinCircleConfirmNavigationProp = StackNavigationProp<RootStackParamList>;
 type JoinCircleConfirmRouteProp = RouteProp<RootStackParamList, "JoinCircleConfirm">;
@@ -90,6 +91,12 @@ export default function JoinCircleConfirmScreen() {
   const { circles, myCircles, browseCircles, joinCircle } = useCircles();
   const { user } = useAuth();
   const { track } = useEventTracker();
+  // Phase 1 Member Access Tiers — exposure cap. Aliased so the local
+  // XnScore-driven `canJoin` flag stays distinct from the tier check.
+  const {
+    canJoinCircle: canJoinExposure,
+    maxExposureCents,
+  } = useExposureCap(user?.id);
   const entryTrackedRef = useRef(false);
   useEffect(() => {
     if (entryTrackedRef.current) return;
@@ -205,6 +212,24 @@ export default function JoinCircleConfirmScreen() {
 
   const handleJoinCircle = async () => {
     if (!canJoin || isFull || !agreedToTerms) return;
+
+    // Phase 1 Member Access Tiers — server-truth exposure gate. Runs
+    // before the join RPC so a tier-blocked user never even attempts
+    // the insert. The RPC factors in active exposure_vouches; we
+    // fail-closed if it errors.
+    const exposureOk = await canJoinExposure(circleId);
+    if (!exposureOk) {
+      Alert.alert(
+        t("exposure.join_blocked_title"),
+        t("exposure.join_blocked", {
+          pot: `$${totalPot.toLocaleString()}`,
+          cap: maxExposureCents == null
+            ? "—"
+            : `$${(maxExposureCents / 100).toLocaleString()}`,
+        }),
+      );
+      return;
+    }
 
     setIsJoining(true);
     try {

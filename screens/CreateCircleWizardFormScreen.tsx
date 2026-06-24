@@ -48,6 +48,7 @@ import { useTranslation } from "react-i18next";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
+import { useExposureCap } from "../hooks/useExposureCap";
 import { useFormDraft } from "../hooks/useFormDraft";
 import {
   CIRCLE_DRAFT_KEY,
@@ -260,7 +261,17 @@ export default function CreateCircleWizardFormScreen() {
     (beneficiaryName.trim().length >= 1 &&
       beneficiaryReason.trim().length >= 1);
 
-  const isValid = isBasicsValid && isBeneficiaryValid;
+  // Phase 1 Member Access Tiers — client-side exposure gate. potCents is
+  // numericAmount (dollars) × memberCount × 100. The hook returns
+  // FALSE while maxExposureCents is still loading so a tier-blocked user
+  // can never sneak through a Next tap before the cap arrives.
+  const { canCreatePotCents, maxExposureCents, isLoading: exposureLoading } =
+    useExposureCap(user?.id);
+  const potCents = Math.round(numericAmount * 100) * memberCount;
+  const isExposureOk =
+    !isBasicsValid || canCreatePotCents(potCents); // only enforce when basics make sense
+
+  const isValid = isBasicsValid && isBeneficiaryValid && isExposureOk;
 
   // Bucket A — live cycle-date preview, same helper Express uses.
   const cycleDates = useMemo(
@@ -719,6 +730,24 @@ export default function CreateCircleWizardFormScreen() {
           </View>
         </ScrollView>
 
+        {/* Phase 1 Member Access Tiers — show an exposure warning only when
+            the basics are otherwise valid (so we don't yell at users who
+            haven't finished typing) AND the pot exceeds the cap AND the
+            cap has loaded (avoid flashing during the initial fetch). */}
+        {isBasicsValid && !exposureLoading && !isExposureOk && (
+          <View style={styles.exposureWarn}>
+            <Ionicons name="alert-circle" size={18} color="#B45309" />
+            <Text style={styles.exposureWarnText}>
+              {t("exposure.create_blocked", {
+                pot: `$${(potCents / 100).toLocaleString()}`,
+                cap: maxExposureCents == null
+                  ? "—"
+                  : `$${(maxExposureCents / 100).toLocaleString()}`,
+              })}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.bottomBar}>
           <TouchableOpacity
             style={[
@@ -905,6 +934,26 @@ const styles = StyleSheet.create({
   },
   nextBtnDisabled: { backgroundColor: "#9CA3AF" },
   nextBtnText: { fontSize: 15, fontWeight: "700", color: "#FFFFFF" },
+  // Phase 1 Member Access Tiers — exposure warning banner.
+  exposureWarn: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#B45309",
+  },
+  exposureWarnText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#78350F",
+    lineHeight: 18,
+  },
   // ----- Bucket C — first-visit explainer modal -----
   modalBackdrop: {
     flex: 1,
