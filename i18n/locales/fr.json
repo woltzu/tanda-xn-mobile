@@ -8397,6 +8397,10 @@
     "expiry_notification_title": "Votre garantie de {{elder_name}} expire bientôt",
     "expiry_notification_body": "Votre niveau temporaire expire dans {{days}} jours. Contactez votre aîné pour renouveler."
   },
+  "promotion": {
+    "notification_title": "Vous êtes maintenant un Membre vérifié",
+    "notification_body": "Vous avez complété assez de cercles pour être vérifié. De nouvelles fonctionnalités sont maintenant disponibles."
+  },
   "resolution_center": {
     "title": "Centre de résolution",
     "banner_text": "Votre compte est restreint — appuyez pour résoudre",
