@@ -82,6 +82,8 @@ export const Routes = {
   Events: "Events",
   CircleHealth: "CircleHealth",
   ConflictAlert: "ConflictAlert",
+  DisputesList: "DisputesList",
+  DisputeDetail: "DisputeDetail",
   // Conflict P1 (2026-06-12): new merged screens.
   ConflictCase: "ConflictCase",
   ElderOnboarding: "ElderOnboarding",

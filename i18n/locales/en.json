@@ -8436,7 +8436,10 @@
     "no_disputes": "No disputes.",
     "mediator_assigned": "Mediator assigned",
     "resolve_success": "Dispute resolved",
-    "reject_success": "Dispute rejected"
+    "reject_success": "Dispute rejected",
+    "messages_title": "Messages",
+    "no_messages": "No messages yet.",
+    "view_disputes": "View disputes"
   },
   "elder": {
     "permission_mediate": "Can mediate disputes",

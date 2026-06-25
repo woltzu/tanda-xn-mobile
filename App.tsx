@@ -101,6 +101,8 @@ import ElderNominationsScreen from "./screens/ElderNominationsScreen";
 import IssueExposureVouchScreen from "./screens/IssueExposureVouchScreen";
 // Phase 2 Bucket B — Resolution Center for critical-tier members.
 import ResolutionCenterScreen from "./screens/ResolutionCenterScreen";
+import DisputesListScreen from "./screens/DisputesListScreen";
+import DisputeDetailScreen from "./screens/DisputeDetailScreen";
 import CriticalBanner from "./components/CriticalBanner";
 // Honor Bucket A — HonorSystemScreen deleted. Its content was a separate
 // vouching-tier story (Newcomer/Guardian/Mentor/Elder/Sage based on vouches
@@ -532,6 +534,12 @@ export type RootStackParamList = {
   IssueExposureVouch: { memberId?: string } | undefined;
   // Phase 2 Bucket B — Resolution Center for critical-tier members.
   ResolutionCenter: undefined;
+  // Phase 2 — Dispute mediation (migration 261).
+  // DisputesList: scoped to circle when circleId supplied, else all
+  // disputes the user can see (RLS handles).
+  // DisputeDetail: single dispute view with messages + mediator actions.
+  DisputesList: { circleId?: string } | undefined;
+  DisputeDetail: { disputeId: string };
   AccessRestricted: {
     type: string;
     requiredScore?: number;
@@ -1115,6 +1123,8 @@ function HomeStackScreen() {
       <HomeStack.Screen name="ElderNominations" component={ElderNominationsScreen} />
       <HomeStack.Screen name="IssueExposureVouch" component={IssueExposureVouchScreen} />
       <HomeStack.Screen name="ResolutionCenter" component={ResolutionCenterScreen} />
+      <HomeStack.Screen name="DisputesList" component={DisputesListScreen} />
+      <HomeStack.Screen name="DisputeDetail" component={DisputeDetailScreen} />
       {/* Community Sub-screens (reachable from Community tab too) */}
       <HomeStack.Screen name="NearYou" component={NearYouScreen} />
       <HomeStack.Screen name="NewArrivals" component={NewArrivalsScreen} />

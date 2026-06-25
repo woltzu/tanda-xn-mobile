@@ -8436,7 +8436,10 @@
     "no_disputes": "Aucun litige.",
     "mediator_assigned": "Médiateur assigné",
     "resolve_success": "Litige résolu",
-    "reject_success": "Litige rejeté"
+    "reject_success": "Litige rejeté",
+    "messages_title": "Messages",
+    "no_messages": "Aucun message pour l'instant.",
+    "view_disputes": "Voir les litiges"
   },
   "elder": {
     "permission_mediate": "Peut médier les litiges",

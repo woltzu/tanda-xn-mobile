@@ -38,6 +38,7 @@ import { useEventTracker } from "../hooks/useEventTracker";
 import { useRoles } from "../hooks/useRoles";
 import { useCircleRiskFlags, MemberRiskFlag } from "../hooks/useCircleRiskFlags";
 import MuteCircleSheet from "../components/MuteCircleSheet";
+import FileDisputeModal from "../components/FileDisputeModal";
 import { showToast } from "../components/Toast";
 import { supabase } from "../lib/supabase";
 
@@ -166,6 +167,8 @@ export default function CircleDetailScreen() {
     return m;
   }, [riskFlags]);
   const [muteSheetOpen, setMuteSheetOpen] = useState(false);
+  // Phase 2 — file-dispute modal state (mounted at the bottom of this screen).
+  const [fileDisputeOpen, setFileDisputeOpen] = useState(false);
   const handleMute = async (durationDays: number | null) => {
     try {
       await muteCircle(durationDays);
@@ -613,6 +616,20 @@ export default function CircleDetailScreen() {
   const handleReportIssue = () => {
     setShowMenu(false);
     navigation.navigate("ReportIssue", { circleName: circle.name, circleId });
+  };
+
+  // Phase 2 — file a formal dispute against another member of this circle.
+  // Modal is mounted at the bottom of this screen.
+  const handleFileDispute = () => {
+    setShowMenu(false);
+    setFileDisputeOpen(true);
+  };
+
+  // Phase 2 — navigate to the list of disputes filed in this circle.
+  // RLS limits results to disputes the caller can see.
+  const handleViewDisputes = () => {
+    setShowMenu(false);
+    navigation.navigate("DisputesList", { circleId });
   };
 
   // === REGULAR MEMBER Menu Handlers ===
@@ -2138,6 +2155,28 @@ export default function CircleDetailScreen() {
                   </View>
                   <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
                 </TouchableOpacity>
+
+                {/* Phase 2 — File a formal dispute against another member. */}
+                <TouchableOpacity style={styles.menuItem} onPress={handleFileDispute}>
+                  <View style={[styles.menuItemIcon, { backgroundColor: "#FEF3C7" }]}>
+                    <Ionicons name="document-text-outline" size={20} color="#92400E" />
+                  </View>
+                  <View style={styles.menuItemContent}>
+                    <Text style={styles.menuItemText}>{t("dispute.file_button")}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                </TouchableOpacity>
+
+                {/* Phase 2 — View the list of disputes for this circle. */}
+                <TouchableOpacity style={styles.menuItem} onPress={handleViewDisputes}>
+                  <View style={[styles.menuItemIcon, { backgroundColor: "#DBEAFE" }]}>
+                    <Ionicons name="list-outline" size={20} color="#1E40AF" />
+                  </View>
+                  <View style={styles.menuItemContent}>
+                    <Text style={styles.menuItemText}>{t("dispute.view_disputes")}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                </TouchableOpacity>
               </View>
 
               {/* === MEMBER Section === */}
@@ -2326,6 +2365,20 @@ export default function CircleDetailScreen() {
         onClose={() => setMuteSheetOpen(false)}
         onMute={handleMute}
         onUnmute={handleUnmute}
+      />
+
+      {/* Phase 2 — File dispute modal. Members list comes from useCircleDetail;
+          exclude self. Uses odictId (auth user_id), not the circle_members row id. */}
+      <FileDisputeModal
+        visible={fileDisputeOpen}
+        onClose={() => setFileDisputeOpen(false)}
+        circleId={circleId}
+        members={members
+          .filter((m) => !m.isCurrentUser)
+          .map((m) => ({ userId: m.odictId, name: m.name }))}
+        onFiled={(id) =>
+          navigation.navigate("DisputeDetail", { disputeId: id })
+        }
       />
     </View>
   );
