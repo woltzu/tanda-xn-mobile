@@ -8438,6 +8438,16 @@
     "resolve_success": "Dispute resolved",
     "reject_success": "Dispute rejected"
   },
+  "elder": {
+    "permission_mediate": "Can mediate disputes",
+    "permission_vouch_elder": "Can vouch elders",
+    "permission_approve_elder": "Can approve elder nominations",
+    "permission_manage_community": "Can manage community",
+    "promote_to_ii": "Promote to Elder II",
+    "promote_to_iii": "Promote to Elder III",
+    "honor_decay_warning": "Your Honor score is decaying due to inactivity. Stay active to maintain your elder status.",
+    "demotion_notification": "You have been demoted from {{old_role}} to {{new_role}}."
+  },
   "resolution_center": {
     "title": "Resolution Center",
     "banner_text": "Your account is restricted — tap to resolve",

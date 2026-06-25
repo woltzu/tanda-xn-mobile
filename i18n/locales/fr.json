@@ -8438,6 +8438,16 @@
     "resolve_success": "Litige résolu",
     "reject_success": "Litige rejeté"
   },
+  "elder": {
+    "permission_mediate": "Peut médier les litiges",
+    "permission_vouch_elder": "Peut cautionner des aînés",
+    "permission_approve_elder": "Peut approuver les nominations d'aînés",
+    "permission_manage_community": "Peut gérer la communauté",
+    "promote_to_ii": "Promouvoir au rang d'Aîné II",
+    "promote_to_iii": "Promouvoir au rang d'Aîné III",
+    "honor_decay_warning": "Votre score d'Honneur diminue en raison de l'inactivité. Restez actif pour maintenir votre statut d'aîné.",
+    "demotion_notification": "Vous avez été rétrogradé de {{old_role}} à {{new_role}}."
+  },
   "resolution_center": {
     "title": "Centre de résolution",
     "banner_text": "Votre compte est restreint — appuyez pour résoudre",
