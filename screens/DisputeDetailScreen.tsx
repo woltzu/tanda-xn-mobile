@@ -84,7 +84,7 @@ export default function DisputeDetailScreen() {
   const { disputeId } = route.params;
   const { dispute, messages, isLoading, error, refresh, postMessage } =
     useDispute(disputeId);
-  const { isElder } = useRoles(user?.id);
+  const { isElder, permissions } = useRoles(user?.id);
 
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -96,16 +96,20 @@ export default function DisputeDetailScreen() {
   );
   const canPost = meIsParty || isElder;
   const meIsMediator = !!user && !!dispute && dispute.assigned_to === user.id;
-  // Anyone can resolve who is the assigned mediator. Admin-only path is
-  // handled server-side (resolve_dispute checks admin_users).
+  // Phase 2 (migration 262) — mediator actions now require the
+  // can_mediate_disputes permission (all elder tiers have it, but the
+  // booleans are the source of truth and future-proof against tier
+  // policy changes). Admin path still handled server-side
+  // (resolve_dispute checks admin_users).
   const canResolve =
+    permissions.canMediateDisputes &&
     meIsMediator &&
     dispute &&
     dispute.status !== "resolved" &&
     dispute.status !== "rejected" &&
     dispute.status !== "closed";
   const canAssign =
-    isElder &&
+    permissions.canMediateDisputes &&
     dispute &&
     !dispute.assigned_to &&
     dispute.status === "open";

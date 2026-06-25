@@ -51,7 +51,7 @@ const IssueExposureVouchScreen: React.FC = () => {
   const route = useRoute<any>();
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { isElder, isLoading: roleLoading } = useRoles(user?.id);
+  const { isElder, permissions, isLoading: roleLoading } = useRoles(user?.id);
 
   // Route can prefill memberId (when navigated from a member detail surface).
   const [memberId, setMemberId] = useState<string>(
@@ -319,17 +319,23 @@ const IssueExposureVouchScreen: React.FC = () => {
           </View>
         ) : null}
 
-        <TouchableOpacity
-          style={[styles.submitBtn, !isValid && styles.submitBtnDisabled]}
-          onPress={handleSubmit}
-          disabled={!isValid || submitting}
-        >
-          {submitting ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.submitBtnText}>{t("role.vouch_submit")}</Text>
-          )}
-        </TouchableOpacity>
+        {/* Phase 2 (migration 262) — gate the submit on the per-tier
+            permission. Elder I has can_vouch_elder=false; only Elder II+
+            can issue vouches. The DB also enforces this via the
+            vouch_member RPC + tier whitelist. */}
+        {permissions.canVouchElder ? (
+          <TouchableOpacity
+            style={[styles.submitBtn, !isValid && styles.submitBtnDisabled]}
+            onPress={handleSubmit}
+            disabled={!isValid || submitting}
+          >
+            {submitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.submitBtnText}>{t("role.vouch_submit")}</Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

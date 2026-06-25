@@ -54,7 +54,7 @@ const ElderNominationsScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const { user } = useAuth();
-  const { isElder, isLoading: roleLoading } = useRoles(user?.id);
+  const { isElder, permissions, isLoading: roleLoading } = useRoles(user?.id);
 
   const [items, setItems] = useState<NominationRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -210,11 +210,14 @@ const ElderNominationsScreen: React.FC = () => {
                   {item.reason}
                 </Text>
               ) : null}
+              {/* Phase 2 (migration 262) — vote buttons gated on
+                  canApproveElder (Elder III only). Self-vote suppressed
+                  with an explanatory note. Non-approvers see nothing. */}
               {isOwnNomination ? (
                 <Text style={styles.ownNote}>
                   {t("role.cant_vote_own_nomination")}
                 </Text>
-              ) : (
+              ) : permissions.canApproveElder ? (
                 <View style={styles.actions}>
                   <TouchableOpacity
                     style={[styles.btn, styles.btnReject]}
@@ -243,7 +246,7 @@ const ElderNominationsScreen: React.FC = () => {
                     )}
                   </TouchableOpacity>
                 </View>
-              )}
+              ) : null}
             </View>
           );
         }}
