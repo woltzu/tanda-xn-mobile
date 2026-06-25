@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   View,
   Text,
@@ -35,6 +35,8 @@ import { useCircleAutopaySuggestion } from "../hooks/useCircleAutopaySuggestion"
 import { useCircleNotificationMute } from "../hooks/useCircleNotificationMute";
 import { useCircleDetail } from "../hooks/useCircleDetail";
 import { useEventTracker } from "../hooks/useEventTracker";
+import { useRoles } from "../hooks/useRoles";
+import { useCircleRiskFlags, MemberRiskFlag } from "../hooks/useCircleRiskFlags";
 import MuteCircleSheet from "../components/MuteCircleSheet";
 import { showToast } from "../components/Toast";
 import { supabase } from "../lib/supabase";
@@ -149,6 +151,20 @@ export default function CircleDetailScreen() {
     mute: muteCircle,
     unmute: unmuteCircle,
   } = useCircleNotificationMute(circleId);
+  // Phase 2 — sensitive signal nudges (migration 256). Elders see a
+  // derived low/medium/high flag on each member row; non-elders skip
+  // the RPC entirely. The RPC also enforces elder-only server-side.
+  // Distinct from `isElder` further down (that's userRole === 'elder',
+  // a per-circle role); this is the app-wide governance role.
+  const { isElder: isAppElder } = useRoles(user?.id);
+  const { flags: riskFlags } = useCircleRiskFlags(
+    isAppElder ? circleId : undefined,
+  );
+  const riskMap = useMemo(() => {
+    const m = new Map<string, MemberRiskFlag>();
+    for (const f of riskFlags) m.set(f.user_id, f);
+    return m;
+  }, [riskFlags]);
   const [muteSheetOpen, setMuteSheetOpen] = useState(false);
   const handleMute = async (durationDays: number | null) => {
     try {
@@ -1607,6 +1623,18 @@ export default function CircleDetailScreen() {
     const memberIsAdmin = member.role === "creator" || member.role === "admin";
     const memberIsElder = member.role === "elder";
     const isMe = member.isCurrentUser;
+    // Risk badge: only populated when current user is an elder (RPC
+    // gated server-side). Lookup is by auth user_id, which lives on
+    // member.odictId — NOT member.id (that's the circle_members row id).
+    const riskEntry = isAppElder ? riskMap.get(member.odictId) : undefined;
+
+    const handleRiskBadgePress = () => {
+      if (!riskEntry) return;
+      const reasonText = riskEntry.risk_reason
+        ? `${t("risk.reason_prefix")}${riskEntry.risk_reason}`
+        : t(`risk.${riskEntry.risk_flag}`);
+      Alert.alert(t(`risk.${riskEntry.risk_flag}`), reasonText);
+    };
 
     return (
       <View style={[styles.memberCard, isMe && styles.memberCardMe]}>
@@ -1642,6 +1670,18 @@ export default function CircleDetailScreen() {
               <View style={[styles.adminTag, { backgroundColor: "#EEF2FF" }]}>
                 <Text style={[styles.adminTagText, { color: "#6366F1" }]}>{t("circle_detail.tag_elder")}</Text>
               </View>
+            )}
+            {riskEntry && (
+              <TouchableOpacity
+                onPress={handleRiskBadgePress}
+                style={[styles.riskBadge, styles[`riskBadge_${riskEntry.risk_flag}` as keyof typeof styles] as any]}
+                accessibilityRole="button"
+                accessibilityLabel={t(`risk.${riskEntry.risk_flag}`)}
+              >
+                <Text style={[styles.riskBadgeText, styles[`riskBadgeText_${riskEntry.risk_flag}` as keyof typeof styles] as any]}>
+                  {t(`risk.${riskEntry.risk_flag}`)}
+                </Text>
+              </TouchableOpacity>
             )}
           </View>
           <Text style={styles.memberPhone}>{member.phone || member.email || t("circle_detail.member_no_contact")}</Text>
@@ -3243,6 +3283,21 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#92400E",
   },
+  riskBadge: {
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+  },
+  riskBadge_low: { backgroundColor: "#DCFCE7" },
+  riskBadge_medium: { backgroundColor: "#FEF3C7" },
+  riskBadge_high: { backgroundColor: "#FEE2E2" },
+  riskBadgeText: {
+    fontSize: 10,
+    fontWeight: "600",
+  },
+  riskBadgeText_low: { color: "#166534" },
+  riskBadgeText_medium: { color: "#92400E" },
+  riskBadgeText_high: { color: "#991B1B" },
   memberPhone: {
     fontSize: 12,
     color: "#6B7280",
