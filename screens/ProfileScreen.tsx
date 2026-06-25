@@ -67,7 +67,7 @@ export default function ProfileScreen() {
   // public.is_admin() — see migration 114.
   const { isAdmin } = useIsAdmin();
   // Phase 2 Bucket A — role badge + governance section gating.
-  const { role, isElder } = useRoles(user?.id);
+  const { role, isElder, honorScore } = useRoles(user?.id);
   // Phase 2 Bucket C — used by handleDeleteAccount to short-circuit
   // before the RPC if the user is in critical tier.
   const { isCritical } = useResolutionStatus(user?.id);
@@ -697,6 +697,44 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         ) : null}
 
+        {/* Phase 2 (migration 262) — honor decay warning banner. Shows when
+            the elder's honor_score is within 50 points of the demotion
+            threshold for their tier, or already below it. Thresholds match
+            demote_inactive_elders(): 700 / 600 / 500 for elder_iii / _ii / _i. */}
+        {(() => {
+          if (!isElder || honorScore == null) return null;
+          const threshold =
+            role === "elder_iii" ? 700 :
+            role === "elder_ii"  ? 600 :
+            role === "elder_i"   ? 500 : null;
+          if (threshold == null) return null;
+          const isBelow = honorScore < threshold;
+          const isNear  = !isBelow && honorScore - threshold <= 50;
+          if (!isBelow && !isNear) return null;
+          return (
+            <View style={[
+              styles.honorWarningBanner,
+              isBelow ? styles.honorWarningBannerBelow : styles.honorWarningBannerNear,
+            ]}>
+              <Ionicons
+                name={isBelow ? "warning" : "alert-circle-outline"}
+                size={20}
+                color={isBelow ? "#991B1B" : "#92400E"}
+              />
+              <Text style={[
+                styles.honorWarningText,
+                { color: isBelow ? "#991B1B" : "#92400E" },
+              ]}>
+                {t(isBelow ? "elder.honor_warning_below" : "elder.honor_warning_near", {
+                  score: honorScore,
+                  role: t(`role.${role}`, { defaultValue: role }),
+                  threshold,
+                })}
+              </Text>
+            </View>
+          );
+        })()}
+
         {/* Menu Sections */}
         <View style={styles.content}>
           {menuItems.map((section, sectionIdx) => (
@@ -990,6 +1028,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: "#0A2342",
+  },
+  honorWarningBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginHorizontal: 20,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  honorWarningBannerNear: {
+    backgroundColor: "#FEF3C7",
+    borderColor: "#FCD34D",
+  },
+  honorWarningBannerBelow: {
+    backgroundColor: "#FEE2E2",
+    borderColor: "#FCA5A5",
+  },
+  honorWarningText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
   },
   content: {
     padding: 20,

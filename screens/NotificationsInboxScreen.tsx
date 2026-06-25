@@ -41,6 +41,11 @@ const getNotificationIcon = (type: string): { name: string; color: string; bg: s
       return { name: "shield-checkmark", color: "#DC2626", bg: "#FEE2E2" };
     case "promo":
       return { name: "gift", color: "#EC4899", bg: "#FCE7F3" };
+    // Phase 2 (migration 262) — elder lifecycle notifications.
+    case "honor_demotion":
+      return { name: "arrow-down-circle", color: "#991B1B", bg: "#FEE2E2" };
+    case "elder_promotion":
+      return { name: "arrow-up-circle", color: "#166534", bg: "#DCFCE7" };
     default:
       return { name: "notifications", color: "#6B7280", bg: "#F5F7FA" };
   }

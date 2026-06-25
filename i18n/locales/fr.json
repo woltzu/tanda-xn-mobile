@@ -8449,7 +8449,9 @@
     "promote_to_ii": "Promouvoir au rang d'Aîné II",
     "promote_to_iii": "Promouvoir au rang d'Aîné III",
     "honor_decay_warning": "Votre score d'Honneur diminue en raison de l'inactivité. Restez actif pour maintenir votre statut d'aîné.",
-    "demotion_notification": "Vous avez été rétrogradé de {{old_role}} à {{new_role}}."
+    "demotion_notification": "Vous avez été rétrogradé de {{old_role}} à {{new_role}}.",
+    "honor_warning_near": "Votre score d'Honneur est {{score}}. Vous serez rétrogradé de {{role}} s'il descend sous {{threshold}}.",
+    "honor_warning_below": "Votre score d'Honneur est inférieur à {{threshold}}. Vous pourriez être rétrogradé bientôt — restez actif pour récupérer."
   },
   "resolution_center": {
     "title": "Centre de résolution",

@@ -8449,7 +8449,9 @@
     "promote_to_ii": "Promote to Elder II",
     "promote_to_iii": "Promote to Elder III",
     "honor_decay_warning": "Your Honor score is decaying due to inactivity. Stay active to maintain your elder status.",
-    "demotion_notification": "You have been demoted from {{old_role}} to {{new_role}}."
+    "demotion_notification": "You have been demoted from {{old_role}} to {{new_role}}.",
+    "honor_warning_near": "Your Honor score is {{score}}. You will be demoted from {{role}} if it drops below {{threshold}}.",
+    "honor_warning_below": "Your Honor score is below {{threshold}}. You may be demoted soon — stay active to recover."
   },
   "resolution_center": {
     "title": "Resolution Center",
