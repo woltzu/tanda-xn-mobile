@@ -8412,6 +8412,10 @@
     "no_results": "Aucun membre trouvé.",
     "invite_blocked": "Vous ne pouvez pas inviter cette personne dans ce cercle."
   },
+  "provider": {
+    "not_accessible": "Ce prestataire n'est pas disponible dans votre communauté.",
+    "community_providers_title": "Prestataires de votre communauté"
+  },
   "resolution_center": {
     "title": "Centre de résolution",
     "banner_text": "Votre compte est restreint — appuyez pour résoudre",

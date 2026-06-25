@@ -8412,6 +8412,10 @@
     "no_results": "No members found.",
     "invite_blocked": "You cannot invite this person to this circle."
   },
+  "provider": {
+    "not_accessible": "This provider is not available in your community.",
+    "community_providers_title": "Providers in your community"
+  },
   "resolution_center": {
     "title": "Resolution Center",
     "banner_text": "Your account is restricted — tap to resolve",
