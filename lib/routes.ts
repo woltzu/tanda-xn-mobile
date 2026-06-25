@@ -156,6 +156,7 @@ export const Routes = {
   InterestUnlockedSuccess: "InterestUnlockedSuccess",
   InternationalVerification: "InternationalVerification",
   IssueExposureVouch: "IssueExposureVouch",
+  ResolutionCenter: "ResolutionCenter",
   ITINApplicationHelp: "ITINApplicationHelp",
   ITINEducation: "ITINEducation",
   ITINPending: "ITINPending",

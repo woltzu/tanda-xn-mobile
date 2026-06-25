@@ -99,6 +99,9 @@ import VouchMemberScreen from "./screens/VouchMemberScreen";
 // Phase 2 Bucket A — Member Access Tiers governance screens.
 import ElderNominationsScreen from "./screens/ElderNominationsScreen";
 import IssueExposureVouchScreen from "./screens/IssueExposureVouchScreen";
+// Phase 2 Bucket B — Resolution Center for critical-tier members.
+import ResolutionCenterScreen from "./screens/ResolutionCenterScreen";
+import CriticalBanner from "./components/CriticalBanner";
 // Honor Bucket A — HonorSystemScreen deleted. Its content was a separate
 // vouching-tier story (Newcomer/Guardian/Mentor/Elder/Sage based on vouches
 // count) that contradicted the canonical Honor Score tier ladder. Vouching
@@ -527,6 +530,8 @@ export type RootStackParamList = {
   // memberId prefill when navigated from a member surface.
   ElderNominations: undefined;
   IssueExposureVouch: { memberId?: string } | undefined;
+  // Phase 2 Bucket B — Resolution Center for critical-tier members.
+  ResolutionCenter: undefined;
   AccessRestricted: {
     type: string;
     requiredScore?: number;
@@ -1109,6 +1114,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="VouchMember" component={VouchMemberScreen} />
       <HomeStack.Screen name="ElderNominations" component={ElderNominationsScreen} />
       <HomeStack.Screen name="IssueExposureVouch" component={IssueExposureVouchScreen} />
+      <HomeStack.Screen name="ResolutionCenter" component={ResolutionCenterScreen} />
       {/* Community Sub-screens (reachable from Community tab too) */}
       <HomeStack.Screen name="NearYou" component={NearYouScreen} />
       <HomeStack.Screen name="NewArrivals" component={NewArrivalsScreen} />
@@ -1611,7 +1617,13 @@ function MainTabs() {
   }, [isEmailVerified, user?.email, navigation]);
 
   return (
-    <Tab.Navigator
+    // Phase 2 Bucket B — mount CriticalBanner above MainTabs so the
+    // sticky red bar appears on every authenticated screen. Unsigned
+    // pre-MainTabs screens (Login, SignUp, OTP, EmailVerification)
+    // never see it, which is correct — there's no user to restrict.
+    <View style={{ flex: 1 }}>
+      <CriticalBanner />
+      <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarStyle: {
@@ -1714,7 +1726,8 @@ function MainTabs() {
         component={CommunityStackScreen}
         options={{ tabBarLabel: t("tabs.community") }}
       />
-    </Tab.Navigator>
+      </Tab.Navigator>
+    </View>
   );
 }
 

@@ -110,6 +110,11 @@ export const linkingConfig = {
       ElderNominations: "governance/nominations",
       IssueExposureVouch: "governance/vouch/:memberId?",
 
+      // Phase 2 Bucket B — Resolution Center. Lets critical-tier
+      // member notifications (future trigger) route the user straight
+      // to the resolution flow.
+      ResolutionCenter: "resolution",
+
       // Stress Score Dashboard — Bucket C of the Stress review. Lets
       // the stress_status_change and stress_intervention_offered
       // notifications (migration 215) route straight to the dashboard.
