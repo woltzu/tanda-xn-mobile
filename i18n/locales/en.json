@@ -8409,6 +8409,18 @@
     "go_to_resolution": "Open Resolution Center",
     "cannot_delete_account": "You cannot delete your account while it is restricted. Please resolve the issue first."
   },
+  "account": {
+    "delete_account_label": "Delete account",
+    "delete_blocked_title": "Account restricted",
+    "delete_blocked_critical": "You cannot delete your account while it is restricted. Please resolve the issue first.",
+    "delete_confirm_title": "Delete account?",
+    "delete_confirm": "Are you sure you want to delete your account? Your data will be scheduled for permanent deletion after a 30-day grace period.",
+    "delete_confirm_yes": "Yes, delete",
+    "delete_success": "Account scheduled for deletion. You have been signed out.",
+    "delete_failed_title": "Deletion failed",
+    "delete_failed": "Could not schedule your account for deletion. Please contact support.",
+    "flag_check_blocked": "This email or phone is linked to a previously restricted account. Please contact support to resolve the issue before signing up."
+  },
   "leave_review": {
     "title": "Rate your trip",
     "untitled_trip": "Untitled trip",

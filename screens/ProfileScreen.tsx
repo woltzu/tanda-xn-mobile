@@ -27,6 +27,9 @@ import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
 // verified_member / elder_i / _ii / _iii). Drives the role badge in
 // the header and the elder-only Governance section below.
 import { useRoles } from "../hooks/useRoles";
+// Phase 2 Bucket C — gate Delete account row on critical tier (delete_account
+// RPC also raises, but client-side gate gives a better UX than an error toast).
+import { useResolutionStatus } from "../hooks/useResolutionStatus";
 // Phase 1A: Verified Provider Network — surfaces "Become a provider" if
 // the user has no provider row yet, or "Provider dashboard" if they do.
 import { useProviderDashboard } from "../hooks/useProviders";
@@ -65,6 +68,9 @@ export default function ProfileScreen() {
   const { isAdmin } = useIsAdmin();
   // Phase 2 Bucket A — role badge + governance section gating.
   const { role, isElder } = useRoles(user?.id);
+  // Phase 2 Bucket C — used by handleDeleteAccount to short-circuit
+  // before the RPC if the user is in critical tier.
+  const { isCritical } = useResolutionStatus(user?.id);
   // Autopay-review P0 (2026-06-15): autopay only makes sense if the
   // user has an active advance. Hide the Payment Settings section
   // entirely when there's nothing to configure, so the menu row no
@@ -209,6 +215,63 @@ export default function ProfileScreen() {
   const cancelEditingName = () => {
     setEditingName(false);
     setDraftName("");
+  };
+
+  // Phase 2 Bucket C — Delete account. Two-step confirmation, then RPC.
+  // Critical-tier users are blocked client-side via useResolutionStatus
+  // (the isCritical branch); the server-side delete_account RPC double-
+  // checks and raises if a critical user somehow gets through (e.g.,
+  // stale local state). On success, sign out + restart auth flow — the
+  // user_deletion_requests cron processes the actual data drop 30 days
+  // later.
+  const handleDeleteAccount = async () => {
+    if (isCritical) {
+      const msg = t("resolution_center.cannot_delete_account");
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        window.alert(msg);
+      } else {
+        Alert.alert(t("account.delete_blocked_title"), msg, [
+          { text: t("common.ok") },
+          {
+            text: t("resolution_center.go_to_resolution"),
+            onPress: () => navigation.navigate("ResolutionCenter"),
+          },
+        ]);
+      }
+      return;
+    }
+    const proceed = async () => {
+      try {
+        const { error: e } = await supabase.rpc("delete_account", {
+          p_reason: "User-initiated deletion from Profile screen",
+        });
+        if (e) throw new Error(e.message);
+        showToast(t("account.delete_success"));
+        // Sign out so the session can't continue against a queued-for-
+        // deletion account. The 30-day window means the user can email
+        // support to cancel before processing.
+        await signOut();
+      } catch (err: any) {
+        const body = err?.message ?? t("account.delete_failed");
+        if (Platform.OS === "web" && typeof window !== "undefined") {
+          window.alert(body);
+        } else {
+          Alert.alert(t("account.delete_failed_title"), body);
+        }
+      }
+    };
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      if (window.confirm(t("account.delete_confirm"))) await proceed();
+    } else {
+      Alert.alert(
+        t("account.delete_confirm_title"),
+        t("account.delete_confirm"),
+        [
+          { text: t("common.cancel"), style: "cancel" },
+          { text: t("account.delete_confirm_yes"), style: "destructive", onPress: proceed },
+        ],
+      );
+    }
   };
 
   const handleSignOut = async () => {
@@ -404,6 +467,11 @@ export default function ProfileScreen() {
         { icon: "people-outline", label: t("profile.item_communities"), onPress: () => navigation.navigate("CommunityPreferences") },
         { icon: "eye-off-outline", label: t("profile.item_privacy"), onPress: () => navigation.navigate("PrivacySettings") },
         { icon: "cog-outline", label: t("profile.item_all_settings"), onPress: () => navigation.navigate("Settings") },
+        // Phase 2 Bucket C — Delete account. Routes through delete_account
+        // RPC which queues a user_deletion_requests row for the 4am cron
+        // and blocks critical-tier users. Sits in Preferences (not its own
+        // section) so it's not the first thing a user sees.
+        { icon: "trash-outline", label: t("account.delete_account_label"), onPress: handleDeleteAccount },
       ],
     },
     // P1 (profile review): "Support" section removed — Help, FAQ,

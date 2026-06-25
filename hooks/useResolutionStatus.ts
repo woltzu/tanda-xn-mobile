@@ -60,7 +60,38 @@ export function useResolutionStatus(
         p_user_id: userId,
       });
       if (e) throw new Error(e.message);
-      setDetails(data as ResolutionDetails);
+      let result = (data ?? null) as ResolutionDetails | null;
+
+      // Phase 2 Bucket C — cross-account flag check. A user who deleted a
+      // critical account and re-signed up with the same email/phone shows
+      // up here as 'newcomer' (their new account is fresh). is_account_flagged
+      // catches that case and we synthesize a critical state so the banner
+      // + RestrictedActionGate still fire. The actual member_tier_status
+      // row is untouched; only the in-memory shape changes.
+      if (result && result.tier !== "critical") {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("email, phone")
+          .eq("id", userId)
+          .maybeSingle();
+        if (profile?.email || profile?.phone) {
+          const { data: isFlagged } = await supabase.rpc("is_account_flagged", {
+            p_email: profile?.email ?? null,
+            p_phone: profile?.phone ?? null,
+          });
+          if (isFlagged === true) {
+            result = {
+              ...result,
+              tier: "critical",
+              is_demoted: true,
+              demotion_reason:
+                result.demotion_reason ??
+                "This account is linked to a previously restricted account. Contact support to resolve.",
+            };
+          }
+        }
+      }
+      setDetails(result);
     } catch (err: any) {
       setError(err?.message ?? "Failed to load resolution status");
       setDetails(null);

@@ -22,6 +22,10 @@ import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
 import PasswordStrengthBar from "../components/PasswordStrengthBar";
 import AuthProgressStrip from "../components/AuthProgressStrip";
+// Phase 2 Bucket C — sign-up flag check. Anonymous-callable RPC that
+// looks up critical_account_history (migration 250). Hash happens
+// server-side; we send plaintext over HTTPS.
+import { supabase } from "../lib/supabase";
 
 type SignupScreenNavigationProp = StackNavigationProp<RootStackParamList, "Signup">;
 type SignupScreenRouteProp = RouteProp<RootStackParamList, "Signup">;
@@ -50,6 +54,11 @@ export default function SignupScreen() {
   // for an actionable card that offers to take the user to Login with
   // their email pre-filled. Cancel resets to false so they can edit.
   const [showAlreadyRegistered, setShowAlreadyRegistered] = useState(false);
+  // Phase 2 Bucket C — debounced is_account_flagged probe. Set true
+  // when the typed email/phone matches a previously-restricted account.
+  // Disables submit + renders the blocking banner. Re-runs whenever
+  // either identifier changes (300ms debounce).
+  const [flaggedAccount, setFlaggedAccount] = useState(false);
 
   // Real Terms / Privacy URLs — opened externally so the user keeps
   // their typed form data while the legal text loads in the browser.
@@ -99,6 +108,35 @@ export default function SignupScreen() {
     })();
   }, [route.params?.email]);
 
+  // Phase 2 Bucket C — debounced flag probe. Fires 400ms after the last
+  // edit to email or phone, asks is_account_flagged, and toggles the
+  // blocking banner. Reset to false the moment either identifier
+  // changes so a quick correction clears the lock. The submit handler
+  // re-checks defensively in case the debounce hasn't settled.
+  useEffect(() => {
+    const email = formData.email.trim();
+    const phone = formData.phone.trim();
+    if (!email && !phone) {
+      setFlaggedAccount(false);
+      return;
+    }
+    setFlaggedAccount(false);
+    const t0 = setTimeout(async () => {
+      try {
+        const { data } = await supabase.rpc("is_account_flagged", {
+          p_email: email || null,
+          p_phone: phone || null,
+        });
+        if (data === true) setFlaggedAccount(true);
+      } catch {
+        // Network or RPC failure: stay permissive — better to let the
+        // user attempt sign-up than to block them on a transient error.
+        // The defensive re-check in handleSubmit catches real flags.
+      }
+    }, 400);
+    return () => clearTimeout(t0);
+  }, [formData.email, formData.phone]);
+
   const handleSubmit = async () => {
     const newErrors: Record<string, string> = {};
     if (!formData.fullName.trim()) newErrors.fullName = t("signup.err_name_required");
@@ -117,6 +155,22 @@ export default function SignupScreen() {
 
     setErrors(newErrors);
     if (Object.keys(newErrors).length === 0) {
+      // Phase 2 Bucket C — defensive flag re-check. Covers the race
+      // where the debounce hasn't run since the last edit. The banner
+      // is the user-facing block; this RPC call is the server-side
+      // confirmation that no flagged account is slipping through.
+      try {
+        const { data: isFlagged } = await supabase.rpc("is_account_flagged", {
+          p_email: formData.email.trim() || null,
+          p_phone: formData.phone.trim() || null,
+        });
+        if (isFlagged === true) {
+          setFlaggedAccount(true);
+          return;
+        }
+      } catch {
+        /* permissive on transient errors — see useEffect comment */
+      }
       try {
         await signUp(formData.email, formData.password, formData.fullName, formData.phone);
         // Signup → email verification → AuthCallback → Dashboard.
@@ -361,12 +415,28 @@ export default function SignupScreen() {
             </TouchableOpacity>
             {errors.terms ? <Text style={styles.fieldError}>{errors.terms}</Text> : null}
 
+            {/* Phase 2 Bucket C — flagged-account block. Shows when the
+                debounced is_account_flagged probe returns true. Disables
+                the submit button below so the only way out is to edit
+                email/phone or contact support. */}
+            {flaggedAccount ? (
+              <View style={styles.flaggedBanner}>
+                <Ionicons name="alert-circle" size={20} color="#991B1B" />
+                <Text style={styles.flaggedBannerText}>
+                  {t("account.flag_check_blocked")}
+                </Text>
+              </View>
+            ) : null}
+
             {/* Submit Button */}
             <TouchableOpacity
-              style={[styles.submitButton, isLoading ? styles.submitButtonDisabled : null]}
+              style={[
+                styles.submitButton,
+                (isLoading || flaggedAccount) ? styles.submitButtonDisabled : null,
+              ]}
               onPress={handleSubmit}
               activeOpacity={0.8}
-              disabled={isLoading}
+              disabled={isLoading || flaggedAccount}
             >
               {isLoading ? (
                 <ActivityIndicator color="#FFFFFF" />
@@ -579,6 +649,26 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: {
     opacity: 0.7,
+  },
+  // Phase 2 Bucket C — flagged-account banner above the submit button.
+  flaggedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FEE2E2",
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+  },
+  flaggedBannerText: {
+    flex: 1,
+    color: "#991B1B",
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
   },
   submitButtonText: {
     color: "#FFFFFF",

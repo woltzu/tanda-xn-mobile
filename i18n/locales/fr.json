@@ -8409,6 +8409,18 @@
     "go_to_resolution": "Ouvrir le Centre de résolution",
     "cannot_delete_account": "Vous ne pouvez pas supprimer votre compte tant qu'il est restreint. Veuillez d'abord résoudre le problème."
   },
+  "account": {
+    "delete_account_label": "Supprimer le compte",
+    "delete_blocked_title": "Compte restreint",
+    "delete_blocked_critical": "Vous ne pouvez pas supprimer votre compte tant qu'il est restreint. Veuillez d'abord résoudre le problème.",
+    "delete_confirm_title": "Supprimer le compte ?",
+    "delete_confirm": "Êtes-vous sûr de vouloir supprimer votre compte ? Vos données seront programmées pour suppression définitive après un délai de grâce de 30 jours.",
+    "delete_confirm_yes": "Oui, supprimer",
+    "delete_success": "Compte programmé pour suppression. Vous avez été déconnecté.",
+    "delete_failed_title": "Échec de la suppression",
+    "delete_failed": "Impossible de programmer la suppression de votre compte. Veuillez contacter le support.",
+    "flag_check_blocked": "Cet e-mail ou ce numéro est lié à un compte précédemment restreint. Veuillez contacter le support pour résoudre le problème avant de vous inscrire."
+  },
   "leave_review": {
     "title": "Évaluer le voyage",
     "untitled_trip": "Voyage sans titre",
