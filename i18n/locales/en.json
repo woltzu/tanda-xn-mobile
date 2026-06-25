@@ -8407,6 +8407,11 @@
     "high": "High risk",
     "reason_prefix": "Reason: "
   },
+  "search": {
+    "placeholder": "Search members...",
+    "no_results": "No members found.",
+    "invite_blocked": "You cannot invite this person to this circle."
+  },
   "resolution_center": {
     "title": "Resolution Center",
     "banner_text": "Your account is restricted — tap to resolve",
