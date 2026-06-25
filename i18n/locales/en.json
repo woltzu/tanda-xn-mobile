@@ -8401,6 +8401,12 @@
     "notification_title": "You are now a Verified Member",
     "notification_body": "You have completed enough circles to be verified. New features are now available."
   },
+  "risk": {
+    "low": "Low risk",
+    "medium": "Medium risk",
+    "high": "High risk",
+    "reason_prefix": "Reason: "
+  },
   "resolution_center": {
     "title": "Resolution Center",
     "banner_text": "Your account is restricted — tap to resolve",

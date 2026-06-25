@@ -8401,6 +8401,12 @@
     "notification_title": "Vous êtes maintenant un Membre vérifié",
     "notification_body": "Vous avez complété assez de cercles pour être vérifié. De nouvelles fonctionnalités sont maintenant disponibles."
   },
+  "risk": {
+    "low": "Risque faible",
+    "medium": "Risque moyen",
+    "high": "Risque élevé",
+    "reason_prefix": "Motif : "
+  },
   "resolution_center": {
     "title": "Centre de résolution",
     "banner_text": "Votre compte est restreint — appuyez pour résoudre",
