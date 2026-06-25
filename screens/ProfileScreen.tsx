@@ -18,6 +18,13 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../hooks/useProfile";
+// Phase 2 (migration 258) — tiered profile visibility. useProfileView
+// calls get_profile_view which projects through a per-viewer filter.
+// For self this returns the full set; for other viewers fields the
+// caller isn't allowed to see come back as NULL. useProfile still owns
+// the editable form fields (country, round_up_increment, …) that the
+// view RPC doesn't surface.
+import { useProfileView } from "../hooks/useProfileView";
 import AvatarPicker from "../components/AvatarPicker";
 import { useXnScoreFromBundle } from "../hooks/useXnScore";
 import { useWallet } from "../context/WalletContext";
@@ -56,6 +63,17 @@ export default function ProfileScreen() {
   // in parallel.
   const { profile, loading: profileLoading, refetch: refetchProfile } =
     useProfile();
+  // Phase 2 (migration 258) — tiered view. For the current user this
+  // returns the SELF projection (all visible fields). The display-name /
+  // email / avatar surfaces on the header card source from here so the
+  // screen renders the same canonical values it would when a co-community
+  // peer views this profile (modulo redacted fields). Editable form fields
+  // still come from useProfile because the view RPC doesn't surface them.
+  const {
+    profile: viewProfile,
+    isLoading: viewProfileLoading,
+    refresh: refreshViewProfile,
+  } = useProfileView(user?.id);
   // Bucket A — XnScoreContext retired; read the real score from the
   // shared bundle the ScoreHub fills. `score` is `number | null` while
   // the bundle is loading; the row below renders an em-dash for null.
@@ -95,7 +113,18 @@ export default function ProfileScreen() {
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [draftName, setDraftName] = useState<string>("");
-  const avatarUrl = profile?.avatar_url ?? null;
+  // Phase 2 (migration 258) — display-tier sources. viewProfile is the
+  // canonical projection; fall back to useProfile / auth user only while
+  // viewProfile is still loading so the header doesn't flash empty on
+  // cold start.
+  const avatarUrl =
+    viewProfile?.avatar_url ?? profile?.avatar_url ?? null;
+  const displayName =
+    viewProfile?.full_name ??
+    viewProfile?.display_name ??
+    user?.name ??
+    "";
+  const displayEmail = viewProfile?.email ?? user?.email ?? "";
 
   // ──────────────────────────────────────────────────────────────────
   // Open profile Bucket B — pull-to-refresh + focus refetch.
@@ -132,13 +161,14 @@ export default function ProfileScreen() {
     try {
       await Promise.allSettled([
         refetchProfile(),
+        refreshViewProfile(),
         refreshScore(),
         refreshWallet(),
       ]);
     } finally {
       setRefreshing(false);
     }
-  }, [refetchProfile, refreshScore, refreshWallet]);
+  }, [refetchProfile, refreshViewProfile, refreshScore, refreshWallet]);
 
   // Open profile Bucket B — required-fields completeness signal.
   // Drives the "Complete your profile" banner below the header.
@@ -197,16 +227,19 @@ export default function ProfileScreen() {
   // updateProfile() the PersonalInfoScreen uses. Refetch hits
   // useProfile()'s cache buster.
   const beginEditingName = () => {
-    setDraftName(user?.name ?? "");
+    setDraftName(displayName);
     setEditingName(true);
   };
   const commitName = async () => {
     const next = draftName.trim();
     setEditingName(false);
-    if (!next || next === (user?.name ?? "")) return;
+    if (!next || next === displayName) return;
     try {
       await updateProfile({ name: next });
-      await refetchProfile();
+      // Refetch both the raw-columns hook (useProfile) and the tiered
+      // view (useProfileView) so the header re-renders with the new name
+      // sourced from the canonical view RPC.
+      await Promise.allSettled([refetchProfile(), refreshViewProfile()]);
       showToast(t("profile.name_saved_toast"), "success");
     } catch (err: any) {
       showToast(err?.message ?? t("profile.name_save_failed_toast"), "error");
@@ -550,6 +583,35 @@ export default function ProfileScreen() {
       : []),
   ];
 
+  // Phase 2 (migration 258) — cold-load spinner. While the view RPC is
+  // resolving for the first time (no cached profile yet), surface a
+  // centered spinner rather than flashing an empty header card.
+  if (viewProfileLoading && !viewProfile) {
+    return (
+      <View style={[styles.container, styles.centeredFill]}>
+        <ActivityIndicator size="large" color="#00C6AE" />
+      </View>
+    );
+  }
+  // Defensive: get_profile_view always returns at least the anon
+  // projection for any logged-in viewer, so on the user's own profile
+  // this branch should never fire. Kept so the screen degrades cleanly
+  // if the RPC errors (e.g. ID drift after a delete_account queued row
+  // was processed and the session token outlived the row).
+  if (!viewProfileLoading && !viewProfile && user?.id) {
+    return (
+      <View style={[styles.container, styles.centeredFill]}>
+        <Ionicons name="person-circle-outline" size={48} color="#9CA3AF" />
+        <Text style={styles.unavailableTitle}>
+          {t("profile.unavailable_title")}
+        </Text>
+        <Text style={styles.unavailableBody}>
+          {t("profile.unavailable_body")}
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -589,7 +651,7 @@ export default function ProfileScreen() {
                   style={styles.avatar}
                 >
                   <Text style={styles.avatarText}>
-                    {(user?.name || "U").charAt(0).toUpperCase()}
+                    {(displayName || "U").charAt(0).toUpperCase()}
                   </Text>
                 </LinearGradient>
               )}
@@ -620,11 +682,11 @@ export default function ProfileScreen() {
                 accessibilityRole="button"
               >
                 <Text style={styles.userName}>
-                  {user?.name || t("profile.default_user")}
+                  {displayName || t("profile.default_user")}
                 </Text>
               </TouchableOpacity>
             )}
-            <Text style={styles.userEmail}>{user?.email || ""}</Text>
+            <Text style={styles.userEmail}>{displayEmail}</Text>
 
             {/* Phase 2 Bucket A — role badge. Hidden for the default
                 'member' tier to avoid noise (every new user starts
@@ -813,7 +875,7 @@ export default function ProfileScreen() {
         hasExisting={!!avatarUrl}
         onClose={() => setAvatarPickerOpen(false)}
         onUpdated={async () => {
-          await refetchProfile();
+          await Promise.allSettled([refetchProfile(), refreshViewProfile()]);
         }}
       />
 
@@ -871,6 +933,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F5F7FA",
+  },
+  centeredFill: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    gap: 8,
+  },
+  unavailableTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginTop: 6,
+  },
+  unavailableBody: {
+    fontSize: 13,
+    color: "#6B7280",
+    textAlign: "center",
+    lineHeight: 18,
   },
   header: {
     paddingTop: 60,

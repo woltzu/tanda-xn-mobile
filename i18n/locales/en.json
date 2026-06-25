@@ -207,6 +207,8 @@
   "profile": {
     "header": "Profile",
     "default_user": "User",
+    "unavailable_title": "Profile not available",
+    "unavailable_body": "We couldn't load this profile. Pull down to try again, or check your connection.",
     "xn_score_label": "XnScore™",
     "view_details": "View Details",
     "section_account": "Account",
