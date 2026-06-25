@@ -36,6 +36,13 @@ import { useCircleNotificationMute } from "../hooks/useCircleNotificationMute";
 import { useCircleDetail } from "../hooks/useCircleDetail";
 import { useEventTracker } from "../hooks/useEventTracker";
 import { useRoles } from "../hooks/useRoles";
+// Phase 2 (migration 257) — critical-tier gate. Intercepts contribute taps
+// before the navigation fires; the trigger tr_block_critical_contribution
+// would otherwise reject the eventual Stripe-webhook INSERT and the user
+// would only learn at payment time. Imperative variant used here so the
+// pulse animation on the bottom-bar Contribute button isn't broken by a
+// wrapper element.
+import { useRestrictedAction } from "../components/RestrictedActionGate";
 import { useCircleRiskFlags, MemberRiskFlag } from "../hooks/useCircleRiskFlags";
 import MuteCircleSheet from "../components/MuteCircleSheet";
 import FileDisputeModal from "../components/FileDisputeModal";
@@ -158,6 +165,8 @@ export default function CircleDetailScreen() {
   // Distinct from `isElder` further down (that's userRole === 'elder',
   // a per-circle role); this is the app-wide governance role.
   const { isElder: isAppElder } = useRoles(user?.id);
+  const { isBlocked: isContributeBlocked, showBlockedAlert: showContributeBlocked } =
+    useRestrictedAction();
   const { flags: riskFlags } = useCircleRiskFlags(
     isAppElder ? circleId : undefined,
   );
@@ -844,6 +853,7 @@ export default function CircleDetailScreen() {
                   navigation.navigate("WalletMain" as never);
                   return;
                 }
+                if (isContributeBlocked) return showContributeBlocked();
                 trackContributeTap("hero");
                 navigation.navigate("MakeContribution", { circleId });
               }}
@@ -871,6 +881,7 @@ export default function CircleDetailScreen() {
             activeOpacity={0.85}
             onPress={() => {
               if (showHeroCoach) dismissHeroCoach();
+              if (isContributeBlocked) return showContributeBlocked();
               trackContributeTap("hero");
               navigation.navigate("MakeContribution", { circleId });
             }}
@@ -2048,6 +2059,7 @@ export default function CircleDetailScreen() {
                 // Tapping Contribute clears the pulse immediately —
                 // user has acknowledged the affordance.
                 if (shouldPulse) setShouldPulse(false);
+                if (isContributeBlocked) return showContributeBlocked();
                 trackContributeTap("bottom_bar");
                 navigation.navigate("MakeContribution", { circleId });
               }}

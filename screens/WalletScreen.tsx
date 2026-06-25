@@ -31,6 +31,11 @@ import { useKYCGate } from "../components/KYCGate";
 import { useGoalActions } from "../hooks/useGoalActions";
 import { useCircleNetBalance } from "../hooks/useCircleNetBalance";
 import { useAuth } from "../context/AuthContext";
+// Phase 2 (migration 257) — critical-tier gate for withdraw. The trigger
+// tr_block_critical_withdrawal rejects the underlying withdrawal_requests
+// INSERT; the imperative hook here intercepts at the navigation entry so
+// the user gets the resolution-center prompt before the form.
+import { useRestrictedAction } from "../components/RestrictedActionGate";
 import { useCircles } from "../context/CirclesContext";
 import { supabase } from "../lib/supabase";
 
@@ -49,6 +54,8 @@ export default function WalletScreen() {
   const { t } = useTranslation();
   const { balance, currencies, addCurrencyWallet, refreshWallet } = useWallet();
   const { fetchGoals } = useGoalActions();
+  const { isBlocked: isWithdrawBlocked, showBlockedAlert: showWithdrawBlocked } =
+    useRestrictedAction();
   const { totalNet: circleNetTotal } = useCircleNetBalance();
   // Recent Activity now reads from money_transfers via the new hook —
   // the prior local-AsyncStorage list was missing fresh sends because
@@ -455,7 +462,10 @@ export default function WalletScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.actionButtonOutline}
-                  onPress={() => navigation.navigate("Withdraw")}
+                  onPress={() => {
+                    if (isWithdrawBlocked) return showWithdrawBlocked();
+                    navigation.navigate("Withdraw");
+                  }}
                 >
                   <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
                   <Text style={styles.actionButtonText}>{t("wallet.action_withdraw")}</Text>
