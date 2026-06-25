@@ -8416,6 +8416,28 @@
     "not_accessible": "Ce prestataire n'est pas disponible dans votre communauté.",
     "community_providers_title": "Prestataires de votre communauté"
   },
+  "dispute": {
+    "title": "Litiges",
+    "file_button": "Déposer un litige",
+    "file_modal_title": "Déposer un litige",
+    "against": "Contre",
+    "reason": "Motif",
+    "submit": "Soumettre",
+    "status_open": "Ouvert",
+    "status_under_review": "En cours d'examen",
+    "status_resolved": "Résolu",
+    "status_rejected": "Rejeté",
+    "status_closed": "Clôturé",
+    "assign_mediator": "Assigner un médiateur",
+    "resolve": "Résoudre",
+    "reject": "Rejeter",
+    "resolution_note": "Notes de résolution",
+    "message_placeholder": "Ajouter un message...",
+    "no_disputes": "Aucun litige.",
+    "mediator_assigned": "Médiateur assigné",
+    "resolve_success": "Litige résolu",
+    "reject_success": "Litige rejeté"
+  },
   "resolution_center": {
     "title": "Centre de résolution",
     "banner_text": "Votre compte est restreint — appuyez pour résoudre",

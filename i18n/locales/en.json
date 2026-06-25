@@ -8416,6 +8416,28 @@
     "not_accessible": "This provider is not available in your community.",
     "community_providers_title": "Providers in your community"
   },
+  "dispute": {
+    "title": "Disputes",
+    "file_button": "File a dispute",
+    "file_modal_title": "File a dispute",
+    "against": "Against",
+    "reason": "Reason",
+    "submit": "Submit",
+    "status_open": "Open",
+    "status_under_review": "Under review",
+    "status_resolved": "Resolved",
+    "status_rejected": "Rejected",
+    "status_closed": "Closed",
+    "assign_mediator": "Assign mediator",
+    "resolve": "Resolve",
+    "reject": "Reject",
+    "resolution_note": "Resolution notes",
+    "message_placeholder": "Add a message...",
+    "no_disputes": "No disputes.",
+    "mediator_assigned": "Mediator assigned",
+    "resolve_success": "Dispute resolved",
+    "reject_success": "Dispute rejected"
+  },
   "resolution_center": {
     "title": "Resolution Center",
     "banner_text": "Your account is restricted — tap to resolve",
