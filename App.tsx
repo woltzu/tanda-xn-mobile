@@ -96,6 +96,9 @@ import WalletTransactionSuccessScreen from "./screens/WalletTransactionSuccessSc
 import XnScoreDashboardScreen from "./screens/XnScoreDashboardScreen";
 import XnScoreHistoryScreen from "./screens/XnScoreHistoryScreen";
 import VouchMemberScreen from "./screens/VouchMemberScreen";
+// Phase 2 Bucket A — Member Access Tiers governance screens.
+import ElderNominationsScreen from "./screens/ElderNominationsScreen";
+import IssueExposureVouchScreen from "./screens/IssueExposureVouchScreen";
 // Honor Bucket A — HonorSystemScreen deleted. Its content was a separate
 // vouching-tier story (Newcomer/Guardian/Mentor/Elder/Sage based on vouches
 // count) that contradicted the canonical Honor Score tier ladder. Vouching
@@ -518,6 +521,12 @@ export type RootStackParamList = {
   XnScoreHistory: undefined;
   // Trust & Honor System — Honor Bucket A retired the HonorSystem route.
   VouchMember: undefined;
+  // Phase 2 Bucket A — Member Access Tiers & Vouch governance.
+  // ElderNominations: review queue for pending elder_nominations.
+  // IssueExposureVouch: form that calls vouch_member RPC; optional
+  // memberId prefill when navigated from a member surface.
+  ElderNominations: undefined;
+  IssueExposureVouch: { memberId?: string } | undefined;
   AccessRestricted: {
     type: string;
     requiredScore?: number;
@@ -1098,6 +1107,8 @@ function HomeStackScreen() {
       <HomeStack.Screen name="ActiveSessions" component={ActiveSessionsScreen} />
       <HomeStack.Screen name="AboutApp" component={AboutAppScreen} />
       <HomeStack.Screen name="VouchMember" component={VouchMemberScreen} />
+      <HomeStack.Screen name="ElderNominations" component={ElderNominationsScreen} />
+      <HomeStack.Screen name="IssueExposureVouch" component={IssueExposureVouchScreen} />
       {/* Community Sub-screens (reachable from Community tab too) */}
       <HomeStack.Screen name="NearYou" component={NearYouScreen} />
       <HomeStack.Screen name="NewArrivals" component={NewArrivalsScreen} />

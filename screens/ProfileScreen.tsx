@@ -23,6 +23,10 @@ import { useXnScoreFromBundle } from "../hooks/useXnScore";
 import { useWallet } from "../context/WalletContext";
 import { useIsAdmin } from "../hooks/useIsAdmin";
 import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
+// Phase 2 Bucket A — Member Access Tiers governance role (member /
+// verified_member / elder_i / _ii / _iii). Drives the role badge in
+// the header and the elder-only Governance section below.
+import { useRoles } from "../hooks/useRoles";
 // Phase 1A: Verified Provider Network — surfaces "Become a provider" if
 // the user has no provider row yet, or "Provider dashboard" if they do.
 import { useProviderDashboard } from "../hooks/useProviders";
@@ -59,6 +63,8 @@ export default function ProfileScreen() {
   // monitor (previously dev-only). Source of truth is admin_users via
   // public.is_admin() — see migration 114.
   const { isAdmin } = useIsAdmin();
+  // Phase 2 Bucket A — role badge + governance section gating.
+  const { role, isElder } = useRoles(user?.id);
   // Autopay-review P0 (2026-06-15): autopay only makes sense if the
   // user has an active advance. Hide the Payment Settings section
   // entirely when there's nothing to configure, so the menu row no
@@ -405,6 +411,30 @@ export default function ProfileScreen() {
     // existing "All Settings" entry in the Preferences section above.
     // Keeps the Profile screen focused on identity + money rather than
     // being a settings dump.
+    // Phase 2 Bucket A — Governance section. Elder-only. Houses the
+    // elder_nominations review queue and the standalone vouch_member
+    // form. Sits above admin tools because it's role-based (not the
+    // app-admin flag) and is intended to be a regular elder workflow,
+    // not an exceptional admin one.
+    ...(isElder
+      ? [
+          {
+            section: t("profile.section_governance"),
+            items: [
+              {
+                icon: "ribbon-outline",
+                label: t("profile.item_elder_nominations"),
+                onPress: () => navigation.navigate("ElderNominations"),
+              },
+              {
+                icon: "shield-half-outline",
+                label: t("profile.item_issue_vouch"),
+                onPress: () => navigation.navigate("IssueExposureVouch"),
+              },
+            ],
+          },
+        ]
+      : []),
     // Moderation P0 (2026-06-13): admin-only tools section. Appended at
     // the bottom of the menu so it never shadows a member-facing item.
     ...(isAdmin
@@ -527,6 +557,18 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             )}
             <Text style={styles.userEmail}>{user?.email || ""}</Text>
+
+            {/* Phase 2 Bucket A — role badge. Hidden for the default
+                'member' tier to avoid noise (every new user starts
+                there). Shows the translated role name otherwise so
+                verified_member / elder_i / _ii / _iii get visible
+                identity affordances. */}
+            {role && role !== "member" ? (
+              <View style={styles.roleBadge}>
+                <Ionicons name="shield-checkmark" size={11} color="#FFFFFF" />
+                <Text style={styles.roleBadgeText}>{t(`role.${role}`)}</Text>
+              </View>
+            ) : null}
 
             {/* Open profile Bucket B.4 — slim XnScore row replaces the
                 badge + "View details" button. Score Hub is now the
@@ -808,6 +850,25 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "rgba(255,255,255,0.92)",
+  },
+  // Phase 2 Bucket A — role badge styles. Self-contained pill so the
+  // badge can live inside the navy header without leaking outside.
+  roleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "center",
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,198,174,0.85)",
+  },
+  roleBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
   },
   // ----- Open profile Bucket B.3 — Complete-your-profile banner -----
   // Lives between the navy LinearGradient header and the white content

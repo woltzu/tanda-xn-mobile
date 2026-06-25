@@ -104,6 +104,12 @@ export const linkingConfig = {
       // to the overview. userId optional; absent = own profile.
       HonorScoreOverview: "honor/:userId?",
 
+      // Phase 2 Bucket A — governance routes. Both gated by elder
+      // role server-side (the RPCs raise for non-elders), so deep-link
+      // hits from non-elders land on the screen's "Elder-only" guard.
+      ElderNominations: "governance/nominations",
+      IssueExposureVouch: "governance/vouch/:memberId?",
+
       // Stress Score Dashboard — Bucket C of the Stress review. Lets
       // the stress_status_change and stress_intervention_offered
       // notifications (migration 215) route straight to the dashboard.
