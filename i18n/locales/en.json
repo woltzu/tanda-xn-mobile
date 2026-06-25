@@ -8382,6 +8382,21 @@
     "vouch_failed_title": "Vouch failed",
     "vouch_failed": "Could not issue vouch. Please try again."
   },
+  "vouch": {
+    "backing_cap_label": "Your backing limit based on Honor: ${{limit}}",
+    "backing_cap_exceeded": "Exceeds your Honor-based limit of ${{limit}}",
+    "active_card_title": "Active vouch",
+    "active_card_body": "You currently back this member at {{tier}} tier for {{backing}}.",
+    "revoke_button": "Revoke vouch",
+    "revoke_confirm_title": "Revoke this vouch?",
+    "revoke_confirm_short": "The member loses their temporary tier immediately. This action is logged.",
+    "revoke_success_title": "Vouch revoked",
+    "revoke_success": "Your vouch has been revoked and the member's tier reverts.",
+    "revoke_failed_title": "Revoke failed",
+    "revoke_failed": "Could not revoke the vouch. Please try again.",
+    "expiry_notification_title": "Your vouch from {{elder_name}} is expiring soon",
+    "expiry_notification_body": "Your temporary tier expires in {{days}} days. Contact your elder to renew."
+  },
   "resolution_center": {
     "title": "Resolution Center",
     "banner_text": "Your account is restricted — tap to resolve",

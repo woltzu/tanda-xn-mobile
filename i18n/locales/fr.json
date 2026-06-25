@@ -8382,6 +8382,21 @@
     "vouch_failed_title": "Échec de la garantie",
     "vouch_failed": "Impossible d'émettre la garantie. Veuillez réessayer."
   },
+  "vouch": {
+    "backing_cap_label": "Votre plafond basé sur l'Honneur : {{limit}} $",
+    "backing_cap_exceeded": "Dépasse votre plafond Honneur de {{limit}} $",
+    "active_card_title": "Garantie active",
+    "active_card_body": "Vous garantissez actuellement ce membre au niveau {{tier}} pour {{backing}}.",
+    "revoke_button": "Révoquer la garantie",
+    "revoke_confirm_title": "Révoquer cette garantie ?",
+    "revoke_confirm_short": "Le membre perd immédiatement son niveau temporaire. Cette action est enregistrée.",
+    "revoke_success_title": "Garantie révoquée",
+    "revoke_success": "Votre garantie a été révoquée et le niveau du membre est rétabli.",
+    "revoke_failed_title": "Échec de la révocation",
+    "revoke_failed": "Impossible de révoquer la garantie. Veuillez réessayer.",
+    "expiry_notification_title": "Votre garantie de {{elder_name}} expire bientôt",
+    "expiry_notification_body": "Votre niveau temporaire expire dans {{days}} jours. Contactez votre aîné pour renouveler."
+  },
   "resolution_center": {
     "title": "Centre de résolution",
     "banner_text": "Votre compte est restreint — appuyez pour résoudre",

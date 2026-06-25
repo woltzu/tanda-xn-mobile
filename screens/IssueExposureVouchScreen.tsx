@@ -16,7 +16,7 @@
 // only surfaces the form + error messages.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -28,6 +28,7 @@ import {
   ActivityIndicator,
   TextInput,
   Alert,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -60,10 +61,69 @@ const IssueExposureVouchScreen: React.FC = () => {
   const [backingDollars, setBackingDollars] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Phase 2 vouch enhancement (migration 252) — Honor-derived backing cap.
+  // Fetched once at mount; trigger keeps it in sync server-side.
+  const [maxBackingCents, setMaxBackingCents] = useState<number | null>(null);
+
+  // Active vouch the elder has placed on the typed member (if any). When
+  // present, the screen surfaces a "Revoke" affordance instead of just
+  // overwriting via a new vouch_member call — gives the elder an
+  // explicit, audit-logged way to retract without re-issuing.
+  const [activeVouch, setActiveVouch] = useState<{
+    id: string;
+    expires_at: string;
+    backing_amount_cents: number | null;
+    temporary_tier: string;
+  } | null>(null);
+  const [revoking, setRevoking] = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from("profiles")
+      .select("max_backing_cents")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setMaxBackingCents(
+          (data?.max_backing_cents as number | undefined) ?? 0,
+        );
+      });
+  }, [user?.id]);
+
+  // Probe active vouch when the typed member ID looks like a UUID. Filters
+  // on this elder so we only surface a revoke for vouches THIS elder
+  // issued — revoking another elder's vouch is intentionally not exposed.
+  const probeActiveVouch = useCallback(async () => {
+    const mid = memberId.trim();
+    if (mid.length < 30 || !user?.id) {
+      setActiveVouch(null);
+      return;
+    }
+    const { data } = await supabase
+      .from("exposure_vouches")
+      .select("id, expires_at, backing_amount_cents, temporary_tier")
+      .eq("member_id", mid)
+      .eq("elder_id", user.id)
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setActiveVouch((data as any) ?? null);
+  }, [memberId, user?.id]);
+
+  useEffect(() => {
+    probeActiveVouch();
+  }, [probeActiveVouch]);
+
   const backingDollarsNum = parseFloat(backingDollars) || 0;
+  const backingCentsNum = Math.round(backingDollarsNum * 100);
+  const capExceeded =
+    maxBackingCents !== null && backingCentsNum > maxBackingCents;
   const isValid =
     memberId.trim().length >= 30 && // rough UUID length sanity
-    backingDollarsNum > 0;
+    backingDollarsNum > 0 &&
+    !capExceeded;
 
   const handleSubmit = async () => {
     if (!isValid) return;
@@ -72,7 +132,7 @@ const IssueExposureVouchScreen: React.FC = () => {
       const { data, error } = await supabase.rpc("vouch_member", {
         p_member_id: memberId.trim(),
         p_temporary_tier: tier,
-        p_backing_amount_cents: Math.round(backingDollarsNum * 100),
+        p_backing_amount_cents: backingCentsNum,
       });
       if (error) throw new Error(error.message);
       Alert.alert(
@@ -85,6 +145,47 @@ const IssueExposureVouchScreen: React.FC = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Phase 2 vouch enhancement — revoke the elder's active vouch on this
+  // member. Server-side guard re-checks elder role + presence of active
+  // vouch; client-side guard prevents the call if no vouch is loaded.
+  const handleRevoke = async () => {
+    if (!activeVouch) return;
+    try {
+      setRevoking(true);
+      const { error } = await supabase.rpc("revoke_vouch", {
+        p_member_id: memberId.trim(),
+      });
+      if (error) throw new Error(error.message);
+      setActiveVouch(null);
+      Alert.alert(
+        t("vouch.revoke_success_title"),
+        t("vouch.revoke_success"),
+      );
+    } catch (err: any) {
+      Alert.alert(
+        t("vouch.revoke_failed_title"),
+        err?.message ?? t("vouch.revoke_failed"),
+      );
+    } finally {
+      setRevoking(false);
+    }
+  };
+
+  const confirmRevoke = () => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      if (window.confirm(t("vouch.revoke_confirm_short"))) handleRevoke();
+      return;
+    }
+    Alert.alert(
+      t("vouch.revoke_confirm_title"),
+      t("vouch.revoke_confirm_short"),
+      [
+        { text: t("common.cancel"), style: "cancel" },
+        { text: t("vouch.revoke_button"), style: "destructive", onPress: handleRevoke },
+      ],
+    );
   };
 
   const renderHeader = () => (
@@ -175,6 +276,48 @@ const IssueExposureVouchScreen: React.FC = () => {
             keyboardType="numeric"
           />
         </View>
+        {/* Phase 2 vouch enhancement — Honor-derived backing cap. The
+            server (vouch_member RPC) re-checks; this label gives early
+            feedback so the elder doesn't hit a confusing RPC error. */}
+        {maxBackingCents !== null ? (
+          <Text style={[styles.capLabel, capExceeded && styles.capLabelError]}>
+            {capExceeded
+              ? t("vouch.backing_cap_exceeded", { limit: (maxBackingCents / 100).toString() })
+              : t("vouch.backing_cap_label", { limit: (maxBackingCents / 100).toString() })}
+          </Text>
+        ) : null}
+
+        {/* Active-vouch card — surfaces a Revoke action when the elder
+            already has a live vouch on this member. Only the elder's own
+            vouches show up (probed with elder_id = self). */}
+        {activeVouch ? (
+          <View style={styles.activeVouchCard}>
+            <Text style={styles.activeVouchTitle}>
+              {t("vouch.active_card_title")}
+            </Text>
+            <Text style={styles.activeVouchBody}>
+              {t("vouch.active_card_body", {
+                tier: t(`role.${activeVouch.temporary_tier}`),
+                backing: activeVouch.backing_amount_cents
+                  ? "$" + (activeVouch.backing_amount_cents / 100).toString()
+                  : "—",
+              })}
+            </Text>
+            <TouchableOpacity
+              style={styles.revokeBtn}
+              onPress={confirmRevoke}
+              disabled={revoking}
+            >
+              {revoking ? (
+                <ActivityIndicator size="small" color="#991B1B" />
+              ) : (
+                <Text style={styles.revokeBtnText}>
+                  {t("vouch.revoke_button")}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         <TouchableOpacity
           style={[styles.submitBtn, !isValid && styles.submitBtnDisabled]}
@@ -251,6 +394,35 @@ const styles = StyleSheet.create({
   },
   submitBtnDisabled: { backgroundColor: "#9CA3AF" },
   submitBtnText: { color: "#FFFFFF", fontSize: typography.body, fontWeight: typography.bold },
+  capLabel: {
+    fontSize: typography.label,
+    color: MUTED,
+    marginTop: 4,
+  },
+  capLabelError: { color: "#DC2626", fontWeight: typography.semibold },
+  activeVouchCard: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    backgroundColor: "#FEF3C7",
+    borderRadius: radius.card,
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    gap: 8,
+  },
+  activeVouchTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: "#92400E",
+  },
+  activeVouchBody: { fontSize: typography.bodySmall, color: "#92400E", lineHeight: 18 },
+  revokeBtn: {
+    backgroundColor: "#FEE2E2",
+    borderRadius: radius.pill,
+    paddingVertical: 10,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  revokeBtnText: { color: "#991B1B", fontSize: typography.body, fontWeight: typography.bold },
   guardText: {
     fontSize: typography.body,
     color: MUTED,
