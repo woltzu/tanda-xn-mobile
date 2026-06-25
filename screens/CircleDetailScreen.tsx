@@ -1569,6 +1569,28 @@ export default function CircleDetailScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+          {/* Phase 2 (migration 259) — direct invite-by-name surface.
+              Sits below the share-code row so the implicit-distribution
+              path (Share API) stays the primary, but power users in the
+              circle's community can pick a known person from search and
+              fire the invite without the recipient ever needing the
+              code. Server-side gating (can_invite + tr_block_critical_
+              invitation) is the real authority; this row is always
+              visible to members and the search screen owns the
+              critical-tier "can't invite" banner. */}
+          <TouchableOpacity
+            style={styles.inviteByNameBtn}
+            onPress={() =>
+              navigation.navigate("MemberSearch", { circleId: circle.id })
+            }
+            accessibilityRole="button"
+            accessibilityLabel={t("circle_detail.invite_btn_search")}
+          >
+            <Ionicons name="person-add-outline" size={16} color="#0A2342" />
+            <Text style={styles.inviteByNameBtnText}>
+              {t("circle_detail.invite_btn_search")}
+            </Text>
+          </TouchableOpacity>
           <Text style={styles.inviteHelpText}>
             {t("circle_detail.invite_help")}
           </Text>
@@ -2900,6 +2922,23 @@ const styles = StyleSheet.create({
   },
   inviteActionBtnPrimaryText: {
     color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  inviteByNameBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    marginTop: 10,
+    paddingVertical: 10,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    backgroundColor: "#F9FAFB",
+  },
+  inviteByNameBtnText: {
+    color: "#0A2342",
     fontSize: 13,
     fontWeight: "700",
   },

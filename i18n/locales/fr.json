@@ -86,6 +86,7 @@
     "continue": "Continuer",
     "search": "Rechercher",
     "select": "Sélectionner",
+    "clear": "Effacer",
     "help": "Aide"
   },
   "tabs": {
@@ -4028,6 +4029,7 @@
     "invite_btn_copy": "Copier le code",
     "invite_btn_copied": "Copié !",
     "invite_btn_share": "Partager l'invitation",
+    "invite_btn_search": "Rechercher et inviter un membre",
     "invite_help": "Partagez ce code avec les personnes que vous voulez inviter. Elles touchent « Vous avez un code d'invitation ? » dans l'onglet Cercles et le collent.",
     "card_circle_details": "Détails du cercle",
     "detail_start_date": "Date de début",
@@ -8412,7 +8414,15 @@
   "search": {
     "placeholder": "Rechercher des membres...",
     "no_results": "Aucun membre trouvé.",
-    "invite_blocked": "Vous ne pouvez pas inviter cette personne dans ce cercle."
+    "invite_blocked": "Vous ne pouvez pas inviter cette personne dans ce cercle.",
+    "invite_success": "Invitation envoyée !",
+    "invite_failed": "Échec de l'envoi de l'invitation.",
+    "invite_sent": "Envoyée",
+    "invite_btn": "Inviter {{name}}",
+    "invite_btn_short": "Inviter",
+    "title_invite": "Inviter un membre",
+    "title_browse": "Trouver des membres",
+    "empty_prompt": "Commencez à saisir un nom pour trouver des membres dans vos communautés et cercles."
   },
   "provider": {
     "not_accessible": "Ce prestataire n'est pas disponible dans votre communauté.",

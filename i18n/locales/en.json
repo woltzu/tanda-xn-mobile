@@ -86,6 +86,7 @@
     "continue": "Continue",
     "search": "Search",
     "select": "Select",
+    "clear": "Clear",
     "help": "Help"
   },
   "tabs": {
@@ -4028,6 +4029,7 @@
     "invite_btn_copy": "Copy code",
     "invite_btn_copied": "Copied!",
     "invite_btn_share": "Share invite",
+    "invite_btn_search": "Search & invite a member",
     "invite_help": "Share this code with anyone you want to invite. They tap \"Have an invite code?\" on the Circles tab and paste it.",
     "card_circle_details": "Circle Details",
     "detail_start_date": "Start Date",
@@ -8412,7 +8414,15 @@
   "search": {
     "placeholder": "Search members...",
     "no_results": "No members found.",
-    "invite_blocked": "You cannot invite this person to this circle."
+    "invite_blocked": "You cannot invite this person to this circle.",
+    "invite_success": "Invitation sent!",
+    "invite_failed": "Failed to send invitation.",
+    "invite_sent": "Sent",
+    "invite_btn": "Invite {{name}}",
+    "invite_btn_short": "Invite",
+    "title_invite": "Invite a member",
+    "title_browse": "Find members",
+    "empty_prompt": "Start typing a name to find members in your communities and circles."
   },
   "provider": {
     "not_accessible": "This provider is not available in your community.",

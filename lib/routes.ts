@@ -196,6 +196,7 @@ export const Routes = {
   MediationCase: "MediationCase",
   DiscoverCircles: "DiscoverCircles",
   MediationTools: "MediationTools",
+  MemberSearch: "MemberSearch",
   LeaveReview: "LeaveReview",
   TripReviews: "TripReviews",
   MoodInsights: "MoodInsights",
