@@ -155,6 +155,13 @@ export default function ProviderListScreen() {
         <View style={{ width: 38 }} />
       </LinearGradient>
 
+      {/* Phase 2 (migration 260) — make the community scoping explicit.
+          Results are bounded by providers RLS (co-community + platform-
+          wide + self + admin); this header reflects that intent. */}
+      <Text style={styles.communityScopeLabel}>
+        {t("provider.community_providers_title")}
+      </Text>
+
       {/* Provider-side CTA. Shown only when the screen is the tab root —
           a goal-context entry already has a focused "Select this
           provider" task and the apply/dashboard CTA would distract. */}
@@ -580,6 +587,16 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   headerTitle: { fontSize: 17, fontWeight: "700", color: "#FFFFFF" },
+  communityScopeLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 2,
+  },
   filtersWrap: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 },
   filterLabel: {
     fontSize: 12,

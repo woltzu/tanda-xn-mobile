@@ -24,6 +24,7 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { ProviderReview, useProvider } from "../hooks/useProviders";
+import { useProviderAccess } from "../hooks/useProviderAccess";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
@@ -67,6 +68,12 @@ export default function ProviderDetailScreen() {
 
   const { provider, reviews, loading, refetch } = useProvider(providerId);
   const { user } = useAuth();
+  // Phase 2 (migration 260) — community-scoped provider access. The list
+  // view is already RLS-bounded, but a deep link / cached link could still
+  // land here with a provider id outside the user's community. The hook
+  // calls is_provider_accessible() server-side and fails closed.
+  const { canAccess: providerAccessible, isLoading: accessLoading } =
+    useProviderAccess(providerId);
 
   // Phase 1B — current user's own goal links to this provider. RLS
   // already scopes goal_provider_links to the goal owner, so the
@@ -225,8 +232,23 @@ export default function ProviderDetailScreen() {
           </View>
         ) : null}
 
-        {/* Contact */}
-        {(provider.phone || provider.email || provider.website) ? (
+        {/* Phase 2 — community access gate. While the access check is
+            in flight we suppress the contact section to avoid a flash
+            of contact rows that then disappear. When the check resolves
+            to denied, show the "not available" message in place of the
+            contact section. */}
+        {!accessLoading && !providerAccessible ? (
+          <View style={[styles.sectionCard, styles.notAccessibleCard]}>
+            <Ionicons name="lock-closed" size={20} color="#991B1B" />
+            <Text style={styles.notAccessibleText}>
+              {t("provider.not_accessible")}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Contact — hidden when the provider is not accessible to the caller. */}
+        {providerAccessible &&
+        (provider.phone || provider.email || provider.website) ? (
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>{t("provider_detail.section_contact")}</Text>
             {provider.phone ? (
@@ -417,6 +439,20 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 14, fontWeight: "800", color: "#0A2342" },
   statLabel: { fontSize: 11, color: "#6B7280" },
 
+  notAccessibleCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FEE2E2",
+    borderColor: "#FCA5A5",
+  },
+  notAccessibleText: {
+    flex: 1,
+    color: "#991B1B",
+    fontSize: 13,
+    fontWeight: "600",
+    lineHeight: 18,
+  },
   sectionCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 14,
