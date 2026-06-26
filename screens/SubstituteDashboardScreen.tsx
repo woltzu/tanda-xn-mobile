@@ -1,19 +1,18 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// screens/SubstituteDashboardScreen.tsx — Phase 2, migration 264 scaffold
+// screens/SubstituteDashboardScreen.tsx — Phase 2, migration 264+265
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Placeholder dashboard for the elder-triggered substitute rotation
-// feature. Scope of this surface:
+// Elder-facing substitute rotation surface.
 //
 //   • Per-user toggle backing profiles.is_substitute_available.
-//     Writes optimistically; rolls back on failure.
-//   • Read-only directory of currently-available substitutes, scoped by
-//     the get_profile_view RPC (migration 258) — so the list respects
-//     bounded-belonging visibility automatically.
-//   • "Coming soon" banner for the rotation activation flow itself
-//     (rotate_substitute RPC + at-risk member feed) — those land in the
-//     follow-up migration once the cycle / wallet / payout-position
-//     schema fit is locked down.
+//   • Read-only directory of currently-available substitutes.
+//   • At-risk feed: open rows from substitute_needed_events scoped to
+//     circles the current user is an active member of. Elders see a
+//     "Activate substitute" button per row that opens a picker.
+//   • Activation modal: lists available substitutes; selecting one calls
+//     rotate_substitute(p_circle_id, p_at_risk_user_id, p_substitute_user_id,
+//     p_cycle_id). The RPC itself enforces elder role + community + funds,
+//     so the UI surfaces the full list and lets the server reject.
 //
 // Reachable from ProfileScreen → Trust section → "Substitute dashboard".
 // ═══════════════════════════════════════════════════════════════════════════
@@ -30,6 +29,7 @@ import {
   ActivityIndicator,
   Switch,
   Image,
+  Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -37,6 +37,7 @@ import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import { useRoles } from "../hooks/useRoles";
 import { showToast } from "../components/Toast";
 
 const NAVY = colors.primaryNavy;
@@ -50,10 +51,23 @@ interface SubstituteRow {
   avatar_url: string | null;
 }
 
+interface AtRiskEvent {
+  id: string;
+  circle_id: string;
+  at_risk_user_id: string;
+  cycle_id: string | null;
+  risk_score: number | null;
+  reason: string | null;
+  circle_name: string | null;
+  at_risk_name: string | null;
+  at_risk_avatar: string | null;
+}
+
 const SubstituteDashboardScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { isElder } = useRoles();
 
   const [available, setAvailable] = useState<boolean>(false);
   const [toggling, setToggling] = useState(false);
@@ -61,6 +75,12 @@ const SubstituteDashboardScreen: React.FC = () => {
 
   const [substitutes, setSubstitutes] = useState<SubstituteRow[]>([]);
   const [loadingList, setLoadingList] = useState(true);
+
+  const [atRiskEvents, setAtRiskEvents] = useState<AtRiskEvent[]>([]);
+  const [loadingAtRisk, setLoadingAtRisk] = useState(true);
+
+  const [modalEvent, setModalEvent] = useState<AtRiskEvent | null>(null);
+  const [rotatingSubId, setRotatingSubId] = useState<string | null>(null);
 
   // ── Load the current user's toggle state ──────────────────────────
   useEffect(() => {
@@ -108,6 +128,61 @@ const SubstituteDashboardScreen: React.FC = () => {
     loadSubstitutes();
   }, [loadSubstitutes]);
 
+  // ── Load open at-risk events for circles the user is a member of ──
+  const loadAtRiskEvents = useCallback(async () => {
+    if (!user?.id) {
+      setLoadingAtRisk(false);
+      return;
+    }
+    try {
+      setLoadingAtRisk(true);
+      const { data: memberships, error: mErr } = await supabase
+        .from("circle_members")
+        .select("circle_id")
+        .eq("user_id", user.id)
+        .eq("status", "active");
+      if (mErr) throw new Error(mErr.message);
+      const circleIds = (memberships ?? [])
+        .map((r: any) => r.circle_id)
+        .filter(Boolean);
+      if (circleIds.length === 0) {
+        setAtRiskEvents([]);
+        return;
+      }
+      const { data, error } = await supabase
+        .from("substitute_needed_events")
+        .select(
+          "id, circle_id, at_risk_user_id, cycle_id, risk_score, reason, circles:circle_id(name), profiles:at_risk_user_id(full_name, display_name, avatar_url)",
+        )
+        .eq("status", "open")
+        .in("circle_id", circleIds)
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (error) throw new Error(error.message);
+      const rows: AtRiskEvent[] = (data ?? []).map((r: any) => ({
+        id: r.id,
+        circle_id: r.circle_id,
+        at_risk_user_id: r.at_risk_user_id,
+        cycle_id: r.cycle_id,
+        risk_score: r.risk_score,
+        reason: r.reason,
+        circle_name: r.circles?.name ?? null,
+        at_risk_name:
+          r.profiles?.full_name ?? r.profiles?.display_name ?? null,
+        at_risk_avatar: r.profiles?.avatar_url ?? null,
+      }));
+      setAtRiskEvents(rows);
+    } catch (err: any) {
+      console.warn("[SubstituteDashboard] at-risk load failed:", err);
+      setAtRiskEvents([]);
+    } finally {
+      setLoadingAtRisk(false);
+    }
+  }, [user?.id]);
+  useEffect(() => {
+    loadAtRiskEvents();
+  }, [loadAtRiskEvents]);
+
   // ── Toggle handler (optimistic, rolls back on failure) ────────────
   const handleToggle = useCallback(
     async (next: boolean) => {
@@ -127,7 +202,6 @@ const SubstituteDashboardScreen: React.FC = () => {
             : t("substitute.toggle_off_toast"),
           "success",
         );
-        // Refresh the directory so the user's row appears/disappears.
         loadSubstitutes();
       } catch (err: any) {
         setAvailable(prev);
@@ -137,6 +211,32 @@ const SubstituteDashboardScreen: React.FC = () => {
       }
     },
     [user?.id, available, toggling, t, loadSubstitutes],
+  );
+
+  // ── Activation handler: call rotate_substitute RPC ────────────────
+  const handleSelectSubstitute = useCallback(
+    async (substituteId: string) => {
+      if (!modalEvent || rotatingSubId) return;
+      setRotatingSubId(substituteId);
+      try {
+        const { error } = await supabase.rpc("rotate_substitute", {
+          p_circle_id: modalEvent.circle_id,
+          p_at_risk_user_id: modalEvent.at_risk_user_id,
+          p_substitute_user_id: substituteId,
+          p_cycle_id: modalEvent.cycle_id,
+        });
+        if (error) throw new Error(error.message);
+        showToast(t("substitute.activate_success"), "success");
+        setModalEvent(null);
+        loadAtRiskEvents();
+        loadSubstitutes();
+      } catch (err: any) {
+        showToast(err?.message ?? t("substitute.activate_failed"), "error");
+      } finally {
+        setRotatingSubId(null);
+      }
+    },
+    [modalEvent, rotatingSubId, t, loadAtRiskEvents, loadSubstitutes],
   );
 
   const renderHeader = () => (
@@ -160,7 +260,79 @@ const SubstituteDashboardScreen: React.FC = () => {
       <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
       {renderHeader()}
       <ScrollView contentContainerStyle={styles.scroll}>
-        {/* Coming-soon banner — explicit that activation isn't live yet. */}
+        {/* At-risk feed — elders only */}
+        {isElder ? (
+          <>
+            <Text style={styles.sectionTitle}>
+              {t("substitute.at_risk_title")}
+            </Text>
+            {loadingAtRisk ? (
+              <View style={styles.listLoading}>
+                <ActivityIndicator size="small" color={TEAL} />
+              </View>
+            ) : atRiskEvents.length === 0 ? (
+              <View style={styles.empty}>
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={36}
+                  color="#CBD5E1"
+                />
+                <Text style={styles.emptyText}>
+                  {t("substitute.no_at_risk")}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.listCard}>
+                {atRiskEvents.map((ev, idx) => {
+                  const name = ev.at_risk_name ?? "—";
+                  return (
+                    <View
+                      key={ev.id}
+                      style={[
+                        styles.atRiskRow,
+                        idx < atRiskEvents.length - 1 && styles.rowBorder,
+                      ]}
+                    >
+                      {ev.at_risk_avatar ? (
+                        <Image
+                          source={{ uri: ev.at_risk_avatar }}
+                          style={styles.avatar}
+                        />
+                      ) : (
+                        <View style={[styles.avatar, styles.avatarFallback]}>
+                          <Text style={styles.avatarFallbackText}>
+                            {(name || "?").charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.rowName} numberOfLines={1}>
+                          {name}
+                        </Text>
+                        {ev.circle_name ? (
+                          <Text style={styles.atRiskSub} numberOfLines={1}>
+                            {ev.circle_name}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <TouchableOpacity
+                        style={styles.activateBtn}
+                        onPress={() => setModalEvent(ev)}
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.activateBtnText}>
+                          {t("substitute.activate_modal_title")}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </>
+        ) : null}
+
+        {/* Coming-soon banner */}
         <View style={styles.banner}>
           <Ionicons name="time-outline" size={18} color="#92400E" />
           <Text style={styles.bannerText}>
@@ -249,6 +421,99 @@ const SubstituteDashboardScreen: React.FC = () => {
           </View>
         )}
       </ScrollView>
+
+      {/* Activation modal */}
+      <Modal
+        visible={modalEvent !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setModalEvent(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {t("substitute.select_substitute")}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setModalEvent(null)}
+                accessibilityRole="button"
+                disabled={rotatingSubId !== null}
+              >
+                <Ionicons name="close" size={24} color={NAVY} />
+              </TouchableOpacity>
+            </View>
+            {modalEvent?.at_risk_name ? (
+              <Text style={styles.modalSubtitle}>
+                {modalEvent.at_risk_name}
+                {modalEvent.circle_name
+                  ? ` · ${modalEvent.circle_name}`
+                  : ""}
+              </Text>
+            ) : null}
+            <ScrollView style={styles.modalList}>
+              {substitutes.length === 0 ? (
+                <View style={styles.empty}>
+                  <Text style={styles.emptyText}>
+                    {t("substitute.no_substitutes")}
+                  </Text>
+                </View>
+              ) : (
+                substitutes.map((s, idx) => {
+                  const name = s.full_name ?? s.display_name ?? "—";
+                  const isRotating = rotatingSubId === s.id;
+                  const otherRotating =
+                    rotatingSubId !== null && rotatingSubId !== s.id;
+                  return (
+                    <View
+                      key={s.id}
+                      style={[
+                        styles.row,
+                        idx < substitutes.length - 1 && styles.rowBorder,
+                      ]}
+                    >
+                      {s.avatar_url ? (
+                        <Image
+                          source={{ uri: s.avatar_url }}
+                          style={styles.avatar}
+                        />
+                      ) : (
+                        <View style={[styles.avatar, styles.avatarFallback]}>
+                          <Text style={styles.avatarFallbackText}>
+                            {(name || "?").charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.rowName} numberOfLines={1}>
+                          {name}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[
+                          styles.selectBtn,
+                          otherRotating && styles.selectBtnDisabled,
+                        ]}
+                        disabled={otherRotating || isRotating}
+                        onPress={() => handleSelectSubstitute(s.id)}
+                        accessibilityRole="button"
+                      >
+                        {isRotating ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                          <Text style={styles.selectBtnText}>
+                            {t("substitute.select")}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -346,6 +611,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
+  atRiskRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  atRiskSub: {
+    fontSize: typography.label,
+    color: MUTED,
+    marginTop: 2,
+  },
   rowBorder: {
     borderBottomWidth: 1,
     borderBottomColor: "#F3F4F6",
@@ -371,5 +648,66 @@ const styles = StyleSheet.create({
     fontSize: typography.label,
     color: TEAL,
     fontWeight: typography.bold,
+  },
+  activateBtn: {
+    backgroundColor: TEAL,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  activateBtnText: {
+    color: "#FFFFFF",
+    fontWeight: typography.bold,
+    fontSize: typography.label,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    backgroundColor: colors.cardBg,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
+    maxHeight: "80%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+  },
+  modalTitle: {
+    fontSize: typography.sectionHeader,
+    fontWeight: typography.bold,
+    color: NAVY,
+  },
+  modalSubtitle: {
+    fontSize: typography.label,
+    color: MUTED,
+    paddingHorizontal: spacing.lg,
+    marginTop: 4,
+    marginBottom: spacing.md,
+  },
+  modalList: {
+    paddingHorizontal: spacing.md,
+  },
+  selectBtn: {
+    backgroundColor: NAVY,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 76,
+    alignItems: "center",
+  },
+  selectBtnDisabled: {
+    opacity: 0.4,
+  },
+  selectBtnText: {
+    color: "#FFFFFF",
+    fontWeight: typography.bold,
+    fontSize: typography.label,
   },
 });
