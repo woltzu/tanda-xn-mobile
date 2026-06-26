@@ -16,6 +16,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as SecureStore from "expo-secure-store";
 import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import { navigationRef } from "../lib/navigation";
 import { showToast } from "../components/Toast";
 import { KYCVerificationEngine } from "../services/KYCVerificationEngine";
@@ -107,6 +108,11 @@ type AuthContextType = {
   hasAskedBiometricOptIn: () => Promise<boolean>;
   markBiometricOptInAsked: () => Promise<void>;
   signInWithPhone: (phone: string) => Promise<void>;
+  // Social-login P0 — Google + Apple via Supabase OAuth (web flow on all
+  // platforms; native Apple Sign-In deferred). Throws Error('CANCELLED')
+  // if the user closes the in-app browser without completing. The
+  // resulting session lands via onAuthStateChange SIGNED_IN.
+  signInWithOAuth: (provider: "google" | "apple") => Promise<void>;
   verifyOTP: (phone: string, token: string) => Promise<void>;
   signOut: (opts?: SignOutOpts) => Promise<SignOutResult>;
   // P1 (session-persistence review): true when we believe the device
@@ -1052,6 +1058,86 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // ── Social login (Google + Apple) ──────────────────────────────────
+  // Unified web-OAuth flow on all platforms. Mobile opens an in-app
+  // browser via WebBrowser.openAuthSessionAsync; the callback URL
+  // delivers access/refresh tokens in its fragment, which we hand to
+  // supabase.auth.setSession. Web uses Supabase's built-in redirect.
+  // Native Apple Sign-In (expo-apple-authentication / signInWithIdToken)
+  // is intentionally NOT used here so the flow stays single-path and
+  // works on Android + web without platform-shimming.
+  const signInWithOAuth = async (
+    provider: "google" | "apple",
+  ): Promise<void> => {
+    setIsLoading(true);
+    try {
+      const redirectTo = getEmailRedirectUrl("auth/callback");
+
+      // Web path: Supabase handles the in-page redirect. The browser
+      // navigates to the provider and back to redirectTo; the new page
+      // load picks up the session from AsyncStorage.
+      if (Platform.OS === "web") {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: { redirectTo },
+        });
+        if (error) throw error;
+        eventService.trackAuth("login", "success", `oauth_${provider}`);
+        return;
+      }
+
+      // Native path: skipBrowserRedirect returns the authorization URL
+      // instead of trying to navigate (we have no browser to redirect).
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo, skipBrowserRedirect: true },
+      });
+      if (error) throw error;
+      if (!data?.url) throw new Error("OAuth provider did not return a URL");
+
+      // Open the provider's auth page in the in-app browser; resolves
+      // when the user is redirected back to redirectTo.
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type === "cancel" || result.type === "dismiss") {
+        throw new Error("CANCELLED");
+      }
+      if (result.type !== "success" || !result.url) {
+        throw new Error("OAuth flow did not complete");
+      }
+
+      // Supabase returns tokens in the URL hash fragment.
+      const fragmentStart = result.url.indexOf("#");
+      const fragment =
+        fragmentStart >= 0 ? result.url.slice(fragmentStart + 1) : "";
+      const params = new URLSearchParams(fragment);
+      const access_token = params.get("access_token");
+      const refresh_token = params.get("refresh_token");
+      if (!access_token || !refresh_token) {
+        throw new Error("OAuth callback did not include session tokens");
+      }
+
+      // Hand the session to Supabase; the existing onAuthStateChange
+      // listener fires SIGNED_IN and updates session/user state.
+      const { error: setErr } = await supabase.auth.setSession({
+        access_token,
+        refresh_token,
+      });
+      if (setErr) throw setErr;
+      eventService.trackAuth("login", "success", `oauth_${provider}`);
+    } catch (error: any) {
+      if (error?.message !== "CANCELLED") {
+        console.error("OAuth sign in error:", error);
+      }
+      eventService.trackAuth("login", "failure", `oauth_${provider}`, {
+        code: error?.code,
+        message: error?.message,
+      });
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Verify OTP
   const verifyOTP = async (phone: string, token: string) => {
     setIsLoading(true);
@@ -1391,6 +1477,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         biometricsAvailable,
         signIn,
         signInWithPhone,
+        signInWithOAuth,
         verifyOTP,
         signOut,
         signUp,

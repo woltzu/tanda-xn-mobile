@@ -55,6 +55,12 @@
     "learn_link": "Learn how circles work"
   },
   "auth": {
+    "continue_with": "Continue with",
+    "or_sign_in": "or sign in with email",
+    "google": "Google",
+    "apple": "Apple",
+    "social_error": "Couldn't sign in with {{provider}}. Please try again.",
+    "social_cancel": "Sign in was cancelled.",
     "password_strength_weak": "Weak",
     "password_strength_okay": "Okay",
     "password_strength_strong": "Strong",

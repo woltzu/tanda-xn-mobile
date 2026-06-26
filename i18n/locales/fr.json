@@ -55,6 +55,12 @@
     "learn_link": "Découvrir comment les cercles fonctionnent"
   },
   "auth": {
+    "continue_with": "Continuer avec",
+    "or_sign_in": "ou se connecter avec un e-mail",
+    "google": "Google",
+    "apple": "Apple",
+    "social_error": "Impossible de se connecter avec {{provider}}. Veuillez réessayer.",
+    "social_cancel": "Connexion annulée.",
     "password_strength_weak": "Faible",
     "password_strength_okay": "Correct",
     "password_strength_strong": "Fort",

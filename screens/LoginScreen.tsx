@@ -35,6 +35,7 @@ export default function LoginScreen() {
   const {
     signIn,
     signInWithPhone,
+    signInWithOAuth,
     signInWithBiometrics,
     enableBiometrics,
     hasAskedBiometricOptIn,
@@ -56,7 +57,38 @@ export default function LoginScreen() {
   // equals the remembered value — once the user starts typing fresh
   // text the link is redundant.
   const [storedIdentifier, setStoredIdentifier] = useState<string | null>(null);
+  // Social-login in-flight flag. Disables both buttons while one OAuth
+  // round-trip is mid-flight so we don't open two browser sheets.
+  const [oauthProvider, setOauthProvider] = useState<"google" | "apple" | null>(
+    null,
+  );
   const identifierRef = useRef<TextInput>(null);
+
+  // Social-login handler — opens the provider's OAuth flow via
+  // AuthContext.signInWithOAuth. The new session lands via
+  // onAuthStateChange; we reset to MainTabs on success. User-cancel is
+  // a silent no-op.
+  const handleSocialLogin = async (provider: "google" | "apple") => {
+    if (oauthProvider) return;
+    setError("");
+    setOauthProvider(provider);
+    try {
+      await signInWithOAuth(provider);
+      navigation.reset({ index: 0, routes: [{ name: "MainTabs" }] });
+    } catch (err: any) {
+      if (err?.message === "CANCELLED") {
+        // User closed the browser. Silent — common and not an error.
+        return;
+      }
+      setError(
+        t("auth.social_error", {
+          provider: provider === "google" ? t("auth.google") : t("auth.apple"),
+        }),
+      );
+    } finally {
+      setOauthProvider(null);
+    }
+  };
 
   // Pre-fill the last identifier the user signed in with. Honour the
   // "remember me" UX: only pre-fill if storage has a value.
@@ -256,6 +288,60 @@ export default function LoginScreen() {
         >
           {/* Login method toggle removed — single identifier field below
               auto-detects email vs phone format on submit. */}
+
+          {/* Social-login P0 — Google + Apple via web OAuth. Native Apple
+              Sign-In (expo-apple-authentication) deferred so this flow
+              works on iOS + Android + web from a single code path.
+              Prerequisite: providers enabled in Supabase Auth dashboard
+              with redirect URI tandaxn://auth/callback. */}
+          <View style={styles.socialContainer}>
+            <TouchableOpacity
+              style={[
+                styles.socialButton,
+                oauthProvider === "google" && styles.socialButtonBusy,
+              ]}
+              onPress={() => handleSocialLogin("google")}
+              disabled={oauthProvider !== null}
+              accessibilityRole="button"
+              accessibilityLabel={t("auth.continue_with") + " " + t("auth.google")}
+            >
+              {oauthProvider === "google" ? (
+                <ActivityIndicator size="small" color="#0A2342" />
+              ) : (
+                <Ionicons name="logo-google" size={20} color="#0A2342" />
+              )}
+              <Text style={styles.socialButtonText}>
+                {t("auth.continue_with")} {t("auth.google")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.socialButton,
+                styles.socialButtonApple,
+                oauthProvider === "apple" && styles.socialButtonBusy,
+              ]}
+              onPress={() => handleSocialLogin("apple")}
+              disabled={oauthProvider !== null}
+              accessibilityRole="button"
+              accessibilityLabel={t("auth.continue_with") + " " + t("auth.apple")}
+            >
+              {oauthProvider === "apple" ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
+              )}
+              <Text
+                style={[styles.socialButtonText, styles.socialButtonTextApple]}
+              >
+                {t("auth.continue_with")} {t("auth.apple")}
+              </Text>
+            </TouchableOpacity>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>{t("auth.or_sign_in")}</Text>
+              <View style={styles.dividerLine} />
+            </View>
+          </View>
 
           {/* Fast biometric sign-in — only shown for users who previously
               opted in AND who have a fresh stashed refresh token. Tapping
@@ -658,6 +744,54 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "700",
+  },
+  socialContainer: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  socialButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  socialButtonApple: {
+    backgroundColor: "#000000",
+    borderColor: "#000000",
+  },
+  socialButtonBusy: {
+    opacity: 0.6,
+  },
+  socialButtonText: {
+    color: "#0A2342",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  socialButtonTextApple: {
+    color: "#FFFFFF",
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 6,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#E5E7EB",
+  },
+  dividerText: {
+    color: "#6B7280",
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   loginButton: {
     backgroundColor: "#00C6AE",
