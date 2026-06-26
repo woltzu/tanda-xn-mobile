@@ -444,6 +444,10 @@ export default function ProfileScreen() {
         // entry to their joined trips. Sits in the trust section since
         // it's a "your commitments" surface, not a discovery one.
         { icon: "briefcase-outline", label: t("profile.item_my_trips"), onPress: () => navigation.navigate("MyTrips") },
+        // Phase 2 (migration 264 scaffold) — entry to the substitute
+        // dashboard. Houses the availability toggle and a read-only
+        // directory; rotation activation lands in a follow-up bucket.
+        { icon: "swap-horizontal-outline", label: t("profile.item_substitute"), onPress: () => navigation.navigate("SubstituteDashboard") },
       ],
     },
     // Verified Provider Network (Phase 1A). Single row that switches

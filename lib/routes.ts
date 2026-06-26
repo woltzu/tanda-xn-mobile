@@ -268,6 +268,7 @@ export const Routes = {
   StoreBookings: "StoreBookings",
   StoreDetail: "StoreDetail",
   SubstitutePool: "SubstitutePool",
+  SubstituteDashboard: "SubstituteDashboard",
   StressScoreDashboard: "StressScoreDashboard",
   SupportDream: "SupportDream",
   TaxIDEntry: "TaxIDEntry",

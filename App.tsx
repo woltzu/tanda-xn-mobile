@@ -102,6 +102,9 @@ import IssueExposureVouchScreen from "./screens/IssueExposureVouchScreen";
 // Phase 2 (migration 259) — bounded-belonging member search +
 // direct-invite surface backed by search_members + can_invite RPCs.
 import MemberSearchScreen from "./screens/MemberSearchScreen";
+// Phase 2 (migration 264 scaffold) — substitute availability toggle
+// + read-only directory. Activation flow lands in a follow-up.
+import SubstituteDashboardScreen from "./screens/SubstituteDashboardScreen";
 // Phase 2 Bucket B — Resolution Center for critical-tier members.
 import ResolutionCenterScreen from "./screens/ResolutionCenterScreen";
 import DisputesListScreen from "./screens/DisputesListScreen";
@@ -540,6 +543,8 @@ export type RootStackParamList = {
   MemberSearch:
     | { circleId?: string; communityId?: string }
     | undefined;
+  // Phase 2 (migration 264) — substitute availability toggle + dashboard.
+  SubstituteDashboard: undefined;
   // Phase 2 Bucket B — Resolution Center for critical-tier members.
   ResolutionCenter: undefined;
   // Phase 2 — Dispute mediation (migration 261).
@@ -1131,6 +1136,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="ElderNominations" component={ElderNominationsScreen} />
       <HomeStack.Screen name="IssueExposureVouch" component={IssueExposureVouchScreen} />
       <HomeStack.Screen name="MemberSearch" component={MemberSearchScreen} />
+      <HomeStack.Screen name="SubstituteDashboard" component={SubstituteDashboardScreen} />
       <HomeStack.Screen name="ResolutionCenter" component={ResolutionCenterScreen} />
       <HomeStack.Screen name="DisputesList" component={DisputesListScreen} />
       <HomeStack.Screen name="DisputeDetail" component={DisputeDetailScreen} />
