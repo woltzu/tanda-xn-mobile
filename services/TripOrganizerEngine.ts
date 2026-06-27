@@ -487,7 +487,116 @@ function generateSlug(name: string): string {
 // TRIP ORGANIZER ENGINE
 // ══════════════════════════════════════════════════════════════════════════════
 
+// Stripe Connect — payout history row returned to the UI. One entry per
+// Stripe Transfer (NOT per trip_payment): release-trip-funds creates one
+// transfer per trip (idempotencyKey = `release-${trip_id}`), and N
+// participant payments roll up into that single transfer. Grouping at
+// the engine layer keeps the screen simple — one row per disbursement.
+export interface OrganizerPayoutEntry {
+  transfer_id: string;
+  trip_id: string;
+  trip_name: string;
+  destination: string | null;
+  gross: number;        // sum of trip_payments.amount across the transfer (USD)
+  fee: number;          // 2 % platform fee, rounded to cents
+  net: number;          // gross - fee, what landed on the connected account
+  transferred_at: string | null; // null = transfer issued but transfer.paid not yet received
+  status: string;       // 'transferred' once webhook confirms
+  payment_count: number;
+}
+
 export class TripOrganizerEngine {
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // GROUP 0: STRIPE CONNECT — PAYOUT HISTORY (Bucket D)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * List every Stripe Transfer the organizer's trips have produced.
+   *
+   * Uses a single PostgREST request with !inner embeds so the filter on
+   * `trip_participant.trip.organizer_id` is pushed into the join (rows
+   * where the embed is null get dropped, which gives the same effect
+   * as a SQL INNER JOIN + WHERE). Side-stepping an RPC keeps this
+   * client-side per the bucket spec.
+   *
+   * Rows are grouped by transfer_id in app-space — one Stripe Transfer
+   * = one screen row.
+   */
+  static async getPayoutHistory(userId: string): Promise<OrganizerPayoutEntry[]> {
+    if (!userId) return [];
+    const { data, error } = await supabase
+      .from("trip_payments")
+      .select(`
+        amount,
+        transferred_at,
+        transfer_id,
+        status,
+        trip_participants!inner (
+          trip_id,
+          trips!inner (
+            id,
+            trip_name,
+            destination,
+            organizer_id
+          )
+        )
+      `)
+      .not("transfer_id", "is", null)
+      .eq("status", "transferred")
+      .eq("trip_participants.trips.organizer_id", userId)
+      .order("transferred_at", { ascending: false });
+
+    if (error) throw new Error(error.message);
+
+    // Group N trip_payments into one entry per transfer_id. Sum gross,
+    // recompute fee at 2 % BPS (matches release-trip-funds), net = gross - fee.
+    const PLATFORM_FEE_BPS = 200;
+    const grouped = new Map<string, OrganizerPayoutEntry>();
+    for (const row of (data ?? []) as any[]) {
+      const transferId = row.transfer_id as string;
+      const trip = row.trip_participants?.trips ?? null;
+      if (!trip) continue;
+      const grossDelta = Number(row.amount ?? 0);
+      const existing = grouped.get(transferId);
+      if (existing) {
+        existing.gross += grossDelta;
+        existing.payment_count += 1;
+      } else {
+        grouped.set(transferId, {
+          transfer_id: transferId,
+          trip_id: trip.id,
+          trip_name: trip.trip_name ?? "",
+          destination: trip.destination ?? null,
+          gross: grossDelta,
+          fee: 0,
+          net: 0,
+          transferred_at: (row.transferred_at as string | null) ?? null,
+          status: row.status ?? "transferred",
+          payment_count: 1,
+        });
+      }
+    }
+
+    // Compute fee + net per entry in a second pass (avoids rounding drift
+    // when summing already-rounded per-payment fees).
+    const entries = Array.from(grouped.values()).map((e) => {
+      const feeCents = Math.round((e.gross * 100 * PLATFORM_FEE_BPS) / 10000);
+      const fee = feeCents / 100;
+      return { ...e, fee, net: e.gross - fee };
+    });
+
+    // Sort by transferred_at desc (some rows may have null transferred_at
+    // if transfer.paid hasn't landed yet — surface them at the top so
+    // the organizer sees "pending settlement" entries first).
+    entries.sort((a, b) => {
+      if (!a.transferred_at && !b.transferred_at) return 0;
+      if (!a.transferred_at) return -1;
+      if (!b.transferred_at) return 1;
+      return b.transferred_at.localeCompare(a.transferred_at);
+    });
+    return entries;
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   // GROUP 1: TRIP CRUD

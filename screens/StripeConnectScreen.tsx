@@ -203,6 +203,16 @@ export default function StripeConnectScreen() {
                     {connecting ? "…" : t("stripe.continue_onboarding")}
                   </Text>
                 </TouchableOpacity>
+                {/* Bucket D — payout history entry. Only shown when
+                    connected; before that, there can be no transfers. */}
+                <TouchableOpacity
+                  style={styles.secondaryBtn}
+                  onPress={() => navigation.navigate("OrganizerPayoutHistory")}
+                >
+                  <Text style={styles.secondaryBtnText}>
+                    {t("stripe.view_payout_history")}
+                  </Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.dangerBtn} onPress={handleDisconnect}>
                   <Text style={styles.dangerBtnText}>{t("stripe.disconnect_button")}</Text>
                 </TouchableOpacity>

@@ -2524,6 +2524,7 @@
     "menu_label": "Stripe payouts",
     "connect_button": "Connect Stripe",
     "continue_onboarding": "Continue onboarding",
+    "view_payout_history": "View payout history",
     "connected_status": "Stripe connected",
     "not_connected_status": "Not connected",
     "disconnect_button": "Disconnect",
@@ -2536,6 +2537,18 @@
     "callback_success": "Stripe account connected successfully!",
     "callback_refresh": "Stripe session expired — please continue onboarding.",
     "footnote": "Powered by Stripe Connect. We never see your bank details."
+  },
+  "payout_history": {
+    "title": "Payout History",
+    "empty": "You haven't received any payouts yet.",
+    "trip": "Trip",
+    "amount": "Amount",
+    "fee": "Fee",
+    "net": "Net",
+    "date": "Date",
+    "status_completed": "Completed",
+    "status_pending": "Pending",
+    "status_failed": "Failed"
   },
   "kyc_badge": {
     "none": "KYC: Unverified",

@@ -351,6 +351,7 @@ import AdminTripsScreen from "./screens/AdminTripsScreen";
 import AdminTripDetailScreen from "./screens/AdminTripDetailScreen";
 import AdminPlatformSettingsScreen from "./screens/AdminPlatformSettingsScreen";
 import StripeConnectScreen from "./screens/StripeConnectScreen";
+import OrganizerPayoutHistoryScreen from "./screens/OrganizerPayoutHistoryScreen";
 import AdminModerationScreen from "./screens/AdminModerationScreen";
 import PlatformAuditTrailScreen from "./screens/PlatformAuditTrailScreen";
 // Goals flow (GOALS-001..015) — 13 screens translated from web JSX.
@@ -914,6 +915,10 @@ export type RootStackParamList = {
   AdminPlatformSettings: undefined;
   // Stripe Connect onboarding for trip organizers (Bucket A, migration 270).
   StripeConnect: undefined;
+  // Stripe Connect payout history (Bucket D) — lists every Stripe Transfer
+  // the organizer's trips have produced. Named OrganizerPayoutHistory to
+  // coexist with the circle PayoutHistory screen shipped earlier.
+  OrganizerPayoutHistory: undefined;
   // Moderation P0 (2026-06-13) — platform-wide content + user-report queue.
   AdminModeration: undefined;
   // Audit Trail P0 (2026-06-13) — immutable platform compliance log.
@@ -1138,6 +1143,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AdminTripDetail" component={AdminTripDetailScreen} />
       <HomeStack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
       <HomeStack.Screen name="StripeConnect" component={StripeConnectScreen} />
+      <HomeStack.Screen name="OrganizerPayoutHistory" component={OrganizerPayoutHistoryScreen} />
       <HomeStack.Screen name="AdminModeration" component={AdminModerationScreen} />
       <HomeStack.Screen name="PlatformAuditTrail" component={PlatformAuditTrailScreen} />
       {/* Goals flow (GOALS-001..015). Entered (for now) via the __DEV__

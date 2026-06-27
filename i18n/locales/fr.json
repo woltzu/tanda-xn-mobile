@@ -2524,6 +2524,7 @@
     "menu_label": "Paiements Stripe",
     "connect_button": "Connecter Stripe",
     "continue_onboarding": "Poursuivre l'inscription",
+    "view_payout_history": "Voir l'historique des versements",
     "connected_status": "Stripe connecté",
     "not_connected_status": "Non connecté",
     "disconnect_button": "Déconnecter",
@@ -2536,6 +2537,18 @@
     "callback_success": "Compte Stripe connecté avec succès !",
     "callback_refresh": "Session Stripe expirée — veuillez poursuivre l'inscription.",
     "footnote": "Propulsé par Stripe Connect. Nous ne voyons jamais vos coordonnées bancaires."
+  },
+  "payout_history": {
+    "title": "Historique des versements",
+    "empty": "Vous n'avez encore reçu aucun versement.",
+    "trip": "Voyage",
+    "amount": "Montant",
+    "fee": "Frais",
+    "net": "Net",
+    "date": "Date",
+    "status_completed": "Terminé",
+    "status_pending": "En attente",
+    "status_failed": "Échoué"
   },
   "kyc_badge": {
     "none": "KYC : Non vérifié",
