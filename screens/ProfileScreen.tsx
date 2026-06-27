@@ -524,6 +524,8 @@ export default function ProfileScreen() {
         { icon: "globe-outline", label: t("profile.item_language"), onPress: () => navigation.navigate("LanguageRegion") },
         { icon: "people-outline", label: t("profile.item_communities"), onPress: () => navigation.navigate("CommunityPreferences") },
         { icon: "eye-off-outline", label: t("profile.item_privacy"), onPress: () => navigation.navigate("PrivacySettings") },
+        // Stripe Connect onboarding for trip organizers (Bucket A, migration 270).
+        { icon: "wallet-outline", label: t("stripe.menu_label"), onPress: () => navigation.navigate("StripeConnect") },
         { icon: "cog-outline", label: t("profile.item_all_settings"), onPress: () => navigation.navigate("Settings") },
         // Re-open the first-launch Dashboard tour. Clears the seen flag,
         // sets the force-show flag, then pops back to the Home tab so

@@ -350,6 +350,7 @@ import AdminCircleDetailScreen from "./screens/AdminCircleDetailScreen";
 import AdminTripsScreen from "./screens/AdminTripsScreen";
 import AdminTripDetailScreen from "./screens/AdminTripDetailScreen";
 import AdminPlatformSettingsScreen from "./screens/AdminPlatformSettingsScreen";
+import StripeConnectScreen from "./screens/StripeConnectScreen";
 import AdminModerationScreen from "./screens/AdminModerationScreen";
 import PlatformAuditTrailScreen from "./screens/PlatformAuditTrailScreen";
 // Goals flow (GOALS-001..015) — 13 screens translated from web JSX.
@@ -911,6 +912,8 @@ export type RootStackParamList = {
   // system config, admin user roster). Named AdminPlatformSettings to
   // coexist with the per-circle AdminSettings governance screen.
   AdminPlatformSettings: undefined;
+  // Stripe Connect onboarding for trip organizers (Bucket A, migration 270).
+  StripeConnect: undefined;
   // Moderation P0 (2026-06-13) — platform-wide content + user-report queue.
   AdminModeration: undefined;
   // Audit Trail P0 (2026-06-13) — immutable platform compliance log.
@@ -1134,6 +1137,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AdminTrips" component={AdminTripsScreen} />
       <HomeStack.Screen name="AdminTripDetail" component={AdminTripDetailScreen} />
       <HomeStack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
+      <HomeStack.Screen name="StripeConnect" component={StripeConnectScreen} />
       <HomeStack.Screen name="AdminModeration" component={AdminModerationScreen} />
       <HomeStack.Screen name="PlatformAuditTrail" component={PlatformAuditTrailScreen} />
       {/* Goals flow (GOALS-001..015). Entered (for now) via the __DEV__

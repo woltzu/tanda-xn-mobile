@@ -2519,6 +2519,24 @@
       "user_not_found": "No user found with that email."
     }
   },
+  "stripe": {
+    "title": "Stripe Connect",
+    "menu_label": "Stripe payouts",
+    "connect_button": "Connect Stripe",
+    "continue_onboarding": "Continue onboarding",
+    "connected_status": "Stripe connected",
+    "not_connected_status": "Not connected",
+    "disconnect_button": "Disconnect",
+    "disconnect_confirm": "Disconnect Stripe? You won't be able to receive new payouts until you reconnect.",
+    "disconnect_success": "Stripe disconnected.",
+    "disconnect_failed": "Failed to disconnect Stripe.",
+    "connect_description": "Connect your Stripe account to receive payments from participants.",
+    "connected_description": "Your Stripe account is connected and ready to receive payouts.",
+    "callback_error": "Failed to connect Stripe. Please try again.",
+    "callback_success": "Stripe account connected successfully!",
+    "callback_refresh": "Stripe session expired — please continue onboarding.",
+    "footnote": "Powered by Stripe Connect. We never see your bank details."
+  },
   "kyc_badge": {
     "none": "KYC: Unverified",
     "pending": "KYC: Pending",
