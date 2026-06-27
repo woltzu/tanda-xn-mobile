@@ -2380,6 +2380,12 @@
     "start_cta_body": "Lancez la vérification d'identité Persona pour débloquer les actions monétaires.",
     "start_cta_label": "Démarrer la vérification"
   },
+  "kyc_badge": {
+    "none": "KYC : Non vérifié",
+    "pending": "KYC : En attente",
+    "verified": "KYC : Vérifié",
+    "rejected": "KYC : Refusé"
+  },
   "kyc_gate": {
     "title": "Vérification requise",
     "body": "Pour continuer, vous devez vérifier votre identité. Vos informations seront enregistrées afin que vous puissiez reprendre là où vous en étiez.",

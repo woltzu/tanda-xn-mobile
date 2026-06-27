@@ -109,6 +109,12 @@ export default function ProfileScreen() {
   // Reset to false in the catch branch so the user can retry; on success
   // the navigation.reset unmounts the screen, no cleanup needed.
   const [isSigningOut, setIsSigningOut] = useState(false);
+
+  // KYC badge — fetched via migration 268's get_kyc_status RPC.
+  // null while loading; one of 'none' | 'pending' | 'verified' | 'rejected'
+  // once resolved. Re-fetched on focus so returning from KYCHub shows the
+  // fresh status.
+  const [kycStatus, setKycStatus] = useState<string | null>(null);
   // P1 (profile review): avatar + name editing surfaces.
   const [avatarErrored, setAvatarErrored] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
@@ -149,6 +155,20 @@ export default function ProfileScreen() {
         eventCategory: "settings",
         eventAction: "opened",
       });
+      // Refresh KYC status on every focus — covers the case where the
+      // user just finished a verification flow in KYCHub and is now back
+      // here. Best-effort: a failure leaves the badge at its prior
+      // value (or hidden if never resolved).
+      (async () => {
+        try {
+          const { data, error } = await supabase.rpc("get_kyc_status");
+          if (error) return;
+          const next = (data as { status?: string } | null)?.status;
+          if (typeof next === "string") setKycStatus(next);
+        } catch {
+          /* best-effort */
+        }
+      })();
     }, [refetchProfile, trackScreenView, track]),
   );
 
@@ -717,6 +737,35 @@ export default function ProfileScreen() {
               </View>
             ) : null}
 
+            {/* KYC badge — tap routes to KYCHub. Hidden while the status
+                fetch is still pending so we don't flash a wrong label. */}
+            {kycStatus ? (
+              <TouchableOpacity
+                onPress={() => navigation.navigate("KYCHub")}
+                style={[
+                  styles.kycBadge,
+                  kycStatus === "verified" && styles.kycBadgeVerified,
+                  kycStatus === "rejected" && styles.kycBadgeRejected,
+                ]}
+                accessibilityRole="button"
+              >
+                <Ionicons
+                  name={
+                    kycStatus === "verified"
+                      ? "checkmark-circle"
+                      : kycStatus === "rejected"
+                      ? "alert-circle"
+                      : "id-card-outline"
+                  }
+                  size={11}
+                  color="#FFFFFF"
+                />
+                <Text style={styles.roleBadgeText}>
+                  {t(`kyc_badge.${kycStatus}`)}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+
             {/* Open profile Bucket B.4 — slim XnScore row replaces the
                 badge + "View details" button. Score Hub is now the
                 canonical destination for scoring, so this routes there
@@ -1073,6 +1122,22 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     letterSpacing: 0.3,
   },
+  // KYC badge — same pill shape as roleBadge, neutral navy/grey for
+  // the unverified + pending states; teal for verified, red for
+  // rejected. Reuses roleBadgeText for the label.
+  kycBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "center",
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  kycBadgeVerified: { backgroundColor: "rgba(0,198,174,0.85)" },
+  kycBadgeRejected: { backgroundColor: "rgba(220,38,38,0.85)" },
   // ----- Open profile Bucket B.3 — Complete-your-profile banner -----
   // Lives between the navy LinearGradient header and the white content
   // section. Tap routes to PersonalInfoScreen so the user can fill in

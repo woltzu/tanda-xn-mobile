@@ -2380,6 +2380,12 @@
     "start_cta_body": "Begin the Persona-powered ID check to unlock money actions.",
     "start_cta_label": "Start verification"
   },
+  "kyc_badge": {
+    "none": "KYC: Unverified",
+    "pending": "KYC: Pending",
+    "verified": "KYC: Verified",
+    "rejected": "KYC: Rejected"
+  },
   "kyc_gate": {
     "title": "Verification required",
     "body": "To continue, you need to verify your identity. Your details will be saved so you can resume right where you left off.",
