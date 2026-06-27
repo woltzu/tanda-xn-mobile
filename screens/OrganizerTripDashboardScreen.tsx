@@ -22,6 +22,8 @@ import { useTripDashboard } from '../hooks/useTripOrganizer';
 import { useEventTracker } from '../hooks/useEventTracker';
 import InstallmentScheduleView from '../components/InstallmentScheduleView';
 import { TripShareSheet } from '../components/TripShareSheet';
+import { supabase } from '../lib/supabase';
+import { showToast } from '../components/Toast';
 
 // View-trip-dashboard B.1 — HelpSheet topics. B.4 — coach mark
 // AsyncStorage key (versioned suffix for future re-prompts).
@@ -138,6 +140,61 @@ const OrganizerTripDashboardScreen: React.FC = () => {
   // `loading && !dashboard` so that subsequent refreshes don't blank
   // the screen.
   const showSkeleton = loading && !dashboard;
+
+  // Stripe Connect Bucket B — escrow release. Local state: poll
+  // can_confirm_trip RPC on focus to decide whether to show the
+  // "Confirm trip" card and what reason to surface when it's hidden.
+  // Calling release-trip-funds on tap transfers held funds to the
+  // organizer's Stripe Connect account minus the 2 % platform fee.
+  type Eligibility = {
+    eligible: boolean;
+    reason: string;
+    days_until: number | null;
+    has_stripe: boolean;
+    has_payments: boolean;
+    gross_cents: number;
+  };
+  const [eligibility, setEligibility] = useState<Eligibility | null>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  const loadEligibility = useCallback(async () => {
+    if (!tripId) return;
+    const { data, error } = await supabase.rpc("can_confirm_trip", {
+      p_trip_id: tripId,
+    });
+    if (error) {
+      console.warn("[OrganizerTripDashboard] can_confirm_trip failed:", error.message);
+      return;
+    }
+    setEligibility(data as Eligibility);
+  }, [tripId]);
+  useEffect(() => {
+    loadEligibility();
+  }, [loadEligibility]);
+
+  const handleConfirmTrip = useCallback(async () => {
+    if (!tripId || confirming) return;
+    setConfirming(true);
+    try {
+      const { data, error } = await supabase.functions.invoke(
+        "release-trip-funds",
+        { body: { trip_id: tripId } },
+      );
+      if (error) throw new Error(error.message);
+      const result = data as { net_cents?: number };
+      const net = ((result?.net_cents ?? 0) / 100).toLocaleString(undefined, {
+        style: "currency",
+        currency: "USD",
+      });
+      showToast(t("trip.confirm_success", { amount: net }), "success");
+      await loadEligibility();
+    } catch (err) {
+      console.warn("[OrganizerTripDashboard] release-trip-funds failed:", err);
+      showToast(t("trip.confirm_failed"), "error");
+    } finally {
+      setConfirming(false);
+    }
+  }, [tripId, confirming, t, loadEligibility]);
 
   // B.1 — HelpSheet state. B.4 — first-visit coach mark on the quick
   // actions row; AsyncStorage-gated + auto-dismiss after 4s.
@@ -438,6 +495,50 @@ const OrganizerTripDashboardScreen: React.FC = () => {
           </View>
         )}
 
+        {/* Stripe Connect Bucket B — Confirm trip card. Hidden when
+            the trip is already confirmed (no actionable state) so
+            the dashboard isn't visually cluttered post-release. For
+            every other reason we still render the card with a
+            disabled CTA + i18n'd reason so the organizer learns
+            what to do next (connect Stripe, wait until 60 days out,
+            collect at least one payment). */}
+        {eligibility && eligibility.reason !== 'already_confirmed' ? (
+          <View style={[styles.card, eligibility.eligible && styles.confirmCardActive]}>
+            <Text style={styles.confirmTitle}>
+              {eligibility.eligible
+                ? t('trip.confirm_card_title_ready')
+                : t('trip.confirm_card_title_pending')}
+            </Text>
+            {eligibility.eligible ? (
+              <Text style={styles.confirmBody}>
+                {t('trip.confirm_card_body_ready', {
+                  amount: ((eligibility.gross_cents ?? 0) / 100).toLocaleString(
+                    undefined,
+                    { style: 'currency', currency: 'USD' },
+                  ),
+                  days: eligibility.days_until ?? 0,
+                })}
+              </Text>
+            ) : (
+              <Text style={styles.confirmBody}>
+                {t(`trip.confirm_reason_${eligibility.reason}`)}
+              </Text>
+            )}
+            <TouchableOpacity
+              style={[
+                styles.confirmBtn,
+                (!eligibility.eligible || confirming) && styles.confirmBtnDisabled,
+              ]}
+              onPress={handleConfirmTrip}
+              disabled={!eligibility.eligible || confirming}
+            >
+              <Text style={styles.confirmBtnText}>
+                {confirming ? '…' : t('trip.confirm_button')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         {/* Payment Progress */}
         <View style={styles.card}>
           <ProgressBar
@@ -711,6 +812,28 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 2,
   },
+  // Stripe Connect Bucket B — Confirm trip card styles.
+  confirmCardActive: { borderWidth: 1, borderColor: TEAL },
+  confirmTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: NAVY,
+    marginBottom: 4,
+  },
+  confirmBody: {
+    fontSize: typography.label,
+    color: '#6B7280',
+    marginBottom: spacing.md,
+    lineHeight: 18,
+  },
+  confirmBtn: {
+    backgroundColor: TEAL,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  confirmBtnDisabled: { backgroundColor: '#CBD5E1' },
+  confirmBtnText: { color: '#FFFFFF', fontSize: typography.body, fontWeight: typography.bold },
   // Progress
   progressSection: {},
   progressHeader: {

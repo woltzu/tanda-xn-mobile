@@ -8734,7 +8734,20 @@
     "notification_review_reminder_title": "Comment était {{trip_name}} ?",
     "notification_review_reminder_body": "Votre voyage vient de se terminer. Laissez une évaluation pour aider la communauté !",
     "notification_review_submitted_title": "Nouvel avis pour {{trip_name}}",
-    "notification_review_submitted_body": "{{reviewer_name}} vous a donné {{rating}} étoiles. Découvrez ce qu'ils ont dit."
+    "notification_review_submitted_body": "{{reviewer_name}} vous a donné {{rating}} étoiles. Découvrez ce qu'ils ont dit.",
+    "confirm_button": "Confirmer le voyage et libérer les fonds",
+    "confirm_card_title_ready": "Prêt à confirmer",
+    "confirm_card_title_pending": "Confirmation du voyage",
+    "confirm_card_body_ready": "Libérer {{amount}} retenus en séquestre vers votre compte Stripe. Le voyage commence dans {{days}} jours.",
+    "confirm_success": "{{amount}} versés sur votre compte Stripe.",
+    "confirm_failed": "Échec de la libération des fonds. Veuillez réessayer.",
+    "confirm_reason_too_far_out": "Vous pourrez confirmer lorsque le voyage sera à 60 jours du départ.",
+    "confirm_reason_not_started": "La date de départ est déjà passée — contactez le support si les fonds sont toujours retenus.",
+    "confirm_reason_no_stripe": "Connectez Stripe dans votre profil avant de libérer les fonds.",
+    "confirm_reason_no_payments": "Aucun paiement de participant à libérer pour le moment.",
+    "confirm_reason_not_found": "Voyage introuvable.",
+    "confirm_reason_already_confirmed": "Voyage déjà confirmé.",
+    "confirm_reason_unknown": "Le voyage n'est pas éligible à la confirmation pour le moment."
   },
   "trip_reviews": {
     "title": "Avis sur le voyage",

@@ -8734,7 +8734,20 @@
     "notification_review_reminder_title": "How was {{trip_name}}?",
     "notification_review_reminder_body": "Your trip ended recently. Leave a review to help the community!",
     "notification_review_submitted_title": "New review for {{trip_name}}",
-    "notification_review_submitted_body": "{{reviewer_name}} rated you {{rating}} stars. See what they said."
+    "notification_review_submitted_body": "{{reviewer_name}} rated you {{rating}} stars. See what they said.",
+    "confirm_button": "Confirm trip & release funds",
+    "confirm_card_title_ready": "Ready to confirm",
+    "confirm_card_title_pending": "Trip confirmation",
+    "confirm_card_body_ready": "Release {{amount}} held in escrow to your Stripe account. Trip starts in {{days}} days.",
+    "confirm_success": "{{amount}} released to your Stripe account.",
+    "confirm_failed": "Failed to release funds. Please try again.",
+    "confirm_reason_too_far_out": "You can confirm once the trip is within 60 days of the start date.",
+    "confirm_reason_not_started": "The trip start date has already passed — contact support if funds are still held.",
+    "confirm_reason_no_stripe": "Connect Stripe in your profile before releasing funds.",
+    "confirm_reason_no_payments": "No participant payments to release yet.",
+    "confirm_reason_not_found": "Trip not found.",
+    "confirm_reason_already_confirmed": "Trip already confirmed.",
+    "confirm_reason_unknown": "Trip is not eligible to confirm right now."
   },
   "trip_reviews": {
     "title": "Trip reviews",

@@ -150,10 +150,18 @@ Deno.serve(async (req) => {
   // We use the service-role client so the lookup isn't filtered by the
   // caller's participant status — a not-yet-joined invitee is a valid
   // caller here.
+  //
+  // Bucket B (Stripe Connect, migration 271) — we now also pull
+  // confirmed_at to decide between escrow vs direct-charge mode, and
+  // join the organizer's stripe_connect_account_id so a confirmed trip
+  // can route the charge straight to the connected account via
+  // transfer_data[destination].
   const serviceClient = createClient(supabaseUrl, serviceRoleKey);
   const { data: trip, error: tripErr } = await serviceClient
     .from("trips")
-    .select("id, status, organizer_id")
+    .select(
+      "id, status, organizer_id, confirmed_at, organizer:organizer_id(stripe_connect_account_id)",
+    )
     .eq("id", tripId)
     .maybeSingle();
   if (tripErr) {
@@ -179,31 +187,59 @@ Deno.serve(async (req) => {
   // record_trip_payment_succeeded() without any additional lookups. Both
   // are optional at the EF boundary (participant_id only present for
   // participant-driven payments; payment_type defaults to 'full').
+  //
+  // Stripe Connect Bucket B — branch on trip.confirmed_at:
+  //   • confirmed_at IS NULL  →  escrow: standard PI on the platform
+  //     account; release-trip-funds transfers later.
+  //   • confirmed_at IS NOT NULL + organizer has Stripe Connect →
+  //     destination charge with transfer_data[destination] and a 2 %
+  //     application_fee_amount.
+  //
+  // If the trip is confirmed but the organizer has no Stripe account
+  // (edge: account was disconnected after confirmation), we fall back
+  // to escrow mode and stamp metadata.escrow_reason so the release
+  // path can surface a clear error.
   const idempotencyKey = crypto.randomUUID();
+  const PLATFORM_FEE_BPS = 200; // 2 % expressed as basis points
+  const stripeAcct =
+    (trip as { organizer?: { stripe_connect_account_id?: string | null } | null })
+      .organizer?.stripe_connect_account_id ?? null;
+  const isConfirmed = (trip as { confirmed_at: string | null }).confirmed_at !== null;
+  const useDirectCharge = isConfirmed && !!stripeAcct;
+
   const metadata: Record<string, string> = {
     user_id: user.id,
     type: purpose,
     trip_id: tripId,
     organizer_id: trip.organizer_id,
     payment_type: paymentType,
+    charge_mode: useDirectCharge ? "direct" : "escrow",
   };
+  if (isConfirmed && !stripeAcct) {
+    metadata.escrow_reason = "confirmed_but_no_stripe";
+  }
   if (participantId) {
     metadata.trip_participant_id = participantId;
   }
   const description = `Trip ${purpose} ${tripId}`;
 
+  const piParams: Stripe.PaymentIntentCreateParams = {
+    amount: amount as number,
+    currency,
+    metadata,
+    description,
+    automatic_payment_methods: { enabled: true },
+  };
+  if (useDirectCharge) {
+    piParams.application_fee_amount = Math.round(
+      ((amount as number) * PLATFORM_FEE_BPS) / 10000,
+    );
+    piParams.transfer_data = { destination: stripeAcct! };
+  }
+
   let intent: Stripe.PaymentIntent;
   try {
-    intent = await stripe.paymentIntents.create(
-      {
-        amount: amount as number,
-        currency,
-        metadata,
-        description,
-        automatic_payment_methods: { enabled: true },
-      },
-      { idempotencyKey },
-    );
+    intent = await stripe.paymentIntents.create(piParams, { idempotencyKey });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[create-trip-payment-intent] stripe.create failed:", msg);
