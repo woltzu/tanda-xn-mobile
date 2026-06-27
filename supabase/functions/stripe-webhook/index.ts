@@ -395,6 +395,60 @@ Deno.serve(async (req) => {
         acct.payouts_enabled
       );
     }
+  } else if (event.type === "transfer.paid") {
+    // ── Stripe Connect Bucket C: confirm trip-payment release ──
+    // release-trip-funds (Bucket B) stamps trip_payments.transfer_id
+    // when it creates the Transfer; that records *intent*. transfer.paid
+    // fires when Stripe confirms the funds actually landed on the
+    // organizer's connected account, which can be hours later for ACH
+    // payouts. We stamp transferred_at + flip status to 'transferred'
+    // here so the dashboard can show a clean "paid out" state.
+    //
+    // Idempotency layers:
+    //   Layer 1: UNIQUE on stripe_event_id catches duplicate deliveries.
+    //   Layer 2: UPDATE filters on status != 'transferred' so a re-
+    //     delivery (or a non-trip transfer that happens to collide on
+    //     transfer_id space — Stripe ids are globally unique, so this
+    //     is belt-and-braces) is a no-op rather than overwriting
+    //     transferred_at.
+    //
+    // Non-trip transfers (e.g. future elder payouts, refunds) won't
+    // match any trip_payments row — count===0 is logged and dropped,
+    // NOT errored, so the webhook returns 200 and Stripe doesn't retry.
+    const transfer = event.data.object as Stripe.Transfer;
+    const transferredAt = new Date(event.created * 1000).toISOString();
+
+    const { error: updErr, count } = await supabase
+      .from("trip_payments")
+      .update(
+        { status: "transferred", transferred_at: transferredAt },
+        { count: "exact" }
+      )
+      .eq("transfer_id", transfer.id)
+      .neq("status", "transferred");
+
+    if (updErr) {
+      processingError = `transfer.paid apply failed: ${updErr.message}`;
+      console.error("[stripe-webhook]", processingError);
+    } else if (count === 0) {
+      // Either no trip_payments row links to this transfer (non-trip
+      // transfer, e.g. a future elder-payout flow), OR the row is
+      // already 'transferred' (Stripe redelivery). Both are fine.
+      console.log(
+        "[stripe-webhook] transfer.paid no-op for",
+        transfer.id,
+        "(no matching trip_payments row OR already transferred)"
+      );
+    } else {
+      console.log(
+        "[stripe-webhook] transfer.paid applied for",
+        transfer.id,
+        "→",
+        count,
+        "trip_payments rows marked transferred at",
+        transferredAt
+      );
+    }
   } else {
     console.log("[stripe-webhook] ignoring non-PI/non-account event", event.type);
   }
