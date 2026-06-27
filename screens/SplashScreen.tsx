@@ -27,14 +27,20 @@ export default function SplashScreen() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
 
-  // Auto-redirect to MainTabs if user already has an active session
+  // Auto-redirect once auth resolves: authed → MainTabs, unauthed →
+  // Login. The second branch makes Splash a one-frame bounce instead
+  // of a CTA stop — Login already surfaces social-first (Google +
+  // Apple) plus email/password and a "Don't have an account? Sign up"
+  // link, so showing it directly satisfies "login/signup options
+  // immediately." The Splash CTA pair below stays in the markup as a
+  // fallback for the brief window before the reset fires (or in case
+  // the navigation ref is unavailable on first paint).
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "MainTabs" }],
-      });
-    }
+    if (authLoading) return;
+    navigation.reset({
+      index: 0,
+      routes: [{ name: isAuthenticated ? "MainTabs" : "Login" }],
+    });
   }, [authLoading, isAuthenticated]);
 
   useEffect(() => {
