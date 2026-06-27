@@ -2380,6 +2380,22 @@
     "start_cta_body": "Lancez la vérification d'identité Persona pour débloquer les actions monétaires.",
     "start_cta_label": "Démarrer la vérification"
   },
+  "admin": {
+    "title": "Espace admin",
+    "not_authorized": "Vous n'avez pas accès à l'espace admin.",
+    "coming_soon": "Ce module sera bientôt disponible.",
+    "coming_soon_chip": "Bientôt disponible",
+    "modules": {
+      "overview": "Vue d'ensemble",
+      "users": "Utilisateurs",
+      "circles": "Cercles",
+      "trips": "Voyages",
+      "disputes": "Litiges",
+      "elders": "Aînés",
+      "kyc": "Vérification KYC",
+      "settings": "Paramètres"
+    }
+  },
   "kyc_badge": {
     "none": "KYC : Non vérifié",
     "pending": "KYC : En attente",

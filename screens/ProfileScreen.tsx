@@ -581,6 +581,11 @@ export default function ProfileScreen() {
             section: t("profile.section_admin_tools"),
             items: [
               {
+                icon: "grid-outline",
+                label: t("admin.title"),
+                onPress: () => navigation.navigate("AdminHub"),
+              },
+              {
                 icon: "shield-checkmark-outline",
                 label: t("profile.item_moderation_queue"),
                 onPress: () => navigation.navigate("AdminModeration"),

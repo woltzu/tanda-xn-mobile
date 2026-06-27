@@ -2380,6 +2380,22 @@
     "start_cta_body": "Begin the Persona-powered ID check to unlock money actions.",
     "start_cta_label": "Start verification"
   },
+  "admin": {
+    "title": "Admin Hub",
+    "not_authorized": "You don't have admin access.",
+    "coming_soon": "This module is coming soon.",
+    "coming_soon_chip": "Coming soon",
+    "modules": {
+      "overview": "Overview",
+      "users": "Users",
+      "circles": "Circles",
+      "trips": "Trips",
+      "disputes": "Disputes",
+      "elders": "Elders",
+      "kyc": "KYC Verification",
+      "settings": "Settings"
+    }
+  },
   "kyc_badge": {
     "none": "KYC: Unverified",
     "pending": "KYC: Pending",

@@ -341,6 +341,7 @@ import CommunityPreferencesScreen from "./screens/CommunityPreferencesScreen";
 import RateBreakdownScreen from "./screens/RateBreakdownScreen";
 import AdvanceSettingsScreen from "./screens/AdvanceSettingsScreen";
 import AdminDashboardScreen from "./screens/AdminDashboardScreen";
+import AdminHubScreen from "./screens/AdminHubScreen";
 import AdminModerationScreen from "./screens/AdminModerationScreen";
 import PlatformAuditTrailScreen from "./screens/PlatformAuditTrailScreen";
 // Goals flow (GOALS-001..015) — 13 screens translated from web JSX.
@@ -886,6 +887,10 @@ export type RootStackParamList = {
         alerts?: object[];
       }
     | undefined;
+  // Admin hub — 8-module landing screen (Bucket A). Lightweight grid
+  // that aggregates Overview / KYC / Disputes / Elders + placeholder
+  // tiles for Users / Circles / Trips / Settings.
+  AdminHub: undefined;
   // Moderation P0 (2026-06-13) — platform-wide content + user-report queue.
   AdminModeration: undefined;
   // Audit Trail P0 (2026-06-13) — immutable platform compliance log.
@@ -1100,6 +1105,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="RateBreakdown" component={RateBreakdownScreen} />
       <HomeStack.Screen name="AdvanceSettings" component={AdvanceSettingsScreen} />
       <HomeStack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+      <HomeStack.Screen name="AdminHub" component={AdminHubScreen} />
       <HomeStack.Screen name="AdminModeration" component={AdminModerationScreen} />
       <HomeStack.Screen name="PlatformAuditTrail" component={PlatformAuditTrailScreen} />
       {/* Goals flow (GOALS-001..015). Entered (for now) via the __DEV__
