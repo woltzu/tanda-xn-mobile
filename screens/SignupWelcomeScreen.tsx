@@ -43,6 +43,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import AuthProgressStrip from "../components/AuthProgressStrip";
+import { useAuth } from "../context/AuthContext";
+import { useCircles } from "../context/CirclesContext";
 
 type NavProp = StackNavigationProp<RootStackParamList, "SignupWelcome">;
 
@@ -86,10 +88,22 @@ const CARDS: Card[] = [
 export default function SignupWelcomeScreen() {
   const navigation = useNavigation<NavProp>();
   const { t } = useTranslation();
+  const { user } = useAuth();
+  // Circle-count drives the state-aware CTA. While loading, fall back
+  // to the generic dashboard CTA so the button never flashes the wrong
+  // label.
+  const { myCircles, isLoading: circlesLoading } = useCircles();
   // Stay in loading state until the seen-check resolves. If the flag
   // is already set we navigate away before rendering the cards — the
   // user never sees a flash of the welcome they already dismissed.
   const [ready, setReady] = useState(false);
+
+  // First-name only for the greeting — "Hi Jane," reads warmer than
+  // "Hi Jane Marie Doe,". Falls back to the un-personalised greeting
+  // when there's no name on the account (AuthContext computes user.name
+  // from metadata.name → full_name → display_name → email, but new
+  // OAuth users with no metadata can land here with an empty string).
+  const firstName = (user?.name ?? "").trim().split(/\s+/)[0] ?? "";
 
   useEffect(() => {
     let cancelled = false;
@@ -137,7 +151,11 @@ export default function SignupWelcomeScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient colors={[NAVY_TOP, NAVY_BOTTOM]} style={styles.header}>
-        <Text style={styles.title}>{t("signup_welcome.title")}</Text>
+        <Text style={styles.title}>
+          {firstName
+            ? t("signup_welcome.greeting_named", { name: firstName })
+            : t("signup_welcome.title")}
+        </Text>
       </LinearGradient>
 
       <View style={styles.card}>
@@ -166,7 +184,11 @@ export default function SignupWelcomeScreen() {
           >
             <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
             <Text style={styles.primaryButtonText}>
-              {t("signup_welcome.cta")}
+              {circlesLoading
+                ? t("signup_welcome.cta")
+                : myCircles.length === 0
+                ? t("signup_welcome.cta_create_circle")
+                : t("signup_welcome.cta_view_circles")}
             </Text>
           </TouchableOpacity>
 

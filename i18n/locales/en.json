@@ -1918,6 +1918,9 @@
     "card3_title": "Get paid",
     "card3_desc": "Receive payouts and access advances when you need them.",
     "cta": "Take me to my dashboard",
+    "cta_create_circle": "Create your first circle",
+    "cta_view_circles": "View your circles",
+    "greeting_named": "Hi {{name}}, welcome to TandaXn",
     "secondary_link": "Learn more about TandaXn"
   },
   "otp": {

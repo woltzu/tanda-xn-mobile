@@ -1918,6 +1918,9 @@
     "card3_title": "Recevoir des paiements",
     "card3_desc": "Recevez vos virements et accédez aux avances quand vous en avez besoin.",
     "cta": "Aller à mon tableau de bord",
+    "cta_create_circle": "Créer votre premier cercle",
+    "cta_view_circles": "Voir mes cercles",
+    "greeting_named": "Bonjour {{name}}, bienvenue sur TandaXn",
     "secondary_link": "En savoir plus sur TandaXn"
   },
   "otp": {
