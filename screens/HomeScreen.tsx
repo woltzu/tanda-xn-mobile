@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTranslation } from "react-i18next";
 import { colors } from "../theme/tokens";
+import DashboardTourOverlay from "../components/DashboardTourOverlay";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useMemberTier } from "../hooks/useGraduatedEntry";
@@ -2002,6 +2003,12 @@ export default function HomeScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* First-launch tour. Self-mounted as its own Modal so position in
+          the tree doesn't matter — gates on AsyncStorage seen flag +
+          firstLaunchProgress.join_circle. Also honours the force flag
+          set by ProfileScreen's "Show tour" row. */}
+      <DashboardTourOverlay />
     </SafeAreaView>
   );
 }

@@ -42,6 +42,7 @@ import { useResolutionStatus } from "../hooks/useResolutionStatus";
 import { useProviderDashboard } from "../hooks/useProviders";
 import { supabase } from "../lib/supabase";
 import { showToast } from "../components/Toast";
+import { resetDashboardTour } from "../components/DashboardTourOverlay";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useEventTracker } from "../hooks/useEventTracker";
@@ -504,6 +505,18 @@ export default function ProfileScreen() {
         { icon: "people-outline", label: t("profile.item_communities"), onPress: () => navigation.navigate("CommunityPreferences") },
         { icon: "eye-off-outline", label: t("profile.item_privacy"), onPress: () => navigation.navigate("PrivacySettings") },
         { icon: "cog-outline", label: t("profile.item_all_settings"), onPress: () => navigation.navigate("Settings") },
+        // Re-open the first-launch Dashboard tour. Clears the seen flag,
+        // sets the force-show flag, then pops back to the Home tab so
+        // DashboardScreen regains focus → DashboardTourOverlay's
+        // useFocusEffect picks up the force flag and renders the tour.
+        {
+          icon: "play-circle-outline",
+          label: t("dashboard_tour.reopen_button"),
+          onPress: async () => {
+            await resetDashboardTour();
+            navigation.navigate("Dashboard");
+          },
+        },
         // Phase 2 Bucket C — Delete account. Routes through delete_account
         // RPC which queues a user_deletion_requests row for the 4am cron
         // and blocks critical-tier users. Sits in Preferences (not its own

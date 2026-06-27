@@ -16,7 +16,7 @@
 // dismisses; the user never sees the tour again on this device.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -24,10 +24,10 @@ import {
   Modal,
   TouchableOpacity,
   Pressable,
-  ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTranslation } from "react-i18next";
+import { useFocusEffect } from "@react-navigation/native";
 import { useOnboarding } from "../context/OnboardingContext";
 
 const TEAL = "#00C6AE";
@@ -36,6 +36,25 @@ const MUTED = "#6B7280";
 const BORDER = "#E5E7EB";
 
 const TOUR_SEEN_KEY = "@tandaxn_onboarding_dashboard_tour_seen_v1";
+// Force-show flag set by ProfileScreen's "Show tour" row. Overrides both
+// the seen flag and the join_circle gate so the tour can be re-played
+// from Settings even after the user has joined a circle. Cleared on next
+// mount so it's a single-shot.
+const TOUR_FORCE_KEY = "@tandaxn_onboarding_dashboard_tour_force_v1";
+
+/**
+ * Re-open the tour the next time DashboardScreen mounts. Callers should
+ * navigate to Home after awaiting this. Used by ProfileScreen's
+ * "Show tour" row.
+ */
+export async function resetDashboardTour(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(TOUR_SEEN_KEY);
+    await AsyncStorage.setItem(TOUR_FORCE_KEY, "1");
+  } catch {
+    /* best-effort — the tour will still re-show if AsyncStorage recovers */
+  }
+}
 
 type StepKey = "circles" | "create" | "contribute";
 
@@ -77,26 +96,50 @@ export default function DashboardTourOverlay() {
   // We only want to show on first launch AND only while join_circle is
   // still false. A user who already joined a circle gets the strip
   // (P1) instead — they don't need the tour.
-  useEffect(() => {
-    let cancelled = false;
-    if (loading) return; // wait for useHasContribution to resolve
-    if (firstLaunchProgress.join_circle) {
-      setPhase("dismissed");
-      return;
-    }
-    (async () => {
-      try {
-        const seen = await AsyncStorage.getItem(TOUR_SEEN_KEY);
-        if (cancelled) return;
-        setPhase(seen ? "dismissed" : "visible");
-      } catch {
-        if (!cancelled) setPhase("dismissed");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [loading, firstLaunchProgress.join_circle]);
+  // useFocusEffect (not useEffect) so the eligibility check also re-runs
+  // when DashboardScreen regains focus — that's how the "Show tour" row
+  // in ProfileScreen takes effect: ProfileScreen calls
+  // resetDashboardTour() and pops back, focus fires here, force flag is
+  // read, tour appears.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      if (loading) return; // wait for useHasContribution to resolve
+      (async () => {
+        try {
+          // Force-show wins over both gates so "Show tour" from Profile
+          // works even after the user has joined a circle. The force flag
+          // is single-shot — we clear it right after reading.
+          const force = await AsyncStorage.getItem(TOUR_FORCE_KEY);
+          if (force) {
+            await AsyncStorage.removeItem(TOUR_FORCE_KEY);
+            if (cancelled) return;
+            setStepIdx(0);
+            setPhase("visible");
+            return;
+          }
+          const seen = await AsyncStorage.getItem(TOUR_SEEN_KEY);
+          if (cancelled) return;
+          if (seen) {
+            setPhase("dismissed");
+            return;
+          }
+          // First-launch gate: skip the tour for users who already joined
+          // a circle (they get the journey strip instead).
+          if (firstLaunchProgress.join_circle) {
+            setPhase("dismissed");
+            return;
+          }
+          setPhase("visible");
+        } catch {
+          if (!cancelled) setPhase("dismissed");
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [loading, firstLaunchProgress.join_circle]),
+  );
 
   const dismiss = async () => {
     setPhase("dismissed");
@@ -130,6 +173,12 @@ export default function DashboardTourOverlay() {
         <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.handle} />
 
+          <Text style={styles.stepCounter}>
+            {t("dashboard_tour.step_counter", {
+              current: stepIdx + 1,
+              total: STEPS.length,
+            })}
+          </Text>
           <View style={styles.progressDots}>
             {STEPS.map((_, i) => (
               <View
@@ -196,6 +245,14 @@ const styles = StyleSheet.create({
     backgroundColor: BORDER,
     alignSelf: "center",
     marginBottom: 18,
+  },
+  stepCounter: {
+    fontSize: 12,
+    color: MUTED,
+    fontWeight: "600",
+    textAlign: "center",
+    letterSpacing: 0.3,
+    marginBottom: 8,
   },
   progressDots: {
     flexDirection: "row",

@@ -44,7 +44,9 @@
     "step3_body": "Une fois inscrit, vous contribuez à chaque cycle et recevez la cagnotte à votre tour.",
     "next": "Suivant",
     "finish": "Compris",
-    "skip": "Passer"
+    "skip": "Passer",
+    "step_counter": "Étape {{current}} sur {{total}}",
+    "reopen_button": "Revoir la visite"
   },
   "dashboard_suggestions": {
     "title": "Cercles suggérés à rejoindre",

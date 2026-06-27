@@ -44,7 +44,9 @@
     "step3_body": "After joining, you'll contribute each cycle and get paid in turn.",
     "next": "Next",
     "finish": "Got it",
-    "skip": "Skip"
+    "skip": "Skip",
+    "step_counter": "Step {{current}} of {{total}}",
+    "reopen_button": "Show tour"
   },
   "dashboard_suggestions": {
     "title": "Suggested circles to join",
