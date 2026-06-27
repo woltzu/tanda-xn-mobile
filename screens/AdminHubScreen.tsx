@@ -58,10 +58,10 @@ type ModuleDef = {
 };
 
 const MODULES: ModuleDef[] = [
-  { key: "overview", icon: "grid-outline",          route: "AdminDashboard" },
-  { key: "users",    icon: "people-outline",        route: null },
-  { key: "circles",  icon: "refresh-outline",       route: null },
-  { key: "trips",    icon: "airplane-outline",      route: null },
+  { key: "overview", icon: "grid-outline",          route: "AdminOverview" },
+  { key: "users",    icon: "people-outline",        route: "AdminUsers" },
+  { key: "circles",  icon: "refresh-outline",       route: "AdminCircles" },
+  { key: "trips",    icon: "airplane-outline",      route: "AdminTrips" },
   { key: "disputes", icon: "shield-half-outline",   route: "AdminModeration" },
   { key: "elders",   icon: "ribbon-outline",        route: "ElderDashboard" },
   { key: "kyc",      icon: "id-card-outline",       route: "AdminVerificationQueue" },

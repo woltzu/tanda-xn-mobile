@@ -342,6 +342,13 @@ import RateBreakdownScreen from "./screens/RateBreakdownScreen";
 import AdvanceSettingsScreen from "./screens/AdvanceSettingsScreen";
 import AdminDashboardScreen from "./screens/AdminDashboardScreen";
 import AdminHubScreen from "./screens/AdminHubScreen";
+import AdminOverviewScreen from "./screens/AdminOverviewScreen";
+import AdminUsersScreen from "./screens/AdminUsersScreen";
+import AdminUserDetailScreen from "./screens/AdminUserDetailScreen";
+import AdminCirclesScreen from "./screens/AdminCirclesScreen";
+import AdminCircleDetailScreen from "./screens/AdminCircleDetailScreen";
+import AdminTripsScreen from "./screens/AdminTripsScreen";
+import AdminTripDetailScreen from "./screens/AdminTripDetailScreen";
 import AdminModerationScreen from "./screens/AdminModerationScreen";
 import PlatformAuditTrailScreen from "./screens/PlatformAuditTrailScreen";
 // Goals flow (GOALS-001..015) — 13 screens translated from web JSX.
@@ -891,6 +898,14 @@ export type RootStackParamList = {
   // that aggregates Overview / KYC / Disputes / Elders + placeholder
   // tiles for Users / Circles / Trips / Settings.
   AdminHub: undefined;
+  // Admin Bucket B — module screens (lists + detail views).
+  AdminOverview: undefined;
+  AdminUsers: undefined;
+  AdminUserDetail: { userId: string };
+  AdminCircles: undefined;
+  AdminCircleDetail: { circleId: string };
+  AdminTrips: undefined;
+  AdminTripDetail: { tripId: string };
   // Moderation P0 (2026-06-13) — platform-wide content + user-report queue.
   AdminModeration: undefined;
   // Audit Trail P0 (2026-06-13) — immutable platform compliance log.
@@ -1106,6 +1121,13 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AdvanceSettings" component={AdvanceSettingsScreen} />
       <HomeStack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
       <HomeStack.Screen name="AdminHub" component={AdminHubScreen} />
+      <HomeStack.Screen name="AdminOverview" component={AdminOverviewScreen} />
+      <HomeStack.Screen name="AdminUsers" component={AdminUsersScreen} />
+      <HomeStack.Screen name="AdminUserDetail" component={AdminUserDetailScreen} />
+      <HomeStack.Screen name="AdminCircles" component={AdminCirclesScreen} />
+      <HomeStack.Screen name="AdminCircleDetail" component={AdminCircleDetailScreen} />
+      <HomeStack.Screen name="AdminTrips" component={AdminTripsScreen} />
+      <HomeStack.Screen name="AdminTripDetail" component={AdminTripDetailScreen} />
       <HomeStack.Screen name="AdminModeration" component={AdminModerationScreen} />
       <HomeStack.Screen name="PlatformAuditTrail" component={PlatformAuditTrailScreen} />
       {/* Goals flow (GOALS-001..015). Entered (for now) via the __DEV__
