@@ -349,6 +349,7 @@ import AdminCirclesScreen from "./screens/AdminCirclesScreen";
 import AdminCircleDetailScreen from "./screens/AdminCircleDetailScreen";
 import AdminTripsScreen from "./screens/AdminTripsScreen";
 import AdminTripDetailScreen from "./screens/AdminTripDetailScreen";
+import AdminPlatformSettingsScreen from "./screens/AdminPlatformSettingsScreen";
 import AdminModerationScreen from "./screens/AdminModerationScreen";
 import PlatformAuditTrailScreen from "./screens/PlatformAuditTrailScreen";
 // Goals flow (GOALS-001..015) — 13 screens translated from web JSX.
@@ -906,6 +907,10 @@ export type RootStackParamList = {
   AdminCircleDetail: { circleId: string };
   AdminTrips: undefined;
   AdminTripDetail: { tripId: string };
+  // Admin Bucket C — platform-wide settings (feature flags, templates,
+  // system config, admin user roster). Named AdminPlatformSettings to
+  // coexist with the per-circle AdminSettings governance screen.
+  AdminPlatformSettings: undefined;
   // Moderation P0 (2026-06-13) — platform-wide content + user-report queue.
   AdminModeration: undefined;
   // Audit Trail P0 (2026-06-13) — immutable platform compliance log.
@@ -1128,6 +1133,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AdminCircleDetail" component={AdminCircleDetailScreen} />
       <HomeStack.Screen name="AdminTrips" component={AdminTripsScreen} />
       <HomeStack.Screen name="AdminTripDetail" component={AdminTripDetailScreen} />
+      <HomeStack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
       <HomeStack.Screen name="AdminModeration" component={AdminModerationScreen} />
       <HomeStack.Screen name="PlatformAuditTrail" component={PlatformAuditTrailScreen} />
       {/* Goals flow (GOALS-001..015). Entered (for now) via the __DEV__

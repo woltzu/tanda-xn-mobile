@@ -48,6 +48,7 @@ export const Routes = {
   AdminDashboard: "AdminDashboard",
   AdminHub: "AdminHub",
   AdminOverview: "AdminOverview",
+  AdminPlatformSettings: "AdminPlatformSettings",
   AdminSettings: "AdminSettings",
   AdminTemplateQueue: "AdminTemplateQueue",
   AdminTripDetail: "AdminTripDetail",
