@@ -2437,7 +2437,14 @@
       "suspend_confirm": "Suspend this user? They will lose access to money actions.",
       "suspended_toast": "User suspended.",
       "suspend_failed": "Failed to suspend user.",
-      "unsuspend_note": "Unsuspending isn't supported yet — contact engineering if you need to reverse this."
+      "unsuspend_note": "Unsuspending isn't supported yet — contact engineering if you need to reverse this.",
+      "reactivate": "Reactivate user",
+      "reactivate_confirm": "Reactivate this user? They will regain access to all features.",
+      "reactivate_reason_placeholder": "Reason for reactivation (optional)",
+      "reactivate_success": "User reactivated successfully.",
+      "reactivate_failed": "Failed to reactivate user.",
+      "modal_cancel": "Cancel",
+      "modal_confirm": "Confirm"
     },
     "circles": {
       "title": "Circles",

@@ -2437,7 +2437,14 @@
       "suspend_confirm": "Suspendre cet utilisateur ? Il perdra l'accès aux actions monétaires.",
       "suspended_toast": "Utilisateur suspendu.",
       "suspend_failed": "Échec de la suspension.",
-      "unsuspend_note": "L'annulation de la suspension n'est pas encore prise en charge — contactez l'équipe technique pour l'inverser."
+      "unsuspend_note": "L'annulation de la suspension n'est pas encore prise en charge — contactez l'équipe technique pour l'inverser.",
+      "reactivate": "Réactiver l'utilisateur",
+      "reactivate_confirm": "Réactiver cet utilisateur ? Il retrouvera l'accès à toutes les fonctionnalités.",
+      "reactivate_reason_placeholder": "Motif de la réactivation (facultatif)",
+      "reactivate_success": "Utilisateur réactivé avec succès.",
+      "reactivate_failed": "Échec de la réactivation.",
+      "modal_cancel": "Annuler",
+      "modal_confirm": "Confirmer"
     },
     "circles": {
       "title": "Cercles",

@@ -1,12 +1,18 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// screens/AdminUserDetailScreen.tsx — user profile + suspend (Bucket B mod 2)
+// screens/AdminUserDetailScreen.tsx — user profile + suspend/reactivate
 // ═══════════════════════════════════════════════════════════════════════════
 //
 // Reads the user's profile, their circle memberships, and their organised
-// trips. super_admin/admin can suspend via the existing suspend_user RPC
-// (p_user_id uuid, p_reason text). Unsuspend is NOT exposed here — no
-// dedicated RPC ships in prod and the toggle path needs an audit-trail
-// design decision; the action is deferred to a follow-up bucket.
+// trips. super_admin/admin can:
+//   * suspend via the existing suspend_user RPC (writes users.is_suspended)
+//   * reactivate via reactivate_user (migration 275) — writes BOTH
+//     users.is_suspended=false AND profiles.is_active=true so the UI
+//     reflects the change immediately and the round-trip ends in a
+//     consistent state.
+//
+// Reactivate uses a Modal with a TextInput for an optional reason
+// (per spec); suspend keeps the existing Alert.alert path to avoid
+// unrelated UX churn.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -20,6 +26,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -76,6 +84,8 @@ export default function AdminUserDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
+  const [reactivateOpen, setReactivateOpen] = useState(false);
+  const [reactivateReason, setReactivateReason] = useState("");
 
   const load = useCallback(async () => {
     if (!userId || !me?.id) return;
@@ -162,6 +172,37 @@ export default function AdminUserDetailScreen() {
       ]);
     }
   }, [profile, load, t]);
+
+  const openReactivate = useCallback(() => {
+    setReactivateReason("");
+    setReactivateOpen(true);
+  }, []);
+
+  const closeReactivate = useCallback(() => {
+    if (acting) return;
+    setReactivateOpen(false);
+    setReactivateReason("");
+  }, [acting]);
+
+  const submitReactivate = useCallback(async () => {
+    if (!profile || acting) return;
+    setActing(true);
+    try {
+      const { error } = await supabase.rpc("reactivate_user", {
+        p_user_id: profile.id,
+        p_reason: reactivateReason.trim() || null,
+      });
+      if (error) throw new Error(error.message);
+      setReactivateOpen(false);
+      setReactivateReason("");
+      showToast(t("admin.users.reactivate_success"), "success");
+      load();
+    } catch (err: any) {
+      showToast(err?.message ?? t("admin.users.reactivate_failed"), "error");
+    } finally {
+      setActing(false);
+    }
+  }, [profile, acting, reactivateReason, load, t]);
 
   if (loading) {
     return (
@@ -263,6 +304,15 @@ export default function AdminUserDetailScreen() {
           )}
         </Section>
 
+        {canSuspend && profile.is_active === false ? (
+          <TouchableOpacity
+            style={[styles.primaryBtn, acting && styles.primaryBtnDisabled]}
+            onPress={openReactivate}
+            disabled={acting}
+          >
+            <Text style={styles.primaryBtnText}>{t("admin.users.reactivate")}</Text>
+          </TouchableOpacity>
+        ) : null}
         {canSuspend && profile.is_active !== false ? (
           <TouchableOpacity
             style={[styles.dangerBtn, acting && styles.dangerBtnDisabled]}
@@ -276,12 +326,53 @@ export default function AdminUserDetailScreen() {
             )}
           </TouchableOpacity>
         ) : null}
-        {profile.is_active === false ? (
-          <Text style={styles.suspendedNote}>
-            {t("admin.users.unsuspend_note")}
-          </Text>
-        ) : null}
       </ScrollView>
+
+      <Modal
+        visible={reactivateOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={closeReactivate}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{t("admin.users.reactivate_confirm")}</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder={t("admin.users.reactivate_reason_placeholder")}
+              placeholderTextColor={MUTED}
+              value={reactivateReason}
+              onChangeText={setReactivateReason}
+              multiline
+              numberOfLines={3}
+              maxLength={500}
+              editable={!acting}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, acting && styles.dangerBtnDisabled]}
+                onPress={closeReactivate}
+                disabled={acting}
+              >
+                <Text style={styles.modalCancelText}>{t("admin.users.modal_cancel")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, acting && styles.dangerBtnDisabled]}
+                onPress={submitReactivate}
+                disabled={acting}
+              >
+                {acting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>
+                    {t("admin.users.modal_confirm")}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -384,13 +475,62 @@ const styles = StyleSheet.create({
   },
   dangerBtnDisabled: { opacity: 0.6 },
   dangerBtnText: { color: "#FFFFFF", fontSize: typography.body, fontWeight: typography.bold },
-  suspendedNote: {
+  primaryBtn: {
     marginTop: spacing.md,
-    fontSize: typography.label,
-    color: MUTED,
-    textAlign: "center",
-    fontStyle: "italic",
+    backgroundColor: TEAL,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
   },
+  primaryBtnDisabled: { opacity: 0.6 },
+  primaryBtnText: { color: "#FFFFFF", fontSize: typography.body, fontWeight: typography.bold },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   mutedText: { fontSize: typography.body, color: MUTED, textAlign: "center" },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg,
+  },
+  modalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  modalTitle: {
+    fontSize: typography.body,
+    fontWeight: typography.bold,
+    color: NAVY,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: spacing.sm,
+    minHeight: 80,
+    textAlignVertical: "top",
+    color: NAVY,
+    fontSize: typography.body,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: spacing.sm,
+  },
+  modalCancelBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 10,
+  },
+  modalCancelText: { color: MUTED, fontWeight: typography.medium },
+  modalConfirmBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 10,
+    backgroundColor: TEAL,
+    minWidth: 96,
+    alignItems: "center",
+  },
+  modalConfirmText: { color: "#FFFFFF", fontWeight: typography.bold },
 });
