@@ -52,6 +52,8 @@ import SubmitTemplateScreen from "./screens/SubmitTemplateScreen";
 import AdminTemplateQueueScreen from "./screens/AdminTemplateQueueScreen";
 import PayoutHistoryScreen from "./screens/PayoutHistoryScreen";
 import PayoutListener from "./components/PayoutListener";
+import BugReportButton from "./components/BugReportButton";
+import { BugReportProvider, useBugReportScreen } from "./context/BugReportContext";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import LoginScreen from "./screens/LoginScreen";
 import SignupScreen from "./screens/SignupScreen";
@@ -1447,12 +1449,29 @@ function getActiveRouteName(state: any): string | undefined {
 // Component that wraps the app content and handles inactivity lock
 function AppContent() {
   const { user, isAuthenticated, isLocked, lockApp } = useAuth();
+  const { setScreenName } = useBugReportScreen();
 
   const { resetTimer } = useInactivityLock({
     onLock: lockApp,
     isAuthenticated,
     isLocked,
   });
+
+  // Feed the active route name into BugReportContext so the FAB modal
+  // can stamp it onto each report. Subscribes to navigationRef rather
+  // than reading state inline so it picks up nested-stack transitions.
+  React.useEffect(() => {
+    const apply = () => {
+      const state = navigationRef.getRootState?.();
+      const route = state ? getActiveRouteName(state) : undefined;
+      if (route) setScreenName(route);
+    };
+    apply();
+    const unsub = navigationRef.addListener?.("state", apply);
+    return () => {
+      if (typeof unsub === "function") unsub();
+    };
+  }, [setScreenName]);
 
   // SyncStream deep-link handler. Listens for tandaxn://sync-room?id=...
   // intents (both cold-open via getInitialURL and warm via the url event).
@@ -1548,6 +1567,10 @@ function AppContent() {
             modal when the app is foreground. Push-tap routing for the
             backgrounded case is handled by NotificationContext. */}
         <PayoutListener />
+        {/* Floating bug-report FAB. Self-hides when no auth user (RLS
+            requires auth.uid() = user_id). Reads current screen name
+            from BugReportContext (fed by onStateChange below). */}
+        <BugReportButton />
         <Stack.Navigator
           initialRouteName="Splash"
           screenOptions={{
@@ -1838,18 +1861,20 @@ export default function App() {
                         <MemberProfileProvider>
                           <NotificationProvider>
                             <OnboardingProvider>
-                              <NavigationContainer
-                                ref={navigationRef}
-                                linking={linkingConfig}
-                                onStateChange={(state) => {
-                                  const currentRoute = getActiveRouteName(state);
-                                  if (currentRoute) {
-                                    eventService.trackScreenView(currentRoute);
-                                  }
-                                }}
-                              >
-                                <AppContent />
-                              </NavigationContainer>
+                              <BugReportProvider>
+                                <NavigationContainer
+                                  ref={navigationRef}
+                                  linking={linkingConfig}
+                                  onStateChange={(state) => {
+                                    const currentRoute = getActiveRouteName(state);
+                                    if (currentRoute) {
+                                      eventService.trackScreenView(currentRoute);
+                                    }
+                                  }}
+                                >
+                                  <AppContent />
+                                </NavigationContainer>
+                              </BugReportProvider>
                             </OnboardingProvider>
                           </NotificationProvider>
                         </MemberProfileProvider>

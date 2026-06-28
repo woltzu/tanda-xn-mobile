@@ -2578,6 +2578,20 @@
     "modal_cancel": "Cancel",
     "modal_confirm": "Confirm"
   },
+  "bug_report": {
+    "title": "Report a bug",
+    "subtitle": "We'll look into it and get back to you.",
+    "screen_label": "Current screen",
+    "description_placeholder": "Describe what happened...",
+    "attach_screenshot": "Attach screenshot",
+    "remove_screenshot": "Remove screenshot",
+    "submit": "Submit report",
+    "cancel": "Cancel",
+    "success": "Bug reported – thank you!",
+    "error": "Failed to submit. Please try again.",
+    "invalid_description": "Please describe the bug.",
+    "report_button": "Report a bug"
+  },
   "kyc_badge": {
     "none": "KYC: Unverified",
     "pending": "KYC: Pending",

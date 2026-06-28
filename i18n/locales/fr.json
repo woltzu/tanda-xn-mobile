@@ -2578,6 +2578,20 @@
     "modal_cancel": "Annuler",
     "modal_confirm": "Confirmer"
   },
+  "bug_report": {
+    "title": "Signaler un bug",
+    "subtitle": "Nous allons examiner et vous tenir au courant.",
+    "screen_label": "Écran actuel",
+    "description_placeholder": "Décrivez ce qui s'est passé...",
+    "attach_screenshot": "Joindre une capture d'écran",
+    "remove_screenshot": "Retirer la capture",
+    "submit": "Envoyer le signalement",
+    "cancel": "Annuler",
+    "success": "Bug signalé – merci !",
+    "error": "Échec de l'envoi. Veuillez réessayer.",
+    "invalid_description": "Veuillez décrire le bug.",
+    "report_button": "Signaler un bug"
+  },
   "kyc_badge": {
     "none": "KYC : Non vérifié",
     "pending": "KYC : En attente",
