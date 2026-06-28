@@ -2386,6 +2386,8 @@
     "coming_soon": "This module is coming soon.",
     "coming_soon_chip": "Coming soon",
     "scoped_banner": "Scoped to your community.",
+    "load_failed": "Couldn't load data. Check your connection and try again.",
+    "retry": "Retry",
     "modules": {
       "overview": "Overview",
       "users": "Users",

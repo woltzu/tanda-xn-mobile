@@ -26,6 +26,8 @@ import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useIsAdmin } from "../hooks/useIsAdmin";
+import AdminListSkeleton from "../components/AdminListSkeleton";
+import AdminErrorState from "../components/AdminErrorState";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
@@ -49,11 +51,13 @@ export default function AdminTripsScreen() {
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const [rows, setRows] = useState<TripRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
   const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
+    setError(null);
     try {
       const { data: adminRow } = await supabase
         .from("admin_users")
@@ -88,6 +92,7 @@ export default function AdminTripsScreen() {
       setRows((data ?? []) as TripRow[]);
     } catch (err) {
       console.warn("[AdminTrips] load failed:", err);
+      setError(err instanceof Error ? err.message : String(err));
       setRows([]);
     } finally {
       setLoading(false);
@@ -153,10 +158,10 @@ export default function AdminTripsScreen() {
         />
       </View>
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="small" color={TEAL} />
-        </View>
+      {error && rows.length === 0 ? (
+        <AdminErrorState onRetry={load} />
+      ) : loading && rows.length === 0 ? (
+        <AdminListSkeleton rowCount={5} showChip={false} />
       ) : (
         <FlatList
           data={filtered}

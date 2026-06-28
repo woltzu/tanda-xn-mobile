@@ -26,6 +26,7 @@ import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { showToast } from "../components/Toast";
+import AdminErrorState from "../components/AdminErrorState";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
@@ -73,11 +74,13 @@ export default function AdminCircleDetailScreen() {
   const [contributions, setContributions] = useState<Contribution[]>([]);
   const [callerRole, setCallerRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
 
   const load = useCallback(async () => {
     if (!circleId || !me?.id) return;
     setLoading(true);
+    setError(null);
     try {
       const [circleR, callerR, membersR, contribR] = await Promise.all([
         supabase
@@ -134,6 +137,7 @@ export default function AdminCircleDetailScreen() {
       setContributions((contribR.data ?? []) as Contribution[]);
     } catch (err) {
       console.warn("[AdminCircleDetail] load failed:", err);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -188,6 +192,14 @@ export default function AdminCircleDetailScreen() {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={TEAL} />
         </View>
+      </SafeAreaView>
+    );
+  }
+  if (!circle && error) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <Header title={t("admin.circles.title")} onBack={() => navigation.goBack()} />
+        <AdminErrorState onRetry={load} />
       </SafeAreaView>
     );
   }

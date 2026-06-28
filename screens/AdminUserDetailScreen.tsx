@@ -29,6 +29,7 @@ import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { showToast } from "../components/Toast";
+import AdminErrorState from "../components/AdminErrorState";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
@@ -73,11 +74,13 @@ export default function AdminUserDetailScreen() {
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [callerRole, setCallerRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
 
   const load = useCallback(async () => {
     if (!userId || !me?.id) return;
     setLoading(true);
+    setError(null);
     try {
       const [profileR, callerR, membershipsR, tripsR] = await Promise.all([
         supabase
@@ -117,6 +120,7 @@ export default function AdminUserDetailScreen() {
       setTrips((tripsR.data ?? []) as TripRow[]);
     } catch (err) {
       console.warn("[AdminUserDetail] load failed:", err);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -165,6 +169,14 @@ export default function AdminUserDetailScreen() {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={TEAL} />
         </View>
+      </SafeAreaView>
+    );
+  }
+  if (!profile && error) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <Header title={t("admin.users.title")} onBack={() => navigation.goBack()} />
+        <AdminErrorState onRetry={load} />
       </SafeAreaView>
     );
   }

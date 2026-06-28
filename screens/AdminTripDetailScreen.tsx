@@ -27,6 +27,7 @@ import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { showToast } from "../components/Toast";
+import AdminErrorState from "../components/AdminErrorState";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
@@ -65,10 +66,12 @@ export default function AdminTripDetailScreen() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [callerRole, setCallerRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!tripId || !me?.id) return;
     setLoading(true);
+    setError(null);
     try {
       const [tripR, callerR, partsR] = await Promise.all([
         supabase
@@ -118,6 +121,7 @@ export default function AdminTripDetailScreen() {
       );
     } catch (err) {
       console.warn("[AdminTripDetail] load failed:", err);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -138,6 +142,14 @@ export default function AdminTripDetailScreen() {
         <View style={styles.center}>
           <ActivityIndicator size="large" color={TEAL} />
         </View>
+      </SafeAreaView>
+    );
+  }
+  if (!trip && error) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <Header title={t("admin.trips.title")} onBack={() => navigation.goBack()} />
+        <AdminErrorState onRetry={load} />
       </SafeAreaView>
     );
   }

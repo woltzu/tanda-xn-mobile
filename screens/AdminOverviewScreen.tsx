@@ -29,6 +29,8 @@ import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
 import { useIsAdmin } from "../hooks/useIsAdmin";
 import { useAuth } from "../context/AuthContext";
+import AdminListSkeleton from "../components/AdminListSkeleton";
+import AdminErrorState from "../components/AdminErrorState";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
@@ -54,10 +56,12 @@ export default function AdminOverviewScreen() {
   const { isAdmin, loading: adminLoading } = useIsAdmin();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
+    setError(null);
     try {
       // Resolve role + community for scoping.
       const { data: adminRow } = await supabase
@@ -160,6 +164,7 @@ export default function AdminOverviewScreen() {
       });
     } catch (err) {
       console.warn("[AdminOverview] load failed:", err);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -169,13 +174,43 @@ export default function AdminOverviewScreen() {
     load();
   }, [load]);
 
-  if (adminLoading || (!metrics && loading)) {
+  if (adminLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
         <View style={styles.center}>
           <ActivityIndicator size="large" color={TEAL} />
         </View>
+      </SafeAreaView>
+    );
+  }
+  if (!metrics && error) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+            <Ionicons name="arrow-back" size={24} color={NAVY} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t("admin.overview.title")}</Text>
+          <View style={styles.headerBtn} />
+        </View>
+        <AdminErrorState onRetry={load} />
+      </SafeAreaView>
+    );
+  }
+  if (!metrics && loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
+            <Ionicons name="arrow-back" size={24} color={NAVY} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t("admin.overview.title")}</Text>
+          <View style={styles.headerBtn} />
+        </View>
+        <AdminListSkeleton rowCount={5} showChip={false} />
       </SafeAreaView>
     );
   }
