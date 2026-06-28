@@ -2586,6 +2586,21 @@
     "status_pending": "Pending",
     "status_failed": "Failed"
   },
+  "admin_bulk": {
+    "select_all": "Select All",
+    "clear_selection": "Clear",
+    "selected_count": "{{count}} selected",
+    "bulk_suspend": "Suspend Selected",
+    "bulk_reactivate": "Reactivate Selected",
+    "bulk_close": "Close Selected",
+    "bulk_cancel": "Cancel Selected",
+    "bulk_confirm_title": "Confirm {{action}}",
+    "bulk_confirm_message": "Are you sure you want to {{action}} {{count}} items?",
+    "bulk_reason_placeholder": "Reason (optional)",
+    "bulk_success": "{{action}} completed for {{count}} items.",
+    "bulk_partial_failure": "{{count}} items failed.",
+    "bulk_requires_selection": "Please select at least one item."
+  },
   "admin_trip_actions": {
     "cancel_trip": "Cancel Trip",
     "cancel_confirm": "Cancel this trip? All eligible payments will be queued for refund.",

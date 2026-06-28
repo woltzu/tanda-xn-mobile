@@ -2586,6 +2586,21 @@
     "status_pending": "En attente",
     "status_failed": "Échoué"
   },
+  "admin_bulk": {
+    "select_all": "Tout sélectionner",
+    "clear_selection": "Effacer",
+    "selected_count": "{{count}} sélectionné(s)",
+    "bulk_suspend": "Suspendre la sélection",
+    "bulk_reactivate": "Réactiver la sélection",
+    "bulk_close": "Fermer la sélection",
+    "bulk_cancel": "Annuler la sélection",
+    "bulk_confirm_title": "Confirmer {{action}}",
+    "bulk_confirm_message": "Confirmer {{action}} sur {{count}} élément(s) ?",
+    "bulk_reason_placeholder": "Motif (facultatif)",
+    "bulk_success": "{{action}} effectué pour {{count}} élément(s).",
+    "bulk_partial_failure": "{{count}} élément(s) en échec.",
+    "bulk_requires_selection": "Veuillez sélectionner au moins un élément."
+  },
   "admin_trip_actions": {
     "cancel_trip": "Annuler le voyage",
     "cancel_confirm": "Annuler ce voyage ? Tous les paiements éligibles seront mis en file pour remboursement.",

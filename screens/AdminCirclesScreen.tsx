@@ -28,6 +28,9 @@ import { useIsAdmin } from "../hooks/useIsAdmin";
 import AdminListSkeleton from "../components/AdminListSkeleton";
 import AdminErrorState from "../components/AdminErrorState";
 import AdminFilterChips from "../components/AdminFilterChips";
+import BulkActionBar from "../components/BulkActionBar";
+import BulkReasonModal from "../components/BulkReasonModal";
+import { showToast } from "../components/Toast";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
@@ -56,6 +59,9 @@ export default function AdminCirclesScreen() {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [communityFilter, setCommunityFilter] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [pendingBulk, setPendingBulk] = useState<"close" | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -133,6 +139,81 @@ export default function AdminCirclesScreen() {
     setCommunityFilter(null);
   }, []);
 
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAllFiltered = useCallback(() => {
+    setSelectedIds(new Set(filtered.map((r) => r.id)));
+  }, [filtered]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+  }, []);
+
+  // Only allow closing circles that aren't already terminal — gates the
+  // bulk button when the selection is all completed/cancelled.
+  const selectedRows = useMemo(
+    () => rows.filter((r) => selectedIds.has(r.id)),
+    [rows, selectedIds],
+  );
+  const anyCloseable = selectedRows.some(
+    (r) => r.status !== "completed" && r.status !== "cancelled",
+  );
+
+  const runBulkClose = useCallback(
+    async (reason: string) => {
+      if (selectedRows.length === 0) {
+        showToast(t("admin_bulk.bulk_requires_selection"), "error");
+        return;
+      }
+      setBulkBusy(true);
+      const effectiveReason = reason || "Bulk close via admin hub";
+      try {
+        const results = await Promise.allSettled(
+          selectedRows.map((r) =>
+            supabase.rpc("admin_close_group", {
+              p_group_id: r.id,
+              p_reason: effectiveReason,
+            }),
+          ),
+        );
+        const failed = results.filter(
+          (x) =>
+            x.status === "rejected" ||
+            (x.status === "fulfilled" && (x as any).value?.error),
+        ).length;
+        const ok = selectedRows.length - failed;
+        const actionLabel = t("admin_bulk.bulk_close");
+        if (ok > 0) {
+          showToast(
+            t("admin_bulk.bulk_success", { action: actionLabel, count: ok }),
+            "success",
+          );
+        }
+        if (failed > 0) {
+          showToast(
+            t("admin_bulk.bulk_partial_failure", { count: failed }),
+            "error",
+          );
+        }
+        clearSelection();
+        setPendingBulk(null);
+        load();
+      } catch (err: any) {
+        showToast(err?.message ?? "Bulk action failed", "error");
+      } finally {
+        setBulkBusy(false);
+      }
+    },
+    [selectedRows, t, clearSelection, load],
+  );
+
   if (adminLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -161,9 +242,21 @@ export default function AdminCirclesScreen() {
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t("admin.circles.title")}</Text>
-        <TouchableOpacity onPress={load} style={styles.headerBtn} disabled={loading}>
-          <Ionicons name="refresh" size={22} color={loading ? "#CBD5E1" : NAVY} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={selectedIds.size > 0 ? clearSelection : selectAllFiltered}
+            style={styles.headerTextBtn}
+          >
+            <Text style={styles.headerTextBtnLabel}>
+              {selectedIds.size > 0
+                ? t("admin_bulk.clear_selection")
+                : t("admin_bulk.select_all")}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={load} style={styles.headerBtn} disabled={loading}>
+            <Ionicons name="refresh" size={22} color={loading ? "#CBD5E1" : NAVY} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.searchBar}>
@@ -218,14 +311,32 @@ export default function AdminCirclesScreen() {
           data={filtered}
           keyExtractor={(r) => r.id}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.row}
-              onPress={() =>
-                navigation.navigate("AdminCircleDetail", { circleId: item.id })
-              }
-            >
-              <View style={{ flex: 1 }}>
+          renderItem={({ item }) => {
+            const inSelectMode = selectedIds.size > 0;
+            const selected = selectedIds.has(item.id);
+            return (
+              <TouchableOpacity
+                style={[styles.row, selected && styles.rowSelected]}
+                onPress={() =>
+                  inSelectMode
+                    ? toggleSelect(item.id)
+                    : navigation.navigate("AdminCircleDetail", { circleId: item.id })
+                }
+                onLongPress={() => toggleSelect(item.id)}
+              >
+                {inSelectMode ? (
+                  <View
+                    style={[
+                      styles.checkbox,
+                      selected && styles.checkboxChecked,
+                    ]}
+                  >
+                    {selected ? (
+                      <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                    ) : null}
+                  </View>
+                ) : null}
+                <View style={{ flex: 1 }}>
                 <Text style={styles.rowName} numberOfLines={1}>
                   {item.name ?? "—"}
                 </Text>
@@ -243,9 +354,10 @@ export default function AdminCirclesScreen() {
                   · ${Number(item.amount ?? 0).toLocaleString()}
                 </Text>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
-            </TouchableOpacity>
-          )}
+                <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+              </TouchableOpacity>
+            );
+          }}
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="refresh-outline" size={36} color="#CBD5E1" />
@@ -254,6 +366,31 @@ export default function AdminCirclesScreen() {
           }
         />
       )}
+
+      <BulkActionBar
+        selectedCount={selectedIds.size}
+        onClearSelection={clearSelection}
+        busy={bulkBusy}
+        actions={[
+          {
+            key: "close",
+            label: t("admin_bulk.bulk_close"),
+            onPress: () => setPendingBulk("close"),
+            variant: "danger",
+            disabled: !anyCloseable,
+          },
+        ]}
+      />
+
+      <BulkReasonModal
+        visible={pendingBulk !== null}
+        action={t("admin_bulk.bulk_close")}
+        count={selectedIds.size}
+        variant="danger"
+        busy={bulkBusy}
+        onCancel={() => setPendingBulk(null)}
+        onConfirm={(reason) => runBulkClose(reason)}
+      />
     </SafeAreaView>
   );
 }
@@ -271,6 +408,14 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerBtn: { width: 40, alignItems: "center", justifyContent: "center" },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 4 },
+  headerTextBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#F3F4F6",
+  },
+  headerTextBtnLabel: { fontSize: 12, color: NAVY, fontWeight: typography.bold },
   headerTitle: { fontSize: typography.sectionHeader, fontWeight: typography.bold, color: NAVY },
   searchBar: {
     flexDirection: "row",
@@ -302,6 +447,22 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: 8,
   },
+  rowSelected: {
+    backgroundColor: "rgba(0,198,174,0.10)",
+    borderWidth: 1,
+    borderColor: TEAL,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: "#CBD5E1",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxChecked: { borderColor: TEAL, backgroundColor: TEAL },
   rowName: { fontSize: typography.body, color: NAVY, fontWeight: typography.bold },
   rowMeta: { fontSize: typography.label, color: MUTED, marginTop: 2 },
   empty: { alignItems: "center", gap: 10, padding: spacing.xl },
