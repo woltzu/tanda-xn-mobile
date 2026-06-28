@@ -43,6 +43,8 @@ export const Routes = {
   ActivityEditor: "ActivityEditor",
   AddFunds: "AddFunds",
   AddRecipient: "AddRecipient",
+  AdminBugReportDetail: "AdminBugReportDetail",
+  AdminBugReports: "AdminBugReports",
   AdminCircleDetail: "AdminCircleDetail",
   AdminCircles: "AdminCircles",
   AdminDashboard: "AdminDashboard",

@@ -2408,7 +2408,8 @@
       "disputes": "Litiges",
       "elders": "Aînés",
       "kyc": "Vérification KYC",
-      "settings": "Paramètres"
+      "settings": "Paramètres",
+      "bug_reports": "Signalements"
     },
     "overview": {
       "title": "Vue d'ensemble",
@@ -2602,6 +2603,31 @@
     "bulk_success": "{{action}} effectué pour {{count}} élément(s).",
     "bulk_partial_failure": "{{count}} élément(s) en échec.",
     "bulk_requires_selection": "Veuillez sélectionner au moins un élément."
+  },
+  "admin_bug_reports": {
+    "title": "Signalements de bugs",
+    "empty": "Aucun signalement de bug.",
+    "status_open": "Ouvert",
+    "status_in_progress": "En cours",
+    "status_resolved": "Résolu",
+    "status_closed": "Fermé",
+    "status_all": "Tous",
+    "user": "Utilisateur",
+    "screen": "Écran",
+    "description": "Description",
+    "date": "Date",
+    "detail_title": "Détails du signalement",
+    "device_info": "Infos appareil",
+    "screenshot": "Capture d'écran",
+    "admin_notes": "Notes admin",
+    "add_note": "Ajouter une note",
+    "note_placeholder": "Écrire une note...",
+    "save": "Enregistrer",
+    "notify_user": "Notifier l'utilisateur à la résolution",
+    "notify_success": "L'utilisateur a été notifié.",
+    "status_updated": "Statut mis à jour.",
+    "note_added": "Note ajoutée.",
+    "update_failed": "Échec de la mise à jour."
   },
   "admin_trip_actions": {
     "cancel_trip": "Annuler le voyage",

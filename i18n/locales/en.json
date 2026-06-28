@@ -2408,7 +2408,8 @@
       "disputes": "Disputes",
       "elders": "Elders",
       "kyc": "KYC Verification",
-      "settings": "Settings"
+      "settings": "Settings",
+      "bug_reports": "Bug Reports"
     },
     "overview": {
       "title": "Overview",
@@ -2602,6 +2603,31 @@
     "bulk_success": "{{action}} completed for {{count}} items.",
     "bulk_partial_failure": "{{count}} items failed.",
     "bulk_requires_selection": "Please select at least one item."
+  },
+  "admin_bug_reports": {
+    "title": "Bug Reports",
+    "empty": "No bug reports found.",
+    "status_open": "Open",
+    "status_in_progress": "In Progress",
+    "status_resolved": "Resolved",
+    "status_closed": "Closed",
+    "status_all": "All",
+    "user": "User",
+    "screen": "Screen",
+    "description": "Description",
+    "date": "Date",
+    "detail_title": "Bug Report Details",
+    "device_info": "Device Info",
+    "screenshot": "Screenshot",
+    "admin_notes": "Admin Notes",
+    "add_note": "Add Note",
+    "note_placeholder": "Write a note...",
+    "save": "Save",
+    "notify_user": "Notify user when resolved",
+    "notify_success": "User has been notified.",
+    "status_updated": "Status updated.",
+    "note_added": "Note added.",
+    "update_failed": "Failed to update bug report."
   },
   "admin_trip_actions": {
     "cancel_trip": "Cancel Trip",
