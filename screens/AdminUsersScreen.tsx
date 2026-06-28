@@ -27,6 +27,7 @@ import { useAuth } from "../context/AuthContext";
 import { useIsAdmin } from "../hooks/useIsAdmin";
 import AdminListSkeleton from "../components/AdminListSkeleton";
 import AdminErrorState from "../components/AdminErrorState";
+import AdminFilterChips from "../components/AdminFilterChips";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
@@ -51,6 +52,9 @@ export default function AdminUsersScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [kycFilter, setKycFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [roleFilter, setRoleFilter] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -100,13 +104,41 @@ export default function AdminUsersScreen() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter(
-      (r) =>
-        (r.full_name ?? "").toLowerCase().includes(q) ||
-        (r.email ?? "").toLowerCase().includes(q),
-    );
-  }, [rows, query]);
+    return rows.filter((r) => {
+      if (q) {
+        const inName = (r.full_name ?? "").toLowerCase().includes(q);
+        const inEmail = (r.email ?? "").toLowerCase().includes(q);
+        if (!inName && !inEmail) return false;
+      }
+      if (kycFilter && (r.kyc_status ?? "none") !== kycFilter) return false;
+      if (statusFilter === "active" && r.is_active === false) return false;
+      if (statusFilter === "suspended" && r.is_active !== false) return false;
+      if (roleFilter && (r.role ?? "member") !== roleFilter) return false;
+      return true;
+    });
+  }, [rows, query, kycFilter, statusFilter, roleFilter]);
+
+  // Role options come from the loaded rows so we don't hardcode the long
+  // tail of elder/tier roles. Sorted for deterministic ordering.
+  const roleOptions = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r) => {
+      if (r.role) set.add(r.role);
+    });
+    return Array.from(set)
+      .sort()
+      .map((value) => ({ value, label: value }));
+  }, [rows]);
+
+  const hasActiveFilters =
+    !!query || !!kycFilter || !!statusFilter || !!roleFilter;
+
+  const clearFilters = useCallback(() => {
+    setQuery("");
+    setKycFilter(null);
+    setStatusFilter(null);
+    setRoleFilter(null);
+  }, []);
 
   if (adminLoading) {
     return (
@@ -152,6 +184,45 @@ export default function AdminUsersScreen() {
           autoCapitalize="none"
           autoCorrect={false}
         />
+        {hasActiveFilters ? (
+          <TouchableOpacity onPress={clearFilters} style={styles.clearBtn}>
+            <Text style={styles.clearBtnText}>{t("admin.clear_filters")}</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      <View style={styles.filtersWrap}>
+        <AdminFilterChips
+          label={t("admin.filter_status")}
+          allLabel={t("admin.filter_all")}
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { value: "active", label: t("admin.users.active_chip") },
+            { value: "suspended", label: t("admin.users.suspended_chip") },
+          ]}
+        />
+        <AdminFilterChips
+          label={t("admin.filter_kyc")}
+          allLabel={t("admin.filter_all")}
+          value={kycFilter}
+          onChange={setKycFilter}
+          options={[
+            { value: "none", label: "none" },
+            { value: "pending", label: "pending" },
+            { value: "verified", label: "verified" },
+            { value: "rejected", label: "rejected" },
+          ]}
+        />
+        {roleOptions.length > 1 ? (
+          <AdminFilterChips
+            label={t("admin.filter_role")}
+            allLabel={t("admin.filter_all")}
+            value={roleFilter}
+            onChange={setRoleFilter}
+            options={roleOptions}
+          />
+        ) : null}
       </View>
 
       {error && rows.length === 0 ? (
@@ -249,6 +320,14 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   searchInput: { flex: 1, fontSize: typography.body, color: NAVY, padding: 0 },
+  clearBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#FEE2E2",
+  },
+  clearBtnText: { fontSize: 11, color: "#991B1B", fontWeight: typography.bold },
+  filtersWrap: { gap: 10, paddingBottom: spacing.sm },
   listContent: { paddingHorizontal: spacing.lg, paddingBottom: 40, gap: 8 },
   row: {
     flexDirection: "row",

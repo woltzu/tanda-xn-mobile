@@ -27,6 +27,7 @@ import { useAuth } from "../context/AuthContext";
 import { useIsAdmin } from "../hooks/useIsAdmin";
 import AdminListSkeleton from "../components/AdminListSkeleton";
 import AdminErrorState from "../components/AdminErrorState";
+import AdminFilterChips from "../components/AdminFilterChips";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
@@ -53,6 +54,8 @@ export default function AdminCirclesScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [communityFilter, setCommunityFilter] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -99,9 +102,36 @@ export default function AdminCirclesScreen() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => (r.name ?? "").toLowerCase().includes(q));
-  }, [rows, query]);
+    return rows.filter((r) => {
+      if (q && !(r.name ?? "").toLowerCase().includes(q)) return false;
+      if (statusFilter && (r.status ?? "") !== statusFilter) return false;
+      if (communityFilter && (r.community_id ?? "") !== communityFilter)
+        return false;
+      return true;
+    });
+  }, [rows, query, statusFilter, communityFilter]);
+
+  // Communities derived from result set — keeps support admins constrained
+  // to their own community automatically (rows are already scoped above).
+  const communityOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    rows.forEach((r) => {
+      if (r.community_id && r.community_name) {
+        map.set(r.community_id, r.community_name);
+      }
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([value, label]) => ({ value, label }));
+  }, [rows]);
+
+  const hasActiveFilters = !!query || !!statusFilter || !!communityFilter;
+
+  const clearFilters = useCallback(() => {
+    setQuery("");
+    setStatusFilter(null);
+    setCommunityFilter(null);
+  }, []);
 
   if (adminLoading) {
     return (
@@ -146,6 +176,37 @@ export default function AdminCirclesScreen() {
           onChangeText={setQuery}
           autoCapitalize="none"
         />
+        {hasActiveFilters ? (
+          <TouchableOpacity onPress={clearFilters} style={styles.clearBtn}>
+            <Text style={styles.clearBtnText}>{t("admin.clear_filters")}</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      <View style={styles.filtersWrap}>
+        <AdminFilterChips
+          label={t("admin.filter_status")}
+          allLabel={t("admin.filter_all")}
+          value={statusFilter}
+          onChange={setStatusFilter}
+          options={[
+            { value: "forming", label: "forming" },
+            { value: "pending", label: "pending" },
+            { value: "active", label: "active" },
+            { value: "paused", label: "paused" },
+            { value: "completed", label: "completed" },
+            { value: "cancelled", label: "cancelled" },
+          ]}
+        />
+        {communityOptions.length > 1 ? (
+          <AdminFilterChips
+            label={t("admin.filter_community")}
+            allLabel={t("admin.filter_all")}
+            value={communityFilter}
+            onChange={setCommunityFilter}
+            options={communityOptions}
+          />
+        ) : null}
       </View>
 
       {error && rows.length === 0 ? (
@@ -224,6 +285,14 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   searchInput: { flex: 1, fontSize: typography.body, color: NAVY, padding: 0 },
+  clearBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#FEE2E2",
+  },
+  clearBtnText: { fontSize: 11, color: "#991B1B", fontWeight: typography.bold },
+  filtersWrap: { gap: 10, paddingBottom: spacing.sm },
   listContent: { paddingHorizontal: spacing.lg, paddingBottom: 40, gap: 8 },
   row: {
     flexDirection: "row",
