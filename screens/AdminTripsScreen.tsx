@@ -26,6 +26,7 @@ import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useIsAdmin } from "../hooks/useIsAdmin";
+import { useAdminScope } from "../hooks/useAdminScope";
 import AdminListSkeleton from "../components/AdminListSkeleton";
 import AdminErrorState from "../components/AdminErrorState";
 import AdminFilterChips from "../components/AdminFilterChips";
@@ -53,6 +54,7 @@ export default function AdminTripsScreen() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { isAdmin, loading: adminLoading } = useIsAdmin();
+  const scope = useAdminScope();
   const [rows, setRows] = useState<TripRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,29 +67,15 @@ export default function AdminTripsScreen() {
 
   const load = useCallback(async () => {
     if (!user?.id) return;
+    if (scope.loading) return;
+    if (scope.noCommunityAssigned) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const { data: adminRow } = await supabase
-        .from("admin_users")
-        .select("role, community_id")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .maybeSingle();
-      const role = adminRow?.role as string | undefined;
-      const communityId = adminRow?.community_id as string | null | undefined;
-
-      // For support role, restrict to trips whose circle's community
-      // matches admin's community_id. Resolve circle ids first.
-      let scopedCircleIds: string[] | null = null;
-      if (role === "support" && communityId) {
-        const { data: scoped } = await supabase
-          .from("circles")
-          .select("id")
-          .eq("community_id", communityId);
-        scopedCircleIds = (scoped ?? []).map((r: any) => r.id);
-      }
-
       const q = supabase
         .from("trips")
         .select(
@@ -95,7 +83,9 @@ export default function AdminTripsScreen() {
         )
         .order("start_date", { ascending: false })
         .limit(200);
-      if (scopedCircleIds) q.in("circle_id", scopedCircleIds);
+      // trips have no community_id column — scope via circles.community_id
+      // (pre-resolved in the scope hook so we don't re-query here).
+      if (scope.scopedCircleIds) q.in("circle_id", scope.scopedCircleIds);
       const { data, error } = await q;
       if (error) throw new Error(error.message);
       setRows((data ?? []) as TripRow[]);
@@ -106,7 +96,7 @@ export default function AdminTripsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, scope.loading, scope.noCommunityAssigned, scope.scopedCircleIds]);
 
   useEffect(() => {
     load();
@@ -307,7 +297,14 @@ export default function AdminTripsScreen() {
         />
       </View>
 
-      {error && rows.length === 0 ? (
+      {scope.noCommunityAssigned ? (
+        <View style={styles.empty}>
+          <Ionicons name="alert-circle-outline" size={36} color="#CBD5E1" />
+          <Text style={styles.mutedText}>
+            {t("admin.no_community_assigned")}
+          </Text>
+        </View>
+      ) : error && rows.length === 0 ? (
         <AdminErrorState onRetry={load} />
       ) : loading && rows.length === 0 ? (
         <AdminListSkeleton rowCount={5} showChip={false} />

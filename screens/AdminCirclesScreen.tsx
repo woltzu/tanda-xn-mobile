@@ -25,6 +25,7 @@ import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useIsAdmin } from "../hooks/useIsAdmin";
+import { useAdminScope } from "../hooks/useAdminScope";
 import AdminListSkeleton from "../components/AdminListSkeleton";
 import AdminErrorState from "../components/AdminErrorState";
 import AdminFilterChips from "../components/AdminFilterChips";
@@ -53,6 +54,7 @@ export default function AdminCirclesScreen() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { isAdmin, loading: adminLoading } = useIsAdmin();
+  const scope = useAdminScope();
   const [rows, setRows] = useState<CircleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,18 +67,15 @@ export default function AdminCirclesScreen() {
 
   const load = useCallback(async () => {
     if (!user?.id) return;
+    if (scope.loading) return;
+    if (scope.noCommunityAssigned) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const { data: adminRow } = await supabase
-        .from("admin_users")
-        .select("role, community_id")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .maybeSingle();
-      const role = adminRow?.role as string | undefined;
-      const communityId = adminRow?.community_id as string | null | undefined;
-
       const q = supabase
         .from("circles")
         .select(
@@ -84,7 +83,11 @@ export default function AdminCirclesScreen() {
         )
         .order("created_at", { ascending: false })
         .limit(200);
-      if (role === "support" && communityId) q.eq("community_id", communityId);
+      // Direct .eq is cheaper than .in over scopedCircleIds when the
+      // underlying column is the scoping field itself.
+      if (scope.isSupport && scope.communityId) {
+        q.eq("community_id", scope.communityId);
+      }
       const { data, error } = await q;
       if (error) throw new Error(error.message);
       setRows(
@@ -100,7 +103,7 @@ export default function AdminCirclesScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, scope.loading, scope.noCommunityAssigned, scope.isSupport, scope.communityId]);
 
   useEffect(() => {
     load();
@@ -302,7 +305,14 @@ export default function AdminCirclesScreen() {
         ) : null}
       </View>
 
-      {error && rows.length === 0 ? (
+      {scope.noCommunityAssigned ? (
+        <View style={styles.empty}>
+          <Ionicons name="alert-circle-outline" size={36} color="#CBD5E1" />
+          <Text style={styles.mutedText}>
+            {t("admin.no_community_assigned")}
+          </Text>
+        </View>
+      ) : error && rows.length === 0 ? (
         <AdminErrorState onRetry={load} />
       ) : loading && rows.length === 0 ? (
         <AdminListSkeleton rowCount={5} showChip={true} />

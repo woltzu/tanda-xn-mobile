@@ -25,6 +25,7 @@ import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { useIsAdmin } from "../hooks/useIsAdmin";
+import { useAdminScope } from "../hooks/useAdminScope";
 import AdminListSkeleton from "../components/AdminListSkeleton";
 import AdminErrorState from "../components/AdminErrorState";
 import AdminFilterChips from "../components/AdminFilterChips";
@@ -51,6 +52,7 @@ export default function AdminUsersScreen() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { isAdmin, loading: adminLoading } = useIsAdmin();
+  const scope = useAdminScope();
   const [rows, setRows] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,34 +68,25 @@ export default function AdminUsersScreen() {
 
   const load = useCallback(async () => {
     if (!user?.id) return;
+    // Block load while scope is still resolving — otherwise we'd fire an
+    // unscoped query and a scoped one back-to-back.
+    if (scope.loading) return;
+    // Misconfigured support admin (role=support, no community_id): refuse
+    // to load anything. The screen renders an empty-state banner instead.
+    if (scope.noCommunityAssigned) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const { data: adminRow } = await supabase
-        .from("admin_users")
-        .select("role, community_id")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .maybeSingle();
-      const role = adminRow?.role as string | undefined;
-      const communityId = adminRow?.community_id as string | null | undefined;
-
-      let scopedIds: string[] | null = null;
-      if (role === "support" && communityId) {
-        const { data: memberships } = await supabase
-          .from("community_memberships")
-          .select("user_id")
-          .eq("community_id", communityId)
-          .eq("status", "active");
-        scopedIds = (memberships ?? []).map((r: any) => r.user_id);
-      }
-
       const q = supabase
         .from("profiles")
         .select("id, full_name, email, kyc_status, role, is_active, created_at")
         .order("created_at", { ascending: false })
         .limit(200);
-      if (scopedIds) q.in("id", scopedIds);
+      if (scope.scopedUserIds) q.in("id", scope.scopedUserIds);
       const { data, error } = await q;
       if (error) throw new Error(error.message);
       setRows((data ?? []) as UserRow[]);
@@ -104,7 +97,7 @@ export default function AdminUsersScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, scope.loading, scope.noCommunityAssigned, scope.scopedUserIds]);
 
   useEffect(() => {
     load();
@@ -332,7 +325,14 @@ export default function AdminUsersScreen() {
         ) : null}
       </View>
 
-      {error && rows.length === 0 ? (
+      {scope.noCommunityAssigned ? (
+        <View style={styles.empty}>
+          <Ionicons name="alert-circle-outline" size={36} color="#CBD5E1" />
+          <Text style={styles.mutedText}>
+            {t("admin.no_community_assigned")}
+          </Text>
+        </View>
+      ) : error && rows.length === 0 ? (
         <AdminErrorState onRetry={load} />
       ) : loading && rows.length === 0 ? (
         <AdminListSkeleton rowCount={5} showChip={true} />

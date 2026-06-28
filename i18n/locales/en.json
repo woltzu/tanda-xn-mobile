@@ -2398,6 +2398,8 @@
     "filter_date_range": "Date Range",
     "filter_upcoming": "Upcoming",
     "filter_past": "Past",
+    "support_scope": "Community: {{name}}",
+    "no_community_assigned": "No community assigned. Please contact a super admin.",
     "modules": {
       "overview": "Overview",
       "users": "Users",

@@ -36,6 +36,7 @@ import { colors, radius, typography, spacing } from "../theme/tokens";
 import { supabase } from "../lib/supabase";
 import { useIsAdmin } from "../hooks/useIsAdmin";
 import { useAuth } from "../context/AuthContext";
+import { useAdminScope } from "../hooks/useAdminScope";
 import AdminListSkeleton from "../components/AdminListSkeleton";
 import AdminErrorState from "../components/AdminErrorState";
 import ChartContainer from "../components/charts/ChartContainer";
@@ -64,9 +65,6 @@ interface Metrics {
   totalTrips: number;
   upcomingTrips: number;
   pendingKyc: number;
-  scopedToCommunity: boolean;
-  scopedUserIds: string[] | null;
-  scopedCircleIds: string[] | null;
 }
 
 export default function AdminOverviewScreen() {
@@ -74,6 +72,7 @@ export default function AdminOverviewScreen() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { isAdmin, loading: adminLoading } = useIsAdmin();
+  const scope = useAdminScope();
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,40 +80,23 @@ export default function AdminOverviewScreen() {
 
   const load = useCallback(async () => {
     if (!user?.id) return;
+    if (scope.loading) return;
+    if (scope.noCommunityAssigned) {
+      setMetrics(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      const { data: adminRow } = await supabase
-        .from("admin_users")
-        .select("role, community_id")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .maybeSingle();
-      const role = adminRow?.role as string | undefined;
-      const communityId = adminRow?.community_id as string | null | undefined;
-      const scoped = role === "support" && !!communityId;
+      const scoped = scope.isSupport && !!scope.communityId;
+      const communityId = scope.communityId;
+      const scopedUserIds = scope.scopedUserIds;
+      const scopedCircleIds = scope.scopedCircleIds;
 
       const sevenDaysAgo = new Date(
         Date.now() - 7 * 24 * 60 * 60 * 1000,
       ).toISOString();
-
-      let scopedUserIds: string[] | null = null;
-      let scopedCircleIds: string[] | null = null;
-      if (scoped) {
-        const [{ data: memberships }, { data: scopedCircles }] = await Promise.all([
-          supabase
-            .from("community_memberships")
-            .select("user_id")
-            .eq("community_id", communityId)
-            .eq("status", "active"),
-          supabase
-            .from("circles")
-            .select("id")
-            .eq("community_id", communityId),
-        ]);
-        scopedUserIds = (memberships ?? []).map((r: any) => r.user_id);
-        scopedCircleIds = (scopedCircles ?? []).map((r: any) => r.id);
-      }
 
       const usersQ = supabase
         .from("profiles")
@@ -187,9 +169,6 @@ export default function AdminOverviewScreen() {
         totalTrips: totalTrips ?? 0,
         upcomingTrips: upcomingTrips ?? 0,
         pendingKyc: pendingKyc ?? 0,
-        scopedToCommunity: scoped,
-        scopedUserIds,
-        scopedCircleIds,
       });
     } catch (err) {
       console.warn("[AdminOverview] load failed:", err);
@@ -197,7 +176,15 @@ export default function AdminOverviewScreen() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [
+    user?.id,
+    scope.loading,
+    scope.noCommunityAssigned,
+    scope.isSupport,
+    scope.communityId,
+    scope.scopedUserIds,
+    scope.scopedCircleIds,
+  ]);
 
   useEffect(() => {
     load();
@@ -205,10 +192,10 @@ export default function AdminOverviewScreen() {
 
   const chartScope = useMemo(
     () => ({
-      scopedUserIds: metrics?.scopedUserIds ?? null,
-      scopedCircleIds: metrics?.scopedCircleIds ?? null,
+      scopedUserIds: scope.scopedUserIds,
+      scopedCircleIds: scope.scopedCircleIds,
     }),
-    [metrics?.scopedUserIds, metrics?.scopedCircleIds],
+    [scope.scopedUserIds, scope.scopedCircleIds],
   );
   const charts = useAdminCharts(range, chartScope);
 
@@ -286,7 +273,14 @@ export default function AdminOverviewScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        {metrics?.scopedToCommunity ? (
+        {scope.noCommunityAssigned ? (
+          <View style={styles.scopedBanner}>
+            <Ionicons name="alert-circle-outline" size={16} color="#92400E" />
+            <Text style={styles.scopedBannerText}>
+              {t("admin.no_community_assigned")}
+            </Text>
+          </View>
+        ) : scope.isSupport && scope.communityId ? (
           <View style={styles.scopedBanner}>
             <Ionicons name="people-outline" size={16} color="#92400E" />
             <Text style={styles.scopedBannerText}>

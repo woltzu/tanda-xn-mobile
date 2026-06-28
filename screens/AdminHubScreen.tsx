@@ -18,7 +18,7 @@
 // AdminDashboard for portfolio metrics.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -34,6 +34,8 @@ import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { colors, radius, typography, spacing } from "../theme/tokens";
 import { useIsAdmin } from "../hooks/useIsAdmin";
+import { useAdminScope } from "../hooks/useAdminScope";
+import { supabase } from "../lib/supabase";
 import { showToast } from "../components/Toast";
 
 const NAVY = colors.primaryNavy;
@@ -72,6 +74,31 @@ export default function AdminHubScreen() {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
   const { isAdmin, loading } = useIsAdmin();
+  const scope = useAdminScope();
+  const [communityName, setCommunityName] = useState<string | null>(null);
+
+  // Resolve the community name only when there's a scope to display.
+  // Skipped for super_admin / admin (no badge shown) and for misconfigured
+  // support admins (no communityId yet — the "no community assigned"
+  // banner inside list screens covers that state).
+  useEffect(() => {
+    if (!scope.isSupport || !scope.communityId) {
+      setCommunityName(null);
+      return;
+    }
+    let cancelled = false;
+    supabase
+      .from("communities")
+      .select("name")
+      .eq("id", scope.communityId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setCommunityName(data?.name ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scope.isSupport, scope.communityId]);
 
   const handlePress = (m: ModuleDef) => {
     if (m.route) {
@@ -105,7 +132,16 @@ export default function AdminHubScreen() {
             <Ionicons name="arrow-back" size={24} color={NAVY} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("admin.title")}</Text>
-          <View style={styles.headerBtn} />
+          {communityName ? (
+            <View style={styles.scopeBadge}>
+              <Ionicons name="people-outline" size={12} color="#92400E" />
+              <Text style={styles.scopeBadgeText} numberOfLines={1}>
+                {t("admin.support_scope", { name: communityName })}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.headerBtn} />
+          )}
         </View>
         <View style={styles.loadingFrame}>
           <Ionicons name="lock-closed-outline" size={48} color="#CBD5E1" />
@@ -175,6 +211,24 @@ const styles = StyleSheet.create({
     fontSize: typography.sectionHeader,
     fontWeight: typography.bold,
     color: NAVY,
+  },
+  scopeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    maxWidth: 160,
+  },
+  scopeBadgeText: {
+    fontSize: 11,
+    color: "#92400E",
+    fontWeight: typography.bold,
+    flexShrink: 1,
   },
   scroll: { padding: spacing.lg },
   grid: {
