@@ -1,17 +1,24 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// screens/AdminOverviewScreen.tsx — admin metrics overview (Bucket B mod 1)
+// screens/AdminOverviewScreen.tsx — admin metrics + 9 charts
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Headline counts: users, circles, trips, pending KYC, pending disputes.
-// Scoping: super_admin / admin see global; support (≡ community_admin) is
-// scoped via admin_users.community_id. Trips don't have a community_id
-// column in prod, so trip counts stay global even for support — flagged
-// inline.
+// Top: existing count cards (users / circles / trips).
+// Middle: range toggle (7d / 30d / 90d / all).
+// Bottom: 9 charts driven by useAdminCharts — user growth (line),
+// DAU (bar), circles created (bar), circle-status donut, transaction
+// volume (bar), trip revenue (bar), platform fee (line), dispute pie,
+// KYC funnel.
 //
-// Reachable from AdminHub's Overview card.
+// Scoping: super_admin / admin see global; support is scoped via
+// admin_users.community_id. Trip-side stays global (trips have no
+// community_id column — flagged in the existing metric load).
+//
+// Charts: hand-rolled SVG primitives in components/charts/* — matches
+// the existing sparkline pattern (XnScore, CircleHealth, Honor,
+// CircleVisualizer) rather than pulling in victory-native + Skia.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -31,10 +38,21 @@ import { useIsAdmin } from "../hooks/useIsAdmin";
 import { useAuth } from "../context/AuthContext";
 import AdminListSkeleton from "../components/AdminListSkeleton";
 import AdminErrorState from "../components/AdminErrorState";
+import ChartContainer from "../components/charts/ChartContainer";
+import LineChart from "../components/charts/LineChart";
+import BarChart from "../components/charts/BarChart";
+import DonutChart, { DonutSlice } from "../components/charts/DonutChart";
+import FunnelChart from "../components/charts/FunnelChart";
+import {
+  useAdminCharts,
+  ChartRange,
+} from "../hooks/useAdminCharts";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
 const MUTED = "#6B7280";
+
+const RANGE_OPTIONS: ChartRange[] = ["7d", "30d", "90d", "all"];
 
 interface Metrics {
   totalUsers: number;
@@ -47,6 +65,8 @@ interface Metrics {
   upcomingTrips: number;
   pendingKyc: number;
   scopedToCommunity: boolean;
+  scopedUserIds: string[] | null;
+  scopedCircleIds: string[] | null;
 }
 
 export default function AdminOverviewScreen() {
@@ -57,13 +77,13 @@ export default function AdminOverviewScreen() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [range, setRange] = useState<ChartRange>("30d");
 
   const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     setError(null);
     try {
-      // Resolve role + community for scoping.
       const { data: adminRow } = await supabase
         .from("admin_users")
         .select("role, community_id")
@@ -78,16 +98,24 @@ export default function AdminOverviewScreen() {
         Date.now() - 7 * 24 * 60 * 60 * 1000,
       ).toISOString();
 
-      // Users counts.
       let scopedUserIds: string[] | null = null;
+      let scopedCircleIds: string[] | null = null;
       if (scoped) {
-        const { data: memberships } = await supabase
-          .from("community_memberships")
-          .select("user_id")
-          .eq("community_id", communityId)
-          .eq("status", "active");
+        const [{ data: memberships }, { data: scopedCircles }] = await Promise.all([
+          supabase
+            .from("community_memberships")
+            .select("user_id")
+            .eq("community_id", communityId)
+            .eq("status", "active"),
+          supabase
+            .from("circles")
+            .select("id")
+            .eq("community_id", communityId),
+        ]);
         scopedUserIds = (memberships ?? []).map((r: any) => r.user_id);
+        scopedCircleIds = (scopedCircles ?? []).map((r: any) => r.id);
       }
+
       const usersQ = supabase
         .from("profiles")
         .select("id", { count: "exact", head: true });
@@ -115,7 +143,6 @@ export default function AdminOverviewScreen() {
       if (scopedUserIds) kycQ.in("id", scopedUserIds);
       const { count: pendingKyc } = await kycQ;
 
-      // Circles counts.
       const totalCirclesQ = supabase
         .from("circles")
         .select("id", { count: "exact", head: true });
@@ -129,18 +156,18 @@ export default function AdminOverviewScreen() {
       if (scoped) activeCirclesQ.eq("community_id", communityId);
       const { count: activeCircles } = await activeCirclesQ;
 
-      // Total pot = sum(amount * member_count) across circles. Two-query
-      // approach since postgrest doesn't aggregate without a view.
       const potQ = supabase.from("circles").select("amount, member_count");
       if (scoped) potQ.eq("community_id", communityId);
       const { data: potRows } = await potQ;
       const totalPotCents = (potRows ?? []).reduce(
         (sum: number, r: any) =>
-          sum + Math.round((Number(r.amount) || 0) * (Number(r.member_count) || 0) * 100),
+          sum +
+          Math.round(
+            (Number(r.amount) || 0) * (Number(r.member_count) || 0) * 100,
+          ),
         0,
       );
 
-      // Trips counts — no community_id column; counts stay global.
       const { count: totalTrips } = await supabase
         .from("trips")
         .select("id", { count: "exact", head: true });
@@ -161,6 +188,8 @@ export default function AdminOverviewScreen() {
         upcomingTrips: upcomingTrips ?? 0,
         pendingKyc: pendingKyc ?? 0,
         scopedToCommunity: scoped,
+        scopedUserIds,
+        scopedCircleIds,
       });
     } catch (err) {
       console.warn("[AdminOverview] load failed:", err);
@@ -173,6 +202,15 @@ export default function AdminOverviewScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const chartScope = useMemo(
+    () => ({
+      scopedUserIds: metrics?.scopedUserIds ?? null,
+      scopedCircleIds: metrics?.scopedCircleIds ?? null,
+    }),
+    [metrics?.scopedUserIds, metrics?.scopedCircleIds],
+  );
+  const charts = useAdminCharts(range, chartScope);
 
   if (adminLoading) {
     return (
@@ -188,13 +226,7 @@ export default function AdminOverviewScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
-            <Ionicons name="arrow-back" size={24} color={NAVY} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t("admin.overview.title")}</Text>
-          <View style={styles.headerBtn} />
-        </View>
+        <Header onBack={() => navigation.goBack()} loading={loading} onReload={load} t={t} />
         <AdminErrorState onRetry={load} />
       </SafeAreaView>
     );
@@ -203,13 +235,7 @@ export default function AdminOverviewScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerBtn}>
-            <Ionicons name="arrow-back" size={24} color={NAVY} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t("admin.overview.title")}</Text>
-          <View style={styles.headerBtn} />
-        </View>
+        <Header onBack={() => navigation.goBack()} loading={loading} onReload={load} t={t} />
         <AdminListSkeleton rowCount={5} showChip={false} />
       </SafeAreaView>
     );
@@ -225,11 +251,18 @@ export default function AdminOverviewScreen() {
     );
   }
 
-  const fmtUSD = (cents: number) =>
+  const fmtUSD = (n: number) =>
+    `$${Math.round(n).toLocaleString("en-US")}`;
+  const fmtUSDFromCents = (cents: number) =>
     `$${(cents / 100).toLocaleString("en-US", {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     })}`;
+
+  const refreshAll = () => {
+    load();
+    charts.refetch();
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -239,8 +272,16 @@ export default function AdminOverviewScreen() {
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t("admin.overview.title")}</Text>
-        <TouchableOpacity onPress={load} style={styles.headerBtn} disabled={loading}>
-          <Ionicons name="refresh" size={22} color={loading ? "#CBD5E1" : NAVY} />
+        <TouchableOpacity
+          onPress={refreshAll}
+          style={styles.headerBtn}
+          disabled={loading || charts.loading}
+        >
+          <Ionicons
+            name="refresh"
+            size={22}
+            color={loading || charts.loading ? "#CBD5E1" : NAVY}
+          />
         </TouchableOpacity>
       </View>
 
@@ -266,7 +307,7 @@ export default function AdminOverviewScreen() {
           <Metric label={t("admin.overview.active_circles")} value={metrics?.activeCircles ?? 0} />
           <Metric
             label={t("admin.overview.total_pot")}
-            value={fmtUSD(metrics?.totalPotCents ?? 0)}
+            value={fmtUSDFromCents(metrics?.totalPotCents ?? 0)}
           />
         </Section>
 
@@ -274,8 +315,188 @@ export default function AdminOverviewScreen() {
           <Metric label={t("admin.overview.total_trips")} value={metrics?.totalTrips ?? 0} />
           <Metric label={t("admin.overview.upcoming_trips")} value={metrics?.upcomingTrips ?? 0} />
         </Section>
+
+        {/* Range toggle for charts. */}
+        <View style={styles.rangeRow}>
+          {RANGE_OPTIONS.map((r) => (
+            <TouchableOpacity
+              key={r}
+              onPress={() => setRange(r)}
+              style={[styles.rangePill, range === r && styles.rangePillActive]}
+            >
+              <Text
+                style={[
+                  styles.rangePillText,
+                  range === r && styles.rangePillTextActive,
+                ]}
+              >
+                {t(`admin.overview.charts.time_range_${r}`)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* 9 charts. ChartContainer handles loading/error per card so a
+            slow query doesn't blank the rest. */}
+        <ChartContainer
+          title={t("admin.overview.charts.user_growth")}
+          subtitle={t("admin.overview.total_users") + ": " + (charts.data?.totals.totalUsers ?? 0)}
+          loading={charts.loading && !charts.data}
+          error={charts.error}
+          empty={!charts.loading && !charts.data?.userGrowth.length}
+          onRetry={charts.refetch}
+        >
+          {charts.data ? <LineChart points={charts.data.userGrowth} /> : null}
+        </ChartContainer>
+
+        <ChartContainer
+          title={t("admin.overview.charts.daily_active")}
+          subtitle={`avg ${charts.data?.totals.avgDau ?? 0}/${range}`}
+          loading={charts.loading && !charts.data}
+          error={charts.error}
+          empty={!charts.loading && !charts.data?.dailyActiveUsers.length}
+          onRetry={charts.refetch}
+        >
+          {charts.data ? (
+            <BarChart
+              points={charts.data.dailyActiveUsers}
+              summaryValue={String(charts.data.totals.avgDau)}
+            />
+          ) : null}
+        </ChartContainer>
+
+        <ChartContainer
+          title={t("admin.overview.charts.circles_created")}
+          subtitle={t("admin.overview.total_circles") + ": " + (charts.data?.totals.circlesCreated ?? 0)}
+          loading={charts.loading && !charts.data}
+          error={charts.error}
+          empty={!charts.loading && !charts.data?.circlesCreated.length}
+          onRetry={charts.refetch}
+        >
+          {charts.data ? (
+            <BarChart
+              points={charts.data.circlesCreated}
+              summaryValue={String(charts.data.totals.circlesCreated)}
+            />
+          ) : null}
+        </ChartContainer>
+
+        <ChartContainer
+          title={t("admin.overview.charts.active_vs_total")}
+          loading={charts.loading && !charts.data}
+          error={charts.error}
+          empty={!charts.loading && !charts.data?.circleStatus.length}
+          onRetry={charts.refetch}
+        >
+          {charts.data ? (
+            <DonutChart
+              slices={(charts.data.circleStatus as unknown) as DonutSlice[]}
+              centerValue={String(charts.data.totals.totalCircles)}
+              centerLabel={t("admin.overview.total_circles")}
+            />
+          ) : null}
+        </ChartContainer>
+
+        <ChartContainer
+          title={t("admin.overview.charts.transaction_volume")}
+          subtitle={fmtUSD(charts.data?.totals.transactionVolume ?? 0)}
+          loading={charts.loading && !charts.data}
+          error={charts.error}
+          empty={!charts.loading && !charts.data?.transactionVolume.length}
+          onRetry={charts.refetch}
+        >
+          {charts.data ? (
+            <BarChart
+              points={charts.data.transactionVolume}
+              summaryValue={fmtUSD(charts.data.totals.transactionVolume)}
+            />
+          ) : null}
+        </ChartContainer>
+
+        <ChartContainer
+          title={t("admin.overview.charts.trip_revenue")}
+          subtitle={fmtUSD(charts.data?.totals.tripRevenue ?? 0)}
+          loading={charts.loading && !charts.data}
+          error={charts.error}
+          empty={!charts.loading && !charts.data?.tripRevenue.length}
+          onRetry={charts.refetch}
+        >
+          {charts.data ? (
+            <BarChart
+              points={charts.data.tripRevenue}
+              summaryValue={fmtUSD(charts.data.totals.tripRevenue)}
+            />
+          ) : null}
+        </ChartContainer>
+
+        <ChartContainer
+          title={t("admin.overview.charts.platform_fee")}
+          subtitle={fmtUSD(charts.data?.totals.platformFee ?? 0)}
+          loading={charts.loading && !charts.data}
+          error={charts.error}
+          empty={!charts.loading && !charts.data?.platformFee.length}
+          onRetry={charts.refetch}
+        >
+          {charts.data ? (
+            <LineChart
+              points={charts.data.platformFee}
+              formatValue={(v) => fmtUSD(v)}
+            />
+          ) : null}
+        </ChartContainer>
+
+        <ChartContainer
+          title={t("admin.overview.charts.disputes")}
+          loading={charts.loading && !charts.data}
+          error={charts.error}
+          empty={!charts.loading && !charts.data?.disputes.length}
+          onRetry={charts.refetch}
+        >
+          {charts.data ? (
+            <DonutChart
+              slices={(charts.data.disputes as unknown) as DonutSlice[]}
+              centerValue={String(charts.data.totals.openDisputes)}
+              centerLabel="open"
+            />
+          ) : null}
+        </ChartContainer>
+
+        <ChartContainer
+          title={t("admin.overview.charts.kyc_funnel")}
+          loading={charts.loading && !charts.data}
+          error={charts.error}
+          empty={!charts.loading && !charts.data?.kycFunnel.length}
+          onRetry={charts.refetch}
+          height={170}
+        >
+          {charts.data ? <FunnelChart stages={charts.data.kycFunnel} /> : null}
+        </ChartContainer>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function Header({
+  onBack,
+  loading,
+  onReload,
+  t,
+}: {
+  onBack: () => void;
+  loading: boolean;
+  onReload: () => void;
+  t: (k: string) => string;
+}) {
+  return (
+    <View style={styles.header}>
+      <TouchableOpacity onPress={onBack} style={styles.headerBtn}>
+        <Ionicons name="arrow-back" size={24} color={NAVY} />
+      </TouchableOpacity>
+      <Text style={styles.headerTitle}>{t("admin.overview.title")}</Text>
+      <TouchableOpacity onPress={onReload} style={styles.headerBtn} disabled={loading}>
+        <Ionicons name="refresh" size={22} color={loading ? "#CBD5E1" : NAVY} />
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -310,7 +531,11 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   headerBtn: { width: 40, alignItems: "center", justifyContent: "center" },
-  headerTitle: { fontSize: typography.sectionHeader, fontWeight: typography.bold, color: NAVY },
+  headerTitle: {
+    fontSize: typography.sectionHeader,
+    fontWeight: typography.bold,
+    color: NAVY,
+  },
   scroll: { padding: spacing.lg, gap: spacing.md, paddingBottom: 40 },
   scopedBanner: {
     flexDirection: "row",
@@ -353,6 +578,30 @@ const styles = StyleSheet.create({
   },
   metricLabel: { fontSize: typography.body, color: NAVY, fontWeight: typography.medium },
   metricValue: { fontSize: typography.body, color: NAVY, fontWeight: typography.bold },
+  rangeRow: {
+    flexDirection: "row",
+    gap: 6,
+    paddingVertical: 4,
+  },
+  rangePill: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+  },
+  rangePillActive: {
+    backgroundColor: TEAL,
+    borderColor: TEAL,
+  },
+  rangePillText: {
+    fontSize: 12,
+    color: NAVY,
+    fontWeight: typography.medium,
+  },
+  rangePillTextActive: { color: "#FFFFFF", fontWeight: typography.bold },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   mutedText: { fontSize: typography.body, color: MUTED, textAlign: "center" },
 });

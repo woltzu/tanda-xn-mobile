@@ -2422,7 +2422,22 @@
       "active_circles": "Cercles actifs",
       "total_pot": "Cagnotte totale",
       "total_trips": "Voyages au total",
-      "upcoming_trips": "Voyages à venir"
+      "upcoming_trips": "Voyages à venir",
+      "charts": {
+        "user_growth": "Croissance des utilisateurs",
+        "daily_active": "Utilisateurs actifs quotidiens",
+        "circles_created": "Cercles créés",
+        "active_vs_total": "Actifs vs total",
+        "transaction_volume": "Volume de transactions",
+        "trip_revenue": "Revenus voyages",
+        "platform_fee": "Revenus commission plateforme",
+        "disputes": "Litiges",
+        "kyc_funnel": "Entonnoir de vérification KYC",
+        "time_range_7d": "7 jours",
+        "time_range_30d": "30 jours",
+        "time_range_90d": "90 jours",
+        "time_range_all": "Tout"
+      }
     },
     "users": {
       "title": "Utilisateurs",
