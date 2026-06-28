@@ -2468,6 +2468,8 @@
       "no_participants": "No participants yet.",
       "section_info": "Info",
       "section_participants": "Participants ({{count}})",
+      "section_payments": "Payments ({{count}})",
+      "no_payments": "No payments yet.",
       "destination": "Destination",
       "organizer": "Organizer",
       "status": "Status",
@@ -2551,6 +2553,23 @@
     "status_completed": "Completed",
     "status_pending": "Pending",
     "status_failed": "Failed"
+  },
+  "admin_trip_actions": {
+    "cancel_trip": "Cancel Trip",
+    "cancel_confirm": "Cancel this trip? All eligible payments will be queued for refund.",
+    "cancel_reason_placeholder": "Reason for cancellation (optional)",
+    "cancel_success": "Trip cancelled. Refunds queued for processing.",
+    "cancel_failed": "Failed to cancel trip.",
+    "refund_payment": "Refund",
+    "refund_confirm": "Refund this payment? It will be processed by Stripe on the next refund run.",
+    "refund_reason_placeholder": "Reason for refund (optional)",
+    "refund_success": "Refund queued. Stripe will process it shortly.",
+    "refund_failed": "Failed to queue refund.",
+    "refund_status_pending": "Refund pending",
+    "refund_status_refunded": "Refunded",
+    "refund_status_failed": "Refund failed",
+    "modal_cancel": "Cancel",
+    "modal_confirm": "Confirm"
   },
   "kyc_badge": {
     "none": "KYC: Unverified",

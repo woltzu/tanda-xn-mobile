@@ -2468,6 +2468,8 @@
       "no_participants": "Aucun participant.",
       "section_info": "Informations",
       "section_participants": "Participants ({{count}})",
+      "section_payments": "Paiements ({{count}})",
+      "no_payments": "Aucun paiement pour le moment.",
       "destination": "Destination",
       "organizer": "Organisateur",
       "status": "Statut",
@@ -2551,6 +2553,23 @@
     "status_completed": "Terminé",
     "status_pending": "En attente",
     "status_failed": "Échoué"
+  },
+  "admin_trip_actions": {
+    "cancel_trip": "Annuler le voyage",
+    "cancel_confirm": "Annuler ce voyage ? Tous les paiements éligibles seront mis en file pour remboursement.",
+    "cancel_reason_placeholder": "Motif de l'annulation (facultatif)",
+    "cancel_success": "Voyage annulé. Remboursements mis en file pour traitement.",
+    "cancel_failed": "Échec de l'annulation du voyage.",
+    "refund_payment": "Rembourser",
+    "refund_confirm": "Rembourser ce paiement ? Il sera traité par Stripe lors du prochain traitement.",
+    "refund_reason_placeholder": "Motif du remboursement (facultatif)",
+    "refund_success": "Remboursement mis en file. Stripe le traitera sous peu.",
+    "refund_failed": "Échec de la mise en file du remboursement.",
+    "refund_status_pending": "Remboursement en attente",
+    "refund_status_refunded": "Remboursé",
+    "refund_status_failed": "Échec du remboursement",
+    "modal_cancel": "Annuler",
+    "modal_confirm": "Confirmer"
   },
   "kyc_badge": {
     "none": "KYC : Non vérifié",

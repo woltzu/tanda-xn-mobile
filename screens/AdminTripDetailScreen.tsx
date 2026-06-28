@@ -2,11 +2,14 @@
 // screens/AdminTripDetailScreen.tsx — trip detail (Bucket B mod 4)
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Trip info + participants list. Spec's cancel/refund actions are NOT
-// wired here — there is no cancel_trip or refund_trip RPC in prod
-// (refund_transaction is generic, not trip-shaped). Action buttons
-// surface a "coming soon" toast and the absent RPCs are documented as
-// the follow-up gap.
+// Trip info + participants list + per-payment refunds. The cancel-trip
+// + refund-payment actions are now backed by migration 274
+// (admin_cancel_trip / admin_refund_payment RPCs) and the
+// process-refunds Edge Function which drains the refund queue.
+//
+// Both flows surface a single ReasonModal (text input + Confirm) so the
+// admin's audit log entry includes context. Refunds are per-payment,
+// not per-participant — a participant with two payments gets two rows.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import React, { useCallback, useEffect, useState } from "react";
@@ -19,6 +22,8 @@ import {
   StatusBar,
   TouchableOpacity,
   ActivityIndicator,
+  Modal,
+  TextInput,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -53,7 +58,18 @@ interface Participant {
   full_name: string | null;
 }
 
+interface Payment {
+  id: string;
+  amount: number | null;
+  status: string | null;
+  refund_status: string | null;
+  paid_at: string | null;
+  participant_name: string | null;
+}
+
 type Params = { AdminTripDetail: { tripId: string } };
+
+type ActionKind = "cancel_trip" | "refund_payment";
 
 export default function AdminTripDetailScreen() {
   const navigation = useNavigation<any>();
@@ -64,16 +80,25 @@ export default function AdminTripDetailScreen() {
 
   const [trip, setTrip] = useState<Trip | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [callerRole, setCallerRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Reason-modal state — one modal reused for both cancel and refund.
+  // pendingAction holds the kind + the target id (trip id OR payment id).
+  const [pendingAction, setPendingAction] = useState<
+    { kind: ActionKind; targetId: string } | null
+  >(null);
+  const [reason, setReason] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
     if (!tripId || !me?.id) return;
     setLoading(true);
     setError(null);
     try {
-      const [tripR, callerR, partsR] = await Promise.all([
+      const [tripR, callerR, partsR, paysR] = await Promise.all([
         supabase
           .from("trips")
           .select(
@@ -92,6 +117,19 @@ export default function AdminTripDetailScreen() {
           .select("id, user_id, status, profiles:user_id(full_name)")
           .eq("trip_id", tripId)
           .limit(100),
+        // Pull payments via trip_participants!inner so the eq() filter
+        // pushes into the join — trip_payments has no direct trip_id
+        // column. Refund cols (refund_status etc.) come from migration
+        // 274; until that lands the embed silently returns nulls which
+        // the UI tolerates (eligibility checks treat null as 'none').
+        supabase
+          .from("trip_payments")
+          .select(
+            "id, amount, status, refund_status, paid_at, trip_participants!inner ( trip_id, profiles:user_id(full_name) )",
+          )
+          .eq("trip_participants.trip_id", tripId)
+          .order("paid_at", { ascending: false })
+          .limit(200),
       ]);
       const tr = tripR.data as any;
       setTrip(
@@ -119,6 +157,16 @@ export default function AdminTripDetailScreen() {
           full_name: r.profiles?.full_name ?? null,
         })),
       );
+      setPayments(
+        ((paysR.data ?? []) as any[]).map((r) => ({
+          id: r.id,
+          amount: r.amount,
+          status: r.status,
+          refund_status: r.refund_status ?? "none",
+          paid_at: r.paid_at,
+          participant_name: r.trip_participants?.profiles?.full_name ?? null,
+        })),
+      );
     } catch (err) {
       console.warn("[AdminTripDetail] load failed:", err);
       setError(err instanceof Error ? err.message : String(err));
@@ -132,9 +180,59 @@ export default function AdminTripDetailScreen() {
   }, [load]);
 
   const canAct = callerRole === "super_admin" || callerRole === "admin";
+  const tripCancelled =
+    trip?.status === "cancelled" || trip?.status === "completed";
 
-  const handleComingSoon = () =>
-    showToast(t("admin.trips.action_coming_soon"), "info");
+  const openReasonModal = (kind: ActionKind, targetId: string) => {
+    setPendingAction({ kind, targetId });
+    setReason("");
+  };
+
+  const closeReasonModal = () => {
+    if (submitting) return;
+    setPendingAction(null);
+    setReason("");
+  };
+
+  const submitAction = async () => {
+    if (!pendingAction || submitting) return;
+    setSubmitting(true);
+    try {
+      const trimmedReason = reason.trim() || null;
+      if (pendingAction.kind === "cancel_trip") {
+        const { error: rpcErr } = await supabase.rpc("admin_cancel_trip", {
+          p_trip_id: pendingAction.targetId,
+          p_reason: trimmedReason,
+        });
+        if (rpcErr) throw new Error(rpcErr.message);
+        showToast(t("admin_trip_actions.cancel_success"), "success");
+      } else {
+        const { error: rpcErr } = await supabase.rpc("admin_refund_payment", {
+          p_payment_id: pendingAction.targetId,
+          p_reason: trimmedReason,
+        });
+        if (rpcErr) throw new Error(rpcErr.message);
+        showToast(t("admin_trip_actions.refund_success"), "success");
+      }
+      setPendingAction(null);
+      setReason("");
+      await load();
+    } catch (err) {
+      console.warn("[AdminTripDetail] action failed:", err);
+      const key =
+        pendingAction.kind === "cancel_trip"
+          ? "admin_trip_actions.cancel_failed"
+          : "admin_trip_actions.refund_failed";
+      showToast(t(key), "error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const paymentIsRefundable = (p: Payment) =>
+    (p.status === "succeeded" || p.status === "pending") &&
+    p.refund_status !== "refunded" &&
+    p.refund_status !== "pending";
 
   if (loading) {
     return (
@@ -216,23 +314,113 @@ export default function AdminTripDetailScreen() {
           )}
         </Section>
 
-        {canAct ? (
+        {/* Payments section — one row per trip_payment. Per-row refund
+            button only renders for super_admin/admin AND when the
+            payment is in a refundable state (succeeded/pending + not
+            already refunded/queued). */}
+        <Section
+          title={t("admin.trips.section_payments", { count: payments.length })}
+        >
+          {payments.length === 0 ? (
+            <Text style={styles.emptyText}>{t("admin.trips.no_payments")}</Text>
+          ) : (
+            payments.map((p, i) => (
+              <View
+                key={p.id}
+                style={[styles.payRow, i < payments.length - 1 && styles.subRowBorder]}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.subRowName}>{p.participant_name ?? "—"}</Text>
+                  <Text style={styles.subRowMeta}>
+                    ${Number(p.amount ?? 0).toFixed(2)} · {p.status ?? "—"}
+                    {p.refund_status && p.refund_status !== "none"
+                      ? ` · ${t(`admin_trip_actions.refund_status_${p.refund_status}`)}`
+                      : ""}
+                  </Text>
+                </View>
+                {canAct && paymentIsRefundable(p) ? (
+                  <TouchableOpacity
+                    style={styles.refundBtn}
+                    onPress={() => openReasonModal("refund_payment", p.id)}
+                  >
+                    <Text style={styles.refundBtnText}>
+                      {t("admin_trip_actions.refund_payment")}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ))
+          )}
+        </Section>
+
+        {canAct && !tripCancelled ? (
           <View style={styles.actionsRow}>
-            <TouchableOpacity style={styles.dangerBtn} onPress={handleComingSoon}>
-              <Text style={styles.dangerBtnText}>{t("admin.trips.cancel")}</Text>
-            </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.dangerBtn, styles.dangerBtnAlt]}
-              onPress={handleComingSoon}
+              style={styles.dangerBtn}
+              onPress={() => openReasonModal("cancel_trip", trip.id)}
             >
-              <Text style={styles.dangerBtnText}>{t("admin.trips.refund")}</Text>
+              <Text style={styles.dangerBtnText}>
+                {t("admin_trip_actions.cancel_trip")}
+              </Text>
             </TouchableOpacity>
           </View>
         ) : null}
-        {canAct ? (
-          <Text style={styles.note}>{t("admin.trips.actions_note")}</Text>
-        ) : null}
       </ScrollView>
+
+      <Modal
+        visible={!!pendingAction}
+        transparent
+        animationType="fade"
+        onRequestClose={closeReasonModal}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {pendingAction?.kind === "cancel_trip"
+                ? t("admin_trip_actions.cancel_confirm")
+                : t("admin_trip_actions.refund_confirm")}
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder={
+                pendingAction?.kind === "cancel_trip"
+                  ? t("admin_trip_actions.cancel_reason_placeholder")
+                  : t("admin_trip_actions.refund_reason_placeholder")
+              }
+              placeholderTextColor={MUTED}
+              value={reason}
+              onChangeText={setReason}
+              multiline
+              maxLength={500}
+              editable={!submitting}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={closeReasonModal}
+                disabled={submitting}
+              >
+                <Text style={styles.modalCancelText}>
+                  {t("admin_trip_actions.modal_cancel")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, submitting && { opacity: 0.6 }]}
+                onPress={submitAction}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>
+                    {t("admin_trip_actions.modal_confirm")}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -346,6 +534,64 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontStyle: "italic",
   },
+  payRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: 8,
+  },
+  refundBtn: {
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  refundBtnText: {
+    color: "#92400E",
+    fontSize: typography.label,
+    fontWeight: typography.bold,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    padding: spacing.lg,
+  },
+  modalCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: radius.card,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  modalTitle: { fontSize: typography.body, color: NAVY, fontWeight: typography.bold },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 8,
+    padding: 10,
+    minHeight: 80,
+    fontSize: typography.body,
+    color: NAVY,
+    textAlignVertical: "top",
+  },
+  modalActions: { flexDirection: "row", gap: 8, justifyContent: "flex-end" },
+  modalCancelBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#F3F4F6",
+  },
+  modalCancelText: { color: NAVY, fontWeight: typography.bold },
+  modalConfirmBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: "#DC2626",
+    minWidth: 96,
+    alignItems: "center",
+  },
+  modalConfirmText: { color: "#FFFFFF", fontWeight: typography.bold },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   mutedText: { fontSize: typography.body, color: MUTED, textAlign: "center" },
 });
