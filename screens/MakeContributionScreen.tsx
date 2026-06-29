@@ -1,3 +1,23 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// MakeContributionScreen — member-facing contribution UI.
+//
+// Stage 2 note on Stripe Connect: this screen is invisible to the
+// payment processor in the user-visible sense. Stripe Connect onboarding
+// is an ORGANIZER concern — when a circle creator goes through the
+// StripeConnectScreen flow to enable payouts. Members contributing into
+// a circle never sign up for Stripe; they pay via wallet or via a saved
+// payment method (PaymentSheet handles card / ACH on the platform's
+// own Stripe account, NOT via the organizer's connected account on the
+// contribution path — only the payout side transfers to the connected
+// account).
+//
+// Trust signal: we deliberately keep "Powered by Stripe" copy on the
+// TRIP buyer flow (different screen) because diaspora users benefit
+// from seeing a known processor name. On the circle path, we don't
+// mention Stripe at all — the wallet / "saved card" abstraction is
+// enough.
+// ═══════════════════════════════════════════════════════════════════════════
+
 import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -30,6 +50,7 @@ import { useEventTracker } from "../hooks/useEventTracker";
 import { useCurrency, CURRENCIES } from "../context/CurrencyContext";
 import { CurrencySelector, QuickCurrencyPicker } from "../components/CurrencySelector";
 import { ExchangeRateDisplay, FXRiskWarning } from "../components/ExchangeRateDisplay";
+import TestModeBadge from "../components/TestModeBadge";
 
 type MakeContributionNavigationProp = StackNavigationProp<RootStackParamList>;
 type MakeContributionRouteProp = RouteProp<RootStackParamList, "MakeContribution">;
@@ -747,6 +768,11 @@ export default function MakeContributionScreen() {
 
         {/* Content */}
         <View style={styles.content}>
+          {/* TEST MODE badge — renders null in real prod builds with
+              prod Stripe keys. Sits at the top of content so any tester
+              sees it before they tap "Pay". */}
+          <TestModeBadge />
+
           {/* Amount Card */}
           <View style={styles.amountCard}>
             <Text style={styles.amountLabel}>{t("make_contribution.amount_label")}</Text>
