@@ -102,23 +102,31 @@ Deno.serve(async (req) => {
     external_reference_id?: string | null;
     external_reference_type?: string | null;
     metadata?: Record<string, unknown> | null;
-  }) => {
-    const { error: ledgerErr } = await supabase.from("ledger_events").insert({
-      stripe_event_id: event.id,
-      stripe_object_id: row.stripe_object_id,
-      event_type: row.event_type,
-      amount_cents: row.amount_cents,
-      currency: row.currency ?? "USD",
-      user_id: row.user_id ?? null,
-      recipient_user_id: row.recipient_user_id ?? null,
-      circle_id: row.circle_id ?? null,
-      trip_id: row.trip_id ?? null,
-      cycle_id: row.cycle_id ?? null,
-      external_reference_id: row.external_reference_id ?? null,
-      external_reference_type: row.external_reference_type ?? null,
-      raw_payload: event as unknown,
-      metadata: row.metadata ?? null,
-    });
+  }): Promise<string | null> => {
+    // Returns the inserted ledger_events.id on success, or null on dup /
+    // failure (so callers that need to link FKs can short-circuit cleanly).
+    // On dup we re-query to surface the existing row's id — Stripe retries
+    // still produce a usable FK target for the circle_contributions upsert.
+    const { data: inserted, error: ledgerErr } = await supabase
+      .from("ledger_events")
+      .insert({
+        stripe_event_id: event.id,
+        stripe_object_id: row.stripe_object_id,
+        event_type: row.event_type,
+        amount_cents: row.amount_cents,
+        currency: row.currency ?? "USD",
+        user_id: row.user_id ?? null,
+        recipient_user_id: row.recipient_user_id ?? null,
+        circle_id: row.circle_id ?? null,
+        trip_id: row.trip_id ?? null,
+        cycle_id: row.cycle_id ?? null,
+        external_reference_id: row.external_reference_id ?? null,
+        external_reference_type: row.external_reference_type ?? null,
+        raw_payload: event as unknown,
+        metadata: row.metadata ?? null,
+      })
+      .select("id")
+      .single();
     if (ledgerErr) {
       const isDup =
         ledgerErr.code === "23505" ||
@@ -127,9 +135,14 @@ Deno.serve(async (req) => {
         console.log(
           "[stripe-webhook] ledger_events duplicate for event",
           event.id,
-          "— no-op"
+          "— resolving existing row"
         );
-        return;
+        const { data: existing } = await supabase
+          .from("ledger_events")
+          .select("id")
+          .eq("stripe_event_id", event.id)
+          .maybeSingle();
+        return existing?.id ?? null;
       }
       console.error(
         "[stripe-webhook] ledger_events insert failed:",
@@ -139,7 +152,9 @@ Deno.serve(async (req) => {
       // we want Stripe to retry so reconciliation stays whole. The retry
       // will hit the unique constraint above and become a no-op.
       processingError = processingError ?? `ledger write failed: ${ledgerErr.message}`;
+      return null;
     }
+    return inserted?.id ?? null;
   };
 
   // Helper to coerce a Stripe metadata UUID-ish string to a UUID or null.
@@ -391,12 +406,21 @@ Deno.serve(async (req) => {
     if (event.type === "payment_intent.succeeded") {
       const meta = pi.metadata ?? {};
       let externalReferenceType: string | null = null;
+      let externalReferenceId: string | null = null;
       if (typeof meta.type === "string" && meta.type.startsWith("trip_")) {
         externalReferenceType = "trip_participant";
+        externalReferenceId = maybeUuid(meta.trip_participant_id);
       } else if (meta.type === "goal_deposit") {
         externalReferenceType = "goal";
+        externalReferenceId = maybeUuid(meta.goal_id);
+      } else if (meta.type === "circle_contribution") {
+        // Stage 2 Bucket A (migration 277) — pending_intent_id is stamped
+        // on PI metadata at create-circle-contribution-intent time so the
+        // ledger row can carry the FK forward to circle_contributions.
+        externalReferenceType = "pending_intent";
+        externalReferenceId = maybeUuid(meta.pending_intent_id);
       }
-      await writeLedgerEvent({
+      const ledgerEventId = await writeLedgerEvent({
         stripe_object_id: pi.id,
         event_type: "charge.succeeded",
         amount_cents: pi.amount_received ?? pi.amount ?? 0,
@@ -405,11 +429,123 @@ Deno.serve(async (req) => {
         trip_id: maybeUuid(meta.trip_id),
         circle_id: maybeUuid(meta.circle_id),
         cycle_id: maybeUuid(meta.cycle_id),
-        external_reference_id:
-          maybeUuid(meta.trip_participant_id) ?? maybeUuid(meta.goal_id),
+        external_reference_id: externalReferenceId,
         external_reference_type: externalReferenceType,
         metadata: meta,
       });
+
+      // ── Circle-contribution upsert (Stage 2 Bucket A) ──────────────────
+      // The wallet payment path writes circle_contributions directly via
+      // useWallet.makeContribution. The Stripe card path was previously
+      // a mock (StripeConnectEngine._createStripePaymentIntent returned
+      // fake PI ids and never produced a real DB row). This branch fills
+      // that gap: when a real circle_contribution PI succeeds, we either
+      // mark the matching pending row as paid OR insert a fresh one — and
+      // either way link it to the ledger event + pending intent.
+      //
+      // Matching strategy: look for an unpaid row on (circle_id, user_id,
+      // cycle_number). Cycle_number falls back to 1 if metadata is missing
+      // (rare — the EF stamps it, but pre-A.3 PIs without it default to
+      // cycle 1 which is the most common case). Status='paid' rows are
+      // never updated — they represent a different cycle's payment.
+      if (meta.type === "circle_contribution") {
+        const circleIdMeta = maybeUuid(meta.circle_id);
+        const payerUserId = maybeUuid(meta.user_id);
+        const pendingIntentIdMeta = maybeUuid(meta.pending_intent_id);
+        const cycleNumberRaw = typeof meta.cycle_number === "string" ? meta.cycle_number : "";
+        const cycleNumber =
+          /^\d+$/.test(cycleNumberRaw) ? parseInt(cycleNumberRaw, 10) : 1;
+        const amountDollars =
+          ((pi.amount_received ?? pi.amount ?? 0) as number) / 100;
+        const currencyUpper = (pi.currency ?? "usd").toUpperCase();
+        const paidAt = new Date().toISOString();
+
+        if (!circleIdMeta || !payerUserId) {
+          console.warn(
+            "[stripe-webhook] circle_contribution missing circle_id/user_id in metadata for",
+            pi.id,
+            "— skipping upsert"
+          );
+        } else {
+          // Try to update an existing unpaid row first. If zero rows match,
+          // insert a fresh one. We don't use Postgres ON CONFLICT here
+          // because there's no unique key on (circle_id, user_id,
+          // cycle_number) in the live schema — the contribution table
+          // permits multiple rows per (member, cycle) intentionally to
+          // accommodate the partial-pool / catch-up flow.
+          const { data: updated, error: ccUpdErr } = await supabase
+            .from("circle_contributions")
+            .update({
+              status: "paid",
+              paid_date: paidAt,
+              payment_method: "stripe",
+              pending_intent_id: pendingIntentIdMeta,
+              ledger_event_id: ledgerEventId,
+              amount: amountDollars,
+              currency: currencyUpper,
+            })
+            .eq("circle_id", circleIdMeta)
+            .eq("user_id", payerUserId)
+            .eq("cycle_number", cycleNumber)
+            .neq("status", "paid")
+            .select("id");
+
+          if (ccUpdErr) {
+            console.error(
+              "[stripe-webhook] circle_contributions update failed:",
+              ccUpdErr.message
+            );
+            processingError = processingError ??
+              `circle_contributions update failed: ${ccUpdErr.message}`;
+          } else if (!updated || updated.length === 0) {
+            // No existing pending row — this happens when the user pays
+            // ahead of a contribution being scheduled. Insert a fresh
+            // 'paid' row. due_date is NOT NULL on the table; use the
+            // payment timestamp as a sensible default (the row reads as
+            // "due today, paid today" which doesn't pollute late-stats).
+            const { error: ccInsErr } = await supabase
+              .from("circle_contributions")
+              .insert({
+                circle_id: circleIdMeta,
+                user_id: payerUserId,
+                cycle_number: cycleNumber,
+                amount: amountDollars,
+                currency: currencyUpper,
+                due_date: paidAt.slice(0, 10),
+                paid_date: paidAt,
+                status: "paid",
+                payment_method: "stripe",
+                pending_intent_id: pendingIntentIdMeta,
+                ledger_event_id: ledgerEventId,
+              });
+            if (ccInsErr) {
+              console.error(
+                "[stripe-webhook] circle_contributions insert failed:",
+                ccInsErr.message
+              );
+              processingError = processingError ??
+                `circle_contributions insert failed: ${ccInsErr.message}`;
+            } else {
+              console.log(
+                "[stripe-webhook] circle_contributions inserted for PI",
+                pi.id,
+                "→ circle",
+                circleIdMeta,
+                "cycle",
+                cycleNumber
+              );
+            }
+          } else {
+            console.log(
+              "[stripe-webhook] circle_contributions marked paid for PI",
+              pi.id,
+              "→",
+              updated.length,
+              "row(s)"
+            );
+          }
+        }
+      }
     }
   } else if (event.type === "account.updated") {
     // ── Stage 1: Connect onboarding status updates ──

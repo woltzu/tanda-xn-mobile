@@ -457,17 +457,43 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
     paymentMethodId?: string,
   ) => {
     if (!user) throw new Error('User not authenticated');
+    // Stage 2 Bucket A — route through the real create-circle-contribution-intent
+    // EF instead of StripeConnectEngine._createStripePaymentIntent (which is a
+    // mock returning `pi_test_*`). The EF:
+    //   - validates the caller is an active circle member
+    //   - writes a pending_intents row before calling Stripe (forensic trail)
+    //   - resolves cycle_id from circle_cycles when cycle_number is provided
+    //   - returns a real client_secret for PaymentSheet
+    //
+    // The legacy `cycleId` string param from the screen is the "cycle-N"
+    // synthetic id; we parse the integer back out so the EF can resolve a
+    // real circle_cycles UUID. Empty / malformed values are passed as null.
+    let cycleNumber: number | null = null;
+    if (typeof cycleId === 'string') {
+      const m = cycleId.match(/(\d+)/);
+      if (m) {
+        const parsed = parseInt(m[1], 10);
+        if (Number.isFinite(parsed) && parsed > 0) cycleNumber = parsed;
+      }
+    }
     try {
-      const pi = await StripeConnectEngine.createPaymentIntent({
-        memberId: user.id,
-        amountCents,
-        currency,
-        purpose: 'contribution',
-        circleId,
-        cycleId,
-        paymentMethodId,
+      const { data, error } = await supabase.functions.invoke('create-circle-contribution-intent', {
+        body: {
+          circle_id: circleId,
+          amount_cents: amountCents,
+          currency,
+          cycle_number: cycleNumber,
+          payment_method_id: paymentMethodId ?? null,
+        },
       });
-      return { clientSecret: pi.clientSecret!, paymentIntentId: pi.stripePaymentIntentId };
+      if (error) throw error;
+      if (!data?.clientSecret) {
+        throw new Error('Edge function did not return a clientSecret');
+      }
+      return {
+        clientSecret: data.clientSecret as string,
+        paymentIntentId: data.paymentIntentId as string,
+      };
     } catch (err: any) {
       setPaymentError(err.message);
       throw err;

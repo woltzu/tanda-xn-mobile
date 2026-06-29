@@ -2638,6 +2638,16 @@
     "net": "Net",
     "no_data": "Aucune donnée de réconciliation disponible."
   },
+  "circle_contribution": {
+    "title": "Faire une cotisation",
+    "amount_label": "Montant de la cotisation",
+    "pay_button": "Payer maintenant",
+    "processing": "Traitement en cours...",
+    "success": "Votre cotisation a été enregistrée !",
+    "failed": "Le paiement a échoué. Veuillez réessayer.",
+    "circle_name": "Cercle : {{name}}",
+    "cycle": "Cycle {{number}}"
+  },
   "admin_trip_actions": {
     "cancel_trip": "Annuler le voyage",
     "cancel_confirm": "Annuler ce voyage ? Tous les paiements éligibles seront mis en file pour remboursement.",

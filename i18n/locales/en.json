@@ -2638,6 +2638,16 @@
     "net": "Net",
     "no_data": "No reconciliation data available."
   },
+  "circle_contribution": {
+    "title": "Make a contribution",
+    "amount_label": "Contribution amount",
+    "pay_button": "Pay now",
+    "processing": "Processing...",
+    "success": "Your contribution has been recorded!",
+    "failed": "Payment failed. Please try again.",
+    "circle_name": "Circle: {{name}}",
+    "cycle": "Cycle {{number}}"
+  },
   "admin_trip_actions": {
     "cancel_trip": "Cancel Trip",
     "cancel_confirm": "Cancel this trip? All eligible payments will be queued for refund.",
