@@ -2380,6 +2380,10 @@
     "start_cta_body": "Lancez la vérification d'identité Persona pour débloquer les actions monétaires.",
     "start_cta_label": "Démarrer la vérification"
   },
+  "adoption": {
+    "banner_title": "Gratuit pendant votre période d'adoption",
+    "banner_body": "Les cercles premium que vous créez sont gratuits jusqu'à ce que vous terminiez {{cycleTarget}} cycle(s) et atteigniez {{dayTarget}} jours sur TandaXn. Actuellement : {{cycles}}/{{cycleTarget}} cycles, {{days}}/{{dayTarget}} jours. Des frais de plateforme de 2 % s'appliquent ensuite."
+  },
   "admin": {
     "title": "Espace admin",
     "not_authorized": "Vous n'avez pas accès à l'espace admin.",

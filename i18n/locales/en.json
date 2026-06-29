@@ -2380,6 +2380,10 @@
     "start_cta_body": "Begin the Persona-powered ID check to unlock money actions.",
     "start_cta_label": "Start verification"
   },
+  "adoption": {
+    "banner_title": "Free during your adoption period",
+    "banner_body": "Premium circles you create are free until you complete {{cycleTarget}} cycle(s) and reach {{dayTarget}} days on TandaXn. Right now: {{cycles}}/{{cycleTarget}} cycles, {{days}}/{{dayTarget}} days. A 2% platform fee starts after that."
+  },
   "admin": {
     "title": "Admin Hub",
     "not_authorized": "You don't have admin access.",

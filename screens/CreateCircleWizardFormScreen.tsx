@@ -50,6 +50,7 @@ import { RootStackParamList } from "../App";
 import { useAuth } from "../context/AuthContext";
 import { useExposureCap } from "../hooks/useExposureCap";
 import { useFormDraft } from "../hooks/useFormDraft";
+import { useAdoptionStatus, isPremiumCircleType } from "../hooks/useAdoptionStatus";
 import {
   CIRCLE_DRAFT_KEY,
   type CircleDraft,
@@ -128,6 +129,15 @@ export default function CreateCircleWizardFormScreen() {
   const { draft, saveDraft } = useFormDraft<CircleDraft>(CIRCLE_DRAFT_KEY, {
     circleType,
   });
+
+  // Bucket 10 — adoption gating. The fee on premium circles is conditional
+  // server-side (apply_adoption_conditional_fee trigger). We pull the
+  // status here so the banner can render the user's real progress toward
+  // adoption — no second fetch needed.
+  const { status: adoptionStatus } = useAdoptionStatus();
+  const isPremium = isPremiumCircleType(circleType);
+  const showAdoptionBanner =
+    isPremium && adoptionStatus !== null && !adoptionStatus.isAdopted;
 
   // Bucket C — first-visit explainer. One-shot modal that explains what
   // the Advanced wizard adds over Express. Gated by AsyncStorage so it
@@ -389,6 +399,30 @@ export default function CreateCircleWizardFormScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {showAdoptionBanner && adoptionStatus ? (
+            <View style={styles.adoptionBanner}>
+              <Ionicons
+                name="gift-outline"
+                size={20}
+                color="#0F766E"
+                style={{ marginRight: 8 }}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.adoptionBannerTitle}>
+                  {t("adoption.banner_title")}
+                </Text>
+                <Text style={styles.adoptionBannerBody}>
+                  {t("adoption.banner_body", {
+                    cycles: adoptionStatus.cyclesCompleted,
+                    cycleTarget: adoptionStatus.thresholdCycles,
+                    days: adoptionStatus.accountAgeDays,
+                    dayTarget: adoptionStatus.thresholdDays,
+                  })}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
           {/* ── Section: Basics ──────────────────────────────────────── */}
           <Text style={styles.sectionTitle}>
             {t("create_circle_wizard.section_basics")}
@@ -830,6 +864,27 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   scrollContent: { padding: 20, paddingBottom: 140 },
+  adoptionBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#ECFDF5",
+    borderColor: "#A7F3D0",
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  adoptionBannerTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#065F46",
+    marginBottom: 2,
+  },
+  adoptionBannerBody: {
+    fontSize: 12,
+    color: "#0F766E",
+    lineHeight: 16,
+  },
   sectionTitle: {
     fontSize: 12,
     fontWeight: "700",
