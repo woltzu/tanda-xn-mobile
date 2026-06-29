@@ -130,7 +130,33 @@ Deno.serve(async (req) => {
 
   const serviceClient = createClient(supabaseUrl, serviceRoleKey);
 
-  // ─── 3. Verify caller is an active member of the circle ──────────────
+  // ─── 3. Load the circle to read fee config ───────────────────────────
+  // Stage 2 Bucket C — premium circles (is_premium=true) charge a
+  // platform fee on top of the contribution amount. Ordinary circles
+  // stay free (is_premium=false → platform_fee_bps=0). We trust the
+  // CHECK in migration 279 to keep platform_fee_bps in [0,1000].
+  const { data: circleRow, error: circleErr } = await serviceClient
+    .from("circles")
+    .select("is_premium, platform_fee_bps")
+    .eq("id", circleId)
+    .maybeSingle();
+  if (circleErr || !circleRow) {
+    return jsonResponse(
+      { error: "Circle not found", detail: circleErr?.message },
+      404,
+    );
+  }
+  const platformFeeBps = circleRow.is_premium
+    ? Math.max(0, Number(circleRow.platform_fee_bps) || 0)
+    : 0;
+  const platformFeeCents = Math.round(
+    ((amountCents as number) * platformFeeBps) / 10000,
+  );
+  // Fee is on TOP of the contribution: the member pays amount + fee,
+  // the circle gets full amount, the platform retains the fee.
+  const chargeAmountCents = (amountCents as number) + platformFeeCents;
+
+  // ─── 4. Verify caller is an active member of the circle ──────────────
   // Two layers of defense: anon callers can't reach this EF (JWT-gated
   // above), and this check stops a logged-in user from contributing to a
   // circle they don't belong to.
@@ -194,12 +220,20 @@ Deno.serve(async (req) => {
       circle_id: circleId,
       cycle_id: cycleId,
       intent_type: "charge",
-      amount_cents: amountCents as number,
+      // amount_cents on the pending row mirrors the actual Stripe charge
+      // (contribution + platform fee) so reconciliation matches the
+      // ledger row 1:1. Contribution amount + fee breakdown live in
+      // metadata for downstream attribution.
+      amount_cents: chargeAmountCents,
       currency: currency.toUpperCase(),
       metadata: {
         purpose: "contribution",
         cycle_number: cycleNumber,
         payment_method_id: paymentMethodId,
+        contribution_cents: amountCents as number,
+        platform_fee_cents: platformFeeCents,
+        platform_fee_bps: platformFeeBps,
+        is_premium: !!circleRow.is_premium,
       },
     })
     .select("id")
@@ -216,6 +250,9 @@ Deno.serve(async (req) => {
   }
 
   // ─── 6. Create the PaymentIntent on Stripe ────────────────────────────
+  // Charge = contribution + platform fee. The fee is on top of the
+  // contribution per doc 35 (member pays both; circle gets full
+  // contribution; platform retains fee).
   const idempotencyKey = crypto.randomUUID();
   const metadata: Record<string, string> = {
     user_id: user.id,
@@ -225,13 +262,16 @@ Deno.serve(async (req) => {
     cycle_number: cycleNumber !== null ? String(cycleNumber) : "",
     pending_intent_id: pending.id,
     client_reference_id: clientReferenceId,
+    contribution_cents: String(amountCents as number),
+    platform_fee_cents: String(platformFeeCents),
+    platform_fee_bps: String(platformFeeBps),
   };
   const description = `Circle contribution ${circleId}${
     cycleNumber !== null ? ` cycle ${cycleNumber}` : ""
-  }`;
+  }${platformFeeCents > 0 ? ` (+${platformFeeBps} bps fee)` : ""}`;
 
   const piParams: Stripe.PaymentIntentCreateParams = {
-    amount: amountCents as number,
+    amount: chargeAmountCents,
     currency,
     metadata,
     description,
@@ -263,7 +303,11 @@ Deno.serve(async (req) => {
     .insert({
       stripe_payment_intent_id: intent.id,
       member_id: user.id,
-      amount_cents: amountCents as number,
+      // amount_cents on stripe_payment_intents is the actual Stripe
+      // charge (contribution + platform fee). Keeps Stripe-side and
+      // DB-side amounts consistent — admin views can compare PI amount
+      // to ledger amount_cents without arithmetic.
+      amount_cents: chargeAmountCents,
       currency,
       status: intent.status,
       purpose: "contribution",
@@ -297,7 +341,13 @@ Deno.serve(async (req) => {
     clientSecret: intent.client_secret,
     paymentIntentId: intent.id,
     pendingIntentId: pending.id,
-    amount: amountCents as number,
+    // contribution_cents: amount that lands on the circle.
+    // platform_fee_cents: what TandaXn retains (0 for ordinary circles).
+    // charge_cents: what Stripe actually bills the member.
+    contribution_cents: amountCents as number,
+    platform_fee_cents: platformFeeCents,
+    platform_fee_bps: platformFeeBps,
+    charge_cents: chargeAmountCents,
     currency,
   });
 });

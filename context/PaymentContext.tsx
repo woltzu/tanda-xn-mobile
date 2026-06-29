@@ -94,7 +94,14 @@ export type PaymentContextType = {
     circleId: string,
     cycleId?: string,
     paymentMethodId?: string,
-  ) => Promise<{ clientSecret: string; paymentIntentId: string }>;
+  ) => Promise<{
+    clientSecret: string;
+    paymentIntentId: string;
+    contributionCents: number;
+    platformFeeCents: number;
+    platformFeeBps: number;
+    chargeCents: number;
+  }>;
   createWithdrawal: (
     amountCents: number,
     currency: string,
@@ -493,6 +500,13 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
       return {
         clientSecret: data.clientSecret as string,
         paymentIntentId: data.paymentIntentId as string,
+        // Stage 2 Bucket C — fee breakdown from the EF response. The
+        // screen uses these to render the "Processing fee — covered by
+        // TandaXn" line and the optional Platform fee row.
+        contributionCents: Number(data.contribution_cents) || amountCents,
+        platformFeeCents: Number(data.platform_fee_cents) || 0,
+        platformFeeBps: Number(data.platform_fee_bps) || 0,
+        chargeCents: Number(data.charge_cents) || amountCents,
       };
     } catch (err: any) {
       setPaymentError(err.message);

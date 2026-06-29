@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
 // Bucket D — legacy useXnScore.processContribution removed. The real
 // backend now credits the score from a Postgres trigger on the
 // contributions table (migration 020 → tr_contribution_activity →
@@ -121,6 +122,13 @@ export default function MakeContributionScreen() {
   const [paymentCurrency, setPaymentCurrency] = useState<string>(primaryCurrency);
   const [showCurrencyOptions, setShowCurrencyOptions] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  // Stage 2 Bucket C — circle fee config loaded from the DB once on
+  // mount. Ordinary circles default to is_premium=false / fee=0 so the
+  // initial render of premium-only UI is empty until the row arrives.
+  const [circleFee, setCircleFee] = useState<{
+    isPremium: boolean;
+    platformFeeBps: number;
+  }>({ isPremium: false, platformFeeBps: 0 });
 
   // Has the user manually changed the payment method this session?
   // If so, the auto-selector below stops overriding their choice when
@@ -260,6 +268,31 @@ export default function MakeContributionScreen() {
     return getExchangeRate(paymentCurrency, circleCurrency);
   }, [paymentCurrency, circleCurrency, isCrossBorder]);
 
+  // Stage 2 Bucket C — fetch the circle's fee config so the summary
+  // card can show the platform-fee line BEFORE the user taps Confirm.
+  // Server-side recomputes from the same circles columns on PI create,
+  // so this client read is purely cosmetic. Fire-and-forget; silent
+  // fallback to "no premium fee" if the row can't be read.
+  useEffect(() => {
+    if (!circleId) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("circles")
+        .select("is_premium, platform_fee_bps")
+        .eq("id", circleId)
+        .maybeSingle();
+      if (cancelled || !data) return;
+      setCircleFee({
+        isPremium: !!data.is_premium,
+        platformFeeBps: Number(data.platform_fee_bps) || 0,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [circleId]);
+
   // C.1 — Auto-select the best payment method on mount and whenever
   // the wallet's covered-status changes (e.g. user picked a smaller
   // partial chip). Manual user picks win — `userPickedMethodRef`
@@ -390,6 +423,30 @@ export default function MakeContributionScreen() {
     if (!isCrossBorder) return effectiveCircleAmount;
     return convert(effectiveCircleAmount, circleCurrency, paymentCurrency);
   }, [effectiveCircleAmount, circleCurrency, paymentCurrency, isCrossBorder]);
+
+  // Stage 2 Bucket C — platform fee (on top of paymentAmount when the
+  // circle is premium). Computed client-side from circleFee state so the
+  // summary card can show the breakdown before the user confirms.
+  // Server recomputes from circles row on PI creation — this is purely
+  // for display.
+  const platformFeeAmount = useMemo(() => {
+    if (!circleFee.isPremium || circleFee.platformFeeBps <= 0) return 0;
+    return Math.round((paymentAmount * circleFee.platformFeeBps) / 100) / 100;
+  }, [paymentAmount, circleFee.isPremium, circleFee.platformFeeBps]);
+
+  // Stage 2 Bucket C — Stripe processing-fee ESTIMATE (2.9% + $0.30 of
+  // the total charge). Shown on the summary as "covered by TandaXn"
+  // because the platform absorbs until $200K GTV (doc 35). Real fee
+  // comes from balance_transaction on the webhook; this is just the
+  // pre-charge display so users see what TandaXn covers on their
+  // behalf. The "+ 0.30" applies once per charge regardless of
+  // payment currency — we treat it as a flat 0.30 of the payment
+  // currency for display simplicity.
+  const totalChargeAmount = paymentAmount + platformFeeAmount;
+  const estimatedStripeFee = useMemo(() => {
+    if (totalChargeAmount <= 0) return 0;
+    return Math.round((totalChargeAmount * 0.029 + 0.30) * 100) / 100;
+  }, [totalChargeAmount]);
 
   // Get wallet balance for selected currency
   const walletBalance = getCurrencyBalance(paymentCurrency);
@@ -966,10 +1023,38 @@ export default function MakeContributionScreen() {
               </Text>
             </View>
 
+            {/* Platform fee row (Stage 2 Bucket C) — only rendered when
+                the circle is premium and a fee is set. Ordinary circles
+                stay free (no row). Amount is computed client-side using
+                the circle's platform_fee_bps so the user sees what
+                they'll pay BEFORE confirming. Source-of-truth still
+                lives server-side; the EF recomputes from the DB. */}
+            {platformFeeAmount > 0 ? (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>
+                  {t("fee.platform_fee", {
+                    amount: `${currencyInfo?.symbol}${formatCurrency(platformFeeAmount, paymentCurrency)}`,
+                  })}
+                </Text>
+                <Text style={styles.summaryValue}>
+                  {currencyInfo?.symbol}{formatCurrency(platformFeeAmount, paymentCurrency)}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* Processing fee (Stripe) — estimated at 2.9% + $0.30 of the
+                charge, shown ALWAYS even when absorbed by the platform.
+                "Covered by TandaXn" copy stays through the $200K GTV cap
+                per doc 35; the line item remains familiar when we later
+                stop absorbing — no surprise new fee appears. */}
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>{t("make_contribution.summary_processing_fee")}</Text>
+              <Text style={styles.summaryLabel}>
+                {t("fee.processing_fee_covered", {
+                  amount: `${currencyInfo?.symbol}${formatCurrency(estimatedStripeFee, paymentCurrency)}`,
+                })}
+              </Text>
               <Text style={[styles.summaryValue, { color: "#00C6AE" }]}>
-                {currencyInfo?.symbol}0.00
+                {currencyInfo?.symbol}{formatCurrency(estimatedStripeFee, paymentCurrency)}
               </Text>
             </View>
 
@@ -978,7 +1063,7 @@ export default function MakeContributionScreen() {
             <View style={styles.summaryRow}>
               <Text style={styles.totalLabel}>{t("make_contribution.summary_total")}</Text>
               <Text style={styles.totalValue}>
-                {currencyInfo?.symbol}{formatCurrency(paymentAmount, paymentCurrency)} {paymentCurrency}
+                {currencyInfo?.symbol}{formatCurrency(totalChargeAmount, paymentCurrency)} {paymentCurrency}
               </Text>
             </View>
           </View>

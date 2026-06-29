@@ -101,16 +101,24 @@ Deno.serve(async (req) => {
     cycle_id?: string | null;
     external_reference_id?: string | null;
     external_reference_type?: string | null;
+    stripe_fee_cents?: number;
+    stripe_event_id_override?: string;
     metadata?: Record<string, unknown> | null;
   }): Promise<string | null> => {
     // Returns the inserted ledger_events.id on success, or null on dup /
     // failure (so callers that need to link FKs can short-circuit cleanly).
     // On dup we re-query to surface the existing row's id — Stripe retries
     // still produce a usable FK target for the circle_contributions upsert.
+    // stripe_event_id is UNIQUE on ledger_events. Most rows use the
+    // delivered event.id; the platform-fee sidecar row (Bucket C) needs
+    // a synthetic id derived from event.id so a single payment_intent
+    // .succeeded event can produce TWO ledger rows (charge.succeeded +
+    // platform_fee.charged) without colliding on UNIQUE.
+    const stripeEventId = row.stripe_event_id_override ?? event.id;
     const { data: inserted, error: ledgerErr } = await supabase
       .from("ledger_events")
       .insert({
-        stripe_event_id: event.id,
+        stripe_event_id: stripeEventId,
         stripe_object_id: row.stripe_object_id,
         event_type: row.event_type,
         amount_cents: row.amount_cents,
@@ -122,6 +130,7 @@ Deno.serve(async (req) => {
         cycle_id: row.cycle_id ?? null,
         external_reference_id: row.external_reference_id ?? null,
         external_reference_type: row.external_reference_type ?? null,
+        stripe_fee_cents: row.stripe_fee_cents ?? 0,
         raw_payload: event as unknown,
         metadata: row.metadata ?? null,
       })
@@ -134,13 +143,13 @@ Deno.serve(async (req) => {
       if (isDup) {
         console.log(
           "[stripe-webhook] ledger_events duplicate for event",
-          event.id,
+          stripeEventId,
           "— resolving existing row"
         );
         const { data: existing } = await supabase
           .from("ledger_events")
           .select("id")
-          .eq("stripe_event_id", event.id)
+          .eq("stripe_event_id", stripeEventId)
           .maybeSingle();
         return existing?.id ?? null;
       }
@@ -405,6 +414,40 @@ Deno.serve(async (req) => {
     // partial captures or amount-changed flows still reconcile cleanly.
     if (event.type === "payment_intent.succeeded") {
       const meta = pi.metadata ?? {};
+
+      // ── Stripe fee retrieval (Bucket C / migration 279) ──
+      // The event payload doesn't include the balance_transaction; we
+      // retrieve the PI with expand=['latest_charge.balance_transaction']
+      // to get the actual Stripe fee in cents. One extra API call per
+      // successful charge — acceptable. If the retrieve fails (network
+      // hiccup, Stripe outage), we fall back to stripe_fee_cents=0 and
+      // a future cron can backfill.
+      let stripeFeeCents = 0;
+      try {
+        const expanded = await stripe.paymentIntents.retrieve(pi.id, {
+          expand: ["latest_charge.balance_transaction"],
+        });
+        const latestCharge = expanded.latest_charge;
+        if (
+          latestCharge &&
+          typeof latestCharge === "object" &&
+          "balance_transaction" in latestCharge
+        ) {
+          const bt = (latestCharge as Stripe.Charge).balance_transaction;
+          if (bt && typeof bt === "object" && "fee" in bt) {
+            stripeFeeCents = (bt as Stripe.BalanceTransaction).fee ?? 0;
+          }
+        }
+      } catch (err) {
+        console.warn(
+          "[stripe-webhook] balance_transaction retrieve failed for",
+          pi.id,
+          ":",
+          err instanceof Error ? err.message : String(err),
+          "— ledger row gets stripe_fee_cents=0 (backfill later)"
+        );
+      }
+
       let externalReferenceType: string | null = null;
       let externalReferenceId: string | null = null;
       if (typeof meta.type === "string" && meta.type.startsWith("trip_")) {
@@ -431,8 +474,43 @@ Deno.serve(async (req) => {
         cycle_id: maybeUuid(meta.cycle_id),
         external_reference_id: externalReferenceId,
         external_reference_type: externalReferenceType,
+        stripe_fee_cents: stripeFeeCents,
         metadata: meta,
       });
+
+      // ── Platform fee sidecar (Bucket C) ──
+      // When a circle_contribution PI carries platform_fee_cents > 0 in
+      // metadata, write a SECOND ledger row 'platform_fee.charged' that
+      // captures what TandaXn retained. Uses a synthetic stripe_event_id
+      // suffixed with ':fee' so the UNIQUE constraint accepts both rows
+      // from the same delivered event. This lets the reconciliation
+      // RPC and the operating-costs view query fees independently from
+      // the main charge.
+      if (meta.type === "circle_contribution") {
+        const platformFeeCentsRaw =
+          typeof meta.platform_fee_cents === "string"
+            ? parseInt(meta.platform_fee_cents, 10)
+            : 0;
+        if (Number.isFinite(platformFeeCentsRaw) && platformFeeCentsRaw > 0) {
+          await writeLedgerEvent({
+            stripe_event_id_override: `${event.id}:fee`,
+            stripe_object_id: pi.id,
+            event_type: "platform_fee.charged",
+            amount_cents: platformFeeCentsRaw,
+            currency: (pi.currency ?? "usd").toUpperCase(),
+            user_id: maybeUuid(meta.user_id),
+            circle_id: maybeUuid(meta.circle_id),
+            cycle_id: maybeUuid(meta.cycle_id),
+            external_reference_id: maybeUuid(meta.pending_intent_id),
+            external_reference_type: "pending_intent",
+            metadata: {
+              platform_fee_bps: meta.platform_fee_bps,
+              parent_event_id: event.id,
+              parent_ledger_event_id: ledgerEventId,
+            },
+          });
+        }
+      }
 
       // ── Circle-contribution upsert (Stage 2 Bucket A) ──────────────────
       // The wallet payment path writes circle_contributions directly via

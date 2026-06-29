@@ -63,6 +63,7 @@ interface Metrics {
   activeCircles: number;
   totalPotCents: number;
   totalPayoutsCents: number;
+  totalStripeFees30dCents: number;
   totalTrips: number;
   upcomingTrips: number;
   pendingKyc: number;
@@ -192,6 +193,28 @@ export default function AdminOverviewScreen() {
         0,
       );
 
+      // Stage 2 Bucket C — Stripe fees absorbed in the past 30 days.
+      // Super_admin / admin only (the operating-costs view is global,
+      // not community-scoped). Support admins see 0 — they don't need
+      // the cost surface to do per-community moderation. Sum runs in
+      // app-space because PostgREST doesn't expose SUM aggregation
+      // without an RPC; ledger_events is bounded by 30d so the read
+      // is small.
+      let totalStripeFees30dCents = 0;
+      if (!scope.isSupport) {
+        const thirtyDaysAgo = new Date(
+          Date.now() - 30 * 24 * 60 * 60 * 1000,
+        ).toISOString();
+        const { data: feeRows } = await supabase
+          .from("ledger_events")
+          .select("stripe_fee_cents")
+          .gte("created_at", thirtyDaysAgo);
+        totalStripeFees30dCents = (feeRows ?? []).reduce(
+          (sum: number, r: any) => sum + (Number(r.stripe_fee_cents) || 0),
+          0,
+        );
+      }
+
       setMetrics({
         totalUsers: totalUsers ?? 0,
         activeUsers: activeUsers ?? 0,
@@ -200,6 +223,7 @@ export default function AdminOverviewScreen() {
         activeCircles: activeCircles ?? 0,
         totalPotCents,
         totalPayoutsCents,
+        totalStripeFees30dCents,
         totalTrips: totalTrips ?? 0,
         upcomingTrips: upcomingTrips ?? 0,
         pendingKyc: pendingKyc ?? 0,
@@ -558,6 +582,19 @@ export default function AdminOverviewScreen() {
         >
           {charts.data ? <FunnelChart stages={charts.data.kycFunnel} /> : null}
         </ChartContainer>
+
+        {/* Operating costs (Stage 2 Bucket C). super_admin / admin only —
+            same scoping rule as the reconciliation section below. Surfaces
+            the Stripe fees the platform has absorbed in the past 30 days,
+            so we can track when we're approaching the $200K GTV cap. */}
+        {reconciliationVisible ? (
+          <Section title={t("fee.operating_costs")}>
+            <Metric
+              label={t("fee.stripe_fees_absorbed_30d")}
+              value={fmtUSDFromCents(metrics?.totalStripeFees30dCents ?? 0)}
+            />
+          </Section>
+        ) : null}
 
         {/* Reconciliation ledger summary (migration 276). super_admin /
             admin only — the ledger isn't community-scoped, so support

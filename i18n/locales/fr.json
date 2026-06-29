@@ -2657,6 +2657,13 @@
     "status_refunded": "Remboursé",
     "payout_failed": "Le versement a échoué. Veuillez contacter le support."
   },
+  "fee": {
+    "processing_fee": "Frais de traitement : {{amount}}",
+    "processing_fee_covered": "Frais de traitement : {{amount}} — pris en charge par TandaXn",
+    "platform_fee": "Frais de plateforme : {{amount}}",
+    "operating_costs": "Coûts d'exploitation",
+    "stripe_fees_absorbed_30d": "Frais Stripe absorbés (30 j)"
+  },
   "admin_trip_actions": {
     "cancel_trip": "Annuler le voyage",
     "cancel_confirm": "Annuler ce voyage ? Tous les paiements éligibles seront mis en file pour remboursement.",

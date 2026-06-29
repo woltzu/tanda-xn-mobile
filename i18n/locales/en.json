@@ -2657,6 +2657,13 @@
     "status_refunded": "Refunded",
     "payout_failed": "Payout failed. Please contact support."
   },
+  "fee": {
+    "processing_fee": "Processing fee: {{amount}}",
+    "processing_fee_covered": "Processing fee: {{amount}} — covered by TandaXn",
+    "platform_fee": "Platform fee: {{amount}}",
+    "operating_costs": "Operating costs",
+    "stripe_fees_absorbed_30d": "Stripe fees absorbed (30d)"
+  },
   "admin_trip_actions": {
     "cancel_trip": "Cancel Trip",
     "cancel_confirm": "Cancel this trip? All eligible payments will be queued for refund.",
