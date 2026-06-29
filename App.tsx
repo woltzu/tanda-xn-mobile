@@ -348,6 +348,7 @@ import AdminOverviewScreen from "./screens/AdminOverviewScreen";
 import AdminUsersScreen from "./screens/AdminUsersScreen";
 import AdminBugReportsScreen from "./screens/AdminBugReportsScreen";
 import AdminBugReportDetailScreen from "./screens/AdminBugReportDetailScreen";
+import AdminLiquidityAdvancesScreen from "./screens/AdminLiquidityAdvancesScreen";
 import AdminUserDetailScreen from "./screens/AdminUserDetailScreen";
 import AdminCirclesScreen from "./screens/AdminCirclesScreen";
 import AdminCircleDetailScreen from "./screens/AdminCircleDetailScreen";
@@ -916,6 +917,7 @@ export type RootStackParamList = {
   // Bug Reports admin module (uses bug_reports table from migration 273).
   AdminBugReports: undefined;
   AdminBugReportDetail: { reportId: string };
+  AdminLiquidityAdvances: undefined;
   // Admin Bucket C — platform-wide settings (feature flags, templates,
   // system config, admin user roster). Named AdminPlatformSettings to
   // coexist with the per-circle AdminSettings governance screen.
@@ -1150,6 +1152,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AdminTripDetail" component={AdminTripDetailScreen} />
       <HomeStack.Screen name="AdminBugReports" component={AdminBugReportsScreen} />
       <HomeStack.Screen name="AdminBugReportDetail" component={AdminBugReportDetailScreen} />
+      <HomeStack.Screen name="AdminLiquidityAdvances" component={AdminLiquidityAdvancesScreen} />
       <HomeStack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
       <HomeStack.Screen name="StripeConnect" component={StripeConnectScreen} />
       <HomeStack.Screen name="OrganizerPayoutHistory" component={OrganizerPayoutHistoryScreen} />

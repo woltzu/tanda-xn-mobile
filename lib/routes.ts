@@ -45,6 +45,7 @@ export const Routes = {
   AddRecipient: "AddRecipient",
   AdminBugReportDetail: "AdminBugReportDetail",
   AdminBugReports: "AdminBugReports",
+  AdminLiquidityAdvances: "AdminLiquidityAdvances",
   AdminCircleDetail: "AdminCircleDetail",
   AdminCircles: "AdminCircles",
   AdminDashboard: "AdminDashboard",

@@ -51,7 +51,8 @@ type ModuleKey =
   | "elders"
   | "kyc"
   | "settings"
-  | "bug_reports";
+  | "bug_reports"
+  | "advances";
 
 type ModuleDef = {
   key: ModuleKey;
@@ -70,6 +71,7 @@ const MODULES: ModuleDef[] = [
   { key: "kyc",      icon: "id-card-outline",       route: "AdminVerificationQueue" },
   { key: "settings", icon: "cog-outline",           route: "AdminPlatformSettings" },
   { key: "bug_reports", icon: "bug-outline",        route: "AdminBugReports" },
+  { key: "advances",    icon: "cash-outline",       route: "AdminLiquidityAdvances" },
 ];
 
 export default function AdminHubScreen() {
