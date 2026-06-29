@@ -2629,6 +2629,15 @@
     "note_added": "Note ajoutée.",
     "update_failed": "Échec de la mise à jour."
   },
+  "reconciliation": {
+    "title": "Réconciliation",
+    "day": "Jour",
+    "charges": "Encaissements",
+    "transfers": "Versements",
+    "refunds": "Remboursements",
+    "net": "Net",
+    "no_data": "Aucune donnée de réconciliation disponible."
+  },
   "admin_trip_actions": {
     "cancel_trip": "Annuler le voyage",
     "cancel_confirm": "Annuler ce voyage ? Tous les paiements éligibles seront mis en file pour remboursement.",

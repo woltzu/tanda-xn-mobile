@@ -67,6 +67,18 @@ interface Metrics {
   pendingKyc: number;
 }
 
+// Reconciliation ledger (migration 276): one row per day, defaulting to
+// the last 30 days. The RPC returns BIGINT cents; we coerce to Number for
+// rendering — totals over $90M would lose precision but that's well past
+// the alert threshold for any single-day window.
+interface ReconciliationDay {
+  day: string;
+  total_charges_cents: number;
+  total_transfers_cents: number;
+  total_refunds_cents: number;
+  net_cents: number;
+}
+
 export default function AdminOverviewScreen() {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
@@ -77,6 +89,9 @@ export default function AdminOverviewScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [range, setRange] = useState<ChartRange>("30d");
+  const [reconciliation, setReconciliation] = useState<ReconciliationDay[] | null>(null);
+  const [reconciliationLoading, setReconciliationLoading] = useState(false);
+  const [reconciliationError, setReconciliationError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -190,6 +205,60 @@ export default function AdminOverviewScreen() {
     load();
   }, [load]);
 
+  // Reconciliation: super_admin / admin only. Support admins don't see it
+  // because the ledger isn't scoped to a community — it captures
+  // platform-wide money movement, which would leak revenue across scopes.
+  // We re-run when the user toggles the chart range so the section roughly
+  // tracks the same window the rest of the screen is showing (but the
+  // RPC defaults to 30d when range=='all'/'90d'/'7d' — we map below).
+  const reconciliationVisible = !scope.isSupport;
+  const loadReconciliation = useCallback(async () => {
+    if (!reconciliationVisible) {
+      setReconciliation(null);
+      return;
+    }
+    setReconciliationLoading(true);
+    setReconciliationError(null);
+    try {
+      const today = new Date();
+      const daysBack =
+        range === "7d" ? 7 : range === "30d" ? 30 : range === "90d" ? 90 : 365;
+      const start = new Date(today.getTime() - daysBack * 24 * 60 * 60 * 1000);
+      const fmt = (d: Date) => d.toISOString().slice(0, 10);
+      const { data, error } = await supabase.rpc("get_reconciliation_summary", {
+        p_start_date: fmt(start),
+        p_end_date: fmt(today),
+      });
+      if (error) throw error;
+      const rows = (data ?? []) as Array<{
+        day: string;
+        total_charges_cents: number | string;
+        total_transfers_cents: number | string;
+        total_refunds_cents: number | string;
+        net_cents: number | string;
+      }>;
+      setReconciliation(
+        rows.map((r) => ({
+          day: r.day,
+          total_charges_cents: Number(r.total_charges_cents) || 0,
+          total_transfers_cents: Number(r.total_transfers_cents) || 0,
+          total_refunds_cents: Number(r.total_refunds_cents) || 0,
+          net_cents: Number(r.net_cents) || 0,
+        })),
+      );
+    } catch (err) {
+      console.warn("[AdminOverview] reconciliation load failed:", err);
+      setReconciliationError(err instanceof Error ? err.message : String(err));
+      setReconciliation(null);
+    } finally {
+      setReconciliationLoading(false);
+    }
+  }, [reconciliationVisible, range]);
+
+  useEffect(() => {
+    loadReconciliation();
+  }, [loadReconciliation]);
+
   const chartScope = useMemo(
     () => ({
       scopedUserIds: scope.scopedUserIds,
@@ -249,6 +318,7 @@ export default function AdminOverviewScreen() {
   const refreshAll = () => {
     load();
     charts.refetch();
+    loadReconciliation();
   };
 
   return (
@@ -465,6 +535,73 @@ export default function AdminOverviewScreen() {
         >
           {charts.data ? <FunnelChart stages={charts.data.kycFunnel} /> : null}
         </ChartContainer>
+
+        {/* Reconciliation ledger summary (migration 276). super_admin /
+            admin only — the ledger isn't community-scoped, so support
+            admins don't see it to avoid cross-community revenue leakage. */}
+        {reconciliationVisible ? (
+          <Section title={t("reconciliation.title")}>
+            {reconciliationLoading && !reconciliation ? (
+              <View style={styles.reconRow}>
+                <ActivityIndicator size="small" color={TEAL} />
+              </View>
+            ) : reconciliationError ? (
+              <View style={styles.reconRow}>
+                <Text style={styles.mutedText}>{reconciliationError}</Text>
+              </View>
+            ) : !reconciliation || reconciliation.length === 0 ? (
+              <View style={styles.reconRow}>
+                <Text style={styles.mutedText}>
+                  {t("reconciliation.no_data")}
+                </Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.reconHeader}>
+                  <Text style={[styles.reconCell, styles.reconCellDay, styles.reconHeaderText]}>
+                    {t("reconciliation.day")}
+                  </Text>
+                  <Text style={[styles.reconCell, styles.reconHeaderText]}>
+                    {t("reconciliation.charges")}
+                  </Text>
+                  <Text style={[styles.reconCell, styles.reconHeaderText]}>
+                    {t("reconciliation.transfers")}
+                  </Text>
+                  <Text style={[styles.reconCell, styles.reconHeaderText]}>
+                    {t("reconciliation.refunds")}
+                  </Text>
+                  <Text style={[styles.reconCell, styles.reconHeaderText]}>
+                    {t("reconciliation.net")}
+                  </Text>
+                </View>
+                {reconciliation.slice(0, 30).map((r) => (
+                  <View key={r.day} style={styles.reconBodyRow}>
+                    <Text style={[styles.reconCell, styles.reconCellDay]}>
+                      {r.day.slice(5)}
+                    </Text>
+                    <Text style={styles.reconCell}>
+                      {fmtUSDFromCents(r.total_charges_cents)}
+                    </Text>
+                    <Text style={styles.reconCell}>
+                      {fmtUSDFromCents(r.total_transfers_cents)}
+                    </Text>
+                    <Text style={styles.reconCell}>
+                      {fmtUSDFromCents(r.total_refunds_cents)}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.reconCell,
+                        { color: r.net_cents >= 0 ? "#047857" : "#B91C1C", fontWeight: typography.bold },
+                      ]}
+                    >
+                      {fmtUSDFromCents(r.net_cents)}
+                    </Text>
+                  </View>
+                ))}
+              </>
+            )}
+          </Section>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -598,4 +735,42 @@ const styles = StyleSheet.create({
   rangePillTextActive: { color: "#FFFFFF", fontWeight: typography.bold },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   mutedText: { fontSize: typography.body, color: MUTED, textAlign: "center" },
+  reconRow: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    alignItems: "center",
+  },
+  reconHeader: {
+    flexDirection: "row",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: "#F9FAFB",
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  reconHeaderText: {
+    fontSize: 11,
+    color: MUTED,
+    fontWeight: typography.bold,
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  reconBodyRow: {
+    flexDirection: "row",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#F3F4F6",
+  },
+  reconCell: {
+    flex: 1,
+    fontSize: 12,
+    color: NAVY,
+    textAlign: "right",
+  },
+  reconCellDay: {
+    flex: 0.7,
+    textAlign: "left",
+    color: MUTED,
+  },
 });

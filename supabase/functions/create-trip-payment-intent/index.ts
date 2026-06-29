@@ -207,6 +207,39 @@ Deno.serve(async (req) => {
   const isConfirmed = (trip as { confirmed_at: string | null }).confirmed_at !== null;
   const useDirectCharge = isConfirmed && !!stripeAcct;
 
+  // ─── Reconciliation ledger (migration 276): write pending_intents BEFORE
+  // calling Stripe so we have a forensic record of EVERY attempt, including
+  // ones that never complete. The client_reference_id flows through to
+  // Stripe metadata so the webhook can join it back to this row.
+  const clientReferenceId = `client_ref_${crypto.randomUUID()}`;
+  const { error: pendingErr } = await serviceClient
+    .from("pending_intents")
+    .insert({
+      client_reference_id: clientReferenceId,
+      user_id: user.id,
+      trip_id: tripId,
+      intent_type: "charge",
+      amount_cents: amount as number,
+      currency: currency.toUpperCase(),
+      metadata: {
+        purpose,
+        payment_type: paymentType,
+        organizer_id: trip.organizer_id,
+        charge_mode: useDirectCharge ? "direct" : "escrow",
+        trip_participant_id: participantId,
+      },
+    });
+  if (pendingErr) {
+    console.error(
+      "[create-trip-payment-intent] pending_intents insert failed:",
+      pendingErr.message,
+    );
+    return jsonResponse(
+      { error: "Failed to record pending intent", detail: pendingErr.message },
+      500,
+    );
+  }
+
   const metadata: Record<string, string> = {
     user_id: user.id,
     type: purpose,
@@ -214,6 +247,7 @@ Deno.serve(async (req) => {
     organizer_id: trip.organizer_id,
     payment_type: paymentType,
     charge_mode: useDirectCharge ? "direct" : "escrow",
+    client_reference_id: clientReferenceId,
   };
   if (isConfirmed && !stripeAcct) {
     metadata.escrow_reason = "confirmed_but_no_stripe";

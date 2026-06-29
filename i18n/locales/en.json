@@ -2629,6 +2629,15 @@
     "note_added": "Note added.",
     "update_failed": "Failed to update bug report."
   },
+  "reconciliation": {
+    "title": "Reconciliation",
+    "day": "Day",
+    "charges": "Charges",
+    "transfers": "Transfers",
+    "refunds": "Refunds",
+    "net": "Net",
+    "no_data": "No reconciliation data available."
+  },
   "admin_trip_actions": {
     "cancel_trip": "Cancel Trip",
     "cancel_confirm": "Cancel this trip? All eligible payments will be queued for refund.",

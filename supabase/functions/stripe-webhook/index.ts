@@ -81,6 +81,75 @@ Deno.serve(async (req) => {
   // a separate concern.
   let processingError: string | null = null;
 
+  // Reconciliation ledger (migration 276): append-only row per confirmed
+  // Stripe event. Written AFTER the legacy side-effects so a ledger-write
+  // failure doesn't roll back the rest, but BEFORE the stripe_webhook_events
+  // row so duplicate-event handling stays at the bottom of the function.
+  // Idempotency layer: ledger_events.stripe_event_id UNIQUE — a Stripe
+  // retry that gets past the existing webhook_events guard would still
+  // be a no-op here. We catch the duplicate so it doesn't poison the
+  // processingError flag.
+  const writeLedgerEvent = async (row: {
+    stripe_object_id: string;
+    event_type: string;
+    amount_cents: number;
+    currency?: string;
+    user_id?: string | null;
+    recipient_user_id?: string | null;
+    circle_id?: string | null;
+    trip_id?: string | null;
+    cycle_id?: string | null;
+    external_reference_id?: string | null;
+    external_reference_type?: string | null;
+    metadata?: Record<string, unknown> | null;
+  }) => {
+    const { error: ledgerErr } = await supabase.from("ledger_events").insert({
+      stripe_event_id: event.id,
+      stripe_object_id: row.stripe_object_id,
+      event_type: row.event_type,
+      amount_cents: row.amount_cents,
+      currency: row.currency ?? "USD",
+      user_id: row.user_id ?? null,
+      recipient_user_id: row.recipient_user_id ?? null,
+      circle_id: row.circle_id ?? null,
+      trip_id: row.trip_id ?? null,
+      cycle_id: row.cycle_id ?? null,
+      external_reference_id: row.external_reference_id ?? null,
+      external_reference_type: row.external_reference_type ?? null,
+      raw_payload: event as unknown,
+      metadata: row.metadata ?? null,
+    });
+    if (ledgerErr) {
+      const isDup =
+        ledgerErr.code === "23505" ||
+        /duplicate key|already exists/i.test(ledgerErr.message);
+      if (isDup) {
+        console.log(
+          "[stripe-webhook] ledger_events duplicate for event",
+          event.id,
+          "— no-op"
+        );
+        return;
+      }
+      console.error(
+        "[stripe-webhook] ledger_events insert failed:",
+        ledgerErr.message
+      );
+      // Surface as a soft-fail: the legacy side-effects already ran, but
+      // we want Stripe to retry so reconciliation stays whole. The retry
+      // will hit the unique constraint above and become a no-op.
+      processingError = processingError ?? `ledger write failed: ${ledgerErr.message}`;
+    }
+  };
+
+  // Helper to coerce a Stripe metadata UUID-ish string to a UUID or null.
+  // Stripe round-trips metadata as strings; an empty/malformed value would
+  // explode the FK insert, so we filter to a strict UUID pattern.
+  const UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const maybeUuid = (v: unknown): string | null =>
+    typeof v === "string" && UUID_RE.test(v) ? v : null;
+
   if (event.type.startsWith("payment_intent.")) {
     const pi = event.data.object as Stripe.PaymentIntent;
     if (!PI_STATUSES.has(pi.status)) {
@@ -314,6 +383,34 @@ Deno.serve(async (req) => {
         }
       }
     }
+
+    // ── Reconciliation ledger: charge.succeeded ──
+    // Migration 276 — every confirmed Stripe charge gets a row. We write
+    // pi.amount_received (the post-decline net) rather than pi.amount so
+    // partial captures or amount-changed flows still reconcile cleanly.
+    if (event.type === "payment_intent.succeeded") {
+      const meta = pi.metadata ?? {};
+      let externalReferenceType: string | null = null;
+      if (typeof meta.type === "string" && meta.type.startsWith("trip_")) {
+        externalReferenceType = "trip_participant";
+      } else if (meta.type === "goal_deposit") {
+        externalReferenceType = "goal";
+      }
+      await writeLedgerEvent({
+        stripe_object_id: pi.id,
+        event_type: "charge.succeeded",
+        amount_cents: pi.amount_received ?? pi.amount ?? 0,
+        currency: (pi.currency ?? "usd").toUpperCase(),
+        user_id: maybeUuid(meta.user_id),
+        trip_id: maybeUuid(meta.trip_id),
+        circle_id: maybeUuid(meta.circle_id),
+        cycle_id: maybeUuid(meta.cycle_id),
+        external_reference_id:
+          maybeUuid(meta.trip_participant_id) ?? maybeUuid(meta.goal_id),
+        external_reference_type: externalReferenceType,
+        metadata: meta,
+      });
+    }
   } else if (event.type === "account.updated") {
     // ── Stage 1: Connect onboarding status updates ──
     // Connect Express accounts fire account.updated whenever their state
@@ -449,6 +546,54 @@ Deno.serve(async (req) => {
         transferredAt
       );
     }
+
+    // ── Reconciliation ledger: transfer.paid ──
+    // user_id is null (the platform is the source). recipient_user_id is
+    // the connected-account owner — pulled from transfer.metadata.organizer_id
+    // which release-trip-funds stamps on the transfer.
+    const tMeta = (transfer.metadata ?? {}) as Record<string, string>;
+    await writeLedgerEvent({
+      stripe_object_id: transfer.id,
+      event_type: "transfer.paid",
+      amount_cents: transfer.amount ?? 0,
+      currency: (transfer.currency ?? "usd").toUpperCase(),
+      user_id: null,
+      recipient_user_id: maybeUuid(tMeta.organizer_id),
+      trip_id: maybeUuid(tMeta.trip_id),
+      external_reference_type: "trip",
+      external_reference_id: maybeUuid(tMeta.trip_id),
+      metadata: tMeta,
+    });
+  } else if (event.type === "charge.refunded") {
+    // ── Reconciliation ledger: refund.succeeded ──
+    // Stripe fires charge.refunded after a successful Refund (whether
+    // issued via Dashboard or our process-refunds EF). The charge object
+    // exposes amount_refunded (cumulative) and a refunds.data list with
+    // per-refund amounts. We log the DELTA of this delivery — for a single
+    // full refund that equals amount_refunded; for partials each refund
+    // creates its own event with its own delta.
+    //
+    // No legacy side-effects from this event (the refund row write happens
+    // in process-refunds before Stripe responds). So this branch is
+    // ledger-only.
+    const charge = event.data.object as Stripe.Charge;
+    const lastRefund =
+      charge.refunds && Array.isArray(charge.refunds.data) && charge.refunds.data.length > 0
+        ? charge.refunds.data[charge.refunds.data.length - 1]
+        : null;
+    const refundAmount = lastRefund?.amount ?? charge.amount_refunded ?? 0;
+    const cMeta = (charge.metadata ?? {}) as Record<string, string>;
+    await writeLedgerEvent({
+      stripe_object_id: charge.id,
+      event_type: "refund.succeeded",
+      amount_cents: refundAmount,
+      currency: (charge.currency ?? "usd").toUpperCase(),
+      user_id: maybeUuid(cMeta.user_id),
+      trip_id: maybeUuid(cMeta.trip_id),
+      circle_id: maybeUuid(cMeta.circle_id),
+      external_reference_type: "charge",
+      metadata: { ...cMeta, refund_id: lastRefund?.id ?? null },
+    });
   } else {
     console.log("[stripe-webhook] ignoring non-PI/non-account event", event.type);
   }

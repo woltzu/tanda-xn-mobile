@@ -177,6 +177,47 @@ Deno.serve(async (req) => {
   const feeCents = Math.round((grossCents * PLATFORM_FEE_BPS) / 10000);
   const netCents = grossCents - feeCents;
 
+  // ─── Reconciliation ledger (migration 276): record pending transfer ───
+  // Written BEFORE the Stripe call so an EF crash or Stripe error still
+  // leaves a forensic trail. client_reference_id is deterministic on
+  // trip_id (same as the Stripe idempotency key) — a re-run by the same
+  // organizer is a UNIQUE no-op rather than a duplicate insert.
+  const clientReferenceId = `client_ref_release_${trip_id}`;
+  const { error: pendingErr } = await service.from("pending_intents").insert({
+    client_reference_id: clientReferenceId,
+    user_id: null,
+    recipient_user_id: user.id,
+    trip_id,
+    intent_type: "transfer",
+    amount_cents: netCents,
+    currency: "USD",
+    metadata: {
+      gross_cents: grossCents,
+      fee_cents: feeCents,
+      payment_count: releasePis.length,
+      destination_account: stripeAcct,
+    },
+  });
+  if (pendingErr) {
+    const isDup =
+      pendingErr.code === "23505" ||
+      /duplicate key|already exists/i.test(pendingErr.message);
+    if (!isDup) {
+      console.error(
+        "[release-trip-funds] pending_intents insert failed:",
+        pendingErr.message,
+      );
+      return jsonResponse(
+        { error: "Failed to record pending intent", detail: pendingErr.message },
+        500,
+      );
+    }
+    console.log(
+      "[release-trip-funds] pending_intents idempotent replay for",
+      clientReferenceId,
+    );
+  }
+
   // ─── 6. Create the Stripe Transfer (idempotent on trip_id) ────────────
   let transfer: Stripe.Transfer;
   try {
@@ -192,6 +233,7 @@ Deno.serve(async (req) => {
           organizer_id: user.id,
           gross_cents: String(grossCents),
           fee_cents: String(feeCents),
+          client_reference_id: clientReferenceId,
         },
       },
       { idempotencyKey: `release-${trip_id}` },

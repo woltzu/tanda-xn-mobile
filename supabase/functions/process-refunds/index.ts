@@ -96,6 +96,42 @@ Deno.serve(async (req) => {
 
   for (const row of rows) {
     try {
+      // ─── Reconciliation ledger (migration 276): pending refund ───
+      // Deterministic client_reference_id on trip_payment_id makes a
+      // retried run a UNIQUE no-op rather than a new pending row. The
+      // intent_type='refund' rows are matched to ledger_events
+      // refund.succeeded via the trip_id + amount + window.
+      const clientReferenceId = `client_ref_refund_${row.id}`;
+      const { error: pendingErr } = await service.from("pending_intents").insert({
+        client_reference_id: clientReferenceId,
+        user_id: null,
+        trip_id: null,
+        intent_type: "refund",
+        amount_cents: Math.round(Number(row.amount) * 100),
+        currency: "USD",
+        metadata: {
+          trip_payment_id: row.id,
+          admin_user_id: user.id,
+          reason: row.refund_reason ?? null,
+          stripe_payment_intent_id: row.stripe_payment_intent_id,
+        },
+      });
+      if (pendingErr) {
+        const isDup =
+          pendingErr.code === "23505" ||
+          /duplicate key|already exists/i.test(pendingErr.message);
+        if (!isDup) {
+          console.warn(
+            "[process-refunds] pending_intents insert failed for",
+            row.id,
+            ":",
+            pendingErr.message,
+          );
+          // Soft-fail: continue with the refund anyway so admin action
+          // isn't blocked by a ledger write failure.
+        }
+      }
+
       const refund = await stripe.refunds.create(
         {
           payment_intent: row.stripe_payment_intent_id,
@@ -104,6 +140,7 @@ Deno.serve(async (req) => {
             trip_payment_id: row.id,
             admin_user_id: user.id,
             reason: row.refund_reason ?? "",
+            client_reference_id: clientReferenceId,
           },
         },
         { idempotencyKey: `refund-${row.id}` },
