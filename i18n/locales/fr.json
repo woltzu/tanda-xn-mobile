@@ -2424,6 +2424,7 @@
       "total_circles": "Cercles au total",
       "active_circles": "Cercles actifs",
       "total_pot": "Cagnotte totale",
+      "total_payouts": "Total des versements",
       "total_trips": "Voyages au total",
       "upcoming_trips": "Voyages à venir",
       "charts": {
@@ -2647,6 +2648,14 @@
     "failed": "Le paiement a échoué. Veuillez réessayer.",
     "circle_name": "Cercle : {{name}}",
     "cycle": "Cycle {{number}}"
+  },
+  "circle_payout": {
+    "title": "Versement",
+    "status_pending": "En attente",
+    "status_paid": "Versé",
+    "status_failed": "Échoué",
+    "status_refunded": "Remboursé",
+    "payout_failed": "Le versement a échoué. Veuillez contacter le support."
   },
   "admin_trip_actions": {
     "cancel_trip": "Annuler le voyage",

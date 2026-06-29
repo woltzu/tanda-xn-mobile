@@ -685,21 +685,134 @@ Deno.serve(async (req) => {
 
     // ── Reconciliation ledger: transfer.paid ──
     // user_id is null (the platform is the source). recipient_user_id is
-    // the connected-account owner — pulled from transfer.metadata.organizer_id
-    // which release-trip-funds stamps on the transfer.
+    // the connected-account owner — pulled from transfer.metadata.
+    // Stage 2 Bucket B: type='circle_payout' transfers carry
+    // recipient_user_id + circle_id + cycle_id + pending_intent_id
+    // directly. Legacy trip transfers use organizer_id + trip_id.
     const tMeta = (transfer.metadata ?? {}) as Record<string, string>;
-    await writeLedgerEvent({
+    const isCirclePayout = tMeta.type === "circle_payout";
+    const transferLedgerEventId = await writeLedgerEvent({
       stripe_object_id: transfer.id,
       event_type: "transfer.paid",
       amount_cents: transfer.amount ?? 0,
       currency: (transfer.currency ?? "usd").toUpperCase(),
       user_id: null,
-      recipient_user_id: maybeUuid(tMeta.organizer_id),
-      trip_id: maybeUuid(tMeta.trip_id),
-      external_reference_type: "trip",
-      external_reference_id: maybeUuid(tMeta.trip_id),
+      recipient_user_id: isCirclePayout
+        ? maybeUuid(tMeta.recipient_user_id)
+        : maybeUuid(tMeta.organizer_id),
+      trip_id: isCirclePayout ? null : maybeUuid(tMeta.trip_id),
+      circle_id: isCirclePayout ? maybeUuid(tMeta.circle_id) : null,
+      cycle_id: isCirclePayout ? maybeUuid(tMeta.cycle_id) : null,
+      external_reference_type: isCirclePayout ? "circle_payout" : "trip",
+      external_reference_id: isCirclePayout
+        ? maybeUuid(tMeta.pending_intent_id)
+        : maybeUuid(tMeta.trip_id),
       metadata: tMeta,
     });
+
+    // ── Circle-payout completion (Stage 2 Bucket B) ─────────────────────
+    // Flip the circle_payouts row that process-circle-payout staged from
+    // 'pending' to 'completed' and stamp completed_at + ledger_event_id.
+    // Also stamp circle_cycles.actual_payout_date so the cycle UI can
+    // surface "paid out at" without a join. The UPDATE filter on
+    // status='pending' makes a Stripe re-delivery a clean no-op.
+    if (isCirclePayout) {
+      const cyclePayoutCycleId = maybeUuid(tMeta.cycle_id);
+      const { error: cpErr, count: cpCount } = await supabase
+        .from("circle_payouts")
+        .update(
+          {
+            status: "completed",
+            completed_at: transferredAt,
+            ledger_event_id: transferLedgerEventId,
+            actual_date: transferredAt,
+          },
+          { count: "exact" },
+        )
+        .eq("transfer_id", transfer.id)
+        .eq("status", "pending");
+      if (cpErr) {
+        processingError = processingError ??
+          `circle_payouts update failed: ${cpErr.message}`;
+        console.error("[stripe-webhook] circle_payouts update failed:", cpErr.message);
+      } else if (cpCount === 0) {
+        console.log(
+          "[stripe-webhook] circle_payouts no-op for transfer",
+          transfer.id,
+          "(already completed OR not staged)",
+        );
+      } else {
+        console.log(
+          "[stripe-webhook] circle_payouts marked completed for transfer",
+          transfer.id,
+        );
+        if (cyclePayoutCycleId) {
+          // Soft-fail: a missing actual_payout_date on circle_cycles is
+          // a polish issue, not a money problem. The ledger + payout
+          // row already capture the source of truth.
+          await supabase
+            .from("circle_cycles")
+            .update({ actual_payout_date: transferredAt.slice(0, 10) })
+            .eq("id", cyclePayoutCycleId);
+        }
+      }
+    }
+  } else if (event.type === "transfer.failed") {
+    // ── Stripe Connect: transfer.failed ─────────────────────────────────
+    // Fires when a previously-paid Transfer was reversed (rare in Express
+    // accounts; happens for routing-number changes, account closures,
+    // bank rejection). For circle_payout transfers we flip the
+    // circle_payouts row to 'failed' so admins can re-schedule. Legacy
+    // trip transfers don't have a failed-state in trip_payments — we
+    // log and ledger-only for those.
+    const transfer = event.data.object as Stripe.Transfer;
+    const tMeta = (transfer.metadata ?? {}) as Record<string, string>;
+    const isCirclePayout = tMeta.type === "circle_payout";
+    const transferredAt = new Date(event.created * 1000).toISOString();
+
+    await writeLedgerEvent({
+      stripe_object_id: transfer.id,
+      event_type: "transfer.failed",
+      amount_cents: transfer.amount ?? 0,
+      currency: (transfer.currency ?? "usd").toUpperCase(),
+      user_id: null,
+      recipient_user_id: isCirclePayout
+        ? maybeUuid(tMeta.recipient_user_id)
+        : maybeUuid(tMeta.organizer_id),
+      circle_id: isCirclePayout ? maybeUuid(tMeta.circle_id) : null,
+      cycle_id: isCirclePayout ? maybeUuid(tMeta.cycle_id) : null,
+      external_reference_type: isCirclePayout ? "circle_payout" : "trip",
+      external_reference_id: isCirclePayout
+        ? maybeUuid(tMeta.pending_intent_id)
+        : null,
+      metadata: tMeta,
+    });
+
+    if (isCirclePayout) {
+      const { error: cpErr } = await supabase
+        .from("circle_payouts")
+        .update({
+          status: "failed",
+          completed_at: transferredAt,
+        })
+        .eq("transfer_id", transfer.id)
+        .neq("status", "failed");
+      if (cpErr) {
+        processingError = processingError ??
+          `circle_payouts failure update failed: ${cpErr.message}`;
+        console.error("[stripe-webhook] circle_payouts failure update failed:", cpErr.message);
+      } else {
+        console.log(
+          "[stripe-webhook] circle_payouts marked failed for transfer",
+          transfer.id,
+        );
+      }
+    } else {
+      console.log(
+        "[stripe-webhook] transfer.failed ledger-only for non-circle transfer",
+        transfer.id,
+      );
+    }
   } else if (event.type === "charge.refunded") {
     // ── Reconciliation ledger: refund.succeeded ──
     // Stripe fires charge.refunded after a successful Refund (whether

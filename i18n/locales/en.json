@@ -2424,6 +2424,7 @@
       "total_circles": "Total circles",
       "active_circles": "Active circles",
       "total_pot": "Total pot",
+      "total_payouts": "Total payouts",
       "total_trips": "Total trips",
       "upcoming_trips": "Upcoming trips",
       "charts": {
@@ -2647,6 +2648,14 @@
     "failed": "Payment failed. Please try again.",
     "circle_name": "Circle: {{name}}",
     "cycle": "Cycle {{number}}"
+  },
+  "circle_payout": {
+    "title": "Payout",
+    "status_pending": "Pending",
+    "status_paid": "Paid",
+    "status_failed": "Failed",
+    "status_refunded": "Refunded",
+    "payout_failed": "Payout failed. Please contact support."
   },
   "admin_trip_actions": {
     "cancel_trip": "Cancel Trip",

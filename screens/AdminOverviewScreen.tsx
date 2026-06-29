@@ -62,6 +62,7 @@ interface Metrics {
   totalCircles: number;
   activeCircles: number;
   totalPotCents: number;
+  totalPayoutsCents: number;
   totalTrips: number;
   upcomingTrips: number;
   pendingKyc: number;
@@ -174,6 +175,23 @@ export default function AdminOverviewScreen() {
         .select("id", { count: "exact", head: true })
         .gte("start_date", today);
 
+      // Stage 2 Bucket B — sum amount_cents from circle_payouts.status='completed'.
+      // Scoped via scopedCircleIds for support admins so cross-community
+      // revenue doesn't leak. amount_cents is the new int column from
+      // migration 278; legacy rows pre-278 stored only the numeric `amount`
+      // in dollars — those'll appear as NULL in amount_cents and roll up
+      // to 0, which is the correct behavior for "Stripe-paid payouts".
+      const payoutsQ = supabase
+        .from("circle_payouts")
+        .select("amount_cents")
+        .eq("status", "completed");
+      if (scopedCircleIds) payoutsQ.in("circle_id", scopedCircleIds);
+      const { data: payoutRows } = await payoutsQ;
+      const totalPayoutsCents = (payoutRows ?? []).reduce(
+        (sum: number, r: any) => sum + (Number(r.amount_cents) || 0),
+        0,
+      );
+
       setMetrics({
         totalUsers: totalUsers ?? 0,
         activeUsers: activeUsers ?? 0,
@@ -181,6 +199,7 @@ export default function AdminOverviewScreen() {
         totalCircles: totalCircles ?? 0,
         activeCircles: activeCircles ?? 0,
         totalPotCents,
+        totalPayoutsCents,
         totalTrips: totalTrips ?? 0,
         upcomingTrips: upcomingTrips ?? 0,
         pendingKyc: pendingKyc ?? 0,
@@ -372,6 +391,10 @@ export default function AdminOverviewScreen() {
           <Metric
             label={t("admin.overview.total_pot")}
             value={fmtUSDFromCents(metrics?.totalPotCents ?? 0)}
+          />
+          <Metric
+            label={t("admin.overview.total_payouts")}
+            value={fmtUSDFromCents(metrics?.totalPayoutsCents ?? 0)}
           />
         </Section>
 
