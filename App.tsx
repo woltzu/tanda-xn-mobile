@@ -53,6 +53,7 @@ import AdminTemplateQueueScreen from "./screens/AdminTemplateQueueScreen";
 import PayoutHistoryScreen from "./screens/PayoutHistoryScreen";
 import PayoutListener from "./components/PayoutListener";
 import BugReportButton from "./components/BugReportButton";
+import LogoHomeButton from "./components/LogoHomeButton";
 import { BugReportProvider, useBugReportScreen } from "./context/BugReportContext";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import LoginScreen from "./screens/LoginScreen";
@@ -1585,6 +1586,11 @@ function AppContent() {
             requires auth.uid() = user_id). Reads current screen name
             from BugReportContext (fed by onStateChange below). */}
         <BugReportButton />
+        {/* Global brand-mark overlay — small flame + "TandaXn" pill in
+            the top-left that navigates to the Home tab from any screen.
+            Self-hides when no auth user (unauthenticated tree already
+            has its own branding). */}
+        <LogoHomeButton />
         <Stack.Navigator
           initialRouteName="Splash"
           screenOptions={{
