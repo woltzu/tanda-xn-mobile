@@ -64,6 +64,7 @@ import AuthCallbackScreen from "./screens/AuthCallbackScreen";
 import DashboardScreen from "./screens/DashboardScreen";
 import HomeScreen from "./screens/HomeScreen";
 import WalletScreen from "./screens/WalletScreen";
+import WithdrawToBankScreen from "./screens/WithdrawToBankScreen";
 import CirclesScreen from "./screens/CirclesScreen";
 import CirclesV2Screen from "./screens/CirclesV2Screen";
 import ScoreHubScreen from "./screens/ScoreHubScreen";
@@ -522,6 +523,7 @@ export type RootStackParamList = {
     };
   } | undefined;
   Remittance: undefined;
+  WithdrawToBank: undefined;
   WalletTransactionSuccess: {
     type: "add" | "withdraw" | "send";
     amount: number;
@@ -1042,6 +1044,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="ElderOnboarding" component={ElderOnboardingScreen} />
       <HomeStack.Screen name="AddFunds" component={AddFundsScreen} />
       <HomeStack.Screen name="WalletMain" component={WalletScreen} />
+      <HomeStack.Screen name="WithdrawToBank" component={WithdrawToBankScreen} />
       <HomeStack.Screen name="Withdraw" component={WithdrawScreen} />
       <HomeStack.Screen name="CreateCircleStart" component={CreateCircleStartScreen} />
       <HomeStack.Screen name="CreateCircleExpress" component={CreateCircleExpressScreen} />

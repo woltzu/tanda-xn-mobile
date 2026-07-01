@@ -795,6 +795,22 @@ export default function WalletScreen() {
             )}
           </View>
 
+          {/* Withdraw to bank — user-facing entry for the withdrawal
+              flow. Stripe/Connect terminology is deliberately hidden;
+              the underlying provider is chosen server-side later. */}
+          <TouchableOpacity
+            style={styles.payoutHistoryRow}
+            onPress={() => navigation.navigate("WithdrawToBank")}
+            accessibilityRole="button"
+            accessibilityLabel={t("withdraw.title")}
+          >
+            <View style={styles.payoutHistoryIcon}>
+              <Ionicons name="arrow-up-circle-outline" size={20} color="#059669" />
+            </View>
+            <Text style={styles.payoutHistoryText}>{t("withdraw.title")}</Text>
+            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+          </TouchableOpacity>
+
           {/* Payout history row — entry into the dedicated
               PayoutHistoryScreen (Bucket B of receive-payout review). */}
           <TouchableOpacity

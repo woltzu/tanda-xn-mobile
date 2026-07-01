@@ -300,6 +300,7 @@ export const Routes = {
   WalletMain: "WalletMain",
   WalletTransactionSuccess: "WalletTransactionSuccess",
   WebView: "WebView",
+  WithdrawToBank: "WithdrawToBank",
   Welcome: "Welcome",
   Withdraw: "Withdraw",
   XnScoreDashboard: "XnScoreDashboard",
