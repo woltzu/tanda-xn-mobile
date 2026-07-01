@@ -524,8 +524,11 @@ export default function ProfileScreen() {
         { icon: "globe-outline", label: t("profile.item_language"), onPress: () => navigation.navigate("LanguageRegion") },
         { icon: "people-outline", label: t("profile.item_communities"), onPress: () => navigation.navigate("CommunityPreferences") },
         { icon: "eye-off-outline", label: t("profile.item_privacy"), onPress: () => navigation.navigate("PrivacySettings") },
-        // Stripe Connect onboarding for trip organizers (Bucket A, migration 270).
-        { icon: "wallet-outline", label: t("stripe.menu_label"), onPress: () => navigation.navigate("StripeConnect") },
+        // Stripe Connect entry intentionally hidden from user-facing UI.
+        // Payouts will surface as a generic "Withdraw to bank" flow once
+        // built; Connect stays as an implementation detail. The
+        // StripeConnectScreen route is still registered in App.tsx and
+        // reachable via deep link for debugging / future organizer flows.
         { icon: "cog-outline", label: t("profile.item_all_settings"), onPress: () => navigation.navigate("Settings") },
         // Re-open the first-launch Dashboard tour. Clears the seen flag,
         // sets the force-show flag, then pops back to the Home tab so

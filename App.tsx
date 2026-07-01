@@ -1154,6 +1154,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AdminBugReportDetail" component={AdminBugReportDetailScreen} />
       <HomeStack.Screen name="AdminLiquidityAdvances" component={AdminLiquidityAdvancesScreen} />
       <HomeStack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
+      {/* StripeConnectScreen is reachable via deep link only; no user-facing menu entry. */}
       <HomeStack.Screen name="StripeConnect" component={StripeConnectScreen} />
       <HomeStack.Screen name="OrganizerPayoutHistory" component={OrganizerPayoutHistoryScreen} />
       <HomeStack.Screen name="AdminModeration" component={AdminModerationScreen} />
