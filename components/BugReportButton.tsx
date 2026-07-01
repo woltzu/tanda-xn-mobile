@@ -96,10 +96,6 @@ export default function BugReportButton() {
   const [submitting, setSubmitting] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
 
-  // FAB only shows for signed-in users — bug_reports.user_id is NOT NULL
-  // and RLS requires auth.uid() = user_id.
-  if (!user?.id) return null;
-
   const resetForm = useCallback(() => {
     setDescription("");
     setTitle("");
@@ -261,6 +257,14 @@ export default function BugReportButton() {
     t,
     resetForm,
   ]);
+
+  // FAB only renders for signed-in users — bug_reports.user_id is NOT NULL
+  // and RLS requires auth.uid() = user_id. This guard sits AFTER every
+  // hook so React's hook-count invariant holds across auth transitions;
+  // moving it above the useCallbacks (as it was previously) triggered
+  // "Rendered more hooks than during the previous render" the moment the
+  // session flipped from signed-out → signed-in.
+  if (!user?.id) return null;
 
   const renderChooser = () => (
     <>
