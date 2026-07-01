@@ -16,13 +16,17 @@
 
 import React, { useCallback } from "react";
 import { StyleSheet, TouchableOpacity, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, CommonActions } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, typography } from "../theme/tokens";
 import { useAuth } from "../context/AuthContext";
 
+// Brand mark: teal rounded square with "Xn" text in navy, mirroring the
+// onboarding screen mark (tandaxn-onboarding-module.jsx). There is no
+// image asset for the logo — it's CSS-styled everywhere it appears —
+// so we reproduce the same look inline with a View + Text pair.
 const NAVY = colors.primaryNavy;
+const TEAL = colors.accentTeal;
 
 export default function LogoHomeButton() {
   const navigation = useNavigation<any>();
@@ -50,8 +54,8 @@ export default function LogoHomeButton() {
       activeOpacity={0.85}
       hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
     >
-      <View style={styles.iconWrap}>
-        <Ionicons name="flame" size={14} color="#E8A842" />
+      <View style={styles.xnMark}>
+        <Text style={styles.xnMarkText}>Xn</Text>
       </View>
       <Text style={styles.wordmark}>TandaXn</Text>
     </TouchableOpacity>
@@ -80,13 +84,21 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
-  iconWrap: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "rgba(232,168,66,0.15)",
+  xnMark: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: TEAL,
     alignItems: "center",
     justifyContent: "center",
+  },
+  xnMarkText: {
+    fontSize: 11,
+    fontWeight: typography.bold,
+    color: NAVY,
+    // Tighten the "Xn" glyph pair a touch so it centers optically
+    // inside the small rounded square without extra padding tricks.
+    letterSpacing: -0.3,
   },
   wordmark: {
     fontSize: 12,
