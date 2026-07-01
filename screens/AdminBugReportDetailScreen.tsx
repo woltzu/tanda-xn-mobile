@@ -47,6 +47,10 @@ type Params = { AdminBugReportDetail: { reportId: string } };
 interface Report {
   id: string;
   user_id: string;
+  type: string | null;
+  title: string | null;
+  category: string | null;
+  help_why: string | null;
   screen_name: string | null;
   description: string | null;
   screenshot_url: string | null;
@@ -57,6 +61,11 @@ interface Report {
   resolved_at: string | null;
   created_at: string | null;
 }
+
+const TYPE_COLORS: Record<string, { bg: string; fg: string }> = {
+  bug: { bg: "#FEE2E2", fg: "#991B1B" },
+  idea: { bg: "#FEF3C7", fg: "#92400E" },
+};
 
 interface Profile {
   id: string;
@@ -93,7 +102,7 @@ export default function AdminBugReportDetailScreen() {
       const { data: reportRow, error: reportErr } = await supabase
         .from("bug_reports")
         .select(
-          "id, user_id, screen_name, description, screenshot_url, device_info, app_version, status, admin_notes, resolved_at, created_at",
+          "id, user_id, type, title, category, help_why, screen_name, description, screenshot_url, device_info, app_version, status, admin_notes, resolved_at, created_at",
         )
         .eq("id", reportId)
         .maybeSingle();
@@ -281,7 +290,45 @@ export default function AdminBugReportDetailScreen() {
           </TouchableOpacity>
         </Section>
 
-        <Section title={t("admin_bug_reports.description")}>
+        <Section
+          title={
+            (report.type ?? "bug") === "idea"
+              ? t("feedback.admin_idea_section")
+              : t("feedback.admin_bug_section")
+          }
+        >
+          <View style={styles.typeBadgeRow}>
+            <View
+              style={[
+                styles.typeBadge,
+                {
+                  backgroundColor:
+                    (TYPE_COLORS[report.type ?? "bug"] ?? TYPE_COLORS.bug).bg,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.typeBadgeText,
+                  {
+                    color:
+                      (TYPE_COLORS[report.type ?? "bug"] ?? TYPE_COLORS.bug).fg,
+                  },
+                ]}
+              >
+                {t(`feedback.type_${report.type ?? "bug"}`)}
+              </Text>
+            </View>
+          </View>
+          {report.title ? (
+            <Field label={t("feedback.title_label")} value={report.title} />
+          ) : null}
+          {report.category ? (
+            <Field
+              label={t("feedback.category_label")}
+              value={t(`feedback.category_${report.category}`)}
+            />
+          ) : null}
           <Field
             label={t("admin_bug_reports.screen")}
             value={report.screen_name ?? "—"}
@@ -300,6 +347,14 @@ export default function AdminBugReportDetailScreen() {
           <View style={styles.descBlock}>
             <Text style={styles.descText}>{report.description ?? "—"}</Text>
           </View>
+          {report.help_why ? (
+            <View style={styles.descBlock}>
+              <Text style={styles.helpWhyLabel}>
+                {t("feedback.help_why_label")}
+              </Text>
+              <Text style={styles.descText}>{report.help_why}</Text>
+            </View>
+          ) : null}
         </Section>
 
         {report.screenshot_url ? (
@@ -516,6 +571,22 @@ const styles = StyleSheet.create({
     borderTopColor: "#F3F4F6",
   },
   descText: { fontSize: typography.body, color: NAVY, lineHeight: 20 },
+  typeBadgeRow: { flexDirection: "row", marginBottom: 8 },
+  typeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  typeBadgeText: {
+    fontSize: 12,
+    fontWeight: typography.bold,
+  },
+  helpWhyLabel: {
+    fontSize: typography.label,
+    color: MUTED,
+    fontWeight: typography.medium,
+    marginBottom: 4,
+  },
   shotWrap: {
     width: "100%",
     height: 200,

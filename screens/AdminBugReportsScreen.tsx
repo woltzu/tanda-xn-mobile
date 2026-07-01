@@ -40,6 +40,9 @@ const MUTED = "#6B7280";
 interface ReportRow {
   id: string;
   user_id: string;
+  type: string | null;
+  title: string | null;
+  category: string | null;
   screen_name: string | null;
   description: string | null;
   status: string | null;
@@ -55,6 +58,12 @@ const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
   closed: { bg: "#E5E7EB", fg: "#374151" },
 };
 
+// Type badge palette — bugs are red-ish (alert), ideas are amber (suggestion).
+const TYPE_COLORS: Record<string, { bg: string; fg: string }> = {
+  bug: { bg: "#FEE2E2", fg: "#991B1B" },
+  idea: { bg: "#FEF3C7", fg: "#92400E" },
+};
+
 export default function AdminBugReportsScreen() {
   const navigation = useNavigation<any>();
   const { t } = useTranslation();
@@ -68,6 +77,7 @@ export default function AdminBugReportsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -83,7 +93,7 @@ export default function AdminBugReportsScreen() {
       const q = supabase
         .from("bug_reports")
         .select(
-          "id, user_id, screen_name, description, status, created_at, profiles:user_id(full_name, email)",
+          "id, user_id, type, title, category, screen_name, description, status, created_at, profiles:user_id(full_name, email)",
         )
         .order("created_at", { ascending: false })
         .limit(200);
@@ -97,6 +107,9 @@ export default function AdminBugReportsScreen() {
         ((data ?? []) as any[]).map((r) => ({
           id: r.id,
           user_id: r.user_id,
+          type: r.type ?? "bug",
+          title: r.title,
+          category: r.category,
           screen_name: r.screen_name,
           description: r.description,
           status: r.status,
@@ -122,16 +135,18 @@ export default function AdminBugReportsScreen() {
   const filtered = useMemo(() => {
     const qLower = query.trim().toLowerCase();
     return rows.filter((r) => {
+      if (typeFilter && (r.type ?? "bug") !== typeFilter) return false;
       if (statusFilter && (r.status ?? "open") !== statusFilter) return false;
       if (qLower) {
         const inName = (r.user_full_name ?? "").toLowerCase().includes(qLower);
         const inEmail = (r.user_email ?? "").toLowerCase().includes(qLower);
         const inDesc = (r.description ?? "").toLowerCase().includes(qLower);
-        if (!inName && !inEmail && !inDesc) return false;
+        const inTitle = (r.title ?? "").toLowerCase().includes(qLower);
+        if (!inName && !inEmail && !inDesc && !inTitle) return false;
       }
       return true;
     });
-  }, [rows, query, statusFilter]);
+  }, [rows, query, statusFilter, typeFilter]);
 
   if (adminLoading) {
     return (
@@ -164,7 +179,7 @@ export default function AdminBugReportsScreen() {
           <Ionicons name="arrow-back" size={24} color={NAVY} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {t("admin_bug_reports.title")}
+          {t("feedback.admin_title")}
         </Text>
         <TouchableOpacity
           onPress={load}
@@ -193,6 +208,16 @@ export default function AdminBugReportsScreen() {
       </View>
 
       <View style={styles.filtersWrap}>
+        <AdminFilterChips
+          label={t("feedback.filter_type")}
+          allLabel={t("feedback.type_all")}
+          value={typeFilter}
+          onChange={setTypeFilter}
+          options={[
+            { value: "bug", label: t("feedback.type_bug") },
+            { value: "idea", label: t("feedback.type_idea") },
+          ]}
+        />
         <AdminFilterChips
           label={t("admin.filter_status")}
           allLabel={t("admin_bug_reports.status_all")}
@@ -241,7 +266,9 @@ export default function AdminBugReportsScreen() {
           }
           renderItem={({ item }) => {
             const status = item.status ?? "open";
+            const type = item.type ?? "bug";
             const palette = STATUS_COLORS[status] ?? STATUS_COLORS.closed;
+            const typePalette = TYPE_COLORS[type] ?? TYPE_COLORS.bug;
             return (
               <TouchableOpacity
                 style={styles.row}
@@ -258,16 +285,46 @@ export default function AdminBugReportsScreen() {
                         item.user_email ||
                         t("admin.users.no_name")}
                     </Text>
-                    <View
-                      style={[styles.statusChip, { backgroundColor: palette.bg }]}
-                    >
-                      <Text style={[styles.statusChipText, { color: palette.fg }]}>
-                        {t(`admin_bug_reports.status_${status}`)}
-                      </Text>
+                    <View style={styles.rowChipRow}>
+                      <View
+                        style={[
+                          styles.statusChip,
+                          { backgroundColor: typePalette.bg },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.statusChipText,
+                            { color: typePalette.fg },
+                          ]}
+                        >
+                          {t(`feedback.type_${type}`)}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.statusChip,
+                          { backgroundColor: palette.bg },
+                        ]}
+                      >
+                        <Text
+                          style={[styles.statusChipText, { color: palette.fg }]}
+                        >
+                          {t(`admin_bug_reports.status_${status}`)}
+                        </Text>
+                      </View>
                     </View>
                   </View>
+                  {item.title ? (
+                    <Text style={styles.rowTitle} numberOfLines={1}>
+                      {item.title}
+                    </Text>
+                  ) : null}
                   <Text style={styles.rowMeta} numberOfLines={1}>
                     {item.screen_name || "—"}
+                    {item.category
+                      ? ` · ${t(`feedback.category_${item.category}`)}`
+                      : ""}
                   </Text>
                   <Text style={styles.rowDesc} numberOfLines={2}>
                     {item.description || ""}
@@ -284,9 +341,13 @@ export default function AdminBugReportsScreen() {
           }}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Ionicons name="bug-outline" size={36} color="#CBD5E1" />
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={36}
+                color="#CBD5E1"
+              />
               <Text style={styles.mutedText}>
-                {t("admin_bug_reports.empty")}
+                {t("feedback.admin_empty")}
               </Text>
             </View>
           }
@@ -348,6 +409,12 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     color: NAVY,
     fontWeight: typography.bold,
+  },
+  rowChipRow: { flexDirection: "row", gap: 6 },
+  rowTitle: {
+    fontSize: typography.body,
+    color: NAVY,
+    fontWeight: typography.medium,
   },
   rowMeta: { fontSize: typography.label, color: MUTED },
   rowDesc: { fontSize: typography.label, color: NAVY },

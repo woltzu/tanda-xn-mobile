@@ -1,17 +1,21 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// components/BugReportButton.tsx — floating bug-report FAB + modal
+// components/BugReportButton.tsx — floating feedback FAB (bugs + ideas)
 // ═══════════════════════════════════════════════════════════════════════════
 //
 // Mounted globally near PayoutListener in App.tsx (inside the auth-gated
-// tree, so it only renders for signed-in users). Opens a modal that
-// captures description + optional screenshot, then inserts a
-// bug_reports row with screen_name (from BugReportContext) + device
-// info + app version.
+// tree, so it only renders for signed-in users). Tap → chooser ("Report
+// a bug" / "Share an idea"). Each path opens a form that captures
+// the current screen name (from BugReportContext) plus device info,
+// uploads an optional screenshot to the private bug-screenshots bucket,
+// then inserts a bug_reports row.
 //
-// Storage: screenshot uploads to the private `bug-screenshots` bucket
-// under `<uid>/<timestamp>-<rand>.jpg`. We store a 30-day signed URL
-// on the row (consistent with AvatarPicker); admin tooling can
-// re-sign if it expires.
+// Schema (mig 273 + mig 282): bug_reports.type = 'bug' | 'idea'.
+//   • Bug    — description (required), screenshot (optional).
+//   • Idea   — title (required), category (chip select), description
+//              (required), help_why (optional), screenshot (optional).
+// The component name stays "BugReportButton" so App.tsx and any other
+// importers don't need to change; the user-facing copy is i18n'd via
+// the `feedback.*` namespace so the chooser reads neutral.
 // ═══════════════════════════════════════════════════════════════════════════
 
 import React, { useCallback, useState } from "react";
@@ -44,9 +48,22 @@ const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
 const MUTED = "#6B7280";
 const MAX_DESCRIPTION = 1000;
+const MAX_TITLE = 80;
+const MAX_HELP_WHY = 500;
 const SCREENSHOT_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 type UploadState = "idle" | "uploading" | "uploaded" | "failed";
+type Mode = "chooser" | "bug" | "idea";
+type Category = "circle" | "trip" | "payments" | "ux" | "new_feature" | "other";
+
+const CATEGORIES: Category[] = [
+  "circle",
+  "trip",
+  "payments",
+  "ux",
+  "new_feature",
+  "other",
+];
 
 function collectDeviceInfo() {
   const platform =
@@ -70,7 +87,11 @@ export default function BugReportButton() {
   const insets = useSafeAreaInsets();
 
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<Mode>("chooser");
   const [description, setDescription] = useState("");
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState<Category | null>(null);
+  const [helpWhy, setHelpWhy] = useState("");
   const [localImageUri, setLocalImageUri] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
@@ -81,12 +102,16 @@ export default function BugReportButton() {
 
   const resetForm = useCallback(() => {
     setDescription("");
+    setTitle("");
+    setCategory(null);
+    setHelpWhy("");
     setLocalImageUri(null);
     setUploadState("idle");
   }, []);
 
   const handleOpen = useCallback(() => {
     resetForm();
+    setMode("chooser");
     setOpen(true);
   }, [resetForm]);
 
@@ -94,6 +119,13 @@ export default function BugReportButton() {
     if (submitting) return;
     setOpen(false);
     resetForm();
+    setMode("chooser");
+  }, [submitting, resetForm]);
+
+  const handleBackToChooser = useCallback(() => {
+    if (submitting) return;
+    resetForm();
+    setMode("chooser");
   }, [submitting, resetForm]);
 
   const handlePickImage = useCallback(async () => {
@@ -123,8 +155,6 @@ export default function BugReportButton() {
       if (!user?.id) return null;
       setUploadState("uploading");
       try {
-        // Resize to max 1600 long-edge so triage previews stay snappy
-        // without sacrificing detail.
         const manipulated = await ImageManipulator.manipulateAsync(
           uri,
           [{ resize: { width: 1600 } }],
@@ -159,10 +189,24 @@ export default function BugReportButton() {
   const handleSubmit = useCallback(async () => {
     if (submitting) return;
     const desc = description.trim();
+    const ttl = title.trim();
+    const why = helpWhy.trim();
+
     if (!desc) {
-      showToast(t("bug_report.invalid_description"), "error");
+      showToast(t("feedback.invalid_description"), "error");
       return;
     }
+    if (mode === "idea") {
+      if (!ttl) {
+        showToast(t("feedback.invalid_title"), "error");
+        return;
+      }
+      if (!category) {
+        showToast(t("feedback.invalid_category"), "error");
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       let screenshotUrl: string | null = null;
@@ -175,28 +219,41 @@ export default function BugReportButton() {
         (Constants?.expoConfig as { version?: string } | undefined)?.version ??
         null;
 
-      const { error: insErr } = await supabase.from("bug_reports").insert({
+      const row: Record<string, unknown> = {
         user_id: user!.id,
+        type: mode,
         screen_name: screenName || "Unknown",
         description: desc,
         screenshot_url: screenshotUrl,
         device_info: collectDeviceInfo(),
         app_version: appVersion,
-      });
+      };
+      if (mode === "idea") {
+        row.title = ttl;
+        row.category = category;
+        if (why) row.help_why = why;
+      }
+
+      const { error: insErr } = await supabase.from("bug_reports").insert(row);
       if (insErr) throw new Error(insErr.message);
 
-      showToast(t("bug_report.success"), "success");
+      showToast(t("feedback.success"), "success");
       setOpen(false);
       resetForm();
+      setMode("chooser");
     } catch (e: any) {
       console.warn("[BugReportButton] submit failed", e);
-      showToast(e?.message ?? t("bug_report.error"), "error");
+      showToast(e?.message ?? t("feedback.error"), "error");
     } finally {
       setSubmitting(false);
     }
   }, [
     submitting,
     description,
+    title,
+    category,
+    helpWhy,
+    mode,
     localImageUri,
     uploadScreenshot,
     user,
@@ -205,15 +262,206 @@ export default function BugReportButton() {
     resetForm,
   ]);
 
+  const renderChooser = () => (
+    <>
+      <Text style={styles.title}>{t("feedback.chooser_title")}</Text>
+      <Text style={styles.subtitle}>{t("feedback.chooser_subtitle")}</Text>
+
+      <TouchableOpacity
+        style={styles.chooserOption}
+        onPress={() => setMode("bug")}
+        accessibilityRole="button"
+      >
+        <View style={styles.chooserIconWrap}>
+          <Ionicons name="bug-outline" size={22} color={TEAL} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.chooserOptionTitle}>{t("feedback.bug_option")}</Text>
+          <Text style={styles.chooserOptionSub}>
+            {t("feedback.bug_option_sub")}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.chooserOption}
+        onPress={() => setMode("idea")}
+        accessibilityRole="button"
+      >
+        <View style={styles.chooserIconWrap}>
+          <Ionicons name="bulb-outline" size={22} color={TEAL} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.chooserOptionTitle}>{t("feedback.idea_option")}</Text>
+          <Text style={styles.chooserOptionSub}>
+            {t("feedback.idea_option_sub")}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#CBD5E1" />
+      </TouchableOpacity>
+
+      <View style={styles.actions}>
+        <TouchableOpacity style={styles.cancelBtn} onPress={handleClose}>
+          <Text style={styles.cancelText}>{t("feedback.cancel")}</Text>
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+
+  const renderForm = () => (
+    <>
+      <View style={styles.formHeaderRow}>
+        <TouchableOpacity
+          onPress={handleBackToChooser}
+          style={styles.backInlineBtn}
+          accessibilityRole="button"
+          disabled={submitting}
+        >
+          <Ionicons name="arrow-back" size={18} color={NAVY} />
+        </TouchableOpacity>
+        <Text style={styles.title}>
+          {mode === "idea" ? t("feedback.idea_title") : t("feedback.bug_title")}
+        </Text>
+      </View>
+
+      <View style={styles.screenRow}>
+        <Text style={styles.screenLabel}>{t("feedback.screen_label")}</Text>
+        <Text style={styles.screenValue} numberOfLines={1}>
+          {screenName}
+        </Text>
+      </View>
+
+      {mode === "idea" ? (
+        <>
+          <TextInput
+            style={styles.input}
+            placeholder={t("feedback.title_placeholder")}
+            placeholderTextColor={MUTED}
+            value={title}
+            onChangeText={setTitle}
+            maxLength={MAX_TITLE}
+            editable={!submitting}
+          />
+
+          <Text style={styles.label}>{t("feedback.category_label")}</Text>
+          <View style={styles.chipRow}>
+            {CATEGORIES.map((c) => {
+              const isSel = category === c;
+              return (
+                <TouchableOpacity
+                  key={c}
+                  style={[styles.chip, isSel && styles.chipSelected]}
+                  onPress={() => setCategory(c)}
+                  disabled={submitting}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      isSel && styles.chipTextSelected,
+                    ]}
+                  >
+                    {t(`feedback.category_${c}`)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
+
+      <TextInput
+        style={[styles.input, styles.inputMultiline]}
+        placeholder={t("feedback.description_placeholder")}
+        placeholderTextColor={MUTED}
+        value={description}
+        onChangeText={setDescription}
+        multiline
+        maxLength={MAX_DESCRIPTION}
+        editable={!submitting}
+      />
+
+      {mode === "idea" ? (
+        <>
+          <Text style={styles.label}>{t("feedback.help_why_label")}</Text>
+          <TextInput
+            style={[styles.input, styles.inputMultiline]}
+            placeholder={t("feedback.help_why_placeholder")}
+            placeholderTextColor={MUTED}
+            value={helpWhy}
+            onChangeText={setHelpWhy}
+            multiline
+            maxLength={MAX_HELP_WHY}
+            editable={!submitting}
+          />
+        </>
+      ) : null}
+
+      {localImageUri ? (
+        <View style={styles.imagePreviewWrap}>
+          <Image
+            source={{ uri: localImageUri }}
+            style={styles.imagePreview}
+            resizeMode="cover"
+          />
+          <TouchableOpacity
+            style={styles.imageRemoveBtn}
+            onPress={handleRemoveImage}
+            disabled={submitting}
+          >
+            <Ionicons name="close" size={16} color="#FFFFFF" />
+          </TouchableOpacity>
+          {uploadState === "uploading" ? (
+            <View style={styles.imageBadge}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            </View>
+          ) : null}
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={styles.attachBtn}
+          onPress={handlePickImage}
+          disabled={submitting}
+        >
+          <Ionicons name="image-outline" size={18} color={TEAL} />
+          <Text style={styles.attachText}>
+            {t("feedback.attach_screenshot")}
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.actions}>
+        <TouchableOpacity
+          style={[styles.cancelBtn, submitting && styles.btnDisabled]}
+          onPress={handleClose}
+          disabled={submitting}
+        >
+          <Text style={styles.cancelText}>{t("feedback.cancel")}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.submitBtn, submitting && styles.btnDisabled]}
+          onPress={handleSubmit}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.submitText}>{t("feedback.submit")}</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+
   return (
     <>
       <TouchableOpacity
-        accessibilityLabel={t("bug_report.report_button")}
+        accessibilityLabel={t("feedback.fab_label")}
         style={[styles.fab, { bottom: Math.max(insets.bottom, 16) + 80 }]}
         onPress={handleOpen}
         activeOpacity={0.85}
       >
-        <Ionicons name="bug-outline" size={22} color="#FFFFFF" />
+        <Ionicons name="chatbubble-ellipses-outline" size={22} color="#FFFFFF" />
       </TouchableOpacity>
 
       <Modal
@@ -231,84 +479,7 @@ export default function BugReportButton() {
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={styles.sheetContent}
             >
-              <Text style={styles.title}>{t("bug_report.title")}</Text>
-              <Text style={styles.subtitle}>{t("bug_report.subtitle")}</Text>
-
-              <View style={styles.screenRow}>
-                <Text style={styles.screenLabel}>
-                  {t("bug_report.screen_label")}
-                </Text>
-                <Text style={styles.screenValue} numberOfLines={1}>
-                  {screenName}
-                </Text>
-              </View>
-
-              <TextInput
-                style={styles.input}
-                placeholder={t("bug_report.description_placeholder")}
-                placeholderTextColor={MUTED}
-                value={description}
-                onChangeText={setDescription}
-                multiline
-                maxLength={MAX_DESCRIPTION}
-                editable={!submitting}
-              />
-
-              {localImageUri ? (
-                <View style={styles.imagePreviewWrap}>
-                  <Image
-                    source={{ uri: localImageUri }}
-                    style={styles.imagePreview}
-                    resizeMode="cover"
-                  />
-                  <TouchableOpacity
-                    style={styles.imageRemoveBtn}
-                    onPress={handleRemoveImage}
-                    disabled={submitting}
-                  >
-                    <Ionicons name="close" size={16} color="#FFFFFF" />
-                  </TouchableOpacity>
-                  {uploadState === "uploading" ? (
-                    <View style={styles.imageBadge}>
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    </View>
-                  ) : null}
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.attachBtn}
-                  onPress={handlePickImage}
-                  disabled={submitting}
-                >
-                  <Ionicons name="image-outline" size={18} color={TEAL} />
-                  <Text style={styles.attachText}>
-                    {t("bug_report.attach_screenshot")}
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  style={[styles.cancelBtn, submitting && styles.btnDisabled]}
-                  onPress={handleClose}
-                  disabled={submitting}
-                >
-                  <Text style={styles.cancelText}>{t("bug_report.cancel")}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.submitBtn, submitting && styles.btnDisabled]}
-                  onPress={handleSubmit}
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.submitText}>
-                      {t("bug_report.submit")}
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </View>
+              {mode === "chooser" ? renderChooser() : renderForm()}
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -358,6 +529,52 @@ const styles = StyleSheet.create({
     fontSize: typography.body,
     color: MUTED,
   },
+  label: {
+    fontSize: typography.label,
+    color: MUTED,
+    fontWeight: typography.medium,
+  },
+  formHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  backInlineBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chooserOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.card,
+    backgroundColor: "#FAFAFA",
+  },
+  chooserIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,198,174,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chooserOptionTitle: {
+    fontSize: typography.body,
+    color: NAVY,
+    fontWeight: typography.bold,
+  },
+  chooserOptionSub: {
+    fontSize: typography.label,
+    color: MUTED,
+    marginTop: 2,
+  },
   screenRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -381,10 +598,37 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: 10,
     padding: spacing.sm,
-    minHeight: 120,
-    textAlignVertical: "top",
     color: NAVY,
     fontSize: typography.body,
+  },
+  inputMultiline: {
+    minHeight: 100,
+    textAlignVertical: "top",
+  },
+  chipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "#FFFFFF",
+  },
+  chipSelected: {
+    backgroundColor: TEAL,
+    borderColor: TEAL,
+  },
+  chipText: {
+    fontSize: typography.label,
+    color: NAVY,
+  },
+  chipTextSelected: {
+    color: "#FFFFFF",
+    fontWeight: typography.bold,
   },
   attachBtn: {
     flexDirection: "row",
