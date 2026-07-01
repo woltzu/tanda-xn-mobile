@@ -324,6 +324,15 @@ export function useCircleNetBalance(): UseCircleNetBalanceResult {
     [entries],
   );
 
+  // Memoize refetch so consumers can safely place it in
+  // useFocusEffect / useEffect dependency arrays. Without this, the
+  // arrow function got a new identity every render — HomeScreen's
+  // useFocusEffect(useCallback(..., [refetch])) re-registered every
+  // render, re-firing on focus, calling refetch, triggering setState,
+  // triggering re-render, ad infinitum. Manifested as
+  // "Maximum update depth exceeded" pointing at fetchData.
+  const refetch = useCallback(() => fetchData(true), [fetchData]);
+
   return {
     circleNetBalances: entries,
     totalNet,
@@ -331,6 +340,6 @@ export function useCircleNetBalance(): UseCircleNetBalanceResult {
     totalReceived,
     loading,
     error,
-    refetch: () => fetchData(true),
+    refetch,
   };
 }

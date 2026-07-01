@@ -97,20 +97,38 @@ export default function StripeConnectScreen() {
   const handleConnect = useCallback(async () => {
     if (!user?.id || connecting) return;
     setConnecting(true);
+    // Instrumentation for the "button does nothing" report. Every step
+    // logs so we can pinpoint where the flow stalls: (1) return URL
+    // built, (2) EF invoked, (3) EF response, (4) browser opened,
+    // (5) browser closed. Grep for "[StripeConnect]" in the Metro/Web
+    // console.
     try {
       const returnUrl = Linking.createURL("stripe/callback");
+      console.log("[StripeConnect] step 1: returnUrl", returnUrl);
+
+      console.log("[StripeConnect] step 2: invoking EF stripe-create-account-link");
       const { data, error } = await supabase.functions.invoke(
         "stripe-create-account-link",
         { body: { return_url: returnUrl } },
       );
+      console.log("[StripeConnect] step 3: EF response", {
+        hasData: !!data,
+        hasUrl: !!(data && (data as { url?: string }).url),
+        error: error?.message ?? null,
+      });
       if (error || !data?.url) {
-        throw new Error(error?.message || "Empty response");
+        throw new Error(error?.message || "Empty response from EF");
       }
 
+      console.log("[StripeConnect] step 4: opening browser sheet");
       const result = await WebBrowser.openAuthSessionAsync(
         data.url as string,
         returnUrl,
       );
+      console.log("[StripeConnect] step 5: browser closed", {
+        type: result.type,
+        url: "url" in result ? result.url : null,
+      });
 
       await load();
 
@@ -130,7 +148,10 @@ export default function StripeConnectScreen() {
       }
     } catch (err) {
       console.warn("[StripeConnect] connect failed:", err);
-      showToast(t("stripe.callback_error"), "error");
+      showToast(
+        `${t("stripe.callback_error")}: ${(err as Error)?.message ?? "unknown"}`,
+        "error",
+      );
     } finally {
       setConnecting(false);
     }
