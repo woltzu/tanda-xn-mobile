@@ -1,293 +1,348 @@
-import React, { useState } from "react";
+// ═══════════════════════════════════════════════════════════════════════════
+// screens/TwoFactorAuthScreen.tsx
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Real TOTP enrol / disable. Wraps supabase.auth.mfa.*:
+//   - listFactors() to detect current state (verified / unverified / none)
+//   - enroll({ factorType: 'totp' }) to start a new enrolment
+//   - challengeAndVerify() to confirm the code and mark the factor verified
+//   - unenroll({ factorId }) to disable
+//
+// The screen is a simple two-mode surface:
+//   * VIEW mode — 2FA already verified. Big status card + Disable btn.
+//   * ENROL mode — no factor OR unverified factor left over. QR code + secret
+//                  + 6-digit input + Verify btn. Cancel drops the enrolment.
+//
+// Backup codes are NOT built into Supabase MFA and are out of scope for this
+// bucket. The password-reset flow remains the account-recovery fallback.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Switch,
   Alert,
+  ActivityIndicator,
+  TextInput,
+  Platform,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
-import { StackNavigationProp } from "@react-navigation/stack";
-import { RootStackParamList } from "../App";
+import QRCode from "react-native-qrcode-svg";
 
-type TwoFactorAuthNavigationProp = StackNavigationProp<RootStackParamList>;
+import { supabase } from "../lib/supabase";
+import { showToast } from "../components/Toast";
 
-interface TwoFAMethod {
-  id: string;
-  icon: string;
-  title: string;
-  description: string;
-  recommended?: boolean;
-}
+type Mode = "loading" | "view" | "enrol";
+
+type EnrolPayload = {
+  factorId: string;
+  secret: string;
+  uri: string;
+};
 
 export default function TwoFactorAuthScreen() {
   const { t } = useTranslation();
+  const navigation = useNavigation<any>();
 
-  const navigation = useNavigation<TwoFactorAuthNavigationProp>();
+  const [mode, setMode] = useState<Mode>("loading");
+  // The verified factor id, when 2FA is already on. Kept so the Disable
+  // button knows which factor to unenroll.
+  const [verifiedFactorId, setVerifiedFactorId] = useState<string | null>(
+    null,
+  );
+  const [enrol, setEnrol] = useState<EnrolPayload | null>(null);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [enabled, setEnabled] = useState(true);
-  const [selectedMethod, setSelectedMethod] = useState("authenticator");
-  const backupCodesRemaining = 8;
+  const refreshStatus = useCallback(async () => {
+    setMode("loading");
+    setError(null);
+    try {
+      const { data, error: err } = await supabase.auth.mfa.listFactors();
+      if (err) throw err;
+      const verified = data?.totp?.find((f) => f.status === "verified");
+      const unverified = data?.totp?.find((f) => f.status === "unverified");
 
-  const methods: TwoFAMethod[] = [
-    {
-      id: "authenticator",
-      icon: "key",
-      title: "Authenticator App",
-      description: "Google Authenticator, Authy, etc.",
-      recommended: true,
-    },
-    {
-      id: "sms",
-      icon: "chatbox-ellipses",
-      title: "SMS Code",
-      description: "+1 (***) ***-4567",
-    },
-    {
-      id: "email",
-      icon: "mail",
-      title: "Email Code",
-      description: "f***@gmail.com",
-    },
-  ];
+      if (verified) {
+        setVerifiedFactorId(verified.id);
+        setMode("view");
+        return;
+      }
 
-  const handleToggle2FA = (value: boolean) => {
-    if (!value) {
-      Alert.alert(
-        "Disable 2FA",
-        "Are you sure you want to disable two-factor authentication? This will make your account less secure.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Disable",
-            style: "destructive",
-            onPress: () => setEnabled(false),
-          },
-        ]
-      );
-    } else {
-      setEnabled(true);
+      // Clean up any dangling unverified factor before starting a fresh
+      // enrolment — Supabase will otherwise reject the new enroll for
+      // conflicting with the pending one.
+      if (unverified) {
+        try {
+          await supabase.auth.mfa.unenroll({ factorId: unverified.id });
+        } catch {
+          /* ignore — we'll surface the enroll error if any */
+        }
+      }
+      setVerifiedFactorId(null);
+      setMode("view"); // land on view first; user taps Enable to move to enrol
+    } catch (e: any) {
+      console.warn("[TwoFactorAuth] listFactors failed", e?.message);
+      setError(e?.message ?? "Failed to load 2FA status");
+      setMode("view");
     }
-  };
+  }, []);
 
-  const handleViewBackupCodes = () => {
-    Alert.alert(
-      "View Backup Codes",
-      "For security, you'll need to verify your identity to view your backup codes.",
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Verify", onPress: () => console.log("Show backup codes") },
-      ]
-    );
-  };
+  useEffect(() => {
+    void refreshStatus();
+  }, [refreshStatus]);
 
-  const handleRegenerateBackupCodes = () => {
-    Alert.alert(
-      "Regenerate Backup Codes",
-      "This will invalidate your existing backup codes. Are you sure you want to continue?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Regenerate",
-          onPress: () => console.log("Regenerate backup codes"),
+  const startEnrol = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { data, error: err } = await supabase.auth.mfa.enroll({
+        factorType: "totp",
+        issuer: "TandaXn",
+      });
+      if (err) throw err;
+      if (!data?.id || !data.totp?.secret || !data.totp?.uri) {
+        throw new Error("Enrolment payload missing required fields");
+      }
+      setEnrol({
+        factorId: data.id,
+        secret: data.totp.secret,
+        uri: data.totp.uri,
+      });
+      setCode("");
+      setMode("enrol");
+    } catch (e: any) {
+      Alert.alert(t("2fa.title"), e?.message ?? "Failed to start enrolment");
+    } finally {
+      setBusy(false);
+    }
+  }, [t]);
+
+  const verifyEnrol = useCallback(async () => {
+    if (!enrol) return;
+    const trimmed = code.trim();
+    if (trimmed.length !== 6 || !/^\d{6}$/.test(trimmed)) {
+      setError(t("2fa.invalid_code"));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const { error: err } = await supabase.auth.mfa.challengeAndVerify({
+        factorId: enrol.factorId,
+        code: trimmed,
+      });
+      if (err) throw err;
+      showToast(t("2fa.enable_success"), "success");
+      setEnrol(null);
+      setCode("");
+      await refreshStatus();
+    } catch (e: any) {
+      setError(e?.message ?? t("2fa.invalid_code"));
+    } finally {
+      setBusy(false);
+    }
+  }, [code, enrol, refreshStatus, t]);
+
+  const cancelEnrol = useCallback(async () => {
+    if (!enrol) return;
+    setBusy(true);
+    try {
+      await supabase.auth.mfa.unenroll({ factorId: enrol.factorId });
+    } catch {
+      /* best-effort */
+    } finally {
+      setEnrol(null);
+      setCode("");
+      setBusy(false);
+      await refreshStatus();
+    }
+  }, [enrol, refreshStatus]);
+
+  const confirmDisable = useCallback(() => {
+    if (!verifiedFactorId) return;
+    Alert.alert(t("2fa.title"), t("2fa.disable_confirm"), [
+      { text: t("2fa.cancel"), style: "cancel" },
+      {
+        text: t("2fa.disable_button"),
+        style: "destructive",
+        onPress: async () => {
+          setBusy(true);
+          try {
+            const { error: err } = await supabase.auth.mfa.unenroll({
+              factorId: verifiedFactorId,
+            });
+            if (err) throw err;
+            showToast(t("2fa.disable_success"), "success");
+            await refreshStatus();
+          } catch (e: any) {
+            Alert.alert(t("2fa.title"), e?.message ?? "Failed to disable 2FA");
+          } finally {
+            setBusy(false);
+          }
         },
-      ]
-    );
-  };
+      },
+    ]);
+  }, [refreshStatus, t, verifiedFactorId]);
 
+  // ── Render ────────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
-          <View style={styles.headerRow}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-            <View>
-              <Text style={styles.headerTitle}>{t("screen_headers.two_factor_auth")}</Text>
-              <Text style={styles.headerSubtitle}>{t("final_polish.twofactorauth_extra_security_for_your_account")}</Text>
-            </View>
-          </View>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => navigation.goBack()}
+            accessibilityLabel={t("2fa.cancel")}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t("2fa.title")}</Text>
         </LinearGradient>
 
-        {/* Content */}
-        <View style={styles.content}>
-          {/* Main Toggle */}
-          <View style={styles.card}>
-            <View style={styles.toggleRow}>
-              <View
-                style={[
-                  styles.toggleIcon,
-                  { backgroundColor: enabled ? "#F0FDFB" : "#F5F7FA" },
-                ]}
-              >
-                <Ionicons
-                  name="shield-checkmark"
-                  size={26}
-                  color={enabled ? "#00C6AE" : "#6B7280"}
+        <View style={styles.body}>
+          {mode === "loading" ? (
+            <View style={styles.loading}>
+              <ActivityIndicator color="#00C6AE" />
+            </View>
+          ) : mode === "enrol" && enrol ? (
+            <View>
+              <Text style={styles.instruction}>{t("2fa.qr_instruction")}</Text>
+              <View style={styles.qrWrap}>
+                <QRCode
+                  value={enrol.uri}
+                  size={200}
+                  color="#0A2342"
+                  backgroundColor="#FFFFFF"
                 />
               </View>
-              <View style={styles.toggleContent}>
-                <Text style={styles.toggleTitle}>{t("final_polish.twofactorauth_two_factor_authentication")}</Text>
-                <Text style={styles.toggleSubtitle}>
-                  {enabled ? "Your account is protected" : "Add extra security"}
+              <Text style={styles.secretLabel}>{t("2fa.secret_label")}</Text>
+              <View style={styles.secretBox}>
+                <Text style={styles.secretText} selectable>
+                  {enrol.secret}
                 </Text>
               </View>
-              <Switch
-                value={enabled}
-                onValueChange={handleToggle2FA}
-                trackColor={{ false: "#E5E7EB", true: "#00C6AE" }}
-                thumbColor="#FFFFFF"
+
+              <Text style={styles.codeLabel}>
+                {t("2fa.verify_code_label")}
+              </Text>
+              <TextInput
+                style={styles.codeInput}
+                value={code}
+                onChangeText={(v) => {
+                  const clean = v.replace(/[^0-9]/g, "").slice(0, 6);
+                  setCode(clean);
+                  if (error) setError(null);
+                }}
+                placeholder="••••••"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="number-pad"
+                textContentType="oneTimeCode"
+                autoComplete={
+                  Platform.OS === "web" ? "one-time-code" : "sms-otp"
+                }
+                maxLength={6}
+                editable={!busy}
               />
-            </View>
-          </View>
+              {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          {enabled && (
-            <>
-              {/* Method Selection */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>{t("final_polish.twofactorauth_verification_method")}</Text>
-                <View style={styles.card}>
-                  {methods.map((method, index) => (
-                    <TouchableOpacity
-                      key={method.id}
-                      style={[
-                        styles.methodItem,
-                        index < methods.length - 1 && styles.methodItemBorder,
-                        selectedMethod === method.id && styles.methodItemSelected,
-                      ]}
-                      onPress={() => setSelectedMethod(method.id)}
-                    >
-                      <View
-                        style={[
-                          styles.methodIcon,
-                          {
-                            backgroundColor:
-                              selectedMethod === method.id
-                                ? "#F0FDFB"
-                                : "#F5F7FA",
-                          },
-                        ]}
-                      >
-                        <Ionicons
-                          name={method.icon as any}
-                          size={22}
-                          color={
-                            selectedMethod === method.id ? "#00C6AE" : "#6B7280"
-                          }
-                        />
-                      </View>
-                      <View style={styles.methodContent}>
-                        <View style={styles.methodTitleRow}>
-                          <Text style={styles.methodTitle}>{method.title}</Text>
-                          {method.recommended && (
-                            <View style={styles.recommendedBadge}>
-                              <Text style={styles.recommendedText}>{t("final_polish.twofactorauth_recommended")}</Text>
-                            </View>
-                          )}
-                        </View>
-                        <Text style={styles.methodDescription}>
-                          {method.description}
-                        </Text>
-                      </View>
-                      <View
-                        style={[
-                          styles.radioCircle,
-                          selectedMethod === method.id && styles.radioCircleSelected,
-                        ]}
-                      >
-                        {selectedMethod === method.id && (
-                          <Ionicons name="checkmark" size={12} color="#FFFFFF" />
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-
-              {/* Backup Codes */}
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>{t("final_polish.twofactorauth_backup_codes")}</Text>
-                <View style={styles.card}>
-                  <View style={styles.backupHeader}>
-                    <Text style={styles.backupTitle}>{t("final_polish.twofactorauth_recovery_codes")}</Text>
-                    <View
-                      style={[
-                        styles.backupBadge,
-                        {
-                          backgroundColor:
-                            backupCodesRemaining > 3 ? "#F0FDFB" : "#FEF3C7",
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.backupBadgeText,
-                          {
-                            color:
-                              backupCodesRemaining > 3 ? "#00897B" : "#D97706",
-                          },
-                        ]}
-                      >
-                        {backupCodesRemaining} remaining
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={styles.backupDescription}>
-                    Use backup codes to access your account if you lose access to
-                    your phone.
+              <TouchableOpacity
+                style={[
+                  styles.primaryBtn,
+                  (busy || code.length !== 6) && styles.primaryBtnDisabled,
+                ]}
+                onPress={verifyEnrol}
+                disabled={busy || code.length !== 6}
+              >
+                {busy ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>
+                    {t("2fa.verify_button")}
                   </Text>
-                  <View style={styles.backupButtons}>
-                    <TouchableOpacity
-                      style={styles.backupButton}
-                      onPress={handleViewBackupCodes}
-                    >
-                      <Text style={styles.backupButtonText}>{t("final_polish.twofactorauth_view_codes")}</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.backupButtonOutline}
-                      onPress={handleRegenerateBackupCodes}
-                    >
-                      <Text style={styles.backupButtonOutlineText}>{t("final_polish.twofactorauth_regenerate")}</Text>
-                    </TouchableOpacity>
-                  </View>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.secondaryBtn}
+                onPress={cancelEnrol}
+                disabled={busy}
+              >
+                <Text style={styles.secondaryBtnText}>{t("2fa.cancel")}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : verifiedFactorId ? (
+            // View mode — 2FA already enabled.
+            <View>
+              <View style={styles.statusCard}>
+                <View style={[styles.statusIcon, styles.statusIconOn]}>
+                  <Ionicons
+                    name="shield-checkmark"
+                    size={26}
+                    color="#00C6AE"
+                  />
+                </View>
+                <View style={styles.statusText}>
+                  <Text style={styles.statusTitle}>{t("2fa.enabled")}</Text>
+                  <Text style={styles.statusSubtitle}>
+                    {t("2fa.verified")}
+                  </Text>
                 </View>
               </View>
-            </>
-          )}
 
-          {/* Info Note */}
-          <View
-            style={[
-              styles.infoCard,
-              { backgroundColor: enabled ? "#F0FDFB" : "#FEF3C7" },
-            ]}
-          >
-            <Ionicons
-              name={enabled ? "shield-checkmark" : "warning"}
-              size={18}
-              color={enabled ? "#00897B" : "#D97706"}
-            />
-            <Text
-              style={[
-                styles.infoText,
-                { color: enabled ? "#065F46" : "#92400E" },
-              ]}
-            >
-              {enabled
-                ? "Two-factor authentication adds an extra layer of security. You'll need to enter a code each time you sign in."
-                : "Your account is not fully protected. We strongly recommend enabling two-factor authentication."}
-            </Text>
-          </View>
+              <TouchableOpacity
+                style={[styles.dangerBtn, busy && styles.primaryBtnDisabled]}
+                onPress={confirmDisable}
+                disabled={busy}
+              >
+                {busy ? (
+                  <ActivityIndicator color="#DC2626" />
+                ) : (
+                  <Text style={styles.dangerBtnText}>
+                    {t("2fa.disable_button")}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : (
+            // View mode — 2FA not enabled.
+            <View>
+              <View style={styles.statusCard}>
+                <View style={[styles.statusIcon, styles.statusIconOff]}>
+                  <Ionicons
+                    name="shield-outline"
+                    size={26}
+                    color="#6B7280"
+                  />
+                </View>
+                <View style={styles.statusText}>
+                  <Text style={styles.statusTitle}>{t("2fa.disabled")}</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.primaryBtn, busy && styles.primaryBtnDisabled]}
+                onPress={startEnrol}
+                disabled={busy}
+              >
+                {busy ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>
+                    {t("2fa.enable_button")}
+                  </Text>
+                )}
+              </TouchableOpacity>
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -295,21 +350,17 @@ export default function TwoFactorAuthScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F5F7FA",
-  },
+  container: { flex: 1, backgroundColor: "#F5F7FA" },
+  scroll: { paddingBottom: 40 },
   header: {
     paddingTop: 60,
     paddingHorizontal: 20,
     paddingBottom: 20,
-  },
-  headerRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
-  backButton: {
+  backBtn: {
     width: 40,
     height: 40,
     borderRadius: 10,
@@ -322,188 +373,142 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
   },
-  headerSubtitle: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.8)",
-    marginTop: 2,
+  body: { padding: 20 },
+  loading: {
+    padding: 40,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  content: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  card: {
+  statusCard: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+    borderRadius: 14,
     padding: 16,
     borderWidth: 1,
     borderColor: "#E5E7EB",
-    marginBottom: 16,
-  },
-  toggleRow: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: 14,
+    marginBottom: 20,
   },
-  toggleIcon: {
+  statusIcon: {
     width: 52,
     height: 52,
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
   },
-  toggleContent: {
-    flex: 1,
-  },
-  toggleTitle: {
+  statusIconOn: { backgroundColor: "#F0FDFB" },
+  statusIconOff: { backgroundColor: "#F5F7FA" },
+  statusText: { flex: 1 },
+  statusTitle: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#0A2342",
-  },
-  toggleSubtitle: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginTop: 2,
-  },
-  section: {
-    marginBottom: 4,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0A2342",
-    marginBottom: 12,
-  },
-  methodItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    gap: 12,
-  },
-  methodItemBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#F5F7FA",
-  },
-  methodItemSelected: {
-    backgroundColor: "#F0FDFB",
-    marginHorizontal: -16,
-    paddingHorizontal: 30,
-    borderRadius: 0,
-  },
-  methodIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  methodContent: {
-    flex: 1,
-  },
-  methodTitleRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  methodTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0A2342",
-  },
-  recommendedBadge: {
-    backgroundColor: "#00C6AE",
-    paddingVertical: 2,
-    paddingHorizontal: 6,
-    borderRadius: 4,
-  },
-  recommendedText: {
-    fontSize: 9,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: "#0A2342",
   },
-  methodDescription: {
+  statusSubtitle: {
     fontSize: 12,
     color: "#6B7280",
     marginTop: 2,
   },
-  radioCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: "#D1D5DB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  radioCircleSelected: {
-    backgroundColor: "#00C6AE",
-    borderColor: "#00C6AE",
-  },
-  backupHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  backupTitle: {
+  instruction: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#0A2342",
+    color: "#374151",
+    marginBottom: 16,
+    lineHeight: 20,
   },
-  backupBadge: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 6,
+  qrWrap: {
+    alignItems: "center",
+    padding: 20,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 16,
   },
-  backupBadgeText: {
-    fontSize: 11,
-    fontWeight: "600",
-  },
-  backupDescription: {
+  secretLabel: {
     fontSize: 12,
     color: "#6B7280",
-    lineHeight: 18,
-    marginBottom: 12,
+    marginBottom: 6,
   },
-  backupButtons: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  backupButton: {
-    flex: 1,
+  secretBox: {
     backgroundColor: "#F5F7FA",
     borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    padding: 12,
+    marginBottom: 20,
   },
-  backupButtonText: {
+  secretText: {
+    fontFamily: Platform.select({ ios: "Menlo", android: "monospace" }),
+    fontSize: 13,
+    color: "#0A2342",
+    letterSpacing: 1,
+    textAlign: "center",
+  },
+  codeLabel: {
     fontSize: 13,
     fontWeight: "600",
     color: "#0A2342",
+    marginBottom: 8,
   },
-  backupButtonOutline: {
-    flex: 1,
-    backgroundColor: "#F0FDFB",
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#00C6AE",
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  backupButtonOutlineText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#00897B",
-  },
-  infoCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
+  codeInput: {
+    height: 56,
+    backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    padding: 14,
-    gap: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    textAlign: "center",
+    fontSize: 24,
+    fontWeight: "600",
+    letterSpacing: 6,
+    color: "#0A2342",
+    marginBottom: 12,
   },
-  infoText: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 18,
+  error: {
+    color: "#DC2626",
+    fontSize: 13,
+    fontWeight: "500",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  primaryBtn: {
+    height: 52,
+    backgroundColor: "#00C6AE",
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+  },
+  primaryBtnDisabled: { opacity: 0.5 },
+  primaryBtnText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  secondaryBtn: {
+    height: 44,
+    marginTop: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  secondaryBtnText: {
+    color: "#6B7280",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  dangerBtn: {
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#DC2626",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+  },
+  dangerBtnText: {
+    color: "#DC2626",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

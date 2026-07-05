@@ -9533,5 +9533,35 @@
     "progress_label": "Progression vers {{nextTier}}",
     "view_full": "Voir tous les détails du palier",
     "dismiss": "Fermer"
+  },
+  "2fa": {
+    "title": "Authentification à deux facteurs",
+    "enabled": "Activée",
+    "disabled": "Désactivée",
+    "enable_button": "Activer la 2FA",
+    "disable_button": "Désactiver la 2FA",
+    "qr_instruction": "Scannez le QR code avec votre application d'authentification (Google Authenticator, Authy, 1Password, etc.).",
+    "secret_label": "Ou saisissez cette clé secrète manuellement :",
+    "verify_code_label": "Entrez le code à 6 chiffres",
+    "verify_button": "Vérifier",
+    "enable_success": "La 2FA a été activée.",
+    "disable_success": "La 2FA a été désactivée.",
+    "disable_confirm": "Êtes-vous sûr(e) de vouloir désactiver la 2FA ?",
+    "challenge_title": "Entrez votre code 2FA",
+    "challenge_subtitle": "Ouvrez votre application d'authentification et entrez le code à 6 chiffres.",
+    "invalid_code": "Code invalide. Veuillez réessayer.",
+    "cancel": "Annuler",
+    "verified": "Vérifiée"
+  },
+  "sessions": {
+    "title": "Sessions actives",
+    "current": "En cours",
+    "revoke": "Révoquer",
+    "revoke_all": "Déconnecter toutes les autres sessions",
+    "revoke_success": "Session révoquée.",
+    "revoke_all_success": "Toutes les autres sessions ont été déconnectées.",
+    "empty": "Aucune session active.",
+    "device_unknown": "Appareil inconnu",
+    "last_active": "Dernière activité : {{date}}"
   }
 }

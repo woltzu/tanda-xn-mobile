@@ -197,7 +197,16 @@ export default function LoginScreen() {
       return;
     }
     try {
-      await signIn(id, password);
+      const result = await signIn(id, password);
+      // 2FA gate. Password succeeded but AAL2 is required. AuthContext
+      // is now holding pendingMfa; isAuthenticated stays false until the
+      // TOTP code lands. Route to the challenge screen and skip the
+      // biometric opt-in + MainTabs reset — those fire on the
+      // subsequent successful challenge.
+      if (result?.requiresMfa) {
+        navigation.navigate("MfaChallenge" as never);
+        return;
+      }
       // Remember the identifier for next launch (only after a successful
       // sign-in so we never persist a fat-fingered string).
       if (rememberMe) {

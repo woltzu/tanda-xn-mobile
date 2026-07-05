@@ -57,6 +57,7 @@ import LogoHomeButton from "./components/LogoHomeButton";
 import { BugReportProvider, useBugReportScreen } from "./context/BugReportContext";
 import WelcomeScreen from "./screens/WelcomeScreen";
 import LoginScreen from "./screens/LoginScreen";
+import MfaChallengeScreen from "./screens/MfaChallengeScreen";
 import SignupScreen from "./screens/SignupScreen";
 import SignupWelcomeScreen from "./screens/SignupWelcomeScreen";
 import OTPScreen from "./screens/OTPScreen";
@@ -385,6 +386,7 @@ export type RootStackParamList = {
   Splash: undefined;
   Welcome: undefined;
   Login: undefined;
+  MfaChallenge: undefined;
   Signup: { email?: string } | undefined;
   SignupWelcome: undefined;
   ForgotPassword: { email?: string } | undefined;
@@ -1602,6 +1604,12 @@ function AppContent() {
           <Stack.Screen name="Splash" component={SplashScreen} />
           <Stack.Screen name="Welcome" component={WelcomeScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
+          {/* 2FA challenge — reached from LoginScreen when signIn
+              resolves with { requiresMfa: true }. AuthContext holds
+              pendingMfa which forces isAuthenticated=false, so this
+              screen stays inside the auth stack until the code is
+              verified. */}
+          <Stack.Screen name="MfaChallenge" component={MfaChallengeScreen} />
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="SignupWelcome" component={SignupWelcomeScreen} />
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />

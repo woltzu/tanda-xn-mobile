@@ -1,4 +1,21 @@
-import React, { useState } from "react";
+// ═══════════════════════════════════════════════════════════════════════════
+// screens/ActiveSessionsScreen.tsx
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Real sessions list. Backed by:
+//   - get_my_sessions()  RPC (migration 285) → row per auth.sessions
+//   - revoke_my_session(session_id) RPC (migration 285) → per-row revoke
+//   - supabase.auth.signOut({ scope: 'others' }) → log out all other sessions
+//
+// The current session is identified by decoding the access-token JWT to
+// pull the session_id claim (Supabase stamps it). If the decode fails
+// (rare — RN Hermes 0.70+ has atob), we fall back to the row with the
+// max updated_at as the current-session heuristic. Revoke is hidden for
+// the current row so the user can't accidentally sign themselves out
+// from a per-row action; use the sign-out flow for that.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,111 +23,320 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
+
 import { RootStackParamList } from "../App";
+import { supabase } from "../lib/supabase";
+import { showToast } from "../components/Toast";
 
 type ActiveSessionsNavigationProp = StackNavigationProp<RootStackParamList>;
 
-interface Session {
-  id: string;
-  device: string;
-  browser: string;
-  location: string;
-  lastActive: string;
-  isCurrent: boolean;
-  deviceType: "mobile" | "desktop" | "tablet";
+type SessionRow = {
+  session_id: string;
+  created_at: string | null;
+  updated_at: string | null;
+  user_agent: string | null;
+  ip: string | null;
+  aal: string | null;
+  not_after: string | null;
+  factor_id: string | null;
+};
+
+type DeviceType = "mobile" | "desktop" | "tablet" | "unknown";
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+function parseUa(ua: string | null): { device: string; deviceType: DeviceType } {
+  if (!ua) return { device: "", deviceType: "unknown" };
+  const lower = ua.toLowerCase();
+
+  // Native RN identifies as "okhttp" (Android) or "CFNetwork" (iOS)
+  // with expo-managed clients. Match those first so we don't fall into
+  // the desktop-browser branches.
+  if (/expo|okhttp/.test(lower)) {
+    if (/android/.test(lower)) return { device: "Android app", deviceType: "mobile" };
+    if (/iphone|ios/.test(lower)) return { device: "iPhone app", deviceType: "mobile" };
+    if (/ipad/.test(lower)) return { device: "iPad app", deviceType: "tablet" };
+    return { device: "TandaXn app", deviceType: "mobile" };
+  }
+
+  if (/ipad/.test(lower)) return { device: "iPad", deviceType: "tablet" };
+  if (/iphone/.test(lower)) return { device: "iPhone", deviceType: "mobile" };
+  if (/android/.test(lower)) {
+    return { device: /tablet/.test(lower) ? "Android tablet" : "Android", deviceType: /tablet/.test(lower) ? "tablet" : "mobile" };
+  }
+  if (/edg\//.test(lower)) return { device: "Edge · desktop", deviceType: "desktop" };
+  if (/chrome/.test(lower)) return { device: "Chrome · desktop", deviceType: "desktop" };
+  if (/firefox/.test(lower)) return { device: "Firefox · desktop", deviceType: "desktop" };
+  if (/safari/.test(lower)) return { device: "Safari · desktop", deviceType: "desktop" };
+  if (/mac os|macintosh/.test(lower)) return { device: "Mac", deviceType: "desktop" };
+  if (/windows/.test(lower)) return { device: "Windows PC", deviceType: "desktop" };
+
+  return { device: "", deviceType: "unknown" };
 }
+
+function maskIp(ip: string | null): string {
+  if (!ip) return "—";
+  // IPv4 → replace last octet.
+  const v4 = ip.match(/^(\d+\.\d+\.\d+)\.\d+$/);
+  if (v4) return `${v4[1]}.x`;
+  // IPv6 → keep first two groups + …
+  const v6 = ip.split(":");
+  if (v6.length > 2) return `${v6[0]}:${v6[1]}::…`;
+  return ip;
+}
+
+function iconFor(t: DeviceType): keyof typeof Ionicons.glyphMap {
+  switch (t) {
+    case "mobile": return "phone-portrait";
+    case "tablet": return "tablet-portrait";
+    case "desktop": return "desktop";
+    default: return "hardware-chip";
+  }
+}
+
+function decodeSessionIdFromJwt(accessToken: string | null | undefined): string | null {
+  if (!accessToken) return null;
+  try {
+    const parts = accessToken.split(".");
+    if (parts.length !== 3) return null;
+    // JWT uses base64url; convert to base64 for atob.
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "===".slice((b64.length + 3) % 4);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const g = globalThis as any;
+    const raw = typeof g.atob === "function" ? g.atob(padded) : null;
+    if (!raw) return null;
+    const payload = JSON.parse(raw);
+    return typeof payload.session_id === "string" ? payload.session_id : null;
+  } catch {
+    return null;
+  }
+}
+
+function formatDate(t: (k: string) => string, iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString();
+  } catch {
+    return "—";
+  }
+}
+
+// ── Screen ───────────────────────────────────────────────────────────────
 
 export default function ActiveSessionsScreen() {
   const { t } = useTranslation();
-
   const navigation = useNavigation<ActiveSessionsNavigationProp>();
 
-  const [sessions] = useState<Session[]>([
-    {
-      id: "s1",
-      device: "iPhone 14 Pro",
-      browser: "TandaXn App",
-      location: "Atlanta, GA",
-      lastActive: "Now",
-      isCurrent: true,
-      deviceType: "mobile",
-    },
-    {
-      id: "s2",
-      device: "MacBook Pro",
-      browser: "Chrome",
-      location: "Atlanta, GA",
-      lastActive: "2 hours ago",
-      isCurrent: false,
-      deviceType: "desktop",
-    },
-    {
-      id: "s3",
-      device: "iPad Air",
-      browser: "TandaXn App",
-      location: "New York, NY",
-      lastActive: "3 days ago",
-      isCurrent: false,
-      deviceType: "tablet",
-    },
-  ]);
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [currentId, setCurrentId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyAll, setBusyAll] = useState(false);
 
-  const getDeviceIcon = (type: string): keyof typeof Ionicons.glyphMap => {
-    switch (type) {
-      case "mobile":
-        return "phone-portrait";
-      case "desktop":
-        return "desktop";
-      case "tablet":
-        return "tablet-portrait";
-      default:
-        return "hardware-chip";
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const [rowsRes, sessionRes] = await Promise.all([
+        supabase.rpc("get_my_sessions"),
+        supabase.auth.getSession(),
+      ]);
+      if (rowsRes.error) throw rowsRes.error;
+      const rows: SessionRow[] = Array.isArray(rowsRes.data) ? rowsRes.data : [];
+
+      let cur = decodeSessionIdFromJwt(sessionRes.data.session?.access_token);
+      // Fallback heuristic when the JWT couldn't be decoded — the row we
+      // just updated (this GET) will have the newest updated_at.
+      if (!cur && rows.length > 0) {
+        const sorted = [...rows].sort((a, b) => {
+          const av = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+          const bv = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+          return bv - av;
+        });
+        cur = sorted[0]?.session_id ?? null;
+      }
+
+      setSessions(rows);
+      setCurrentId(cur);
+    } catch (e: any) {
+      console.warn("[ActiveSessions] load failed", e?.message);
+      setError(e?.message ?? "Failed to load sessions");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, []);
 
-  const handleLogoutSession = (session: Session) => {
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    void load();
+  }, [load]);
+
+  const handleRevoke = useCallback(
+    (row: SessionRow) => {
+      Alert.alert(
+        t("sessions.revoke"),
+        `${row.user_agent ?? t("sessions.device_unknown")}`,
+        [
+          { text: t("2fa.cancel"), style: "cancel" },
+          {
+            text: t("sessions.revoke"),
+            style: "destructive",
+            onPress: async () => {
+              setBusyId(row.session_id);
+              try {
+                const { error: rpcErr } = await supabase.rpc(
+                  "revoke_my_session",
+                  { p_session_id: row.session_id },
+                );
+                if (rpcErr) throw rpcErr;
+                showToast(t("sessions.revoke_success"), "success");
+                await load();
+              } catch (e: any) {
+                Alert.alert(
+                  t("sessions.title"),
+                  e?.message ?? "Failed to revoke session",
+                );
+              } finally {
+                setBusyId(null);
+              }
+            },
+          },
+        ],
+      );
+    },
+    [load, t],
+  );
+
+  const handleRevokeAll = useCallback(() => {
     Alert.alert(
-      "Log Out Session",
-      `Are you sure you want to log out from ${session.device}?`,
+      t("sessions.revoke_all"),
+      t("final_polish.activesessions_log_out_confirm") ||
+        "This will log you out from all other devices. You'll stay logged in on this device.",
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("2fa.cancel"), style: "cancel" },
         {
-          text: "Log Out",
+          text: t("sessions.revoke_all"),
           style: "destructive",
-          onPress: () => console.log("Log out session:", session.id),
+          onPress: async () => {
+            setBusyAll(true);
+            try {
+              const { error: sErr } = await supabase.auth.signOut({
+                scope: "others",
+              });
+              if (sErr) throw sErr;
+              showToast(t("sessions.revoke_all_success"), "success");
+              await load();
+            } catch (e: any) {
+              Alert.alert(
+                t("sessions.title"),
+                e?.message ?? "Failed to log out other sessions",
+              );
+            } finally {
+              setBusyAll(false);
+            }
+          },
         },
-      ]
+      ],
+    );
+  }, [load, t]);
+
+  // ── Derived groupings ───────────────────────────────────────────────
+  const current = sessions.find((s) => s.session_id === currentId);
+  const others = sessions.filter((s) => s.session_id !== currentId);
+
+  const renderRow = (row: SessionRow, isCurrent: boolean) => {
+    const { device, deviceType } = parseUa(row.user_agent);
+    const deviceLabel = device || t("sessions.device_unknown");
+    const last = formatDate(t, row.updated_at ?? row.created_at);
+    const revoking = busyId === row.session_id;
+    return (
+      <View
+        key={row.session_id}
+        style={[
+          styles.sessionRow,
+          isCurrent && styles.sessionRowCurrent,
+        ]}
+      >
+        <View
+          style={[
+            styles.deviceIcon,
+            isCurrent ? styles.deviceIconCurrent : styles.deviceIconOther,
+          ]}
+        >
+          <Ionicons
+            name={iconFor(deviceType)}
+            size={22}
+            color={isCurrent ? "#00C6AE" : "#0A2342"}
+          />
+        </View>
+        <View style={styles.sessionContent}>
+          <View style={styles.sessionTitleRow}>
+            <Text style={styles.sessionDevice}>{deviceLabel}</Text>
+            {isCurrent ? (
+              <View style={styles.currentBadge}>
+                <Text style={styles.currentBadgeText}>
+                  {t("sessions.current")}
+                </Text>
+              </View>
+            ) : null}
+            {row.aal === "aal2" ? (
+              <View style={styles.aalBadge}>
+                <Text style={styles.aalBadgeText}>2FA</Text>
+              </View>
+            ) : null}
+          </View>
+          <Text style={styles.sessionMeta}>{maskIp(row.ip)}</Text>
+          <Text style={styles.sessionMeta}>
+            {t("sessions.last_active", { date: last })}
+          </Text>
+        </View>
+        {!isCurrent ? (
+          <TouchableOpacity
+            style={[styles.revokeBtn, revoking && styles.revokeBtnDisabled]}
+            onPress={() => handleRevoke(row)}
+            disabled={revoking || busyAll}
+          >
+            {revoking ? (
+              <ActivityIndicator color="#DC2626" size="small" />
+            ) : (
+              <Text style={styles.revokeBtnText}>{t("sessions.revoke")}</Text>
+            )}
+          </TouchableOpacity>
+        ) : null}
+      </View>
     );
   };
-
-  const handleLogoutAll = () => {
-    Alert.alert(
-      "Log Out All Sessions",
-      "This will log you out from all other devices. You'll stay logged in on this device.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Log Out All",
-          style: "destructive",
-          onPress: () => console.log("Log out all other sessions"),
-        },
-      ]
-    );
-  };
-
-  const currentSession = sessions.find((s) => s.isCurrent);
-  const otherSessions = sessions.filter((s) => !s.isCurrent);
 
   return (
     <View style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
           <View style={styles.headerRow}>
             <TouchableOpacity
@@ -120,165 +346,84 @@ export default function ActiveSessionsScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View>
-              <Text style={styles.headerTitle}>{t("screen_headers.active_sessions")}</Text>
+              <Text style={styles.headerTitle}>{t("sessions.title")}</Text>
               <Text style={styles.headerSubtitle}>
-                {sessions.length} device{sessions.length !== 1 ? "s" : ""} logged in
+                {sessions.length}{" "}
+                {sessions.length === 1 ? "device" : "devices"}
               </Text>
             </View>
           </View>
         </LinearGradient>
 
-        {/* Content */}
         <View style={styles.content}>
-          {/* Current Session */}
-          {currentSession && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t("final_polish.activesessions_this_device")}</Text>
-              <View style={styles.currentSessionCard}>
-                <View style={styles.sessionRow}>
-                  <View style={styles.currentDeviceIcon}>
-                    <Ionicons
-                      name={getDeviceIcon(currentSession.deviceType)}
-                      size={24}
-                      color="#00C6AE"
-                    />
-                  </View>
-                  <View style={styles.sessionContent}>
-                    <View style={styles.sessionTitleRow}>
-                      <Text style={styles.sessionDevice}>
-                        {currentSession.device}
-                      </Text>
-                      <View style={styles.currentBadge}>
-                        <Text style={styles.currentBadgeText}>{t("final_polish.activesessions_this_device")}</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.sessionBrowser}>
-                      {currentSession.browser}
-                    </Text>
-                    <View style={styles.sessionMeta}>
-                      <View style={styles.metaItem}>
-                        <Ionicons
-                          name="location-outline"
-                          size={12}
-                          color="#6B7280"
-                        />
-                        <Text style={styles.metaText}>
-                          {currentSession.location}
-                        </Text>
-                      </View>
-                      <Text style={styles.activeNow}>{t("final_polish.activesessions_active_now")}</Text>
-                    </View>
+          {loading ? (
+            <View style={styles.loading}>
+              <ActivityIndicator color="#00C6AE" />
+            </View>
+          ) : error ? (
+            <View style={styles.warningCard}>
+              <Ionicons name="warning" size={18} color="#D97706" />
+              <Text style={styles.warningText}>{error}</Text>
+            </View>
+          ) : sessions.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>{t("sessions.empty")}</Text>
+            </View>
+          ) : (
+            <>
+              {current ? (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>
+                    {t("final_polish.activesessions_this_device")}
+                  </Text>
+                  <View style={styles.card}>{renderRow(current, true)}</View>
+                </View>
+              ) : null}
+
+              {others.length > 0 ? (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>
+                    {t("final_polish.activesessions_other_sessions")}
+                  </Text>
+                  <View style={styles.card}>
+                    {others.map((s) => renderRow(s, false))}
                   </View>
                 </View>
-              </View>
-            </View>
+              ) : null}
+            </>
           )}
-
-          {/* Other Sessions */}
-          {otherSessions.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t("final_polish.activesessions_other_sessions")}</Text>
-              <View style={styles.card}>
-                {otherSessions.map((session, index) => (
-                  <View
-                    key={session.id}
-                    style={[
-                      styles.sessionRow,
-                      styles.otherSession,
-                      index < otherSessions.length - 1 && styles.borderBottom,
-                    ]}
-                  >
-                    <View style={styles.deviceIcon}>
-                      <Ionicons
-                        name={getDeviceIcon(session.deviceType)}
-                        size={22}
-                        color="#0A2342"
-                      />
-                    </View>
-                    <View style={styles.sessionContent}>
-                      <Text style={styles.sessionDevice}>{session.device}</Text>
-                      <Text style={styles.sessionBrowser}>{session.browser}</Text>
-                      <View style={styles.sessionMeta}>
-                        <View style={styles.metaItem}>
-                          <Ionicons
-                            name="location-outline"
-                            size={12}
-                            color="#6B7280"
-                          />
-                          <Text style={styles.metaText}>{session.location}</Text>
-                        </View>
-                        <Text style={styles.metaText}>
-                          {session.lastActive}
-                        </Text>
-                      </View>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.logoutButton}
-                      onPress={() => handleLogoutSession(session)}
-                    >
-                      <Text style={styles.logoutButtonText}>{t("final_polish.activesessions_log_out")}</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* Security Warning */}
-          <View style={styles.warningCard}>
-            <Ionicons name="warning" size={18} color="#D97706" />
-            <Text style={styles.warningText}>
-              Don't recognize a session? Log it out immediately and change your
-              password to secure your account.
-            </Text>
-          </View>
-
-          {/* Security Tips */}
-          <View style={styles.tipsCard}>
-            <Text style={styles.tipsTitle}>{t("final_polish.activesessions_security_tips")}</Text>
-            <View style={styles.tipItem}>
-              <Ionicons name="checkmark-circle" size={16} color="#00C6AE" />
-              <Text style={styles.tipText}>
-                Regularly review your active sessions
-              </Text>
-            </View>
-            <View style={styles.tipItem}>
-              <Ionicons name="checkmark-circle" size={16} color="#00C6AE" />
-              <Text style={styles.tipText}>
-                Log out from devices you no longer use
-              </Text>
-            </View>
-            <View style={styles.tipItem}>
-              <Ionicons name="checkmark-circle" size={16} color="#00C6AE" />
-              <Text style={styles.tipText}>
-                Enable two-factor authentication
-              </Text>
-            </View>
-          </View>
         </View>
       </ScrollView>
 
-      {/* Bottom Action */}
-      {otherSessions.length > 0 && (
+      {others.length > 0 ? (
         <View style={styles.bottomBar}>
           <TouchableOpacity
-            style={styles.logoutAllButton}
-            onPress={handleLogoutAll}
+            style={[
+              styles.revokeAllBtn,
+              busyAll && styles.revokeBtnDisabled,
+            ]}
+            onPress={handleRevokeAll}
+            disabled={busyAll}
           >
-            <Ionicons name="log-out-outline" size={20} color="#DC2626" />
-            <Text style={styles.logoutAllText}>{t("final_polish.activesessions_log_out_all_other_sessions")}</Text>
+            {busyAll ? (
+              <ActivityIndicator color="#DC2626" />
+            ) : (
+              <>
+                <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+                <Text style={styles.revokeAllText}>
+                  {t("sessions.revoke_all")}
+                </Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
-      )}
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#F5F7FA",
-  },
+  container: { flex: 1, backgroundColor: "#F5F7FA" },
   header: {
     paddingTop: 60,
     paddingHorizontal: 20,
@@ -309,7 +454,11 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    paddingBottom: 120,
+    paddingBottom: 140,
+  },
+  loading: {
+    padding: 40,
+    alignItems: "center",
   },
   section: {
     marginBottom: 20,
@@ -320,13 +469,6 @@ const styles = StyleSheet.create({
     color: "#0A2342",
     marginBottom: 10,
   },
-  currentSessionCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: "#00C6AE",
-    overflow: "hidden",
-  },
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
@@ -336,41 +478,31 @@ const styles = StyleSheet.create({
   },
   sessionRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     padding: 16,
     gap: 14,
-  },
-  otherSession: {
-    alignItems: "center",
-  },
-  borderBottom: {
     borderBottomWidth: 1,
     borderBottomColor: "#F5F7FA",
   },
-  currentDeviceIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: "#F0FDFB",
-    alignItems: "center",
-    justifyContent: "center",
+  sessionRowCurrent: {
+    borderBottomWidth: 0,
   },
   deviceIcon: {
     width: 48,
     height: 48,
     borderRadius: 12,
-    backgroundColor: "#F5F7FA",
     alignItems: "center",
     justifyContent: "center",
   },
-  sessionContent: {
-    flex: 1,
-  },
+  deviceIconCurrent: { backgroundColor: "#F0FDFB" },
+  deviceIconOther: { backgroundColor: "#F5F7FA" },
+  sessionContent: { flex: 1 },
   sessionTitleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    marginBottom: 2,
+    gap: 6,
+    flexWrap: "wrap",
+    marginBottom: 4,
   },
   sessionDevice: {
     fontSize: 15,
@@ -388,37 +520,32 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
   },
-  sessionBrowser: {
-    fontSize: 12,
-    color: "#6B7280",
-    marginBottom: 6,
+  aalBadge: {
+    backgroundColor: "#DBEAFE",
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRadius: 4,
+  },
+  aalBadgeText: {
+    fontSize: 9,
+    fontWeight: "700",
+    color: "#1D4ED8",
   },
   sessionMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  metaItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  metaText: {
     fontSize: 11,
     color: "#6B7280",
+    marginTop: 1,
   },
-  activeNow: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#00C6AE",
-  },
-  logoutButton: {
+  revokeBtn: {
     backgroundColor: "#FEE2E2",
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
+    minWidth: 76,
+    alignItems: "center",
   },
-  logoutButtonText: {
+  revokeBtnDisabled: { opacity: 0.5 },
+  revokeBtnText: {
     fontSize: 12,
     fontWeight: "600",
     color: "#DC2626",
@@ -438,28 +565,13 @@ const styles = StyleSheet.create({
     color: "#92400E",
     lineHeight: 18,
   },
-  tipsCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-  },
-  tipsTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#0A2342",
-    marginBottom: 12,
-  },
-  tipItem: {
-    flexDirection: "row",
+  emptyCard: {
+    padding: 40,
     alignItems: "center",
-    gap: 10,
-    marginBottom: 8,
   },
-  tipText: {
-    fontSize: 13,
-    color: "#4B5563",
+  emptyText: {
+    fontSize: 14,
+    color: "#6B7280",
   },
   bottomBar: {
     position: "absolute",
@@ -472,7 +584,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#E5E7EB",
   },
-  logoutAllButton: {
+  revokeAllBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -483,7 +595,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     gap: 8,
   },
-  logoutAllText: {
+  revokeAllText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#DC2626",

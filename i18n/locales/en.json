@@ -9533,5 +9533,35 @@
     "progress_label": "Progress to {{nextTier}}",
     "view_full": "View full tier details",
     "dismiss": "Dismiss"
+  },
+  "2fa": {
+    "title": "Two-Factor Authentication",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "enable_button": "Enable 2FA",
+    "disable_button": "Disable 2FA",
+    "qr_instruction": "Scan the QR code with your authenticator app (Google Authenticator, Authy, 1Password, etc.).",
+    "secret_label": "Or enter this secret key manually:",
+    "verify_code_label": "Enter the 6-digit code",
+    "verify_button": "Verify",
+    "enable_success": "2FA has been enabled.",
+    "disable_success": "2FA has been disabled.",
+    "disable_confirm": "Are you sure you want to disable 2FA?",
+    "challenge_title": "Enter your 2FA code",
+    "challenge_subtitle": "Open your authenticator app and enter the 6-digit code.",
+    "invalid_code": "Invalid code. Please try again.",
+    "cancel": "Cancel",
+    "verified": "Verified"
+  },
+  "sessions": {
+    "title": "Active Sessions",
+    "current": "Current",
+    "revoke": "Revoke",
+    "revoke_all": "Log out all other sessions",
+    "revoke_success": "Session revoked.",
+    "revoke_all_success": "All other sessions logged out.",
+    "empty": "No active sessions.",
+    "device_unknown": "Unknown device",
+    "last_active": "Last active: {{date}}"
   }
 }

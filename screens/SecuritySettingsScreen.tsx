@@ -1,4 +1,22 @@
-import React, { useState } from "react";
+// ═══════════════════════════════════════════════════════════════════════════
+// screens/SecuritySettingsScreen.tsx
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Real security hub. Shows:
+//   * Change password → ChangePassword (already real)
+//   * 2FA on/off status → TwoFactorAuth (now real)
+//   * Biometrics toggle → wired to AuthContext (already real)
+//   * Active sessions count → get_my_sessions RPC → ActiveSessions (now real)
+//
+// Dropped from the previous mock:
+//   * Fake security-score gauge (derived from unwired toggles).
+//   * "Login alerts" + "Transaction alerts" toggles — pure local useState
+//     that persisted nothing.
+//   * Hardcoded "Last changed 30 days ago" / "Authenticator app enabled"
+//     copy that lied when neither was true.
+// ═══════════════════════════════════════════════════════════════════════════
+
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -9,45 +27,72 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
+
 import { RootStackParamList } from "../App";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
 
 type SecuritySettingsNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function SecuritySettingsScreen() {
   const navigation = useNavigation<SecuritySettingsNavigationProp>();
   const { t } = useTranslation();
+  const {
+    biometricsEnabled,
+    biometricsAvailable,
+    setBiometricsEnabled,
+  } = useAuth();
 
-  const [biometricsEnabled, setBiometricsEnabled] = useState(true);
-  const [loginAlerts, setLoginAlerts] = useState(true);
-  const [transactionAlerts, setTransactionAlerts] = useState(true);
+  const [mfaEnabled, setMfaEnabled] = useState<boolean | null>(null);
+  const [sessionCount, setSessionCount] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Security score based on settings
-  const calculateSecurityScore = () => {
-    let score = 50; // Base score
-    if (biometricsEnabled) score += 20;
-    if (loginAlerts) score += 15;
-    if (transactionAlerts) score += 15;
-    return score;
-  };
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [factorsRes, sessionsRes] = await Promise.all([
+        supabase.auth.mfa.listFactors(),
+        supabase.rpc("get_my_sessions"),
+      ]);
+      const verified = factorsRes.data?.totp?.find(
+        (f) => f.status === "verified",
+      );
+      setMfaEnabled(!!verified);
+      setSessionCount(
+        Array.isArray(sessionsRes.data) ? sessionsRes.data.length : 0,
+      );
+    } catch (e) {
+      console.warn("[SecuritySettings] load failed", e);
+      // Leave state as-is so the UI doesn't flicker between real / mock.
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const securityScore = calculateSecurityScore();
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const getScoreColor = (score: number) => {
-    if (score >= 90) return "#00C6AE";
-    if (score >= 70) return "#00897B";
-    if (score >= 50) return "#D97706";
-    return "#DC2626";
-  };
+  // Re-fetch on focus so a change in TwoFactorAuth / ActiveSessions is
+  // reflected the moment the user comes back to this hub.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
-  const getScoreLabel = (score: number) => {
-    if (score >= 90) return "Excellent";
-    if (score >= 70) return "Good";
-    if (score >= 50) return "Fair";
-    return "Needs Improvement";
-  };
+  const mfaSubtitle =
+    mfaEnabled === null
+      ? "…"
+      : mfaEnabled
+      ? t("2fa.enabled")
+      : t("2fa.disabled");
+
+  const sessionSubtitle =
+    sessionCount === null ? "…" : String(sessionCount);
 
   return (
     <View style={styles.container}>
@@ -62,34 +107,23 @@ export default function SecuritySettingsScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <View>
-              <Text style={styles.headerTitle}>{t("screen_headers.security_settings")}</Text>
-              <Text style={styles.headerSubtitle}>{t("final_polish.securitysettings_protect_your_account")}</Text>
+              <Text style={styles.headerTitle}>
+                {t("screen_headers.security_settings")}
+              </Text>
+              <Text style={styles.headerSubtitle}>
+                {t("final_polish.securitysettings_protect_your_account")}
+              </Text>
             </View>
             <View style={{ width: 40 }} />
           </View>
-
-          {/* Security Score */}
-          <View style={styles.scoreCard}>
-            <View style={styles.scoreCircle}>
-              <Text style={[styles.scoreValue, { color: getScoreColor(securityScore) }]}>
-                {securityScore}
-              </Text>
-              <Text style={styles.scoreMax}>/100</Text>
-            </View>
-            <View style={styles.scoreInfo}>
-              <Text style={styles.scoreLabel}>{t("final_polish.securitysettings_security_score")}</Text>
-              <Text style={[styles.scoreStatus, { color: getScoreColor(securityScore) }]}>
-                {getScoreLabel(securityScore)}
-              </Text>
-            </View>
-          </View>
         </LinearGradient>
 
-        {/* Content */}
         <View style={styles.content}>
           {/* Password Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t("final_polish.securitysettings_password")}</Text>
+            <Text style={styles.sectionTitle}>
+              {t("final_polish.securitysettings_password")}
+            </Text>
             <View style={styles.card}>
               <TouchableOpacity
                 style={styles.menuItem}
@@ -99,8 +133,9 @@ export default function SecuritySettingsScreen() {
                   <Ionicons name="key-outline" size={20} color="#00C6AE" />
                 </View>
                 <View style={styles.menuContent}>
-                  <Text style={styles.menuTitle}>{t("final_polish.securitysettings_change_password")}</Text>
-                  <Text style={styles.menuSubtitle}>Last changed 30 days ago</Text>
+                  <Text style={styles.menuTitle}>
+                    {t("final_polish.securitysettings_change_password")}
+                  </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
               </TouchableOpacity>
@@ -109,123 +144,112 @@ export default function SecuritySettingsScreen() {
 
           {/* Two-Factor Authentication */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t("final_polish.securitysettings_two_factor_authentication")}</Text>
+            <Text style={styles.sectionTitle}>
+              {t("final_polish.securitysettings_two_factor_authentication")}
+            </Text>
             <View style={styles.card}>
               <TouchableOpacity
                 style={styles.menuItem}
                 onPress={() => navigation.navigate("TwoFactorAuth" as any)}
+                disabled={loading}
               >
                 <View style={[styles.menuIcon, { backgroundColor: "#F0FDFB" }]}>
-                  <Ionicons name="shield-checkmark-outline" size={20} color="#00C6AE" />
+                  <Ionicons
+                    name="shield-checkmark-outline"
+                    size={20}
+                    color="#00C6AE"
+                  />
                 </View>
                 <View style={styles.menuContent}>
-                  <Text style={styles.menuTitle}>2FA Settings</Text>
-                  <Text style={styles.menuSubtitle}>{t("final_polish.securitysettings_authenticator_app_enabled")}</Text>
+                  <Text style={styles.menuTitle}>{t("2fa.title")}</Text>
+                  <Text style={styles.menuSubtitle}>{mfaSubtitle}</Text>
                 </View>
-                <View style={styles.enabledBadge}>
-                  <Text style={styles.enabledText}>{t("final_polish.securitysettings_enabled")}</Text>
-                </View>
+                {mfaEnabled === true ? (
+                  <View style={styles.enabledBadge}>
+                    <Text style={styles.enabledText}>
+                      {t("final_polish.securitysettings_enabled")}
+                    </Text>
+                  </View>
+                ) : null}
                 <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Biometrics */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t("final_polish.securitysettings_biometrics")}</Text>
-            <View style={styles.card}>
-              <View style={styles.toggleItem}>
-                <View style={[styles.menuIcon, { backgroundColor: "#EFF6FF" }]}>
-                  <Ionicons name="finger-print" size={20} color="#3B82F6" />
+          {/* Biometrics — wired to real AuthContext */}
+          {biometricsAvailable ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                {t("final_polish.securitysettings_biometrics")}
+              </Text>
+              <View style={styles.card}>
+                <View style={styles.toggleItem}>
+                  <View style={[styles.menuIcon, { backgroundColor: "#EFF6FF" }]}>
+                    <Ionicons name="finger-print" size={20} color="#3B82F6" />
+                  </View>
+                  <View style={styles.menuContent}>
+                    <Text style={styles.menuTitle}>Face ID / Touch ID</Text>
+                    <Text style={styles.menuSubtitle}>
+                      Quick &amp; secure login
+                    </Text>
+                  </View>
+                  <Switch
+                    value={biometricsEnabled}
+                    onValueChange={(v) => {
+                      void setBiometricsEnabled(v);
+                    }}
+                    trackColor={{ false: "#E5E7EB", true: "#00C6AE" }}
+                    thumbColor="#FFFFFF"
+                  />
                 </View>
-                <View style={styles.menuContent}>
-                  <Text style={styles.menuTitle}>Face ID / Touch ID</Text>
-                  <Text style={styles.menuSubtitle}>
-                    Quick & secure login
-                  </Text>
-                </View>
-                <Switch
-                  value={biometricsEnabled}
-                  onValueChange={setBiometricsEnabled}
-                  trackColor={{ false: "#E5E7EB", true: "#00C6AE" }}
-                  thumbColor="#FFFFFF"
-                />
               </View>
             </View>
-          </View>
-
-          {/* Security Alerts */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t("final_polish.securitysettings_security_alerts")}</Text>
-            <View style={styles.card}>
-              <View style={[styles.toggleItem, styles.borderBottom]}>
-                <View style={[styles.menuIcon, { backgroundColor: "#FEF3C7" }]}>
-                  <Ionicons name="log-in-outline" size={20} color="#D97706" />
-                </View>
-                <View style={styles.menuContent}>
-                  <Text style={styles.menuTitle}>{t("final_polish.securitysettings_login_alerts")}</Text>
-                  <Text style={styles.menuSubtitle}>
-                    Get notified of new logins
-                  </Text>
-                </View>
-                <Switch
-                  value={loginAlerts}
-                  onValueChange={setLoginAlerts}
-                  trackColor={{ false: "#E5E7EB", true: "#00C6AE" }}
-                  thumbColor="#FFFFFF"
-                />
-              </View>
-
-              <View style={styles.toggleItem}>
-                <View style={[styles.menuIcon, { backgroundColor: "#FEE2E2" }]}>
-                  <Ionicons name="card-outline" size={20} color="#DC2626" />
-                </View>
-                <View style={styles.menuContent}>
-                  <Text style={styles.menuTitle}>{t("final_polish.securitysettings_transaction_alerts")}</Text>
-                  <Text style={styles.menuSubtitle}>
-                    Alerts for money movement
-                  </Text>
-                </View>
-                <Switch
-                  value={transactionAlerts}
-                  onValueChange={setTransactionAlerts}
-                  trackColor={{ false: "#E5E7EB", true: "#00C6AE" }}
-                  thumbColor="#FFFFFF"
-                />
-              </View>
-            </View>
-          </View>
+          ) : null}
 
           {/* Active Sessions */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t("final_polish.securitysettings_sessions")}</Text>
+            <Text style={styles.sectionTitle}>
+              {t("final_polish.securitysettings_sessions")}
+            </Text>
             <View style={styles.card}>
               <TouchableOpacity
                 style={styles.menuItem}
                 onPress={() => navigation.navigate("ActiveSessions" as any)}
+                disabled={loading}
               >
                 <View style={[styles.menuIcon, { backgroundColor: "#F5F7FA" }]}>
-                  <Ionicons name="phone-portrait-outline" size={20} color="#0A2342" />
+                  <Ionicons
+                    name="phone-portrait-outline"
+                    size={20}
+                    color="#0A2342"
+                  />
                 </View>
                 <View style={styles.menuContent}>
-                  <Text style={styles.menuTitle}>{t("final_polish.securitysettings_active_sessions")}</Text>
-                  <Text style={styles.menuSubtitle}>3 devices logged in</Text>
+                  <Text style={styles.menuTitle}>
+                    {t("final_polish.securitysettings_active_sessions")}
+                  </Text>
+                  <Text style={styles.menuSubtitle}>{sessionSubtitle}</Text>
                 </View>
-                <View style={styles.sessionsBadge}>
-                  <Text style={styles.sessionsBadgeText}>3</Text>
-                </View>
+                {sessionCount !== null && sessionCount > 0 ? (
+                  <View style={styles.sessionsBadge}>
+                    <Text style={styles.sessionsBadgeText}>{sessionCount}</Text>
+                  </View>
+                ) : null}
                 <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
               </TouchableOpacity>
             </View>
           </View>
 
-          {/* Security Tips */}
+          {/* Security Tip */}
           <View style={styles.tipCard}>
             <Ionicons name="bulb-outline" size={20} color="#00897B" />
             <View style={styles.tipContent}>
-              <Text style={styles.tipTitle}>{t("final_polish.securitysettings_security_tips")}</Text>
+              <Text style={styles.tipTitle}>
+                {t("final_polish.securitysettings_security_tips")}
+              </Text>
               <Text style={styles.tipText}>
-                Enable all security features and use a strong, unique password to keep your account safe.
+                Enable 2FA and use a strong, unique password to keep your
+                account safe.
               </Text>
             </View>
           </View>
@@ -249,7 +273,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    marginBottom: 20,
   },
   backButton: {
     width: 40,
@@ -267,42 +290,6 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 13,
     color: "rgba(255,255,255,0.8)",
-    marginTop: 2,
-  },
-  scoreCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 14,
-    padding: 16,
-    gap: 16,
-  },
-  scoreCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scoreValue: {
-    fontSize: 24,
-    fontWeight: "700",
-  },
-  scoreMax: {
-    fontSize: 10,
-    color: "rgba(255,255,255,0.6)",
-  },
-  scoreInfo: {
-    flex: 1,
-  },
-  scoreLabel: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.7)",
-  },
-  scoreStatus: {
-    fontSize: 18,
-    fontWeight: "700",
     marginTop: 2,
   },
   content: {
@@ -339,10 +326,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 14,
     gap: 12,
-  },
-  borderBottom: {
-    borderBottomWidth: 1,
-    borderBottomColor: "#F5F7FA",
   },
   menuIcon: {
     width: 40,

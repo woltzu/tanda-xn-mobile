@@ -68,6 +68,24 @@ type User = {
   kyc?: KycSummary | null;
 };
 
+// Set on the context between a successful password check and a completed
+// TOTP challenge. When non-null, isAuthenticated is forced false so the
+// app keeps rendering the auth stack (specifically MfaChallengeScreen)
+// even though supabase.auth already has an AAL1 session. Cleared by
+// verifyMfaAndComplete (upgrade path) or cancelMfaChallenge (sign back
+// out and return to Login).
+export type PendingMfa = {
+  factorId: string;
+  email: string;
+};
+
+// signIn return contract. Callers (LoginScreen) branch on requiresMfa to
+// route into MfaChallenge before the app tree swaps.
+export type SignInResult = {
+  requiresMfa: boolean;
+  factorId?: string;
+};
+
 type AuthContextType = {
   user: User | null;
   session: Session | null;
@@ -85,7 +103,21 @@ type AuthContextType = {
   // uses this (plus the two booleans above) to decide whether to render
   // the biometric sign-in button.
   hasStoredRefreshToken: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
+  // Returns { requiresMfa: true, factorId } when Supabase reports a
+  // verified TOTP factor is enrolled — LoginScreen then routes to
+  // MfaChallenge. Otherwise { requiresMfa: false } and the app tree
+  // swaps to authenticated as usual.
+  signIn: (email: string, password: string) => Promise<SignInResult>;
+  // Set between password check and TOTP challenge; null otherwise.
+  pendingMfa: PendingMfa | null;
+  // Complete the AAL1 → AAL2 upgrade. On success clears pendingMfa; the
+  // existing session is upgraded in place so the auth listener has
+  // already set user/session — the app tree swaps as soon as
+  // isAuthenticated flips true.
+  verifyMfaAndComplete: (code: string) => Promise<void>;
+  // Abort the challenge (user tapped Cancel). Signs out to drop the
+  // stashed AAL1 session and clears pendingMfa.
+  cancelMfaChallenge: () => Promise<void>;
   // P2 (logout review): scope controls how broadly the JWT revocation
   // hits Supabase. 'local' (default) ends only this device's session;
   // 'global' revokes every refresh token tied to this user — useful
@@ -324,6 +356,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [biometricsEnabled, setBiometricsEnabledState] = useState(false);
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [hasStoredRefreshToken, setHasStoredRefreshToken] = useState(false);
+  // 2FA gate. When non-null the user has passed the password check but
+  // still owes a TOTP code. isAuthenticated is forced false in that
+  // window so App.tsx keeps rendering the auth stack (MfaChallenge).
+  const [pendingMfa, setPendingMfa] = useState<PendingMfa | null>(null);
 
   // P0 (kyc-trigger review): fetch the live verification row for the
   // given user and project it onto user.kyc. Fire-and-forget — the
@@ -989,8 +1025,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     []
   );
 
-  // Sign in with email and password
-  const signIn = async (email: string, password: string) => {
+  // Sign in with email and password. Returns { requiresMfa } so the
+  // caller can route into MfaChallenge before the app tree swaps.
+  const signIn = async (
+    email: string,
+    password: string,
+  ): Promise<SignInResult> => {
     setIsLoading(true);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -999,6 +1039,43 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
 
       if (error) throw error;
+
+      // ── AAL gate ────────────────────────────────────────────────────
+      // Supabase returns a session at AAL1 even for MFA-enrolled users;
+      // getAuthenticatorAssuranceLevel tells us whether an AAL2 factor
+      // exists that we still need to satisfy. When it does, we set
+      // pendingMfa (which forces isAuthenticated=false) instead of
+      // completing the sign-in — the LoginScreen then routes to
+      // MfaChallenge. The AAL1 session stays live in supabase.auth so
+      // mfa.challengeAndVerify can upgrade it in place without another
+      // password round-trip. A failure at this probe should NOT abort
+      // the sign-in (e.g. old client + brand-new project); fall through
+      // to the non-MFA path.
+      try {
+        const { data: aal } =
+          await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (
+          aal?.currentLevel === "aal1" &&
+          aal?.nextLevel === "aal2"
+        ) {
+          const { data: factors } = await supabase.auth.mfa.listFactors();
+          const totp = factors?.totp?.find((f) => f.status === "verified");
+          if (totp) {
+            // Do NOT set session/user or stash biometric refresh token
+            // yet — the AAL1 session lands in supabase.auth via the
+            // onAuthStateChange listener, but pendingMfa keeps
+            // isAuthenticated false until the code is verified.
+            setPendingMfa({ factorId: totp.id, email });
+            eventService.trackAuth("login", "success", "email_mfa_required");
+            return { requiresMfa: true, factorId: totp.id };
+          }
+        }
+      } catch (e) {
+        console.warn(
+          "[AuthContext] AAL probe failed — proceeding without MFA",
+          (e as Error)?.message,
+        );
+      }
 
       setSession(data.session);
       setUser(formatUser(data.user));
@@ -1024,6 +1101,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             console.warn("Failed to stash refresh token:", e?.message ?? e),
           );
       }
+
+      return { requiresMfa: false };
     } catch (error: any) {
       console.error("Sign in error:", error);
       eventService.trackAuth('login', 'failure', 'email', {
@@ -1035,6 +1114,57 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(false);
     }
   };
+
+  // Completes the AAL1 → AAL2 upgrade. Called by MfaChallengeScreen
+  // after the user enters the 6-digit code. On success the existing
+  // session is upgraded in place (no new tokens issued from our side —
+  // Supabase re-signs the JWT with aal='aal2') and pendingMfa clears,
+  // which flips isAuthenticated true and swaps the app tree.
+  const verifyMfaAndComplete = useCallback(
+    async (code: string): Promise<void> => {
+      if (!pendingMfa) throw new Error("No pending MFA challenge");
+      const { error } = await supabase.auth.mfa.challengeAndVerify({
+        factorId: pendingMfa.factorId,
+        code,
+      });
+      if (error) {
+        eventService.trackAuth("login", "failure", "mfa_challenge", {
+          code: error.code,
+          message: error.message,
+        });
+        throw error;
+      }
+      // Refresh the session object we hold — the JWT that came back
+      // from the challenge carries the aal2 claim.
+      const { data: refreshed } = await supabase.auth.getSession();
+      if (refreshed?.session) setSession(refreshed.session);
+      setUser(formatUser(refreshed?.session?.user ?? null));
+      setIsLocked(false);
+      setPendingMfa(null);
+      eventService.trackAuth("login", "success", "mfa_challenge");
+    },
+    [pendingMfa],
+  );
+
+  // User tapped Cancel on the MfaChallenge screen. Sign out to drop the
+  // stashed AAL1 session (otherwise it'd stay on device and let anyone
+  // with the phone unlock into an unfinished sign-in) and clear the
+  // pending state. The listener SIGNED_OUT will fall through the
+  // "manual" path and skip the session-expired Alert.
+  const cancelMfaChallenge = useCallback(async (): Promise<void> => {
+    isManualSignOutRef.current = true;
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (e) {
+      console.warn(
+        "[AuthContext] signOut during cancelMfaChallenge failed",
+        (e as Error)?.message,
+      );
+    } finally {
+      isManualSignOutRef.current = false;
+      setPendingMfa(null);
+    }
+  }, []);
 
   // Sign in with phone (sends OTP)
   const signInWithPhone = async (phone: string) => {
@@ -1466,7 +1596,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         user,
         session,
         isLoading,
-        isAuthenticated: !!session && !!user,
+        // pendingMfa gates this false — the AAL1 session lives in
+        // supabase.auth (so the listener already set user/session) but
+        // we don't consider the sign-in complete until the TOTP code
+        // has been verified.
+        isAuthenticated: !!session && !!user && !pendingMfa,
         // Supabase stamps email_confirmed_at when the magic-link target
         // (auth/confirm) resolves successfully. The string is present
         // and non-null on a verified session; missing on a fresh signup
@@ -1498,6 +1632,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         markBiometricOptInAsked,
         isOffline,
         retryRefresh,
+        pendingMfa,
+        verifyMfaAndComplete,
+        cancelMfaChallenge,
       }}
     >
       {children}
