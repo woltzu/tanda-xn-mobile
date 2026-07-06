@@ -31,15 +31,19 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import { colors, radius, spacing, typography } from "../theme/tokens";
 
 type SecuritySettingsNavigationProp = StackNavigationProp<RootStackParamList>;
 
 export default function SecuritySettingsScreen() {
   const navigation = useNavigation<SecuritySettingsNavigationProp>();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
   const {
     biometricsEnabled,
     biometricsAvailable,
@@ -98,13 +102,16 @@ export default function SecuritySettingsScreen() {
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
+        <LinearGradient
+          colors={[colors.primaryNavy, "#143654"]}
+          style={[styles.header, { paddingTop: insets.top + spacing.md }]}
+        >
           <View style={styles.headerTop}>
             <TouchableOpacity
               style={styles.backButton}
               onPress={() => navigation.goBack()}
             >
-              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+              <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
             </TouchableOpacity>
             <View>
               <Text style={styles.headerTitle}>
@@ -129,15 +136,15 @@ export default function SecuritySettingsScreen() {
                 style={styles.menuItem}
                 onPress={() => navigation.navigate("ChangePassword" as any)}
               >
-                <View style={[styles.menuIcon, { backgroundColor: "#F0FDFB" }]}>
-                  <Ionicons name="key-outline" size={20} color="#00C6AE" />
+                <View style={[styles.menuIcon, { backgroundColor: colors.tealTintBg }]}>
+                  <Ionicons name="key-outline" size={20} color={colors.accentTeal} />
                 </View>
                 <View style={styles.menuContent}>
                   <Text style={styles.menuTitle}>
                     {t("final_polish.securitysettings_change_password")}
                   </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
           </View>
@@ -153,11 +160,11 @@ export default function SecuritySettingsScreen() {
                 onPress={() => navigation.navigate("TwoFactorAuth" as any)}
                 disabled={loading}
               >
-                <View style={[styles.menuIcon, { backgroundColor: "#F0FDFB" }]}>
+                <View style={[styles.menuIcon, { backgroundColor: colors.tealTintBg }]}>
                   <Ionicons
                     name="shield-checkmark-outline"
                     size={20}
-                    color="#00C6AE"
+                    color={colors.accentTeal}
                   />
                 </View>
                 <View style={styles.menuContent}>
@@ -171,7 +178,7 @@ export default function SecuritySettingsScreen() {
                     </Text>
                   </View>
                 ) : null}
-                <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
           </View>
@@ -198,8 +205,8 @@ export default function SecuritySettingsScreen() {
                     onValueChange={(v) => {
                       void setBiometricsEnabled(v);
                     }}
-                    trackColor={{ false: "#E5E7EB", true: "#00C6AE" }}
-                    thumbColor="#FFFFFF"
+                    trackColor={{ false: colors.border, true: colors.accentTeal }}
+                    thumbColor={colors.cardBg}
                   />
                 </View>
               </View>
@@ -217,11 +224,11 @@ export default function SecuritySettingsScreen() {
                 onPress={() => navigation.navigate("ActiveSessions" as any)}
                 disabled={loading}
               >
-                <View style={[styles.menuIcon, { backgroundColor: "#F5F7FA" }]}>
+                <View style={[styles.menuIcon, { backgroundColor: colors.screenBg }]}>
                   <Ionicons
                     name="phone-portrait-outline"
                     size={20}
-                    color="#0A2342"
+                    color={colors.primaryNavy}
                   />
                 </View>
                 <View style={styles.menuContent}>
@@ -235,7 +242,7 @@ export default function SecuritySettingsScreen() {
                     <Text style={styles.sessionsBadgeText}>{sessionCount}</Text>
                   </View>
                 ) : null}
-                <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
           </View>
@@ -262,12 +269,12 @@ export default function SecuritySettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.screenBg,
   },
   header: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    // paddingTop = insets.top + spacing.md applied inline.
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
   },
   headerTop: {
     flexDirection: "row",
@@ -285,7 +292,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   headerSubtitle: {
     fontSize: 13,
@@ -302,17 +309,17 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#6B7280",
+    color: colors.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 8,
     marginLeft: 4,
   },
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     overflow: "hidden",
   },
   menuItem: {
@@ -340,15 +347,15 @@ const styles = StyleSheet.create({
   menuTitle: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   menuSubtitle: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginTop: 1,
   },
   enabledBadge: {
-    backgroundColor: "#F0FDFB",
+    backgroundColor: colors.tealTintBg,
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 6,
@@ -356,25 +363,25 @@ const styles = StyleSheet.create({
   enabledText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#00C6AE",
+    color: colors.accentTeal,
   },
   sessionsBadge: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#0A2342",
+    backgroundColor: colors.primaryNavy,
     alignItems: "center",
     justifyContent: "center",
   },
   sessionsBadgeText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   tipCard: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#F0FDFB",
+    backgroundColor: colors.tealTintBg,
     borderRadius: 14,
     padding: 16,
     gap: 12,
@@ -390,7 +397,7 @@ const styles = StyleSheet.create({
   },
   tipText: {
     fontSize: 13,
-    color: "#065F46",
+    color: colors.successLabel,
     lineHeight: 18,
   },
 });

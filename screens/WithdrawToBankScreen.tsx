@@ -42,7 +42,7 @@ import { showToast } from "../components/Toast";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
-const MUTED = "#6B7280";
+const MUTED = colors.textSecondary;
 
 const MIN_WITHDRAWAL_DOLLARS = 1;
 
@@ -179,7 +179,7 @@ export default function WithdrawToBankScreen() {
                 value={amountText}
                 onChangeText={handleAmountChange}
                 placeholder={t("withdraw.amount_placeholder")}
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={colors.textSecondary}
                 keyboardType="decimal-pad"
                 editable={!submitting}
                 accessibilityLabel={t("withdraw.amount_label")}
@@ -208,7 +208,7 @@ export default function WithdrawToBankScreen() {
           >
             {submitting ? (
               <View style={styles.submitInner}>
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <ActivityIndicator size="small" color={colors.cardBg} />
                 <Text style={styles.submitText}>{t("withdraw.submitting")}</Text>
               </View>
             ) : (
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
   amountInputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: typography.label,
-    color: "#B91C1C",
+    color: colors.errorText,
     marginTop: 2,
   },
   infoCard: {
@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   submitText: {
-    color: "#FFFFFF",
+    color: colors.cardBg,
     fontSize: typography.body,
     fontWeight: typography.bold,
   },

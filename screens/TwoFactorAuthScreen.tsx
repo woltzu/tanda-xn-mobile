@@ -35,8 +35,11 @@ import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import QRCode from "react-native-qrcode-svg";
 
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { supabase } from "../lib/supabase";
 import { showToast } from "../components/Toast";
+import { colors, radius, spacing, typography } from "../theme/tokens";
 
 type Mode = "loading" | "view" | "enrol";
 
@@ -49,6 +52,7 @@ type EnrolPayload = {
 export default function TwoFactorAuthScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
 
   const [mode, setMode] = useState<Mode>("loading");
   // The verified factor id, when 2FA is already on. Kept so the Disable
@@ -196,13 +200,16 @@ export default function TwoFactorAuthScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
+        <LinearGradient
+          colors={[colors.primaryNavy, "#143654"]}
+          style={[styles.header, { paddingTop: insets.top + spacing.md }]}
+        >
           <TouchableOpacity
             style={styles.backBtn}
             onPress={() => navigation.goBack()}
             accessibilityLabel={t("2fa.cancel")}
           >
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+            <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("2fa.title")}</Text>
         </LinearGradient>
@@ -210,7 +217,7 @@ export default function TwoFactorAuthScreen() {
         <View style={styles.body}>
           {mode === "loading" ? (
             <View style={styles.loading}>
-              <ActivityIndicator color="#00C6AE" />
+              <ActivityIndicator color={colors.accentTeal} />
             </View>
           ) : mode === "enrol" && enrol ? (
             <View>
@@ -219,8 +226,8 @@ export default function TwoFactorAuthScreen() {
                 <QRCode
                   value={enrol.uri}
                   size={200}
-                  color="#0A2342"
-                  backgroundColor="#FFFFFF"
+                  color={colors.primaryNavy}
+                  backgroundColor={colors.cardBg}
                 />
               </View>
               <Text style={styles.secretLabel}>{t("2fa.secret_label")}</Text>
@@ -242,7 +249,7 @@ export default function TwoFactorAuthScreen() {
                   if (error) setError(null);
                 }}
                 placeholder="••••••"
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={colors.textSecondary}
                 keyboardType="number-pad"
                 textContentType="oneTimeCode"
                 autoComplete={
@@ -262,7 +269,7 @@ export default function TwoFactorAuthScreen() {
                 disabled={busy || code.length !== 6}
               >
                 {busy ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator color={colors.cardBg} />
                 ) : (
                   <Text style={styles.primaryBtnText}>
                     {t("2fa.verify_button")}
@@ -286,7 +293,7 @@ export default function TwoFactorAuthScreen() {
                   <Ionicons
                     name="shield-checkmark"
                     size={26}
-                    color="#00C6AE"
+                    color={colors.accentTeal}
                   />
                 </View>
                 <View style={styles.statusText}>
@@ -303,7 +310,7 @@ export default function TwoFactorAuthScreen() {
                 disabled={busy}
               >
                 {busy ? (
-                  <ActivityIndicator color="#DC2626" />
+                  <ActivityIndicator color={colors.errorText} />
                 ) : (
                   <Text style={styles.dangerBtnText}>
                     {t("2fa.disable_button")}
@@ -319,7 +326,7 @@ export default function TwoFactorAuthScreen() {
                   <Ionicons
                     name="shield-outline"
                     size={26}
-                    color="#6B7280"
+                    color={colors.textSecondary}
                   />
                 </View>
                 <View style={styles.statusText}>
@@ -333,7 +340,7 @@ export default function TwoFactorAuthScreen() {
                 disabled={busy}
               >
                 {busy ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator color={colors.cardBg} />
                 ) : (
                   <Text style={styles.primaryBtnText}>
                     {t("2fa.enable_button")}
@@ -350,15 +357,16 @@ export default function TwoFactorAuthScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5F7FA" },
+  container: { flex: 1, backgroundColor: colors.screenBg },
   scroll: { paddingBottom: 40 },
   header: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    // Vertical top padding comes from insets.top + spacing.md applied
+    // inline in the render (see LinearGradient wrapper).
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: spacing.md,
   },
   backBtn: {
     width: 40,
@@ -371,7 +379,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   body: { padding: 20 },
   loading: {
@@ -382,11 +390,11 @@ const styles = StyleSheet.create({
   statusCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     gap: 14,
     marginBottom: 20,
   },
@@ -397,75 +405,75 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  statusIconOn: { backgroundColor: "#F0FDFB" },
-  statusIconOff: { backgroundColor: "#F5F7FA" },
+  statusIconOn: { backgroundColor: colors.tealTintBg },
+  statusIconOff: { backgroundColor: colors.screenBg },
   statusText: { flex: 1 },
   statusTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   statusSubtitle: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginTop: 2,
   },
   instruction: {
     fontSize: 14,
-    color: "#374151",
+    color: colors.textPrimary,
     marginBottom: 16,
     lineHeight: 20,
   },
   qrWrap: {
     alignItems: "center",
     padding: 20,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     marginBottom: 16,
   },
   secretLabel: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginBottom: 6,
   },
   secretBox: {
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.screenBg,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     padding: 12,
     marginBottom: 20,
   },
   secretText: {
     fontFamily: Platform.select({ ios: "Menlo", android: "monospace" }),
     fontSize: 13,
-    color: "#0A2342",
+    color: colors.primaryNavy,
     letterSpacing: 1,
     textAlign: "center",
   },
   codeLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginBottom: 8,
   },
   codeInput: {
     height: 56,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     textAlign: "center",
     fontSize: 24,
     fontWeight: "600",
     letterSpacing: 6,
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginBottom: 12,
   },
   error: {
-    color: "#DC2626",
+    color: colors.errorText,
     fontSize: 13,
     fontWeight: "500",
     marginBottom: 12,
@@ -473,7 +481,7 @@ const styles = StyleSheet.create({
   },
   primaryBtn: {
     height: 52,
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
@@ -481,7 +489,7 @@ const styles = StyleSheet.create({
   },
   primaryBtnDisabled: { opacity: 0.5 },
   primaryBtnText: {
-    color: "#FFFFFF",
+    color: colors.cardBg,
     fontSize: 16,
     fontWeight: "700",
   },
@@ -492,22 +500,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   secondaryBtnText: {
-    color: "#6B7280",
+    color: colors.textSecondary,
     fontSize: 14,
     fontWeight: "500",
   },
   dangerBtn: {
     height: 52,
     borderRadius: 12,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderWidth: 1,
-    borderColor: "#DC2626",
+    borderColor: colors.errorText,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 8,
   },
   dangerBtnText: {
-    color: "#DC2626",
+    color: colors.errorText,
     fontSize: 16,
     fontWeight: "700",
   },

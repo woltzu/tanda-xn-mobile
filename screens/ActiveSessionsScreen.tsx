@@ -32,9 +32,12 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
 import { showToast } from "../components/Toast";
+import { colors, radius, spacing, typography } from "../theme/tokens";
 
 type ActiveSessionsNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -136,6 +139,7 @@ function formatDate(t: (k: string) => string, iso: string | null): string {
 export default function ActiveSessionsScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<ActiveSessionsNavigationProp>();
+  const insets = useSafeAreaInsets();
 
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -288,7 +292,7 @@ export default function ActiveSessionsScreen() {
           <Ionicons
             name={iconFor(deviceType)}
             size={22}
-            color={isCurrent ? "#00C6AE" : "#0A2342"}
+            color={isCurrent ? colors.accentTeal : colors.primaryNavy}
           />
         </View>
         <View style={styles.sessionContent}>
@@ -319,7 +323,7 @@ export default function ActiveSessionsScreen() {
             disabled={revoking || busyAll}
           >
             {revoking ? (
-              <ActivityIndicator color="#DC2626" size="small" />
+              <ActivityIndicator color={colors.errorText} size="small" />
             ) : (
               <Text style={styles.revokeBtnText}>{t("sessions.revoke")}</Text>
             )}
@@ -337,13 +341,16 @@ export default function ActiveSessionsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
+        <LinearGradient
+          colors={[colors.primaryNavy, "#143654"]}
+          style={[styles.header, { paddingTop: insets.top + spacing.md }]}
+        >
           <View style={styles.headerRow}>
             <TouchableOpacity
               style={styles.backButton}
               onPress={() => navigation.goBack()}
             >
-              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+              <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
             </TouchableOpacity>
             <View>
               <Text style={styles.headerTitle}>{t("sessions.title")}</Text>
@@ -358,11 +365,11 @@ export default function ActiveSessionsScreen() {
         <View style={styles.content}>
           {loading ? (
             <View style={styles.loading}>
-              <ActivityIndicator color="#00C6AE" />
+              <ActivityIndicator color={colors.accentTeal} />
             </View>
           ) : error ? (
             <View style={styles.warningCard}>
-              <Ionicons name="warning" size={18} color="#D97706" />
+              <Ionicons name="warning" size={18} color={colors.warningAmber} />
               <Text style={styles.warningText}>{error}</Text>
             </View>
           ) : sessions.length === 0 ? (
@@ -406,10 +413,10 @@ export default function ActiveSessionsScreen() {
             disabled={busyAll}
           >
             {busyAll ? (
-              <ActivityIndicator color="#DC2626" />
+              <ActivityIndicator color={colors.errorText} />
             ) : (
               <>
-                <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+                <Ionicons name="log-out-outline" size={20} color={colors.errorText} />
                 <Text style={styles.revokeAllText}>
                   {t("sessions.revoke_all")}
                 </Text>
@@ -423,11 +430,11 @@ export default function ActiveSessionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5F7FA" },
+  container: { flex: 1, backgroundColor: colors.screenBg },
   header: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    // paddingTop = insets.top + spacing.md applied inline on LinearGradient.
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.xl,
   },
   headerRow: {
     flexDirection: "row",
@@ -445,7 +452,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   headerSubtitle: {
     fontSize: 13,
@@ -466,14 +473,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginBottom: 10,
   },
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     overflow: "hidden",
   },
   sessionRow: {
@@ -482,7 +489,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#F5F7FA",
+    borderBottomColor: colors.screenBg,
   },
   sessionRowCurrent: {
     borderBottomWidth: 0,
@@ -494,8 +501,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  deviceIconCurrent: { backgroundColor: "#F0FDFB" },
-  deviceIconOther: { backgroundColor: "#F5F7FA" },
+  deviceIconCurrent: { backgroundColor: colors.tealTintBg },
+  deviceIconOther: { backgroundColor: colors.screenBg },
   sessionContent: { flex: 1 },
   sessionTitleRow: {
     flexDirection: "row",
@@ -507,10 +514,10 @@ const styles = StyleSheet.create({
   sessionDevice: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   currentBadge: {
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     paddingVertical: 2,
     paddingHorizontal: 8,
     borderRadius: 4,
@@ -518,7 +525,7 @@ const styles = StyleSheet.create({
   currentBadgeText: {
     fontSize: 9,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   aalBadge: {
     backgroundColor: "#DBEAFE",
@@ -533,11 +540,11 @@ const styles = StyleSheet.create({
   },
   sessionMeta: {
     fontSize: 11,
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginTop: 1,
   },
   revokeBtn: {
-    backgroundColor: "#FEE2E2",
+    backgroundColor: colors.errorBg,
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 8,
@@ -548,12 +555,12 @@ const styles = StyleSheet.create({
   revokeBtnText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#DC2626",
+    color: colors.errorText,
   },
   warningCard: {
     flexDirection: "row",
     alignItems: "flex-start",
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.warningBg,
     borderRadius: 12,
     padding: 14,
     gap: 10,
@@ -562,7 +569,7 @@ const styles = StyleSheet.create({
   warningText: {
     flex: 1,
     fontSize: 12,
-    color: "#92400E",
+    color: colors.warningLabel,
     lineHeight: 18,
   },
   emptyCard: {
@@ -571,33 +578,33 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: "#6B7280",
+    color: colors.textSecondary,
   },
   bottomBar: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     padding: 16,
     paddingBottom: 32,
     borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
+    borderTopColor: colors.border,
   },
   revokeAllBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#DC2626",
+    borderColor: colors.errorText,
     paddingVertical: 16,
     gap: 8,
   },
   revokeAllText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#DC2626",
+    color: colors.errorText,
   },
 });
