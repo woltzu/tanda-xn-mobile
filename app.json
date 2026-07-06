@@ -1,8 +1,10 @@
 {
   "expo": {
-    "name": "tanda-xn-mobile",
+    "name": "TandaXn",
     "slug": "tanda-xn-mobile",
-    "version": "1.1.0",
+    "version": "1.2.0",
+    "description": "Rotating savings circles for groups, families, and diaspora communities.",
+    "primaryColor": "#00C6AE",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -15,12 +17,17 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tandaxn.app",
+      "buildNumber": "1",
       "associatedDomains": [
         "applinks:tandaxn.com",
         "applinks:v0-tanda-xn.vercel.app"
       ],
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Use Face ID to securely sign in to TandaXn and unlock your wallet."
+        "NSFaceIDUsageDescription": "Use Face ID to securely sign in to TandaXn and unlock your wallet.",
+        "NSCameraUsageDescription": "TandaXn uses the camera to scan QR codes for two-factor authentication setup and to capture photos for community posts and identity verification.",
+        "NSPhotoLibraryUsageDescription": "TandaXn accesses your photo library so you can attach images to community posts, set your profile picture, and submit identity documents.",
+        "NSLocationWhenInUseUsageDescription": "TandaXn uses your location only when you verify a savings-goal milestone on the ground or list yourself as a Verified Provider. Location is never tracked in the background.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -31,6 +38,13 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.tandaxn.app",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",

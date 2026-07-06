@@ -13,6 +13,7 @@ import {
   Image,
   TextInput,
   RefreshControl,
+  Linking,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -270,6 +271,24 @@ export default function ProfileScreen() {
     setEditingName(false);
     setDraftName("");
   };
+
+  // Store submission — Contact Support row. Opens the OS mail client to
+  // support@tandaxn.com. Failing openURL (no mail app configured) falls
+  // through to an Alert showing the address so the user can copy it.
+  const handleContactSupport = useCallback(async () => {
+    const url = "mailto:support@tandaxn.com";
+    try {
+      const can = await Linking.canOpenURL(url);
+      if (!can) throw new Error("no-mail-handler");
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert(
+        t("profile.contact_support"),
+        "support@tandaxn.com",
+        [{ text: t("common.ok") }],
+      );
+    }
+  }, [t]);
 
   // Phase 2 Bucket C — Delete account. Two-step confirmation, then RPC.
   // Critical-tier users are blocked client-side via useResolutionStatus
@@ -530,6 +549,10 @@ export default function ProfileScreen() {
         // StripeConnectScreen route is still registered in App.tsx and
         // reachable via deep link for debugging / future organizer flows.
         { icon: "cog-outline", label: t("profile.item_all_settings"), onPress: () => navigation.navigate("Settings") },
+        // Store-submission review — a visible support entry is a Play /
+        // App Store requirement. Opens mailto:support@tandaxn.com with an
+        // Alert fallback when no mail handler is installed.
+        { icon: "mail-outline", label: t("profile.contact_support"), onPress: handleContactSupport },
         // Re-open the first-launch Dashboard tour. Clears the seen flag,
         // sets the force-show flag, then pops back to the Home tab so
         // DashboardScreen regains focus → DashboardTourOverlay's
