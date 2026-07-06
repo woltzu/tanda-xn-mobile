@@ -4757,6 +4757,7 @@
     "first_contribution_due_on": "Dû le <b>{{date}}</b>",
     "first_contribution_amount": "Montant : <b>{{amount}}</b>",
     "btn_go_back": "Retour",
+    "btn_go_home": "Aller à l'accueil",
     "alert_error_title": "Erreur",
     "alert_failed_join": "Échec de l'adhésion au cercle. Veuillez réessayer.",
     "error_circle_full": "Ce cercle est déjà complet.",

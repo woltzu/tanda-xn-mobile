@@ -4757,6 +4757,7 @@
     "first_contribution_due_on": "Due on <b>{{date}}</b>",
     "first_contribution_amount": "Amount: <b>{{amount}}</b>",
     "btn_go_back": "Go Back",
+    "btn_go_home": "Go Home",
     "alert_error_title": "Error",
     "alert_failed_join": "Failed to join circle. Please try again.",
     "error_circle_full": "This circle is already full.",

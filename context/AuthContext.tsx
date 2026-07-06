@@ -118,6 +118,14 @@ type AuthContextType = {
   // Abort the challenge (user tapped Cancel). Signs out to drop the
   // stashed AAL1 session and clears pendingMfa.
   cancelMfaChallenge: () => Promise<void>;
+  // Callable from any screen when it catches an auth error indicating the
+  // refresh token is stale ("Invalid Refresh Token", "refresh_token_not_found",
+  // AuthApiError with a 401). Kicks off the same "Session expired" alert +
+  // Login reset the auto-expiry path uses, but without waiting for Supabase
+  // to spontaneously fire SIGNED_OUT (which sometimes never happens if the
+  // stale token surfaces on a specific RPC/select rather than on the
+  // proactive refresh timer).
+  notifySessionExpired: () => Promise<void>;
   // P2 (logout review): scope controls how broadly the JWT revocation
   // hits Supabase. 'local' (default) ends only this device's session;
   // 'global' revokes every refresh token tied to this user — useful
@@ -1390,6 +1398,36 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // Callable escape hatch for callers that catch a stale-token error
+  // ("Invalid Refresh Token", AuthApiError 401) from a Supabase RPC /
+  // select. Supabase's auto-refresh normally fires SIGNED_OUT on refresh
+  // failure — but if the stale token surfaces mid-operation the
+  // SIGNED_OUT event can lag or never come, leaving the user staring
+  // at a broken screen while their session is dead. Kicks the same
+  // "Session expired" alert + Login reset the auto-expiry path uses.
+  //
+  // Does NOT set isManualSignOutRef, so the SIGNED_OUT listener
+  // (see line 618) will still recognise this as auto and run
+  // handleAutoSessionExpiry(). A local supabase.auth.signOut() network
+  // failure is also fine — we call the expiry handler + null out
+  // React state as a fallback so the tree unmounts either way.
+  const notifySessionExpired = async () => {
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (e) {
+      console.warn(
+        "[AuthContext] notifySessionExpired supabase.auth.signOut failed — running fallback",
+        e,
+      );
+      if (!autoExpiryHandledRef.current) {
+        autoExpiryHandledRef.current = true;
+        handleAutoSessionExpiry();
+      }
+      setSession(null);
+      setUser(null);
+    }
+  };
+
   // Sign up with email and password
   const signUp = async (
     email: string,
@@ -1635,6 +1673,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         pendingMfa,
         verifyMfaAndComplete,
         cancelMfaChallenge,
+        notifySessionExpired,
       }}
     >
       {children}

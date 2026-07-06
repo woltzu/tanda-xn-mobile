@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp, CommonActions } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation, Trans } from "react-i18next";
 import { RootStackParamList } from "../App";
@@ -99,7 +99,7 @@ export default function JoinCircleConfirmScreen() {
   // instead of hitting the "Not found" branch. Symmetric with
   // JoinCircleSuccessScreen which already merges all three lists.
   const { circles, myCircles, browseCircles, joinCircle, findCircleByInviteCode } = useCircles();
-  const { user } = useAuth();
+  const { user, notifySessionExpired } = useAuth();
   const { track } = useEventTracker();
   // Phase 1 Member Access Tiers — exposure cap. Aliased so the local
   // XnScore-driven `canJoin` flag stays distinct from the tier check.
@@ -198,11 +198,19 @@ export default function JoinCircleConfirmScreen() {
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color="#9CA3AF" />
           <Text style={styles.errorText}>{t("join_circle_confirm.not_found_body")}</Text>
+          {/* Go Home instead of Go Back: goBack() lands the user on
+              JoinCircleByCode where they'd just re-try the same code
+              and hit the same wall. A reset to the Home tab is what a
+              stuck user actually wants. CommonActions.navigate walks up
+              to the tab navigator and switches to the Home tab from any
+              nested stack. */}
           <TouchableOpacity
             style={styles.errorButton}
-            onPress={() => navigation.goBack()}
+            onPress={() =>
+              navigation.dispatch(CommonActions.navigate({ name: "Home" }))
+            }
           >
-            <Text style={styles.errorButtonText}>{t("join_circle_confirm.btn_go_back")}</Text>
+            <Text style={styles.errorButtonText}>{t("join_circle_confirm.btn_go_home")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -297,12 +305,39 @@ export default function JoinCircleConfirmScreen() {
         eventLabel: source,
         eventValue: { circleId, source },
       });
-      navigation.navigate("JoinCircleSuccess", { circleId, source });
+      // Skip JoinCircleSuccessScreen — it triggers an authenticated fetch
+      // of the freshly-joined circle to render its summary. That fetch
+      // fails with "Circle not found" when the session's refresh token
+      // has silently gone stale mid-flow, even though the join RPC
+      // itself already committed (verified by reload — the user is in
+      // the circle list). Going straight to CircleDetail lets its own
+      // useFocusEffect drive the load, so a bad session degrades to
+      // that screen's loading / error handling instead of the confirm
+      // screen's `!circle` fallback.
+      navigation.replace("CircleDetail", { circleId });
     } catch (error: any) {
       // Map typed RPC errors thrown by CirclesContext.joinCircle to
       // specific i18n strings. Default to the generic "failed to join"
       // for anything we haven't catalogued.
       const code = (error?.message || "").toLowerCase();
+      // Detect a stale-refresh-token / AuthApiError even when it comes
+      // wrapped by our own thrown Error. When we spot one, punt to
+      // AuthContext's central handler — it bounces the user to Login
+      // with a "Session expired" alert instead of leaving them staring
+      // at a confusing "join failed" toast.
+      if (
+        code.includes("invalid refresh token") ||
+        code.includes("refresh_token_not_found") ||
+        code.includes("authapierror") ||
+        code.includes("jwt expired") ||
+        code.includes("jwt is expired")
+      ) {
+        console.warn(
+          "[JoinCircleConfirm] stale session detected — routing to Login",
+        );
+        await notifySessionExpired();
+        return;
+      }
       let body: string;
       if (code.includes("circle_full")) {
         body = t("join_circle_confirm.error_circle_full");
