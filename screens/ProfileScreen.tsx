@@ -49,6 +49,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { useEventTracker } from "../hooks/useEventTracker";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
+import { colors } from "../theme/tokens";
 
 type ProfileScreenNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -659,7 +660,7 @@ export default function ProfileScreen() {
   if (viewProfileLoading && !viewProfile) {
     return (
       <View style={[styles.container, styles.centeredFill]}>
-        <ActivityIndicator size="large" color="#00C6AE" />
+        <ActivityIndicator size="large" color={colors.accentTeal} />
       </View>
     );
   }
@@ -671,7 +672,7 @@ export default function ProfileScreen() {
   if (!viewProfileLoading && !viewProfile && user?.id) {
     return (
       <View style={[styles.container, styles.centeredFill]}>
-        <Ionicons name="person-circle-outline" size={48} color="#9CA3AF" />
+        <Ionicons name="person-circle-outline" size={48} color={colors.textSecondary} />
         <Text style={styles.unavailableTitle}>
           {t("profile.unavailable_title")}
         </Text>
@@ -690,13 +691,13 @@ export default function ProfileScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#00C6AE"
-            colors={["#00C6AE"]}
+            tintColor={colors.accentTeal}
+            colors={[colors.accentTeal]}
           />
         }
       >
         {/* Header */}
-        <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
+        <LinearGradient colors={[colors.primaryNavy, "#143654"]} style={styles.header}>
           <Text style={styles.headerTitle}>{t("profile.header")}</Text>
 
           {/* Profile Card */}
@@ -717,7 +718,7 @@ export default function ProfileScreen() {
                 />
               ) : (
                 <LinearGradient
-                  colors={["#00C6AE", "#00A896"]}
+                  colors={[colors.accentTeal, "#00A896"]}
                   style={styles.avatar}
                 >
                   <Text style={styles.avatarText}>
@@ -726,7 +727,7 @@ export default function ProfileScreen() {
                 </LinearGradient>
               )}
               <View style={styles.avatarEditChip}>
-                <Ionicons name="camera" size={12} color="#FFFFFF" />
+                <Ionicons name="camera" size={12} color={colors.cardBg} />
               </View>
             </TouchableOpacity>
 
@@ -765,7 +766,7 @@ export default function ProfileScreen() {
                 identity affordances. */}
             {role && role !== "member" ? (
               <View style={styles.roleBadge}>
-                <Ionicons name="shield-checkmark" size={11} color="#FFFFFF" />
+                <Ionicons name="shield-checkmark" size={11} color={colors.cardBg} />
                 <Text style={styles.roleBadgeText}>{t(`role.${role}`)}</Text>
               </View>
             ) : null}
@@ -791,7 +792,7 @@ export default function ProfileScreen() {
                       : "id-card-outline"
                   }
                   size={11}
-                  color="#FFFFFF"
+                  color={colors.cardBg}
                 />
                 <Text style={styles.roleBadgeText}>
                   {t(`kyc_badge.${kycStatus}`)}
@@ -814,7 +815,7 @@ export default function ProfileScreen() {
               <Text style={styles.xnScoreSlimText}>
                 {t("profile.xn_score_label")}: {score ?? "—"}
               </Text>
-              <Ionicons name="chevron-forward" size={14} color="#FFFFFF" />
+              <Ionicons name="chevron-forward" size={14} color={colors.cardBg} />
             </TouchableOpacity>
           </View>
         </LinearGradient>
@@ -835,7 +836,7 @@ export default function ProfileScreen() {
               <Ionicons
                 name="person-circle-outline"
                 size={22}
-                color="#0A2342"
+                color={colors.primaryNavy}
               />
             </View>
             <View style={{ flex: 1 }}>
@@ -853,7 +854,7 @@ export default function ProfileScreen() {
               <Text style={styles.completionBannerCtaText}>
                 {t("profile.complete_banner_cta")}
               </Text>
-              <Ionicons name="chevron-forward" size={14} color="#0A2342" />
+              <Ionicons name="chevron-forward" size={14} color={colors.primaryNavy} />
             </View>
           </TouchableOpacity>
         ) : null}
@@ -880,11 +881,11 @@ export default function ProfileScreen() {
               <Ionicons
                 name={isBelow ? "warning" : "alert-circle-outline"}
                 size={20}
-                color={isBelow ? "#991B1B" : "#92400E"}
+                color={isBelow ? "#991B1B" : colors.warningLabel}
               />
               <Text style={[
                 styles.honorWarningText,
-                { color: isBelow ? "#991B1B" : "#92400E" },
+                { color: isBelow ? "#991B1B" : colors.warningLabel },
               ]}>
                 {t(isBelow ? "elder.honor_warning_below" : "elder.honor_warning_near", {
                   score: honorScore,
@@ -913,7 +914,7 @@ export default function ProfileScreen() {
                   >
                     <View style={styles.menuItemLeft}>
                       <View style={styles.menuIconContainer}>
-                        <Ionicons name={item.icon as any} size={20} color="#0A2342" />
+                        <Ionicons name={item.icon as any} size={20} color={colors.primaryNavy} />
                       </View>
                       <Text style={styles.menuItemLabel}>{item.label}</Text>
                     </View>
@@ -921,7 +922,7 @@ export default function ProfileScreen() {
                       {(item as any).value ? (
                         <Text style={styles.menuItemValue}>{(item as any).value}</Text>
                       ) : null}
-                      <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                      <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -939,14 +940,14 @@ export default function ProfileScreen() {
           >
             {isSigningOut ? (
               <>
-                <ActivityIndicator size="small" color="#DC2626" />
+                <ActivityIndicator size="small" color={colors.errorText} />
                 <Text style={styles.signOutText}>
                   {t("profile.sign_out_in_progress")}
                 </Text>
               </>
             ) : (
               <>
-                <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+                <Ionicons name="log-out-outline" size={20} color={colors.errorText} />
                 <Text style={styles.signOutText}>{t("profile.sign_out")}</Text>
               </>
             )}
@@ -962,7 +963,7 @@ export default function ProfileScreen() {
         style={styles.floatingHelp}
         onPress={() => navigation.navigate("HelpCenter" as any)}
       >
-        <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
+        <Ionicons name="chatbubble-ellipses" size={24} color={colors.cardBg} />
         <Text style={styles.floatingHelpText}>{t("common.help")}</Text>
       </TouchableOpacity>
 
@@ -1013,7 +1014,7 @@ export default function ProfileScreen() {
                   <Ionicons
                     name={isActive ? "radio-button-on" : "radio-button-off"}
                     size={18}
-                    color={isActive ? "#00C6AE" : "#9CA3AF"}
+                    color={isActive ? colors.accentTeal : colors.textSecondary}
                   />
                   <Text style={styles.roundUpOptionText}>
                     {roundUpLabel(inc)}
@@ -1031,7 +1032,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.screenBg,
   },
   centeredFill: {
     alignItems: "center",
@@ -1042,12 +1043,12 @@ const styles = StyleSheet.create({
   unavailableTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginTop: 6,
   },
   unavailableBody: {
     fontSize: 13,
-    color: "#6B7280",
+    color: colors.textSecondary,
     textAlign: "center",
     lineHeight: 18,
   },
@@ -1059,7 +1060,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
     marginBottom: 20,
   },
   profileCard: {
@@ -1082,18 +1083,18 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 32,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   userName: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
     marginBottom: 4,
   },
   userNameInput: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
     marginBottom: 4,
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -1109,11 +1110,11 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#0A2342",
+    backgroundColor: colors.primaryNavy,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
-    borderColor: "#FFFFFF",
+    borderColor: colors.cardBg,
   },
   userEmail: {
     fontSize: 14,
@@ -1152,7 +1153,7 @@ const styles = StyleSheet.create({
   roleBadgeText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
     letterSpacing: 0.3,
   },
   // KYC badge — same pill shape as roleBadge, neutral navy/grey for
@@ -1206,7 +1207,7 @@ const styles = StyleSheet.create({
   completionBannerTitle: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginBottom: 2,
   },
   completionBannerBody: {
@@ -1222,7 +1223,7 @@ const styles = StyleSheet.create({
   completionBannerCtaText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   honorWarningBanner: {
     flexDirection: "row",
@@ -1235,11 +1236,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   honorWarningBannerNear: {
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.warningBg,
     borderColor: "#FCD34D",
   },
   honorWarningBannerBelow: {
-    backgroundColor: "#FEE2E2",
+    backgroundColor: colors.errorBg,
     borderColor: "#FCA5A5",
   },
   honorWarningText: {
@@ -1257,17 +1258,17 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#6B7280",
+    color: colors.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 10,
     marginLeft: 4,
   },
   menuCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     overflow: "hidden",
   },
   menuItem: {
@@ -1289,14 +1290,14 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.screenBg,
     alignItems: "center",
     justifyContent: "center",
   },
   menuItemLabel: {
     fontSize: 15,
     fontWeight: "500",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   menuItemRight: {
     flexDirection: "row",
@@ -1306,7 +1307,7 @@ const styles = StyleSheet.create({
   menuItemValue: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#00C6AE",
+    color: colors.accentTeal,
   },
   signOutButtonDisabled: {
     opacity: 0.6,
@@ -1316,7 +1317,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: colors.errorBg,
     borderRadius: 14,
     padding: 16,
     marginBottom: 20,
@@ -1324,12 +1325,12 @@ const styles = StyleSheet.create({
   signOutText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#DC2626",
+    color: colors.errorText,
   },
   versionText: {
     textAlign: "center",
     fontSize: 12,
-    color: "#9CA3AF",
+    color: colors.textSecondary,
     marginBottom: 20,
   },
   floatingHelp: {
@@ -1338,7 +1339,7 @@ const styles = StyleSheet.create({
     right: 16,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 24,
@@ -1352,7 +1353,7 @@ const styles = StyleSheet.create({
   floatingHelpText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   // Send-Money P2 — round-up picker styles
   roundUpBackdrop: {
@@ -1361,7 +1362,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   roundUpSheet: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 28,
@@ -1372,19 +1373,19 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
     alignSelf: "center",
     marginBottom: 14,
   },
   roundUpTitle: {
     fontSize: 17,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginBottom: 4,
   },
   roundUpBody: {
     fontSize: 13,
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginBottom: 16,
     lineHeight: 18,
   },
@@ -1395,17 +1396,17 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     backgroundColor: "#F9FAFB",
     marginBottom: 8,
   },
   roundUpOptionActive: {
-    borderColor: "#00C6AE",
-    backgroundColor: "#F0FDFB",
+    borderColor: colors.accentTeal,
+    backgroundColor: colors.tealTintBg,
   },
   roundUpOptionText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
 });

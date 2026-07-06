@@ -1978,7 +1978,7 @@ export default function HomeScreen() {
             <View
               style={[
                 styles.tierModalHeader,
-                { backgroundColor: `${tier?.color ?? "#6B7280"}1A` },
+                { backgroundColor: `${tier?.color ?? colors.textSecondary}1A` },
               ]}
             >
               <Text style={styles.tierModalEmoji}>{tier?.icon}</Text>

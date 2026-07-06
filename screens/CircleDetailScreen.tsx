@@ -23,6 +23,7 @@ import { Routes } from "../lib/routes";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
+import { colors } from "../theme/tokens";
 import { Circle, CircleMember, CircleActivity, useCircles } from "../context/CirclesContext";
 import * as Clipboard from "expo-clipboard";
 import { useAuth } from "../context/AuthContext";
@@ -457,17 +458,17 @@ export default function CircleDetailScreen() {
   if (!circle) {
     return (
       <View style={styles.container}>
-        <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
+        <LinearGradient colors={[colors.primaryNavy, "#143654"]} style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+            <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t("circle_detail.not_found_header")}</Text>
         </LinearGradient>
         <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle-outline" size={64} color="#9CA3AF" />
+          <Ionicons name="alert-circle-outline" size={64} color={colors.textSecondary} />
           <Text style={styles.errorText}>{t("circle_detail.not_found_body")}</Text>
           <TouchableOpacity
             style={styles.errorButton}
@@ -818,7 +819,7 @@ export default function CircleDetailScreen() {
               date: formatDate(latestUserPayout!.timestamp),
             });
             iconName = "checkmark-circle";
-            iconColor = "#065F46";
+            iconColor = colors.successLabel;
             iconBg = "rgba(5,150,105,0.18)";
             cardExtraStyle = styles.heroNextCardReceived;
           } else if (isYourTurn) {
@@ -827,7 +828,7 @@ export default function CircleDetailScreen() {
               date: formatDate(getNextPayoutDate().toISOString()),
             });
             iconName = "trophy";
-            iconColor = "#92400E";
+            iconColor = colors.warningLabel;
             iconBg = "rgba(245,158,11,0.18)";
             cardExtraStyle = styles.heroNextCardYourTurn;
           } else {
@@ -838,7 +839,7 @@ export default function CircleDetailScreen() {
               total: circle.memberCount,
             });
             iconName = "calendar";
-            iconColor = "#0A2342";
+            iconColor = colors.primaryNavy;
             iconBg = "rgba(0,198,174,0.15)";
           }
 
@@ -863,7 +864,7 @@ export default function CircleDetailScreen() {
                 <Ionicons name={iconName} size={22} color={iconColor} />
               </View>
               <Text style={styles.heroNextText}>{label}</Text>
-              <Ionicons name="chevron-forward" size={18} color="#0A2342" />
+              <Ionicons name="chevron-forward" size={18} color={colors.primaryNavy} />
             </TouchableOpacity>
           );
         })()
@@ -887,7 +888,7 @@ export default function CircleDetailScreen() {
             }}
             accessibilityRole="button"
           >
-            <Ionicons name="wallet" size={22} color="#FFFFFF" />
+            <Ionicons name="wallet" size={22} color={colors.cardBg} />
             <Text style={styles.contributeHeroCtaText}>
               {t("circle_detail.contribute_now_cta", { amount: circle.amount })}
             </Text>
@@ -900,11 +901,11 @@ export default function CircleDetailScreen() {
               accessibilityRole="button"
               accessibilityLabel={t("circle_detail.coach_hero_tip")}
             >
-              <Ionicons name="arrow-up" size={14} color="#0A2342" />
+              <Ionicons name="arrow-up" size={14} color={colors.primaryNavy} />
               <Text style={styles.heroCoachTipText}>
                 {t("circle_detail.coach_hero_tip")}
               </Text>
-              <Ionicons name="close" size={14} color="#6B7280" />
+              <Ionicons name="close" size={14} color={colors.textSecondary} />
             </TouchableOpacity>
           ) : null}
         </>
@@ -929,7 +930,7 @@ export default function CircleDetailScreen() {
           </View>
           {circle.myPosition ? (
             <View style={styles.heroStripChip}>
-              <Ionicons name="trophy-outline" size={14} color="#92400E" />
+              <Ionicons name="trophy-outline" size={14} color={colors.warningLabel} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.heroStripLabel}>
                   {t("circle_detail.hero_your_position")}
@@ -968,7 +969,7 @@ export default function CircleDetailScreen() {
           const eta = new Date(Date.now() + cyclesAway * periodMs);
           return (
             <View style={styles.payoutCountdownChip}>
-              <Ionicons name="time-outline" size={14} color="#0A2342" />
+              <Ionicons name="time-outline" size={14} color={colors.primaryNavy} />
               <Text style={styles.payoutCountdownText}>
                 {t("circle_detail.payout_in_cycles", {
                   cycles: cyclesAway,
@@ -1004,8 +1005,8 @@ export default function CircleDetailScreen() {
             accessibilityRole="button"
             accessibilityLabel={t("circle_detail.action_group_chat")}
           >
-            <View style={[styles.iconActionIcon, { backgroundColor: "#FEF3C7" }]}>
-              <Ionicons name="chatbubbles-outline" size={18} color="#D97706" />
+            <View style={[styles.iconActionIcon, { backgroundColor: colors.warningBg }]}>
+              <Ionicons name="chatbubbles-outline" size={18} color={colors.warningAmber} />
             </View>
             <Text style={styles.iconActionLabel} numberOfLines={1}>
               {t("circle_detail.action_group_chat_short")}
@@ -1017,7 +1018,7 @@ export default function CircleDetailScreen() {
             accessibilityRole="button"
             accessibilityLabel={t("circle_detail.action_set_up_autopay")}
           >
-            <View style={[styles.iconActionIcon, { backgroundColor: "#ECFDF5" }]}>
+            <View style={[styles.iconActionIcon, { backgroundColor: colors.successBg }]}>
               <Ionicons name="repeat-outline" size={18} color="#047857" />
             </View>
             <Text style={styles.iconActionLabel} numberOfLines={1}>
@@ -1038,7 +1039,7 @@ export default function CircleDetailScreen() {
               <Ionicons
                 name={circleMuted ? "notifications-off" : "notifications-outline"}
                 size={18}
-                color={circleMuted ? "#92400E" : "#0A2342"}
+                color={circleMuted ? colors.warningLabel : colors.primaryNavy}
               />
             </View>
             <Text style={styles.iconActionLabel} numberOfLines={1}>
@@ -1066,7 +1067,7 @@ export default function CircleDetailScreen() {
           accessibilityRole="button"
           accessibilityLabel={t("circle_detail.substitute_pool_row_title")}
         >
-          <View style={[styles.substituteRowIcon, { backgroundColor: "#ECFDF5" }]}>
+          <View style={[styles.substituteRowIcon, { backgroundColor: colors.successBg }]}>
             <Ionicons name="people-circle-outline" size={20} color="#10B981" />
           </View>
           <View style={{ flex: 1 }}>
@@ -1079,7 +1080,7 @@ export default function CircleDetailScreen() {
               })}
             </Text>
           </View>
-          <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+          <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
         </TouchableOpacity>
       ) : null}
 
@@ -1088,7 +1089,7 @@ export default function CircleDetailScreen() {
           see when returning to the circle after missing a cycle. */}
       {showAutopaySuggestion && (
         <View style={styles.suggestionBanner}>
-          <Ionicons name="alert-circle" size={20} color="#92400E" />
+          <Ionicons name="alert-circle" size={20} color={colors.warningLabel} />
           <View style={{ flex: 1 }}>
             <Text style={styles.suggestionTitle}>
               {t("circle_detail.autopay_suggestion_title")}
@@ -1141,7 +1142,7 @@ export default function CircleDetailScreen() {
               <Ionicons
                 name={autopayPaused ? "alert-circle" : "checkmark-circle"}
                 size={11}
-                color={autopayPaused ? "#92400E" : "#047857"}
+                color={autopayPaused ? colors.warningLabel : "#047857"}
               />
               <Text
                 style={[
@@ -1170,7 +1171,7 @@ export default function CircleDetailScreen() {
         </View>
         <View style={styles.statCard}>
           <Text style={styles.statLabel}>{t("circle_detail.stat_total_pot")}</Text>
-          <Text style={[styles.statValue, { color: "#00C6AE" }]}>${totalPot.toLocaleString()}</Text>
+          <Text style={[styles.statValue, { color: colors.accentTeal }]}>${totalPot.toLocaleString()}</Text>
           <Text style={styles.statSubtext}>{circle.memberCount} members</Text>
         </View>
       </View>
@@ -1193,13 +1194,13 @@ export default function CircleDetailScreen() {
           tier = {
             label: "ELITE",
             color: "#B45309",
-            bg: "#FEF3C7",
+            bg: colors.warningBg,
             summary: "Elite reputation — premium benefits unlocked.",
           };
         } else if (score >= 70) {
           tier = {
             label: "EXCELLENT",
-            color: "#065F46",
+            color: colors.successLabel,
             bg: "#D1FAE5",
             summary:
               score >= 80
@@ -1209,15 +1210,15 @@ export default function CircleDetailScreen() {
         } else if (score >= 40) {
           tier = {
             label: "BUILDING",
-            color: "#92400E",
-            bg: "#FEF3C7",
+            color: colors.warningLabel,
+            bg: colors.warningBg,
             summary: "Building trust — keep contributing on time.",
           };
         } else if (score > 0) {
           tier = {
             label: "AT RISK",
             color: "#991B1B",
-            bg: "#FEE2E2",
+            bg: colors.errorBg,
             summary: "Reputation at risk — defaults are eroding trust.",
           };
         } else {
@@ -1269,13 +1270,13 @@ export default function CircleDetailScreen() {
             {score >= 80 && (
               <View style={styles.repBenefitsBlock}>
                 <View style={styles.repBenefitRow}>
-                  <Ionicons name="trending-down" size={14} color="#065F46" />
+                  <Ionicons name="trending-down" size={14} color={colors.successLabel} />
                   <Text style={styles.repBenefitText}>
                     0.5% lower insurance fee
                   </Text>
                 </View>
                 <View style={styles.repBenefitRow}>
-                  <Ionicons name="trending-up" size={14} color="#065F46" />
+                  <Ionicons name="trending-up" size={14} color={colors.successLabel} />
                   <Text style={styles.repBenefitText}>
                     90% advance limit (instead of 80%)
                   </Text>
@@ -1399,7 +1400,7 @@ export default function CircleDetailScreen() {
               accessibilityLabel="Refresh circle health score"
             >
               {healthRecomputing ? (
-                <Ionicons name="refresh" size={14} color="#6B7280" />
+                <Ionicons name="refresh" size={14} color={colors.textSecondary} />
               ) : (
                 <>
                   <Ionicons name="refresh-outline" size={14} color="#2563EB" />
@@ -1421,7 +1422,7 @@ export default function CircleDetailScreen() {
         <View style={styles.partialPlanCard}>
           <View style={styles.partialPlanHeader}>
             <View style={styles.partialPlanIcon}>
-              <Ionicons name="calendar-outline" size={20} color="#00C6AE" />
+              <Ionicons name="calendar-outline" size={20} color={colors.accentTeal} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.partialPlanBadge}>{t("circle_detail.partial_plan_badge")}</Text>
@@ -1435,7 +1436,7 @@ export default function CircleDetailScreen() {
             <View
               style={[
                 styles.progressBarFill,
-                { width: `${partialProgress.percentage}%`, backgroundColor: "#00C6AE" },
+                { width: `${partialProgress.percentage}%`, backgroundColor: colors.accentTeal },
               ]}
             />
           </View>
@@ -1450,7 +1451,7 @@ export default function CircleDetailScreen() {
 
           {partialNextDue && (
             <View style={styles.partialPlanNextRow}>
-              <Ionicons name="time-outline" size={14} color="#6B7280" />
+              <Ionicons name="time-outline" size={14} color={colors.textSecondary} />
               <Text style={styles.partialPlanNextText}>
                 Next catch-up due {partialNextDue}
               </Text>
@@ -1469,7 +1470,7 @@ export default function CircleDetailScreen() {
             accessibilityLabel="View Flexible Payment plan details"
           >
             <Text style={styles.partialPlanButtonText}>{t("circle_detail.partial_plan_btn")}</Text>
-            <Ionicons name="arrow-forward" size={14} color="#00C6AE" />
+            <Ionicons name="arrow-forward" size={14} color={colors.accentTeal} />
           </TouchableOpacity>
         </View>
       )}
@@ -1488,7 +1489,7 @@ export default function CircleDetailScreen() {
 
         {paymentProgress < 100 && (
           <View style={styles.paymentAlert}>
-            <Ionicons name="time-outline" size={18} color="#D97706" />
+            <Ionicons name="time-outline" size={18} color={colors.warningAmber} />
             <Text style={styles.paymentAlertText}>
               Waiting for {members.length - paidMembers} more payments
             </Text>
@@ -1500,7 +1501,7 @@ export default function CircleDetailScreen() {
       {hasBeneficiary && (
         <View style={styles.beneficiaryCard}>
           <View style={styles.beneficiaryIcon}>
-            <Ionicons name="person-circle" size={32} color="#00C6AE" />
+            <Ionicons name="person-circle" size={32} color={colors.accentTeal} />
           </View>
           <View style={styles.beneficiaryInfo}>
             <Text style={styles.beneficiaryLabel}>{t("circle_detail.beneficiary_label")}</Text>
@@ -1520,7 +1521,7 @@ export default function CircleDetailScreen() {
       {isMember && inviteCode ? (
         <View style={styles.inviteCard}>
           <View style={styles.inviteCardHeader}>
-            <Ionicons name="key-outline" size={16} color="#00C6AE" />
+            <Ionicons name="key-outline" size={16} color={colors.accentTeal} />
             <Text style={styles.inviteCardTitle}>
               {t("circle_detail.invite_code_title")}
             </Text>
@@ -1551,7 +1552,7 @@ export default function CircleDetailScreen() {
               <Ionicons
                 name={codeCopied ? "checkmark" : "copy-outline"}
                 size={16}
-                color={codeCopied ? "#FFFFFF" : "#0A2342"}
+                color={codeCopied ? colors.cardBg : colors.primaryNavy}
               />
               <Text
                 style={[
@@ -1573,7 +1574,7 @@ export default function CircleDetailScreen() {
               <Ionicons
                 name="share-social-outline"
                 size={16}
-                color="#FFFFFF"
+                color={colors.cardBg}
               />
               <Text style={styles.inviteActionBtnPrimaryText}>
                 {t("circle_detail.invite_btn_share")}
@@ -1597,7 +1598,7 @@ export default function CircleDetailScreen() {
             accessibilityRole="button"
             accessibilityLabel={t("circle_detail.invite_btn_search")}
           >
-            <Ionicons name="person-add-outline" size={16} color="#0A2342" />
+            <Ionicons name="person-add-outline" size={16} color={colors.primaryNavy} />
             <Text style={styles.inviteByNameBtnText}>
               {t("circle_detail.invite_btn_search")}
             </Text>
@@ -1614,7 +1615,7 @@ export default function CircleDetailScreen() {
 
         <View style={styles.detailRow}>
           <View style={styles.detailIcon}>
-            <Ionicons name="calendar-outline" size={18} color="#6B7280" />
+            <Ionicons name="calendar-outline" size={18} color={colors.textSecondary} />
           </View>
           <Text style={styles.detailLabel}>{t("circle_detail.detail_start_date")}</Text>
           <Text style={styles.detailValue}>{formatDate(circle.startDate)}</Text>
@@ -1622,7 +1623,7 @@ export default function CircleDetailScreen() {
 
         <View style={styles.detailRow}>
           <View style={styles.detailIcon}>
-            <Ionicons name="repeat-outline" size={18} color="#6B7280" />
+            <Ionicons name="repeat-outline" size={18} color={colors.textSecondary} />
           </View>
           <Text style={styles.detailLabel}>{t("circle_detail.detail_frequency")}</Text>
           <Text style={styles.detailValue}>{getFrequencyLabel(circle.frequency)}</Text>
@@ -1631,7 +1632,7 @@ export default function CircleDetailScreen() {
         {!isOneTime && !hasBeneficiary && (
           <View style={styles.detailRow}>
             <View style={styles.detailIcon}>
-              <Ionicons name="shuffle-outline" size={18} color="#6B7280" />
+              <Ionicons name="shuffle-outline" size={18} color={colors.textSecondary} />
             </View>
             <Text style={styles.detailLabel}>{t("circle_detail.detail_payout_order")}</Text>
             <Text style={styles.detailValue}>{getRotationMethodLabel(circle.rotationMethod)}</Text>
@@ -1644,7 +1645,7 @@ export default function CircleDetailScreen() {
               <Ionicons
                 name="help-circle-outline"
                 size={16}
-                color="#6B7280"
+                color={colors.textSecondary}
                 style={{ marginLeft: 6 }}
               />
             </TouchableOpacity>
@@ -1653,7 +1654,7 @@ export default function CircleDetailScreen() {
 
         <View style={styles.detailRow}>
           <View style={styles.detailIcon}>
-            <Ionicons name="time-outline" size={18} color="#6B7280" />
+            <Ionicons name="time-outline" size={18} color={colors.textSecondary} />
           </View>
           <Text style={styles.detailLabel}>{t("circle_detail.detail_grace_period")}</Text>
           <Text style={styles.detailValue}>
@@ -1694,7 +1695,7 @@ export default function CircleDetailScreen() {
           </Text>
           {memberIsAdmin && (
             <View style={styles.adminBadge}>
-              <Ionicons name="star" size={10} color="#FFFFFF" />
+              <Ionicons name="star" size={10} color={colors.cardBg} />
             </View>
           )}
         </View>
@@ -1750,9 +1751,9 @@ export default function CircleDetailScreen() {
             </Text>
           )}
           {member.hasPaid ? (
-            <Ionicons name="checkmark-circle" size={20} color="#00C6AE" />
+            <Ionicons name="checkmark-circle" size={20} color={colors.accentTeal} />
           ) : (
-            <Ionicons name="time-outline" size={20} color="#D97706" />
+            <Ionicons name="time-outline" size={20} color={colors.warningAmber} />
           )}
         </View>
       </View>
@@ -1767,12 +1768,12 @@ export default function CircleDetailScreen() {
 
       {isLoadingMembers ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00C6AE" />
+          <ActivityIndicator size="large" color={colors.accentTeal} />
           <Text style={styles.loadingText}>{t("circle_detail.loading_members")}</Text>
         </View>
       ) : members.length === 0 ? (
         <View style={styles.emptyMembersContainer}>
-          <Ionicons name="people-outline" size={48} color="#9CA3AF" />
+          <Ionicons name="people-outline" size={48} color={colors.textSecondary} />
           <Text style={styles.emptyMembersText}>{t("circle_detail.empty_no_members")}</Text>
         </View>
       ) : (
@@ -1818,12 +1819,12 @@ export default function CircleDetailScreen() {
 
   const getActivityColor = (type: string): { bg: string; icon: string } => {
     switch (type) {
-      case "contribution": return { bg: "#F0FDFB", icon: "#00C6AE" };
+      case "contribution": return { bg: colors.tealTintBg, icon: colors.accentTeal };
       case "payout": return { bg: "#D1FAE5", icon: "#10B981" };
       case "joined": return { bg: "#EEF2FF", icon: "#6366F1" };
-      case "created": return { bg: "#FEF3C7", icon: "#D97706" };
-      case "left": return { bg: "#FEE2E2", icon: "#DC2626" };
-      default: return { bg: "#F3F4F6", icon: "#6B7280" };
+      case "created": return { bg: colors.warningBg, icon: colors.warningAmber };
+      case "left": return { bg: colors.errorBg, icon: colors.errorText };
+      default: return { bg: "#F3F4F6", icon: colors.textSecondary };
     }
   };
 
@@ -1846,7 +1847,7 @@ export default function CircleDetailScreen() {
 
       {isLoadingActivities ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="small" color="#00C6AE" />
+          <ActivityIndicator size="small" color={colors.accentTeal} />
           <Text style={styles.loadingText}>{t("circle_detail.loading_activities")}</Text>
         </View>
       ) : activities.length === 0 ? (
@@ -1925,7 +1926,7 @@ export default function CircleDetailScreen() {
           onPress={() => setShowAllActivities(true)}
           accessibilityRole="button"
         >
-          <Ionicons name="chevron-down" size={14} color="#0A2342" />
+          <Ionicons name="chevron-down" size={14} color={colors.primaryNavy} />
           <Text style={styles.showEarlierText}>
             {t("circle_detail.activity_show_earlier", { count: earlierCount })}
           </Text>
@@ -1943,19 +1944,19 @@ export default function CircleDetailScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#00C6AE"
-            colors={["#00C6AE"]}
+            tintColor={colors.accentTeal}
+            colors={[colors.accentTeal]}
           />
         }
       >
         {/* Header */}
-        <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
+        <LinearGradient colors={[colors.primaryNavy, "#143654"]} style={styles.header}>
           <View style={styles.headerTop}>
             <TouchableOpacity
               style={styles.backButton}
               onPress={() => navigation.goBack()}
             >
-              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+              <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
             </TouchableOpacity>
             <View style={styles.headerActions}>
               {/* Timeline + Voting were rendered as inline tabs but
@@ -1970,7 +1971,7 @@ export default function CircleDetailScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t("circle_detail.tab_timeline")}
               >
-                <Ionicons name="time-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="time-outline" size={20} color={colors.cardBg} />
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.headerActionButton}
@@ -1980,7 +1981,7 @@ export default function CircleDetailScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t("circle_detail.tab_voting")}
               >
-                <Ionicons name="reader-outline" size={20} color="#FFFFFF" />
+                <Ionicons name="reader-outline" size={20} color={colors.cardBg} />
                 {openProposalCount > 0 && (
                   <View style={styles.headerActionBadge}>
                     <Text style={styles.headerActionBadgeText}>
@@ -1993,7 +1994,7 @@ export default function CircleDetailScreen() {
                 style={styles.headerActionButton}
                 onPress={() => setShowMenu(true)}
               >
-                <Ionicons name="ellipsis-vertical" size={20} color="#FFFFFF" />
+                <Ionicons name="ellipsis-vertical" size={20} color={colors.cardBg} />
               </TouchableOpacity>
             </View>
           </View>
@@ -2009,7 +2010,7 @@ export default function CircleDetailScreen() {
             </View>
             {circle.verified && (
               <View style={styles.verifiedBadge}>
-                <Ionicons name="shield-checkmark" size={14} color="#00C6AE" />
+                <Ionicons name="shield-checkmark" size={14} color={colors.accentTeal} />
                 <Text style={styles.verifiedText}>{t("circle_detail.tag_verified")}</Text>
               </View>
             )}
@@ -2046,7 +2047,7 @@ export default function CircleDetailScreen() {
             style={{
               transform: [{ scale: shouldPulse ? pulseAnim : 1 }],
               borderRadius: 14,
-              shadowColor: shouldPulse ? "#00C6AE" : "transparent",
+              shadowColor: shouldPulse ? colors.accentTeal : "transparent",
               shadowOffset: { width: 0, height: 0 },
               shadowOpacity: shouldPulse ? 0.6 : 0,
               shadowRadius: shouldPulse ? 14 : 0,
@@ -2064,7 +2065,7 @@ export default function CircleDetailScreen() {
                 navigation.navigate("MakeContribution", { circleId });
               }}
             >
-              <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
+              <Ionicons name="wallet-outline" size={20} color={colors.cardBg} />
               <Text style={styles.payButtonText}>Contribute ${circle.amount}</Text>
             </TouchableOpacity>
           </Animated.View>
@@ -2074,7 +2075,7 @@ export default function CircleDetailScreen() {
             onPress={() => !isFull && navigation.navigate("JoinCircleConfirm", { circleId, source: "detail" })}
             disabled={isFull}
           >
-            <Ionicons name="people" size={20} color="#FFFFFF" />
+            <Ionicons name="people" size={20} color={colors.cardBg} />
             <Text style={styles.payButtonText}>
               {isFull ? "Circle Full" : "Join Circle"}
             </Text>
@@ -2087,7 +2088,7 @@ export default function CircleDetailScreen() {
         style={styles.floatingHelp}
         onPress={() => navigation.navigate("HelpCenter")}
       >
-        <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
+        <Ionicons name="chatbubble-ellipses" size={24} color={colors.cardBg} />
         <Text style={styles.floatingHelpText}>{t("final_polish.circledetail_help")}</Text>
       </TouchableOpacity>
 
@@ -2113,18 +2114,18 @@ export default function CircleDetailScreen() {
                     <Ionicons
                       name={isAdmin ? "shield-checkmark" : isElder ? "eye" : "person"}
                       size={12}
-                      color={isAdmin ? "#F59E0B" : isElder ? "#6366F1" : "#00C6AE"}
+                      color={isAdmin ? "#F59E0B" : isElder ? "#6366F1" : colors.accentTeal}
                     />
                     <Text style={[
                       styles.menuRoleText,
-                      { color: isAdmin ? "#F59E0B" : isElder ? "#6366F1" : "#00C6AE" }
+                      { color: isAdmin ? "#F59E0B" : isElder ? "#6366F1" : colors.accentTeal }
                     ]}>
                       {isAdmin ? "Admin" : isElder ? "Elder" : "Member"}
                     </Text>
                   </View>
                 </View>
                 <TouchableOpacity onPress={() => setShowMenu(false)}>
-                  <Ionicons name="close" size={24} color="#6B7280" />
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
@@ -2133,14 +2134,14 @@ export default function CircleDetailScreen() {
                 <Text style={styles.menuSectionTitle}>{t("circle_detail.menu_general")}</Text>
 
                 <TouchableOpacity style={styles.menuItem} onPress={handleViewCircleRules}>
-                  <View style={[styles.menuItemIcon, { backgroundColor: "#F0FDFB" }]}>
-                    <Ionicons name="document-text-outline" size={20} color="#00C6AE" />
+                  <View style={[styles.menuItemIcon, { backgroundColor: colors.tealTintBg }]}>
+                    <Ionicons name="document-text-outline" size={20} color={colors.accentTeal} />
                   </View>
                   <View style={styles.menuItemContent}>
                     <Text style={styles.menuItemText}>{t("circle_detail.menu_rules")}</Text>
                     <Text style={styles.menuItemDesc}>Terms, contributions & guidelines</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuItem} onPress={handleShareCircle}>
@@ -2151,54 +2152,54 @@ export default function CircleDetailScreen() {
                     <Text style={styles.menuItemText}>{t("circle_detail.menu_share")}</Text>
                     <Text style={styles.menuItemDesc}>{t("circle_detail.menu_share_desc")}</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuItem} onPress={() => {
                   setShowMenu(false);
                   navigation.navigate("QRCodeDisplay", { circleId });
                 }}>
-                  <View style={[styles.menuItemIcon, { backgroundColor: "#F0FDFB" }]}>
-                    <Ionicons name="qr-code-outline" size={20} color="#00C6AE" />
+                  <View style={[styles.menuItemIcon, { backgroundColor: colors.tealTintBg }]}>
+                    <Ionicons name="qr-code-outline" size={20} color={colors.accentTeal} />
                   </View>
                   <View style={styles.menuItemContent}>
                     <Text style={styles.menuItemText}>{t("circle_detail.menu_qr")}</Text>
                     <Text style={styles.menuItemDesc}>{t("circle_detail.menu_qr_desc")}</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuItem} onPress={handleHelpSupport}>
-                  <View style={[styles.menuItemIcon, { backgroundColor: "#FEF3C7" }]}>
-                    <Ionicons name="help-circle-outline" size={20} color="#D97706" />
+                  <View style={[styles.menuItemIcon, { backgroundColor: colors.warningBg }]}>
+                    <Ionicons name="help-circle-outline" size={20} color={colors.warningAmber} />
                   </View>
                   <View style={styles.menuItemContent}>
                     <Text style={styles.menuItemText}>Help & Support</Text>
                     <Text style={styles.menuItemDesc}>FAQs, tutorials & contact</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuItem} onPress={handleReportIssue}>
-                  <View style={[styles.menuItemIcon, { backgroundColor: "#FEE2E2" }]}>
-                    <Ionicons name="flag-outline" size={20} color="#DC2626" />
+                  <View style={[styles.menuItemIcon, { backgroundColor: colors.errorBg }]}>
+                    <Ionicons name="flag-outline" size={20} color={colors.errorText} />
                   </View>
                   <View style={styles.menuItemContent}>
                     <Text style={styles.menuItemText}>{t("circle_detail.menu_report")}</Text>
                     <Text style={styles.menuItemDesc}>{t("circle_detail.menu_report_desc")}</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
 
                 {/* Phase 2 — File a formal dispute against another member. */}
                 <TouchableOpacity style={styles.menuItem} onPress={handleFileDispute}>
-                  <View style={[styles.menuItemIcon, { backgroundColor: "#FEF3C7" }]}>
-                    <Ionicons name="document-text-outline" size={20} color="#92400E" />
+                  <View style={[styles.menuItemIcon, { backgroundColor: colors.warningBg }]}>
+                    <Ionicons name="document-text-outline" size={20} color={colors.warningLabel} />
                   </View>
                   <View style={styles.menuItemContent}>
                     <Text style={styles.menuItemText}>{t("dispute.file_button")}</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
 
                 {/* Phase 2 — View the list of disputes for this circle. */}
@@ -2209,7 +2210,7 @@ export default function CircleDetailScreen() {
                   <View style={styles.menuItemContent}>
                     <Text style={styles.menuItemText}>{t("dispute.view_disputes")}</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
@@ -2218,14 +2219,14 @@ export default function CircleDetailScreen() {
                 <Text style={styles.menuSectionTitle}>{t("circle_detail.menu_your_activity")}</Text>
 
                 <TouchableOpacity style={styles.menuItem} onPress={handlePaymentHistory}>
-                  <View style={[styles.menuItemIcon, { backgroundColor: "#F0FDFB" }]}>
-                    <Ionicons name="receipt-outline" size={20} color="#00C6AE" />
+                  <View style={[styles.menuItemIcon, { backgroundColor: colors.tealTintBg }]}>
+                    <Ionicons name="receipt-outline" size={20} color={colors.accentTeal} />
                   </View>
                   <View style={styles.menuItemContent}>
                     <Text style={styles.menuItemText}>{t("circle_detail.menu_payment_history")}</Text>
                     <Text style={styles.menuItemDesc}>{t("circle_detail.menu_payment_history_desc")}</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuItem} onPress={handlePaymentReminders}>
@@ -2236,7 +2237,7 @@ export default function CircleDetailScreen() {
                     <Text style={styles.menuItemText}>{t("circle_detail.menu_reminders")}</Text>
                     <Text style={styles.menuItemDesc}>{t("circle_detail.menu_reminders_desc")}</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
 
                 {/* Swap Position — Phase D2 of feat(position-swap) #18.
@@ -2252,18 +2253,18 @@ export default function CircleDetailScreen() {
                       Trade your payout position with another member
                     </Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.menuItem} onPress={handleLeaveCircle}>
-                  <View style={[styles.menuItemIcon, { backgroundColor: "#FEE2E2" }]}>
-                    <Ionicons name="exit-outline" size={20} color="#DC2626" />
+                  <View style={[styles.menuItemIcon, { backgroundColor: colors.errorBg }]}>
+                    <Ionicons name="exit-outline" size={20} color={colors.errorText} />
                   </View>
                   <View style={styles.menuItemContent}>
-                    <Text style={[styles.menuItemText, { color: "#DC2626" }]}>{t("circle_detail.menu_leave_circle")}</Text>
+                    <Text style={[styles.menuItemText, { color: colors.errorText }]}>{t("circle_detail.menu_leave_circle")}</Text>
                     <Text style={styles.menuItemDesc}>{t("circle_detail.menu_leave_desc")}</Text>
                   </View>
-                  <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
@@ -2273,7 +2274,7 @@ export default function CircleDetailScreen() {
                   <View style={styles.menuSectionHeader}>
                     <Text style={styles.menuSectionTitle}>{t("circle_detail.menu_admin_controls")}</Text>
                     <View style={styles.adminBadgeSmall}>
-                      <Ionicons name="shield-checkmark" size={10} color="#FFFFFF" />
+                      <Ionicons name="shield-checkmark" size={10} color={colors.cardBg} />
                     </View>
                   </View>
 
@@ -2290,51 +2291,51 @@ export default function CircleDetailScreen() {
                       <Text style={styles.menuItemText}>{t("circle_detail.menu_manage_members")}</Text>
                       <Text style={styles.menuItemDesc}>Add, remove & assign roles</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                    <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.menuItem} onPress={handlePauseCircle}>
-                    <View style={[styles.menuItemIcon, { backgroundColor: "#FEF3C7" }]}>
-                      <Ionicons name="pause-circle-outline" size={20} color="#D97706" />
+                    <View style={[styles.menuItemIcon, { backgroundColor: colors.warningBg }]}>
+                      <Ionicons name="pause-circle-outline" size={20} color={colors.warningAmber} />
                     </View>
                     <View style={styles.menuItemContent}>
                       <Text style={styles.menuItemText}>{t("circle_detail.menu_pause")}</Text>
                       <Text style={styles.menuItemDesc}>{t("circle_detail.menu_pause_desc")}</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                    <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.menuItem} onPress={handleExportData}>
-                    <View style={[styles.menuItemIcon, { backgroundColor: "#F0FDFB" }]}>
-                      <Ionicons name="download-outline" size={20} color="#00C6AE" />
+                    <View style={[styles.menuItemIcon, { backgroundColor: colors.tealTintBg }]}>
+                      <Ionicons name="download-outline" size={20} color={colors.accentTeal} />
                     </View>
                     <View style={styles.menuItemContent}>
                       <Text style={styles.menuItemText}>{t("circle_detail.menu_export")}</Text>
                       <Text style={styles.menuItemDesc}>PDF, CSV & audit reports</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                    <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.menuItem} onPress={handleAdminSettings}>
-                    <View style={[styles.menuItemIcon, { backgroundColor: "#F5F7FA" }]}>
-                      <Ionicons name="settings-outline" size={20} color="#6B7280" />
+                    <View style={[styles.menuItemIcon, { backgroundColor: colors.screenBg }]}>
+                      <Ionicons name="settings-outline" size={20} color={colors.textSecondary} />
                     </View>
                     <View style={styles.menuItemContent}>
                       <Text style={styles.menuItemText}>{t("circle_detail.menu_admin_settings")}</Text>
                       <Text style={styles.menuItemDesc}>Contributions, visibility & more</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                    <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.menuItem} onPress={handleCloseCircle}>
-                    <View style={[styles.menuItemIcon, { backgroundColor: "#FEE2E2" }]}>
-                      <Ionicons name="close-circle-outline" size={20} color="#DC2626" />
+                    <View style={[styles.menuItemIcon, { backgroundColor: colors.errorBg }]}>
+                      <Ionicons name="close-circle-outline" size={20} color={colors.errorText} />
                     </View>
                     <View style={styles.menuItemContent}>
-                      <Text style={[styles.menuItemText, { color: "#DC2626" }]}>{t("circle_detail.menu_close_circle")}</Text>
+                      <Text style={[styles.menuItemText, { color: colors.errorText }]}>{t("circle_detail.menu_close_circle")}</Text>
                       <Text style={styles.menuItemDesc}>{t("circle_detail.menu_close_desc")}</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                    <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
               )}
@@ -2345,7 +2346,7 @@ export default function CircleDetailScreen() {
                   <View style={styles.menuSectionHeader}>
                     <Text style={styles.menuSectionTitle}>{t("circle_detail.menu_oversight_tools")}</Text>
                     <View style={[styles.adminBadgeSmall, { backgroundColor: "#6366F1" }]}>
-                      <Ionicons name="eye" size={10} color="#FFFFFF" />
+                      <Ionicons name="eye" size={10} color={colors.cardBg} />
                     </View>
                   </View>
 
@@ -2357,7 +2358,7 @@ export default function CircleDetailScreen() {
                       <Text style={styles.menuItemText}>{t("circle_detail.menu_oversight_dashboard")}</Text>
                       <Text style={styles.menuItemDesc}>Circle health & compliance</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                    <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.menuItem} onPress={handleMediationTools}>
@@ -2368,18 +2369,18 @@ export default function CircleDetailScreen() {
                       <Text style={styles.menuItemText}>{t("circle_detail.menu_mediation")}</Text>
                       <Text style={styles.menuItemDesc}>{t("circle_detail.menu_mediation_desc")}</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                    <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
 
                   <TouchableOpacity style={styles.menuItem} onPress={handleAuditTrail}>
-                    <View style={[styles.menuItemIcon, { backgroundColor: "#F0FDFB" }]}>
-                      <Ionicons name="list-outline" size={20} color="#00C6AE" />
+                    <View style={[styles.menuItemIcon, { backgroundColor: colors.tealTintBg }]}>
+                      <Ionicons name="list-outline" size={20} color={colors.accentTeal} />
                     </View>
                     <View style={styles.menuItemContent}>
                       <Text style={styles.menuItemText}>{t("circle_detail.menu_audit")}</Text>
                       <Text style={styles.menuItemDesc}>{t("circle_detail.menu_audit_desc")}</Text>
                     </View>
-                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                    <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
               )}
@@ -2421,7 +2422,7 @@ export default function CircleDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.screenBg,
   },
   header: {
     paddingTop: 60,
@@ -2445,7 +2446,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: colors.cardBg,
     flex: 1,
     textAlign: "center",
   },
@@ -2474,7 +2475,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   headerActionBadgeText: {
-    color: "#FFFFFF",
+    color: colors.cardBg,
     fontSize: 10,
     fontWeight: "700",
   },
@@ -2497,7 +2498,7 @@ const styles = StyleSheet.create({
   circleName: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
     marginBottom: 8,
   },
   circleTypeBadge: {
@@ -2519,7 +2520,7 @@ const styles = StyleSheet.create({
   },
   verifiedText: {
     fontSize: 12,
-    color: "#00C6AE",
+    color: colors.accentTeal,
     fontWeight: "600",
   },
   tabsContainer: {
@@ -2536,7 +2537,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   tabActive: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
   },
   tabText: {
     fontSize: 14,
@@ -2544,7 +2545,7 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.7)",
   },
   tabTextActive: {
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   tabContent: {
     padding: 20,
@@ -2558,25 +2559,25 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
   },
   statLabel: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   statValue: {
     fontSize: 24,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   statSubtext: {
     fontSize: 11,
-    color: "#9CA3AF",
+    color: colors.textSecondary,
     marginTop: 2,
   },
   // Phase 1 — circle autopay status pill that sits under the
@@ -2590,11 +2591,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "#ECFDF5",
+    backgroundColor: colors.successBg,
   },
-  autopayBadgePaused: { backgroundColor: "#FEF3C7" },
+  autopayBadgePaused: { backgroundColor: colors.warningBg },
   autopayBadgeText: { fontSize: 10, fontWeight: "800", color: "#047857" },
-  autopayBadgeTextPaused: { color: "#92400E" },
+  autopayBadgeTextPaused: { color: colors.warningLabel },
   // Phase 2 — muted-circle pill (sits next to the autopay pill).
   mutedBadge: { backgroundColor: "#F3F4F6", marginTop: 4 },
   mutedBadgeText: { color: "#1F2937" },
@@ -2605,10 +2606,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     padding: 14,
-    backgroundColor: "#F0FDFB",
+    backgroundColor: colors.tealTintBg,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#00C6AE",
+    borderColor: colors.accentTeal,
     marginBottom: 16,
   },
   heroNextIcon: {
@@ -2622,16 +2623,16 @@ const styles = StyleSheet.create({
   heroNextText: {
     flex: 1,
     fontSize: 13,
-    color: "#0A2342",
+    color: colors.primaryNavy,
     fontWeight: "600",
     lineHeight: 18,
   },
   heroNextCardYourTurn: {
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.warningBg,
     borderColor: "#F59E0B",
   },
   heroNextCardReceived: {
-    backgroundColor: "#ECFDF5",
+    backgroundColor: colors.successBg,
     borderColor: "#059669",
   },
   payoutCountdownChip: {
@@ -2639,18 +2640,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     alignSelf: "flex-start",
     gap: 6,
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.screenBg,
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 12,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
   },
   payoutCountdownText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   contributeHeroCta: {
     flexDirection: "row",
@@ -2660,9 +2661,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 16,
     borderRadius: 14,
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     marginBottom: 16,
-    shadowColor: "#00C6AE",
+    shadowColor: colors.accentTeal,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
     shadowRadius: 12,
@@ -2671,7 +2672,7 @@ const styles = StyleSheet.create({
   contributeHeroCtaText: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   heroCoachTip: {
     flexDirection: "row",
@@ -2680,7 +2681,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.warningBg,
     borderWidth: 1,
     borderColor: "#F59E0B",
     alignSelf: "center",
@@ -2691,7 +2692,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   heroStripRow: {
     flexDirection: "row",
@@ -2705,21 +2706,21 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 12,
     borderRadius: 12,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
   },
   heroStripLabel: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#6B7280",
+    color: colors.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   heroStripValue: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginTop: 2,
   },
   iconActionsRow: {
@@ -2733,9 +2734,9 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
   },
   iconActionIcon: {
     width: 36,
@@ -2747,7 +2748,7 @@ const styles = StyleSheet.create({
   iconActionLabel: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     textAlign: "center",
   },
 
@@ -2756,7 +2757,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 14,
@@ -2764,7 +2765,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 6,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
   },
   substituteRowIcon: {
     width: 36,
@@ -2776,27 +2777,27 @@ const styles = StyleSheet.create({
   substituteRowTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   substituteRowSubtitle: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginTop: 2,
   },
   memberCardMe: {
-    backgroundColor: "#F0FDFB",
-    borderColor: "#00C6AE",
+    backgroundColor: colors.tealTintBg,
+    borderColor: colors.accentTeal,
   },
   mePill: {
     paddingVertical: 2,
     paddingHorizontal: 8,
     borderRadius: 10,
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
   },
   mePillText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
     letterSpacing: 0.3,
   },
   showEarlierBtn: {
@@ -2810,22 +2811,22 @@ const styles = StyleSheet.create({
   showEarlierText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   suggestionBanner: {
     flexDirection: "row",
     gap: 12,
     padding: 14,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.warningBg,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#FDE68A",
     marginBottom: 16,
   },
-  suggestionTitle: { fontSize: 14, fontWeight: "700", color: "#92400E" },
+  suggestionTitle: { fontSize: 14, fontWeight: "700", color: colors.warningLabel },
   suggestionBody: {
     fontSize: 12,
-    color: "#92400E",
+    color: colors.warningLabel,
     lineHeight: 17,
     marginTop: 4,
   },
@@ -2838,37 +2839,37 @@ const styles = StyleSheet.create({
   suggestionCta: {
     paddingVertical: 8,
     paddingHorizontal: 14,
-    backgroundColor: "#92400E",
+    backgroundColor: colors.warningLabel,
     borderRadius: 10,
   },
-  suggestionCtaText: { fontSize: 12, fontWeight: "700", color: "#FFFFFF" },
+  suggestionCtaText: { fontSize: 12, fontWeight: "700", color: colors.cardBg },
   suggestionDismiss: { paddingVertical: 8 },
   suggestionDismissText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#92400E",
+    color: colors.warningLabel,
   },
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 14,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
   },
   cardTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginBottom: 14,
   },
 
   // ── Invite Code card ──────────────────────────────────────────────────
   inviteCard: {
-    backgroundColor: "#F0FDFB",
+    backgroundColor: colors.tealTintBg,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#00C6AE",
+    borderColor: colors.accentTeal,
     padding: 16,
     marginHorizontal: 16,
     marginBottom: 16,
@@ -2893,7 +2894,7 @@ const styles = StyleSheet.create({
   inviteCodeChip: {
     fontSize: 26,
     fontWeight: "800",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     letterSpacing: 4,
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     textAlign: "center",
@@ -2913,27 +2914,27 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   inviteActionBtnOutline: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderWidth: 1,
-    borderColor: "#0A2342",
+    borderColor: colors.primaryNavy,
   },
   inviteActionBtnOutlineText: {
-    color: "#0A2342",
+    color: colors.primaryNavy,
     fontSize: 13,
     fontWeight: "700",
   },
   inviteActionBtnCopied: {
-    backgroundColor: "#0A2342",
-    borderColor: "#0A2342",
+    backgroundColor: colors.primaryNavy,
+    borderColor: colors.primaryNavy,
   },
   inviteActionBtnCopiedText: {
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   inviteActionBtnPrimary: {
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
   },
   inviteActionBtnPrimaryText: {
-    color: "#FFFFFF",
+    color: colors.cardBg,
     fontSize: 13,
     fontWeight: "700",
   },
@@ -2946,17 +2947,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     backgroundColor: "#F9FAFB",
   },
   inviteByNameBtnText: {
-    color: "#0A2342",
+    color: colors.primaryNavy,
     fontSize: 13,
     fontWeight: "700",
   },
   inviteHelpText: {
     fontSize: 11,
-    color: "#065F46",
+    color: colors.successLabel,
     marginTop: 10,
     lineHeight: 16,
     fontStyle: "italic",
@@ -2966,23 +2967,23 @@ const styles = StyleSheet.create({
   },
   progressBarBg: {
     height: 8,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
     borderRadius: 4,
     overflow: "hidden",
     marginBottom: 8,
   },
   progressBarFill: {
     height: "100%",
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     borderRadius: 4,
   },
   partialPlanCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 14,
     padding: 16,
     marginBottom: 16,
     borderLeftWidth: 4,
-    borderLeftColor: "#00C6AE",
+    borderLeftColor: colors.accentTeal,
     shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowOffset: { width: 0, height: 2 },
@@ -3006,13 +3007,13 @@ const styles = StyleSheet.create({
   partialPlanBadge: {
     fontSize: 10,
     fontWeight: "800",
-    color: "#00C6AE",
+    color: colors.accentTeal,
     letterSpacing: 0.6,
   },
   partialPlanTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginTop: 2,
   },
   partialPlanProgressRow: {
@@ -3023,12 +3024,12 @@ const styles = StyleSheet.create({
   },
   partialPlanProgressLabel: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
   },
   partialPlanProgressPct: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#00C6AE",
+    color: colors.accentTeal,
   },
   partialPlanNextRow: {
     flexDirection: "row",
@@ -3038,7 +3039,7 @@ const styles = StyleSheet.create({
   },
   partialPlanNextText: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
   },
   partialPlanButton: {
     flexDirection: "row",
@@ -3053,10 +3054,10 @@ const styles = StyleSheet.create({
   partialPlanButtonText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#00C6AE",
+    color: colors.accentTeal,
   },
   healthCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 14,
     padding: 16,
     marginBottom: 16,
@@ -3085,7 +3086,7 @@ const styles = StyleSheet.create({
   healthBadgeLabel: { fontSize: 12, fontWeight: "800", letterSpacing: 0.4 },
   healthScoreBox: { flexDirection: "row", alignItems: "baseline", gap: 2 },
   healthScore: { fontSize: 28, fontWeight: "800" },
-  healthScoreOver: { fontSize: 13, color: "#9CA3AF", fontWeight: "600" },
+  healthScoreOver: { fontSize: 13, color: colors.textSecondary, fontWeight: "600" },
   healthScoreBar: {
     height: 6,
     backgroundColor: "#F3F4F6",
@@ -3102,7 +3103,7 @@ const styles = StyleSheet.create({
   },
   healthTrendEmoji: { fontSize: 14 },
   healthTrendLabel: { fontSize: 13, fontWeight: "700" },
-  healthDelta: { fontSize: 12, color: "#6B7280", marginLeft: 4 },
+  healthDelta: { fontSize: 12, color: colors.textSecondary, marginLeft: 4 },
   healthGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -3110,7 +3111,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   healthGridItem: { flex: 1, minWidth: "44%" },
-  healthGridLabel: { fontSize: 11, color: "#6B7280", marginBottom: 4 },
+  healthGridLabel: { fontSize: 11, color: colors.textSecondary, marginBottom: 4 },
   healthGridBarBg: {
     height: 4,
     backgroundColor: "#F3F4F6",
@@ -3129,7 +3130,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#F3F4F6",
   },
-  healthFooterText: { fontSize: 11, color: "#9CA3AF" },
+  healthFooterText: { fontSize: 11, color: colors.textSecondary },
   healthRefresh: {
     flexDirection: "row",
     alignItems: "center",
@@ -3139,7 +3140,7 @@ const styles = StyleSheet.create({
   },
   healthRefreshText: { fontSize: 12, fontWeight: "700", color: "#2563EB" },
   repCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 14,
     padding: 16,
     marginBottom: 16,
@@ -3164,10 +3165,10 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   repBadgeLabel: { fontSize: 10, fontWeight: "800", letterSpacing: 0.6 },
-  repCardTitle: { fontSize: 15, fontWeight: "700", color: "#0A2342" },
+  repCardTitle: { fontSize: 15, fontWeight: "700", color: colors.primaryNavy },
   repScoreBox: { flexDirection: "row", alignItems: "baseline", gap: 2 },
   repScore: { fontSize: 32, fontWeight: "800" },
-  repScoreOver: { fontSize: 13, color: "#9CA3AF", fontWeight: "600" },
+  repScoreOver: { fontSize: 13, color: colors.textSecondary, fontWeight: "600" },
   repScoreBar: {
     height: 6,
     backgroundColor: "#F3F4F6",
@@ -3185,31 +3186,31 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   repBenefitRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  repBenefitText: { fontSize: 12, color: "#065F46", fontWeight: "600" },
+  repBenefitText: { fontSize: 12, color: colors.successLabel, fontWeight: "600" },
   progressText: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
   },
   paymentAlert: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.warningBg,
     padding: 10,
     borderRadius: 8,
   },
   paymentAlertText: {
     fontSize: 12,
-    color: "#92400E",
+    color: colors.warningLabel,
     flex: 1,
   },
   beneficiaryCard: {
-    backgroundColor: "#F0FDFB",
+    backgroundColor: colors.tealTintBg,
     borderRadius: 14,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#00C6AE",
+    borderColor: colors.accentTeal,
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -3234,31 +3235,31 @@ const styles = StyleSheet.create({
   beneficiaryName: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginTop: 2,
   },
   beneficiaryReason: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginTop: 2,
   },
   beneficiaryAmount: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#00C6AE",
+    color: colors.accentTeal,
   },
   detailRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#F5F7FA",
+    borderBottomColor: colors.screenBg,
   },
   detailIcon: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.screenBg,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -3266,19 +3267,19 @@ const styles = StyleSheet.create({
   detailLabel: {
     flex: 1,
     fontSize: 14,
-    color: "#6B7280",
+    color: colors.textSecondary,
   },
   detailValue: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   actionsCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 14,
     padding: 4,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
   },
   actionButton: {
     flexDirection: "row",
@@ -3297,12 +3298,12 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginBottom: 16,
   },
   loadingContainer: {
@@ -3312,7 +3313,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginTop: 12,
   },
   emptyMembersContainer: {
@@ -3322,25 +3323,25 @@ const styles = StyleSheet.create({
   },
   emptyMembersText: {
     fontSize: 14,
-    color: "#9CA3AF",
+    color: colors.textSecondary,
     marginTop: 12,
   },
   memberCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     gap: 12,
   },
   memberAvatar: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#0A2342",
+    backgroundColor: colors.primaryNavy,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
@@ -3348,7 +3349,7 @@ const styles = StyleSheet.create({
   memberAvatarText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   adminBadge: {
     position: "absolute",
@@ -3361,7 +3362,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
-    borderColor: "#FFFFFF",
+    borderColor: colors.cardBg,
   },
   memberInfo: {
     flex: 1,
@@ -3374,10 +3375,10 @@ const styles = StyleSheet.create({
   memberName: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   adminTag: {
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.warningBg,
     paddingVertical: 2,
     paddingHorizontal: 6,
     borderRadius: 4,
@@ -3385,7 +3386,7 @@ const styles = StyleSheet.create({
   adminTagText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#92400E",
+    color: colors.warningLabel,
   },
   riskBadge: {
     paddingVertical: 2,
@@ -3393,18 +3394,18 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   riskBadge_low: { backgroundColor: "#DCFCE7" },
-  riskBadge_medium: { backgroundColor: "#FEF3C7" },
-  riskBadge_high: { backgroundColor: "#FEE2E2" },
+  riskBadge_medium: { backgroundColor: colors.warningBg },
+  riskBadge_high: { backgroundColor: colors.errorBg },
   riskBadgeText: {
     fontSize: 10,
     fontWeight: "600",
   },
   riskBadgeText_low: { color: "#166534" },
-  riskBadgeText_medium: { color: "#92400E" },
+  riskBadgeText_medium: { color: colors.warningLabel },
   riskBadgeText_high: { color: "#991B1B" },
   memberPhone: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginTop: 2,
   },
   memberRight: {
@@ -3412,7 +3413,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   xnScoreBadge: {
-    backgroundColor: "#F0FDFB",
+    backgroundColor: colors.tealTintBg,
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 6,
@@ -3420,11 +3421,11 @@ const styles = StyleSheet.create({
   xnScoreText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#00C6AE",
+    color: colors.accentTeal,
   },
   positionText: {
     fontSize: 11,
-    color: "#6B7280",
+    color: colors.textSecondary,
   },
   activityItem: {
     flexDirection: "row",
@@ -3449,11 +3450,11 @@ const styles = StyleSheet.create({
   },
   activityBold: {
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   activityTime: {
     fontSize: 12,
-    color: "#9CA3AF",
+    color: colors.textSecondary,
     marginTop: 4,
   },
   emptyActivities: {
@@ -3463,12 +3464,12 @@ const styles = StyleSheet.create({
   emptyActivitiesText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginTop: 12,
   },
   emptyActivitiesSubtext: {
     fontSize: 14,
-    color: "#9CA3AF",
+    color: colors.textSecondary,
     marginTop: 4,
     textAlign: "center",
     paddingHorizontal: 20,
@@ -3479,7 +3480,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 14,
-    color: "#9CA3AF",
+    color: colors.textSecondary,
     marginTop: 12,
   },
   bottomBar: {
@@ -3487,28 +3488,28 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     padding: 16,
     paddingBottom: 32,
     borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
+    borderTopColor: colors.border,
   },
   payButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     borderRadius: 14,
     paddingVertical: 16,
     gap: 10,
   },
   payButtonDisabled: {
-    backgroundColor: "#9CA3AF",
+    backgroundColor: colors.textSecondary,
   },
   payButtonText: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   errorContainer: {
     flex: 1,
@@ -3518,7 +3519,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginTop: 16,
     textAlign: "center",
   },
@@ -3526,13 +3527,13 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    backgroundColor: "#0A2342",
+    backgroundColor: colors.primaryNavy,
     borderRadius: 10,
   },
   errorButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   // Menu Modal Styles
   modalOverlay: {
@@ -3541,7 +3542,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   menuContainer: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: "85%",
@@ -3553,12 +3554,12 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: colors.border,
   },
   menuTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   menuRoleBadge: {
     flexDirection: "row",
@@ -3584,7 +3585,7 @@ const styles = StyleSheet.create({
   menuSectionTitle: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#6B7280",
+    color: colors.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 12,
@@ -3620,16 +3621,16 @@ const styles = StyleSheet.create({
   menuItemText: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   menuItemDesc: {
     fontSize: 12,
-    color: "#9CA3AF",
+    color: colors.textSecondary,
     marginTop: 2,
   },
   menuDivider: {
     height: 1,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
     marginHorizontal: 16,
     marginVertical: 8,
   },
@@ -3639,7 +3640,7 @@ const styles = StyleSheet.create({
     right: 16,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 24,
@@ -3653,6 +3654,6 @@ const styles = StyleSheet.create({
   floatingHelpText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
 });

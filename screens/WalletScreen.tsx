@@ -18,6 +18,7 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
+import { colors } from "../theme/tokens";
 import { useWallet, Transaction } from "../context/WalletContext";
 import { usePayment } from "../context/PaymentContext";
 import { useCurrency, CURRENCIES } from "../context/CurrencyContext";
@@ -350,17 +351,17 @@ export default function WalletScreen() {
       case "received":
       case "added":
       case "payout":
-        return { icon: "arrow-down-outline" as const, color: "#00C6AE", bg: "#F0FDFB" };
+        return { icon: "arrow-down-outline" as const, color: colors.accentTeal, bg: colors.tealTintBg };
       case "sent":
       case "withdrawn":
       case "contribution":
-        return { icon: "arrow-up-outline" as const, color: "#DC2626", bg: "#FEE2E2" };
+        return { icon: "arrow-up-outline" as const, color: colors.errorText, bg: colors.errorBg };
       case "converted":
         return { icon: "swap-horizontal-outline" as const, color: "#1565C0", bg: "#E3F2FD" };
       case "remittance":
         return { icon: "paper-plane-outline" as const, color: "#8B5CF6", bg: "#F3E8FF" };
       default:
-        return { icon: "swap-horizontal-outline" as const, color: "#6B7280", bg: "#F5F7FA" };
+        return { icon: "swap-horizontal-outline" as const, color: colors.textSecondary, bg: colors.screenBg };
     }
   };
 
@@ -396,13 +397,13 @@ export default function WalletScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#00C6AE"
-            colors={["#00C6AE"]}
+            tintColor={colors.accentTeal}
+            colors={[colors.accentTeal]}
           />
         }
       >
         {/* Header */}
-        <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
+        <LinearGradient colors={[colors.primaryNavy, "#143654"]} style={styles.header}>
           <View style={styles.headerTop}>
             <Text style={styles.headerTitle}>{t("wallet.header")}</Text>
             {/* P1.4: globe auto-refresh chip moved into the FX section
@@ -450,14 +451,14 @@ export default function WalletScreen() {
                   style={styles.actionButtonPrimary}
                   onPress={handleSendMoney}
                 >
-                  <Ionicons name="paper-plane" size={16} color="#FFFFFF" />
+                  <Ionicons name="paper-plane" size={16} color={colors.cardBg} />
                   <Text style={styles.actionButtonText}>{t("wallet.send")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.actionButtonOutline}
                   onPress={handleAddFunds}
                 >
-                  <Ionicons name="add" size={16} color="#FFFFFF" />
+                  <Ionicons name="add" size={16} color={colors.cardBg} />
                   <Text style={styles.actionButtonText}>{t("wallet.action_add_funds")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -467,7 +468,7 @@ export default function WalletScreen() {
                     navigation.navigate("Withdraw");
                   }}
                 >
-                  <Ionicons name="arrow-up" size={16} color="#FFFFFF" />
+                  <Ionicons name="arrow-up" size={16} color={colors.cardBg} />
                   <Text style={styles.actionButtonText}>{t("wallet.action_withdraw")}</Text>
                 </TouchableOpacity>
               </View>
@@ -486,7 +487,7 @@ export default function WalletScreen() {
               accessibilityRole="button"
             >
               <View style={styles.emptyBannerIcon}>
-                <Ionicons name="cash-outline" size={20} color="#00C6AE" />
+                <Ionicons name="cash-outline" size={20} color={colors.accentTeal} />
               </View>
               <View style={styles.emptyBannerTextWrap}>
                 <Text style={styles.emptyBannerTitle}>{t("wallet.empty_title")}</Text>
@@ -505,14 +506,14 @@ export default function WalletScreen() {
           >
             <View style={styles.remittanceLeft}>
               <View style={styles.remittanceIcon}>
-                <Ionicons name="paper-plane" size={20} color="#00C6AE" />
+                <Ionicons name="paper-plane" size={20} color={colors.accentTeal} />
               </View>
               <View>
                 <Text style={styles.remittanceTitle}>{t("wallet.remittance_title")}</Text>
                 <Text style={styles.remittanceSubtitle}>{t("wallet.remittance_subtitle")}</Text>
               </View>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#00C6AE" />
+            <Ionicons name="chevron-forward" size={20} color={colors.accentTeal} />
           </TouchableOpacity>
         </LinearGradient>
 
@@ -552,7 +553,7 @@ export default function WalletScreen() {
                     <Ionicons
                       name={autoRefreshEnabled ? "refresh" : "refresh-outline"}
                       size={14}
-                      color={autoRefreshEnabled ? "#00C6AE" : "#6B7280"}
+                      color={autoRefreshEnabled ? colors.accentTeal : colors.textSecondary}
                     />
                   </Animated.View>
                   {autoRefreshEnabled && (
@@ -562,7 +563,7 @@ export default function WalletScreen() {
                 <Ionicons
                   name={fxOpen ? "chevron-up" : "chevron-down"}
                   size={18}
-                  color="#9CA3AF"
+                  color={colors.textSecondary}
                 />
               </View>
             </TouchableOpacity>
@@ -592,7 +593,7 @@ export default function WalletScreen() {
                     style={styles.addButton}
                     onPress={() => setShowAddCurrencyModal(true)}
                   >
-                    <Ionicons name="add" size={16} color="#00C6AE" />
+                    <Ionicons name="add" size={16} color={colors.accentTeal} />
                     <Text style={styles.addButtonText}>{t("wallet.add_button")}</Text>
                   </TouchableOpacity>
                 </View>
@@ -658,10 +659,10 @@ export default function WalletScreen() {
                 onPress={() => navigation.navigate("LinkedAccounts" as any)}
               >
                 <View style={styles.payoutBannerLeft}>
-                  <Ionicons name="flash" size={18} color="#FFFFFF" />
+                  <Ionicons name="flash" size={18} color={colors.cardBg} />
                   <Text style={styles.payoutBannerText}>{t("wallet.payout_banner")}</Text>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color="#FFFFFF" />
+                <Ionicons name="chevron-forward" size={18} color={colors.cardBg} />
               </TouchableOpacity>
             )}
 
@@ -670,7 +671,7 @@ export default function WalletScreen() {
                 <View key={method.id} style={styles.pmCard}>
                   <View style={styles.pmCardLeft}>
                     <View style={styles.pmIconContainer}>
-                      <Ionicons name={method.icon as any} size={20} color="#0A2342" />
+                      <Ionicons name={method.icon as any} size={20} color={colors.primaryNavy} />
                     </View>
                     <Text style={styles.pmLabel}>{method.label}</Text>
                     {method.isDefault && (
@@ -679,7 +680,7 @@ export default function WalletScreen() {
                       </View>
                     )}
                   </View>
-                  <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+                  <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
                 </View>
               ))
             ) : (
@@ -690,7 +691,7 @@ export default function WalletScreen() {
                   style={styles.pmAddButton}
                   onPress={() => navigation.navigate("LinkedAccounts" as any)}
                 >
-                  <Ionicons name="add" size={16} color="#FFFFFF" />
+                  <Ionicons name="add" size={16} color={colors.cardBg} />
                   <Text style={styles.pmAddButtonText}>{t("wallet.pm_add_card")}</Text>
                 </TouchableOpacity>
               </View>
@@ -715,13 +716,13 @@ export default function WalletScreen() {
                   circle_name: payoutCoachCircleName || "your circle",
                 })}
               >
-                <Ionicons name="information-circle" size={16} color="#065F46" />
+                <Ionicons name="information-circle" size={16} color={colors.successLabel} />
                 <Text style={styles.payoutCoachTipText}>
                   {t("wallet.payout_coach_tip", {
                     circle_name: payoutCoachCircleName || "your circle",
                   })}
                 </Text>
-                <Ionicons name="close" size={14} color="#6B7280" />
+                <Ionicons name="close" size={14} color={colors.textSecondary} />
               </TouchableOpacity>
             ) : null}
 
@@ -741,7 +742,7 @@ export default function WalletScreen() {
                     ]}
                   >
                     <View style={styles.transactionLeft}>
-                      <View style={[styles.transactionIcon, { backgroundColor: "#E5E7EB" }]} />
+                      <View style={[styles.transactionIcon, { backgroundColor: colors.border }]} />
                       <View style={styles.transactionInfo}>
                         <View style={styles.skeletonLineWide} />
                         <View style={styles.skeletonLineNarrow} />
@@ -776,7 +777,7 @@ export default function WalletScreen() {
                     style={[
                       styles.transactionAmount,
                       {
-                        color: isPositive ? "#00C6AE" : tx.type === "sent" || tx.type === "withdrawn" || tx.type === "contribution" || tx.type === "remittance" ? "#DC2626" : "#0A2342",
+                        color: isPositive ? colors.accentTeal : tx.type === "sent" || tx.type === "withdrawn" || tx.type === "contribution" || tx.type === "remittance" ? colors.errorText : colors.primaryNavy,
                       },
                     ]}
                   >
@@ -808,7 +809,7 @@ export default function WalletScreen() {
               <Ionicons name="arrow-up-circle-outline" size={20} color="#059669" />
             </View>
             <Text style={styles.payoutHistoryText}>{t("withdraw.title")}</Text>
-            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
 
           {/* Payout history row — entry into the dedicated
@@ -825,7 +826,7 @@ export default function WalletScreen() {
             <Text style={styles.payoutHistoryText}>
               {t("payout_history.entry")}
             </Text>
-            <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+            <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -835,7 +836,7 @@ export default function WalletScreen() {
         style={styles.floatingHelp}
         onPress={() => navigation.navigate("HelpCenter" as any)}
       >
-        <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
+        <Ionicons name="chatbubble-ellipses" size={24} color={colors.cardBg} />
         <Text style={styles.floatingHelpText}>{t("common.help")}</Text>
       </TouchableOpacity>
 
@@ -855,7 +856,7 @@ export default function WalletScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t("wallet.breakdown_title")}</Text>
               <TouchableOpacity onPress={() => setBreakdownVisible(false)}>
-                <Ionicons name="close" size={24} color="#0A2342" />
+                <Ionicons name="close" size={24} color={colors.primaryNavy} />
               </TouchableOpacity>
             </View>
             <View style={styles.breakdownRow}>
@@ -877,7 +878,7 @@ export default function WalletScreen() {
               <Text
                 style={[
                   styles.breakdownValue,
-                  circleNetTotal < 0 ? { color: "#DC2626" } : null,
+                  circleNetTotal < 0 ? { color: colors.errorText } : null,
                 ]}
               >
                 {circleNetTotal < 0 ? "−" : ""}$
@@ -954,7 +955,7 @@ export default function WalletScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t("wallet.modal_add_currency_title")}</Text>
               <TouchableOpacity onPress={() => setShowAddCurrencyModal(false)}>
-                <Ionicons name="close" size={24} color="#0A2342" />
+                <Ionicons name="close" size={24} color={colors.primaryNavy} />
               </TouchableOpacity>
             </View>
 
@@ -986,7 +987,7 @@ export default function WalletScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.screenBg,
   },
   header: {
     padding: 20,
@@ -1001,7 +1002,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 22,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   balanceCard: {
     backgroundColor: "rgba(255,255,255,0.1)",
@@ -1036,7 +1037,7 @@ const styles = StyleSheet.create({
   balanceAmount: {
     fontSize: 36,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   eyeButton: {
     padding: 4,
@@ -1069,11 +1070,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 6,
     padding: 12,
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     borderRadius: 12,
   },
   actionButtonText: {
-    color: "#FFFFFF",
+    color: colors.cardBg,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -1104,7 +1105,7 @@ const styles = StyleSheet.create({
   remittanceTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   remittanceSubtitle: {
     fontSize: 12,
@@ -1125,11 +1126,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   ratesTimestamp: {
     fontSize: 11,
-    color: "#9CA3AF",
+    color: colors.textSecondary,
     marginRight: 4,
   },
   refreshTimestamp: {
@@ -1155,12 +1156,12 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
   },
   liveTagText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#00C6AE",
+    color: colors.accentTeal,
     letterSpacing: 0.5,
   },
   globeButton: {
@@ -1181,9 +1182,9 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     borderWidth: 1.5,
-    borderColor: "#0A2342",
+    borderColor: colors.primaryNavy,
   },
   addButton: {
     flexDirection: "row",
@@ -1191,21 +1192,21 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   addButtonText: {
-    color: "#00C6AE",
+    color: colors.accentTeal,
     fontSize: 14,
     fontWeight: "600",
   },
   manageText: {
-    color: "#00C6AE",
+    color: colors.accentTeal,
     fontSize: 14,
     fontWeight: "600",
   },
   currencyCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1220,7 +1221,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.screenBg,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1230,12 +1231,12 @@ const styles = StyleSheet.create({
   currencyCode: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginBottom: 2,
   },
   currencyName: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
   },
   currencyRight: {
     flexDirection: "row",
@@ -1245,13 +1246,13 @@ const styles = StyleSheet.create({
   currencyBalance: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     textAlign: "right",
     marginBottom: 2,
   },
   currencyUsdValue: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
     textAlign: "right",
   },
   emptyState: {
@@ -1265,7 +1266,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: "#ECFDF5",
+    backgroundColor: colors.successBg,
     borderWidth: 1,
     borderColor: "#A7F3D0",
     marginBottom: 12,
@@ -1274,24 +1275,24 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     fontWeight: "600",
-    color: "#065F46",
+    color: colors.successLabel,
   },
   payoutHistoryRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 12,
     padding: 14,
     marginTop: 12,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
   },
   payoutHistoryIcon: {
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "#ECFDF5",
+    backgroundColor: colors.successBg,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1299,24 +1300,24 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   emptyText: {
     fontSize: 14,
-    color: "#9CA3AF",
+    color: colors.textSecondary,
     marginTop: 12,
   },
   emptyButton: {
     marginTop: 12,
     paddingVertical: 8,
     paddingHorizontal: 16,
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     borderRadius: 8,
   },
   emptyButtonText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   alertCard: {
     backgroundColor: "#E3F2FD",
@@ -1336,12 +1337,12 @@ const styles = StyleSheet.create({
   alertTitle: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginBottom: 2,
   },
   alertSubtitle: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
   },
   alertCurrent: {
     fontSize: 14,
@@ -1349,12 +1350,12 @@ const styles = StyleSheet.create({
     color: "#1565C0",
   },
   transactionCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 12,
     padding: 12,
     paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1379,7 +1380,7 @@ const styles = StyleSheet.create({
   transactionDescription: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginBottom: 2,
   },
   transactionMeta: {
@@ -1389,7 +1390,7 @@ const styles = StyleSheet.create({
   },
   transactionDate: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
   },
   transactionFlag: {
     fontSize: 12,
@@ -1404,7 +1405,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalContent: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 24,
@@ -1419,15 +1420,15 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   modalSubtitle: {
     fontSize: 14,
-    color: "#6B7280",
+    color: colors.textSecondary,
     marginBottom: 20,
   },
   modalButton: {
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: "center",
@@ -1436,7 +1437,7 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   floatingHelp: {
     position: "absolute",
@@ -1444,7 +1445,7 @@ const styles = StyleSheet.create({
     right: 16,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 24,
@@ -1458,13 +1459,13 @@ const styles = StyleSheet.create({
   floatingHelpText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   payoutBanner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
@@ -1477,14 +1478,14 @@ const styles = StyleSheet.create({
   payoutBannerText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   pmCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1499,14 +1500,14 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.screenBg,
     alignItems: "center",
     justifyContent: "center",
   },
   pmLabel: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   pmDefaultBadge: {
     backgroundColor: "rgba(0,198,174,0.15)",
@@ -1517,19 +1518,19 @@ const styles = StyleSheet.create({
   pmDefaultText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#00C6AE",
+    color: colors.accentTeal,
   },
   pmEmptyState: {
     alignItems: "center",
     paddingVertical: 24,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
   },
   pmEmptyText: {
     fontSize: 13,
-    color: "#9CA3AF",
+    color: colors.textSecondary,
     marginTop: 8,
     marginBottom: 12,
   },
@@ -1537,7 +1538,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -1545,7 +1546,7 @@ const styles = StyleSheet.create({
   pmAddButtonText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
 
   // ── P2 empty-wallet banner ──────────────────────────────────────
@@ -1553,7 +1554,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 14,
     padding: 14,
     marginTop: 16,
@@ -1570,23 +1571,23 @@ const styles = StyleSheet.create({
   emptyBannerTitle: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     marginBottom: 2,
   },
   emptyBannerBody: {
     fontSize: 12,
-    color: "#6B7280",
+    color: colors.textSecondary,
   },
   emptyBannerCta: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 10,
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
   },
   emptyBannerCtaText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
 
   // ── P1 additions ────────────────────────────────────────────────
@@ -1602,9 +1603,9 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 12,
-    backgroundColor: "#F5F7FA",
+    backgroundColor: colors.screenBg,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
   },
   fxRefreshChipActive: {
     backgroundColor: "rgba(0,198,174,0.10)",
@@ -1613,7 +1614,7 @@ const styles = StyleSheet.create({
   fxRefreshChipText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#00C6AE",
+    color: colors.accentTeal,
     letterSpacing: 0.5,
   },
   fxSubHeader: {
@@ -1625,7 +1626,7 @@ const styles = StyleSheet.create({
   fxSubLabel: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#6B7280",
+    color: colors.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -1633,20 +1634,20 @@ const styles = StyleSheet.create({
   skeletonLineWide: {
     height: 12,
     width: "60%",
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
     borderRadius: 4,
     marginBottom: 6,
   },
   skeletonLineNarrow: {
     height: 10,
     width: "40%",
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
     borderRadius: 4,
   },
   skeletonAmount: {
     height: 14,
     width: 60,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
     borderRadius: 4,
   },
 
@@ -1658,27 +1659,27 @@ const styles = StyleSheet.create({
   },
   breakdownLabel: {
     fontSize: 14,
-    color: "#6B7280",
+    color: colors.textSecondary,
   },
   breakdownValue: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   breakdownTotalRow: {
     borderTopWidth: 1,
-    borderTopColor: "#E5E7EB",
+    borderTopColor: colors.border,
     marginTop: 4,
   },
   breakdownTotalLabel: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   breakdownTotalValue: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#00C6AE",
+    color: colors.accentTeal,
   },
 
   coachBackdrop: {
@@ -1687,7 +1688,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   coachSheet: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     paddingHorizontal: 24,
     paddingTop: 10,
     paddingBottom: 32,
@@ -1698,7 +1699,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
     alignSelf: "center",
     marginBottom: 18,
   },
@@ -1712,21 +1713,21 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
   },
-  coachDotActive: { backgroundColor: "#0A2342", width: 24 },
-  coachDotDone: { backgroundColor: "#00C6AE" },
+  coachDotActive: { backgroundColor: colors.primaryNavy, width: 24 },
+  coachDotDone: { backgroundColor: colors.accentTeal },
   coachEmoji: { fontSize: 48, alignSelf: "center", marginBottom: 12 },
   coachTitle: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#0A2342",
+    color: colors.primaryNavy,
     textAlign: "center",
     marginBottom: 8,
   },
   coachBody: {
     fontSize: 14,
-    color: "#6B7280",
+    color: colors.textSecondary,
     textAlign: "center",
     lineHeight: 20,
     marginBottom: 24,
@@ -1737,16 +1738,16 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: colors.border,
     alignItems: "center",
   },
-  coachSkipText: { fontSize: 14, color: "#6B7280", fontWeight: "700" },
+  coachSkipText: { fontSize: 14, color: colors.textSecondary, fontWeight: "700" },
   coachNextBtn: {
     flex: 2,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: "#00C6AE",
+    backgroundColor: colors.accentTeal,
     alignItems: "center",
   },
-  coachNextText: { fontSize: 14, color: "#FFFFFF", fontWeight: "800" },
+  coachNextText: { fontSize: 14, color: colors.cardBg, fontWeight: "800" },
 });

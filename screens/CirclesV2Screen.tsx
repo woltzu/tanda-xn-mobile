@@ -1434,7 +1434,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   myCircleBadgeWaiting: {
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.warningBg,
   },
   myCircleBadgeActive: {
     backgroundColor: colors.tealTintBg,
@@ -1446,7 +1446,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   myCircleBadgeWaitingText: {
-    color: "#92400E",
+    color: colors.warningLabel,
   },
   myCircleBadgeActiveText: {
     color: colors.accentTeal,
