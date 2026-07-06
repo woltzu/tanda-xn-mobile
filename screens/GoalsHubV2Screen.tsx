@@ -20,7 +20,7 @@
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -239,11 +239,26 @@ export default function GoalsHubV2Screen() {
   // Refetch every time the hub comes into focus — covers the "create new
   // goal then navigate back" case the user reported (Trip To Bali wasn't
   // showing).
+  //
+  // TREMBLING FIX (2026-07-05): `fetchGoals` / `fetchSpendingSuggestions`
+  // from `useGoalActions()` are plain functions (not memoized), so the
+  // outer `loadGoals` / `loadSuggestions` here get a new identity on
+  // every render. Passing them as deps to `useFocusEffect` re-runs the
+  // effect after every state update while the screen is focused →
+  // load → setState → re-render → new callback → load again → …
+  // Route each loader through a ref so the focus effect binds to a
+  // stable callback while still calling the latest closure.
+  const loadGoalsRef = useRef(loadGoals);
+  const loadSuggestionsRef = useRef(loadSuggestions);
+  useEffect(() => {
+    loadGoalsRef.current = loadGoals;
+    loadSuggestionsRef.current = loadSuggestions;
+  });
   useFocusEffect(
     useCallback(() => {
-      loadGoals();
-      loadSuggestions();
-    }, [loadGoals, loadSuggestions]),
+      loadGoalsRef.current();
+      loadSuggestionsRef.current();
+    }, []),
   );
 
   const goals = dbGoals ?? [];

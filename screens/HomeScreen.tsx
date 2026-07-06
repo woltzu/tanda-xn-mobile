@@ -209,10 +209,21 @@ export default function HomeScreen() {
     }
     setGoalsLoading(false);
   }, [fetchGoals]);
+  // TREMBLING FIX (2026-07-05): `fetchGoals` from `useGoalActions()` is
+  // a plain function (not memoized), so `loadGoals` gets a new identity
+  // on every render. Passing it as a dep re-fires the focus effect after
+  // every state update while the screen is focused → load → setState →
+  // re-render → new callback → load again → …  Bind the effect to a
+  // stable ref-based caller so the loader still uses the latest closure
+  // but doesn't churn the effect identity.
+  const loadGoalsRef = useRef(loadGoals);
+  useEffect(() => {
+    loadGoalsRef.current = loadGoals;
+  });
   useFocusEffect(
     useCallback(() => {
-      loadGoals();
-    }, [loadGoals]),
+      loadGoalsRef.current();
+    }, []),
   );
 
   // Aggregate balance across all active goals (already in dollars from

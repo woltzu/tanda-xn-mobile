@@ -4456,6 +4456,8 @@
     "invite_btn_copied": "Copied!",
     "invite_btn_share": "Share invite",
     "invite_btn_search": "Search & invite a member",
+    "invite_search_unavailable_title": "Search unavailable",
+    "invite_search_unavailable_body": "Member search isn't reachable from here. Please share the invite code instead.",
     "invite_help": "Share this code with anyone you want to invite. They tap \"Have an invite code?\" on the Circles tab and paste it.",
     "card_circle_details": "Circle Details",
     "detail_start_date": "Start Date",

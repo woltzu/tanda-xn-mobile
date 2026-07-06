@@ -1254,6 +1254,13 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="PaymentHistory" component={PaymentHistoryScreen} />
       <CirclesStack.Screen name="LeaveCircle" component={LeaveCircleScreen} />
       <CirclesStack.Screen name="ManageMembers" component={ManageMembersScreen} />
+      {/* MemberSearch also lives in HomeStack. CircleDetail's "Invite by
+          name" button calls navigate("MemberSearch") — if the user came
+          from the Circles tab (CirclesStack), React Navigation only walks
+          the current stack, so we need the screen registered here too.
+          Without this, the tab throws
+          "NAVIGATE with payload ... was not handled by any navigator". */}
+      <CirclesStack.Screen name="MemberSearch" component={MemberSearchScreen} />
       <CirclesStack.Screen name="PauseCircle" component={PauseCircleScreen} />
       <CirclesStack.Screen name="CloseCircle" component={CloseCircleScreen} />
       <CirclesStack.Screen name="ExportData" component={ExportDataScreen} />

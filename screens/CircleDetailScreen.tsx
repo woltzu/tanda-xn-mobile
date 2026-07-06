@@ -1592,9 +1592,16 @@ export default function CircleDetailScreen() {
               critical-tier "can't invite" banner. */}
           <TouchableOpacity
             style={styles.inviteByNameBtn}
-            onPress={() =>
-              navigation.navigate("MemberSearch", { circleId: circle.id })
-            }
+            onPress={() => {
+              try {
+                navigation.navigate("MemberSearch", { circleId: circle.id });
+              } catch (e) {
+                Alert.alert(
+                  t("circle_detail.invite_search_unavailable_title"),
+                  t("circle_detail.invite_search_unavailable_body"),
+                );
+              }
+            }}
             accessibilityRole="button"
             accessibilityLabel={t("circle_detail.invite_btn_search")}
           >
