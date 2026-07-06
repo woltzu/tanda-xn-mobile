@@ -109,11 +109,16 @@ export default function JoinCircleByCodeScreen() {
       if (found) {
         // Forward the resolved Circle as `initialCircle` so the confirm
         // screen doesn't have to re-fetch (which would fail anyway for
-        // non-members under current circles RLS).
+        // non-members under current circles RLS). Also pass the plain
+        // `inviteCode` string — if the navigator drops `initialCircle`
+        // (react-native-web URL serialization strips complex nested
+        // params), the confirm screen can re-resolve from the code
+        // alone via the SECURITY DEFINER RPC.
         navigation.navigate("JoinCircleConfirm", {
           circleId: found.id,
           source: "code",
           initialCircle: found,
+          inviteCode: cleanCode,
         });
       } else {
         // Exact match failed — no partial fallback. Surface the typed

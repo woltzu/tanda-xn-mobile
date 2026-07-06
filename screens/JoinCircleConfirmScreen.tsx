@@ -89,11 +89,16 @@ export default function JoinCircleConfirmScreen() {
   // Non-member callers can't SELECT circles under the migration-255 RLS,
   // so myCircles/browseCircles/circles won't contain the row.
   const initialCircle = route.params?.initialCircle;
+  // Plain-string invite code as a last-resort fallback. react-native-web
+  // URL serialization can drop complex nested params (initialCircle is
+  // a Circle object) on reload / deep-link entry / navigator restore.
+  // The code is a short scalar that always survives.
+  const inviteCodeParam = route.params?.inviteCode;
   // myCircles is included so a member following a stale deep-link or
   // back-navigating after a successful join still resolves the circle
   // instead of hitting the "Not found" branch. Symmetric with
   // JoinCircleSuccessScreen which already merges all three lists.
-  const { circles, myCircles, browseCircles, joinCircle } = useCircles();
+  const { circles, myCircles, browseCircles, joinCircle, findCircleByInviteCode } = useCircles();
   const { user } = useAuth();
   const { track } = useEventTracker();
   // Phase 1 Member Access Tiers — exposure cap. Aliased so the local
@@ -132,16 +137,51 @@ export default function JoinCircleConfirmScreen() {
       .catch(() => undefined);
   }, []);
 
+  // Late-fallback: if neither the context lists NOR initialCircle carry
+  // this circle, re-resolve it once from the invite code. Handles the
+  // web/react-native-web case where URL param serialization can drop
+  // the nested `initialCircle` object even though the string `circleId`
+  // survives. Fire only when we actually need it — no code, no fetch.
+  const [lateResolvedCircle, setLateResolvedCircle] = useState<any>(null);
+  const lateResolveRanRef = useRef(false);
+  useEffect(() => {
+    if (lateResolveRanRef.current) return;
+    const localHit = [...circles, ...browseCircles, ...myCircles].find(
+      (c) => c.id === circleId,
+    );
+    if (localHit || initialCircle) return;
+    if (!inviteCodeParam) return;
+    lateResolveRanRef.current = true;
+    (async () => {
+      try {
+        const c = await findCircleByInviteCode(inviteCodeParam);
+        if (c) setLateResolvedCircle(c);
+      } catch (e) {
+        console.warn("[JoinCircleConfirm] late resolve failed:", e);
+      }
+    })();
+  }, [
+    circleId,
+    circles,
+    browseCircles,
+    myCircles,
+    initialCircle,
+    inviteCodeParam,
+    findCircleByInviteCode,
+  ]);
+
   // Find the circle. Search myCircles last so a freshly-joined entry
   // doesn't shadow the canonical row from `circles`/`browseCircles` if
   // they differ in a field briefly during reconciliation. Fall back to
   // `initialCircle` (typically the invite-code RPC result) when the
   // three local lists are empty for this id — that's the expected case
   // for a non-member arriving from JoinCircleByCode, since RLS filters
-  // them out of every list.
+  // them out of every list. Finally, fall back to the late-resolved
+  // circle if the navigator dropped `initialCircle`.
   const circle =
     [...circles, ...browseCircles, ...myCircles].find((c) => c.id === circleId) ??
-    initialCircle;
+    initialCircle ??
+    lateResolvedCircle;
 
   if (!circle) {
     return (

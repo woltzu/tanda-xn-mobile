@@ -484,8 +484,11 @@ export type RootStackParamList = {
   // non-member arriving from JoinCircleByCode can't SELECT the circle via
   // client-side RLS — the confirm screen falls back to this payload when
   // the local myCircles/browseCircles/circles lists don't contain the id.
+  // `inviteCode` is a plain-string fallback so the confirm screen can
+  // re-resolve on the fly if `initialCircle` is dropped by the navigator
+  // (e.g. web URL-linking round-trip strips complex nested params).
   // Typed as `any` here to avoid dragging the Circle model into App.tsx.
-  JoinCircleConfirm: { circleId: string; source?: string; initialCircle?: any };
+  JoinCircleConfirm: { circleId: string; source?: string; initialCircle?: any; inviteCode?: string };
   JoinCircleSuccess: { circleId: string; source?: string };
   // Surfaced by the realtime channel in PayoutListener when a
   // circle_payouts INSERT lands for the current user (status = completed),
