@@ -84,6 +84,11 @@ export default function JoinCircleConfirmScreen() {
   const { t } = useTranslation();
   const { circleId } = route.params;
   const source = route.params?.source ?? "unknown";
+  // Fallback circle payload for callers who resolved the row out-of-band
+  // (e.g. JoinCircleByCode via the invite-code RPC — see migration 286).
+  // Non-member callers can't SELECT circles under the migration-255 RLS,
+  // so myCircles/browseCircles/circles won't contain the row.
+  const initialCircle = route.params?.initialCircle;
   // myCircles is included so a member following a stale deep-link or
   // back-navigating after a successful join still resolves the circle
   // instead of hitting the "Not found" branch. Symmetric with
@@ -129,8 +134,14 @@ export default function JoinCircleConfirmScreen() {
 
   // Find the circle. Search myCircles last so a freshly-joined entry
   // doesn't shadow the canonical row from `circles`/`browseCircles` if
-  // they differ in a field briefly during reconciliation.
-  const circle = [...circles, ...browseCircles, ...myCircles].find((c) => c.id === circleId);
+  // they differ in a field briefly during reconciliation. Fall back to
+  // `initialCircle` (typically the invite-code RPC result) when the
+  // three local lists are empty for this id — that's the expected case
+  // for a non-member arriving from JoinCircleByCode, since RLS filters
+  // them out of every list.
+  const circle =
+    [...circles, ...browseCircles, ...myCircles].find((c) => c.id === circleId) ??
+    initialCircle;
 
   if (!circle) {
     return (

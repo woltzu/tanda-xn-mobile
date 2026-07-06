@@ -479,7 +479,13 @@ export type RootStackParamList = {
   // the user entered the flow from — populated by each navigate call
   // site (browse, code, recommended, feed, detail, community,
   // dashboard, deep_link). Treated as an opaque label by the screen.
-  JoinCircleConfirm: { circleId: string; source?: string };
+  // `initialCircle` carries a Circle row resolved out-of-band (e.g. via the
+  // invite-code SECURITY DEFINER RPC in migration 286). Needed because a
+  // non-member arriving from JoinCircleByCode can't SELECT the circle via
+  // client-side RLS — the confirm screen falls back to this payload when
+  // the local myCircles/browseCircles/circles lists don't contain the id.
+  // Typed as `any` here to avoid dragging the Circle model into App.tsx.
+  JoinCircleConfirm: { circleId: string; source?: string; initialCircle?: any };
   JoinCircleSuccess: { circleId: string; source?: string };
   // Surfaced by the realtime channel in PayoutListener when a
   // circle_payouts INSERT lands for the current user (status = completed),

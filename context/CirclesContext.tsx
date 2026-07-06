@@ -1034,17 +1034,26 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     const codeUpper = code.toUpperCase().trim();
     if (!codeUpper) return null;
 
-    const { data, error: searchError } = await supabase
-      .from("circles")
-      .select("*")
-      .eq("invite_code", codeUpper)
-      .maybeSingle();
+    // Migration 255 tightened `circles` SELECT RLS to require the caller
+    // to be creator / active community member / current circle member.
+    // A friend holding only the invite code matches none of those, so a
+    // direct `.eq("invite_code", ...)` returns null and the UI reports
+    // "Invite code not found." Route the lookup through the SECURITY
+    // DEFINER RPC added in migration 286, which bypasses RLS for the
+    // specific invite-code case (auth-gated, no enumeration path).
+    const { data, error: searchError } = await supabase.rpc(
+      "resolve_circle_by_invite_code",
+      { p_code: codeUpper },
+    );
 
     if (searchError) {
       console.error("[CirclesContext] findCircleByInviteCode failed:", searchError);
       return null;
     }
-    return data ? rowToCircle(data as CircleRow) : null;
+    // The RPC returns SETOF; pick the first (there's a UNIQUE constraint
+    // on invite_code so it's at most one row).
+    const row = Array.isArray(data) ? data[0] : data;
+    return row ? rowToCircle(row as CircleRow) : null;
   };
 
   // ================================================================

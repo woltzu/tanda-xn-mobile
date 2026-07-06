@@ -88,16 +88,11 @@ export default function JoinCircleByCodeScreen() {
     return input.replace(/[^A-Z0-9]/gi, "").toUpperCase();
   };
 
-  // Exact-match lookup via the context function (which itself calls
-  // Supabase with `.eq("invite_code", ...)` — no partial-prefix fallback,
-  // so a typo can't accidentally land the user on the wrong circle). The
-  // prior local-iteration fallback used a name-derived code generator
-  // that no longer matches the server-generated 8-char codes anyway.
-  const findCircleByCode = async (code: string): Promise<string | null> => {
-    const found = await findCircleByInviteCode(code);
-    return found?.id ?? null;
-  };
-
+  // Exact-match lookup via the context function (which now routes through
+  // the SECURITY DEFINER `resolve_circle_by_invite_code` RPC — migration
+  // 286 — so it works for callers who aren't yet in the circle's community
+  // and would otherwise be filtered out by the tightened SELECT RLS from
+  // migration 255).
   const handleJoinByCode = async () => {
     if (inviteCode.trim().length < 4) {
       setError(t("join_by_code.error_invalid_code"));
@@ -109,10 +104,17 @@ export default function JoinCircleByCodeScreen() {
 
     try {
       const cleanCode = extractCodeFromLink(inviteCode.trim());
-      const circleId = await findCircleByCode(cleanCode);
+      const found = await findCircleByInviteCode(cleanCode);
 
-      if (circleId) {
-        navigation.navigate("JoinCircleConfirm", { circleId, source: "code" });
+      if (found) {
+        // Forward the resolved Circle as `initialCircle` so the confirm
+        // screen doesn't have to re-fetch (which would fail anyway for
+        // non-members under current circles RLS).
+        navigation.navigate("JoinCircleConfirm", {
+          circleId: found.id,
+          source: "code",
+          initialCircle: found,
+        });
       } else {
         // Exact match failed — no partial fallback. Surface the typed
         // error key so the user gets a localized "Invite code not found"
