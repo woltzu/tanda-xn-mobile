@@ -6984,7 +6984,9 @@
     "error_load": "Couldn't load recommendations",
     "btn_try_again": "Try again",
     "empty_text": "No recommendations yet",
+    "empty_subtext": "Discover shows circles matched to your profile. New circles from friends may not appear here — use an invite code or share the code from a circle you're in.",
     "btn_refresh": "Refresh",
+    "btn_have_code": "Have an invite code?",
     "btn_dismiss": "Dismiss"
   },
   "book_service_v2": {
@@ -8863,6 +8865,7 @@
     "no_results": "No members found.",
     "invite_blocked": "You cannot invite this person to this circle.",
     "invite_success": "Invitation sent!",
+    "invite_already_sent": "Invitation already sent.",
     "invite_failed": "Failed to send invitation.",
     "invite_sent": "Sent",
     "invite_btn": "Invite {{name}}",

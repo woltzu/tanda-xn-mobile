@@ -1261,6 +1261,10 @@ function CirclesStackScreen() {
           Without this, the tab throws
           "NAVIGATE with payload ... was not handled by any navigator". */}
       <CirclesStack.Screen name="MemberSearch" component={MemberSearchScreen} />
+      {/* LinkedAccounts also lives in HomeStack. MakeContribution (this
+          stack) navigates to LinkedAccounts when the user picks a payment
+          method → same cross-stack-navigator failure as MemberSearch. */}
+      <CirclesStack.Screen name="LinkedAccounts" component={LinkedAccountsScreen} />
       <CirclesStack.Screen name="PauseCircle" component={PauseCircleScreen} />
       <CirclesStack.Screen name="CloseCircle" component={CloseCircleScreen} />
       <CirclesStack.Screen name="ExportData" component={ExportDataScreen} />
@@ -1397,6 +1401,14 @@ function CommunityStackScreen() {
       <CommunityStack.Screen name="ProfileMain" component={ProfileScreen} />
       <CommunityStack.Screen name="PersonalInfo" component={PersonalInfoScreen} />
       <CommunityStack.Screen name="Settings" component={SettingsMainScreen} />
+      {/* Payment settings reachable from ProfileScreen "Payment methods"
+          row. ProfileScreen also lives in HomeStack (where LinkedAccounts
+          is originally registered) but when ProfileScreen is entered via
+          the Community-tab avatar tap, the current navigator is
+          CommunityStack — the navigate walks up this stack, doesn't find
+          LinkedAccounts, and throws. Register here too so the row works
+          from either entry point. */}
+      <CommunityStack.Screen name="LinkedAccounts" component={LinkedAccountsScreen} />
     </CommunityStack.Navigator>
   );
 }

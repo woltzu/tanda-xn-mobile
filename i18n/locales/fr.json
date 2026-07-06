@@ -6984,7 +6984,9 @@
     "error_load": "Impossible de charger les recommandations",
     "btn_try_again": "Réessayer",
     "empty_text": "Aucune recommandation pour le moment",
+    "empty_subtext": "Découvrir affiche des cercles adaptés à votre profil. Les nouveaux cercles créés par vos amis peuvent ne pas apparaître ici — utilisez un code d'invitation ou partagez le code d'un cercle auquel vous appartenez.",
     "btn_refresh": "Actualiser",
+    "btn_have_code": "Vous avez un code d'invitation ?",
     "btn_dismiss": "Ignorer"
   },
   "book_service_v2": {
@@ -8863,6 +8865,7 @@
     "no_results": "Aucun membre trouvé.",
     "invite_blocked": "Vous ne pouvez pas inviter cette personne dans ce cercle.",
     "invite_success": "Invitation envoyée !",
+    "invite_already_sent": "Invitation déjà envoyée.",
     "invite_failed": "Échec de l'envoi de l'invitation.",
     "invite_sent": "Envoyée",
     "invite_btn": "Inviter {{name}}",

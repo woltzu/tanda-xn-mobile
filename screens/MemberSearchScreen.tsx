@@ -24,7 +24,7 @@
 // path — see migration 257 header).
 // ═══════════════════════════════════════════════════════════════════════════
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -94,6 +94,37 @@ const MemberSearchScreen: React.FC = () => {
   );
   const [sentInviteIds, setSentInviteIds] = useState<Set<string>>(new Set());
 
+  // On mount (invite mode only), prefill sentInviteIds from any pending
+  // invitations this user has already sent for this circle. Without
+  // this, a user who invited someone in a prior session sees the same
+  // "Invite" button and can double-send (or perceive that "Sent" isn't
+  // persisting after a re-open).
+  useEffect(() => {
+    if (!circleId || !user?.id) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error: e } = await supabase
+        .from("circle_invitations")
+        .select("invited_user_id")
+        .eq("circle_id", circleId)
+        .eq("invited_by", user.id)
+        .eq("status", "pending");
+      if (cancelled || e || !data) return;
+      const priorIds = new Set(
+        data.map((r: { invited_user_id: string }) => r.invited_user_id),
+      );
+      if (priorIds.size === 0) return;
+      setSentInviteIds((prev) => {
+        const next = new Set(prev);
+        priorIds.forEach((id) => next.add(id));
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [circleId, user?.id]);
+
   const handleInvite = useCallback(
     async (target: MemberSearchResult) => {
       if (!user?.id || !circleId) return;
@@ -134,14 +165,29 @@ const MemberSearchScreen: React.FC = () => {
             name: displayName,
             status: "pending",
           });
-        if (insertErr) throw new Error(insertErr.message);
+        // A 23505 (unique_violation) on circle_invitations means we
+        // already invited this person in a prior tap / session. Treat
+        // that as an already-sent success so the button flips to "Sent"
+        // instead of leaving the user staring at the same "Invite"
+        // pill after a second tap.
+        const isDuplicate =
+          (insertErr as any)?.code === "23505" ||
+          /duplicate key|already exists/i.test(insertErr?.message ?? "");
+        if (insertErr && !isDuplicate) {
+          throw new Error(insertErr.message);
+        }
 
         setSentInviteIds((prev) => {
           const next = new Set(prev);
           next.add(targetId);
           return next;
         });
-        showToast(t("search.invite_success"), "success");
+        showToast(
+          isDuplicate
+            ? t("search.invite_already_sent")
+            : t("search.invite_success"),
+          "success",
+        );
       } catch (err: any) {
         console.warn("[MemberSearchScreen] invite failed:", err);
         showToast(
@@ -327,7 +373,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: spacing.lg,
+    // Extra left padding accommodates the globally-mounted
+    // LogoHomeButton (top-left "Xn" badge, ~40px wide including gap).
+    // Without this the back arrow sits directly under the badge and
+    // both are unreachable / illegible.
+    paddingLeft: 48,
+    paddingRight: spacing.lg,
     paddingVertical: spacing.md,
     backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,

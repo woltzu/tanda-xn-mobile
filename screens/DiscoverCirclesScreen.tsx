@@ -245,10 +245,23 @@ export default function DiscoverCirclesScreen() {
           <Ionicons name="compass-outline" size={48} color={MUTED} />
           <Text style={styles.centerText}>{t("discover_circles.empty_text")}</Text>
           <Text style={styles.centerSubtext}>
-            New circles matching your profile will show up here. Check back later, or pull to refresh.
+            {t("discover_circles.empty_subtext")}
           </Text>
           <TouchableOpacity style={styles.retryBtn} onPress={onRefresh}>
             <Text style={styles.retryBtnText}>{t("discover_circles.btn_refresh")}</Text>
+          </TouchableOpacity>
+          {/* Discover is a ranked-match feed, not a listing of every
+              public circle — a brand-new circle from a friend won't
+              show up here until the matcher scores it in. Give the
+              user the invite-code / by-name paths so they aren't stuck
+              staring at an empty screen. */}
+          <TouchableOpacity
+            style={[styles.retryBtn, { backgroundColor: "transparent", marginTop: 8 }]}
+            onPress={() => navigation.navigate("JoinCircleByCode")}
+          >
+            <Text style={[styles.retryBtnText, { color: TEAL }]}>
+              {t("discover_circles.btn_have_code")}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
