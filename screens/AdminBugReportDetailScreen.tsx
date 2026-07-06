@@ -40,7 +40,7 @@ import AdminFilterChips from "../components/AdminFilterChips";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
-const MUTED = "#6B7280";
+const MUTED = colors.textSecondary;
 
 type Params = { AdminBugReportDetail: { reportId: string } };
 
@@ -63,8 +63,8 @@ interface Report {
 }
 
 const TYPE_COLORS: Record<string, { bg: string; fg: string }> = {
-  bug: { bg: "#FEE2E2", fg: "#991B1B" },
-  idea: { bg: "#FEF3C7", fg: "#92400E" },
+  bug: { bg: colors.errorBg, fg: "#991B1B" },
+  idea: { bg: colors.warningBg, fg: colors.warningLabel },
 };
 
 interface Profile {
@@ -411,7 +411,7 @@ export default function AdminBugReportDetailScreen() {
             disabled={!hasStatusChange || saving}
           >
             {saving ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={colors.cardBg} />
             ) : (
               <Text style={styles.saveBtnText}>
                 {t("admin_bug_reports.save")}
@@ -512,7 +512,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -620,7 +620,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   saveBtnText: {
-    color: "#FFFFFF",
+    color: colors.cardBg,
     fontSize: typography.body,
     fontWeight: typography.bold,
   },

@@ -40,7 +40,7 @@ import { showToast } from "../components/Toast";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
-const MUTED = "#6B7280";
+const MUTED = colors.textSecondary;
 
 type ModuleKey =
   | "overview"
@@ -138,7 +138,7 @@ export default function AdminHubScreen() {
           <Text style={styles.headerTitle}>{t("admin.title")}</Text>
           {communityName ? (
             <View style={styles.scopeBadge}>
-              <Ionicons name="people-outline" size={12} color="#92400E" />
+              <Ionicons name="people-outline" size={12} color={colors.warningLabel} />
               <Text style={styles.scopeBadgeText} numberOfLines={1}>
                 {t("admin.support_scope", { name: communityName })}
               </Text>
@@ -206,7 +206,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -223,14 +223,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.warningBg,
     borderWidth: 1,
     borderColor: "#FCD34D",
     maxWidth: 160,
   },
   scopeBadgeText: {
     fontSize: 11,
-    color: "#92400E",
+    color: colors.warningLabel,
     fontWeight: typography.bold,
     flexShrink: 1,
   },

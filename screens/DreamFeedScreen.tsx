@@ -435,7 +435,7 @@ export default function DreamFeedScreen() {
             style={styles.emptyButton}
             onPress={() => navigation.navigate("Circles" as any)}
           >
-            <Ionicons name="people" size={18} color="#FFFFFF" />
+            <Ionicons name="people" size={18} color={colors.cardBg} />
             <Text style={styles.emptyButtonText}>{t("dream_feed.empty_following_btn")}</Text>
           </TouchableOpacity>
         </View>
@@ -473,7 +473,7 @@ export default function DreamFeedScreen() {
           style={styles.emptyButton}
           onPress={() => navigation.navigate("CreateDreamPost")}
         >
-          <Ionicons name="add" size={18} color="#FFFFFF" />
+          <Ionicons name="add" size={18} color={colors.cardBg} />
           <Text style={styles.emptyButtonText}>{t("dream_feed.empty_for_you_btn")}</Text>
         </TouchableOpacity>
       </View>
@@ -538,7 +538,7 @@ export default function DreamFeedScreen() {
             <Ionicons
               name={tab.icon as any}
               size={14}
-              color={activeFilter === tab.key ? "#FFFFFF" : colors.textSecondary}
+              color={activeFilter === tab.key ? colors.cardBg : colors.textSecondary}
             />
             <Text
               style={[
@@ -606,7 +606,7 @@ export default function DreamFeedScreen() {
         onPress={() => navigation.navigate("CreateDreamPost")}
         activeOpacity={0.8}
       >
-        <Ionicons name="add" size={28} color="#FFFFFF" />
+        <Ionicons name="add" size={28} color={colors.cardBg} />
       </TouchableOpacity>
 
       {/* First-visit coach mark — AsyncStorage-gated 2-slide overlay. */}
@@ -882,33 +882,33 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
   },
   skeletonLineWide: {
     width: "60%",
     height: 12,
     borderRadius: 6,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
     marginBottom: 6,
   },
   skeletonLineNarrow: {
     width: "30%",
     height: 10,
     borderRadius: 5,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
   },
   skeletonLineFull: {
     width: "100%",
     height: 12,
     borderRadius: 6,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
     marginBottom: 8,
   },
   skeletonImage: {
     width: "100%",
     height: 160,
     borderRadius: 10,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
     marginTop: 4,
     marginBottom: 12,
   },
@@ -923,7 +923,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 16,
     borderRadius: 6,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: colors.border,
   },
 
   // Filter Tabs
@@ -954,7 +954,7 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   filterTabTextActive: {
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
 
   // Feed
@@ -1016,7 +1016,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyButtonText: {
-    color: "#FFFFFF",
+    color: colors.cardBg,
     fontSize: typography.body,
     fontWeight: typography.semibold,
   },

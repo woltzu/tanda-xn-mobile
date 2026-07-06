@@ -753,7 +753,7 @@ export default function CreateDreamPostScreen() {
               <Ionicons
                 name="checkmark-circle-outline"
                 size={14}
-                color="#0A2342"
+                color={colors.primaryNavy}
               />
               <Text style={styles.draftPillText}>
                 {t("create_dream.draft_restored")}
@@ -838,7 +838,7 @@ export default function CreateDreamPostScreen() {
               onPress={acceptGoalSuggestion}
               accessibilityRole="button"
             >
-              <Ionicons name="sparkles-outline" size={12} color="#0A2342" />
+              <Ionicons name="sparkles-outline" size={12} color={colors.primaryNavy} />
               <Text style={styles.p2GoalSuggestText}>
                 {t("create_dream.goal_suggest_chip", {
                   goal: suggestedGoal.name,
@@ -869,7 +869,7 @@ export default function CreateDreamPostScreen() {
                 {
                   color:
                     caption.length >= CAPTION_COUNT_WARN_AT
-                      ? "#EF4444"
+                      ? colors.errorText
                       : colors.accentTeal,
                 },
               ]}
@@ -1378,7 +1378,7 @@ function ImageStatusPill({
   if (status === "uploaded") {
     return (
       <View style={[styles.uploadPill, styles.uploadPillUploaded]}>
-        <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+        <Ionicons name="checkmark-circle" size={14} color={colors.successText} />
         <Text style={styles.uploadPillText}>
           {t("create_dream.image_uploaded")}
         </Text>
@@ -1388,7 +1388,7 @@ function ImageStatusPill({
   // failed
   return (
     <View style={[styles.uploadPill, styles.uploadPillFailed]}>
-      <Ionicons name="alert-circle" size={14} color="#DC2626" />
+      <Ionicons name="alert-circle" size={14} color={colors.errorText} />
       <Text style={[styles.uploadPillText, { flex: 1 }]}>
         {t("create_dream.image_upload_failed_short")}
       </Text>
@@ -1576,7 +1576,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#F0FDFB",
+    backgroundColor: colors.tealTintBg,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.accentTeal,
@@ -1588,7 +1588,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontWeight: "600",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
   draftPillDiscardText: {
     fontSize: 12,
@@ -1611,7 +1611,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "#F0FDFB",
+    backgroundColor: colors.tealTintBg,
     borderWidth: 1,
     borderColor: colors.accentTeal,
   },
@@ -1630,7 +1630,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: "#F0FDFB",
+    backgroundColor: colors.tealTintBg,
     borderWidth: 1,
     borderColor: colors.accentTeal,
     marginBottom: 8,
@@ -1638,7 +1638,7 @@ const styles = StyleSheet.create({
   p2GoalSuggestText: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#0A2342",
+    color: colors.primaryNavy,
   },
 
   captionInput: {
@@ -1776,7 +1776,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: "#F0FDFB",
+    backgroundColor: colors.tealTintBg,
     borderWidth: 1,
     borderColor: colors.accentTeal,
   },
@@ -1843,12 +1843,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   uploadPillUploaded: {
-    backgroundColor: "#ECFDF5",
-    borderColor: "#10B981",
+    backgroundColor: colors.successBg,
+    borderColor: colors.successText,
   },
   uploadPillFailed: {
-    backgroundColor: "#FEF2F2",
-    borderColor: "#DC2626",
+    backgroundColor: colors.errorBg,
+    borderColor: colors.errorText,
   },
   uploadPillText: {
     fontSize: 12,
@@ -1858,7 +1858,7 @@ const styles = StyleSheet.create({
   uploadPillAction: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#DC2626",
+    color: colors.errorText,
     textDecorationLine: "underline",
   },
   uploadPillActionMuted: {
@@ -1933,7 +1933,7 @@ const styles = StyleSheet.create({
   },
   visibilityChipActive: {
     borderColor: colors.accentTeal,
-    backgroundColor: "#F0FDFB",
+    backgroundColor: colors.tealTintBg,
   },
   visibilityChipText: {
     fontSize: 12,

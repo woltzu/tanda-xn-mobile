@@ -35,7 +35,7 @@ import { showToast } from "../components/Toast";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
-const MUTED = "#6B7280";
+const MUTED = colors.textSecondary;
 
 interface CircleRow {
   id: string;
@@ -342,7 +342,7 @@ export default function AdminCirclesScreen() {
                     ]}
                   >
                     {selected ? (
-                      <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                      <Ionicons name="checkmark" size={14} color={colors.cardBg} />
                     ) : null}
                   </View>
                 ) : null}
@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
     margin: spacing.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: colors.errorBg,
   },
   clearBtnText: { fontSize: 11, color: "#991B1B", fontWeight: typography.bold },
   filtersWrap: { gap: 10, paddingBottom: spacing.sm },
@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     borderWidth: 2,
     borderColor: "#CBD5E1",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     alignItems: "center",
     justifyContent: "center",
   },

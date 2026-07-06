@@ -35,7 +35,7 @@ import AdminFilterChips from "../components/AdminFilterChips";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
-const MUTED = "#6B7280";
+const MUTED = colors.textSecondary;
 
 interface ReportRow {
   id: string;
@@ -52,16 +52,16 @@ interface ReportRow {
 }
 
 const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
-  open: { bg: "#FEE2E2", fg: "#991B1B" },
-  in_progress: { bg: "#FEF3C7", fg: "#92400E" },
-  resolved: { bg: "#D1FAE5", fg: "#065F46" },
-  closed: { bg: "#E5E7EB", fg: "#374151" },
+  open: { bg: colors.errorBg, fg: "#991B1B" },
+  in_progress: { bg: colors.warningBg, fg: colors.warningLabel },
+  resolved: { bg: "#D1FAE5", fg: colors.successLabel },
+  closed: { bg: colors.border, fg: "#374151" },
 };
 
 // Type badge palette — bugs are red-ish (alert), ideas are amber (suggestion).
 const TYPE_COLORS: Record<string, { bg: string; fg: string }> = {
-  bug: { bg: "#FEE2E2", fg: "#991B1B" },
-  idea: { bg: "#FEF3C7", fg: "#92400E" },
+  bug: { bg: colors.errorBg, fg: "#991B1B" },
+  idea: { bg: colors.warningBg, fg: colors.warningLabel },
 };
 
 export default function AdminBugReportsScreen() {
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
     margin: spacing.md,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,

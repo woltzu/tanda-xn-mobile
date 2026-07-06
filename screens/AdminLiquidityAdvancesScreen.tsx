@@ -44,7 +44,7 @@ import { showToast } from "../components/Toast";
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
-const MUTED = "#6B7280";
+const MUTED = colors.textSecondary;
 
 interface AdvanceRow {
   id: string;
@@ -65,14 +65,14 @@ interface AdvanceRow {
 }
 
 const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
-  requested:  { bg: "#FEF3C7", fg: "#92400E" },
+  requested:  { bg: colors.warningBg, fg: colors.warningLabel },
   approved:   { bg: "#DBEAFE", fg: "#1E40AF" },
-  disbursed:  { bg: "#D1FAE5", fg: "#065F46" },
+  disbursed:  { bg: "#D1FAE5", fg: colors.successLabel },
   repaying:   { bg: "#E0E7FF", fg: "#3730A3" },
-  repaid:     { bg: "#D1FAE5", fg: "#065F46" },
-  rejected:   { bg: "#FEE2E2", fg: "#991B1B" },
-  cancelled:  { bg: "#E5E7EB", fg: "#374151" },
-  defaulted:  { bg: "#FEE2E2", fg: "#7F1D1D" },
+  repaid:     { bg: "#D1FAE5", fg: colors.successLabel },
+  rejected:   { bg: colors.errorBg, fg: "#991B1B" },
+  cancelled:  { bg: colors.border, fg: "#374151" },
+  defaulted:  { bg: colors.errorBg, fg: "#7F1D1D" },
   queued:     { bg: "#F3E8FF", fg: "#6B21A8" },
 };
 
@@ -406,10 +406,10 @@ export default function AdminLiquidityAdvancesScreen() {
                       disabled={isBusy}
                     >
                       {isBusy ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
+                        <ActivityIndicator size="small" color={colors.cardBg} />
                       ) : (
                         <>
-                          <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                          <Ionicons name="checkmark" size={16} color={colors.cardBg} />
                           <Text style={styles.actionBtnText}>
                             {t("admin_liquidity_advances.approve")}
                           </Text>
@@ -435,10 +435,10 @@ export default function AdminLiquidityAdvancesScreen() {
                       disabled={isBusy}
                     >
                       {isBusy ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
+                        <ActivityIndicator size="small" color={colors.cardBg} />
                       ) : (
                         <>
-                          <Ionicons name="send" size={16} color="#FFFFFF" />
+                          <Ionicons name="send" size={16} color={colors.cardBg} />
                           <Text style={styles.actionBtnText}>
                             {t("admin_liquidity_advances.disburse")}
                           </Text>
@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
   actionBtnBusy: { opacity: 0.6 },
   approveBtn: { backgroundColor: TEAL },
   rejectBtn: {
-    backgroundColor: "#FEE2E2",
+    backgroundColor: colors.errorBg,
     borderWidth: 1,
     borderColor: "#FCA5A5",
   },
@@ -573,6 +573,6 @@ const styles = StyleSheet.create({
   actionBtnText: {
     fontSize: typography.label,
     fontWeight: typography.bold,
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
 });

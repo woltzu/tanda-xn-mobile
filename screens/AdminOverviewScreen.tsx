@@ -51,7 +51,7 @@ import {
 
 const NAVY = colors.primaryNavy;
 const TEAL = colors.accentTeal;
-const MUTED = "#6B7280";
+const MUTED = colors.textSecondary;
 
 const RANGE_OPTIONS: ChartRange[] = ["7d", "30d", "90d", "all"];
 
@@ -388,14 +388,14 @@ export default function AdminOverviewScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         {scope.noCommunityAssigned ? (
           <View style={styles.scopedBanner}>
-            <Ionicons name="alert-circle-outline" size={16} color="#92400E" />
+            <Ionicons name="alert-circle-outline" size={16} color={colors.warningLabel} />
             <Text style={styles.scopedBannerText}>
               {t("admin.no_community_assigned")}
             </Text>
           </View>
         ) : scope.isSupport && scope.communityId ? (
           <View style={styles.scopedBanner}>
-            <Ionicons name="people-outline" size={16} color="#92400E" />
+            <Ionicons name="people-outline" size={16} color={colors.warningLabel} />
             <Text style={styles.scopedBannerText}>
               {t("admin.overview.scoped_banner")}
             </Text>
@@ -651,7 +651,7 @@ export default function AdminOverviewScreen() {
                     <Text
                       style={[
                         styles.reconCell,
-                        { color: r.net_cents >= 0 ? "#047857" : "#B91C1C", fontWeight: typography.bold },
+                        { color: r.net_cents >= 0 ? colors.successText : "#B91C1C", fontWeight: typography.bold },
                       ]}
                     >
                       {fmtUSDFromCents(r.net_cents)}
@@ -717,7 +717,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -732,7 +732,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    backgroundColor: "#FEF3C7",
+    backgroundColor: colors.warningBg,
     borderColor: "#FCD34D",
     borderWidth: 1,
     borderRadius: 12,
@@ -741,7 +741,7 @@ const styles = StyleSheet.create({
   scopedBannerText: {
     flex: 1,
     fontSize: typography.label,
-    color: "#92400E",
+    color: colors.warningLabel,
     fontWeight: typography.medium,
   },
   section: { gap: 8 },
@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: colors.cardBg,
     borderWidth: 1,
     borderColor: colors.border,
     alignItems: "center",
@@ -792,7 +792,7 @@ const styles = StyleSheet.create({
     color: NAVY,
     fontWeight: typography.medium,
   },
-  rangePillTextActive: { color: "#FFFFFF", fontWeight: typography.bold },
+  rangePillTextActive: { color: colors.cardBg, fontWeight: typography.bold },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   mutedText: { fontSize: typography.body, color: MUTED, textAlign: "center" },
   reconRow: {

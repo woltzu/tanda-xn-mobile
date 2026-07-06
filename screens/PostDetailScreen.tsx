@@ -619,12 +619,12 @@ export default function PostDetailScreen() {
                         </Text>
                         {jpIsVideo && (
                           <View style={styles.timelineMediaBadge}>
-                            <Ionicons name="videocam" size={10} color="#FFFFFF" />
+                            <Ionicons name="videocam" size={10} color={colors.cardBg} />
                           </View>
                         )}
                         {jpHasImage && (
                           <View style={[styles.timelineMediaBadge, { backgroundColor: "#8B5CF6" }]}>
-                            <Ionicons name="image" size={10} color="#FFFFFF" />
+                            <Ionicons name="image" size={10} color={colors.cardBg} />
                           </View>
                         )}
                         {isCurrentPost && (
@@ -658,7 +658,7 @@ export default function PostDetailScreen() {
                 style={styles.ownPrimaryCTA}
                 onPress={() => navigation.navigate("CreateDreamPost")}
               >
-                <Ionicons name="add-circle-outline" size={18} color="#FFFFFF" />
+                <Ionicons name="add-circle-outline" size={18} color={colors.cardBg} />
                 <Text style={styles.ownPrimaryCTAText}>{t("post_detail.btn_add_update")}</Text>
               </TouchableOpacity>
               <View style={styles.ownSecondaryRow}>
@@ -725,7 +725,7 @@ export default function PostDetailScreen() {
                     {
                       color:
                         commentText.length >= COMMENT_COUNT_WARN_AT
-                          ? "#EF4444"
+                          ? colors.errorText
                           : colors.accentTeal,
                     },
                   ]}
@@ -750,9 +750,9 @@ export default function PostDetailScreen() {
               disabled={!commentText.trim() || isSubmitting}
             >
               {isSubmitting ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <ActivityIndicator size="small" color={colors.cardBg} />
               ) : (
-                <Ionicons name="send" size={18} color="#FFFFFF" />
+                <Ionicons name="send" size={18} color={colors.cardBg} />
               )}
             </TouchableOpacity>
           </View>
@@ -844,7 +844,7 @@ export default function PostDetailScreen() {
                 {/* CTA Buttons */}
                 <View style={styles.dreamDetailCTAs}>
                   <TouchableOpacity style={styles.dreamDetailPrimaryCTA} onPress={() => handleSupport(post)}>
-                    <Ionicons name="hand-left" size={16} color="#FFFFFF" />
+                    <Ionicons name="hand-left" size={16} color={colors.cardBg} />
                     <Text style={styles.dreamDetailPrimaryCTAText}>{t("post_detail.btn_support_dream")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.dreamDetailSecondaryCTA} onPress={() => handleClonePlan(post)}>
@@ -888,7 +888,7 @@ export default function PostDetailScreen() {
                 </View>
                 <View style={styles.dreamDetailCTAs}>
                   <TouchableOpacity style={styles.dreamDetailPrimaryCTA} onPress={() => handleSupport(post)}>
-                    <Ionicons name="people" size={16} color="#FFFFFF" />
+                    <Ionicons name="people" size={16} color={colors.cardBg} />
                     <Text style={styles.dreamDetailPrimaryCTAText}>{t("post_detail.btn_join_circle")}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.dreamDetailSecondaryCTA} onPress={() => handleClonePlan(post)}>
@@ -946,7 +946,7 @@ export default function PostDetailScreen() {
                   {
                     color:
                       commentText.length >= COMMENT_COUNT_WARN_AT
-                        ? "#EF4444"
+                        ? colors.errorText
                         : colors.accentTeal,
                   },
                 ]}
@@ -971,9 +971,9 @@ export default function PostDetailScreen() {
             disabled={!commentText.trim() || isSubmitting}
           >
             {isSubmitting ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator size="small" color={colors.cardBg} />
             ) : (
-              <Ionicons name="send" size={18} color="#FFFFFF" />
+              <Ionicons name="send" size={18} color={colors.cardBg} />
             )}
           </TouchableOpacity>
         </View>
@@ -1259,7 +1259,7 @@ const styles = StyleSheet.create({
   ownPrimaryCTAText: {
     fontSize: typography.body,
     fontWeight: typography.bold,
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   ownSecondaryRow: {
     flexDirection: "row",
@@ -1348,7 +1348,7 @@ const styles = StyleSheet.create({
   spotsLeftText: {
     fontSize: typography.caption,
     fontWeight: typography.semibold,
-    color: "#F59E0B",
+    color: colors.warningAmber,
     textAlign: "right",
     marginBottom: spacing.sm,
   },
@@ -1380,7 +1380,7 @@ const styles = StyleSheet.create({
   dreamDetailPrimaryCTAText: {
     fontSize: typography.bodySmall,
     fontWeight: typography.bold,
-    color: "#FFFFFF",
+    color: colors.cardBg,
   },
   dreamDetailSecondaryCTA: {
     flex: 1,
