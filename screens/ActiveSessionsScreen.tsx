@@ -26,17 +26,16 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
 import { showToast } from "../components/Toast";
+import ScreenHeader from "../components/ScreenHeader";
+import ScreenState from "../components/ScreenState";
 import { colors, radius, spacing, typography } from "../theme/tokens";
 
 type ActiveSessionsNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -139,7 +138,7 @@ function formatDate(t: (k: string) => string, iso: string | null): string {
 export default function ActiveSessionsScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<ActiveSessionsNavigationProp>();
-  const insets = useSafeAreaInsets();
+  // navigation still used for edge cases (see e.g. Alert flows below).
 
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -341,41 +340,31 @@ export default function ActiveSessionsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <LinearGradient
-          colors={[colors.primaryNavy, "#143654"]}
-          style={[styles.header, { paddingTop: insets.top + spacing.md }]}
-        >
-          <View style={styles.headerRow}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
-            </TouchableOpacity>
-            <View>
-              <Text style={styles.headerTitle}>{t("sessions.title")}</Text>
-              <Text style={styles.headerSubtitle}>
-                {sessions.length}{" "}
-                {sessions.length === 1 ? "device" : "devices"}
-              </Text>
-            </View>
-          </View>
-        </LinearGradient>
+        <ScreenHeader
+          title={t("sessions.title")}
+          subtitle={`${sessions.length} ${
+            sessions.length === 1 ? "device" : "devices"
+          }`}
+        />
 
         <View style={styles.content}>
           {loading ? (
-            <View style={styles.loading}>
-              <ActivityIndicator color={colors.accentTeal} />
-            </View>
+            <ScreenState type="loading" />
           ) : error ? (
-            <View style={styles.warningCard}>
-              <Ionicons name="warning" size={18} color={colors.warningAmber} />
-              <Text style={styles.warningText}>{error}</Text>
-            </View>
+            <ScreenState
+              type="error"
+              description={error}
+              onRetry={() => {
+                setLoading(true);
+                void load();
+              }}
+            />
           ) : sessions.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.emptyText}>{t("sessions.empty")}</Text>
-            </View>
+            <ScreenState
+              type="empty"
+              icon="phone-portrait-outline"
+              title={t("sessions.empty")}
+            />
           ) : (
             <>
               {current ? (
@@ -431,41 +420,9 @@ export default function ActiveSessionsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.screenBg },
-  header: {
-    // paddingTop = insets.top + spacing.md applied inline on LinearGradient.
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xl,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: colors.cardBg,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.8)",
-    marginTop: 2,
-  },
   content: {
     padding: 20,
     paddingBottom: 140,
-  },
-  loading: {
-    padding: 40,
-    alignItems: "center",
   },
   section: {
     marginBottom: 20,
@@ -556,29 +513,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
     color: colors.errorText,
-  },
-  warningCard: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    backgroundColor: colors.warningBg,
-    borderRadius: 12,
-    padding: 14,
-    gap: 10,
-    marginBottom: 16,
-  },
-  warningText: {
-    flex: 1,
-    fontSize: 12,
-    color: colors.warningLabel,
-    lineHeight: 18,
-  },
-  emptyCard: {
-    padding: 40,
-    alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 14,
-    color: colors.textSecondary,
   },
   bottomBar: {
     position: "absolute",

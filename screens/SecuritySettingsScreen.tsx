@@ -25,17 +25,15 @@ import {
   TouchableOpacity,
   Switch,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { RootStackParamList } from "../App";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import ScreenHeader from "../components/ScreenHeader";
 import { colors, radius, spacing, typography } from "../theme/tokens";
 
 type SecuritySettingsNavigationProp = StackNavigationProp<RootStackParamList>;
@@ -43,7 +41,6 @@ type SecuritySettingsNavigationProp = StackNavigationProp<RootStackParamList>;
 export default function SecuritySettingsScreen() {
   const navigation = useNavigation<SecuritySettingsNavigationProp>();
   const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
   const {
     biometricsEnabled,
     biometricsAvailable,
@@ -101,29 +98,10 @@ export default function SecuritySettingsScreen() {
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <LinearGradient
-          colors={[colors.primaryNavy, "#143654"]}
-          style={[styles.header, { paddingTop: insets.top + spacing.md }]}
-        >
-          <View style={styles.headerTop}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
-            </TouchableOpacity>
-            <View>
-              <Text style={styles.headerTitle}>
-                {t("screen_headers.security_settings")}
-              </Text>
-              <Text style={styles.headerSubtitle}>
-                {t("final_polish.securitysettings_protect_your_account")}
-              </Text>
-            </View>
-            <View style={{ width: 40 }} />
-          </View>
-        </LinearGradient>
+        <ScreenHeader
+          title={t("screen_headers.security_settings")}
+          subtitle={t("final_polish.securitysettings_protect_your_account")}
+        />
 
         <View style={styles.content}>
           {/* Password Section */}
@@ -270,34 +248,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.screenBg,
-  },
-  header: {
-    // paddingTop = insets.top + spacing.md applied inline.
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xl,
-  },
-  headerTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: colors.cardBg,
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.8)",
-    marginTop: 2,
   },
   content: {
     padding: 20,

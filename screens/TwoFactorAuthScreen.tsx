@@ -29,16 +29,14 @@ import {
   TextInput,
   Platform,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import QRCode from "react-native-qrcode-svg";
 
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { supabase } from "../lib/supabase";
 import { showToast } from "../components/Toast";
+import ScreenHeader from "../components/ScreenHeader";
+import ScreenState from "../components/ScreenState";
 import { colors, radius, spacing, typography } from "../theme/tokens";
 
 type Mode = "loading" | "view" | "enrol";
@@ -51,8 +49,6 @@ type EnrolPayload = {
 
 export default function TwoFactorAuthScreen() {
   const { t } = useTranslation();
-  const navigation = useNavigation<any>();
-  const insets = useSafeAreaInsets();
 
   const [mode, setMode] = useState<Mode>("loading");
   // The verified factor id, when 2FA is already on. Kept so the Disable
@@ -200,25 +196,11 @@ export default function TwoFactorAuthScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <LinearGradient
-          colors={[colors.primaryNavy, "#143654"]}
-          style={[styles.header, { paddingTop: insets.top + spacing.md }]}
-        >
-          <TouchableOpacity
-            style={styles.backBtn}
-            onPress={() => navigation.goBack()}
-            accessibilityLabel={t("2fa.cancel")}
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t("2fa.title")}</Text>
-        </LinearGradient>
+        <ScreenHeader title={t("2fa.title")} />
 
         <View style={styles.body}>
           {mode === "loading" ? (
-            <View style={styles.loading}>
-              <ActivityIndicator color={colors.accentTeal} />
-            </View>
+            <ScreenState type="loading" />
           ) : mode === "enrol" && enrol ? (
             <View>
               <Text style={styles.instruction}>{t("2fa.qr_instruction")}</Text>
@@ -359,34 +341,7 @@ export default function TwoFactorAuthScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.screenBg },
   scroll: { paddingBottom: 40 },
-  header: {
-    // Vertical top padding comes from insets.top + spacing.md applied
-    // inline in the render (see LinearGradient wrapper).
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xl,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.1)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: colors.cardBg,
-  },
   body: { padding: 20 },
-  loading: {
-    padding: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   statusCard: {
     flexDirection: "row",
     alignItems: "center",
