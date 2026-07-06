@@ -192,6 +192,47 @@ function mapToSavedMethod(dbMethod: DBPaymentMethod): SavedPaymentMethod {
 // Context
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Unwrap an EF failure into the most specific message we can find.
+// supabase-js returns a FunctionsHttpError on non-2xx; the response body
+// carries the EF's `{ error: "…" }` payload but only surfaces via
+// error.context.text() (or already-parsed on data when 2xx). Fall through
+// to whatever textual signal exists so the user sees "Stripe Connect not
+// enabled" instead of "Edge Function returned a non-2xx status code".
+async function extractEfErrorMessage(
+  error: unknown,
+  data: unknown,
+): Promise<string> {
+  // If the EF returned 2xx with `{ error }` — happens on our few EFs that
+  // don't use HTTP status for control flow.
+  if (data && typeof data === "object" && "error" in (data as any)) {
+    const e = (data as any).error;
+    if (typeof e === "string" && e.length > 0) return e;
+  }
+  // FunctionsHttpError carries the response on .context. Try to parse it.
+  const anyErr = error as any;
+  try {
+    const ctx = anyErr?.context;
+    if (ctx && typeof ctx.text === "function") {
+      const body = await ctx.text();
+      if (body) {
+        try {
+          const parsed = JSON.parse(body);
+          if (parsed?.error && typeof parsed.error === "string") {
+            return parsed.error;
+          }
+        } catch {
+          // Non-JSON body — return the raw text if it's short enough to
+          // display without dumping a stack trace.
+          if (body.length < 300) return body;
+        }
+      }
+    }
+  } catch {
+    // ignore — fall through
+  }
+  return anyErr?.message || "Edge Function failed. Please try again.";
+}
+
 const PaymentContext = createContext<PaymentContextType | undefined>(undefined);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -364,10 +405,21 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
         body: {},
       });
       if (error) {
-        throw new Error(error.message || 'Failed to start Connect onboarding');
+        // Unpack the EF's specific error before falling back to the
+        // generic supabase-js "non-2xx status code". The audit at
+        // docs/audit/33_currency_and_payment_button_bugs.md documented
+        // the eight known failure modes — surfacing the specific
+        // message tells the user which one hit.
+        const specific = await extractEfErrorMessage(error, data);
+        console.error('[PaymentContext] create-connect-account failed:', specific);
+        throw new Error(specific);
       }
       if (!data) {
         throw new Error('No response from create-connect-account');
+      }
+      if ((data as any).error) {
+        console.error('[PaymentContext] create-connect-account returned error:', (data as any).error);
+        throw new Error(String((data as any).error));
       }
 
       const { onboardingUrl, stripeAccountId, accountStatus } = data as {
@@ -599,8 +651,20 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
         "create-setup-intent",
         { body: {} },
       );
+      // The EF returns a JSON body with a specific `error` field on any
+      // handled failure (Stripe rejection, missing customer row, bad
+      // country, etc.). supabase-js only unpacks that body when the HTTP
+      // status is 2xx; on 4xx/5xx the raw body arrives on FunctionsHttpError,
+      // which we surface via error.context.text() when available. Prefer
+      // the specific message, fall back to the generic HTTP error.
       if (error) {
-        return { success: false, error: error.message || "Setup intent failed" };
+        const specific = await extractEfErrorMessage(error, data);
+        console.error("[PaymentContext] create-setup-intent failed:", specific);
+        return { success: false, error: specific };
+      }
+      if (data?.error) {
+        console.error("[PaymentContext] create-setup-intent returned error:", data.error);
+        return { success: false, error: String(data.error) };
       }
       if (!data?.clientSecret) {
         return { success: false, error: "No clientSecret returned" };

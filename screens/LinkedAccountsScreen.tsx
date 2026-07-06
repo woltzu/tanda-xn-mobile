@@ -212,10 +212,21 @@ export default function LinkedAccountsScreen() {
       await WebBrowser.openAuthSessionAsync(onboardingUrl, CONNECT_RETURN_URL);
       await refreshPaymentMethods();
     } catch (err: any) {
-      Alert.alert(
-        t("linked_accounts_v2.alert_error_title"),
-        err.message || t("linked_accounts_v2.alert_failed_start"),
-      );
+      // Pull the specific EF error out — PaymentContext now unwraps the
+      // response body via extractEfErrorMessage, so `err.message` here
+      // is usually the Stripe / auth / DB reason rather than the raw
+      // "non-2xx status code".
+      const raw = err?.message || '';
+      console.warn('[LinkedAccounts] handleAddBank failed:', raw);
+      // Detect the historically-most-common failure — Connect not
+      // enabled on the Stripe account (see docs/audit/33). That one
+      // needs a Stripe Dashboard fix, not a support ticket, so route
+      // the copy accordingly.
+      const isConnectDisabled = /connect/i.test(raw) && /(sign(ed)?\s*up|dashboard\.stripe\.com\/connect|not enabled)/i.test(raw);
+      const body = isConnectDisabled
+        ? t('linked_accounts_v2.alert_stripe_connect_disabled')
+        : raw || t('linked_accounts_v2.alert_failed_start');
+      Alert.alert(t('linked_accounts_v2.alert_error_title'), body);
     }
   };
 
