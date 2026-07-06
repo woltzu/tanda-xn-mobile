@@ -19,10 +19,10 @@ import { colors, radius, typography, spacing } from '../theme/tokens';
 import { useOrganizerTrips, type Trip } from '../hooks/useTripOrganizer';
 
 // --- Design tokens ---
-const NAVY = '#0A2342';
-const TEAL = '#00C6AE';
+const NAVY = colors.primaryNavy;
+const TEAL = colors.accentTeal;
 const GOLD = '#E8A842';
-const BG = '#F5F7FA';
+const BG = colors.screenBg;
 
 // --- Types ---
 type TripStatus = 'draft' | 'published' | 'closed' | 'cancelled';
@@ -49,10 +49,10 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
 ];
 
 const STATUS_COLORS: Record<TripStatus, { bg: string; text: string }> = {
-  draft: { bg: '#E5E7EB', text: '#6B7280' },
+  draft: { bg: colors.border, text: colors.textSecondary },
   published: { bg: 'rgba(0,198,174,0.15)', text: TEAL },
   closed: { bg: 'rgba(10,35,66,0.12)', text: NAVY },
-  cancelled: { bg: '#FEE2E2', text: '#DC2626' },
+  cancelled: { bg: colors.errorBg, text: colors.errorText },
 };
 
 const formatDateRange = (start: string, end: string): string => {
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
     color: NAVY,
   },
   filterContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderRadius: radius.card,
     marginBottom: spacing.lg,
     overflow: 'hidden',
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
   coverImage: {
     width: '100%',
     height: 140,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.border,
   },
   placeholderCover: {
     width: '100%',
@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.button,
   },
   emptyCtaText: {
-    color: '#FFFFFF',
+    color: colors.cardBg,
     fontSize: typography.bodyLarge,
     fontWeight: typography.semibold,
   },

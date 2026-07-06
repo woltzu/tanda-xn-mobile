@@ -36,10 +36,10 @@ import {
 import { MediaUploadService } from '../services/MediaUploadService';
 
 // --- Design tokens ---
-const NAVY = '#0A2342';
-const TEAL = '#00C6AE';
+const NAVY = colors.primaryNavy;
+const TEAL = colors.accentTeal;
 const GOLD = '#E8A842';
-const BG = '#F5F7FA';
+const BG = colors.screenBg;
 
 const TOTAL_STEPS = 4;
 
@@ -266,7 +266,7 @@ const FormInput: React.FC<{
       value={value}
       onChangeText={onChangeText}
       placeholder={placeholder ?? ''}
-      placeholderTextColor="#9CA3AF"
+      placeholderTextColor={colors.textSecondary}
       multiline={multiline}
       keyboardType={keyboardType}
     />
@@ -285,7 +285,7 @@ const ToggleRow: React.FC<{
       value={value}
       onValueChange={onValueChange}
       trackColor={{ false: '#D1D5DB', true: TEAL }}
-      thumbColor="#FFFFFF"
+      thumbColor={colors.cardBg}
     />
   </View>
 );
@@ -326,8 +326,8 @@ const DatePickerField: React.FC<{
           value: value || '',
           onChange: (e: any) => onChange(e?.target?.value ?? ''),
           style: {
-            backgroundColor: '#FFFFFF',
-            border: `1px solid ${error ? '#DC2626' : colors.border}`,
+            backgroundColor: colors.cardBg,
+            border: `1px solid ${error ? colors.errorText : colors.border}`,
             borderRadius: radius.small,
             padding: `12px ${spacing.md}px`,
             fontSize: typography.body,
@@ -371,7 +371,7 @@ const DatePickerField: React.FC<{
         }}
         activeOpacity={0.7}
       >
-        <Text style={{ fontSize: typography.body, color: value ? NAVY : '#9CA3AF' }}>
+        <Text style={{ fontSize: typography.body, color: value ? NAVY : colors.textSecondary }}>
           {value ? formatDateFriendly(value) : 'Select date'}
         </Text>
       </TouchableOpacity>
@@ -501,13 +501,13 @@ const CoverPhotoField: React.FC<{
         )}
         {url && (
           <View style={styles.coverFieldOverlay} pointerEvents="none">
-            <Ionicons name="camera" size={18} color="#FFFFFF" />
+            <Ionicons name="camera" size={18} color={colors.cardBg} />
             <Text style={styles.coverFieldOverlayText}>{t("create_trip_wizard.cover_change")}</Text>
           </View>
         )}
         {uploading && (
           <View style={styles.coverFieldUploading} pointerEvents="none">
-            <ActivityIndicator size="large" color="#FFFFFF" />
+            <ActivityIndicator size="large" color={colors.cardBg} />
             <Text style={styles.coverFieldUploadingText}>Uploading…</Text>
           </View>
         )}
@@ -766,7 +766,7 @@ const StepPayment: React.FC<{
         tooltipBody={t('create_trip.tooltip_refund')}
       />
       <TouchableOpacity style={styles.dropdownBtn} onPress={() => setShowPolicyPicker(!showPolicyPicker)}>
-        <Text style={[styles.dropdownBtnText, !data.refund_policy && { color: '#9CA3AF' }]}>
+        <Text style={[styles.dropdownBtnText, !data.refund_policy && { color: colors.textSecondary }]}>
           {data.refund_policy || 'Select refund policy'}
         </Text>
         <Ionicons name={showPolicyPicker ? 'chevron-up' : 'chevron-down'} size={20} color={colors.textSecondary} />
@@ -879,10 +879,10 @@ const StepRequirements: React.FC<{
           value={newField}
           onChangeText={setNewField}
           placeholder={t("create_trip_wizard.placeholder_custom_field")}
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor={colors.textSecondary}
         />
         <TouchableOpacity style={styles.addCustomBtn} onPress={addCustom}>
-          <Ionicons name="add" size={20} color="#FFFFFF" />
+          <Ionicons name="add" size={20} color={colors.cardBg} />
         </TouchableOpacity>
       </View>
     </View>
@@ -904,7 +904,7 @@ const StepItinerary: React.FC<{ tripId?: string }> = ({ tripId }) => {
         activeOpacity={0.7}
         onPress={() => navigation.navigate('ItineraryBuilder', { tripId: tripId ?? 'new' })}
       >
-        <Ionicons name="construct-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+        <Ionicons name="construct-outline" size={20} color={colors.cardBg} style={{ marginRight: 8 }} />
         <Text style={styles.itineraryBtnText}>{t("create_trip_wizard.btn_continue_itinerary")}</Text>
       </TouchableOpacity>
     </View>
@@ -981,7 +981,7 @@ const StepReview: React.FC<{
           />
         ) : (
           <View style={[styles.shareablePreviewCover, styles.shareablePreviewCoverPlaceholder]}>
-            <Ionicons name="image-outline" size={32} color="#9CA3AF" />
+            <Ionicons name="image-outline" size={32} color={colors.textSecondary} />
           </View>
         )}
         <View style={styles.reviewCardHeader}>
@@ -1035,7 +1035,7 @@ const StepReview: React.FC<{
         </View>
         <View style={styles.reviewCheckRow}>
           <Ionicons name="square-outline" size={20} color="#D1D5DB" />
-          <Text style={[styles.reviewCheckLabel, { color: '#9CA3AF' }]}>Itinerary — optional at launch</Text>
+          <Text style={[styles.reviewCheckLabel, { color: colors.textSecondary }]}>Itinerary — optional at launch</Text>
         </View>
       </View>
 
@@ -1043,7 +1043,7 @@ const StepReview: React.FC<{
         <Ionicons
           name={isEditMode ? 'save-outline' : 'rocket-outline'}
           size={20}
-          color="#FFFFFF"
+          color={colors.cardBg}
           style={{ marginRight: 8 }}
         />
         <Text style={styles.publishBtnText}>{isEditMode ? 'Save Changes' : 'Publish Trip'}</Text>
@@ -1850,11 +1850,11 @@ const CreateTripWizardScreen: React.FC = () => {
               accessibilityRole="button"
               accessibilityLabel={t('create_trip.coach_dismiss')}
             >
-              <Ionicons name="bulb-outline" size={16} color="#FFFFFF" />
+              <Ionicons name="bulb-outline" size={16} color={colors.cardBg} />
               <Text style={styles.coachText}>
                 {t('create_trip.coach_title')}
               </Text>
-              <Ionicons name="close" size={14} color="#FFFFFF" />
+              <Ionicons name="close" size={14} color={colors.cardBg} />
             </Pressable>
           )}
 
@@ -1882,7 +1882,7 @@ const CreateTripWizardScreen: React.FC = () => {
         {currentStep < TOTAL_STEPS - 1 && (
           <TouchableOpacity style={styles.nextBtn} activeOpacity={0.7} onPress={goNext}>
             <Text style={styles.nextBtnText}>{t("final_polish.createtripwizard_next")}</Text>
-            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+            <Ionicons name="arrow-forward" size={18} color={colors.cardBg} />
           </TouchableOpacity>
         )}
       </View>
@@ -1963,7 +1963,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
   },
@@ -1976,7 +1976,7 @@ const styles = StyleSheet.create({
     color: NAVY,
   },
   stepSection: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     paddingVertical: spacing.md,
     alignItems: 'center',
     borderBottomWidth: 1,
@@ -2026,7 +2026,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   textInput: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.small,
@@ -2042,12 +2042,12 @@ const styles = StyleSheet.create({
   // A.1 — red border when a field is flagged. Matches the inline error
   // text below the input so the eye finds the failing row at a glance.
   textInputError: {
-    borderColor: '#DC2626',
+    borderColor: colors.errorText,
   },
   fieldErrorText: {
     marginTop: 4,
     fontSize: 12,
-    color: '#DC2626',
+    color: colors.errorText,
     fontWeight: '500',
   },
   // A.3 — soft hint under the refund cutoff input. Different from
@@ -2066,7 +2066,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderRadius: radius.small,
     paddingHorizontal: spacing.lg,
     paddingVertical: 14,
@@ -2089,7 +2089,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
   },
   toggleButtonActive: {
     backgroundColor: TEAL,
@@ -2101,25 +2101,25 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
   },
   toggleButtonTextActive: {
-    color: '#FFFFFF',
+    color: colors.cardBg,
   },
   // Installment plan preview shown under the cadence + count pickers.
   installmentPreview: {
     marginTop: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: colors.screenBg,
     borderRadius: 8,
   },
   installmentPreviewText: {
     fontSize: 13,
-    color: '#6B7280',
+    color: colors.textSecondary,
   },
   dropdownBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.small,
@@ -2131,7 +2131,7 @@ const styles = StyleSheet.create({
     color: NAVY,
   },
   dropdownList: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderWidth: 1,
     borderColor: colors.border,
     borderTopWidth: 0,
@@ -2165,7 +2165,7 @@ const styles = StyleSheet.create({
   },
   addCustomInput: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radius.small,
@@ -2211,12 +2211,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxl,
   },
   itineraryBtnText: {
-    color: '#FFFFFF',
+    color: colors.cardBg,
     fontSize: typography.bodyLarge,
     fontWeight: typography.semibold,
   },
   reviewCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderRadius: radius.card,
     padding: spacing.lg,
     marginBottom: spacing.md,
@@ -2257,7 +2257,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xxl,
   },
   publishBtnText: {
-    color: '#FFFFFF',
+    color: colors.cardBg,
     fontSize: typography.bodyLarge,
     fontWeight: typography.bold,
   },
@@ -2267,7 +2267,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
@@ -2301,7 +2301,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.button,
   },
   nextBtnText: {
-    color: '#FFFFFF',
+    color: colors.cardBg,
     fontSize: typography.body,
     fontWeight: typography.semibold,
     marginRight: spacing.sm,
@@ -2419,7 +2419,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   datePickerModalSheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     overflow: 'hidden',
@@ -2461,7 +2461,7 @@ const styles = StyleSheet.create({
   },
   // --- Local-draft restore banner (mirrors GoalCreateScreen) ---
   draftBanner: {
-    backgroundColor: '#FEF3C7',
+    backgroundColor: colors.warningBg,
     padding: 12,
     borderRadius: 8,
     marginBottom: 14,
@@ -2471,7 +2471,7 @@ const styles = StyleSheet.create({
   },
   draftBannerText: {
     flex: 1,
-    color: '#92400E',
+    color: colors.warningLabel,
     fontSize: 13,
     fontWeight: '500',
   },
@@ -2480,10 +2480,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     marginLeft: 8,
   },
-  draftBannerButtonText: { color: '#D97706', fontWeight: '600', fontSize: 13 },
+  draftBannerButtonText: { color: colors.warningAmber, fontWeight: '600', fontSize: 13 },
   // --- Cover photo picker ---
   coverFieldContainer: {
     marginTop: spacing.lg,
@@ -2525,7 +2525,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   coverFieldOverlayText: {
-    color: '#FFFFFF',
+    color: colors.cardBg,
     fontSize: typography.label,
     fontWeight: typography.semibold,
   },
@@ -2556,7 +2556,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   coverFieldUploadingText: {
-    color: '#FFFFFF',
+    color: colors.cardBg,
     fontSize: typography.body,
     fontWeight: typography.semibold,
   },
@@ -2583,7 +2583,7 @@ const styles = StyleSheet.create({
   },
   coachText: {
     flex: 1,
-    color: '#FFFFFF',
+    color: colors.cardBg,
     fontSize: 12,
     fontWeight: '600' as const,
   },
@@ -2642,7 +2642,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   helpSheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingHorizontal: 20,
@@ -2655,7 +2655,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.border,
     marginBottom: 12,
   },
   helpHeaderRow: {
@@ -2673,7 +2673,7 @@ const styles = StyleSheet.create({
   helpItem: {
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: colors.border,
   },
   helpItemTitle: {
     fontSize: 14,
@@ -2683,7 +2683,7 @@ const styles = StyleSheet.create({
   },
   helpItemBody: {
     fontSize: 13,
-    color: '#6B7280',
+    color: colors.textSecondary,
     lineHeight: 19,
   },
 });

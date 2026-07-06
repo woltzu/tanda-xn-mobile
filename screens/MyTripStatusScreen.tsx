@@ -32,10 +32,10 @@ const GOLD = "#E8A842";
 const TEAL = colors.accentTeal;
 const NAVY = colors.primaryNavy;
 const GREEN = "#10B981";
-const GREEN_BG = "#ECFDF5";
+const GREEN_BG = colors.successBg;
 const GOLD_BG = "rgba(232,168,66,0.1)";
-const RED = "#DC2626";
-const RED_BG = "#FEF2F2";
+const RED = colors.errorText;
+const RED_BG = colors.errorBg;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 // Member-trip-status Bucket A.6 — added `cancelled` so the screen can
@@ -1506,7 +1506,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
   },
   emptyCtaText: {
-    color: '#FFFFFF',
+    color: colors.cardBg,
     fontSize: typography.body,
     fontWeight: typography.semibold,
   },
@@ -1733,7 +1733,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   coachCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderRadius: radius.card,
     padding: 18,
     shadowColor: '#000',
@@ -1819,7 +1819,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,

@@ -32,10 +32,13 @@ const HELP_TOPICS: HelpTopic[] = ['stats', 'lifecycle', 'quick_actions', 'editin
 const DASHBOARD_COACH_KEY = '@tandaxn_trip_dashboard_coach_seen_v1';
 
 // --- Design tokens ---
-const NAVY = '#0A2342';
-const TEAL = '#00C6AE';
+// Local aliases for readability. Sourced from theme/tokens.ts so any
+// design-system change ripples in one place. GOLD has no design-system
+// counterpart yet (public trip pages use it as a brand accent).
+const NAVY = colors.primaryNavy;
+const TEAL = colors.accentTeal;
 const GOLD = '#E8A842';
-const BG = '#F5F7FA';
+const BG = colors.screenBg;
 
 // --- Types ---
 // View-trip-dashboard A.7 — `docs_complete`/`docs_total`/`docs_missing_count`
@@ -350,7 +353,7 @@ const OrganizerTripDashboardScreen: React.FC = () => {
           <View style={[styles.hero, styles.skeletonHero]}>
             <View style={styles.heroHeader}>
               <TouchableOpacity onPress={() => navigation.goBack()} style={styles.heroBtn}>
-                <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
               </TouchableOpacity>
               <View style={styles.heroBtn} />
             </View>
@@ -396,7 +399,7 @@ const OrganizerTripDashboardScreen: React.FC = () => {
             {/* Header buttons */}
             <View style={styles.heroHeader}>
               <TouchableOpacity onPress={() => navigation.goBack()} style={styles.heroBtn}>
-                <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
               </TouchableOpacity>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 {/* B.1 — (?) help trigger sits beside the settings icon. */}
@@ -406,7 +409,7 @@ const OrganizerTripDashboardScreen: React.FC = () => {
                   accessibilityRole="button"
                   accessibilityLabel={t('trip_dashboard.help_open_a11y')}
                 >
-                  <Ionicons name="help-circle-outline" size={24} color="#FFFFFF" />
+                  <Ionicons name="help-circle-outline" size={24} color={colors.cardBg} />
                 </TouchableOpacity>
                 <TouchableOpacity
                   onPress={() => {
@@ -421,7 +424,7 @@ const OrganizerTripDashboardScreen: React.FC = () => {
                   }}
                   style={styles.heroBtn}
                 >
-                  <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
+                  <Ionicons name="settings-outline" size={24} color={colors.cardBg} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -469,8 +472,8 @@ const OrganizerTripDashboardScreen: React.FC = () => {
 
         {/* Stat Boxes */}
         <View style={styles.statRow}>
-          <StatBox label={t('trip.dashboard_stat_confirmed')} value={data.confirmed_count} color="#047857" bgColor={colors.successBg} />
-          <StatBox label={t('trip.dashboard_stat_pending')}   value={data.pending_count}   color={GOLD} bgColor="#FFF7ED" />
+          <StatBox label={t('trip.dashboard_stat_confirmed')} value={data.confirmed_count} color={colors.successText} bgColor={colors.successBg} />
+          <StatBox label={t('trip.dashboard_stat_pending')}   value={data.pending_count}   color={GOLD} bgColor={colors.warningBg} />
           <StatBox label={t('trip.dashboard_stat_waitlist')}  value={data.waitlist_count}  color={TEAL} bgColor="rgba(0,198,174,0.1)" />
         </View>
 
@@ -489,7 +492,7 @@ const OrganizerTripDashboardScreen: React.FC = () => {
               activeOpacity={0.85}
               onPress={() => setShareSheetOpen(true)}
             >
-              <Ionicons name="share-social-outline" size={18} color="#FFFFFF" />
+              <Ionicons name="share-social-outline" size={18} color={colors.cardBg} />
               <Text style={styles.emptyCtaText}>{t('trip_dashboard.empty_cta')}</Text>
             </TouchableOpacity>
           </View>
@@ -563,7 +566,7 @@ const OrganizerTripDashboardScreen: React.FC = () => {
                 <Text style={styles.revenueLabel}>
                   {t('trip_dashboard.revenue_collected')}
                 </Text>
-                <Text style={[styles.revenueValue, { color: '#047857' }]}>
+                <Text style={[styles.revenueValue, { color: colors.successText }]}>
                   ${revenueCollected.toFixed(2)}
                 </Text>
               </View>
@@ -732,7 +735,7 @@ const styles = StyleSheet.create({
   heroTitle: {
     fontSize: 24,
     fontWeight: typography.bold,
-    color: '#FFFFFF',
+    color: colors.cardBg,
   },
   heroSubtitle: {
     fontSize: typography.bodyLarge,
@@ -801,7 +804,7 @@ const styles = StyleSheet.create({
   },
   // Card
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     marginHorizontal: spacing.lg,
     marginBottom: spacing.md,
     borderRadius: radius.card,
@@ -822,7 +825,7 @@ const styles = StyleSheet.create({
   },
   confirmBody: {
     fontSize: typography.label,
-    color: '#6B7280',
+    color: colors.textSecondary,
     marginBottom: spacing.md,
     lineHeight: 18,
   },
@@ -833,7 +836,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   confirmBtnDisabled: { backgroundColor: '#CBD5E1' },
-  confirmBtnText: { color: '#FFFFFF', fontSize: typography.body, fontWeight: typography.bold },
+  confirmBtnText: { color: colors.cardBg, fontSize: typography.body, fontWeight: typography.bold },
   // Progress
   progressSection: {},
   progressHeader: {
@@ -854,7 +857,7 @@ const styles = StyleSheet.create({
   },
   progressTrack: {
     height: 8,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.border,
     borderRadius: 4,
     overflow: 'hidden',
   },
@@ -875,12 +878,12 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   skeletonStat: {
-    backgroundColor: '#E5E7EB',
+    backgroundColor: colors.border,
     height: 76,
   },
   // View-trip-dashboard A.8 — empty-state card.
   emptyCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     marginHorizontal: spacing.lg,
     marginBottom: spacing.md,
     borderRadius: radius.card,
@@ -926,7 +929,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.button,
   },
   emptyCtaText: {
-    color: '#FFFFFF',
+    color: colors.cardBg,
     fontSize: typography.body,
     fontWeight: typography.bold,
   },
@@ -953,7 +956,7 @@ const styles = StyleSheet.create({
   },
   quickAction: {
     width: '47%',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderRadius: radius.card,
     padding: spacing.lg,
     alignItems: 'center',
@@ -1023,7 +1026,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   coachText: {
-    color: '#FFFFFF',
+    color: colors.cardBg,
     fontSize: 13,
     fontWeight: '600',
     flex: 1,
@@ -1087,7 +1090,7 @@ const sheetStyles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.cardBg,
     borderTopLeftRadius: 18,
     borderTopRightRadius: 18,
     padding: 20,
@@ -1132,7 +1135,7 @@ const sheetStyles = StyleSheet.create({
     marginTop: 20,
   },
   closeBtnText: {
-    color: '#FFFFFF',
+    color: colors.cardBg,
     fontSize: 14,
     fontWeight: '700',
   },
