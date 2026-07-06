@@ -197,7 +197,18 @@ export default function LinkedAccountsScreen() {
   const handleAddBank = async () => {
     try {
       const onboardingUrl = await setupConnectedAccount(CONNECT_RETURN_URL);
-      if (!onboardingUrl) return;
+      if (!onboardingUrl) {
+        // Silent no-op was the source of "Link a Bank does nothing" in
+        // E2E — surface a friendly message so the user knows the flow
+        // isn't wired for their environment yet (missing Stripe Connect
+        // config, EF not deployed, etc.) rather than staring at an
+        // unresponsive button.
+        Alert.alert(
+          t("linked_accounts_v2.alert_error_title"),
+          t("linked_accounts_v2.alert_bank_setup_unavailable"),
+        );
+        return;
+      }
       await WebBrowser.openAuthSessionAsync(onboardingUrl, CONNECT_RETURN_URL);
       await refreshPaymentMethods();
     } catch (err: any) {

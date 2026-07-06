@@ -8023,6 +8023,7 @@
   "linked_accounts_v2": {
     "alert_error_title": "Erreur",
     "alert_failed_start": "Échec du démarrage de la configuration du compte bancaire.",
+    "alert_bank_setup_unavailable": "La configuration du compte bancaire n'est pas encore disponible. Revenez bientôt.",
     "alert_failed_default": "Échec de la définition du mode de paiement par défaut.",
     "alert_failed_remove": "Échec de la suppression du mode de paiement.",
     "loading_text": "Chargement des modes de paiement...",

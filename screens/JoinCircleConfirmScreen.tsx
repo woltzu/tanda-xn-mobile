@@ -24,6 +24,7 @@ import { useCircles } from "../context/CirclesContext";
 import { useAuth } from "../context/AuthContext";
 import { useEventTracker } from "../hooks/useEventTracker";
 import { useExposureCap } from "../hooks/useExposureCap";
+import { supabase } from "../lib/supabase";
 
 type JoinCircleConfirmNavigationProp = StackNavigationProp<RootStackParamList>;
 type JoinCircleConfirmRouteProp = RouteProp<RootStackParamList, "JoinCircleConfirm">;
@@ -122,6 +123,10 @@ export default function JoinCircleConfirmScreen() {
 
   const [isJoining, setIsJoining] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+  // Last error surfaced by handleJoinCircle. Rendered on the `!circle`
+  // fallback branch so a user who lands there after a failed join sees
+  // the actual reason instead of a static "circle not found" message.
+  const [lastError, setLastError] = useState<string | null>(null);
   // Did the user already accept circle terms on a prior join? If yes we
   // hide the checkbox + disclaimer card and auto-set agreedToTerms so the
   // Join button is immediately enabled.
@@ -197,7 +202,13 @@ export default function JoinCircleConfirmScreen() {
         </LinearGradient>
         <View style={styles.errorContainer}>
           <Ionicons name="alert-circle-outline" size={64} color="#9CA3AF" />
-          <Text style={styles.errorText}>{t("join_circle_confirm.not_found_body")}</Text>
+          {/* Prefer the actual failure text over the generic
+              "circle not found" copy when we have one — the user
+              deserves to know what actually broke. Fall back to the
+              static body only when we truly have no clue. */}
+          <Text style={styles.errorText}>
+            {lastError ?? t("join_circle_confirm.not_found_body")}
+          </Text>
           {/* Go Home instead of Go Back: goBack() lands the user on
               JoinCircleByCode where they'd just re-try the same code
               and hit the same wall. A reset to the Home tab is what a
@@ -338,6 +349,41 @@ export default function JoinCircleConfirmScreen() {
         await notifySessionExpired();
         return;
       }
+      // Defensive re-check: the RPC can raise (e.g. a transient network
+      // failure on the trailing system-message INSERT, an aborted
+      // fetch on flaky connections) AFTER the circle_members row has
+      // already committed. E2E users then see "join failed" while the
+      // DB says they're in. Verify by querying circle_members
+      // directly. If we're a member, treat as success and continue to
+      // CircleDetail — the DB is the truth. maybeSingle so a missing
+      // row cleanly returns null.
+      if (user?.id) {
+        try {
+          const { data: existingMember } = await supabase
+            .from("circle_members")
+            .select("id")
+            .eq("circle_id", circleId)
+            .eq("user_id", user.id)
+            .maybeSingle();
+          if (existingMember) {
+            console.warn(
+              "[JoinCircleConfirm] joinCircle threw but membership exists — treating as success",
+              error?.message,
+            );
+            AsyncStorage.setItem(TERMS_ACCEPTED_KEY, "1").catch(() => undefined);
+            navigation.replace("CircleDetail", { circleId });
+            return;
+          }
+        } catch (verifyErr) {
+          // If we couldn't verify, fall through to the normal error
+          // path. Better to show the user the failure than to falsely
+          // claim success.
+          console.warn(
+            "[JoinCircleConfirm] post-error membership verification failed",
+            verifyErr,
+          );
+        }
+      }
       let body: string;
       if (code.includes("circle_full")) {
         body = t("join_circle_confirm.error_circle_full");
@@ -353,6 +399,10 @@ export default function JoinCircleConfirmScreen() {
         body = t("join_circle_confirm.alert_failed_join");
       }
       console.error("Error joining circle:", error);
+      // Keep the mapped body so the `!circle` fallback branch can
+      // display something more useful than "circle not found" if the
+      // screen re-renders into that state after the catch.
+      setLastError(body || error?.message || null);
       Alert.alert(t("join_circle_confirm.alert_error_title"), body);
     } finally {
       setIsJoining(false);
@@ -590,32 +640,32 @@ export default function JoinCircleConfirmScreen() {
             </View>
           )}
 
-          {/* Terms Agreement — the only consent surface. AsyncStorage
-              suppresses the checkbox after the first accepted join so
-              we don't ask twice. The old always-on disclaimer card
-              underneath has been removed; the checkbox label below
-              already states the commitment. */}
-          {!termsPreviouslyAccepted ? (
-            <TouchableOpacity
-              style={styles.termsRow}
-              onPress={() => setAgreedToTerms(!agreedToTerms)}
-            >
-              <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
-                {agreedToTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
-              </View>
-              <Text style={styles.termsText}>
-                {t(
-                  isOneTime
-                    ? "join_circle_confirm.terms_one_time"
-                    : "join_circle_confirm.terms_recurring",
-                  {
-                    amount: `$${circle.amount}`,
-                    frequency: getFrequencyLabel(circle.frequency).toLowerCase(),
-                  },
-                )}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
+          {/* Terms Agreement — the only consent surface. Always visible
+              so the user sees exactly what they're committing to on
+              every join. Prior consenters land here with `agreedToTerms`
+              already set to true from the AsyncStorage effect above, so
+              the checkbox is pre-ticked and they can tap Join in one
+              step; new users tick it themselves. Either way the button
+              stays gated by `agreedToTerms` on the bottom bar. */}
+          <TouchableOpacity
+            style={styles.termsRow}
+            onPress={() => setAgreedToTerms(!agreedToTerms)}
+          >
+            <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
+              {agreedToTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+            </View>
+            <Text style={styles.termsText}>
+              {t(
+                isOneTime
+                  ? "join_circle_confirm.terms_one_time"
+                  : "join_circle_confirm.terms_recurring",
+                {
+                  amount: `$${circle.amount}`,
+                  frequency: getFrequencyLabel(circle.frequency).toLowerCase(),
+                },
+              )}
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
