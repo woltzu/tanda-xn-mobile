@@ -684,20 +684,35 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
         error: "Adding a card requires the iOS or Android app.",
       };
     }
-    // Snapshot the current card-list brand+last4 so we can detect if
-    // the sheet ends up attaching a duplicate. State (paymentMethods)
-    // isn't captured in this useCallback closure, so we read directly
-    // from the engine. Best-effort — a lookup failure just skips the
-    // dedupe pass rather than blocking a genuine add.
+    // Snapshot the current card-list brand+last4+expiry so we can
+    // detect if the sheet ends up attaching a duplicate. State
+    // (paymentMethods) isn't captured in this useCallback closure, so
+    // we read directly from the engine. Best-effort — a lookup
+    // failure just skips the dedupe pass rather than blocking a
+    // genuine add. Expiry is included in the key so a re-issued
+    // card (new expiry, same last4) isn't flagged as a duplicate of
+    // its predecessor — that's a legitimate replacement, not a
+    // double-tap.
+    const cardKey = (m: {
+      brand?: string | null;
+      last4?: string | null;
+      expMonth?: number | null;
+      expYear?: number | null;
+    }) =>
+      `${(m.brand || "").toLowerCase()}::${m.last4 || ""}::${m.expMonth ?? ""}::${m.expYear ?? ""}`;
     let preKeys = new Set<string>();
     let preIds = new Set<string>();
+    // A row with no brand + no last4 has nothing to dedupe against —
+    // skip so an empty stripe_payment_methods row doesn't collide
+    // with a legit new card whose fields haven't rendered yet.
+    const hasIdentity = (m: { brand?: string | null; last4?: string | null }) =>
+      !!(m.brand || m.last4);
     try {
       const preList = await StripeConnectEngine.getPaymentMethods(user.id);
       for (const m of preList) {
         if (m.type !== "card" || m.status !== "active") continue;
         preIds.add(m.id);
-        const key = `${(m.brand || "").toLowerCase()}::${m.last4 || ""}`;
-        if (key !== "::") preKeys.add(key);
+        if (hasIdentity(m)) preKeys.add(cardKey(m));
       }
     } catch (snapErr) {
       console.warn(
@@ -794,8 +809,9 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
           (m) => m.type === "card" && m.status === "active" && !preIds.has(m.id),
         );
         for (const c of newCards) {
-          const key = `${(c.brand || "").toLowerCase()}::${c.last4 || ""}`;
-          if (key !== "::" && preKeys.has(key)) {
+          if (!hasIdentity(c)) continue;
+          const key = cardKey(c);
+          if (preKeys.has(key)) {
             console.warn("[PaymentContext] duplicate card detected, removing:", c.id);
             try {
               await StripeConnectEngine.removePaymentMethod(user.id, c.id);

@@ -13,7 +13,13 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, FontAwesome } from "@expo/vector-icons";
-import { useNavigation, useFocusEffect, useRoute, RouteProp } from "@react-navigation/native";
+import {
+  useNavigation,
+  useFocusEffect,
+  useRoute,
+  RouteProp,
+  CommonActions,
+} from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import * as WebBrowser from "expo-web-browser";
@@ -159,10 +165,32 @@ export default function LinkedAccountsScreen() {
       navigation.goBack();
       return;
     }
-    navigation.navigate(
-      returnScreen as any,
-      { ...(returnParams ?? {}), selectedPaymentMethodId: method.id },
-    );
+    // Update the target route's params BEFORE popping. Plain
+    // navigation.navigate(returnScreen, params) sometimes fails to
+    // trigger the target's useFocusEffect if it deems the params
+    // "unchanged" — CommonActions.setParams with source=<targetKey>
+    // writes directly to the target's own route and always re-runs
+    // effects that depend on those params. Then goBack pops the
+    // stack cleanly.
+    const state = navigation.getState();
+    const target = state.routes.find((r) => r.name === returnScreen);
+    if (target?.key) {
+      navigation.dispatch({
+        ...CommonActions.setParams({
+          selectedPaymentMethodId: method.id,
+          ...(returnParams ?? {}),
+        }),
+        source: target.key,
+      });
+      navigation.goBack();
+    } else {
+      // Fallback if the target isn't in the current stack (deep-linked
+      // entry): navigate with merge so we don't blow away other params.
+      navigation.navigate(returnScreen as any, {
+        ...(returnParams ?? {}),
+        selectedPaymentMethodId: method.id,
+      });
+    }
   };
 
   const {
