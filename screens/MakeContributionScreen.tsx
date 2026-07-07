@@ -197,6 +197,19 @@ export default function MakeContributionScreen() {
     }, [refreshPaymentMethods])
   );
 
+  // Pick up the id passed back by LinkedAccountsScreen's select flow.
+  // Runs on every params change — the outer navigation.navigate that
+  // returns us here re-mounts the route params, so this effect flips
+  // the selection to the freshly chosen card. Reset the param after
+  // consuming so re-entering the screen doesn't overwrite a manual
+  // choice.
+  useEffect(() => {
+    const picked = route.params?.selectedPaymentMethodId;
+    if (!picked) return;
+    setSelectedMethod(picked);
+    navigation.setParams({ selectedPaymentMethodId: undefined } as any);
+  }, [route.params?.selectedPaymentMethodId, navigation]);
+
   // First-visit coach mark. AsyncStorage-gated per user. Auto-dismiss
   // after 4 s. The interaction with the Confirm button (handleConfirm
   // Payment) also clears the tip — see the wrapped onPress below.
@@ -1010,7 +1023,17 @@ export default function MakeContributionScreen() {
 
             <TouchableOpacity
               style={styles.addCardLink}
-              onPress={() => navigation.navigate("LinkedAccounts")}
+              onPress={() =>
+                navigation.navigate("LinkedAccounts", {
+                  // Ask LinkedAccounts to show Select pills on the
+                  // existing rows and return the chosen card back to
+                  // this screen. If the user adds a new card instead
+                  // they can then tap Select on the new row.
+                  selectMode: true,
+                  returnScreen: "MakeContribution",
+                  returnParams: { circleId },
+                })
+              }
               accessibilityRole="button"
               accessibilityLabel={t("make_contribution.add_card")}
             >

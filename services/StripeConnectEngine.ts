@@ -317,10 +317,15 @@ function mapPaymentMethod(data: any): PaymentMethod {
     isDefault: data.is_default,
     status: data.status,
     fingerprint: data.fingerprint,
-    last4: data.last4,
-    brand: data.brand,
-    expMonth: data.exp_month,
-    expYear: data.exp_year,
+    // DB columns are card_last4 / bank_last4 / card_brand / card_exp_*,
+    // NOT flat last4 / brand / exp_* (which is what the row was reading
+    // before this fix). Every card row therefore rendered as
+    // "Card •••• ****" with no brand + no expiry. Coalesce so cards use
+    // card_last4 and bank rows use bank_last4.
+    last4: data.card_last4 ?? data.bank_last4,
+    brand: data.card_brand,
+    expMonth: data.card_exp_month,
+    expYear: data.card_exp_year,
     bankName: data.bank_name,
     details: data.details,
     createdAt: data.created_at,

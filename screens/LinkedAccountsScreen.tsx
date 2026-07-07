@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, FontAwesome } from "@expo/vector-icons";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useNavigation, useFocusEffect, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { StackNavigationProp } from "@react-navigation/stack";
 import * as WebBrowser from "expo-web-browser";
@@ -25,6 +25,7 @@ import { showToast } from "../components/Toast";
 import MethodActionsSheet from "../components/MethodActionsSheet";
 
 type LinkedAccountsNavigationProp = StackNavigationProp<RootStackParamList>;
+type LinkedAccountsRouteProp = RouteProp<RootStackParamList, "LinkedAccounts">;
 
 // Must match the RETURN_URL prefix used by the create-connect-account EF.
 // Stripe requires HTTPS, so we can't use a custom scheme here. WebBrowser
@@ -142,6 +143,28 @@ export default function LinkedAccountsScreen() {
   const { t } = useTranslation();
 
   const navigation = useNavigation<LinkedAccountsNavigationProp>();
+  const route = useRoute<LinkedAccountsRouteProp>();
+  // Select-a-card mode: caller (e.g. MakeContributionScreen) sends the
+  // user here to pick a card and return with the choice. When true the
+  // per-row "..." button is replaced by a "Select" pill.
+  const selectMode = !!route.params?.selectMode;
+  const returnScreen = route.params?.returnScreen;
+  const returnParams = route.params?.returnParams;
+
+  const handleSelectMethod = (method: SavedPaymentMethod) => {
+    if (!returnScreen) {
+      // Defensive fallback — shouldn't happen because MakeContribution
+      // always sets returnScreen when opening in select mode, but the
+      // param is optional in the type so guard anyway.
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate(
+      returnScreen as any,
+      { ...(returnParams ?? {}), selectedPaymentMethodId: method.id },
+    );
+  };
+
   const {
     paymentMethods,
     isLoadingMethods,
@@ -247,7 +270,7 @@ export default function LinkedAccountsScreen() {
     }
   };
 
-  const handleAddCard = async () => {
+  const proceedAddCard = async () => {
     // [debug create-setup-intent] Temporary trace to confirm the tap
     // reaches this handler and how the guard resolves. Remove once the
     // "EF logs are empty" investigation is closed.
@@ -305,6 +328,33 @@ export default function LinkedAccountsScreen() {
     } finally {
       setAddingCard(false);
     }
+  };
+
+  // Public entry point. Pre-flight: if the user already has at least
+  // one saved card, warn before opening the sheet so they don't
+  // accidentally attach a duplicate. Stripe attaches per payment_method
+  // id, not per fingerprint — the same physical card entered twice
+  // ends up as two distinct rows. Warning here is the cheapest
+  // duplicate-prevention we can do without changing the webhook.
+  const handleAddCard = () => {
+    if (cardAccounts.length === 0) {
+      void proceedAddCard();
+      return;
+    }
+    Alert.alert(
+      t("linked_accounts_v2.alert_duplicate_card_title"),
+      t("linked_accounts_v2.alert_duplicate_card_body"),
+      [
+        { text: t("common.cancel"), style: "cancel" },
+        {
+          text: t("linked_accounts_v2.alert_duplicate_card_confirm"),
+          style: "default",
+          onPress: () => {
+            void proceedAddCard();
+          },
+        },
+      ],
+    );
   };
 
   const handleSetPrimary = async (method: SavedPaymentMethod) => {
@@ -452,14 +502,27 @@ export default function LinkedAccountsScreen() {
           </Text>
         </View>
       </View>
-      <TouchableOpacity
-        style={styles.moreButton}
-        onPress={() => setOpenMethod(method)}
-        accessibilityRole="button"
-        accessibilityLabel={t("linked_accounts_v2.action_set_primary")}
-      >
-        <Ionicons name="ellipsis-vertical" size={18} color="#6B7280" />
-      </TouchableOpacity>
+      {selectMode ? (
+        <TouchableOpacity
+          style={styles.selectPill}
+          onPress={() => handleSelectMethod(method)}
+          accessibilityRole="button"
+          accessibilityLabel={t("linked_accounts_v2.action_select")}
+        >
+          <Text style={styles.selectPillText}>
+            {t("linked_accounts_v2.action_select")}
+          </Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          style={styles.moreButton}
+          onPress={() => setOpenMethod(method)}
+          accessibilityRole="button"
+          accessibilityLabel={t("linked_accounts_v2.action_set_primary")}
+        >
+          <Ionicons name="ellipsis-vertical" size={18} color="#6B7280" />
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -903,6 +966,17 @@ const styles = StyleSheet.create({
   },
   moreButton: {
     padding: 8,
+  },
+  selectPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#00C6AE",
+  },
+  selectPillText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
   },
   emptyCard: {
     backgroundColor: "#FFFFFF",

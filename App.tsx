@@ -502,7 +502,13 @@ export type RootStackParamList = {
   PayoutHistory: undefined;
   // Contribution Flow
   SelectCircleContribution: undefined;
-  MakeContribution: { circleId: string };
+  MakeContribution: {
+    circleId: string;
+    // Set by LinkedAccountsScreen when the user returns via the
+    // select-a-card flow. Matched against paymentMethods on focus so
+    // the just-picked card becomes the active selection.
+    selectedPaymentMethodId?: string;
+  };
   ContributionSuccess: { circleId: string; amount: number; transactionId?: string };
   // Wallet Flow
   AddFunds: undefined;
@@ -632,7 +638,15 @@ export type RootStackParamList = {
   NotificationPrefs: undefined;
   NotificationsInbox: undefined;
   PrivacySettings: undefined;
-  LinkedAccounts: undefined;
+  LinkedAccounts: {
+    // Select-a-card mode: rows show a Select button in place of the
+    // more-menu. On tap, we navigate back to `returnScreen` with
+    // { ...returnParams, selectedPaymentMethodId }. Absent = normal
+    // manage-methods mode.
+    selectMode?: boolean;
+    returnScreen?: keyof RootStackParamList;
+    returnParams?: Record<string, any>;
+  } | undefined;
   ActiveSessions: undefined;
   HelpCenter: undefined;
   FAQ: { category?: string; initialQuery?: string } | undefined;
