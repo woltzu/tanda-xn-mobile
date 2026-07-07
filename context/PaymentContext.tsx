@@ -636,10 +636,22 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
     success: boolean;
     error?: string;
   }> => {
-    if (!user) return { success: false, error: "Not authenticated" };
+    // [debug create-setup-intent] Temporary trace: which branch does the
+    // flow take, and does the invoke actually fire? Remove once the
+    // "EF logs are empty" investigation is closed.
+    console.log("[PaymentContext] setupCardForLater called", {
+      hasUser: !!user,
+      userId: user?.id,
+      platform: Platform.OS,
+    });
+    if (!user) {
+      console.log("[PaymentContext] setupCardForLater: early return — no user");
+      return { success: false, error: "Not authenticated" };
+    }
     if (Platform.OS === "web") {
       // Stripe RN PaymentSheet is native-only — match the pattern used in
       // makeTestCharge so the caller can show a clean error.
+      console.log("[PaymentContext] setupCardForLater: early return — web platform");
       return {
         success: false,
         error: "Adding a card requires the iOS or Android app.",
@@ -647,10 +659,18 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
     }
     try {
       // 1. Get the SetupIntent clientSecret from our EF.
+      console.log("[PaymentContext] invoking EF 'create-setup-intent'");
       const { data, error } = await supabase.functions.invoke(
         "create-setup-intent",
         { body: {} },
       );
+      console.log("[PaymentContext] create-setup-intent returned:", {
+        hasData: !!data,
+        dataKeys: data && typeof data === "object" ? Object.keys(data) : null,
+        hasError: !!error,
+        errorMessage: (error as any)?.message,
+        errorName: (error as any)?.name,
+      });
       // The EF returns a JSON body with a specific `error` field on any
       // handled failure (Stripe rejection, missing customer row, bad
       // country, etc.). supabase-js only unpacks that body when the HTTP

@@ -231,10 +231,20 @@ export default function LinkedAccountsScreen() {
   };
 
   const handleAddCard = async () => {
-    if (addingCard) return;
+    // [debug create-setup-intent] Temporary trace to confirm the tap
+    // reaches this handler and how the guard resolves. Remove once the
+    // "EF logs are empty" investigation is closed.
+    console.log("[LinkedAccounts] handleAddCard tapped", { addingCard });
+    if (addingCard) {
+      console.log("[LinkedAccounts] handleAddCard: skipped (addingCard=true)");
+      return;
+    }
     setAddingCard(true);
     try {
-      const { success, error } = await setupCardForLater();
+      console.log("[LinkedAccounts] calling setupCardForLater()");
+      const result = await setupCardForLater();
+      console.log("[LinkedAccounts] setupCardForLater returned:", result);
+      const { success, error } = result;
       if (success) {
         showToast(t("linked_accounts_v2.toast_card_saved"), "success");
       } else if (error === "Canceled") {
