@@ -321,6 +321,30 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: "Stripe error", detail: msg }, 502);
   }
 
+  // Resolve the DB row uuid for the Stripe pm id. The
+  // stripe_payment_intents.payment_method_id column is UUID FK to
+  // stripe_payment_methods.id — inserting the raw pm_... string
+  // fails with "invalid input syntax for type uuid". If the caller
+  // didn't pass a payment_method (PaymentSheet-picks-later path)
+  // this stays null and the insert still succeeds.
+  let paymentMethodRowId: string | null = null;
+  if (paymentMethodId) {
+    const { data: pmRow, error: pmLookupErr } = await serviceClient
+      .from("stripe_payment_methods")
+      .select("id")
+      .eq("stripe_payment_method_id", paymentMethodId)
+      .eq("member_id", user.id)
+      .maybeSingle();
+    if (pmLookupErr) {
+      console.warn(
+        "[create-circle-contribution-intent] payment_method row lookup failed (continuing with null FK):",
+        pmLookupErr.message,
+      );
+    } else {
+      paymentMethodRowId = pmRow?.id ?? null;
+    }
+  }
+
   // ─── 7. Persist to stripe_payment_intents ────────────────────────────
   // Mirrors the create-trip-payment-intent shape so the webhook's
   // payment_intent.* handler can update the row's status on every
@@ -340,7 +364,7 @@ Deno.serve(async (req) => {
       purpose: "contribution",
       circle_id: circleId,
       cycle_id: cycleId,
-      payment_method_id: paymentMethodId,
+      payment_method_id: paymentMethodRowId,
       idempotency_key: idempotencyKey,
       description,
       metadata: intent.metadata,
