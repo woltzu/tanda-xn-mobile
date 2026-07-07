@@ -199,16 +199,27 @@ function mapToSavedMethod(dbMethod: DBPaymentMethod): SavedPaymentMethod {
 // error.context.text() (or already-parsed on data when 2xx). Fall through
 // to whatever textual signal exists so the user sees "Stripe Connect not
 // enabled" instead of "Edge Function returned a non-2xx status code".
+// Combine `error` + `detail` fields — most of our EFs return that shape
+// (see create-connect-account, create-setup-intent). Without `detail`
+// the user sees a useless "Stripe error" instead of the actual reason
+// like "Currency USD is not supported for country CI".
+function combineErrorAndDetail(payload: any): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const err = typeof payload.error === "string" ? payload.error : "";
+  const detail = typeof payload.detail === "string" ? payload.detail : "";
+  if (!err && !detail) return null;
+  if (err && detail) return `${err}: ${detail}`;
+  return err || detail;
+}
+
 async function extractEfErrorMessage(
   error: unknown,
   data: unknown,
 ): Promise<string> {
   // If the EF returned 2xx with `{ error }` — happens on our few EFs that
   // don't use HTTP status for control flow.
-  if (data && typeof data === "object" && "error" in (data as any)) {
-    const e = (data as any).error;
-    if (typeof e === "string" && e.length > 0) return e;
-  }
+  const fromData = combineErrorAndDetail(data);
+  if (fromData) return fromData;
   // FunctionsHttpError carries the response on .context. Try to parse it.
   const anyErr = error as any;
   try {
@@ -218,8 +229,10 @@ async function extractEfErrorMessage(
       if (body) {
         try {
           const parsed = JSON.parse(body);
-          if (parsed?.error && typeof parsed.error === "string") {
-            return parsed.error;
+          const combined = combineErrorAndDetail(parsed);
+          if (combined) {
+            console.log("[extractEfErrorMessage] parsed body:", parsed);
+            return combined;
           }
         } catch {
           // Non-JSON body — return the raw text if it's short enough to
