@@ -198,17 +198,20 @@ export default function MakeContributionScreen() {
   );
 
   // Pick up the id passed back by LinkedAccountsScreen's select flow.
-  // Runs on every params change — the outer navigation.navigate that
-  // returns us here re-mounts the route params, so this effect flips
-  // the selection to the freshly chosen card. Reset the param after
-  // consuming so re-entering the screen doesn't overwrite a manual
-  // choice.
-  useEffect(() => {
-    const picked = route.params?.selectedPaymentMethodId;
-    if (!picked) return;
-    setSelectedMethod(picked);
-    navigation.setParams({ selectedPaymentMethodId: undefined } as any);
-  }, [route.params?.selectedPaymentMethodId, navigation]);
+  // useFocusEffect is safer than a plain useEffect here because a
+  // navigation.navigate onto an already-mounted MakeContribution
+  // re-focuses without re-running mount effects — the focus callback
+  // does fire, and route.params is fresh at that point. Consuming
+  // the param clears it so a subsequent re-focus doesn't clobber a
+  // manual selection.
+  useFocusEffect(
+    useCallback(() => {
+      const picked = route.params?.selectedPaymentMethodId;
+      if (!picked) return;
+      setSelectedMethod(picked);
+      navigation.setParams({ selectedPaymentMethodId: undefined } as any);
+    }, [route.params?.selectedPaymentMethodId, navigation])
+  );
 
   // First-visit coach mark. AsyncStorage-gated per user. Auto-dismiss
   // after 4 s. The interaction with the Confirm button (handleConfirm

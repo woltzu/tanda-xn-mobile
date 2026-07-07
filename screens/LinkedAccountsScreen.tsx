@@ -305,6 +305,13 @@ export default function LinkedAccountsScreen() {
         showToast(t("linked_accounts_v2.toast_card_saved"), "success");
       } else if (error === "Canceled") {
         // Silent cancel — see P0.4 rationale.
+      } else if (error === "Duplicate") {
+        // setupCardForLater already detached the duplicate before
+        // returning; only the copy is our responsibility here.
+        Alert.alert(
+          t("linked_accounts_v2.alert_duplicate_card_title"),
+          t("linked_accounts_v2.alert_duplicate_card_body"),
+        );
       } else {
         showToast(
           error || t("linked_accounts_v2.toast_card_failed"),
@@ -330,31 +337,13 @@ export default function LinkedAccountsScreen() {
     }
   };
 
-  // Public entry point. Pre-flight: if the user already has at least
-  // one saved card, warn before opening the sheet so they don't
-  // accidentally attach a duplicate. Stripe attaches per payment_method
-  // id, not per fingerprint — the same physical card entered twice
-  // ends up as two distinct rows. Warning here is the cheapest
-  // duplicate-prevention we can do without changing the webhook.
+  // Public entry point. Duplicate detection is done inside
+  // setupCardForLater by comparing the freshly-attached card's
+  // brand+last4 against the pre-setup snapshot — if it matches, that
+  // path removes the new row and returns { error: "Duplicate" } so
+  // we can surface the "already saved" copy here.
   const handleAddCard = () => {
-    if (cardAccounts.length === 0) {
-      void proceedAddCard();
-      return;
-    }
-    Alert.alert(
-      t("linked_accounts_v2.alert_duplicate_card_title"),
-      t("linked_accounts_v2.alert_duplicate_card_body"),
-      [
-        { text: t("common.cancel"), style: "cancel" },
-        {
-          text: t("linked_accounts_v2.alert_duplicate_card_confirm"),
-          style: "default",
-          onPress: () => {
-            void proceedAddCard();
-          },
-        },
-      ],
-    );
+    void proceedAddCard();
   };
 
   const handleSetPrimary = async (method: SavedPaymentMethod) => {

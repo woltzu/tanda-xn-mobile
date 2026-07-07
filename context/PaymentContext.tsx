@@ -684,6 +684,28 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
         error: "Adding a card requires the iOS or Android app.",
       };
     }
+    // Snapshot the current card-list brand+last4 so we can detect if
+    // the sheet ends up attaching a duplicate. State (paymentMethods)
+    // isn't captured in this useCallback closure, so we read directly
+    // from the engine. Best-effort — a lookup failure just skips the
+    // dedupe pass rather than blocking a genuine add.
+    let preKeys = new Set<string>();
+    let preIds = new Set<string>();
+    try {
+      const preList = await StripeConnectEngine.getPaymentMethods(user.id);
+      for (const m of preList) {
+        if (m.type !== "card" || m.status !== "active") continue;
+        preIds.add(m.id);
+        const key = `${(m.brand || "").toLowerCase()}::${m.last4 || ""}`;
+        if (key !== "::") preKeys.add(key);
+      }
+    } catch (snapErr) {
+      console.warn(
+        "[PaymentContext] pre-setup snapshot failed (continuing):",
+        snapErr,
+      );
+    }
+
     try {
       // 1. Get the SetupIntent clientSecret from our EF.
       console.log("[PaymentContext] invoking EF 'create-setup-intent'");
@@ -756,6 +778,43 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
       console.log("[PaymentContext] calling refreshPaymentMethods(syncRemote=true)");
       await refreshPaymentMethods({ syncRemote: true });
       console.log("[PaymentContext] refreshPaymentMethods returned");
+
+      // 5. Duplicate detection. Compare the freshly-attached card(s)
+      // against the pre-setup brand+last4 snapshot. Stripe attaches
+      // per payment_method id, so a re-entered physical card lands as
+      // a distinct row we can identify by matching brand+last4. On
+      // hit, soft-remove the copy so it doesn't linger in the UI, then
+      // return { error: "Duplicate" } for the caller to surface a
+      // targeted alert. Best-effort — if the post-list read fails we
+      // fall through to the success path rather than fail-closed on a
+      // legitimate add.
+      try {
+        const postList = await StripeConnectEngine.getPaymentMethods(user.id);
+        const newCards = postList.filter(
+          (m) => m.type === "card" && m.status === "active" && !preIds.has(m.id),
+        );
+        for (const c of newCards) {
+          const key = `${(c.brand || "").toLowerCase()}::${c.last4 || ""}`;
+          if (key !== "::" && preKeys.has(key)) {
+            console.warn("[PaymentContext] duplicate card detected, removing:", c.id);
+            try {
+              await StripeConnectEngine.removePaymentMethod(user.id, c.id);
+              await refreshPaymentMethods({ syncRemote: false });
+            } catch (rmErr) {
+              console.warn(
+                "[PaymentContext] duplicate soft-remove failed (continuing):",
+                rmErr,
+              );
+            }
+            return { success: false, error: "Duplicate" };
+          }
+        }
+      } catch (dedupErr) {
+        console.warn(
+          "[PaymentContext] post-setup dedupe check failed (continuing):",
+          dedupErr,
+        );
+      }
       return { success: true };
     } catch (err: any) {
       const msg = err?.message ?? "Unexpected card setup error";
