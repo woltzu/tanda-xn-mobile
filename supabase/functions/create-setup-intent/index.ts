@@ -100,8 +100,39 @@ Deno.serve(async (req) => {
   }
 
   if (existing?.stripe_customer_id) {
-    stripeCustomerId = existing.stripe_customer_id;
-  } else {
+    // Validate the stored id still exists on Stripe. A stale row from a
+    // wiped test env / mode switch / manual dashboard delete would send
+    // us straight into "No such customer" on setupIntents.create, and
+    // the user would see it as a permanent failure. Retrieve first, and
+    // if Stripe says it's gone, clear the row so the create branch below
+    // reissues a fresh customer.
+    try {
+      const cust = await stripe.customers.retrieve(existing.stripe_customer_id);
+      if ((cust as any).deleted) {
+        throw new Error("customer marked deleted");
+      }
+      stripeCustomerId = existing.stripe_customer_id;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(
+        "[create-setup-intent] stored customer invalid, will recreate:",
+        existing.stripe_customer_id,
+        msg,
+      );
+      const { error: delErr } = await serviceClient
+        .from("stripe_customers")
+        .delete()
+        .eq("member_id", user.id);
+      if (delErr) {
+        console.warn(
+          "[create-setup-intent] stale row delete failed (continuing):",
+          delErr.message,
+        );
+      }
+      stripeCustomerId = null;
+    }
+  }
+  if (!stripeCustomerId) {
     // Create on demand. We hand Stripe the user's auth email + id metadata
     // so the customer is recognisable in the dashboard.
     try {
