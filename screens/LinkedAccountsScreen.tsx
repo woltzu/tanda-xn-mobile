@@ -222,9 +222,24 @@ export default function LinkedAccountsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      refreshPaymentMethods();
+      // syncRemote so the local DB is guaranteed to reflect Stripe
+      // before the engine read populates state. Fixes the case where
+      // a card was just added (webhook still in flight) and a local-
+      // only read returns empty, clearing the list.
+      refreshPaymentMethods({ syncRemote: true });
     }, [refreshPaymentMethods]),
   );
+
+  // Diagnostic: log the actual state the screen renders from. Compare
+  // against the closure-captured "paymentMethods count" logs in
+  // handleAddCard — this one is the truth, that one is stale.
+  useEffect(() => {
+    console.log("[LinkedAccounts] paymentMethods state changed", {
+      total: paymentMethods.length,
+      cards: paymentMethods.filter((m) => m.type !== "us_bank_account").length,
+      banks: paymentMethods.filter((m) => m.type === "us_bank_account").length,
+    });
+  }, [paymentMethods]);
 
   // P1.5: one-shot coach mark. Fires only when (a) the user has at least
   // one method (otherwise the tip is meaningless — there's no ⋮ to tap)

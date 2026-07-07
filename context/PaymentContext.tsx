@@ -308,10 +308,20 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
       console.log("[PaymentContext] reading stripe_payment_methods via engine");
       const methods = await StripeConnectEngine.getPaymentMethods(user.id);
       const active = methods.filter((m) => m.status === 'active');
-      console.log("[PaymentContext] payment_methods loaded:", { total: methods.length, active: active.length });
+      console.log("[PaymentContext] payment_methods loaded:", {
+        total: methods.length,
+        active: active.length,
+        firstBrand: active[0]?.brand,
+        firstLast4: active[0]?.last4,
+      });
       setPaymentMethods(active.map(mapToSavedMethod));
     } catch (err: any) {
-      console.warn('[PaymentContext] Failed to load payment methods:', err.message);
+      // Preserve the previously-loaded list on failure rather than
+      // wiping state to []. A transient network / RLS blip
+      // shouldn't blank the whole screen — the user's existing
+      // methods should keep rendering until the next successful
+      // fetch replaces them.
+      console.warn('[PaymentContext] Failed to load payment methods (preserving prior state):', err.message);
       setPaymentError(err.message);
     } finally {
       setIsLoadingMethods(false);
