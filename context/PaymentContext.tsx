@@ -281,6 +281,7 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
   const refreshPaymentMethods = useCallback(async (
     opts?: { syncRemote?: boolean },
   ) => {
+    console.log("[PaymentContext] refreshPaymentMethods called", { syncRemote: !!opts?.syncRemote, hasUser: !!user });
     if (!user) return;
     setIsLoadingMethods(true);
     try {
@@ -290,7 +291,13 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
       // useFocusEffect / realtime path does not.
       if (opts?.syncRemote) {
         try {
-          await supabase.functions.invoke('sync-stripe-methods', { body: {} });
+          console.log("[PaymentContext] invoking sync-stripe-methods EF");
+          const { data: syncData, error: syncErr } = await supabase.functions.invoke('sync-stripe-methods', { body: {} });
+          console.log("[PaymentContext] sync-stripe-methods returned:", {
+            hasData: !!syncData,
+            data: syncData,
+            errorMessage: (syncErr as any)?.message,
+          });
         } catch (syncErr: any) {
           console.warn(
             '[PaymentContext] sync-stripe-methods failed (continuing):',
@@ -298,8 +305,10 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
           );
         }
       }
+      console.log("[PaymentContext] reading stripe_payment_methods via engine");
       const methods = await StripeConnectEngine.getPaymentMethods(user.id);
       const active = methods.filter((m) => m.status === 'active');
+      console.log("[PaymentContext] payment_methods loaded:", { total: methods.length, active: active.length });
       setPaymentMethods(active.map(mapToSavedMethod));
     } catch (err: any) {
       console.warn('[PaymentContext] Failed to load payment methods:', err.message);
@@ -735,7 +744,9 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
       // card is missing on first render and the user thinks nothing
       // happened. Pulling from Stripe direct via sync-stripe-methods
       // guarantees the new card shows up.
+      console.log("[PaymentContext] calling refreshPaymentMethods(syncRemote=true)");
       await refreshPaymentMethods({ syncRemote: true });
+      console.log("[PaymentContext] refreshPaymentMethods returned");
       return { success: true };
     } catch (err: any) {
       const msg = err?.message ?? "Unexpected card setup error";

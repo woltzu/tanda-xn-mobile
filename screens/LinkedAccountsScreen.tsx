@@ -267,6 +267,18 @@ export default function LinkedAccountsScreen() {
       console.log("[LinkedAccounts] setupCardForLater returned:", result);
       const { success, error } = result;
       if (success) {
+        // [debug create-setup-intent] Belt-and-braces refresh — the
+        // context refresh should already have run, but if a stale
+        // useCallback or a swallowed sync error blocked it, this
+        // pass will still show the newly-saved card. Remove with
+        // the other traces once the refresh path is verified.
+        console.log("[LinkedAccounts] success — calling refreshPaymentMethods(syncRemote=true)");
+        try {
+          await refreshPaymentMethods({ syncRemote: true });
+          console.log("[LinkedAccounts] post-success refresh completed, paymentMethods count:", paymentMethods.length);
+        } catch (rErr: any) {
+          console.warn("[LinkedAccounts] post-success refresh failed:", rErr?.message);
+        }
         showToast(t("linked_accounts_v2.toast_card_saved"), "success");
       } else if (error === "Canceled") {
         // Silent cancel — see P0.4 rationale.
