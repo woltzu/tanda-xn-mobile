@@ -210,6 +210,12 @@ export default function LinkedAccountsScreen() {
   const isUS = (profile?.country ?? "").toUpperCase() === "US";
 
   const [addingCard, setAddingCard] = useState(false);
+  // When the user opens LinkedAccounts in select mode and taps Add Card,
+  // we snapshot the set of card ids they had beforehand. The effect
+  // below watches paymentMethods; when a new id appears we auto-select
+  // it and pop back to the caller — one-tap "add + use this card"
+  // instead of forcing the user to tap Select after the sheet closes.
+  const [pendingSelectSnapshot, setPendingSelectSnapshot] = useState<Set<string> | null>(null);
   // P1.1: which row's ⋮ sheet is open (null = closed).
   const [openMethod, setOpenMethod] = useState<SavedPaymentMethod | null>(null);
   // P1.4: pull-to-refresh spinner state. Separate from isLoadingMethods so
@@ -240,6 +246,28 @@ export default function LinkedAccountsScreen() {
       banks: paymentMethods.filter((m) => m.type === "us_bank_account").length,
     });
   }, [paymentMethods]);
+
+  // Auto-select-after-add in select mode. When Add Card completes we
+  // snapshot pre-existing ids; this effect fires whenever
+  // paymentMethods updates, spots the freshly-added row, and pops
+  // back to the caller with it pre-selected. Saves the user a Select
+  // tap when they clearly intended to use the card they just added.
+  useEffect(() => {
+    if (!pendingSelectSnapshot) return;
+    if (!selectMode || !returnScreen) return;
+    const newCards = paymentMethods
+      .filter((m) => m.type !== "us_bank_account")
+      .filter((m) => !pendingSelectSnapshot.has(m.id));
+    if (newCards.length === 0) return;
+    // engine sort is created_at DESC → newest first
+    const newest = newCards[0];
+    setPendingSelectSnapshot(null);
+    handleSelectMethod(newest);
+    // handleSelectMethod is stable-enough here (relies on nav +
+    // route.params, both of which are already deps of the callback
+    // above). Not adding to deps to avoid an infinite loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentMethods, pendingSelectSnapshot, selectMode, returnScreen]);
 
   // P1.5: one-shot coach mark. Fires only when (a) the user has at least
   // one method (otherwise the tip is meaningless — there's no ⋮ to tap)
@@ -314,6 +342,12 @@ export default function LinkedAccountsScreen() {
   };
 
   const proceedAddCard = async () => {
+    // If we're in select mode, snapshot the pre-existing card ids so
+    // the effect below can identify the newly-added row and pop back
+    // with it selected.
+    if (selectMode && returnScreen) {
+      setPendingSelectSnapshot(new Set(cardAccounts.map((c) => c.id)));
+    }
     // [debug create-setup-intent] Temporary trace to confirm the tap
     // reaches this handler and how the guard resolves. Remove once the
     // "EF logs are empty" investigation is closed.

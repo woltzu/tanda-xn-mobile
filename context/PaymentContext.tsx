@@ -497,7 +497,22 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
   const removePaymentMethod = useCallback(async (paymentMethodId: string) => {
     if (!user) throw new Error('User not authenticated');
     try {
-      await StripeConnectEngine.removePaymentMethod(user.id, paymentMethodId);
+      // Route through the detach-payment-method EF instead of the
+      // engine's soft-remove. The engine only set status='removed' on
+      // the row, which sync-stripe-methods reset to 'active' on the
+      // next focus refresh — making the "delete" feel broken. The EF
+      // detaches from Stripe first, then hard-deletes the row.
+      const { data, error } = await supabase.functions.invoke(
+        'detach-payment-method',
+        { body: { paymentMethodId } },
+      );
+      if (error) {
+        const msg = await extractEfErrorMessage(error, data);
+        throw new Error(msg);
+      }
+      if (data?.error) throw new Error(String(data.error));
+      // Optimistic local prune so the row disappears immediately —
+      // the state re-syncs on the next refreshPaymentMethods anyway.
       setPaymentMethods((prev) => prev.filter((m) => m.id !== paymentMethodId));
     } catch (err: any) {
       setPaymentError(err.message);

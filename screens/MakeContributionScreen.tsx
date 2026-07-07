@@ -193,7 +193,12 @@ export default function MakeContributionScreen() {
   // "30 s cache for contribution data" item is N/A here.
   useFocusEffect(
     useCallback(() => {
-      refreshPaymentMethods({ syncRemote: false }).catch(() => undefined);
+      // syncRemote so the DB is guaranteed populated before the local
+      // read — otherwise a card just saved from another screen may
+      // not appear in the list yet and the contribution flow only
+      // offers "Add a card" even though methods exist. Cheap: one EF
+      // call per focus, versus the confusion of an empty list.
+      refreshPaymentMethods({ syncRemote: true }).catch(() => undefined);
     }, [refreshPaymentMethods])
   );
 
