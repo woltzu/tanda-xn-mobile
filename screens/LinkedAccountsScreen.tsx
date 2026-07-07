@@ -241,6 +241,10 @@ export default function LinkedAccountsScreen() {
     }
     setAddingCard(true);
     try {
+      console.log(
+        "[LinkedAccounts] typeof setupCardForLater =",
+        typeof setupCardForLater,
+      );
       console.log("[LinkedAccounts] calling setupCardForLater()");
       const result = await setupCardForLater();
       console.log("[LinkedAccounts] setupCardForLater returned:", result);
@@ -255,6 +259,20 @@ export default function LinkedAccountsScreen() {
           "error",
         );
       }
+    } catch (err: any) {
+      // [debug create-setup-intent] Explicit catch so a sync/async throw
+      // in the call chain doesn't get silently swallowed as an unhandled
+      // promise rejection. Remove with the console.log traces once the
+      // "EF logs are empty" investigation is closed.
+      console.error("[LinkedAccounts] handleAddCard threw:", {
+        name: err?.name,
+        message: err?.message,
+        stack: err?.stack,
+      });
+      showToast(
+        err?.message || t("linked_accounts_v2.toast_card_failed"),
+        "error",
+      );
     } finally {
       setAddingCard(false);
     }
