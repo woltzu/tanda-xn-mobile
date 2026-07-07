@@ -270,6 +270,30 @@ Deno.serve(async (req) => {
     cycleNumber !== null ? ` cycle ${cycleNumber}` : ""
   }${platformFeeCents > 0 ? ` (+${platformFeeBps} bps fee)` : ""}`;
 
+  // Resolve the caller's Stripe customer. Stripe requires the customer
+  // to be present on the PaymentIntent whenever a payment_method is
+  // attached that already belongs to a customer — otherwise it rejects
+  // with "The payment_method parameter supplied ... belongs to the
+  // Customer ... Please include the Customer in the customer parameter
+  // on the PaymentIntent." Even when no PM is passed, including the
+  // customer is best-practice: PaymentSheet can then list this
+  // customer's saved methods.
+  const { data: custRow, error: custErr } = await serviceClient
+    .from("stripe_customers")
+    .select("stripe_customer_id")
+    .eq("member_id", user.id)
+    .maybeSingle();
+  if (custErr) {
+    console.error(
+      "[create-circle-contribution-intent] stripe_customers lookup failed:",
+      custErr.message,
+    );
+    return jsonResponse(
+      { error: "Failed to look up Stripe customer", detail: custErr.message },
+      500,
+    );
+  }
+
   const piParams: Stripe.PaymentIntentCreateParams = {
     amount: chargeAmountCents,
     currency,
@@ -277,6 +301,9 @@ Deno.serve(async (req) => {
     description,
     automatic_payment_methods: { enabled: true },
   };
+  if (custRow?.stripe_customer_id) {
+    piParams.customer = custRow.stripe_customer_id;
+  }
   // If the screen already picked a saved Stripe payment method, attach it
   // so PaymentSheet pre-selects it. We do NOT call .confirm here — the
   // client-side PaymentSheet does that to surface 3-D Secure / SCA
