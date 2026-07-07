@@ -84,20 +84,24 @@ const getStripeMethodIcon = (type: string): keyof typeof Ionicons.glyphMap => {
 };
 
 const formatStripeMethodName = (pm: any): string => {
-  if (pm.brand && pm.last4) {
-    const brand = pm.brand.charAt(0).toUpperCase() + pm.brand.slice(1);
-    return `${brand} •••• ${pm.last4}`;
+  // SavedPaymentMethod uses card* / bank* prefixes; the pre-fix
+  // shape (flat brand / last4) is dead — mapToSavedMethod hasn't
+  // returned those fields in months.
+  const last4 = pm.cardLast4 ?? pm.bankLast4;
+  if (pm.cardBrand && last4) {
+    const brand = pm.cardBrand.charAt(0).toUpperCase() + pm.cardBrand.slice(1);
+    return `${brand} •••• ${last4}`;
   }
-  if (pm.bankName && pm.last4) {
-    return `${pm.bankName} •••• ${pm.last4}`;
+  if (pm.bankName && last4) {
+    return `${pm.bankName} •••• ${last4}`;
   }
-  if (pm.last4) return `•••• ${pm.last4}`;
+  if (last4) return `•••• ${last4}`;
   return pm.type === "us_bank_account" ? "Bank Account" : "Card";
 };
 
 const formatStripeMethodDescription = (pm: any): string => {
-  if (pm.expMonth && pm.expYear) {
-    return `Expires ${String(pm.expMonth).padStart(2, "0")}/${pm.expYear}`;
+  if (pm.cardExpMonth && pm.cardExpYear) {
+    return `Expires ${String(pm.cardExpMonth).padStart(2, "0")}/${pm.cardExpYear}`;
   }
   if (pm.bankName) return pm.bankName;
   return pm.type === "us_bank_account" ? "Bank account" : "Saved payment method";
@@ -283,17 +287,24 @@ export default function MakeContributionScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [circle?.id]);
 
-  // Merge wallet option with saved Stripe payment methods
+  // Merge wallet option with saved Stripe payment methods.
+  // SavedPaymentMethod has no `status` field — mapToSavedMethod
+  // already dropped it because refreshPaymentMethods pre-filters by
+  // status='active' at the engine layer. Filtering here on pm.status
+  // therefore matched nothing and the map returned only the wallet
+  // row. Drop the filter. Use pm.id (DB uuid) as the local id so it
+  // lines up with what LinkedAccountsScreen sends back in the
+  // select-flow (route.params.selectedPaymentMethodId).
   const paymentMethods: PaymentMethod[] = useMemo(() => {
-    const stripeMapped: PaymentMethod[] = (stripePaymentMethods || [])
-      .filter((pm: any) => pm.status === "active")
-      .map((pm: any) => ({
-        id: pm.stripePaymentMethodId || pm.id,
+    const stripeMapped: PaymentMethod[] = (stripePaymentMethods || []).map(
+      (pm: any) => ({
+        id: pm.id,
         name: formatStripeMethodName(pm),
         icon: getStripeMethodIcon(pm.type),
         description: formatStripeMethodDescription(pm),
         available: true,
-      }));
+      }),
+    );
     return [WALLET_METHOD, ...stripeMapped];
   }, [stripePaymentMethods]);
 
@@ -353,9 +364,10 @@ export default function MakeContributionScreen() {
         if (!cancelled) setSelectedMethod("wallet");
         return;
       }
-      const activeCards = (stripePaymentMethods || []).filter(
-        (pm: any) => pm.status === "active",
-      );
+      // SavedPaymentMethod has no status field; the context state
+      // is already scoped to active by refreshPaymentMethods, so any
+      // row in stripePaymentMethods is fair game.
+      const activeCards = stripePaymentMethods || [];
       if (activeCards.length === 0) {
         if (!cancelled) setSelectedMethod("wallet");
         return;
@@ -363,18 +375,16 @@ export default function MakeContributionScreen() {
       try {
         const lastId = await AsyncStorage.getItem(LAST_METHOD_KEY);
         if (cancelled) return;
+        // Match against pm.id (DB uuid) — that's what LinkedAccounts's
+        // select flow and the local paymentMethods array both use.
         const lastStillActive = lastId
-          ? activeCards.find((pm: any) =>
-              (pm.stripePaymentMethodId || pm.id) === lastId,
-            )
+          ? activeCards.find((pm: any) => pm.id === lastId)
           : null;
         const pick = lastStillActive ?? activeCards[0];
-        setSelectedMethod(pick.stripePaymentMethodId || pick.id);
+        setSelectedMethod(pick.id);
       } catch {
         if (!cancelled) {
-          setSelectedMethod(
-            activeCards[0].stripePaymentMethodId || activeCards[0].id,
-          );
+          setSelectedMethod(activeCards[0].id);
         }
       }
     })();
@@ -497,10 +507,9 @@ export default function MakeContributionScreen() {
   // red insufficient-balance warning and prevents disabling Contribute
   // when a card could still cover the payment.
   const hasCardAlternative = useMemo(
-    () =>
-      (stripePaymentMethods || []).some(
-        (pm: any) => pm.status === "active",
-      ),
+    // No .status field on SavedPaymentMethod — the context state is
+    // already active-only, so any entry counts as an alternative.
+    () => (stripePaymentMethods || []).length > 0,
     [stripePaymentMethods],
   );
   // Contribute disables only when the wallet is selected AND short. If
@@ -694,12 +703,25 @@ export default function MakeContributionScreen() {
         const currency = paymentCurrency.toLowerCase();
         const cycleId = `cycle-${cycleInfo.cycleNumber}`;
 
+        // selectedMethod is the local id used by the UI: "wallet" or
+        // a DB uuid. The Stripe intent EF expects the Stripe pm id
+        // (pm_...) — look it up from the context list. If the selected
+        // row disappears mid-flow (rare, remote sync ran), fall
+        // through with undefined so the EF picks the customer's
+        // default rather than a stale mismatch.
+        const stripePmId =
+          selectedMethod === "wallet"
+            ? undefined
+            : (stripePaymentMethods || []).find(
+                (pm: any) => pm.id === selectedMethod,
+              )?.stripePaymentMethodId;
+
         const { clientSecret } = await createContribution(
           amountCents,
           currency,
           circleId,
           cycleId,
-          selectedMethod // stripePaymentMethodId
+          stripePmId,
         );
 
         if (clientSecret) {
