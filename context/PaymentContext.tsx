@@ -729,9 +729,13 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
         return { success: false, error: msg };
       }
 
-      // 4. Refresh — payment_method.attached webhook may already have
-      // landed; even if not, the optimistic refresh keeps the list close.
-      await refreshPaymentMethods();
+      // 4. Refresh with syncRemote so we don't wait on the webhook. A
+      // plain local read here often runs microseconds before the
+      // payment_method.attached webhook lands, so the freshly saved
+      // card is missing on first render and the user thinks nothing
+      // happened. Pulling from Stripe direct via sync-stripe-methods
+      // guarantees the new card shows up.
+      await refreshPaymentMethods({ syncRemote: true });
       return { success: true };
     } catch (err: any) {
       const msg = err?.message ?? "Unexpected card setup error";

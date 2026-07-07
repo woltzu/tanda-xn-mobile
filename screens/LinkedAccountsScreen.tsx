@@ -26,7 +26,12 @@ import MethodActionsSheet from "../components/MethodActionsSheet";
 
 type LinkedAccountsNavigationProp = StackNavigationProp<RootStackParamList>;
 
-const CONNECT_RETURN_URL = "tandaxn://linked-accounts";
+// Must match the RETURN_URL prefix used by the create-connect-account EF.
+// Stripe requires HTTPS, so we can't use a custom scheme here. WebBrowser
+// dismisses as soon as it sees a URL beginning with this prefix, so any
+// query-string variant (?onboarding=complete / refresh) resolves the
+// same way.
+const CONNECT_RETURN_URL = "https://v0-tanda-xn.vercel.app/linked-accounts";
 
 // P1.5 (payment-methods review): once-per-user-per-device coach mark
 // gate. Bumped suffix forces re-show if we ever rewrite the copy.

@@ -34,8 +34,13 @@ const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: jsonHeaders });
 
-const RETURN_URL = "tandaxn://linked-accounts?onboarding=complete";
-const REFRESH_URL = "tandaxn://linked-accounts?onboarding=refresh";
+// Stripe's accountLinks API rejects custom-scheme URLs ("Not a valid
+// URL"). It requires HTTPS. Route through our Vercel-hosted web bundle
+// — the SPA lives at /linked-accounts and the client's
+// WebBrowser.openAuthSessionAsync dismisses as soon as it sees the URL
+// prefix match, so the SPA never actually needs to finish rendering.
+const RETURN_URL = "https://v0-tanda-xn.vercel.app/linked-accounts?onboarding=complete";
+const REFRESH_URL = "https://v0-tanda-xn.vercel.app/linked-accounts?onboarding=refresh";
 
 Deno.serve(async (req) => {
   // CORS preflight
