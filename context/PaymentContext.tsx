@@ -6,6 +6,7 @@ import React, {
   useCallback,
   ReactNode,
 } from 'react';
+import { Platform } from 'react-native';
 
 // Stripe is loaded via the platform-resolved shim. On iOS / Android,
 // `lib/stripeShim.ts` re-exports the real API from

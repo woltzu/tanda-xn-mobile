@@ -223,9 +223,21 @@ export default function LinkedAccountsScreen() {
       // needs a Stripe Dashboard fix, not a support ticket, so route
       // the copy accordingly.
       const isConnectDisabled = /connect/i.test(raw) && /(sign(ed)?\s*up|dashboard\.stripe\.com\/connect|not enabled)/i.test(raw);
-      const body = isConnectDisabled
-        ? t('linked_accounts_v2.alert_stripe_connect_disabled')
-        : raw || t('linked_accounts_v2.alert_failed_start');
+      // Second known failure: create-connect-account created the Stripe
+      // account but the stripe_connected_accounts INSERT failed. This
+      // usually means schema drift (missing column) or an RLS/permission
+      // issue on the service role — either way, an unhelpful message
+      // for the user. Route to a friendly copy that tells them to try
+      // again + contact support.
+      const isPersistFailure = /persist connected account/i.test(raw);
+      let body: string;
+      if (isConnectDisabled) {
+        body = t('linked_accounts_v2.alert_stripe_connect_disabled');
+      } else if (isPersistFailure) {
+        body = t('linked_accounts_v2.alert_bank_persist_failure');
+      } else {
+        body = raw || t('linked_accounts_v2.alert_failed_start');
+      }
       Alert.alert(t('linked_accounts_v2.alert_error_title'), body);
     }
   };

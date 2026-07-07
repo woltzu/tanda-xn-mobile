@@ -8025,6 +8025,7 @@
     "alert_failed_start": "Failed to start bank account setup.",
     "alert_bank_setup_unavailable": "Bank account setup isn't available yet. Please check back soon.",
     "alert_stripe_connect_disabled": "Bank connection isn't enabled on our payment account yet. Please contact support so we can turn it on.",
+    "alert_bank_persist_failure": "We couldn't finish linking your bank right now. Please try again in a moment. If it keeps failing, contact support.",
     "alert_failed_default": "Failed to set default payment method.",
     "alert_failed_remove": "Failed to remove payment method.",
     "loading_text": "Loading payment methods...",
