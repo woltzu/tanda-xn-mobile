@@ -619,6 +619,10 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
         paymentIntentClientSecret: clientSecret,
         merchantDisplayName: 'TandaXn',
         allowsDelayedPaymentMethods: false,
+        // Return URL for redirect-based payment methods (Klarna, Cash App
+        // Pay, iDEAL, etc.) and for the 3DS challenge sheet on iOS. The
+        // scheme "tandaxn" is registered in app.json.
+        returnURL: 'tandaxn://stripe-redirect',
       });
 
       if (initError) {
@@ -720,6 +724,11 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
         setupIntentClientSecret: data.clientSecret,
         merchantDisplayName: "TandaXn",
         allowsDelayedPaymentMethods: false,
+        // Return URL for redirect-based save-card methods and the 3DS
+        // challenge sheet on iOS. Silences the SDK's runtime warning
+        // and enables the fuller list of payment methods on both
+        // platforms. Scheme "tandaxn" is registered in app.json.
+        returnURL: "tandaxn://stripe-redirect",
       });
       if (initError) {
         const msg = initError.message || "Failed to initialise card setup";
