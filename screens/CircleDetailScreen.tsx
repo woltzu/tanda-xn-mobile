@@ -1947,6 +1947,9 @@ export default function CircleDetailScreen() {
     <View style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        overScrollMode="never"
+        nestedScrollEnabled
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

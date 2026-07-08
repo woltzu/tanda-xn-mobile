@@ -393,6 +393,8 @@ export default function WalletScreen() {
     <View style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        overScrollMode="never"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

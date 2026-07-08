@@ -687,6 +687,8 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        overScrollMode="never"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
