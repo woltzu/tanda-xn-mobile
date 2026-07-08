@@ -1767,33 +1767,32 @@ export default function CircleDetailScreen() {
     );
   };
 
-  const renderMembersTab = () => (
+  // The Members tab's "N Members" title + loading/empty states are
+  // rendered as the FlatList's ListHeader sub-block (or a single-row
+  // sentinel) rather than a nested FlatList — the outer surface is
+  // now a FlatList itself, so members are its data instead of a
+  // nested list.
+  const renderMembersTabHeader = () => (
     <View style={styles.tabContent}>
       <Text style={styles.sectionTitle}>
         {members.length} Member{members.length !== 1 ? "s" : ""}
       </Text>
+    </View>
+  );
 
-      {isLoadingMembers ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.accentTeal} />
-          <Text style={styles.loadingText}>{t("circle_detail.loading_members")}</Text>
-        </View>
-      ) : members.length === 0 ? (
-        <View style={styles.emptyMembersContainer}>
-          <Ionicons name="people-outline" size={48} color={colors.textSecondary} />
-          <Text style={styles.emptyMembersText}>{t("circle_detail.empty_no_members")}</Text>
-        </View>
-      ) : (
-        // FlatList inside the outer ScrollView — scrollEnabled={false}
-        // defers scroll to the parent and avoids the nested-virtualized-
-        // list warning. keyExtractor uses member.id to stabilize re-orders.
-        <FlatList
-          data={members}
-          keyExtractor={(m) => m.id}
-          renderItem={renderMemberRow}
-          scrollEnabled={false}
-        />
-      )}
+  const renderMembersLoading = () => (
+    <View style={[styles.tabContent, styles.loadingContainer]}>
+      <ActivityIndicator size="large" color={colors.accentTeal} />
+      <Text style={styles.loadingText}>{t("circle_detail.loading_members")}</Text>
+    </View>
+  );
+
+  const renderMembersEmpty = () => (
+    <View style={[styles.tabContent, styles.emptyMembersContainer]}>
+      <Ionicons name="people-outline" size={48} color={colors.textSecondary} />
+      <Text style={styles.emptyMembersText}>
+        {t("circle_detail.empty_no_members")}
+      </Text>
     </View>
   );
 
@@ -1943,13 +1942,65 @@ export default function CircleDetailScreen() {
     );
   };
 
+  // ── Outer-FlatList row model ────────────────────────────────────────────
+  // Overview + Activity are single-item sentinel rows so their existing
+  // renderers can stay untouched. Members explodes into one row per
+  // member (or a single loading / empty sentinel while data is
+  // resolving). listData is memoized on the driving state so the
+  // FlatList doesn't churn cells unnecessarily.
+  type CircleListRow =
+    | { kind: "overview" }
+    | { kind: "activity" }
+    | { kind: "members-loading" }
+    | { kind: "members-empty" }
+    | { kind: "member"; member: CircleMember };
+
+  const listData = useMemo<CircleListRow[]>(() => {
+    if (activeTab === "overview") return [{ kind: "overview" }];
+    if (activeTab === "activity") return [{ kind: "activity" }];
+    if (isLoadingMembers) return [{ kind: "members-loading" }];
+    if (members.length === 0) return [{ kind: "members-empty" }];
+    return members.map((m) => ({ kind: "member" as const, member: m }));
+  }, [activeTab, isLoadingMembers, members]);
+
+  const rowKeyExtractor = (item: CircleListRow, index: number) => {
+    if (item.kind === "member") return item.member.id;
+    return `${item.kind}-${index}`;
+  };
+
+  const renderListRow = ({ item }: { item: CircleListRow }) => {
+    switch (item.kind) {
+      case "overview":
+        return renderOverviewTab();
+      case "activity":
+        return renderActivityTab();
+      case "members-loading":
+        return renderMembersLoading();
+      case "members-empty":
+        return renderMembersEmpty();
+      case "member":
+        return renderMemberRow({ item: item.member });
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <ScrollView
+      {/* Outer surface converted from ScrollView → FlatList so the
+          Members tab's rows are virtualized natively rather than
+          nested. See the row-union above (`CircleListRow`) — the
+          FlatList's data flips on tab change; overview/activity stay
+          single-item sentinels routed to the existing tab renderers
+          in renderItem. */}
+      <FlatList
+        data={listData}
+        renderItem={renderListRow}
+        keyExtractor={rowKeyExtractor}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         overScrollMode="never"
-        nestedScrollEnabled
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1958,97 +2009,100 @@ export default function CircleDetailScreen() {
             colors={[colors.accentTeal]}
           />
         }
-      >
-        {/* Header */}
-        <LinearGradient colors={[colors.primaryNavy, "#143654"]} style={styles.header}>
-          <View style={styles.headerTop}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
-            </TouchableOpacity>
-            <View style={styles.headerActions}>
-              {/* Timeline + Voting were rendered as inline tabs but
-                  actually navigated away to other screens — confusing
-                  and broke back-stack expectations. Promoted to header
-                  icon buttons so the tab bar holds only true panes. */}
-              <TouchableOpacity
-                style={styles.headerActionButton}
-                onPress={() =>
-                  navigation.navigate(Routes.CycleTimeline as never, { circleId } as never)
-                }
-                accessibilityRole="button"
-                accessibilityLabel={t("circle_detail.tab_timeline")}
-              >
-                <Ionicons name="time-outline" size={20} color={colors.cardBg} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.headerActionButton}
-                onPress={() =>
-                  navigation.navigate(Routes.CircleVoting as never, { circleId } as never)
-                }
-                accessibilityRole="button"
-                accessibilityLabel={t("circle_detail.tab_voting")}
-              >
-                <Ionicons name="reader-outline" size={20} color={colors.cardBg} />
-                {openProposalCount > 0 && (
-                  <View style={styles.headerActionBadge}>
-                    <Text style={styles.headerActionBadgeText}>
-                      {openProposalCount > 9 ? "9+" : openProposalCount}
-                    </Text>
+        ListHeaderComponent={
+          <View>
+            {/* Header */}
+            <LinearGradient colors={[colors.primaryNavy, "#143654"]} style={styles.header}>
+              <View style={styles.headerTop}>
+                <TouchableOpacity
+                  style={styles.backButton}
+                  onPress={() => navigation.goBack()}
+                >
+                  <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
+                </TouchableOpacity>
+                <View style={styles.headerActions}>
+                  {/* Timeline + Voting were rendered as inline tabs but
+                      actually navigated away to other screens — confusing
+                      and broke back-stack expectations. Promoted to header
+                      icon buttons so the tab bar holds only true panes. */}
+                  <TouchableOpacity
+                    style={styles.headerActionButton}
+                    onPress={() =>
+                      navigation.navigate(Routes.CycleTimeline as never, { circleId } as never)
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={t("circle_detail.tab_timeline")}
+                  >
+                    <Ionicons name="time-outline" size={20} color={colors.cardBg} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.headerActionButton}
+                    onPress={() =>
+                      navigation.navigate(Routes.CircleVoting as never, { circleId } as never)
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={t("circle_detail.tab_voting")}
+                  >
+                    <Ionicons name="reader-outline" size={20} color={colors.cardBg} />
+                    {openProposalCount > 0 && (
+                      <View style={styles.headerActionBadge}>
+                        <Text style={styles.headerActionBadgeText}>
+                          {openProposalCount > 9 ? "9+" : openProposalCount}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.headerActionButton}
+                    onPress={() => setShowMenu(true)}
+                  >
+                    <Ionicons name="ellipsis-vertical" size={20} color={colors.cardBg} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Circle Info */}
+              <View style={styles.circleInfo}>
+                <View style={styles.circleIconContainer}>
+                  <Text style={styles.circleEmoji}>{circle.emoji}</Text>
+                </View>
+                <Text style={styles.circleName}>{circle.name}</Text>
+                <View style={styles.circleTypeBadge}>
+                  <Text style={styles.circleTypeText}>{getCircleTypeLabel(circle.type)}</Text>
+                </View>
+                {circle.verified && (
+                  <View style={styles.verifiedBadge}>
+                    <Ionicons name="shield-checkmark" size={14} color={colors.accentTeal} />
+                    <Text style={styles.verifiedText}>{t("circle_detail.tag_verified")}</Text>
                   </View>
                 )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.headerActionButton}
-                onPress={() => setShowMenu(true)}
-              >
-                <Ionicons name="ellipsis-vertical" size={20} color={colors.cardBg} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Circle Info */}
-          <View style={styles.circleInfo}>
-            <View style={styles.circleIconContainer}>
-              <Text style={styles.circleEmoji}>{circle.emoji}</Text>
-            </View>
-            <Text style={styles.circleName}>{circle.name}</Text>
-            <View style={styles.circleTypeBadge}>
-              <Text style={styles.circleTypeText}>{getCircleTypeLabel(circle.type)}</Text>
-            </View>
-            {circle.verified && (
-              <View style={styles.verifiedBadge}>
-                <Ionicons name="shield-checkmark" size={14} color={colors.accentTeal} />
-                <Text style={styles.verifiedText}>{t("circle_detail.tag_verified")}</Text>
               </View>
-            )}
-          </View>
 
-          {/* Tabs — all three switch inline panes. Timeline + Voting
-              moved to header icon buttons above (they navigated away,
-              not switched panes). */}
-          <View style={styles.tabsContainer}>
-            {(["overview", "members", "activity"] as const).map((tab) => (
-              <TouchableOpacity
-                key={tab}
-                style={[styles.tab, activeTab === tab && styles.tabActive]}
-                onPress={() => trackTabSwitch(tab)}
-              >
-                <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </LinearGradient>
+              {/* Tabs — all three switch inline panes. Timeline + Voting
+                  moved to header icon buttons above (they navigated away,
+                  not switched panes). */}
+              <View style={styles.tabsContainer}>
+                {(["overview", "members", "activity"] as const).map((tab) => (
+                  <TouchableOpacity
+                    key={tab}
+                    style={[styles.tab, activeTab === tab && styles.tabActive]}
+                    onPress={() => trackTabSwitch(tab)}
+                  >
+                    <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                      {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </LinearGradient>
 
-        {/* Tab Content */}
-        {activeTab === "overview" && renderOverviewTab()}
-        {activeTab === "members" && renderMembersTab()}
-        {activeTab === "activity" && renderActivityTab()}
-      </ScrollView>
+            {/* Per-tab sub-header. Members needs a "N Members" title
+                above its rows; overview + activity roll straight into
+                their sentinel-row renderer below. */}
+            {activeTab === "members" && renderMembersTabHeader()}
+          </View>
+        }
+      />
 
       {/* Bottom Action Button */}
       <View style={styles.bottomBar}>
