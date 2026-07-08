@@ -188,7 +188,7 @@ export default function HomeScreen() {
   // user_wallets.main_balance_cents from Supabase and pushes the new
   // value into the currencies array. The render here re-runs as soon as
   // that state lands.
-  const { balance: walletBalance } = useWallet();
+  const { balance: walletBalance, refreshWallet } = useWallet();
 
   // Real goals from the DB. Replaces the prior `mockData.goals_balance`
   // constant (was $400) and `mockGoal` ("New Car"). Refetches every time
@@ -258,7 +258,7 @@ export default function HomeScreen() {
   // authoritative source — replaces the prior `mockCircles` constant whose
   // string ids (e.g. "family-circle-1") were not UUIDs and crashed the
   // CircleDetail member fetch with `invalid input syntax for type uuid`.
-  const { myCircles } = useCircles();
+  const { myCircles, refreshCircles } = useCircles();
   const activeCircles = useMemo(
     () => myCircles.filter((c) => c.status === "active"),
     [myCircles],
@@ -288,6 +288,19 @@ export default function HomeScreen() {
     useCallback(() => {
       void refetchCircleNet();
     }, [refetchCircleNet]),
+  );
+
+  // Wallet + circles refresh on focus. Fires after every navigation
+  // back to Home — covers the case where the user just made a
+  // contribution and the Active Circles / Future Snapshot / wallet
+  // balance sections would otherwise render stale values until the
+  // next realtime blip. Fire-and-forget with defensive .catch so a
+  // transient network blip doesn't leak a rejection into the loop.
+  useFocusEffect(
+    useCallback(() => {
+      void refreshWallet().catch(() => undefined);
+      void refreshCircles().catch(() => undefined);
+    }, [refreshWallet, refreshCircles]),
   );
 
   const totalNet = useMemo(
