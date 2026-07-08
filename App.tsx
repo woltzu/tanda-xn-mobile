@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { View, TouchableWithoutFeedback, AppState, Modal } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { ScrollDiagnosticProvider } from "./utils/scrollDiagnostics";
 import { eventService } from "./services/EventService";
 import { PreferencesProvider } from "./context/PreferencesContext";
 import { useInactivityLock } from "./hooks/useInactivityLock";
@@ -1917,6 +1918,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
+    <ScrollDiagnosticProvider>
     <AuthProvider>
       <PreferencesProvider>
         <PaymentProvider>
@@ -1965,6 +1967,7 @@ export default function App() {
         </PaymentProvider>
       </PreferencesProvider>
     </AuthProvider>
+    </ScrollDiagnosticProvider>
     </SafeAreaProvider>
   );
 }

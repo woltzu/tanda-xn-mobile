@@ -31,6 +31,11 @@ import { useCircles, type Circle } from "../context/CirclesContext";
 import { useCircleNetBalance } from "../hooks/useCircleNetBalance";
 import { useRecentActivity } from "../hooks/useRecentActivity";
 import { useFutureSnapshot } from "../hooks/useFutureSnapshot";
+import {
+  DiagnosticScrollView,
+  logScrollEvent,
+  logScrollTouch,
+} from "../utils/scrollDiagnostics";
 import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
 import { useScoreHubBadge } from "../hooks/useScoreHubBadge";
 import { useXnScoreFromBundle } from "../hooks/useXnScore";
@@ -904,10 +909,15 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
-      <ScrollView
+      <DiagnosticScrollView
+        diagName="HomeScreen.main"
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={(e) => logScrollEvent("HomeScreen.main", e.nativeEvent.contentOffset.y)}
+        onTouchStart={() => logScrollTouch("HomeScreen.main", "start")}
+        onTouchEnd={() => logScrollTouch("HomeScreen.main", "end")}
       >
         {/* ===== KYC BANNER (P1 — persistent, non-dismissible) =====
             Distinct from the dismissible "soft verify" email-verification
@@ -1872,7 +1882,7 @@ export default function HomeScreen() {
             </Text>
           )}
         </View>
-      </ScrollView>
+      </DiagnosticScrollView>
 
       {/* ===== CIRCLE NET BREAKDOWN BOTTOM SHEET ===== */}
       <Modal
