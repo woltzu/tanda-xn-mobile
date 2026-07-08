@@ -41,6 +41,7 @@ export const Routes = {
   Action: "Action",
   ActiveSessions: "ActiveSessions",
   ActivityEditor: "ActivityEditor",
+  ActivityHistory: "ActivityHistory",
   AddFunds: "AddFunds",
   AddRecipient: "AddRecipient",
   AdminBugReportDetail: "AdminBugReportDetail",

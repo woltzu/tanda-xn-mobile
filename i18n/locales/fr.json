@@ -1,4 +1,12 @@
 {
+  "activity_history": {
+    "title": "Activité",
+    "empty_title": "Aucune activité pour l'instant",
+    "empty_body": "Les contributions, paiements et opérations sur le portefeuille apparaîtront ici dès vos premières utilisations de TandaXn.",
+    "share_button": "Partager le relevé",
+    "share_failed_title": "Échec du partage",
+    "share_failed_body": "Impossible de partager le relevé. Réessayez."
+  },
   "payout": {
     "notification_title": "Paiement reçu !",
     "notification_body": "Vous avez reçu {{amount}} $ de {{circle_name}}.",
@@ -8745,6 +8753,9 @@
     "activity_wallet_generic": "{{desc}}",
     "activity_empty_title": "Aucune activité récente",
     "activity_empty_body": "Vos contributions, paiements et opérations sur le portefeuille apparaîtront ici.",
+    "activity_see_all": "Voir toute l'activité",
+    "future_upcoming_empty": "Aucune contribution à venir.",
+    "future_expected_empty": "Aucun paiement attendu pour l'instant.",
     "circles_due": "Dû le {{date}} : {{amount}} $",
     "circles_position_label": "Position :",
     "circles_position_next": "Prochain !",

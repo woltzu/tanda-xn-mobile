@@ -30,6 +30,7 @@ import type { Goal } from "../types/goals";
 import { useCircles, type Circle } from "../context/CirclesContext";
 import { useCircleNetBalance } from "../hooks/useCircleNetBalance";
 import { useRecentActivity } from "../hooks/useRecentActivity";
+import { useFutureSnapshot } from "../hooks/useFutureSnapshot";
 import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
 import { useScoreHubBadge } from "../hooks/useScoreHubBadge";
 import { useXnScoreFromBundle } from "../hooks/useXnScore";
@@ -298,7 +299,16 @@ export default function HomeScreen() {
   const {
     items: recentActivityItems,
     refresh: refreshRecentActivity,
-  } = useRecentActivity(10);
+  } = useRecentActivity(5);
+
+  // Real upcoming obligations + expected payouts. Replaces the
+  // mockUpcoming / mockExpectedPayouts arrays; five each is plenty
+  // for a snapshot card. Focus-refresh below keeps them fresh.
+  const {
+    obligations: upcomingObligations,
+    expectedPayouts: expectedPayoutItems,
+    refresh: refreshFutureSnapshot,
+  } = useFutureSnapshot(5);
 
   // Wallet + circles refresh on focus. Fires after every navigation
   // back to Home — covers the case where the user just made a
@@ -318,16 +328,19 @@ export default function HomeScreen() {
   const refreshWalletRef = useRef(refreshWallet);
   const refreshCirclesRef = useRef(refreshCircles);
   const refreshActivityRef = useRef(refreshRecentActivity);
+  const refreshFutureRef = useRef(refreshFutureSnapshot);
   useEffect(() => {
     refreshWalletRef.current = refreshWallet;
     refreshCirclesRef.current = refreshCircles;
     refreshActivityRef.current = refreshRecentActivity;
+    refreshFutureRef.current = refreshFutureSnapshot;
   });
   useFocusEffect(
     useCallback(() => {
       void refreshWalletRef.current?.().catch(() => undefined);
       void refreshCirclesRef.current?.().catch(() => undefined);
       void refreshActivityRef.current?.().catch(() => undefined);
+      void refreshFutureRef.current?.().catch(() => undefined);
     }, []),
   );
 
@@ -1641,6 +1654,19 @@ export default function HomeScreen() {
               </Text>
             </View>
           ))}
+          {recentActivityItems.length > 0 && (
+            <TouchableOpacity
+              style={styles.seeAllRow}
+              onPress={() => navigation.navigate(Routes.ActivityHistory)}
+              accessibilityRole="button"
+              accessibilityLabel={t("home_screen.activity_see_all")}
+            >
+              <Text style={styles.seeAllText}>
+                {t("home_screen.activity_see_all")}
+              </Text>
+              <Ionicons name="chevron-forward" size={14} color="#00C6AE" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ===== ACTIVE CIRCLES & POSITIONS CARD ===== */}
@@ -1668,13 +1694,18 @@ export default function HomeScreen() {
             </View>
           ) : (
             activeCircles.map((circle, idx) => {
+              // Position shows "N of M" once assigned; falls back to a
+              // dash when the payout order hasn't run yet (position is
+              // null on the member row). Matches the design ask over
+              // the prior "Next!" copy — pending is a state, not a
+              // promise the app should make.
               const position =
                 circle.myPosition && circle.memberCount
                   ? t("home_screen.circles_position_format", {
                       position: circle.myPosition,
                       total: circle.memberCount,
                     })
-                  : t("home_screen.circles_position_next");
+                  : "—";
               return (
                 <TouchableOpacity
                   key={circle.id}
@@ -1728,33 +1759,45 @@ export default function HomeScreen() {
           <Text style={styles.subSectionLabel}>
             {t("home_screen.future_upcoming_title")}
           </Text>
-          {mockUpcoming.map((row) => (
-            <View key={row.id} style={styles.futureRow}>
-              <Text style={styles.futureDate}>{row.date}</Text>
-              <Text style={styles.futureName} numberOfLines={1}>
-                {row.name}
-              </Text>
-              <Text style={[styles.futureAmount, { color: colors.textPrimary }]}>
-                {formatSigned(-row.amount)}
-              </Text>
-            </View>
-          ))}
+          {upcomingObligations.length === 0 ? (
+            <Text style={styles.futureEmptyText}>
+              {t("home_screen.future_upcoming_empty")}
+            </Text>
+          ) : (
+            upcomingObligations.map((row) => (
+              <View key={row.id} style={styles.futureRow}>
+                <Text style={styles.futureDate}>{row.date}</Text>
+                <Text style={styles.futureName} numberOfLines={1}>
+                  {row.name}
+                </Text>
+                <Text style={[styles.futureAmount, { color: colors.textPrimary }]}>
+                  {formatSigned(-row.amount)}
+                </Text>
+              </View>
+            ))
+          )}
 
           {/* Expected payouts */}
           <Text style={[styles.subSectionLabel, { marginTop: 14 }]}>
             {t("home_screen.future_expected_title")}
           </Text>
-          {mockExpectedPayouts.map((row) => (
-            <View key={row.id} style={styles.futureRow}>
-              <Text style={styles.futureDate}>{row.date}</Text>
-              <Text style={styles.futureName} numberOfLines={1}>
-                {row.name}
-              </Text>
-              <Text style={[styles.futureAmount, { color: colors.successText }]}>
-                {formatSigned(row.amount)}
-              </Text>
-            </View>
-          ))}
+          {expectedPayoutItems.length === 0 ? (
+            <Text style={styles.futureEmptyText}>
+              {t("home_screen.future_expected_empty")}
+            </Text>
+          ) : (
+            expectedPayoutItems.map((row) => (
+              <View key={row.id} style={styles.futureRow}>
+                <Text style={styles.futureDate}>{row.date}</Text>
+                <Text style={styles.futureName} numberOfLines={1}>
+                  {row.name}
+                </Text>
+                <Text style={[styles.futureAmount, { color: colors.successText }]}>
+                  {formatSigned(row.amount)}
+                </Text>
+              </View>
+            ))
+          )}
 
           {/* Credit Report snapshot */}
           <TouchableOpacity
@@ -2640,6 +2683,14 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   activityRowLast: { borderBottomWidth: 0 },
+  seeAllRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 12,
+    gap: 4,
+  },
+  seeAllText: { fontSize: 13, fontWeight: "600", color: "#00C6AE" },
   activityIcon: {
     width: 28,
     height: 28,
@@ -2709,6 +2760,12 @@ const styles = StyleSheet.create({
   },
   futureName: { flex: 1, fontSize: 13, color: colors.textPrimary },
   futureAmount: { fontSize: 13, fontWeight: "700" },
+  futureEmptyText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontStyle: "italic",
+    paddingVertical: 6,
+  },
 
   creditRow: {
     flexDirection: "row",

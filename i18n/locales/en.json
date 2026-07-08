@@ -1,4 +1,12 @@
 {
+  "activity_history": {
+    "title": "Activity",
+    "empty_title": "No activity yet",
+    "empty_body": "Contributions, payouts, and wallet events will appear here once you start using TandaXn.",
+    "share_button": "Share statement",
+    "share_failed_title": "Share failed",
+    "share_failed_body": "We couldn't share the statement. Please try again."
+  },
   "payout": {
     "notification_title": "Payout received!",
     "notification_body": "You received ${{amount}} from {{circle_name}}.",
@@ -8745,6 +8753,9 @@
     "activity_wallet_generic": "{{desc}}",
     "activity_empty_title": "No recent activity",
     "activity_empty_body": "Your contributions, payouts, and wallet events will appear here.",
+    "activity_see_all": "See all activity",
+    "future_upcoming_empty": "No upcoming contributions.",
+    "future_expected_empty": "No expected payouts yet.",
     "circles_due": "Due {{date}}: ${{amount}}",
     "circles_position_label": "Position:",
     "circles_position_next": "Next!",
