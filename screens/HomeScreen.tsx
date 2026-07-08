@@ -294,13 +294,28 @@ export default function HomeScreen() {
   // back to Home — covers the case where the user just made a
   // contribution and the Active Circles / Future Snapshot / wallet
   // balance sections would otherwise render stale values until the
-  // next realtime blip. Fire-and-forget with defensive .catch so a
-  // transient network blip doesn't leak a rejection into the loop.
+  // next realtime blip.
+  //
+  // TREMBLING FIX (2026-07-07): refreshWallet on WalletContext and
+  // refreshCircles on CirclesContext are plain functions — their
+  // identities change every provider render. Adding them to the
+  // useFocusEffect deps re-registers the focus subscription every
+  // render, and while the screen is focused the callback re-fires
+  // immediately → refresh → setState in providers → re-render →
+  // new refresh identity → loop. Follow the loadGoalsRef pattern
+  // above: keep the latest closure in a ref and bind the effect to
+  // stable [] deps so it only fires on real focus events.
+  const refreshWalletRef = useRef(refreshWallet);
+  const refreshCirclesRef = useRef(refreshCircles);
+  useEffect(() => {
+    refreshWalletRef.current = refreshWallet;
+    refreshCirclesRef.current = refreshCircles;
+  });
   useFocusEffect(
     useCallback(() => {
-      void refreshWallet().catch(() => undefined);
-      void refreshCircles().catch(() => undefined);
-    }, [refreshWallet, refreshCircles]),
+      void refreshWalletRef.current?.().catch(() => undefined);
+      void refreshCirclesRef.current?.().catch(() => undefined);
+    }, []),
   );
 
   const totalNet = useMemo(
