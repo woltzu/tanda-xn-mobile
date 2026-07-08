@@ -29,6 +29,7 @@ import { useGoalActions } from "../hooks/useGoalActions";
 import type { Goal } from "../types/goals";
 import { useCircles, type Circle } from "../context/CirclesContext";
 import { useCircleNetBalance } from "../hooks/useCircleNetBalance";
+import { useRecentActivity } from "../hooks/useRecentActivity";
 import { useAdvanceDashboard } from "../hooks/useAdvanceDashboard";
 import { useScoreHubBadge } from "../hooks/useScoreHubBadge";
 import { useXnScoreFromBundle } from "../hooks/useXnScore";
@@ -290,6 +291,15 @@ export default function HomeScreen() {
     }, [refetchCircleNet]),
   );
 
+  // Real recent activity — replaces the mockActivity list. Hook does
+  // its own initial fetch on mount and re-runs when the caller's
+  // myCircles list changes (so newly-joined circles get named in
+  // the descriptions).
+  const {
+    items: recentActivityItems,
+    refresh: refreshRecentActivity,
+  } = useRecentActivity(10);
+
   // Wallet + circles refresh on focus. Fires after every navigation
   // back to Home — covers the case where the user just made a
   // contribution and the Active Circles / Future Snapshot / wallet
@@ -307,14 +317,17 @@ export default function HomeScreen() {
   // stable [] deps so it only fires on real focus events.
   const refreshWalletRef = useRef(refreshWallet);
   const refreshCirclesRef = useRef(refreshCircles);
+  const refreshActivityRef = useRef(refreshRecentActivity);
   useEffect(() => {
     refreshWalletRef.current = refreshWallet;
     refreshCirclesRef.current = refreshCircles;
+    refreshActivityRef.current = refreshRecentActivity;
   });
   useFocusEffect(
     useCallback(() => {
       void refreshWalletRef.current?.().catch(() => undefined);
       void refreshCirclesRef.current?.().catch(() => undefined);
+      void refreshActivityRef.current?.().catch(() => undefined);
     }, []),
   );
 
@@ -1563,12 +1576,26 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          {mockActivity.map((row, idx) => (
+          {recentActivityItems.length === 0 ? (
+            <View style={styles.circlesEmpty}>
+              <Ionicons
+                name="receipt-outline"
+                size={28}
+                color={colors.textSecondary}
+              />
+              <Text style={styles.circlesEmptyTitle}>
+                {t("home_screen.activity_empty_title")}
+              </Text>
+              <Text style={styles.circlesEmptyBody}>
+                {t("home_screen.activity_empty_body")}
+              </Text>
+            </View>
+          ) : recentActivityItems.map((row, idx) => (
             <View
               key={row.id}
               style={[
                 styles.activityRow,
-                idx === mockActivity.length - 1 && styles.activityRowLast,
+                idx === recentActivityItems.length - 1 && styles.activityRowLast,
               ]}
             >
               <View
