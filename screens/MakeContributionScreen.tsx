@@ -137,6 +137,7 @@ export default function MakeContributionScreen() {
     paymentMethods: stripePaymentMethods,
     createContribution,
     presentPaymentSheet,
+    handleNextActionForIntent,
     isStripeReady,
     refreshPaymentMethods,
   } = usePayment();
@@ -716,7 +717,7 @@ export default function MakeContributionScreen() {
                 (pm: any) => pm.id === selectedMethod,
               )?.stripePaymentMethodId;
 
-        const { clientSecret } = await createContribution(
+        const { clientSecret, status } = await createContribution(
           amountCents,
           currency,
           circleId,
@@ -724,7 +725,21 @@ export default function MakeContributionScreen() {
           stripePmId,
         );
 
-        if (clientSecret) {
+        // Server-confirmed with the saved card path:
+        //   status='succeeded'          → done, no client Stripe call
+        //   status='requires_action'    → run handleNextAction (3DS)
+        //   status='requires_capture'   → done (manual-capture flows)
+        // Fall through to PaymentSheet only when the EF returned an
+        // unconfirmed intent (e.g. no paymentMethodId was passed).
+        if (status === "succeeded" || status === "requires_capture") {
+          // Payment already went through on the server. Nothing to do.
+        } else if (status === "requires_action" && clientSecret) {
+          const { success, error } = await handleNextActionForIntent(clientSecret);
+          if (!success) {
+            setPaymentError(error || "Your payment could not be processed.");
+            return;
+          }
+        } else if (clientSecret) {
           const { error } = await presentPaymentSheet(clientSecret);
           if (error) {
             setPaymentError(error.message || "Your payment could not be processed.");

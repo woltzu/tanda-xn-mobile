@@ -304,12 +304,18 @@ Deno.serve(async (req) => {
   if (custRow?.stripe_customer_id) {
     piParams.customer = custRow.stripe_customer_id;
   }
-  // If the screen already picked a saved Stripe payment method, attach it
-  // so PaymentSheet pre-selects it. We do NOT call .confirm here — the
-  // client-side PaymentSheet does that to surface 3-D Secure / SCA
-  // prompts properly.
+  // If the screen already picked a saved Stripe payment method, attach
+  // it AND confirm on the server. Without confirm=true the client
+  // would still have to run PaymentSheet, which re-prompts for card
+  // entry even though the PM is already on the PI — the user
+  // experience the change is fixing. off_session=false because the
+  // user is actively tapping Confirm; return_url covers redirect-
+  // based next_action steps (3-D Secure challenges on iOS).
   if (paymentMethodId) {
     piParams.payment_method = paymentMethodId;
+    piParams.confirm = true;
+    piParams.off_session = false;
+    piParams.return_url = "tandaxn://stripe-redirect";
   }
 
   let intent: Stripe.PaymentIntent;
@@ -387,11 +393,17 @@ Deno.serve(async (req) => {
     );
   }
 
-  // ─── 8. Return clientSecret for mobile PaymentSheet ──────────────────
+  // ─── 8. Return clientSecret + status so the client can skip
+  // PaymentSheet when the server-side confirm already succeeded.
+  // status='requires_action' → client runs handleNextAction (3DS).
+  // status='succeeded' → done, no client Stripe call needed.
+  // status='requires_payment_method' / 'requires_confirmation' →
+  //   client falls back to PaymentSheet (fresh card entry path).
   return jsonResponse({
     clientSecret: intent.client_secret,
     paymentIntentId: intent.id,
     pendingIntentId: pending.id,
+    status: intent.status,
     // contribution_cents: amount that lands on the circle.
     // platform_fee_cents: what TandaXn retains (0 for ordinary circles).
     // charge_cents: what Stripe actually bills the member.

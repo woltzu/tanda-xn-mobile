@@ -98,11 +98,22 @@ export type PaymentContextType = {
   ) => Promise<{
     clientSecret: string;
     paymentIntentId: string;
+    // Stripe PaymentIntent status right after the EF's create. When
+    // paymentMethodId was passed, the EF confirms server-side, so
+    // this can arrive as 'succeeded' or 'requires_action' — the
+    // client uses it to decide whether to skip PaymentSheet.
+    status?: string;
     contributionCents: number;
     platformFeeCents: number;
     platformFeeBps: number;
     chargeCents: number;
   }>;
+  // Runs Stripe SDK's handleNextAction for a PI that came back as
+  // 'requires_action' (usually 3-D Secure). No visible UI unless a
+  // challenge is required.
+  handleNextActionForIntent: (
+    clientSecret: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   createWithdrawal: (
     amountCents: number,
     currency: string,
@@ -255,7 +266,11 @@ const PaymentContext = createContext<PaymentContextType | undefined>(undefined);
 
 function PaymentProviderInner({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const { initPaymentSheet, presentPaymentSheet: stripePresent } = useStripe();
+  const {
+    initPaymentSheet,
+    presentPaymentSheet: stripePresent,
+    handleNextAction,
+  } = useStripe();
 
   // Stripe readiness
   const [isStripeReady, setIsStripeReady] = useState(false);
@@ -600,6 +615,7 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
       return {
         clientSecret: data.clientSecret as string,
         paymentIntentId: data.paymentIntentId as string,
+        status: typeof data.status === "string" ? data.status : undefined,
         // Stage 2 Bucket C — fee breakdown from the EF response. The
         // screen uses these to render the "Processing fee — covered by
         // TandaXn" line and the optional Platform fee row.
@@ -613,6 +629,38 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
       throw err;
     }
   }, [user]);
+
+  // Thin wrapper around Stripe SDK's handleNextAction so callers can
+  // resolve a server-confirmed PI that came back requires_action
+  // (usually 3-D Secure). Presents the challenge natively; no UI when
+  // no action is required. Kept generic so future flows can reuse it.
+  const handleNextActionForIntent = useCallback(
+    async (clientSecret: string): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const { paymentIntent, error } = await handleNextAction(clientSecret);
+        if (error) {
+          return { success: false, error: error.message || "Payment authentication failed" };
+        }
+        if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "requires_capture") {
+          return { success: true };
+        }
+        if (paymentIntent?.status === "requires_confirmation") {
+          // Extremely rare — SDK returns here when the challenge
+          // resolves but the intent still needs a client-side confirm.
+          // Not the shape we want; surface as an error so the caller
+          // shows a retry rather than a silent failure.
+          return { success: false, error: "Payment requires an additional step. Please try again." };
+        }
+        return {
+          success: false,
+          error: `Payment did not complete (status: ${paymentIntent?.status ?? "unknown"}).`,
+        };
+      } catch (err: any) {
+        return { success: false, error: err?.message || "Payment failed" };
+      }
+    },
+    [handleNextAction],
+  );
 
   const createWithdrawal = useCallback(async (amountCents: number, currency: string) => {
     if (!user) throw new Error('User not authenticated');
@@ -923,6 +971,7 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
     createContribution,
     createWithdrawal,
     presentPaymentSheet: presentPaymentSheetAction,
+    handleNextActionForIntent,
     setupCardForLater,
     makeTestCharge,
     paymentError,
