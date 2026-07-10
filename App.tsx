@@ -294,6 +294,7 @@ import TripPaymentFailedScreen from "./screens/TripPaymentFailedScreen";
 import TripPublishSuccessScreen from "./screens/TripPublishSuccessScreen";
 import ActivityEditorScreen from "./screens/ActivityEditorScreen";
 import ActivityHistoryScreen from "./screens/ActivityHistoryScreen";
+import StripeRedirectScreen from "./screens/StripeRedirectScreen";
 import WebViewScreen from "./screens/WebViewScreen";
 import RequestProviderScreen from "./screens/RequestProviderScreen";
 import EditStoreScreen from "./screens/EditStoreScreen";
@@ -777,6 +778,7 @@ export type RootStackParamList = {
   TripPublishSuccess: { tripName?: string; destination?: string; startDate?: string; endDate?: string; tripId: string };
   ActivityEditor: { tripId: string; dayId?: string; activityId?: string; existingData?: any };
   ActivityHistory: undefined;
+  StripeRedirect: undefined;
   // Feature Screens (AI Engines + Circle Management)
   StressScoreDashboard: undefined;
   MoodInsights: undefined;
@@ -1045,6 +1047,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="XnScoreDashboard" component={XnScoreDashboardScreen} />
       <HomeStack.Screen name="XnScoreHistory" component={XnScoreHistoryScreen} />
       <HomeStack.Screen name="ActivityHistory" component={ActivityHistoryScreen} />
+      <HomeStack.Screen name="StripeRedirect" component={StripeRedirectScreen} />
       <HomeStack.Screen name="SelectCircleContribution" component={SelectCircleContributionScreen} />
       <HomeStack.Screen name="MakeContribution" component={MakeContributionScreen} />
       <HomeStack.Screen name="ContributionSuccess" component={ContributionSuccessScreen} />

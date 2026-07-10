@@ -88,6 +88,13 @@ export const linkingConfig = {
       // to pre-fill the caption.
       CreateDreamPost: "dreams/create",
 
+      // Stripe posts users back to tandaxn://stripe-redirect after a
+      // redirect-based PaymentSheet method (Klarna, Cash App Pay,
+      // Amazon Pay, iDEAL) or a 3-D Secure challenge. The screen
+      // holds the UI still while the SDK resolves the intent, then
+      // pops back — see screens/StripeRedirectScreen.tsx.
+      StripeRedirect: "stripe-redirect",
+
       // Wallet / Profile / Settings (root Stack screens)
       WalletMain: "wallet",
       ProfileMain: "profile",

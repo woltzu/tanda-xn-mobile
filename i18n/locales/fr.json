@@ -1,4 +1,8 @@
 {
+  "stripe_redirect": {
+    "please_wait": "Veuillez patienter…",
+    "message": "Finalisation en cours, quelques instants suffisent."
+  },
   "activity_history": {
     "title": "Activité",
     "empty_title": "Aucune activité pour l'instant",

@@ -1,4 +1,8 @@
 {
+  "stripe_redirect": {
+    "please_wait": "Please wait…",
+    "message": "Completing setup, this should only take a moment."
+  },
   "activity_history": {
     "title": "Activity",
     "empty_title": "No activity yet",

@@ -62,6 +62,7 @@ export const Routes = {
   AdminVerificationQueue: "AdminVerificationQueue",
   OrganizerPayoutHistory: "OrganizerPayoutHistory",
   StripeConnect: "StripeConnect",
+  StripeRedirect: "StripeRedirect",
   SubmitTemplate: "SubmitTemplate",
   VerificationMap: "VerificationMap",
   AdvanceDetailsV2: "AdvanceDetailsV2",
