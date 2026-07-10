@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   Modal,
   Pressable,
@@ -149,6 +149,14 @@ function formatDueDate(iso: string | null | undefined): string {
     day: "numeric",
   });
 }
+
+// Module-scope constants for the FlatList wrapper. Held here so their
+// identities are stable across parent renders — otherwise FlatList
+// treats `data` as new every time and skips its virtualization
+// heuristics. The list itself carries no rows; the entire screen sits
+// in ListHeaderComponent.
+const HOME_FLAT_DATA: readonly never[] = [];
+const renderHomeFlatItem = () => null;
 
 // ==========================================================================
 // Component
@@ -904,13 +912,25 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
-      <ScrollView
+      {/* Outer surface converted from ScrollView → FlatList so scroll
+          handling runs through the virtualized-list path even though
+          the whole screen sits in the header. Empty data + noop
+          renderItem gives us the smoother iOS/Android gesture response
+          without changing what the user sees. */}
+      <FlatList
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
+        data={HOME_FLAT_DATA}
+        renderItem={renderHomeFlatItem}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         overScrollMode="never"
-      >
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        removeClippedSubviews
+        ListHeaderComponent={
+          <View>
         {/* ===== KYC BANNER (P1 — persistent, non-dismissible) =====
             Distinct from the dismissible "soft verify" email-verification
             banner below: this one nags every visit until KYC is approved
@@ -1874,7 +1894,9 @@ export default function HomeScreen() {
             </Text>
           )}
         </View>
-      </ScrollView>
+          </View>
+        }
+      />
 
       {/* ===== CIRCLE NET BREAKDOWN BOTTOM SHEET ===== */}
       <Modal

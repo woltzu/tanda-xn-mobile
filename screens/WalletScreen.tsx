@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   Modal,
   Animated,
@@ -49,6 +49,10 @@ const WALLET_COACH_SEEN_KEY = "@tandaxn_wallet_coach_seen_v1";
 const WALLET_PAYOUT_COACH_KEY = "@tandaxn_wallet_payout_coach_seen_v1";
 
 type WalletScreenNavigationProp = StackNavigationProp<RootStackParamList>;
+
+// Empty FlatList sentinel — see the identical comment in HomeScreen.
+const WALLET_FLAT_DATA: readonly never[] = [];
+const renderWalletFlatItem = () => null;
 
 export default function WalletScreen() {
   const navigation = useNavigation<WalletScreenNavigationProp>();
@@ -391,10 +395,19 @@ export default function WalletScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView
+      {/* Outer surface converted from ScrollView → FlatList for the
+          smoother gesture-handling path. Screen carries no rows;
+          everything sits in ListHeaderComponent. */}
+      <FlatList
+        data={WALLET_FLAT_DATA}
+        renderItem={renderWalletFlatItem}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         overScrollMode="never"
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        removeClippedSubviews
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -403,7 +416,8 @@ export default function WalletScreen() {
             colors={[colors.accentTeal]}
           />
         }
-      >
+        ListHeaderComponent={
+          <View>
         {/* Header */}
         <LinearGradient colors={[colors.primaryNavy, "#143654"]} style={styles.header}>
           <View style={styles.headerTop}>
@@ -831,7 +845,9 @@ export default function WalletScreen() {
             <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
           </TouchableOpacity>
         </View>
-      </ScrollView>
+          </View>
+        }
+      />
 
       {/* Floating Help Button */}
       <TouchableOpacity

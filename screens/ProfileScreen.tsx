@@ -3,7 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
+  FlatList,
   TouchableOpacity,
   Alert,
   Platform,
@@ -52,6 +52,10 @@ import { RootStackParamList } from "../App";
 import { colors } from "../theme/tokens";
 
 type ProfileScreenNavigationProp = StackNavigationProp<RootStackParamList>;
+
+// Empty FlatList sentinel — see the identical comment in HomeScreen.
+const PROFILE_FLAT_DATA: readonly never[] = [];
+const renderProfileFlatItem = () => null;
 
 export default function ProfileScreen() {
   const navigation = useNavigation<ProfileScreenNavigationProp>();
@@ -685,10 +689,18 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView
+      {/* Outer surface converted from ScrollView → FlatList. Screen
+          carries no rows; the entire body sits in ListHeaderComponent. */}
+      <FlatList
+        data={PROFILE_FLAT_DATA}
+        renderItem={renderProfileFlatItem}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         overScrollMode="never"
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={7}
+        removeClippedSubviews
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -697,7 +709,8 @@ export default function ProfileScreen() {
             colors={[colors.accentTeal]}
           />
         }
-      >
+        ListHeaderComponent={
+          <View>
         {/* Header */}
         <LinearGradient colors={[colors.primaryNavy, "#143654"]} style={styles.header}>
           <Text style={styles.headerTitle}>{t("profile.header")}</Text>
@@ -958,7 +971,9 @@ export default function ProfileScreen() {
           {/* App Version */}
           <Text style={styles.versionText}>{t("profile.version")}</Text>
         </View>
-      </ScrollView>
+          </View>
+        }
+      />
 
       {/* Floating Help Button */}
       <TouchableOpacity
