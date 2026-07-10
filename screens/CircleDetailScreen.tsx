@@ -13,8 +13,8 @@ import {
   Platform,
   Animated,
   RefreshControl,
-  FlatList,
 } from "react-native";
+import { AppFlashList } from "../components/AppFlashList";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -1985,22 +1985,14 @@ export default function CircleDetailScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Outer surface converted from ScrollView → FlatList so the
-          Members tab's rows are virtualized natively rather than
-          nested. See the row-union above (`CircleListRow`) — the
-          FlatList's data flips on tab change; overview/activity stay
-          single-item sentinels routed to the existing tab renderers
-          in renderItem. */}
-      <FlatList
+      {/* Outer surface: FlashList — same tab-driven row union, but
+          FlashList handles virtualization + gesture routing without
+          the FlatList-only knobs. AppFlashList wrapper enforces the
+          defaults it does accept. */}
+      <AppFlashList
         data={listData}
         renderItem={renderListRow}
         keyExtractor={rowKeyExtractor}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        overScrollMode="never"
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={7}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

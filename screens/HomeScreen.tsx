@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   Modal,
   Pressable,
@@ -13,6 +12,7 @@ import {
   Image,
   ActivityIndicator,
 } from "react-native";
+import { AppFlashList } from "../components/AppFlashList";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -912,23 +912,16 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
-      {/* Outer surface converted from ScrollView → FlatList so scroll
-          handling runs through the virtualized-list path even though
-          the whole screen sits in the header. Empty data + noop
-          renderItem gives us the smoother iOS/Android gesture response
-          without changing what the user sees. */}
-      <FlatList
+      {/* Outer surface: FlashList carrying the whole screen in
+          ListHeaderComponent. FlashList runs its own virtualization
+          + gesture path so we drop the FlatList-only knobs
+          (initialNumToRender/windowSize/removeClippedSubviews) — the
+          AppFlashList wrapper enforces the defaults it does accept. */}
+      <AppFlashList
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         data={HOME_FLAT_DATA}
         renderItem={renderHomeFlatItem}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        overScrollMode="never"
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={7}
-        removeClippedSubviews
         ListHeaderComponent={
           <View>
         {/* ===== KYC BANNER (P1 — persistent, non-dismissible) =====

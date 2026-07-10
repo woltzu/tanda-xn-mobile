@@ -20,6 +20,7 @@ import { View, TouchableWithoutFeedback, AppState, Modal } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ScrollDiagnosticProvider } from "./utils/scrollDiagnostics";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { eventService } from "./services/EventService";
 import { PreferencesProvider } from "./context/PreferencesContext";
 import { useInactivityLock } from "./hooks/useInactivityLock";
@@ -1920,6 +1921,7 @@ export default function App() {
   }, []);
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaProvider>
     <ScrollDiagnosticProvider>
     <AuthProvider>
@@ -1972,5 +1974,6 @@ export default function App() {
     </AuthProvider>
     </ScrollDiagnosticProvider>
     </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

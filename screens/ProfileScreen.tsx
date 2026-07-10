@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   Alert,
   Platform,
@@ -15,6 +14,7 @@ import {
   RefreshControl,
   Linking,
 } from "react-native";
+import { AppFlashList } from "../components/AppFlashList";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/AuthContext";
@@ -689,18 +689,13 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Outer surface converted from ScrollView → FlatList. Screen
-          carries no rows; the entire body sits in ListHeaderComponent. */}
-      <FlatList
+      {/* Outer surface: FlashList carrying the whole screen in
+          ListHeaderComponent. FlashList runs its own virtualization
+          + gesture path so the FlatList-only knobs are dropped and
+          the AppFlashList wrapper handles the defaults. */}
+      <AppFlashList
         data={PROFILE_FLAT_DATA}
         renderItem={renderProfileFlatItem}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        overScrollMode="never"
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={7}
-        removeClippedSubviews
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

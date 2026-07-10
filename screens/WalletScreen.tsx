@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   Modal,
   Animated,
@@ -11,6 +10,7 @@ import {
   Pressable,
   RefreshControl,
 } from "react-native";
+import { AppFlashList } from "../components/AppFlashList";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -395,19 +395,13 @@ export default function WalletScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Outer surface converted from ScrollView → FlatList for the
-          smoother gesture-handling path. Screen carries no rows;
-          everything sits in ListHeaderComponent. */}
-      <FlatList
+      {/* Outer surface: FlashList carrying the whole screen in
+          ListHeaderComponent. FlashList runs its own virtualization
+          + gesture path so the FlatList-only knobs are dropped and
+          the AppFlashList wrapper handles the defaults. */}
+      <AppFlashList
         data={WALLET_FLAT_DATA}
         renderItem={renderWalletFlatItem}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        overScrollMode="never"
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={7}
-        removeClippedSubviews
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
