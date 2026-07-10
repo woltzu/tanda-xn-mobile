@@ -12,13 +12,13 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TextInput,
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
 } from "react-native";
+import { AppFlashList } from "../components/AppFlashList";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -309,10 +309,11 @@ export default function AdminTripsScreen() {
       ) : loading && rows.length === 0 ? (
         <AdminListSkeleton rowCount={5} showChip={false} />
       ) : (
-        <FlatList
+        <AppFlashList
           data={filtered}
           keyExtractor={(r) => r.id}
           contentContainerStyle={styles.listContent}
+          estimatedItemSize={100}
           renderItem={({ item }) => {
             const inSelectMode = selectedIds.size > 0;
             const selected = selectedIds.has(item.id);

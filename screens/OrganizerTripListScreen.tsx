@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
@@ -12,6 +11,7 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
+import { AppFlashList } from '../components/AppFlashList';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from "react-i18next";
@@ -195,9 +195,10 @@ const OrganizerTripListScreen: React.FC = () => {
       </View>
 
       {/* Trip List */}
-      <FlatList
+      <AppFlashList
         data={filteredTrips}
         keyExtractor={(item) => item.id}
+        estimatedItemSize={120}
         renderItem={({ item }) => (
           <TripCard trip={item} onPress={() => navigateToDashboard(item.id)} />
         )}

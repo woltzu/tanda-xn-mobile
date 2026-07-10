@@ -13,7 +13,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TextInput,
   TouchableOpacity,
   SafeAreaView,
@@ -21,6 +20,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import { AppFlashList } from "../components/AppFlashList";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -250,10 +250,11 @@ export default function AdminBugReportsScreen() {
       ) : loading && rows.length === 0 ? (
         <AdminListSkeleton rowCount={5} showChip={true} />
       ) : (
-        <FlatList
+        <AppFlashList
           data={filtered}
           keyExtractor={(r) => r.id}
           contentContainerStyle={styles.listContent}
+          estimatedItemSize={80}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

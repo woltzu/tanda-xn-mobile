@@ -14,11 +14,11 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import { AppFlashList } from "../components/AppFlashList";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { Ionicons } from "@expo/vector-icons";
@@ -101,9 +101,10 @@ export default function DisputesListScreen() {
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : null}
-      <FlatList
+      <AppFlashList
         data={disputes}
         keyExtractor={(d) => d.id}
+        estimatedItemSize={100}
         renderItem={renderRow}
         contentContainerStyle={
           disputes.length === 0 ? styles.emptyContainer : undefined

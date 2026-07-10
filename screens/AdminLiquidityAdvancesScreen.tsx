@@ -24,13 +24,13 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
+import { AppFlashList } from "../components/AppFlashList";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -307,10 +307,11 @@ export default function AdminLiquidityAdvancesScreen() {
       ) : error ? (
         <AdminErrorState onRetry={load} />
       ) : (
-        <FlatList
+        <AppFlashList
           data={rows}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
+          estimatedItemSize={80}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={TEAL} />
           }

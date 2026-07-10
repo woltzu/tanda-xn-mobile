@@ -22,7 +22,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
@@ -30,6 +29,7 @@ import {
   ImageBackground,
   RefreshControl,
 } from "react-native";
+import { AppFlashList } from "../components/AppFlashList";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -284,9 +284,10 @@ const MyTripsScreen: React.FC = () => {
           <Text style={styles.emptyBody}>{t("my_trips.empty_body")}</Text>
         </View>
       ) : (
-        <FlatList
+        <AppFlashList
           data={items}
           keyExtractor={(item) => item.participantId}
+          estimatedItemSize={120}
           renderItem={({ item }) => <TripCard item={item} />}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}

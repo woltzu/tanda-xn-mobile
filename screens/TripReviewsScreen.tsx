@@ -15,13 +15,13 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
   Image,
 } from "react-native";
+import { AppFlashList } from "../components/AppFlashList";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -180,9 +180,10 @@ const TripReviewsScreen: React.FC = () => {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.screenBg} />
       {renderHeader()}
-      <FlatList
+      <AppFlashList
         data={items}
         keyExtractor={(item) => item.id}
+        estimatedItemSize={120}
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}

@@ -30,13 +30,13 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  FlatList,
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
   Image,
 } from "react-native";
+import { AppFlashList } from "../components/AppFlashList";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -349,9 +349,10 @@ const MemberSearchScreen: React.FC = () => {
           <Text style={styles.errorBannerText}>{error}</Text>
         </View>
       ) : null}
-      <FlatList
+      <AppFlashList
         data={results}
         keyExtractor={(r) => r.user_id}
+        estimatedItemSize={80}
         renderItem={renderRow}
         contentContainerStyle={
           results.length === 0

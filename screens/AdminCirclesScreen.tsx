@@ -11,13 +11,13 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TextInput,
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
 } from "react-native";
+import { AppFlashList } from "../components/AppFlashList";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -317,10 +317,11 @@ export default function AdminCirclesScreen() {
       ) : loading && rows.length === 0 ? (
         <AdminListSkeleton rowCount={5} showChip={true} />
       ) : (
-        <FlatList
+        <AppFlashList
           data={filtered}
           keyExtractor={(r) => r.id}
           contentContainerStyle={styles.listContent}
+          estimatedItemSize={80}
           renderItem={({ item }) => {
             const inSelectMode = selectedIds.size > 0;
             const selected = selectedIds.has(item.id);

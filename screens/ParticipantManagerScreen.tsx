@@ -28,7 +28,6 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
@@ -38,6 +37,7 @@ import {
   TextInput,
   ScrollView,
 } from 'react-native';
+import { AppFlashList } from '../components/AppFlashList';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
@@ -479,9 +479,10 @@ const ParticipantManagerScreen: React.FC = () => {
       </View>
 
       {/* Participant List */}
-      <FlatList
+      <AppFlashList
         data={filteredParticipants}
         keyExtractor={(item) => item.id}
+        estimatedItemSize={80}
         renderItem={({ item }) => <ParticipantRow participant={item} />}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
