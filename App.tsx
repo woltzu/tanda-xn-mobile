@@ -1048,6 +1048,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="XnScoreDashboard" component={XnScoreDashboardScreen} />
       <HomeStack.Screen name="XnScoreHistory" component={XnScoreHistoryScreen} />
       <HomeStack.Screen name="ActivityHistory" component={ActivityHistoryScreen} />
+      <HomeStack.Screen name="MyTrips" component={MyTripsScreen} />
       <HomeStack.Screen name="StripeRedirect" component={StripeRedirectScreen} />
       <HomeStack.Screen name="SelectCircleContribution" component={SelectCircleContributionScreen} />
       <HomeStack.Screen name="MakeContribution" component={MakeContributionScreen} />
