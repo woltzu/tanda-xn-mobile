@@ -122,6 +122,13 @@ export default function JoinCircleConfirmScreen() {
   }, [track, circleId, source]);
 
   const [isJoining, setIsJoining] = useState(false);
+  // Sticks true from the moment a successful join is confirmed (either
+  // via the RPC or the defensive membership re-check). Used to gate the
+  // `!circle` fallback so a transient state emptiness between the RPC
+  // resolving and the navigation.replace committing can't flash the
+  // "Circle not found" screen. Distinct from isJoining, which flips
+  // back to false in the finally.
+  const [justJoined, setJustJoined] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   // Last error surfaced by handleJoinCircle. Rendered on the `!circle`
   // fallback branch so a user who lands there after a failed join sees
@@ -188,7 +195,27 @@ export default function JoinCircleConfirmScreen() {
     initialCircle ??
     lateResolvedCircle;
 
-  if (!circle) {
+  // Auto-navigate to CircleDetail on mount if the user is already a
+  // member of this circle. Handles the case where the app was restarted
+  // between a successful join and its post-join navigation — reloading
+  // into the confirm screen previously flashed the "Circle not found"
+  // fallback until CirclesContext hydrated. Runs once.
+  const alreadyMemberRef = useRef(false);
+  useEffect(() => {
+    if (alreadyMemberRef.current) return;
+    if (justJoined || isJoining) return;
+    if (myCircles.some((c) => c.id === circleId)) {
+      alreadyMemberRef.current = true;
+      navigation.replace("CircleDetail", { circleId });
+    }
+  }, [myCircles, circleId, navigation, justJoined, isJoining]);
+
+  // Guard the fallback: while a join is in flight OR just completed,
+  // hold the current UI instead of dumping the user into the error
+  // screen. Any state churn between the RPC resolving and the replace
+  // committing that transiently removes the circle from state gets
+  // swallowed.
+  if (!circle && !isJoining && !justJoined) {
     return (
       <View style={styles.container}>
         <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
@@ -325,6 +352,7 @@ export default function JoinCircleConfirmScreen() {
       // useFocusEffect drive the load, so a bad session degrades to
       // that screen's loading / error handling instead of the confirm
       // screen's `!circle` fallback.
+      setJustJoined(true);
       navigation.replace("CircleDetail", { circleId });
     } catch (error: any) {
       // Map typed RPC errors thrown by CirclesContext.joinCircle to
@@ -371,6 +399,7 @@ export default function JoinCircleConfirmScreen() {
               error?.message,
             );
             AsyncStorage.setItem(TERMS_ACCEPTED_KEY, "1").catch(() => undefined);
+            setJustJoined(true);
             navigation.replace("CircleDetail", { circleId });
             return;
           }
