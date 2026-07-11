@@ -14,12 +14,12 @@ import React, { useMemo } from "react";
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   TouchableOpacity,
   Share,
   Alert,
 } from "react-native";
+import { AppFlashList } from "../components/AppFlashList";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -136,9 +136,13 @@ export default function ActivityHistoryScreen() {
           description={t("activity_history.empty_body")}
         />
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          {grouped.map(({ key, label, rows }) => (
-            <View key={key} style={styles.monthCard}>
+        <AppFlashList
+          data={grouped}
+          keyExtractor={(g) => g.key}
+          contentContainerStyle={styles.content}
+          estimatedItemSize={240}
+          renderItem={({ item: { label, rows } }) => (
+            <View style={styles.monthCard}>
               <View style={styles.monthHeader}>
                 <Text style={styles.monthTitle}>{label}</Text>
                 <TouchableOpacity
@@ -197,8 +201,8 @@ export default function ActivityHistoryScreen() {
                 </View>
               ))}
             </View>
-          ))}
-        </ScrollView>
+          )}
+        />
       )}
     </View>
   );
