@@ -1343,6 +1343,7 @@ function CirclesStackScreen() {
       <CirclesStack.Screen name="TripUpdates" component={TripUpdatesScreen} />
       <CirclesStack.Screen name="MyTripStatus" component={MyTripStatusScreen} />
       <CirclesStack.Screen name="MyTrips" component={MyTripsScreen} />
+      <CirclesStack.Screen name="PayoutPreferences" component={PayoutPreferencesScreen} />
       <CirclesStack.Screen name="LeaveReview" component={LeaveReviewScreen} />
       <CirclesStack.Screen name="TripReviews" component={TripReviewsScreen} />
       <CirclesStack.Screen name="DocumentSubmission" component={DocumentSubmissionScreen} />
