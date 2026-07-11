@@ -63,6 +63,7 @@ export const Routes = {
   OrganizerPayoutHistory: "OrganizerPayoutHistory",
   StripeConnect: "StripeConnect",
   StripeRedirect: "StripeRedirect",
+  PayoutPreferences: "PayoutPreferences",
   SubmitTemplate: "SubmitTemplate",
   VerificationMap: "VerificationMap",
   AdvanceDetailsV2: "AdvanceDetailsV2",

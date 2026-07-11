@@ -2312,6 +2312,23 @@ export default function CircleDetailScreen() {
                   <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
                 </TouchableOpacity>
 
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setShowMenu(false);
+                    navigation.navigate(Routes.PayoutPreferences as never, { circleId } as never);
+                  }}
+                >
+                  <View style={[styles.menuItemIcon, { backgroundColor: "#ECFDF5" }]}>
+                    <Ionicons name="arrow-redo-outline" size={20} color={colors.accentTeal} />
+                  </View>
+                  <View style={styles.menuItemContent}>
+                    <Text style={styles.menuItemText}>{t("circle_detail.menu_payout_prefs")}</Text>
+                    <Text style={styles.menuItemDesc}>{t("circle_detail.menu_payout_prefs_desc")}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                </TouchableOpacity>
+
                 <TouchableOpacity style={styles.menuItem} onPress={handleLeaveCircle}>
                   <View style={[styles.menuItemIcon, { backgroundColor: colors.errorBg }]}>
                     <Ionicons name="exit-outline" size={20} color={colors.errorText} />

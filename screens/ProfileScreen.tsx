@@ -467,6 +467,7 @@ export default function ProfileScreen() {
         { icon: "person-outline", label: t("profile.item_personal_info"), onPress: () => navigation.navigate("PersonalInfo") },
         { icon: "shield-checkmark-outline", label: t("profile.item_security"), onPress: () => navigation.navigate("SecuritySettings") },
         { icon: "card-outline", label: t("profile.item_payment_methods"), onPress: () => navigation.navigate("LinkedAccounts") },
+        { icon: "arrow-redo-outline", label: t("profile.item_payout_destination"), onPress: () => navigation.navigate("PayoutPreferences", undefined) },
         { icon: "wallet-outline", label: t("profile.item_wallet"), value: `$${walletBalance.toFixed(2)}`, onPress: () => navigation.navigate("WalletMain") },
         // P0 (notification-prefs review, 2026-06-15): the "Notifications"
         // row used to live here and on Settings → both routed to the
