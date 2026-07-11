@@ -1,8 +1,10 @@
 // screens/PayoutPreferencesScreen.tsx
 //
-// One screen for both the global-default and per-circle-override
-// payout destination. Route param circleId flips the scope: absent →
-// scope='default'; present → scope='circle_specific' with circle_id.
+// Payout-destination preference form. Same route params + save flow
+// as the initial ship (064cdc3); this pass swaps the radios for
+// tappable cards and turns the split editor into a live segmented
+// bar + auto-balancing sliders so a user can drag one destination
+// higher and see the others give ground proportionally.
 
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -10,9 +12,9 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
   Alert,
 } from "react-native";
+import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -32,6 +34,20 @@ import {
 
 type NavProp = StackNavigationProp<RootStackParamList>;
 type RouteType = RouteProp<RootStackParamList, "PayoutPreferences">;
+
+// Palette used for segments + slider tracks. Kept off-tokens so
+// individual destinations stay visually distinct even where the app
+// theme tinkers with accentTeal / primaryNavy.
+const DEST_COLOR: Record<PayoutSplitEntry["destination"], string> = {
+  wallet: "#00C6AE",
+  bank: "#3B82F6",
+  goal: "#8B5CF6",
+};
+const DEST_ICON: Record<PayoutSplitEntry["destination"], keyof typeof Ionicons.glyphMap> = {
+  wallet: "wallet-outline",
+  bank: "business-outline",
+  goal: "flag-outline",
+};
 
 export default function PayoutPreferencesScreen() {
   const { t } = useTranslation();
@@ -67,7 +83,7 @@ export default function PayoutPreferencesScreen() {
     setDestination(preference.destination);
     setBankId(preference.bank_account_id);
     setGoalId(preference.savings_goal_id);
-    if (preference.split_config && preference.split_config.length > 0) {
+    if (preference.split_config && preference.split_config.length >= 2) {
       setSplit(preference.split_config);
     }
   }, [preference]);
@@ -75,7 +91,10 @@ export default function PayoutPreferencesScreen() {
   const bankDisabled = bankOptions.length === 0;
   const goalDisabled = goalOptions.length === 0;
 
-  const splitTotal = split.reduce((sum, r) => sum + (Number(r.percentage) || 0), 0);
+  const splitTotal = split.reduce(
+    (sum, r) => sum + (Number(r.percentage) || 0),
+    0,
+  );
   const splitValid = split.length >= 2 && Math.round(splitTotal) === 100;
 
   const canSave =
@@ -84,14 +103,110 @@ export default function PayoutPreferencesScreen() {
     (destination === "goal" && !!goalId) ||
     (destination === "split" && splitValid);
 
+  // Auto-balance: when the user drags slider `idx` to `value`, hold
+  // its neighbours proportionally so the total stays 100. When the
+  // others are collectively at 0 (edge case), spread the remainder
+  // equally so the sliders never freeze.
+  const handleSliderChange = (idx: number, rawValue: number) => {
+    const value = Math.round(rawValue);
+    const oldValue = split[idx].percentage;
+    if (value === oldValue) return;
+
+    const others = split.filter((_, i) => i !== idx);
+    const remaining = 100 - value;
+    const otherSum = others.reduce((s, r) => s + r.percentage, 0);
+
+    let scaled: PayoutSplitEntry[];
+    if (otherSum <= 0) {
+      const share = Math.round(remaining / others.length);
+      scaled = others.map((r) => ({ ...r, percentage: share }));
+    } else {
+      scaled = others.map((r) => ({
+        ...r,
+        percentage: Math.round((r.percentage * remaining) / otherSum),
+      }));
+    }
+    // Absorb rounding drift onto the last non-target row so
+    // sum(all) is exactly 100.
+    const scaledSum = scaled.reduce((s, r) => s + r.percentage, 0);
+    const drift = remaining - scaledSum;
+    if (scaled.length > 0 && drift !== 0) {
+      scaled[scaled.length - 1] = {
+        ...scaled[scaled.length - 1],
+        percentage: Math.max(
+          0,
+          Math.min(100, scaled[scaled.length - 1].percentage + drift),
+        ),
+      };
+    }
+
+    const rebuilt: PayoutSplitEntry[] = [];
+    let scaledIdx = 0;
+    for (let i = 0; i < split.length; i++) {
+      if (i === idx) rebuilt.push({ ...split[i], percentage: value });
+      else rebuilt.push(scaled[scaledIdx++]);
+    }
+    setSplit(rebuilt);
+  };
+
+  const cycleSplitDestination = (idx: number) => {
+    const order: PayoutSplitEntry["destination"][] = ["wallet", "bank", "goal"];
+    setSplit((prev) =>
+      prev.map((r, i) =>
+        i === idx
+          ? {
+              ...r,
+              destination: order[(order.indexOf(r.destination) + 1) % order.length],
+            }
+          : r,
+      ),
+    );
+  };
+
+  const addSplitRow = () => {
+    if (split.length >= 3) return;
+    // Insert at 0% so the auto-balance handler can grow it from
+    // scratch — safer than shifting existing values around silently.
+    const usedTypes = new Set(split.map((r) => r.destination));
+    const next: PayoutSplitEntry["destination"] =
+      (["wallet", "bank", "goal"] as const).find((d) => !usedTypes.has(d)) ??
+      "goal";
+    setSplit((prev) => [...prev, { destination: next, percentage: 0 }]);
+  };
+
+  const removeSplitRow = (idx: number) => {
+    if (split.length <= 2) return;
+    const removed = split[idx];
+    const remaining = split.filter((_, i) => i !== idx);
+    const otherSum = remaining.reduce((s, r) => s + r.percentage, 0);
+    if (otherSum > 0) {
+      // Distribute the removed row's share proportionally so total
+      // stays at 100.
+      const factor = 100 / otherSum;
+      const rescaled = remaining.map((r) => ({
+        ...r,
+        percentage: Math.round(r.percentage * factor),
+      }));
+      const drift = 100 - rescaled.reduce((s, r) => s + r.percentage, 0);
+      if (rescaled.length > 0 && drift !== 0) {
+        rescaled[0] = { ...rescaled[0], percentage: rescaled[0].percentage + drift };
+      }
+      setSplit(rescaled);
+    } else {
+      const share = Math.round(100 / remaining.length);
+      setSplit(remaining.map((r) => ({ ...r, percentage: share })));
+    }
+  };
+
   const handleSave = async () => {
     if (!canSave || saving) return;
     if (destination === "split" && !splitValid) {
-      if (split.length < 2) {
-        Alert.alert("", t("payout_preferences.split_min_error"));
-        return;
-      }
-      Alert.alert("", t("payout_preferences.split_sum_error"));
+      Alert.alert(
+        "",
+        split.length < 2
+          ? t("payout_preferences.split_min_error")
+          : t("payout_preferences.split_sum_error"),
+      );
       return;
     }
     setSaving(true);
@@ -117,18 +232,6 @@ export default function PayoutPreferencesScreen() {
     }
   };
 
-  const updateSplitRow = (index: number, patch: Partial<PayoutSplitEntry>) => {
-    setSplit((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
-  };
-  const addSplitRow = () => {
-    if (split.length >= 4) return;
-    setSplit((prev) => [...prev, { destination: "wallet", percentage: 0 }]);
-  };
-  const removeSplitRow = (index: number) => {
-    if (split.length <= 2) return;
-    setSplit((prev) => prev.filter((_, i) => i !== index));
-  };
-
   if (isLoading && !preference) {
     return (
       <View style={styles.container}>
@@ -151,7 +254,7 @@ export default function PayoutPreferencesScreen() {
       <AppFlashList
         data={[0]}
         keyExtractor={() => "form"}
-        estimatedItemSize={800}
+        estimatedItemSize={900}
         contentContainerStyle={styles.content}
         renderItem={() => (
           <View>
@@ -164,46 +267,69 @@ export default function PayoutPreferencesScreen() {
             <Text style={styles.sectionLabel}>
               {t("payout_preferences.destination_label")}
             </Text>
-            <DestinationRadio
-              value="wallet"
-              current={destination}
+
+            <DestCard
+              kind="wallet"
               label={t("payout_preferences.destination_wallet")}
-              onPress={setDestination}
-            />
-            <DestinationRadio
-              value="bank"
+              description={t("payout_preferences.destination_wallet_desc")}
               current={destination}
+              onPress={() => setDestination("wallet")}
+            />
+            <DestCard
+              kind="bank"
               label={t("payout_preferences.destination_bank")}
-              onPress={setDestination}
+              description={
+                bankDisabled
+                  ? t("payout_preferences.no_banks")
+                  : t("payout_preferences.destination_bank_desc")
+              }
+              current={destination}
               disabled={bankDisabled}
-              disabledHint={t("payout_preferences.no_banks")}
+              onPress={() => setDestination("bank")}
             />
-            <DestinationRadio
-              value="goal"
-              current={destination}
+            <DestCard
+              kind="goal"
               label={t("payout_preferences.destination_goal")}
-              onPress={setDestination}
-              disabled={goalDisabled}
-              disabledHint={t("payout_preferences.no_goals")}
-            />
-            <DestinationRadio
-              value="split"
+              description={
+                goalDisabled
+                  ? t("payout_preferences.no_goals")
+                  : t("payout_preferences.destination_goal_desc")
+              }
               current={destination}
+              disabled={goalDisabled}
+              onPress={() => setDestination("goal")}
+            />
+            <DestCard
+              kind="split"
               label={t("payout_preferences.destination_split")}
-              onPress={setDestination}
+              description={t("payout_preferences.destination_split_desc")}
+              current={destination}
+              onPress={() => setDestination("split")}
             />
 
             {destination === "bank" && (
-              <BankPicker
-                options={bankOptions}
+              <SubPickerCards
+                options={bankOptions.map((b) => ({
+                  id: b.id,
+                  title: b.nickname || b.bank_name,
+                  subtitle: b.account_last4 ? `•••• ${b.account_last4}` : "",
+                  icon: "business-outline",
+                  tint: DEST_COLOR.bank,
+                }))}
                 selectedId={bankId}
                 onSelect={setBankId}
                 placeholder={t("payout_preferences.bank_placeholder")}
               />
             )}
             {destination === "goal" && (
-              <GoalPicker
-                options={goalOptions}
+              <SubPickerCards
+                options={goalOptions.map((g) => ({
+                  id: g.id,
+                  title: g.name,
+                  subtitle: "",
+                  icon: "flag-outline",
+                  tint: DEST_COLOR.goal,
+                }))}
                 selectedId={goalId}
                 onSelect={setGoalId}
                 placeholder={t("payout_preferences.goal_placeholder")}
@@ -212,20 +338,26 @@ export default function PayoutPreferencesScreen() {
             {destination === "split" && (
               <SplitEditor
                 rows={split}
-                onChangeRow={updateSplitRow}
+                bankDisabled={bankDisabled}
+                goalDisabled={goalDisabled}
+                onSliderChange={handleSliderChange}
+                onCycleDest={cycleSplitDestination}
                 onAdd={addSplitRow}
                 onRemove={removeSplitRow}
                 total={splitTotal}
                 t={t}
-                bankName={
+                bankLabel={
                   bankOptions[0]?.nickname || bankOptions[0]?.bank_name || ""
                 }
-                goalName={goalOptions[0]?.name || ""}
+                goalLabel={goalOptions[0]?.name || ""}
               />
             )}
 
             <TouchableOpacity
-              style={[styles.saveButton, (!canSave || saving) && styles.saveButtonDisabled]}
+              style={[
+                styles.saveButton,
+                (!canSave || saving) && styles.saveButtonDisabled,
+              ]}
               onPress={handleSave}
               disabled={!canSave || saving}
               accessibilityRole="button"
@@ -241,203 +373,290 @@ export default function PayoutPreferencesScreen() {
   );
 }
 
-function DestinationRadio({
-  value,
-  current,
+// ── DestCard ────────────────────────────────────────────────────────────
+// Tappable card with an icon tile + title + short description. Selected
+// state uses the accent border + a soft ECFDF5 background to match the
+// rest of the design system.
+
+function DestCard({
+  kind,
   label,
+  description,
+  current,
   onPress,
   disabled,
-  disabledHint,
 }: {
-  value: PayoutDestinationKind;
-  current: PayoutDestinationKind;
+  kind: PayoutDestinationKind;
   label: string;
-  onPress: (v: PayoutDestinationKind) => void;
+  description: string;
+  current: PayoutDestinationKind;
+  onPress: () => void;
   disabled?: boolean;
-  disabledHint?: string;
 }) {
-  const active = value === current;
+  const active = current === kind;
+  const iconName: keyof typeof Ionicons.glyphMap =
+    kind === "split" ? "git-branch-outline" : DEST_ICON[kind];
+  const tint =
+    kind === "split" ? colors.accentTeal : DEST_COLOR[kind as PayoutSplitEntry["destination"]];
   return (
     <TouchableOpacity
       style={[
-        styles.radioRow,
-        active && styles.radioRowActive,
-        disabled && styles.radioRowDisabled,
+        styles.destCard,
+        active && styles.destCardActive,
+        disabled && styles.destCardDisabled,
       ]}
-      onPress={() => !disabled && onPress(value)}
+      onPress={onPress}
       disabled={disabled}
       accessibilityRole="radio"
       accessibilityState={{ checked: active, disabled }}
     >
-      <View style={[styles.radioDot, active && styles.radioDotActive]}>
-        {active && <View style={styles.radioDotInner} />}
+      <View
+        style={[
+          styles.destIcon,
+          {
+            backgroundColor: active ? tint : `${tint}22`,
+          },
+        ]}
+      >
+        <Ionicons
+          name={iconName}
+          size={20}
+          color={active ? "#FFFFFF" : tint}
+        />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.radioLabel, disabled && styles.radioLabelDisabled]}>
+        <Text
+          style={[
+            styles.destTitle,
+            disabled && styles.destTitleDisabled,
+          ]}
+        >
           {label}
         </Text>
-        {disabled && disabledHint ? (
-          <Text style={styles.radioHint}>{disabledHint}</Text>
-        ) : null}
+        <Text style={styles.destDesc}>{description}</Text>
+      </View>
+      <View style={[styles.radioDot, active && styles.radioDotActive]}>
+        {active && <View style={styles.radioDotInner} />}
       </View>
     </TouchableOpacity>
   );
 }
 
-function BankPicker({
+// ── SubPickerCards ──────────────────────────────────────────────────────
+// Cards for Bank / Goal sub-selection. Renders a placeholder card when
+// the source list is empty so the section doesn't collapse silently.
+
+function SubPickerCards({
   options,
   selectedId,
   onSelect,
   placeholder,
 }: {
-  options: { id: string; bank_name: string; account_last4: string | null; nickname: string | null }[];
+  options: {
+    id: string;
+    title: string;
+    subtitle: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    tint: string;
+  }[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   placeholder: string;
 }) {
+  if (options.length === 0) {
+    return (
+      <View style={styles.subEmpty}>
+        <Text style={styles.subEmptyText}>{placeholder}</Text>
+      </View>
+    );
+  }
   return (
-    <View style={styles.pickerCard}>
-      {options.length === 0 ? (
-        <Text style={styles.pickerPlaceholder}>{placeholder}</Text>
-      ) : (
-        options.map((b) => {
-          const active = b.id === selectedId;
-          const label = b.nickname
-            ? b.nickname
-            : `${b.bank_name}${b.account_last4 ? ` •••• ${b.account_last4}` : ""}`;
-          return (
-            <TouchableOpacity
-              key={b.id}
-              style={[styles.pickerRow, active && styles.pickerRowActive]}
-              onPress={() => onSelect(b.id)}
-            >
-              <Ionicons
-                name={active ? "radio-button-on" : "radio-button-off"}
-                size={18}
-                color={active ? colors.accentTeal : colors.textSecondary}
-              />
-              <Text style={styles.pickerLabel}>{label}</Text>
-            </TouchableOpacity>
-          );
-        })
-      )}
+    <View style={{ marginTop: 8 }}>
+      {options.map((o) => {
+        const active = o.id === selectedId;
+        return (
+          <TouchableOpacity
+            key={o.id}
+            style={[styles.subCard, active && styles.subCardActive]}
+            onPress={() => onSelect(o.id)}
+          >
+            <View style={[styles.subIcon, { backgroundColor: `${o.tint}22` }]}>
+              <Ionicons name={o.icon} size={18} color={o.tint} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.subTitle}>{o.title}</Text>
+              {!!o.subtitle && (
+                <Text style={styles.subSubtitle}>{o.subtitle}</Text>
+              )}
+            </View>
+            <Ionicons
+              name={active ? "checkmark-circle" : "ellipse-outline"}
+              size={20}
+              color={active ? colors.accentTeal : "#9CA3AF"}
+            />
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
 
-function GoalPicker({
-  options,
-  selectedId,
-  onSelect,
-  placeholder,
-}: {
-  options: { id: string; name: string }[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-  placeholder: string;
-}) {
-  return (
-    <View style={styles.pickerCard}>
-      {options.length === 0 ? (
-        <Text style={styles.pickerPlaceholder}>{placeholder}</Text>
-      ) : (
-        options.map((g) => {
-          const active = g.id === selectedId;
-          return (
-            <TouchableOpacity
-              key={g.id}
-              style={[styles.pickerRow, active && styles.pickerRowActive]}
-              onPress={() => onSelect(g.id)}
-            >
-              <Ionicons
-                name={active ? "radio-button-on" : "radio-button-off"}
-                size={18}
-                color={active ? colors.accentTeal : colors.textSecondary}
-              />
-              <Text style={styles.pickerLabel}>{g.name}</Text>
-            </TouchableOpacity>
-          );
-        })
-      )}
-    </View>
-  );
-}
+// ── SplitEditor ─────────────────────────────────────────────────────────
+// Live segmented bar + one Slider per destination. Add-row grows the
+// split up to 3 buckets (wallet + bank + goal); remove-row scales the
+// survivors back up to 100 %.
 
 function SplitEditor({
   rows,
-  onChangeRow,
+  bankDisabled,
+  goalDisabled,
+  onSliderChange,
+  onCycleDest,
   onAdd,
   onRemove,
   total,
   t,
-  bankName,
-  goalName,
+  bankLabel,
+  goalLabel,
 }: {
   rows: PayoutSplitEntry[];
-  onChangeRow: (i: number, patch: Partial<PayoutSplitEntry>) => void;
+  bankDisabled: boolean;
+  goalDisabled: boolean;
+  onSliderChange: (i: number, v: number) => void;
+  onCycleDest: (i: number) => void;
   onAdd: () => void;
   onRemove: (i: number) => void;
   total: number;
   t: (k: string, opts?: any) => string;
-  bankName: string;
-  goalName: string;
+  bankLabel: string;
+  goalLabel: string;
 }) {
-  const labelFor = (kind: PayoutSplitEntry["destination"]) => {
+  const totalValid = Math.round(total) === 100;
+  const nameFor = (kind: PayoutSplitEntry["destination"]) => {
     if (kind === "wallet") return t("payout_preferences.split_row_wallet");
-    if (kind === "bank") return t("payout_preferences.split_row_bank", { name: bankName });
-    return t("payout_preferences.split_row_goal", { name: goalName });
-  };
-  const cycleDestination = (i: number, current: PayoutSplitEntry["destination"]) => {
-    const order: PayoutSplitEntry["destination"][] = ["wallet", "bank", "goal"];
-    const next = order[(order.indexOf(current) + 1) % order.length];
-    onChangeRow(i, { destination: next });
+    if (kind === "bank")
+      return t("payout_preferences.split_row_bank", { name: bankLabel || "Bank" });
+    return t("payout_preferences.split_row_goal", { name: goalLabel || "Goal" });
   };
   return (
     <View style={styles.splitCard}>
-      {rows.map((row, idx) => (
-        <View key={idx} style={styles.splitRow}>
-          <TouchableOpacity
-            style={styles.splitDestButton}
-            onPress={() => cycleDestination(idx, row.destination)}
-          >
-            <Text style={styles.splitDestText}>{labelFor(row.destination)}</Text>
-            <Ionicons name="swap-vertical" size={14} color={colors.textSecondary} />
-          </TouchableOpacity>
-          <TextInput
-            style={styles.splitInput}
-            keyboardType="numeric"
-            value={String(row.percentage)}
-            onChangeText={(v) => {
-              const n = Math.max(0, Math.min(100, parseInt(v, 10) || 0));
-              onChangeRow(idx, { percentage: n });
+      {/* Segmented distribution bar */}
+      <View style={styles.segmentBar}>
+        {rows.map((r, i) => (
+          <View
+            key={i}
+            style={{
+              flex: Math.max(0, r.percentage),
+              backgroundColor: DEST_COLOR[r.destination],
             }}
           />
-          <Text style={styles.splitPct}>%</Text>
-          <TouchableOpacity
-            onPress={() => onRemove(idx)}
-            disabled={rows.length <= 2}
-            style={styles.splitRemove}
-          >
-            <Ionicons
-              name="close"
-              size={16}
-              color={rows.length <= 2 ? colors.textSecondary : colors.errorText}
+        ))}
+        {rows.every((r) => r.percentage === 0) && (
+          <View style={{ flex: 1, backgroundColor: "#E5E7EB" }} />
+        )}
+      </View>
+      <View style={styles.legendRow}>
+        {rows.map((r, i) => (
+          <View key={i} style={styles.legendItem}>
+            <View
+              style={[
+                styles.legendDot,
+                { backgroundColor: DEST_COLOR[r.destination] },
+              ]}
             />
-          </TouchableOpacity>
-        </View>
-      ))}
-      <TouchableOpacity onPress={onAdd} style={styles.splitAdd} disabled={rows.length >= 4}>
-        <Ionicons name="add" size={16} color={colors.accentTeal} />
-        <Text style={styles.splitAddText}>{t("payout_preferences.split_add")}</Text>
-      </TouchableOpacity>
-      <Text
-        style={[
-          styles.splitTotal,
-          Math.round(total) !== 100 && styles.splitTotalError,
-        ]}
-      >
-        Total: {total}%
-      </Text>
+            <Text style={styles.legendText}>
+              {nameFor(r.destination)} · {r.percentage}%
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      {/* One slider per row */}
+      {rows.map((r, i) => {
+        const disabled =
+          (r.destination === "bank" && bankDisabled) ||
+          (r.destination === "goal" && goalDisabled);
+        return (
+          <View key={i} style={styles.sliderBlock}>
+            <View style={styles.sliderHeader}>
+              <TouchableOpacity
+                style={styles.sliderDestButton}
+                onPress={() => onCycleDest(i)}
+              >
+                <Ionicons
+                  name={DEST_ICON[r.destination]}
+                  size={16}
+                  color={DEST_COLOR[r.destination]}
+                />
+                <Text style={styles.sliderDestText}>
+                  {nameFor(r.destination)}
+                </Text>
+                <Ionicons
+                  name="swap-vertical"
+                  size={12}
+                  color={colors.textSecondary}
+                />
+              </TouchableOpacity>
+              <Text style={styles.sliderPercent}>{r.percentage}%</Text>
+              <TouchableOpacity
+                onPress={() => onRemove(i)}
+                disabled={rows.length <= 2}
+                style={styles.sliderRemove}
+              >
+                <Ionicons
+                  name="close"
+                  size={14}
+                  color={rows.length <= 2 ? "#D1D5DB" : "#DC2626"}
+                />
+              </TouchableOpacity>
+            </View>
+            <Slider
+              minimumValue={0}
+              maximumValue={100}
+              step={1}
+              value={r.percentage}
+              onValueChange={(v) => onSliderChange(i, v)}
+              disabled={disabled}
+              minimumTrackTintColor={DEST_COLOR[r.destination]}
+              maximumTrackTintColor="#E5E7EB"
+              thumbTintColor={DEST_COLOR[r.destination]}
+              style={styles.slider}
+            />
+            {disabled && (
+              <Text style={styles.sliderHint}>
+                {r.destination === "bank"
+                  ? t("payout_preferences.no_banks")
+                  : t("payout_preferences.no_goals")}
+              </Text>
+            )}
+          </View>
+        );
+      })}
+
+      {rows.length < 3 && (
+        <TouchableOpacity onPress={onAdd} style={styles.splitAdd}>
+          <Ionicons name="add-circle-outline" size={16} color={colors.accentTeal} />
+          <Text style={styles.splitAddText}>
+            {t("payout_preferences.split_add")}
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.totalRow}>
+        <Text
+          style={[
+            styles.totalText,
+            !totalValid && styles.totalTextError,
+          ]}
+        >
+          {t("payout_preferences.split_total")}: {total}%
+        </Text>
+        {!totalValid && (
+          <Text style={styles.totalError}>
+            {t("payout_preferences.split_sum_error")}
+          </Text>
+        )}
+      </View>
     </View>
   );
 }
@@ -449,32 +668,57 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textSecondary,
     marginBottom: 12,
+    lineHeight: 18,
   },
   sectionLabel: {
     fontSize: 13,
     color: colors.textSecondary,
     marginBottom: 8,
-    marginTop: 12,
+    marginTop: 4,
   },
-  radioRow: {
+
+  // Destination cards
+  destCard: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     padding: 14,
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    marginBottom: 8,
+    borderRadius: 14,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
-  radioRowActive: { borderColor: colors.accentTeal, backgroundColor: "#ECFDF5" },
-  radioRowDisabled: { opacity: 0.5 },
+  destCardActive: {
+    borderColor: colors.accentTeal,
+    backgroundColor: "#ECFDF5",
+    shadowColor: colors.accentTeal,
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 3 },
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  destCardDisabled: { opacity: 0.5 },
+  destIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  destTitle: {
+    fontSize: 15,
+    color: colors.textPrimary,
+    fontWeight: "600",
+  },
+  destTitleDisabled: { color: colors.textSecondary },
+  destDesc: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
   radioDot: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: "#9CA3AF",
+    borderColor: "#D1D5DB",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -485,85 +729,122 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: colors.accentTeal,
   },
-  radioLabel: { fontSize: 15, color: colors.textPrimary, fontWeight: "500" },
-  radioLabelDisabled: { color: colors.textSecondary },
-  radioHint: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  pickerCard: {
-    backgroundColor: "#FFFFFF",
+
+  // Sub-picker cards (bank / goal single-select)
+  subEmpty: {
+    padding: 14,
+    backgroundColor: "#FEF3C7",
     borderRadius: 12,
-    padding: 8,
     marginTop: 8,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
   },
-  pickerPlaceholder: { fontSize: 13, color: colors.textSecondary, padding: 12 },
-  pickerRow: {
+  subEmptyText: { fontSize: 13, color: "#92400E" },
+  subCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    padding: 10,
-  },
-  pickerRowActive: { backgroundColor: "#ECFDF5", borderRadius: 8 },
-  pickerLabel: { fontSize: 14, color: colors.textPrimary, flex: 1 },
-  splitCard: {
+    gap: 12,
+    padding: 12,
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
-    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  subCardActive: { borderColor: colors.accentTeal, backgroundColor: "#ECFDF5" },
+  subIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  subTitle: { fontSize: 14, color: colors.textPrimary, fontWeight: "500" },
+  subSubtitle: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+
+  // Split editor
+  splitCard: {
+    padding: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
     marginTop: 8,
     borderWidth: 1,
     borderColor: "#E5E7EB",
   },
-  splitRow: {
+  segmentBar: {
+    height: 16,
+    borderRadius: 8,
+    overflow: "hidden",
+    flexDirection: "row",
+    backgroundColor: "#E5E7EB",
+    marginBottom: 12,
+  },
+  legendRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 4 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendText: { fontSize: 11, color: colors.textSecondary },
+
+  sliderBlock: { marginTop: 12 },
+  sliderHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    paddingVertical: 6,
   },
-  splitDestButton: {
+  sliderDestButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    paddingVertical: 8,
+    paddingVertical: 6,
     paddingHorizontal: 10,
     backgroundColor: "#F3F4F6",
-    borderRadius: 8,
+    borderRadius: 999,
   },
-  splitDestText: { fontSize: 13, color: colors.textPrimary, flex: 1 },
-  splitInput: {
-    width: 60,
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    textAlign: "center",
+  sliderDestText: {
+    fontSize: 13,
+    color: colors.textPrimary,
+    fontWeight: "500",
+    flex: 1,
+  },
+  sliderPercent: {
     fontSize: 14,
+    color: colors.textPrimary,
+    fontWeight: "700",
+    width: 44,
+    textAlign: "right",
   },
-  splitPct: { fontSize: 14, color: colors.textSecondary },
-  splitRemove: { padding: 4 },
+  sliderRemove: { padding: 4 },
+  slider: { width: "100%", height: 32 },
+  sliderHint: { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+
   splitAdd: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 6,
     padding: 8,
-    marginTop: 4,
+    marginTop: 8,
   },
   splitAddText: { fontSize: 13, color: colors.accentTeal, fontWeight: "600" },
-  splitTotal: {
-    marginTop: 8,
-    textAlign: "right",
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.textPrimary,
-  },
-  splitTotalError: { color: colors.errorText },
+  totalRow: { marginTop: 12, alignItems: "flex-end" },
+  totalText: { fontSize: 13, fontWeight: "700", color: colors.textPrimary },
+  totalTextError: { color: colors.errorText },
+  totalError: { fontSize: 11, color: colors.errorText, marginTop: 4 },
+
+  // Save button
   saveButton: {
-    marginTop: 24,
+    marginTop: 28,
     backgroundColor: colors.accentTeal,
-    padding: 14,
+    padding: 16,
     borderRadius: 12,
     alignItems: "center",
+    shadowColor: colors.accentTeal,
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
+    elevation: 3,
   },
-  saveButtonDisabled: { backgroundColor: "#D1D5DB" },
-  saveButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "600" },
+  saveButtonDisabled: {
+    backgroundColor: "#D1D5DB",
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  saveButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
 });
