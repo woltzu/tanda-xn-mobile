@@ -4457,6 +4457,7 @@
     "action_set_up_autopay_short": "Auto-paiement",
     "action_mute_short": "Muet",
     "action_unmute_short": "Activer",
+    "action_payout_short": "Paiement",
     "help_rotation_title": "Comment fonctionne l'ordre de paiement",
     "help_rotation_xnscore_body": "L'ordre de paiement est déterminé par les XnScores des membres. Les scores plus élevés passent en premier.",
     "help_rotation_manual_body": "Vous attribuez les positions de paiement après l'arrivée des membres.",

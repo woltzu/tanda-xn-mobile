@@ -1025,29 +1025,23 @@ export default function CircleDetailScreen() {
               {t("circle_detail.action_set_up_autopay_short")}
             </Text>
           </TouchableOpacity>
+          {/* Bucket "payout preferences promote": Mute moved into the
+              menu modal, its action-row slot is now the payout-
+              preferences entry so a member can preset destination
+              without hunting through the modal. */}
           <TouchableOpacity
             style={styles.iconActionBtn}
-            onPress={() => setMuteSheetOpen(true)}
+            onPress={() =>
+              navigation.navigate(Routes.PayoutPreferences as never, { circleId } as never)
+            }
             accessibilityRole="button"
-            accessibilityLabel={t(
-              circleMuted
-                ? "circle_detail.action_unmute_circle"
-                : "circle_detail.action_mute_circle",
-            )}
+            accessibilityLabel={t("circle_detail.menu_payout_prefs")}
           >
-            <View style={[styles.iconActionIcon, { backgroundColor: "#F3F4F6" }]}>
-              <Ionicons
-                name={circleMuted ? "notifications-off" : "notifications-outline"}
-                size={18}
-                color={circleMuted ? colors.warningLabel : colors.primaryNavy}
-              />
+            <View style={[styles.iconActionIcon, { backgroundColor: "#ECFDF5" }]}>
+              <Ionicons name="cash-outline" size={18} color={colors.accentTeal} />
             </View>
             <Text style={styles.iconActionLabel} numberOfLines={1}>
-              {t(
-                circleMuted
-                  ? "circle_detail.action_unmute_short"
-                  : "circle_detail.action_mute_short",
-              )}
+              {t("circle_detail.action_payout_short")}
             </Text>
           </TouchableOpacity>
         </View>

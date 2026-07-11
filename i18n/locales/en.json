@@ -4457,6 +4457,7 @@
     "action_set_up_autopay_short": "Autopay",
     "action_mute_short": "Mute",
     "action_unmute_short": "Unmute",
+    "action_payout_short": "Payout",
     "help_rotation_title": "How payout order works",
     "help_rotation_xnscore_body": "Payout order is determined by members' XnScores. Higher scores go first.",
     "help_rotation_manual_body": "You assign payout positions after members join.",
