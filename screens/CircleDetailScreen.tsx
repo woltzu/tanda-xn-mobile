@@ -455,6 +455,39 @@ export default function CircleDetailScreen() {
     };
   }, [circleId, refresh, track]);
 
+  // ─ Hoisted-above-guard hooks ────────────────────────────────────────────
+  // Rules-of-Hooks: any hook declared AFTER the `if (!circle)` early
+  // return would change the mounted hook count when the guard flips
+  // (transient nulls from the join-flow refresh, session hydration
+  // races, etc.). All hooks must run every render, so both the
+  // codeCopied state and the "opened" telemetry effect live here now.
+  // The effect self-guards on `!circle` and inlines the role
+  // computation since getUserRole() (which reads circle + members) is
+  // declared further down.
+  const [codeCopied, setCodeCopied] = useState(false);
+  useEffect(() => {
+    if (openedTrackedRef.current) return;
+    if (!circle) return;
+    openedTrackedRef.current = true;
+    const currentUserMember = members.find((m) => m.isCurrentUser);
+    const inlineRole: UserRole =
+      circle.createdBy === user?.id
+        ? "admin"
+        : currentUserMember?.role === "creator" ||
+            currentUserMember?.role === "admin"
+          ? "admin"
+          : currentUserMember?.role === "elder"
+            ? "elder"
+            : "member";
+    track({
+      eventType: "circle_detail_opened",
+      eventCategory: "savings",
+      eventAction: "opened",
+      eventLabel: inlineRole,
+      eventValue: { circleId, role: inlineRole },
+    });
+  }, [track, circleId, circle, members, user?.id]);
+
   if (!circle) {
     return (
       <View style={styles.container}>
@@ -498,8 +531,9 @@ export default function CircleDetailScreen() {
   // every "Share" handed out a code the lookup couldn't find.
   const inviteCode = circle.inviteCode ?? "";
 
-  // Local feedback when the user taps "Copy" — flips to true for ~1.6s.
-  const [codeCopied, setCodeCopied] = useState(false);
+  // codeCopied state hoisted above the `if (!circle)` guard to keep
+  // the hook order stable across renders — see the block just above
+  // the guard.
   const handleCopyCode = async () => {
     if (!inviteCode) return;
     await Clipboard.setStringAsync(inviteCode);
@@ -573,20 +607,9 @@ export default function CircleDetailScreen() {
   const isAdmin = userRole === "admin";
   const isElder = userRole === "elder";
 
-  // `opened` telemetry. Waits for the role to be derivable from the
-  // current members list so the role label is accurate; until then we
-  // re-render and fire once.
-  useEffect(() => {
-    if (openedTrackedRef.current) return;
-    openedTrackedRef.current = true;
-    track({
-      eventType: "circle_detail_opened",
-      eventCategory: "savings",
-      eventAction: "opened",
-      eventLabel: userRole,
-      eventValue: { circleId, role: userRole },
-    });
-  }, [track, circleId, userRole]);
+  // `opened` telemetry hoisted above the `if (!circle)` guard — see
+  // the block just above the guard for the hook. Role is inlined
+  // there since getUserRole() isn't yet declared at that point.
 
   // === ALL USERS Menu Handlers ===
   const handleViewCircleRules = () => {
