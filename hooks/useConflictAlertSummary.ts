@@ -14,7 +14,7 @@
 // is where the real surface lives.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 interface MostRecent {
@@ -31,13 +31,34 @@ export function useConflictAlertSummary(
   const [mostRecent, setMostRecent] = useState<MostRecent | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Serialize + sort the id list so `fetchSummary` (and the effect that
+  // owns it) rebuild only when the actual set of ids changes. The upstream
+  // caller passes `myCircles.map(c => c.id)`, and `myCircles` itself is
+  // `circles.filter(...)` in CirclesContext — recomputed on every
+  // provider render, so every parent re-render produced a fresh array
+  // reference with identical contents. Depending on that reference
+  // directly made `fetchSummary` new every render, which re-fired the
+  // effect, whose state updates triggered another render, which the
+  // parent's next context tick re-entered — Maximum update depth on any
+  // downstream screen (CirclesV2Screen, JoinCircleByCode, ...).
+  //
+  // The signature is content-addressed, so callers can keep passing raw
+  // arrays without wrapping them in useMemo themselves.
+  const idsKey = useMemo(
+    () => (circleIds ?? []).slice().sort().join(","),
+    [circleIds],
+  );
+
   const fetchSummary = useCallback(async () => {
-    if (!circleIds || circleIds.length === 0) {
+    if (!idsKey) {
       setOpenCount(0);
       setMostRecent(null);
       setLoading(false);
       return;
     }
+    // Re-derive the id list from the key so the callback stays a pure
+    // function of `idsKey` — no closure over the original array.
+    const ids = idsKey.split(",");
     setLoading(true);
     try {
       const [
@@ -47,13 +68,13 @@ export function useConflictAlertSummary(
         supabase
           .from("dispute_cases")
           .select("id, circle_id, updated_at, circles(name)")
-          .in("circle_id", circleIds)
+          .in("circle_id", ids)
           .in("status", ["open", "investigating"])
           .order("updated_at", { ascending: false }),
         supabase
           .from("post_formation_monitor")
           .select("id, circle_id, updated_at, circles(name)")
-          .in("circle_id", circleIds)
+          .in("circle_id", ids)
           .eq("escalated", true)
           .order("updated_at", { ascending: false }),
       ]);
@@ -105,7 +126,7 @@ export function useConflictAlertSummary(
     } finally {
       setLoading(false);
     }
-  }, [circleIds]);
+  }, [idsKey]);
 
   useEffect(() => {
     fetchSummary();
