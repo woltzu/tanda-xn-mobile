@@ -23,7 +23,11 @@ export type ProposalType =
   | 'resolve_dispute'
   | 'dissolve_circle'
   | 'custom'
-  | 'pool_rollover';
+  | 'pool_rollover'
+  // Bucket B of the underfilled-circle work — cron creates this type
+  // when a pending circle passes its start_date without hitting
+  // member_count. Migration 290 widens the server-side CHECK to match.
+  | 'start_underfilled';
 
 export type ProposalStatus = 'draft' | 'open' | 'closed' | 'cancelled' | 'executed';
 

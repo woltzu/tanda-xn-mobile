@@ -895,20 +895,57 @@ function CircleDetailBody({
           Surface that clearly so the member knows what they're doing
           when they tap Contribute early. */}
       {circle.status === "pending" ? (
-        <View style={styles.pendingBanner}>
-          <Ionicons name="hourglass-outline" size={18} color="#B45309" />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.pendingBannerTitle}>
-              {t("circle_detail.pending_banner_title", {
-                current: circle.currentMembers,
-                total: circle.memberCount,
-              })}
-            </Text>
-            <Text style={styles.pendingBannerBody}>
-              {t("circle_detail.pending_banner_body")}
-            </Text>
-          </View>
-        </View>
+        (() => {
+          // Bucket B hook: is there an open start_underfilled proposal
+          // for this circle? If so, upgrade the amber "contribute now"
+          // banner to a red "vote needed" banner that navigates
+          // straight to the existing CircleVoting screen. openProposals
+          // ForBadge comes from useCircleProposals(circleId) higher up.
+          const underfilledVote = openProposalsForBadge.find(
+            (p) => p.proposalType === "start_underfilled",
+          );
+          if (underfilledVote) {
+            return (
+              <TouchableOpacity
+                style={styles.voteNeededBanner}
+                onPress={() =>
+                  navigation.navigate(
+                    Routes.CircleVoting as never,
+                    { circleId } as never,
+                  )
+                }
+                accessibilityRole="button"
+              >
+                <Ionicons name="alert-circle" size={18} color="#B91C1C" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.voteNeededBannerTitle}>
+                    {t("circle_detail.vote_needed_banner_title")}
+                  </Text>
+                  <Text style={styles.voteNeededBannerBody}>
+                    {t("circle_detail.vote_needed_banner_body")}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#B91C1C" />
+              </TouchableOpacity>
+            );
+          }
+          return (
+            <View style={styles.pendingBanner}>
+              <Ionicons name="hourglass-outline" size={18} color="#B45309" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.pendingBannerTitle}>
+                  {t("circle_detail.pending_banner_title", {
+                    current: circle.currentMembers,
+                    total: circle.memberCount,
+                  })}
+                </Text>
+                <Text style={styles.pendingBannerBody}>
+                  {t("circle_detail.pending_banner_body")}
+                </Text>
+              </View>
+            </View>
+          );
+        })()
       ) : null}
 
       {/* Next-contribution hero — answers "when do I owe money?" up
@@ -2756,6 +2793,28 @@ const styles = StyleSheet.create({
   pendingBannerBody: {
     fontSize: 12,
     color: "#78350F",
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  voteNeededBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 12,
+    marginBottom: 16,
+    backgroundColor: "#FEE2E2",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  voteNeededBannerTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#991B1B",
+  },
+  voteNeededBannerBody: {
+    fontSize: 12,
+    color: "#7F1D1D",
     marginTop: 2,
     lineHeight: 16,
   },
