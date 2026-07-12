@@ -514,7 +514,12 @@ export type RootStackParamList = {
     // the just-picked card becomes the active selection.
     selectedPaymentMethodId?: string;
   };
-  ContributionSuccess: { circleId: string; amount: number; transactionId?: string };
+  ContributionSuccess: {
+    circleId: string;
+    amount: number;
+    transactionId?: string;
+    paymentMethodLabel?: string;
+  };
   // Wallet Flow
   AddFunds: undefined;
   // P0 (kyc-trigger review): optional resume snapshot used by the

@@ -23,7 +23,7 @@ export default function ContributionSuccessScreen() {
   const navigation = useNavigation<ContributionSuccessNavigationProp>();
   const route = useRoute<ContributionSuccessRouteProp>();
   const { t } = useTranslation();
-  const { circleId, amount, transactionId } = route.params;
+  const { circleId, amount, transactionId, paymentMethodLabel } = route.params;
   const { circles, browseCircles, myCircles } = useCircles();
 
   // Animation values
@@ -239,7 +239,9 @@ export default function ContributionSuccessScreen() {
 
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>{t("contribution_success.detail_payment_method")}</Text>
-              <Text style={styles.detailValue}>{t("contribution_success.detail_payment_method_value")}</Text>
+              <Text style={styles.detailValue}>
+                {paymentMethodLabel || t("contribution_success.detail_payment_method_value")}
+              </Text>
             </View>
 
             <View style={styles.detailRow}>

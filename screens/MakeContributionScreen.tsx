@@ -686,6 +686,9 @@ export default function MakeContributionScreen() {
           circleId,
           amount: isCrossBorder ? paymentAmount : amount,
           transactionId,
+          paymentMethodLabel: paymentMethods.find(
+            (m) => m.id === selectedMethod,
+          )?.name,
         });
       } catch (error) {
         Alert.alert(
@@ -779,6 +782,9 @@ export default function MakeContributionScreen() {
           circleId,
           amount: isCrossBorder ? paymentAmount : amount,
           transactionId: clientSecret || "stripe-pending",
+          paymentMethodLabel: paymentMethods.find(
+            (m) => m.id === selectedMethod,
+          )?.name,
         });
       } catch (error: any) {
         const message = error?.message || "There was an error processing your payment. Please try again.";
