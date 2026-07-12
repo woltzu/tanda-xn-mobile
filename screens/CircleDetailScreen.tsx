@@ -453,12 +453,19 @@ function CircleDetailBody({
   // renders a NotFound state itself.
   const circle = _circleProp;
 
-  // Fetch members and activities when screen is focused or circleId changes.
-  // `fetchData()` is cache-aware so re-focuses inside the 30 s TTL don't
-  // refire the round-trips.
+  // Fetch members and activities on every focus. Bypass the cache so a
+  // return from ContributionSuccess (or any other screen where the DB
+  // moved forward) shows the fresh activity feed instead of a stale
+  // 30-s cache hit. First mount uses showSpinner:true so the empty
+  // initial state can flip out of loading; later focuses use
+  // showSpinner:false so the current list stays on screen during the
+  // silent refetch and the new rows swap in when the fetch resolves.
+  const hasFocusedOnceRef = useRef(false);
   useFocusEffect(
     React.useCallback(() => {
-      fetchData({ showSpinner: true });
+      const isFirstFocus = !hasFocusedOnceRef.current;
+      hasFocusedOnceRef.current = true;
+      fetchData({ showSpinner: isFirstFocus, bypassCache: true });
     }, [fetchData])
   );
 
