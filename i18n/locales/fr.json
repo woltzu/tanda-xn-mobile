@@ -4547,6 +4547,8 @@
     "menu_swap_position": "Échanger la position",
     "menu_payout_prefs": "Préférences de paiement",
     "menu_payout_prefs_desc": "Où va votre paiement pour ce cercle",
+    "pending_banner_title": "En attente de {{current}} sur {{total}} membres",
+    "pending_banner_body": "Vous pouvez contribuer dès maintenant. Les paiements sont conservés dans le pot et le cercle démarrera à l'arrivée du dernier membre.",
     "menu_leave_circle": "Quitter le cercle",
     "menu_leave_desc": "Quitter ce cercle d'épargne",
     "menu_admin_controls": "Contrôles administratifs",

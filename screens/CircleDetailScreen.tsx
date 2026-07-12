@@ -889,6 +889,28 @@ function CircleDetailBody({
 
   const renderOverviewTab = () => (
     <View style={styles.tabContent}>
+      {/* Pending-circle banner. Bucket A of the "underfilled circle"
+          work — the circle isn't at capacity yet, but the contribution
+          path (EF + webhook) already accepts pending-circle payments.
+          Surface that clearly so the member knows what they're doing
+          when they tap Contribute early. */}
+      {circle.status === "pending" ? (
+        <View style={styles.pendingBanner}>
+          <Ionicons name="hourglass-outline" size={18} color="#B45309" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.pendingBannerTitle}>
+              {t("circle_detail.pending_banner_title", {
+                current: circle.currentMembers,
+                total: circle.memberCount,
+              })}
+            </Text>
+            <Text style={styles.pendingBannerBody}>
+              {t("circle_detail.pending_banner_body")}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
       {/* Next-contribution hero — answers "when do I owe money?" up
           front. Only meaningful for members of a recurring circle; one-
           time and beneficiary circles already surface the relevant
@@ -2714,6 +2736,28 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 40,
     paddingBottom: 100,
+  },
+  pendingBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 12,
+    marginBottom: 16,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  pendingBannerTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#92400E",
+  },
+  pendingBannerBody: {
+    fontSize: 12,
+    color: "#78350F",
+    marginTop: 2,
+    lineHeight: 16,
   },
   statsGrid: {
     flexDirection: "row",

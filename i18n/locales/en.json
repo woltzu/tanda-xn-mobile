@@ -4547,6 +4547,8 @@
     "menu_swap_position": "Swap Position",
     "menu_payout_prefs": "Payout preferences",
     "menu_payout_prefs_desc": "Where your payout for this circle goes",
+    "pending_banner_title": "Waiting for {{current}} of {{total}} members",
+    "pending_banner_body": "You can contribute now. Payments are held toward the pot and the circle starts when the last member joins.",
     "menu_leave_circle": "Leave Circle",
     "menu_leave_desc": "Exit this savings circle",
     "menu_admin_controls": "Admin Controls",
