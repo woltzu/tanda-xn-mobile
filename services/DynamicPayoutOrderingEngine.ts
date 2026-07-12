@@ -988,7 +988,7 @@ export class DynamicPayoutOrderingEngine {
       .from("circle_cycles")
       .select("cycle_number")
       .eq("circle_id", request.circle_id)
-      .in("status", ["active", "contribution_period", "payout_pending"])
+      .in("cycle_status", ["active", "contribution_period", "payout_pending"])
       .order("cycle_number", { ascending: false })
       .limit(1)
       .single();

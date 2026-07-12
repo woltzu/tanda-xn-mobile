@@ -88,7 +88,7 @@ export function useCurrentCycle(circleId: string | undefined) {
           )
         `)
         .eq('circle_id', circleId)
-        .not('status', 'in', '("closed","cancelled","skipped")')
+        .not('cycle_status', 'in', '("closed","cancelled","skipped")')
         .order('cycle_number', { ascending: true })
         .limit(1)
         .single();
@@ -444,11 +444,11 @@ export function useCycleStats(circleId: string | undefined) {
         .eq('circle_id', circleId);
 
       const allCycles = cycles || [];
-      const completedCycles = allCycles.filter(c => c.status === 'closed');
+      const completedCycles = allCycles.filter(c => c.cycle_status === 'closed');
 
       // Get next upcoming cycle
       const nextCycle = allCycles.find(c =>
-        ['scheduled', 'collecting'].includes(c.status)
+        ['scheduled', 'collecting'].includes(c.cycle_status)
       );
 
       // Calculate totals

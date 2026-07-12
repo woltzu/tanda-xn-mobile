@@ -38,7 +38,7 @@ export function usePendingPayouts(circleId?: string) {
           recipient:profiles!circle_cycles_recipient_user_id_fkey(full_name, email)
         `)
         .eq('recipient_user_id', user.id)
-        .eq('status', 'ready_payout')
+        .eq('cycle_status', 'ready_payout')
         .order('payout_date', { ascending: true });
 
       if (circleId) {
@@ -546,7 +546,7 @@ export function useCirclePayoutQueue(circleId: string) {
             payout_execution:payout_executions(*)
           `)
           .eq('circle_id', circleId)
-          .in('status', ['collecting', 'ready_payout', 'payout_completed'])
+          .in('cycle_status', ['collecting', 'ready_payout', 'payout_completed'])
           .order('cycle_number', { ascending: true });
 
         if (fetchError) throw fetchError;
@@ -596,9 +596,9 @@ export function useCirclePayoutQueue(circleId: string) {
     };
   }, [circleId]);
 
-  const nextPayout = queue.find(c => c.status === 'ready_payout');
-  const completedPayouts = queue.filter(c => c.status === 'payout_completed');
-  const upcomingPayouts = queue.filter(c => c.status === 'collecting');
+  const nextPayout = queue.find(c => c.cycle_status === 'ready_payout');
+  const completedPayouts = queue.filter(c => c.cycle_status === 'payout_completed');
+  const upcomingPayouts = queue.filter(c => c.cycle_status === 'collecting');
 
   return {
     queue,

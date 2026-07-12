@@ -235,14 +235,14 @@ export class ContributionProcessingService {
 
     const allComplete = allContributions?.every(c => c.status === 'completed' || c.status === 'covered');
 
-    if (allComplete && ['grace_period', 'deadline_reached', 'collecting'].includes(cycle.status)) {
+    if (allComplete && ['grace_period', 'deadline_reached', 'collecting'].includes(cycle.cycle_status)) {
       // All contributions received! Transition to ready_payout
       const collectedAmount = await this.calculateCollectedAmount(cycle.id);
 
       await supabase
         .from('circle_cycles')
         .update({
-          status: 'ready_payout',
+          cycle_status: 'ready_payout',
           status_changed_at: new Date().toISOString(),
           collected_amount: collectedAmount,
           payout_amount: collectedAmount * (1 - (circle.platform_fee_percent || 0.02)),
@@ -373,7 +373,7 @@ export class ContributionProcessingService {
     await supabase
       .from('circle_cycles')
       .update({
-        status: 'payout_completed',
+        cycle_status: 'payout_completed',
         status_changed_at: new Date().toISOString(),
         actual_payout_date: new Date().toISOString().split('T')[0],
         payout_transaction_id: transactionId,
@@ -447,7 +447,7 @@ export class ContributionProcessingService {
       await supabase
         .from('circle_cycles')
         .update({
-          status: 'payout_retry',
+          cycle_status: 'payout_retry',
           status_changed_at: new Date().toISOString(),
           payout_attempts: newAttempts,
           last_payout_error: error,
@@ -466,7 +466,7 @@ export class ContributionProcessingService {
       await supabase
         .from('circle_cycles')
         .update({
-          status: 'payout_failed',
+          cycle_status: 'payout_failed',
           status_changed_at: new Date().toISOString(),
           payout_attempts: newAttempts,
           last_payout_error: error,

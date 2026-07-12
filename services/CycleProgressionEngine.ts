@@ -303,7 +303,7 @@ export class CycleProgressionEngine {
         *,
         circle:circles(*)
       `)
-      .eq('status', 'scheduled')
+      .eq('cycle_status', 'scheduled')
       .lte('start_date', today);
 
     if (error) {
@@ -389,7 +389,7 @@ export class CycleProgressionEngine {
     await supabase
       .from('circle_cycles')
       .update({
-        status: 'collecting',
+        cycle_status: 'collecting',
         status_changed_at: new Date().toISOString(),
         recipient_user_id: recipient.user_id,
         recipient_position: cycle.cycle_number,
@@ -448,7 +448,7 @@ export class CycleProgressionEngine {
         *,
         circle:circles(*)
       `)
-      .eq('status', 'collecting')
+      .eq('cycle_status', 'collecting')
       .lt('contribution_deadline', now.split('T')[0]);
 
     let processed = 0;
@@ -492,7 +492,7 @@ export class CycleProgressionEngine {
     await supabase
       .from('circle_cycles')
       .update({
-        status: 'deadline_reached',
+        cycle_status: 'deadline_reached',
         status_changed_at: new Date().toISOString(),
         received_contributions: completed.length,
         collected_amount: collectedAmount,
@@ -573,7 +573,7 @@ export class CycleProgressionEngine {
     await supabase
       .from('circle_cycles')
       .update({
-        status: 'grace_period',
+        cycle_status: 'grace_period',
         status_changed_at: new Date().toISOString(),
         grace_period_end: graceEndDate,
       })
@@ -658,7 +658,7 @@ export class CycleProgressionEngine {
         *,
         circle:circles(*)
       `)
-      .eq('status', 'grace_period');
+      .eq('cycle_status', 'grace_period');
 
     for (const cycle of gracePeriodCycles || []) {
       try {
@@ -880,7 +880,7 @@ export class CycleProgressionEngine {
         *,
         circle:circles(*)
       `)
-      .eq('status', 'ready_payout');
+      .eq('cycle_status', 'ready_payout');
 
     let initiated = 0;
 
@@ -903,7 +903,7 @@ export class CycleProgressionEngine {
             payout_attempts: cycle.payout_attempts + 1,
             last_payout_error: error.message,
             last_payout_attempt_at: new Date().toISOString(),
-            status: cycle.payout_attempts >= 2 ? 'payout_failed' : 'ready_payout',
+            cycle_status: cycle.payout_attempts >= 2 ? 'payout_failed' : 'ready_payout',
           })
           .eq('id', cycle.id);
 
@@ -935,7 +935,7 @@ export class CycleProgressionEngine {
     await supabase
       .from('circle_cycles')
       .update({
-        status: 'ready_payout',
+        cycle_status: 'ready_payout',
         status_changed_at: new Date().toISOString(),
         collected_amount: payoutAmount,
         payout_amount: netPayout,
@@ -986,7 +986,7 @@ export class CycleProgressionEngine {
     await supabase
       .from('circle_cycles')
       .update({
-        status: 'payout_pending',
+        cycle_status: 'payout_pending',
         status_changed_at: new Date().toISOString(),
         payout_attempts: cycle.payout_attempts + 1,
         last_payout_attempt_at: new Date().toISOString(),
@@ -1028,7 +1028,7 @@ export class CycleProgressionEngine {
         *,
         circle:circles(*)
       `)
-      .eq('status', 'payout_pending');
+      .eq('cycle_status', 'payout_pending');
 
     let completed = 0;
 
@@ -1048,7 +1048,7 @@ export class CycleProgressionEngine {
           await supabase
             .from('circle_cycles')
             .update({
-              status: 'payout_completed',
+              cycle_status: 'payout_completed',
               status_changed_at: new Date().toISOString(),
               actual_payout_date: new Date().toISOString().split('T')[0],
             })
@@ -1060,7 +1060,7 @@ export class CycleProgressionEngine {
           await supabase
             .from('circle_cycles')
             .update({
-              status: 'payout_failed',
+              cycle_status: 'payout_failed',
               status_changed_at: new Date().toISOString(),
               last_payout_error: transaction.error_message || 'Payment failed',
             })
@@ -1104,7 +1104,7 @@ export class CycleProgressionEngine {
         *,
         circle:circles(*)
       `)
-      .eq('status', 'payout_completed');
+      .eq('cycle_status', 'payout_completed');
 
     let closed = 0;
 
@@ -1149,7 +1149,7 @@ export class CycleProgressionEngine {
     await supabase
       .from('circle_cycles')
       .update({
-        status: 'closed',
+        cycle_status: 'closed',
         status_changed_at: new Date().toISOString(),
       })
       .eq('id', cycle.id);
@@ -1272,7 +1272,7 @@ export class CycleProgressionEngine {
       .from('circle_cycles')
       .select('*')
       .eq('circle_id', circle.id)
-      .eq('status', 'closed');
+      .eq('cycle_status', 'closed');
 
     const totalPayouts = cycles?.length || 0;
     const totalPayoutAmount = cycles?.reduce((sum, c) => sum + parseFloat(c.payout_amount || '0'), 0) || 0;

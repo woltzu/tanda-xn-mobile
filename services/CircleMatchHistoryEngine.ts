@@ -410,7 +410,7 @@ export class CircleMatchHistoryEngine {
       .from('circle_cycles')
       .select('*', { count: 'exact', head: true })
       .eq('circle_id', circleId)
-      .eq('status', 'completed');
+      .eq('cycle_status', 'completed');
 
     const { count: totalCycles } = await supabase
       .from('circle_cycles')

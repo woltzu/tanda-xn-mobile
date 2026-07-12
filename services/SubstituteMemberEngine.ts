@@ -403,25 +403,25 @@ export class SubstituteMemberEngine {
     // Get circle cycles info
     const { data: cycles } = await supabase
       .from('circle_cycles')
-      .select('id, cycle_number, status, recipient_user_id')
+      .select('id, cycle_number, cycle_status, recipient_user_id')
       .eq('circle_id', circleId)
       .order('cycle_number', { ascending: true });
 
     const allCycles = cycles ?? [];
     const totalCycles = allCycles.length;
     const completedCycles = allCycles.filter(c =>
-      c.status === 'closed' || c.status === 'payout_pending'
+      c.cycle_status === 'closed' || c.cycle_status === 'payout_pending'
     ).length;
     const completionPercentage = totalCycles > 0 ? (completedCycles / totalCycles) * 100 : 0;
 
     // Has member already received their payout?
     const payoutAlreadyReceived = allCycles.some(c =>
-      c.recipient_user_id === userId && c.status === 'closed'
+      c.recipient_user_id === userId && c.cycle_status === 'closed'
     );
 
     // Calculate notice days (from today to next contribution deadline)
     const currentCycle = allCycles.find(c =>
-      c.status === 'collecting' || c.status === 'scheduled'
+      c.cycle_status === 'collecting' || c.cycle_status === 'scheduled'
     );
     const noticeDays = 7; // Default; real calc would compare dates
 
@@ -765,7 +765,7 @@ export class SubstituteMemberEngine {
       .from('circle_cycles')
       .select('id, cycle_number')
       .eq('circle_id', circleId)
-      .in('status', ['collecting', 'scheduled'])
+      .in('cycle_status', ['collecting', 'scheduled'])
       .order('cycle_number', { ascending: true })
       .limit(1)
       .single();
@@ -1126,7 +1126,7 @@ export class SubstituteMemberEngine {
       .from('circle_cycles')
       .select('id', { count: 'exact', head: true })
       .eq('circle_id', record.circle_id)
-      .in('status', ['scheduled', 'collecting']);
+      .in('cycle_status', ['scheduled', 'collecting']);
 
     // Get exiting member's contribution count
     const { count: contributionHistory } = await supabase

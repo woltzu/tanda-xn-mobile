@@ -307,15 +307,15 @@ export default function CycleTimelineScreen() {
   // states. Falls back to the bare label everywhere else.
   const stateChip = useMemo(() => {
     if (!currentCycle) return null;
-    const meta = CYCLE_STATUS_META[currentCycle.status] ?? CYCLE_STATUS_FALLBACK;
+    const meta = CYCLE_STATUS_META[currentCycle.cycle_status] ?? CYCLE_STATUS_FALLBACK;
     const base = t(meta.labelKey);
     let decoration = "";
-    if (currentCycle.status === "collecting") {
+    if (currentCycle.cycle_status === "collecting") {
       const left = daysUntil(currentCycle.contribution_deadline);
       if (left != null) {
         decoration = t("cycle_timeline.state_days_left", { count: left });
       }
-    } else if (currentCycle.status === "grace_period" || currentCycle.status === "deadline_reached") {
+    } else if (currentCycle.cycle_status === "grace_period" || currentCycle.cycle_status === "deadline_reached") {
       const left = daysUntil(currentCycle.grace_period_end);
       if (left != null) {
         decoration = t("cycle_timeline.state_grace_days_left", { count: left });
@@ -566,7 +566,7 @@ export default function CycleTimelineScreen() {
           >
             {allCycles.map((cycle: any) => {
               const isActive = cycle.id === currentCycle?.id;
-              const isCompleted = cycle.status === "closed" || cycle.status === "payout_completed";
+              const isCompleted = cycle.cycle_status === "closed" || cycle.cycle_status === "payout_completed";
               const dotColor = isCompleted ? COLORS.green : isActive ? COLORS.teal : "#D1D5DB";
               return (
                 <TouchableOpacity

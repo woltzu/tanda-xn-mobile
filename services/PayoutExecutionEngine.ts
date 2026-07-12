@@ -329,7 +329,7 @@ export class PayoutExecutionEngine {
       await supabase
         .from('circle_cycles')
         .update({
-          status: 'payout_completed',
+          cycle_status: 'payout_completed',
           actual_payout_date: new Date().toISOString(),
           payout_execution_id: execution.id
         })
@@ -502,16 +502,16 @@ export class PayoutExecutionEngine {
     }
 
     // CHECK 7: Cycle in correct status
-    const cycleReady = cycle.status === 'ready_payout';
+    const cycleReady = cycle.cycle_status === 'ready_payout';
     checks.cycleStatus = {
-      status: cycle.status,
+      status: cycle.cycle_status,
       expected: 'ready_payout',
       passed: cycleReady
     };
 
     if (!cycleReady) {
       allPassed = false;
-      failureReason = failureReason || `Cycle status is ${cycle.status}, expected ready_payout`;
+      failureReason = failureReason || `Cycle status is ${cycle.cycle_status}, expected ready_payout`;
     }
 
     // CHECK 8: Amount is positive and matches expectations

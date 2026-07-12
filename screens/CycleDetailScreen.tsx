@@ -253,14 +253,14 @@ export default function CycleDetailScreen() {
   }, [summary, totalReceived, totalExpected]);
 
   const stateMeta = cycle
-    ? CYCLE_STATUS_META[cycle.status] ?? CYCLE_STATUS_FALLBACK
+    ? CYCLE_STATUS_META[cycle.cycle_status] ?? CYCLE_STATUS_FALLBACK
     : CYCLE_STATUS_FALLBACK;
 
   // ── Substitution Visibility B.1 — derived banner visibility ───────────
   // Gate everything on cycle still being active. A completed cycle is
   // history; even if a stale admin_pending row somehow lingers, we
   // don't want to surface it as "action needed" on a finished cycle.
-  const cycleIsActive = cycle ? cycle.status !== "completed" : false;
+  const cycleIsActive = cycle ? cycle.cycle_status !== "completed" : false;
   const substituteBannerVisible =
     cycleIsActive &&
     !!user?.id &&

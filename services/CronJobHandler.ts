@@ -158,7 +158,7 @@ export class CronJobHandler {
       .select(`
         *,
         circle:circles(name),
-        cycle:circle_cycles(id, status)
+        cycle:circle_cycles(id, cycle_status)
       `)
       .eq('status', 'scheduled')
       .lte('scheduled_for', now)
@@ -435,7 +435,7 @@ export class CronJobHandler {
       const { count: stuckCycles } = await supabase
         .from('circle_cycles')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'payout_pending')
+        .eq('cycle_status', 'payout_pending')
         .lt('status_changed_at', new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString());
 
       checks.stuck_cycles = stuckCycles || 0;
@@ -452,7 +452,7 @@ export class CronJobHandler {
       const { count: failedPayouts } = await supabase
         .from('circle_cycles')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'payout_failed');
+        .eq('cycle_status', 'payout_failed');
 
       checks.failed_payouts = failedPayouts || 0;
 

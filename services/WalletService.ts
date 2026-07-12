@@ -381,7 +381,7 @@ export class WalletService {
         .from('circle_cycles')
         .select('*')
         .eq('circle_id', membership.circle_id)
-        .in('status', ['scheduled', 'collecting'])
+        .in('cycle_status', ['scheduled', 'collecting'])
         .gte('contribution_deadline', new Date().toISOString())
         .lte('contribution_deadline', addDays(new Date(), 14).toISOString());
 
