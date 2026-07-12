@@ -627,6 +627,12 @@ export class CircleDemocracyEngine {
         description: 'Vote to roll over unspent insurance pool funds or distribute to members',
         isCritical: false,
       },
+      start_underfilled: {
+        type: 'start_underfilled',
+        label: 'Start Underfilled Circle',
+        description: 'Start the circle with fewer members than planned (reduced pot) or dissolve and refund',
+        isCritical: true,
+      },
     };
     return info[type] || info.custom;
   }

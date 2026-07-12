@@ -896,53 +896,117 @@ function CircleDetailBody({
           when they tap Contribute early. */}
       {circle.status === "pending" ? (
         (() => {
-          // Bucket B hook: is there an open start_underfilled proposal
-          // for this circle? If so, upgrade the amber "contribute now"
-          // banner to a red "vote needed" banner that navigates
-          // straight to the existing CircleVoting screen. openProposals
-          // ForBadge comes from useCircleProposals(circleId) higher up.
+          // Bucket C polish: pending circles get a progress meter +
+          // countdown + Invite CTA (amber). If a start_underfilled
+          // proposal is open, the whole block upgrades to a red
+          // "vote needed" banner with a countdown to the vote close
+          // and a Vote now button.
           const underfilledVote = openProposalsForBadge.find(
             (p) => p.proposalType === "start_underfilled",
           );
+          const filledPct = Math.min(
+            100,
+            Math.round(
+              (circle.currentMembers / Math.max(1, circle.memberCount)) * 100,
+            ),
+          );
+          const now = Date.now();
+          const startMs = new Date(circle.startDate).getTime();
+          const daysToStart = Number.isFinite(startMs)
+            ? Math.max(0, Math.ceil((startMs - now) / 86400000))
+            : null;
+
           if (underfilledVote) {
+            const endsMs = underfilledVote.votingEndsAt
+              ? new Date(underfilledVote.votingEndsAt).getTime()
+              : null;
+            const hoursLeft =
+              endsMs != null && Number.isFinite(endsMs)
+                ? Math.max(0, Math.round((endsMs - now) / 3600000))
+                : null;
             return (
-              <TouchableOpacity
-                style={styles.voteNeededBanner}
-                onPress={() =>
-                  navigation.navigate(
-                    Routes.CircleVoting as never,
-                    { circleId } as never,
-                  )
-                }
-                accessibilityRole="button"
-              >
-                <Ionicons name="alert-circle" size={18} color="#B91C1C" />
-                <View style={{ flex: 1 }}>
+              <View style={styles.voteNeededBanner}>
+                <View style={styles.bannerHeaderRow}>
+                  <Ionicons name="alert-circle" size={18} color="#B91C1C" />
                   <Text style={styles.voteNeededBannerTitle}>
                     {t("circle_detail.vote_needed_banner_title")}
                   </Text>
-                  <Text style={styles.voteNeededBannerBody}>
-                    {t("circle_detail.vote_needed_banner_body")}
-                  </Text>
                 </View>
-                <Ionicons name="chevron-forward" size={16} color="#B91C1C" />
-              </TouchableOpacity>
+                <Text style={styles.voteNeededBannerBody}>
+                  {t("circle_detail.vote_needed_banner_body_v2", {
+                    current: circle.currentMembers,
+                    total: circle.memberCount,
+                  })}
+                </Text>
+                {hoursLeft != null ? (
+                  <Text style={styles.voteEndsHint}>
+                    {t("circle_detail.vote_ends_in_hours", {
+                      count: hoursLeft,
+                    })}
+                  </Text>
+                ) : null}
+                <TouchableOpacity
+                  style={styles.voteNowButton}
+                  onPress={() =>
+                    navigation.navigate(
+                      Routes.CircleVoting as never,
+                      { circleId } as never,
+                    )
+                  }
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="thumbs-up-outline" size={14} color="#FFFFFF" />
+                  <Text style={styles.voteNowButtonText}>
+                    {t("circle_detail.vote_now_btn")}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             );
           }
+
           return (
             <View style={styles.pendingBanner}>
-              <Ionicons name="hourglass-outline" size={18} color="#B45309" />
-              <View style={{ flex: 1 }}>
+              <View style={styles.bannerHeaderRow}>
+                <Ionicons name="hourglass-outline" size={18} color="#B45309" />
                 <Text style={styles.pendingBannerTitle}>
                   {t("circle_detail.pending_banner_title", {
                     current: circle.currentMembers,
                     total: circle.memberCount,
                   })}
                 </Text>
-                <Text style={styles.pendingBannerBody}>
-                  {t("circle_detail.pending_banner_body")}
-                </Text>
               </View>
+
+              {/* Progress meter */}
+              <View style={styles.pendingProgressTrack}>
+                <View
+                  style={[styles.pendingProgressFill, { width: `${filledPct}%` }]}
+                />
+              </View>
+
+              <Text style={styles.pendingBannerBody}>
+                {daysToStart === 0
+                  ? t("circle_detail.pending_starts_today")
+                  : daysToStart != null && daysToStart > 0
+                    ? t("circle_detail.pending_starts_in_days", {
+                        count: daysToStart,
+                      })
+                    : t("circle_detail.pending_banner_body")}
+              </Text>
+
+              <TouchableOpacity
+                style={styles.inviteButton}
+                onPress={handleInviteMembers}
+                accessibilityRole="button"
+              >
+                <Ionicons
+                  name="person-add-outline"
+                  size={14}
+                  color="#B45309"
+                />
+                <Text style={styles.inviteButtonText}>
+                  {t("circle_detail.pending_invite_friends")}
+                </Text>
+              </TouchableOpacity>
             </View>
           );
         })()
@@ -2775,48 +2839,96 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   pendingBanner: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    padding: 12,
+    padding: 14,
     marginBottom: 16,
     backgroundColor: "#FEF3C7",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#FDE68A",
+    gap: 8,
+  },
+  bannerHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   pendingBannerTitle: {
     fontSize: 13,
     fontWeight: "700",
     color: "#92400E",
+    flex: 1,
   },
   pendingBannerBody: {
     fontSize: 12,
     color: "#78350F",
-    marginTop: 2,
     lineHeight: 16,
   },
-  voteNeededBanner: {
+  pendingProgressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#FCD34D",
+    overflow: "hidden",
+  },
+  pendingProgressFill: {
+    height: 6,
+    backgroundColor: "#B45309",
+  },
+  inviteButton: {
+    alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    padding: 12,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#FCD34D",
+    marginTop: 2,
+  },
+  inviteButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#78350F",
+  },
+  voteNeededBanner: {
+    padding: 14,
     marginBottom: 16,
     backgroundColor: "#FEE2E2",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#FCA5A5",
+    gap: 8,
   },
   voteNeededBannerTitle: {
     fontSize: 13,
     fontWeight: "700",
     color: "#991B1B",
+    flex: 1,
   },
   voteNeededBannerBody: {
     fontSize: 12,
     color: "#7F1D1D",
-    marginTop: 2,
     lineHeight: 16,
+  },
+  voteEndsHint: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#B91C1C",
+  },
+  voteNowButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#B91C1C",
+    marginTop: 2,
+  },
+  voteNowButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   statsGrid: {
     flexDirection: "row",
