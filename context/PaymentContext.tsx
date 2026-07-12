@@ -608,7 +608,13 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
           payment_method_id: paymentMethodId ?? null,
         },
       });
-      if (error) throw error;
+      if (error) {
+        // Unwrap FunctionsHttpError so 409s (e.g. duplicate contribution
+        // for this cycle) surface with the EF's actual message instead
+        // of "Edge Function returned a non-2xx status code".
+        const msg = await extractEfErrorMessage(error, data);
+        throw new Error(msg);
+      }
       if (!data?.clientSecret) {
         throw new Error('Edge function did not return a clientSecret');
       }

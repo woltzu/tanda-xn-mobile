@@ -148,6 +148,11 @@ export default function MakeContributionScreen() {
   const [paymentCurrency, setPaymentCurrency] = useState<string>(primaryCurrency);
   const [showCurrencyOptions, setShowCurrencyOptions] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  // Has the caller already paid this cycle? Server-side EF (Fix 1) is the
+  // authoritative gate, but a client-side hint stops the user from
+  // getting to the payment sheet at all — and covers the wallet path,
+  // which bypasses the EF entirely.
+  const [alreadyContributed, setAlreadyContributed] = useState<boolean>(false);
   // Stage 2 Bucket C — circle fee config loaded from the DB once on
   // mount. Ordinary circles default to is_premium=false / fee=0 so the
   // initial render of premium-only UI is empty until the row arrives.
@@ -346,6 +351,53 @@ export default function MakeContributionScreen() {
       cancelled = true;
     };
   }, [circleId]);
+
+  // Check whether the user has already paid for the current cycle. Mirrors
+  // the EF's duplicate guard (Fix 1 — server side) so the button disables
+  // before the user gets to the payment sheet, and so the wallet path
+  // (which doesn't touch the EF) is also blocked. Cycle number comes
+  // from getCurrentCycleInfo() further down, but we can re-derive it
+  // here without waiting for the JSX render — the calc is pure and cheap.
+  useEffect(() => {
+    if (!circleId || !user?.id || !circle) return;
+    let cancelled = false;
+    (async () => {
+      // Re-run the same cycle math getCurrentCycleInfo does. Kept inline
+      // rather than lifted so this effect stays self-contained.
+      let cn = 1;
+      const start = new Date(circle.startDate);
+      const now = new Date();
+      const step = new Date(start);
+      while (step <= now) {
+        switch (circle.frequency) {
+          case "daily":     step.setDate(step.getDate() + 1); break;
+          case "weekly":    step.setDate(step.getDate() + 7); break;
+          case "biweekly":  step.setDate(step.getDate() + 14); break;
+          case "monthly":   step.setMonth(step.getMonth() + 1); break;
+          default:          break;
+        }
+        if (step <= now) cn++;
+      }
+      const { data } = await supabase
+        .from("circle_contributions")
+        .select("id")
+        .eq("circle_id", circleId)
+        .eq("user_id", user.id)
+        .eq("cycle_number", cn)
+        .eq("status", "paid")
+        .limit(1)
+        .maybeSingle();
+      if (!cancelled) setAlreadyContributed(!!data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // circle?.startDate + circle?.frequency change if the user navigates
+    // to a different circle. Keeping circle in deps triggers a re-check
+    // on the (very rare) case where the wallet balance change causes a
+    // re-fetch of the circle row and the cycle math shifts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [circleId, user?.id, circle?.startDate, circle?.frequency]);
 
   // C.1 — Auto-select the best payment method on mount and whenever
   // the wallet's covered-status changes (e.g. user picked a smaller
@@ -1168,6 +1220,22 @@ export default function MakeContributionScreen() {
             </View>
           </View>
 
+          {/* Already-contributed guard. Blocks any new attempt for the
+              current cycle regardless of payment method. Server-side EF
+              also 409s on the Stripe path; this notice covers the wallet
+              path (which bypasses the EF) and pre-empts the payment
+              sheet on the card path. */}
+          {alreadyContributed ? (
+            <View style={[styles.balanceWarning, styles.balanceWarningRed]}>
+              <Ionicons name="checkmark-circle" size={18} color="#DC2626" />
+              <Text
+                style={[styles.balanceWarningText, { color: "#7F1D1D" }]}
+              >
+                You have already contributed to this cycle.
+              </Text>
+            </View>
+          ) : null}
+
           {/* Wallet-balance warning. Two flavors:
               - Red (insufficient_funds): user has wallet selected AND
                 the balance is short. Disables the Confirm button.
@@ -1249,13 +1317,14 @@ export default function MakeContributionScreen() {
           <TouchableOpacity
             style={[
               styles.confirmButton,
-              (isProcessing || isWalletBlocked) && styles.confirmButtonDisabled,
+              (isProcessing || isWalletBlocked || alreadyContributed) &&
+                styles.confirmButtonDisabled,
             ]}
             onPress={() => {
               if (showCoach) dismissCoach();
               handleConfirmPayment();
             }}
-            disabled={isProcessing || isWalletBlocked}
+            disabled={isProcessing || isWalletBlocked || alreadyContributed}
           >
             {isProcessing ? (
               <Text style={styles.confirmButtonText}>{t("make_contribution.btn_processing")}</Text>

@@ -623,6 +623,195 @@ Deno.serve(async (req) => {
             );
           }
         }
+
+        // ── Auto-payout on cycle completion ───────────────────────────
+        // This contribution just landed in 'paid'. Ask the DB whether it
+        // completed the cycle (every active member has now paid at least
+        // once) and, if so, stage a Stripe Transfer to the recipient
+        // inline. Idempotency lives at three layers:
+        //   A) should_auto_trigger_payout returns FALSE once ANY
+        //      circle_payouts row exists for the cycle — so an admin-
+        //      manual trigger already in flight blocks this branch.
+        //   B) pending_intents.client_reference_id UNIQUE with the same
+        //      deterministic value process-circle-payout uses
+        //      (`client_ref_payout_<cycle_id>`), so admin-then-webhook
+        //      or webhook-then-admin (or two concurrent webhooks) still
+        //      resolve to one Transfer.
+        //   C) Stripe idempotencyKey `payout-<cycle_id>` — identical to
+        //      the admin EF, so even if A and B both leak, Stripe
+        //      returns the existing Transfer instead of creating a new
+        //      one.
+        // Failures here are logged, never bubbled to processingError:
+        // the contribution's own upsert has already succeeded, and
+        // Stripe retrying the webhook wouldn't re-run this branch
+        // meaningfully (the duplicate-event ack short-circuits it).
+        // Admin can finish the payout manually via process-circle-payout.
+        if (circleIdMeta && payerUserId) {
+          const { data: triggerRows, error: triggerErr } = await supabase.rpc(
+            "should_auto_trigger_payout",
+            {
+              p_circle_id: circleIdMeta,
+              p_cycle_number: cycleNumber,
+            },
+          );
+          if (triggerErr) {
+            console.warn(
+              "[stripe-webhook] should_auto_trigger_payout RPC failed for",
+              circleIdMeta,
+              "cycle",
+              cycleNumber,
+              ":",
+              triggerErr.message,
+            );
+          } else {
+            // RPC returns a single row via RETURN QUERY; supabase-js
+            // delivers it as an array.
+            const trig = Array.isArray(triggerRows) ? triggerRows[0] : triggerRows;
+            if (trig?.should_trigger === true) {
+              const triggerCycleId = trig.cycle_id as string;
+              const recipientUserId = trig.recipient_user_id as string;
+              const payoutCents = trig.payout_amount_cents as number;
+              const destAccountId = trig.stripe_connect_account_id as string;
+              const clientReferenceId = `client_ref_payout_${triggerCycleId}`;
+
+              // Layer B — stage pending_intents. A duplicate here means
+              // another actor (admin EF, prior webhook run) already owns
+              // this cycle's payout; back off cleanly.
+              const { data: apPending, error: apPendingErr } = await supabase
+                .from("pending_intents")
+                .insert({
+                  client_reference_id: clientReferenceId,
+                  user_id: null,
+                  recipient_user_id: recipientUserId,
+                  circle_id: circleIdMeta,
+                  cycle_id: triggerCycleId,
+                  intent_type: "transfer",
+                  amount_cents: payoutCents,
+                  currency: "USD",
+                  metadata: {
+                    cycle_number: cycleNumber,
+                    triggered_by: "stripe-webhook-auto",
+                    triggering_pi: pi.id,
+                  },
+                })
+                .select("id")
+                .single();
+
+              let pendingId: string | null = null;
+              if (apPendingErr) {
+                const isDup =
+                  apPendingErr.code === "23505" ||
+                  /duplicate key|already exists/i.test(apPendingErr.message);
+                if (isDup) {
+                  console.log(
+                    "[stripe-webhook] auto-payout: pending_intents already staged for cycle",
+                    triggerCycleId,
+                    "— skipping (admin path or prior webhook holds it)",
+                  );
+                } else {
+                  console.error(
+                    "[stripe-webhook] auto-payout pending_intents insert failed:",
+                    apPendingErr.message,
+                  );
+                }
+              } else {
+                pendingId = apPending?.id ?? null;
+              }
+
+              // Layer C — create the Transfer. The idempotency key means
+              // a retry after a network hiccup returns the same Transfer.
+              if (pendingId) {
+                const transferGroup = `circle_${circleIdMeta}_cycle_${triggerCycleId}`;
+                const idempotencyKey = `payout-${triggerCycleId}`;
+                let autoTransfer: Stripe.Transfer | null = null;
+                try {
+                  autoTransfer = await stripe.transfers.create(
+                    {
+                      amount: payoutCents,
+                      currency: "usd",
+                      destination: destAccountId,
+                      transfer_group: transferGroup,
+                      description: `Circle auto-payout cycle ${cycleNumber}`,
+                      metadata: {
+                        type: "circle_payout",
+                        circle_id: circleIdMeta,
+                        cycle_id: triggerCycleId,
+                        cycle_number: String(cycleNumber),
+                        recipient_user_id: recipientUserId,
+                        pending_intent_id: pendingId,
+                        client_reference_id: clientReferenceId,
+                        triggered_by: "auto",
+                        triggering_pi: pi.id,
+                      },
+                    },
+                    { idempotencyKey },
+                  );
+                } catch (e) {
+                  console.error(
+                    "[stripe-webhook] auto-payout stripe.transfers.create failed:",
+                    e instanceof Error ? e.message : String(e),
+                    "— pending_intents row remains for admin follow-up",
+                  );
+                }
+
+                if (autoTransfer) {
+                  const { error: cpErr } = await supabase
+                    .from("circle_payouts")
+                    .insert({
+                      circle_id: circleIdMeta,
+                      cycle_id: triggerCycleId,
+                      cycle_number: cycleNumber,
+                      recipient_id: recipientUserId,
+                      amount: payoutCents / 100,
+                      amount_cents: payoutCents,
+                      currency: "USD",
+                      status: "pending",
+                      transfer_id: autoTransfer.id,
+                      pending_intent_id: pendingId,
+                      payment_method: "stripe",
+                      metadata: {
+                        triggered_by: "stripe-webhook-auto",
+                        triggering_pi: pi.id,
+                        transfer_group: transferGroup,
+                        client_reference_id: clientReferenceId,
+                      },
+                    });
+                  if (cpErr) {
+                    console.error(
+                      "[stripe-webhook] auto-payout circle_payouts insert failed AFTER Transfer creation:",
+                      cpErr.message,
+                      "transfer_id=",
+                      autoTransfer.id,
+                      "— manual reconciliation may be needed",
+                    );
+                  } else {
+                    console.log(
+                      "[stripe-webhook] auto-payout: Transfer",
+                      autoTransfer.id,
+                      "staged for cycle",
+                      triggerCycleId,
+                      "(",
+                      payoutCents,
+                      "cents to recipient",
+                      recipientUserId + ")",
+                    );
+                  }
+                }
+              }
+            } else if (trig) {
+              console.log(
+                "[stripe-webhook] auto-payout: not triggering — paid",
+                trig.paid_count,
+                "of",
+                trig.expected_count,
+                "for circle",
+                circleIdMeta,
+                "cycle",
+                cycleNumber,
+              );
+            }
+          }
+        }
       }
     }
   } else if (event.type === "account.updated") {

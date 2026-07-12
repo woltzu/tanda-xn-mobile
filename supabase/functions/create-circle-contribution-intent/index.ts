@@ -202,6 +202,53 @@ Deno.serve(async (req) => {
     cycleId = cycleRow?.id ?? null;
   }
 
+  // ─── 4b. Duplicate-contribution guard ────────────────────────────────
+  // Block a second contribution to the same cycle. Only applied when the
+  // caller passed cycle_number — with NULL we can't tell which cycle to
+  // check, so we let the request through rather than risk false-positives
+  // on pre-cycle-table circles (they still write to circle_contributions
+  // with cycle_number defaulted to 1 on the webhook side).
+  //
+  // 'paid' is the only blocking status. Rows in 'pending' / 'due' /
+  // 'overdue' are legitimate contribution attempts still in flight —
+  // treating them as duplicates would strand any user whose first PI
+  // failed at 3-D Secure or ACH decline. The webhook's own guard
+  // (`neq status paid` on the update, then insert-else path) prevents
+  // double-crediting the same paid row.
+  if (cycleNumber !== null) {
+    const { data: existingPaid, error: dupErr } = await serviceClient
+      .from("circle_contributions")
+      .select("id")
+      .eq("circle_id", circleId)
+      .eq("user_id", user.id)
+      .eq("cycle_number", cycleNumber)
+      .eq("status", "paid")
+      .limit(1)
+      .maybeSingle();
+    if (dupErr) {
+      console.error(
+        "[create-circle-contribution-intent] duplicate-check failed:",
+        dupErr.message,
+      );
+      return jsonResponse(
+        {
+          error: "Failed to verify contribution history",
+          detail: dupErr.message,
+        },
+        500,
+      );
+    }
+    if (existingPaid) {
+      return jsonResponse(
+        {
+          error: "You have already contributed to this cycle",
+          code: "already_contributed",
+        },
+        409,
+      );
+    }
+  }
+
   // ─── 5. Write pending_intents BEFORE calling Stripe ───────────────────
   // Reconciliation ledger (migration 276 + 277): a pending row exists for
   // every attempt, including ones that never reach Stripe. The
