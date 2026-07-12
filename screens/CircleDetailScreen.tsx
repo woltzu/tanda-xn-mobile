@@ -117,11 +117,64 @@ const getRotationMethodLabel = (method: string): string => {
   }
 };
 
+// Wrapper. Hooks-order guarantee: the body only mounts once `circle`
+// has been resolved to a non-null value, so its ~35 hooks NEVER run
+// on a null-circle render. Previously the body did its own
+// `if (!circle) return <NotFound/>` guard, and any hook declared
+// after it (each of the previous fixes hoisted more of them, but
+// the file kept growing them back) would shift the mounted hook
+// count when the guard flipped mid-lifecycle. Splitting cleanly
+// isolates that risk.
 export default function CircleDetailScreen() {
   const navigation = useNavigation<CircleDetailNavigationProp>();
   const route = useRoute<CircleDetailRouteProp>();
   const { t } = useTranslation();
   const { circleId } = route.params;
+  const { circles, browseCircles, myCircles } = useCircles();
+  const circle = [...circles, ...myCircles, ...browseCircles].find(
+    (c) => c.id === circleId,
+  );
+  if (!circle) {
+    return (
+      <View style={styles.container}>
+        <LinearGradient colors={[colors.primaryNavy, "#143654"]} style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t("circle_detail.not_found_header")}</Text>
+        </LinearGradient>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={64} color={colors.textSecondary} />
+          <Text style={styles.errorText}>{t("circle_detail.not_found_body")}</Text>
+          <TouchableOpacity
+            style={styles.errorButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.errorButtonText}>{t("circle_detail.btn_go_back")}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+  // key on circleId so param-swap forces a fresh body mount (rare;
+  // in practice navigation.replace uses a new route key anyway).
+  return <CircleDetailBody key={circleId} circle={circle} circleId={circleId} />;
+}
+
+function CircleDetailBody({
+  circle: _circleProp,
+  circleId: _circleIdProp,
+}: {
+  circle: Circle;
+  circleId: string;
+}) {
+  const navigation = useNavigation<CircleDetailNavigationProp>();
+  const route = useRoute<CircleDetailRouteProp>();
+  const { t } = useTranslation();
+  const circleId = _circleIdProp;
   const { circles, browseCircles, myCircles } = useCircles();
   // Aggregate members + activities + 30 s cache lives in this hook; the
   // refresh() handle below covers pull-to-refresh, realtime events, and
@@ -358,8 +411,10 @@ export default function CircleDetailScreen() {
   const { activeProposals: openProposalsForBadge } = useCircleProposals(circleId);
   const openProposalCount = openProposalsForBadge.length;
 
-  // Find the circle in all available sources: user circles, my circles, or browse circles
-  const circle = [...circles, ...myCircles, ...browseCircles].find((c) => c.id === circleId);
+  // Circle comes from the wrapper as a prop — guaranteed non-null
+  // by CircleDetailScreen's `!circle` guard, so this body never
+  // renders a NotFound state itself.
+  const circle = _circleProp;
 
   // Fetch members and activities when screen is focused or circleId changes.
   // `fetchData()` is cache-aware so re-focuses inside the 30 s TTL don't
@@ -508,31 +563,8 @@ export default function CircleDetailScreen() {
     return members.map((m) => ({ kind: "member" as const, member: m }));
   }, [activeTab, isLoadingMembers, members]);
 
-  if (!circle) {
-    return (
-      <View style={styles.container}>
-        <LinearGradient colors={[colors.primaryNavy, "#143654"]} style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t("circle_detail.not_found_header")}</Text>
-        </LinearGradient>
-        <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle-outline" size={64} color={colors.textSecondary} />
-          <Text style={styles.errorText}>{t("circle_detail.not_found_body")}</Text>
-          <TouchableOpacity
-            style={styles.errorButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Text style={styles.errorButtonText}>{t("circle_detail.btn_go_back")}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
+  // NotFound guard moved to the outer CircleDetailScreen wrapper —
+  // this body never renders unless circle is guaranteed non-null.
 
   const isOneTime = circle.frequency === "one-time";
   const hasBeneficiary = circle.beneficiaryName;
