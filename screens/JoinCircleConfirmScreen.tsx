@@ -129,6 +129,16 @@ export default function JoinCircleConfirmScreen() {
   // "Circle not found" screen. Distinct from isJoining, which flips
   // back to false in the finally.
   const [justJoined, setJustJoined] = useState(false);
+  // Sticks true from the moment we START the join sequence (before the
+  // RPC fires) and stays true through the navigation.replace commit.
+  // Belt-and-braces third gate on the fallback — even if a CirclesContext
+  // refresh mid-RPC transiently wipes the circle from every list AND
+  // isJoining has already reset in the finally AND justJoined hasn't
+  // batched yet, this flag was set synchronously in the click handler
+  // so any render between the click and the actual stack swap keeps the
+  // fallback suppressed. Only reset on a truly-unrecoverable error path
+  // where we want the fallback to show.
+  const [isNavigating, setIsNavigating] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   // Last error surfaced by handleJoinCircle. Rendered on the `!circle`
   // fallback branch so a user who lands there after a failed join sees
@@ -203,19 +213,21 @@ export default function JoinCircleConfirmScreen() {
   const alreadyMemberRef = useRef(false);
   useEffect(() => {
     if (alreadyMemberRef.current) return;
-    if (justJoined || isJoining) return;
+    if (justJoined || isJoining || isNavigating) return;
     if (myCircles.some((c) => c.id === circleId)) {
       alreadyMemberRef.current = true;
+      setIsNavigating(true);
       navigation.replace("CircleDetail", { circleId });
     }
-  }, [myCircles, circleId, navigation, justJoined, isJoining]);
+  }, [myCircles, circleId, navigation, justJoined, isJoining, isNavigating]);
 
-  // Guard the fallback: while a join is in flight OR just completed,
-  // hold the current UI instead of dumping the user into the error
-  // screen. Any state churn between the RPC resolving and the replace
-  // committing that transiently removes the circle from state gets
-  // swallowed.
-  if (!circle && !isJoining && !justJoined) {
+  // Guard the fallback: while a join is in flight OR just completed
+  // OR we're mid-navigation to CircleDetail, hold the current UI
+  // instead of dumping the user into the error screen. Any state
+  // churn between the RPC resolving and the replace committing that
+  // transiently removes the circle from state gets swallowed by
+  // whichever of the three flags happens to be set at that render.
+  if (!circle && !isJoining && !justJoined && !isNavigating) {
     return (
       <View style={styles.container}>
         <LinearGradient colors={["#0A2342", "#143654"]} style={styles.header}>
@@ -329,6 +341,11 @@ export default function JoinCircleConfirmScreen() {
     }
 
     setIsJoining(true);
+    // Set BEFORE the RPC. Stays true through the finally + until we
+    // either navigate away (successful path) or hit an unrecoverable
+    // error and explicitly reset. Belt-and-braces so no render window
+    // between the click and the navigation can flash the fallback.
+    setIsNavigating(true);
     try {
       // Forward the circle's invite code to the RPC as a defense-in-depth
       // check — server validates it matches before allowing the join.
@@ -428,6 +445,11 @@ export default function JoinCircleConfirmScreen() {
         body = t("join_circle_confirm.alert_failed_join");
       }
       console.error("Error joining circle:", error);
+      // Truly-unrecoverable error path: neither the session-expired
+      // handler nor the membership re-check rescued us. Release the
+      // isNavigating gate so the `!circle` fallback (or the error
+      // Alert we're about to raise) can render normally.
+      setIsNavigating(false);
       // Keep the mapped body so the `!circle` fallback branch can
       // display something more useful than "circle not found" if the
       // screen re-renders into that state after the catch.
