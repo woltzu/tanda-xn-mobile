@@ -130,11 +130,48 @@ export default function CircleDetailScreen() {
   const route = useRoute<CircleDetailRouteProp>();
   const { t } = useTranslation();
   const { circleId } = route.params;
-  const { circles, browseCircles, myCircles } = useCircles();
+  const { circles, browseCircles, myCircles, refreshCircles } = useCircles();
   const circle = [...circles, ...myCircles, ...browseCircles].find(
     (c) => c.id === circleId,
   );
+
+  // Patient NotFound: right after JoinCircleConfirm's
+  // navigation.replace, this wrapper mounts BEFORE CirclesContext
+  // has propagated the newly-joined membership. If we render
+  // NotFound on the first frame the user sees a bogus error even
+  // though the join succeeded. Gate NotFound on a short grace
+  // window and force one refresh at mount so the truth propagates
+  // ASAP.
+  const [notFoundGraceExpired, setNotFoundGraceExpired] = useState(false);
+  useEffect(() => {
+    // Kick a refresh so any post-join membership row lands as fast
+    // as the RPC can round-trip. Fire-and-forget.
+    refreshCircles?.().catch(() => undefined);
+    const tid = setTimeout(() => setNotFoundGraceExpired(true), 2500);
+    return () => clearTimeout(tid);
+  }, [refreshCircles]);
+
   if (!circle) {
+    if (!notFoundGraceExpired) {
+      // Loading placeholder while we wait for CirclesContext to
+      // hydrate. Uses the same shell so the transition to the real
+      // screen is a body-only swap rather than a full frame change.
+      return (
+        <View style={styles.container}>
+          <LinearGradient colors={[colors.primaryNavy, "#143654"]} style={styles.header}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="arrow-back" size={24} color={colors.cardBg} />
+            </TouchableOpacity>
+          </LinearGradient>
+          <View style={styles.errorContainer}>
+            <ActivityIndicator size="large" color={colors.accentTeal} />
+          </View>
+        </View>
+      );
+    }
     return (
       <View style={styles.container}>
         <LinearGradient colors={[colors.primaryNavy, "#143654"]} style={styles.header}>
