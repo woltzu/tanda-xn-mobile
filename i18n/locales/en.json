@@ -4871,6 +4871,7 @@
     "error_invite_code_not_found": "Invite code not found. Please double-check the code and try again.",
     "error_invalid_code": "Please enter a valid invite code or link.",
     "error_generic": "Something went wrong. Please try again.",
+    "error_network": "Can't reach TandaXn right now. Check your connection and try again.",
     "header_title": "Join Circle",
     "label_invite_code": "Invite Code or Link",
     "placeholder_code": "Enter code (e.g., TANDA2024)",

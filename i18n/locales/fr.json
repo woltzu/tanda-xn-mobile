@@ -4871,6 +4871,7 @@
     "error_invite_code_not_found": "Code d'invitation introuvable. Vérifiez le code et réessayez.",
     "error_invalid_code": "Veuillez saisir un code d'invitation ou un lien valide.",
     "error_generic": "Une erreur s'est produite. Veuillez réessayer.",
+    "error_network": "Impossible de contacter TandaXn pour le moment. Vérifiez votre connexion et réessayez.",
     "header_title": "Rejoindre le cercle",
     "label_invite_code": "Code d'invitation ou lien",
     "placeholder_code": "Saisir le code (ex. TANDA2024)",

@@ -134,7 +134,21 @@ export default function JoinCircleByCodeScreen() {
       }
     } catch (err) {
       console.error("Error finding circle:", err);
-      setError(t("join_by_code.error_generic"));
+      // Differentiate the two failure shapes CirclesContext can throw so
+      // the user sees actionable copy instead of an infinite spinner or
+      // a generic "something went wrong." NETWORK_TIMEOUT is our own
+      // sentinel from the 15 s race; RN's fetch layer surfaces network
+      // drops as "Network request failed" or "TypeError: Network request
+      // failed" depending on platform.
+      const msg = err instanceof Error ? err.message : String(err ?? "");
+      if (
+        msg === "NETWORK_TIMEOUT" ||
+        /network request failed|network error|failed to fetch/i.test(msg)
+      ) {
+        setError(t("join_by_code.error_network"));
+      } else {
+        setError(t("join_by_code.error_generic"));
+      }
     } finally {
       setIsSearching(false);
     }

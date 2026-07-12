@@ -1041,11 +1041,36 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     // "Invite code not found." Route the lookup through the SECURITY
     // DEFINER RPC added in migration 286, which bypasses RLS for the
     // specific invite-code case (auth-gated, no enumeration path).
-    const { data, error: searchError } = await supabase.rpc(
-      "resolve_circle_by_invite_code",
-      { p_code: codeUpper },
-    );
+    //
+    // Race the RPC with a 15 s timeout. In practice the round-trip is
+    // <500 ms; on a bad connection the fetch layer can hang far longer
+    // than the user is willing to sit on a "Searching…" button. Throwing
+    // a NETWORK_TIMEOUT lets JoinCircleByCodeScreen's catch surface a
+    // friendly message instead of leaving the spinner spinning until the
+    // native timeout (~60 s on iOS, indefinite on some web browsers).
+    const RPC_TIMEOUT_MS = 15_000;
+    const rpcPromise = supabase.rpc("resolve_circle_by_invite_code", {
+      p_code: codeUpper,
+    });
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(
+        () => reject(new Error("NETWORK_TIMEOUT")),
+        RPC_TIMEOUT_MS,
+      );
+    });
 
+    let result: Awaited<typeof rpcPromise>;
+    try {
+      result = await Promise.race([rpcPromise, timeoutPromise]);
+    } catch (err) {
+      console.error("[CirclesContext] findCircleByInviteCode failed:", err);
+      // Re-throw so the caller can distinguish timeout / network failure
+      // from a "not found" (which returns null below). JoinCircleByCode
+      // catches this and shows error_generic.
+      throw err;
+    }
+
+    const { data, error: searchError } = result;
     if (searchError) {
       console.error("[CirclesContext] findCircleByInviteCode failed:", searchError);
       return null;
