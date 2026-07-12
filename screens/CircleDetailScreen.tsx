@@ -488,6 +488,26 @@ export default function CircleDetailScreen() {
     });
   }, [track, circleId, circle, members, user?.id]);
 
+  // Type + memo for the outer FlashList's data. Hoisted above the
+  // `if (!circle)` guard so the useMemo hook count stays stable
+  // across renders where circle transiently resolves to null (join
+  // flow → CirclesContext refresh window). Values are safe on the
+  // null-circle path — activeTab / isLoadingMembers / members are
+  // all initialised above the guard.
+  type CircleListRow =
+    | { kind: "overview" }
+    | { kind: "activity" }
+    | { kind: "members-loading" }
+    | { kind: "members-empty" }
+    | { kind: "member"; member: CircleMember };
+  const listData = useMemo<CircleListRow[]>(() => {
+    if (activeTab === "overview") return [{ kind: "overview" }];
+    if (activeTab === "activity") return [{ kind: "activity" }];
+    if (isLoadingMembers) return [{ kind: "members-loading" }];
+    if (members.length === 0) return [{ kind: "members-empty" }];
+    return members.map((m) => ({ kind: "member" as const, member: m }));
+  }, [activeTab, isLoadingMembers, members]);
+
   if (!circle) {
     return (
       <View style={styles.container}>
@@ -1960,26 +1980,10 @@ export default function CircleDetailScreen() {
   };
 
   // ── Outer-FlatList row model ────────────────────────────────────────────
-  // Overview + Activity are single-item sentinel rows so their existing
-  // renderers can stay untouched. Members explodes into one row per
-  // member (or a single loading / empty sentinel while data is
-  // resolving). listData is memoized on the driving state so the
-  // FlatList doesn't churn cells unnecessarily.
-  type CircleListRow =
-    | { kind: "overview" }
-    | { kind: "activity" }
-    | { kind: "members-loading" }
-    | { kind: "members-empty" }
-    | { kind: "member"; member: CircleMember };
-
-  const listData = useMemo<CircleListRow[]>(() => {
-    if (activeTab === "overview") return [{ kind: "overview" }];
-    if (activeTab === "activity") return [{ kind: "activity" }];
-    if (isLoadingMembers) return [{ kind: "members-loading" }];
-    if (members.length === 0) return [{ kind: "members-empty" }];
-    return members.map((m) => ({ kind: "member" as const, member: m }));
-  }, [activeTab, isLoadingMembers, members]);
-
+  // CircleListRow type + listData useMemo hoisted above the
+  // `if (!circle)` guard — see the block just above the guard. Both
+  // must live there so the useMemo hook count doesn't shift on
+  // renders where circle transiently resolves to null.
   const rowKeyExtractor = (item: CircleListRow, index: number) => {
     if (item.kind === "member") return item.member.id;
     return `${item.kind}-${index}`;
