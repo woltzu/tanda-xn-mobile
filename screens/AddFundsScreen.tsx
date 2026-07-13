@@ -142,12 +142,21 @@ export default function AddFundsScreen() {
       );
 
       if (clientSecret) {
-        // Present the Stripe payment sheet
+        // Present the Stripe payment sheet.
+        // Note: presentPaymentSheet returns { success, error?: string } —
+        // `error` is a plain string, NOT an { message } object. The
+        // previous `error.message || <default>` therefore always fell
+        // through to the default copy and hid every Stripe error
+        // ("Your card was declined", "Payment authentication failed",
+        // "Invalid publishable key", etc.) behind a generic "Your
+        // payment could not be processed." Log the raw string and pass
+        // it to the alert so the next failure is actionable.
         const { error } = await presentPaymentSheet(clientSecret);
         if (error) {
+          console.error("[AddFunds] presentPaymentSheet failed:", error);
           Alert.alert(
             t("add_funds.alert_payment_failed_title"),
-            error.message || t("add_funds.alert_payment_failed_body"),
+            error || t("add_funds.alert_payment_failed_body"),
           );
           return;
         }
