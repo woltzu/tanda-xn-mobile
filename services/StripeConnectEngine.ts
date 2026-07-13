@@ -797,6 +797,17 @@ export class StripeConnectEngine {
       applicationFeeCents
     );
 
+    // client_secret is deliberately NOT persisted on the DB row.
+    // Rationale: (a) the column doesn't exist on stripe_payment_intents
+    // in the current schema — writing it errored with "Could not find
+    // the 'client_secret' column of 'stripe_payment_intents' in the
+    // schema cache" and broke every Add-Funds attempt; (b) client_secret
+    // is a bearer credential that lets any holder confirm/modify the
+    // PaymentIntent — persisting it into a row readable by anyone with
+    // SELECT on the table is a security smell we don't want to keep.
+    // The caller receives it as a transient field on the return object,
+    // then hands it directly to the Stripe SDK. No consumer of
+    // getPaymentIntent* needs client_secret from the DB.
     const { data, error } = await supabase
       .from('stripe_payment_intents')
       .insert({
@@ -810,7 +821,6 @@ export class StripeConnectEngine {
         circle_id: params.circleId || null,
         cycle_id: params.cycleId || null,
         payment_method_id: params.paymentMethodId || null,
-        client_secret: stripeResult.clientSecret,
         description: params.description || null,
         application_fee_cents: applicationFeeCents,
         idempotency_key: params.idempotencyKey || null,
@@ -819,7 +829,8 @@ export class StripeConnectEngine {
       .single();
 
     if (error) throw new Error(`Failed to create payment intent record: ${error.message}`);
-    return mapPaymentIntent(data as any);
+    const record = mapPaymentIntent(data as any);
+    return { ...record, clientSecret: stripeResult.clientSecret };
   }
 
   /** Get a payment intent by its internal UUID. */

@@ -1081,7 +1081,7 @@ export default function GoalDetailV2Screen() {
               </View>
               <View style={styles.progressLabels}>
                 <Text style={styles.progressLabel}>
-                  {goal.progressPercent}% complete
+                  {goal.progressPercent.toFixed(1)}% complete
                 </Text>
                 <Text style={styles.progressLabel}>
                   ${remainingAmount.toLocaleString()} to go

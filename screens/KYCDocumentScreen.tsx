@@ -263,9 +263,13 @@ export default function KYCDocumentScreen() {
     setSubmitting(false);
 
     if (error) {
+      // Preserve the raw error for diagnostics — the previous version
+      // swallowed it behind a generic "Check your connection" alert,
+      // which masked the real RLS deny that this flow was hitting.
+      console.error("[KYCDocument] submit failed:", error);
       Alert.alert(
         t("kyc_document.submit_failed_title"),
-        t("kyc_document.submit_failed_body"),
+        `${t("kyc_document.submit_failed_body")}\n\n${error.message}`,
       );
       return;
     }

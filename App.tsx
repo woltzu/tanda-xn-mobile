@@ -1747,6 +1747,15 @@ function AppContent() {
           <Stack.Screen name="AdminVerificationQueue" component={AdminVerificationQueueScreen} />
           <Stack.Screen name="VerificationMap" component={VerificationMapScreen} />
           <Stack.Screen name="GoalTemplateBrowser" component={GoalTemplateBrowserScreen} />
+          {/* GoalCreateExpress is primarily wired inside HomeStack (line
+              ~1213) so the goal-hub → create flow can pop back to Home.
+              We also register it here on the root Stack because
+              GoalTemplateBrowser lives at the root and navigate targets
+              the closest navigator — without this duplicate registration
+              the picker's `navigation.navigate("GoalCreateExpress", …)`
+              throws "was not handled by any navigator". Both registrations
+              use the same component so state / analytics stay unified. */}
+          <Stack.Screen name="GoalCreateExpress" component={GoalCreateExpressScreen} />
           <Stack.Screen name="SubmitTemplate" component={SubmitTemplateScreen} />
           <Stack.Screen name="AdminTemplateQueue" component={AdminTemplateQueueScreen} />
           {/* Deep Link Invite Screens */}

@@ -482,7 +482,12 @@ export default function GoalsHubV2Screen() {
                     />
                   </View>
                   <Text style={styles.progressPct}>
-                    {t("goals_hub_v2.percent_complete", { percent: goal.progressPercent })}
+                    {t("goals_hub_v2.percent_complete", {
+                      // Round to one decimal so IEEE-754 artefacts like
+                      // "27.500000000000004" don't leak into the label.
+                      // Bar width above still consumes the raw value.
+                      percent: goal.progressPercent.toFixed(1),
+                    })}
                   </Text>
                 </View>
 

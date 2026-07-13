@@ -306,7 +306,7 @@ export default function GoalMilestonesScreen() {
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryItem}>
-              <Text style={styles.summaryValue}>{goal.progressPercent}%</Text>
+              <Text style={styles.summaryValue}>{goal.progressPercent.toFixed(1)}%</Text>
               <Text style={styles.summaryLabel}>{t("final_polish.goalmilestones_progress")}</Text>
             </View>
             <View style={styles.summaryDivider} />
