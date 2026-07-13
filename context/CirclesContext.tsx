@@ -390,6 +390,16 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
   // via closure at subscribe time) can read the CURRENT set without going
   // stale after every membership change.
   const myCircleIdsRef = useRef<Set<string>>(new Set());
+
+  // Concurrency + rate-limit control for fetchCircles. Every focus event
+  // on Home + CircleDetail + useCircleDetail.refresh() calls
+  // refreshCircles(), and on flaky networks the fetch fires many parallel
+  // attempts that all time out — the same pattern the "NETWORK_TIMEOUT
+  // (retry failed)" toast keeps flashing over. The two refs below
+  // coalesce concurrent callers onto one live promise and gate re-fetches
+  // to at most one every 3 s. See the fetchCircles body for details.
+  const fetchInFlightRef = useRef<Promise<void> | null>(null);
+  const lastFetchAtRef = useRef<number>(0);
   useEffect(() => {
     myCircleIdsRef.current = myCircleIds;
   }, [myCircleIds]);
@@ -414,6 +424,21 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(false);
       return;
     }
+
+    // Concurrency dedup — if a fetch is already flying, hand callers
+    // that same promise instead of stacking a second one. HomeScreen's
+    // useFocusEffect + CircleDetailScreen's mount effect +
+    // useCircleDetail.refresh() were all firing refreshCircles()
+    // concurrently on a slow network, producing the parallel
+    // NETWORK_TIMEOUT flood in the logs.
+    if (fetchInFlightRef.current) return fetchInFlightRef.current;
+
+    // Cheap rate-limit for successful fetches. The realtime channel
+    // patches individual rows on the fly (see the postgres_changes
+    // handler below), so a full re-fetch more than once every 3 s is
+    // wasted work. If the last completion is fresh, no-op silently.
+    const RATE_LIMIT_MS = 3_000;
+    if (Date.now() - lastFetchAtRef.current < RATE_LIMIT_MS) return;
 
     const QUERY_TIMEOUT_MS = 15_000;
     const withTimeout = <T,>(p: PromiseLike<T>): Promise<T> =>
@@ -496,35 +521,51 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
       }
     };
 
-    setIsLoading(true);
-    setError(null);
-    try {
-      const first = await attempt();
-      if (first.ok) return;
+    // Exponential backoff: 2 s → 4 s → 8 s between attempts, max three
+    // attempts total. Non-network errors (PostgREST 4xx, RLS deny) bypass
+    // the retry loop because they'll fail identically on the next try.
+    const BACKOFF_MS = [2_000, 4_000, 8_000];
+    const MAX_ATTEMPTS = 3;
 
-      // Only retry on network-shaped failures. A PostgREST error (bad
-      // query, RLS deny) will fail identically on the retry and just
-      // burns time — surface it immediately instead.
-      if (!looksLikeNetworkError(first.err)) {
-        console.error("Error in fetchCircles (non-network):", first.err);
-        setError(
-          first.err instanceof Error ? first.err.message : "Failed to fetch circles",
-        );
-        return;
+    const run = async (): Promise<void> => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        let lastErr: unknown = null;
+        for (let i = 0; i < MAX_ATTEMPTS; i++) {
+          const result = await attempt();
+          if (result.ok) {
+            lastFetchAtRef.current = Date.now();
+            return;
+          }
+          lastErr = result.err;
+          if (!looksLikeNetworkError(lastErr)) {
+            console.error("Error in fetchCircles (non-network):", lastErr);
+            setError(
+              lastErr instanceof Error ? lastErr.message : "Failed to fetch circles",
+            );
+            return;
+          }
+          if (i < MAX_ATTEMPTS - 1) {
+            const wait = BACKOFF_MS[i] ?? BACKOFF_MS[BACKOFF_MS.length - 1];
+            console.warn(
+              `[CirclesContext] fetchCircles attempt ${i + 1}/${MAX_ATTEMPTS} network error; retrying in ${wait} ms`,
+            );
+            await new Promise((r) => setTimeout(r, wait));
+          }
+        }
+        console.error("Error in fetchCircles (retry failed):", lastErr);
+        setError("Couldn't load your circles. Check your connection and try again.");
+      } finally {
+        setIsLoading(false);
       }
+    };
 
-      console.warn(
-        "[CirclesContext] fetchCircles first attempt failed with network error; retrying in 2 s",
-      );
-      await new Promise((r) => setTimeout(r, 2_000));
-      const second = await attempt();
-      if (second.ok) return;
-
-      console.error("Error in fetchCircles (retry failed):", second.err);
-      setError("Couldn't load your circles. Check your connection and try again.");
-    } finally {
-      setIsLoading(false);
-    }
+    const promise = run().finally(() => {
+      fetchInFlightRef.current = null;
+    });
+    fetchInFlightRef.current = promise;
+    return promise;
   }, [session, user?.id]);
 
   // Setup real-time subscription

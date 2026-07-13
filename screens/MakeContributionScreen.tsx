@@ -1220,18 +1220,23 @@ export default function MakeContributionScreen() {
             </View>
           </View>
 
-          {/* Already-contributed guard. Blocks any new attempt for the
-              current cycle regardless of payment method. Server-side EF
-              also 409s on the Stripe path; this notice covers the wallet
-              path (which bypasses the EF) and pre-empts the payment
-              sheet on the card path. */}
+          {/* Already-contributed notice — informational, not a block.
+              The DB explicitly permits multiple circle_contributions
+              rows per (member, cycle) to support top-ups and the
+              partial-pool / catch-up flow. The prior red-block variant
+              here (and the matching 409 in the create-circle-
+              contribution-intent EF) was over-strict for the daily-
+              circle + autopay pattern where a user legitimately wants
+              to add another contribution on top of what already
+              landed. Copy stays warm-amber so users get a heads-up
+              without feeling blocked. */}
           {alreadyContributed ? (
-            <View style={[styles.balanceWarning, styles.balanceWarningRed]}>
-              <Ionicons name="checkmark-circle" size={18} color="#DC2626" />
+            <View style={[styles.balanceWarning, styles.balanceWarningAmber]}>
+              <Ionicons name="checkmark-circle" size={18} color="#92400E" />
               <Text
-                style={[styles.balanceWarningText, { color: "#7F1D1D" }]}
+                style={[styles.balanceWarningText, { color: "#92400E" }]}
               >
-                You have already contributed to this cycle.
+                You've already contributed to this cycle. You can add another contribution if you want to top up.
               </Text>
             </View>
           ) : null}
@@ -1317,14 +1322,13 @@ export default function MakeContributionScreen() {
           <TouchableOpacity
             style={[
               styles.confirmButton,
-              (isProcessing || isWalletBlocked || alreadyContributed) &&
-                styles.confirmButtonDisabled,
+              (isProcessing || isWalletBlocked) && styles.confirmButtonDisabled,
             ]}
             onPress={() => {
               if (showCoach) dismissCoach();
               handleConfirmPayment();
             }}
-            disabled={isProcessing || isWalletBlocked || alreadyContributed}
+            disabled={isProcessing || isWalletBlocked}
           >
             {isProcessing ? (
               <Text style={styles.confirmButtonText}>{t("make_contribution.btn_processing")}</Text>
