@@ -985,7 +985,12 @@ Deno.serve(async (req) => {
     // status='pending' makes a Stripe re-delivery a clean no-op.
     if (isCirclePayout) {
       const cyclePayoutCycleId = maybeUuid(tMeta.cycle_id);
-      const { error: cpErr, count: cpCount } = await supabase
+      const recipientUserIdMeta = maybeUuid(tMeta.recipient_user_id);
+      const circleIdMeta = maybeUuid(tMeta.circle_id);
+      const cycleNumberMeta =
+        typeof tMeta.cycle_number === "string" ? tMeta.cycle_number : "";
+
+      const { data: cpUpdated, error: cpErr, count: cpCount } = await supabase
         .from("circle_payouts")
         .update(
           {
@@ -997,7 +1002,8 @@ Deno.serve(async (req) => {
           { count: "exact" },
         )
         .eq("transfer_id", transfer.id)
-        .eq("status", "pending");
+        .eq("status", "pending")
+        .select("id");
       if (cpErr) {
         processingError = processingError ??
           `circle_payouts update failed: ${cpErr.message}`;
@@ -1013,6 +1019,94 @@ Deno.serve(async (req) => {
           "[stripe-webhook] circle_payouts marked completed for transfer",
           transfer.id,
         );
+
+        // ── Recipient-side activity-feed row ─────────────────────────
+        // useRecentActivity on the Home screen reads wallet_transactions
+        // for the caller. Without a row here, a completed circle payout
+        // never surfaces in the feed — the money lands at the recipient's
+        // Stripe Connect account (bank), and the app otherwise has no
+        // ledger entry visible to the recipient's UI. Insert a
+        // credit-direction row now that the transfer landed, gated on
+        // cpCount > 0 so a Stripe re-delivery that no-ops the update
+        // above doesn't double-insert.
+        //
+        // wallet_transactions (migration 015) requires wallet_id FK +
+        // balance_before/after. Payouts don't move app-wallet balance
+        // (funds go directly to the recipient's bank via Connect), so
+        // balance_before === balance_after. The row is informational for
+        // the feed; the ledger_events table remains the accounting truth.
+        //
+        // Failure is logged, never bubbled to processingError: the money
+        // is already at the bank, circle_payouts is already 'completed',
+        // and a Stripe retry would just short-circuit at the
+        // duplicate-event ack. Manual reconciliation covers rare misses.
+        if (recipientUserIdMeta) {
+          const { data: recipientWallet } = await supabase
+            .from("user_wallets")
+            .select("id, main_balance_cents")
+            .eq("user_id", recipientUserIdMeta)
+            .maybeSingle();
+
+          let circleName = "a circle";
+          if (circleIdMeta) {
+            const { data: circleRow } = await supabase
+              .from("circles")
+              .select("name")
+              .eq("id", circleIdMeta)
+              .maybeSingle();
+            if (circleRow?.name) circleName = circleRow.name;
+          }
+
+          if (recipientWallet) {
+            const balanceCents = recipientWallet.main_balance_cents ?? 0;
+            const payoutRowId = cpUpdated?.[0]?.id ?? null;
+            const { error: wtErr } = await supabase
+              .from("wallet_transactions")
+              .insert({
+                wallet_id: recipientWallet.id,
+                user_id: recipientUserIdMeta,
+                transaction_type: "circle_payout",
+                direction: "credit",
+                amount_cents: transfer.amount ?? 0,
+                balance_type: "main",
+                balance_before_cents: balanceCents,
+                balance_after_cents: balanceCents,
+                reference_type: "circle_payout",
+                reference_id: payoutRowId,
+                description: `Payout from ${circleName}`,
+                transaction_status: "completed",
+                metadata: {
+                  transfer_id: transfer.id,
+                  cycle_id: cyclePayoutCycleId,
+                  cycle_number: cycleNumberMeta,
+                  circle_id: circleIdMeta,
+                },
+              });
+            if (wtErr) {
+              console.error(
+                "[stripe-webhook] wallet_transactions insert failed for payout transfer",
+                transfer.id,
+                ":",
+                wtErr.message,
+              );
+            } else {
+              console.log(
+                "[stripe-webhook] wallet_transactions inserted for payout transfer",
+                transfer.id,
+                "→ recipient",
+                recipientUserIdMeta,
+              );
+            }
+          } else {
+            console.warn(
+              "[stripe-webhook] no user_wallets row for recipient",
+              recipientUserIdMeta,
+              "— skipping activity-feed insert for transfer",
+              transfer.id,
+            );
+          }
+        }
+
         if (cyclePayoutCycleId) {
           // Soft-fail: a missing actual_payout_date on circle_cycles is
           // a polish issue, not a money problem. The ledger + payout
