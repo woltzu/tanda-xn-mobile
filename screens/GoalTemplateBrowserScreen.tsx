@@ -232,16 +232,15 @@ function TemplateCard({
   }));
 
   const handleUse = () => {
-    // Pass the full template object so GoalCreateExpressScreen can pre-fill
-    // every supported field (name, target, category, providers) without a
-    // follow-up fetch. The full milestones array also rides along for the
-    // disbursement wizard's later consumption. Override default_target_cents
-    // with the country-adjusted figure so the create form starts at the
-    // adjusted value, not the base.
+    // Pass only the template id + the (optional) country-adjusted target
+    // so the navigation param stays tiny. The full template row
+    // (milestones jsonb, cost_breakdown jsonb, description, etc.) can be
+    // huge — passing it inline was tripping the React Navigation payload
+    // guard on some devices and crashing the transition. GoalCreateExpress
+    // fetches the row itself from goal_templates on mount.
     navigation.navigate("GoalCreateExpress", {
-      template: hasAdjustment
-        ? { ...template, default_target_cents: target }
-        : template,
+      templateId: template.id,
+      overrideTargetCents: hasAdjustment ? target : undefined,
     });
   };
 

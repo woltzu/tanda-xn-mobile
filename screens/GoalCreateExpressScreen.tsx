@@ -121,32 +121,69 @@ export default function GoalCreateExpressScreen() {
     : { params: {} };
   const prefillName = (route?.params as { suggestedName?: string })?.suggestedName;
   const prefillAmount = (route?.params as { suggestedAmount?: number })?.suggestedAmount;
-  const template = (route?.params as {
-    template?: {
-      id: string;
-      category: string;
-      name: string;
-      default_target_cents?: number | null;
-      provider_categories?: string[] | null;
-    };
-  })?.template;
-  // Template name/target take precedence — the user picked this template
-  // for a reason. They can still edit the inputs before submit.
-  const templateName = template?.name;
-  const templateAmount =
-    template?.default_target_cents != null
-      ? Math.round((template.default_target_cents as number) / 100)
-      : undefined;
+  // Template arrives as an ID + optional country-adjusted target only.
+  // The full template row is fetched lazily below — the previous
+  // implementation attached the whole row (including huge milestones and
+  // cost_breakdown JSONB blobs) to the navigation params and tripped the
+  // React Navigation payload guard on some devices.
+  const templateId = (route?.params as { templateId?: string })?.templateId;
+  const overrideTargetCents = (route?.params as {
+    overrideTargetCents?: number | null;
+  })?.overrideTargetCents;
 
   // ── Form state ──────────────────────────────────────────────────────────
-  const [name, setName] = useState(templateName ?? prefillName ?? "");
+  // Start with prefill (or empty) — the async template fetch below will
+  // fill in name/amount when it resolves. Functional setState guards
+  // against clobbering user input if the fetch loses a race against
+  // typing.
+  const [name, setName] = useState(prefillName ?? "");
   const [amount, setAmount] = useState(
-    templateAmount
-      ? String(templateAmount)
-      : prefillAmount
-      ? String(prefillAmount)
-      : "",
+    prefillAmount ? String(prefillAmount) : "",
   );
+
+  // Fetched template row. Shape mirrors the fields the rest of this
+  // screen reads (name for the badge, category + provider_categories for
+  // the post-create UPDATE, id for the template_usage log).
+  const [template, setTemplate] = useState<{
+    id: string;
+    category: string;
+    name: string;
+    default_target_cents: number | null;
+    provider_categories: string[] | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!templateId) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("goal_templates")
+        .select("id, category, name, default_target_cents, provider_categories")
+        .eq("id", templateId)
+        .maybeSingle();
+      if (cancelled || error || !data) return;
+      const finalTargetCents =
+        overrideTargetCents ?? (data.default_target_cents as number | null);
+      setTemplate({
+        id: data.id as string,
+        category: data.category as string,
+        name: data.name as string,
+        default_target_cents: finalTargetCents,
+        provider_categories:
+          (data.provider_categories as string[] | null) ?? null,
+      });
+      // Populate name only if the user hasn't typed anything yet.
+      setName((current) => (current === "" ? (data.name as string) : current));
+      if (finalTargetCents != null) {
+        setAmount((current) =>
+          current === "" ? String(Math.round(finalTargetCents / 100)) : current,
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [templateId, overrideTargetCents]);
 
   // P2 — median target across past goals. Loaded lazily on first amount
   // focus so we don't spend a round-trip for users who never reach the

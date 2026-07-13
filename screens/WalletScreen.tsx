@@ -119,21 +119,20 @@ export default function WalletScreen() {
     }
   };
 
-  // P0 (Access Wallet review): gate the inbound + outbound money
-  // surfaces. Add-funds and Remittance both route to KYCHub when the
-  // user is unverified; the deferred-action snapshot sends them back
-  // to the action they wanted after the verification flow completes.
-  // Send-money (DomesticSendMoney) has its own gate at submit time
-  // (added in the KYC trigger review) so we don't double-gate here.
-  const addFundsGate = useKYCGate({ resumeRoute: "AddFunds" });
+  // KYC gating policy (revised 2026-07-13): verification is required
+  // only for MONEY-OUT flows — withdrawals to bank (WithdrawScreen),
+  // international send (Remittance), advances (AdvanceHubV2), and
+  // domestic send at submit time (DomesticSendMoney). Adding funds
+  // (top-up) is a DEPOSIT — the money originates from a card/bank the
+  // user already owns, not from the platform's balance — so no KYC
+  // gate is applied here. The previous `addFundsGate` was removed
+  // together with its `useKYCGate` call to keep the hook order stable.
   const remittanceGate = useKYCGate({ resumeRoute: "Remittance" });
 
   const handleSendMoney = () => {
     navigation.navigate("DomesticSendMoney" as never);
   };
-  const handleAddFunds = async () => {
-    const passed = await addFundsGate.ensureVerified();
-    if (!passed) return;
+  const handleAddFunds = () => {
     navigation.navigate("AddFunds");
   };
   const handleRemittance = async () => {
