@@ -358,11 +358,33 @@ export default function AddFundsScreen() {
                           />
                         </View>
                         <View style={styles.methodInfo}>
+                          {/* SavedPaymentMethod uses FLAT fields
+                              (cardBrand / cardLast4 / cardExpMonth /
+                              cardExpYear / bankName / bankLast4) — the
+                              previous nested-shape reads (pm.card?.brand
+                              etc.) always returned undefined and the
+                              label fell through to `pm.type` which is
+                              literally "card". Mirrors the formatting
+                              helpers in MakeContributionScreen. */}
                           <Text style={styles.methodName}>
-                            {pm.card?.brand?.toUpperCase() || pm.us_bank_account?.bank_name || pm.type}
+                            {pm.cardBrand && pm.cardLast4
+                              ? `${pm.cardBrand.charAt(0).toUpperCase()}${pm.cardBrand.slice(1)} •••• ${pm.cardLast4}`
+                              : pm.bankName && pm.bankLast4
+                                ? `${pm.bankName} •••• ${pm.bankLast4}`
+                                : pm.cardLast4
+                                  ? `•••• ${pm.cardLast4}`
+                                  : pm.bankLast4
+                                    ? `•••• ${pm.bankLast4}`
+                                    : pm.type === "us_bank_account"
+                                      ? "Bank Account"
+                                      : "Card"}
                           </Text>
                           <Text style={styles.methodDescription}>
-                            ****{pm.card?.last4 || pm.us_bank_account?.last4 || ""}
+                            {pm.cardExpMonth && pm.cardExpYear
+                              ? `Expires ${String(pm.cardExpMonth).padStart(2, "0")}/${pm.cardExpYear}`
+                              : pm.bankName
+                                ? "Bank account"
+                                : pm.type}
                           </Text>
                         </View>
                       </View>
