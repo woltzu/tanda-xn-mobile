@@ -394,7 +394,20 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
     myCircleIdsRef.current = myCircleIds;
   }, [myCircleIds]);
 
-  // Fetch all circles from Supabase
+  // Fetch all circles from Supabase.
+  //
+  // Robustness (2026-07-12): the raw supabase-js query hangs at the fetch
+  // layer on flaky connections — iOS keeps the socket open ~60 s, some
+  // web browsers indefinitely. Users hit "Error fetching circles:
+  // TypeError: Network request failed" (or nothing at all) and there
+  // was no retry. We now:
+  //   - race each supabase query against a 15 s timeout, so a stuck
+  //     socket rejects with NETWORK_TIMEOUT and we can react.
+  //   - retry the whole fetch once after a 2 s pause on any
+  //     network-shaped failure (timeout / "Network request failed" /
+  //     "Failed to fetch"), which covers the common transient blip.
+  //   - surface a friendly `error` message on the second failure so the
+  //     UI can render actionable copy.
   const fetchCircles = useCallback(async () => {
     if (!session) {
       setCircles([]);
@@ -402,58 +415,113 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
+    const QUERY_TIMEOUT_MS = 15_000;
+    const withTimeout = <T,>(p: PromiseLike<T>): Promise<T> =>
+      Promise.race<T>([
+        Promise.resolve(p),
+        new Promise<T>((_, reject) =>
+          setTimeout(
+            () => reject(new Error("NETWORK_TIMEOUT")),
+            QUERY_TIMEOUT_MS,
+          ),
+        ),
+      ]);
+    const looksLikeNetworkError = (err: unknown): boolean => {
+      const msg = err instanceof Error ? err.message : String(err ?? "");
+      return (
+        msg === "NETWORK_TIMEOUT" ||
+        /network request failed|network error|failed to fetch/i.test(msg)
+      );
+    };
+
+    const attempt = async (): Promise<{ ok: true } | { ok: false; err: unknown }> => {
+      try {
+        // Fetch all circles
+        const { data: circlesData, error: circlesError } = await withTimeout(
+          supabase
+            .from("circles")
+            .select("*")
+            .order("created_at", { ascending: false }),
+        );
+
+        if (circlesError) {
+          console.error("Error fetching circles:", circlesError);
+          return { ok: false, err: circlesError };
+        }
+
+        // Fetch user's circle memberships
+        const { data: membershipsData, error: membershipsError } = await withTimeout(
+          supabase
+            .from("circle_members")
+            .select("circle_id")
+            .eq("user_id", user?.id),
+        );
+
+        if (membershipsError) {
+          console.error("Error fetching memberships:", membershipsError);
+          // Non-fatal for the primary circles list; keep going with an
+          // empty membership set rather than failing the whole fetch.
+        }
+
+        // Convert to Circle objects
+        const fetchedCircles = (circlesData || []).map((row: CircleRow) => rowToCircle(row));
+        setCircles(fetchedCircles);
+
+        // Track which circles user is a member of
+        const memberIds = new Set(
+          (membershipsData || []).map((m: { circle_id: string }) => m.circle_id),
+        );
+        setMyCircleIds(memberIds);
+
+        // Fetch all user IDs from the user's circles (network = people in your circles)
+        if (memberIds.size > 0) {
+          const circleIdArray = Array.from(memberIds);
+          const { data: networkData } = await withTimeout(
+            supabase
+              .from("circle_members")
+              .select("user_id")
+              .in("circle_id", circleIdArray)
+              .neq("user_id", user?.id || ""),
+          );
+
+          if (networkData) {
+            setNetworkUserIds(new Set(networkData.map((m: any) => m.user_id)));
+          }
+        } else {
+          setNetworkUserIds(new Set());
+        }
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, err };
+      }
+    };
+
+    setIsLoading(true);
+    setError(null);
     try {
-      setIsLoading(true);
-      setError(null);
+      const first = await attempt();
+      if (first.ok) return;
 
-      // Fetch all circles
-      const { data: circlesData, error: circlesError } = await supabase
-        .from("circles")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (circlesError) {
-        console.error("Error fetching circles:", circlesError);
-        setError(circlesError.message);
+      // Only retry on network-shaped failures. A PostgREST error (bad
+      // query, RLS deny) will fail identically on the retry and just
+      // burns time — surface it immediately instead.
+      if (!looksLikeNetworkError(first.err)) {
+        console.error("Error in fetchCircles (non-network):", first.err);
+        setError(
+          first.err instanceof Error ? first.err.message : "Failed to fetch circles",
+        );
         return;
       }
 
-      // Fetch user's circle memberships
-      const { data: membershipsData, error: membershipsError } = await supabase
-        .from("circle_members")
-        .select("circle_id")
-        .eq("user_id", user?.id);
+      console.warn(
+        "[CirclesContext] fetchCircles first attempt failed with network error; retrying in 2 s",
+      );
+      await new Promise((r) => setTimeout(r, 2_000));
+      const second = await attempt();
+      if (second.ok) return;
 
-      if (membershipsError) {
-        console.error("Error fetching memberships:", membershipsError);
-      }
-
-      // Convert to Circle objects
-      const fetchedCircles = (circlesData || []).map((row: CircleRow) => rowToCircle(row));
-      setCircles(fetchedCircles);
-
-      // Track which circles user is a member of
-      const memberIds = new Set((membershipsData || []).map((m: { circle_id: string }) => m.circle_id));
-      setMyCircleIds(memberIds);
-
-      // Fetch all user IDs from the user's circles (network = people in your circles)
-      if (memberIds.size > 0) {
-        const circleIdArray = Array.from(memberIds);
-        const { data: networkData } = await supabase
-          .from("circle_members")
-          .select("user_id")
-          .in("circle_id", circleIdArray)
-          .neq("user_id", user?.id || "");
-
-        if (networkData) {
-          setNetworkUserIds(new Set(networkData.map((m: any) => m.user_id)));
-        }
-      } else {
-        setNetworkUserIds(new Set());
-      }
-    } catch (err) {
-      console.error("Error in fetchCircles:", err);
-      setError(err instanceof Error ? err.message : "Failed to fetch circles");
+      console.error("Error in fetchCircles (retry failed):", second.err);
+      setError("Couldn't load your circles. Check your connection and try again.");
     } finally {
       setIsLoading(false);
     }

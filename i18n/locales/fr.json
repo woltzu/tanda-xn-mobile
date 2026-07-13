@@ -127,6 +127,7 @@
     "no": "Non",
     "loading": "Chargement…",
     "error": "Une erreur s'est produite",
+    "load_error": "Impossible de charger les données. Vérifiez votre connexion et réessayez.",
     "empty": "Rien pour le moment",
     "success": "Succès",
     "retry": "Réessayer",

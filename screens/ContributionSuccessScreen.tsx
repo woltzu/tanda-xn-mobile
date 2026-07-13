@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCircles } from "../context/CirclesContext";
+import { supabase } from "../lib/supabase";
 
 type ContributionSuccessNavigationProp = StackNavigationProp<RootStackParamList>;
 type ContributionSuccessRouteProp = RouteProp<RootStackParamList, "ContributionSuccess">;
@@ -34,6 +35,75 @@ export default function ContributionSuccessScreen() {
 
   // Find the circle
   const circle = [...circles, ...myCircles, ...browseCircles].find((c) => c.id === circleId);
+
+  // Real cycle progress. Previously derived from a Math.random() mock over
+  // circle.memberCount, which produced 100% on any circle with 2 members.
+  // We now read the actual distinct paid-contributor count for the current
+  // cycle from circle_contributions and the active-member count from
+  // circle_members. Optimistic default: 1-of-planned so the card doesn't
+  // flash 0% between mount and fetch.
+  const [progress, setProgress] = useState<{
+    paidMembers: number;
+    totalMembers: number;
+  }>({
+    paidMembers: 1,
+    totalMembers: circle?.memberCount ?? 1,
+  });
+
+  useEffect(() => {
+    if (!circle) return;
+    let cancelled = false;
+    (async () => {
+      // Match the cycle-number arithmetic MakeContributionScreen /
+      // useCurrentCycle use — walk from startDate at the circle's
+      // frequency until now.
+      let cn = 1;
+      const start = new Date(circle.startDate);
+      const now = new Date();
+      const step = new Date(start);
+      while (step <= now) {
+        switch (circle.frequency) {
+          case "daily":    step.setDate(step.getDate() + 1); break;
+          case "weekly":   step.setDate(step.getDate() + 7); break;
+          case "biweekly": step.setDate(step.getDate() + 14); break;
+          case "monthly":  step.setMonth(step.getMonth() + 1); break;
+          default: break;
+        }
+        if (step <= now) cn++;
+      }
+
+      const [paidRes, membersRes] = await Promise.all([
+        supabase
+          .from("circle_contributions")
+          .select("user_id")
+          .eq("circle_id", circleId)
+          .eq("cycle_number", cn)
+          .eq("status", "paid"),
+        supabase
+          .from("circle_members")
+          .select("user_id", { count: "exact", head: true })
+          .eq("circle_id", circleId)
+          .eq("status", "active"),
+      ]);
+      if (cancelled) return;
+
+      // Partial-pool / catch-up flow allows multiple 'paid' rows per
+      // (member, cycle); DISTINCT the user_id set so the progress bar
+      // reflects members-paid, not row count.
+      const distinctPayers = new Set(
+        (paidRes.data ?? []).map((r: any) => r.user_id),
+      ).size;
+      const activeMembers = membersRes.count ?? circle.memberCount;
+
+      setProgress({
+        paidMembers: distinctPayers,
+        totalMembers: activeMembers,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [circle?.id, circle?.startDate, circle?.frequency, circleId, circle]);
 
   useEffect(() => {
     // Success animation sequence
@@ -86,8 +156,11 @@ export default function ContributionSuccessScreen() {
 
   const totalPot = circle.amount * circle.memberCount;
   const hasBeneficiary = circle.beneficiaryName;
-  const paidMembers = Math.floor(Math.random() * (circle.currentMembers - 1)) + 2; // Mock: random number including you
-  const paymentProgress = (paidMembers / circle.memberCount) * 100;
+  const paidMembers = progress.paidMembers;
+  const totalMembers = progress.totalMembers;
+  const paymentProgress = totalMembers > 0
+    ? Math.min(100, (paidMembers / totalMembers) * 100)
+    : 0;
 
   const now = new Date();
   const timestamp = now.toLocaleString("en-US", {
@@ -273,14 +346,14 @@ export default function ContributionSuccessScreen() {
             </View>
 
             <Text style={styles.progressText}>
-              {paidMembers} of {circle.memberCount} members have contributed
+              {paidMembers} of {totalMembers} members have contributed
             </Text>
 
             {paymentProgress < 100 ? (
               <View style={styles.progressNote}>
                 <Ionicons name="time-outline" size={16} color="#92400E" />
                 <Text style={styles.progressNoteText}>
-                  Waiting for {circle.memberCount - paidMembers} more members
+                  Waiting for {Math.max(0, totalMembers - paidMembers)} more members
                 </Text>
               </View>
             ) : (

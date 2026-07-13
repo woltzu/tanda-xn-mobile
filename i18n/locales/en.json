@@ -127,6 +127,7 @@
     "no": "No",
     "loading": "Loading…",
     "error": "Something went wrong",
+    "load_error": "Couldn't load data. Check your connection and try again.",
     "empty": "Nothing here yet",
     "success": "Success",
     "retry": "Try again",
