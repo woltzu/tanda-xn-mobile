@@ -607,6 +607,19 @@ function CircleDetailBody({
     return members.map((m) => ({ kind: "member" as const, member: m }));
   }, [activeTab, isLoadingMembers, members]);
 
+  // Payout order for the Members tab header. Positions are assigned when
+  // the circle becomes active (via assign_initial_positions RPC), so a
+  // 'pending' circle has position=0 for everyone. We filter those out and
+  // sort ascending — the resulting list drives the "Payout order" card
+  // above the members list.
+  const payoutOrderMembers = useMemo(
+    () =>
+      [...members]
+        .filter((m) => m.position > 0)
+        .sort((a, b) => a.position - b.position),
+    [members],
+  );
+
   // NotFound guard moved to the outer CircleDetailScreen wrapper —
   // this body never renders unless circle is guaranteed non-null.
 
@@ -2008,13 +2021,81 @@ function CircleDetailBody({
   // sentinel) rather than a nested FlatList — the outer surface is
   // now a FlatList itself, so members are its data instead of a
   // nested list.
-  const renderMembersTabHeader = () => (
-    <View style={styles.tabContent}>
-      <Text style={styles.sectionTitle}>
-        {members.length} Member{members.length !== 1 ? "s" : ""}
-      </Text>
-    </View>
-  );
+  const renderMembersTabHeader = () => {
+    // Payout order card. Three states:
+    //   pending  → placeholder copy, no rows (positions land when the
+    //              circle activates via assign_initial_positions).
+    //   active/completed but no positions → "not assigned yet" placeholder.
+    //   otherwise → sorted-by-position list with a small teal dot on the
+    //              row whose position matches circle.currentCycle (the
+    //              member currently scheduled to receive).
+    let payoutOrderBody: React.ReactNode;
+    if (circle.status === "pending") {
+      payoutOrderBody = (
+        <Text style={styles.payoutOrderPlaceholder}>
+          {t("circle_detail.payout_order_pending")}
+        </Text>
+      );
+    } else if (payoutOrderMembers.length === 0) {
+      payoutOrderBody = (
+        <Text style={styles.payoutOrderPlaceholder}>
+          {t("circle_detail.payout_order_empty")}
+        </Text>
+      );
+    } else {
+      payoutOrderBody = payoutOrderMembers.map((m) => {
+        const isCurrentRecipient =
+          circle.status === "active" &&
+          typeof circle.currentCycle === "number" &&
+          m.position === circle.currentCycle;
+        return (
+          <View key={m.id} style={styles.payoutOrderRow}>
+            <View
+              style={[
+                styles.payoutOrderBadge,
+                isCurrentRecipient && styles.payoutOrderBadgeCurrent,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.payoutOrderBadgeText,
+                  isCurrentRecipient && styles.payoutOrderBadgeTextCurrent,
+                ]}
+              >
+                {t("circle_detail.payout_order_position", {
+                  position: m.position,
+                })}
+              </Text>
+            </View>
+            <Text style={styles.payoutOrderName} numberOfLines={1}>
+              {m.name}
+              {m.isCurrentUser
+                ? ` (${t("circle_detail.member_badge_me")})`
+                : ""}
+            </Text>
+            {isCurrentRecipient ? (
+              <View style={styles.payoutOrderCurrentDot} />
+            ) : null}
+          </View>
+        );
+      });
+    }
+
+    return (
+      <View style={styles.tabContent}>
+        <View style={styles.payoutOrderCard}>
+          <Text style={styles.payoutOrderTitle}>
+            {t("circle_detail.payout_order_title")}
+          </Text>
+          {payoutOrderBody}
+        </View>
+
+        <Text style={styles.sectionTitle}>
+          {members.length} Member{members.length !== 1 ? "s" : ""}
+        </Text>
+      </View>
+    );
+  };
 
   const renderMembersLoading = () => (
     <View style={[styles.tabContent, styles.loadingContainer]}>
@@ -3811,6 +3892,64 @@ const styles = StyleSheet.create({
   positionText: {
     fontSize: 11,
     color: colors.textSecondary,
+  },
+  payoutOrderCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  payoutOrderTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.primaryNavy,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    marginBottom: 10,
+  },
+  payoutOrderPlaceholder: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  payoutOrderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 6,
+  },
+  payoutOrderBadge: {
+    minWidth: 36,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: colors.tealTintBg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  payoutOrderBadgeCurrent: {
+    backgroundColor: colors.accentTeal,
+  },
+  payoutOrderBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.accentTeal,
+  },
+  payoutOrderBadgeTextCurrent: {
+    color: colors.cardBg,
+  },
+  payoutOrderName: {
+    flex: 1,
+    fontSize: 14,
+    color: colors.primaryNavy,
+  },
+  payoutOrderCurrentDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.accentTeal,
   },
   activityItem: {
     flexDirection: "row",
