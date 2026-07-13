@@ -612,6 +612,83 @@ export default function GoalDetailV2Screen() {
     return [];
   }, [transactions]);
 
+  // ── Hooks below this line used to sit AFTER the loading/not-found
+  //    early returns. On the first render (goal=null) React ran ~49
+  //    hooks; on the second render (goal populated) it ran all 52 and
+  //    threw "Rendered more hooks than during the previous render."
+  //    They're hoisted here with explicit null guards so every render
+  //    calls the same hook count regardless of `goal` being present.
+
+  // Ahead-of-pace projection. Returns null while goal is unresolved so
+  // the useMemo runs on every render but the downstream banner check
+  // reads null and stays hidden.
+  const aheadProjection = useMemo(() => {
+    if (!goal || !goal.target || goal.target <= 0) return null;
+    if (!goal.targetDate) return null;
+    if (realStatus === "completed") return null;
+    const due = new Date(goal.targetDate);
+    if (isNaN(due.getTime())) return null;
+    const today = new Date();
+    const daysUntil = Math.max(
+      0,
+      Math.ceil((due.getTime() - today.getTime()) / 86_400_000),
+    );
+    // Need at least 7 days of history to extrapolate — short windows
+    // are noisy ("user deposited $50 yesterday so they'll have a
+    // million by Friday" is the kind of false positive we want to
+    // skip).
+    if (goal.daysActive < 7) return null;
+    if (daysUntil <= 0) return null;
+    const dailyRate = goal.balance / goal.daysActive;
+    const projected = goal.balance + dailyRate * daysUntil;
+    if (projected <= goal.target * AHEAD_THRESHOLD) return null;
+    // Round suggested target up to nearest $100.
+    const raw = goal.target * 1.1;
+    const suggested = Math.ceil(raw / 100) * 100;
+    return { projected, suggested };
+  }, [
+    goal?.balance,
+    goal?.target,
+    goal?.targetDate,
+    goal?.daysActive,
+    realStatus,
+  ]);
+
+  // Load any persisted dismiss timestamp from AsyncStorage on mount.
+  useEffect(() => {
+    if (!goal?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(AHEAD_DISMISSED_KEY(goal.id));
+        if (cancelled) return;
+        const ms = raw ? new Date(raw).getTime() : NaN;
+        setAheadDismissedAt(Number.isFinite(ms) ? ms : null);
+      } catch {
+        if (!cancelled) setAheadDismissedAt(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [goal?.id]);
+
+  // P2 (Bucket C.4) — animate the progress bar to the current value
+  // whenever it changes. The Animated.Value is initialised at 0 (see
+  // ref above), so the first paint after fetch animates from 0 → real
+  // progress. Subsequent refetches (deposits, withdrawals) animate
+  // from the prior progress. Skips work while goal is null.
+  useEffect(() => {
+    if (!goal) return;
+    Animated.timing(progressAnim, {
+      toValue: goal.progressPercent ?? 0,
+      duration: 600,
+      easing: Easing.out(Easing.cubic),
+      // Width can't use the native driver — keep this on the JS thread.
+      useNativeDriver: false,
+    }).start();
+  }, [goal?.progressPercent, progressAnim, goal]);
+
   if (loading && !goal) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -773,62 +850,10 @@ export default function GoalDetailV2Screen() {
     showToast(t("goal_detail.share_coming_soon"), "info");
   };
 
-  // P2 (Bucket C.3) — projection math for the "you're ahead" banner.
-  //
-  // Linear pace = balance / days_since_start. Project forward to
-  // target_date. If the projection clears target × 1.10, surface a
-  // banner suggesting a new target = current target × 1.10 (rounded
-  // to the nearest $100 so the chip reads as a clean number).
-  const aheadProjection = useMemo(() => {
-    if (!goal.target || goal.target <= 0) return null;
-    if (!goal.targetDate) return null;
-    if (realStatus === "completed") return null;
-    const due = new Date(goal.targetDate);
-    if (isNaN(due.getTime())) return null;
-    const today = new Date();
-    const daysUntil = Math.max(
-      0,
-      Math.ceil((due.getTime() - today.getTime()) / 86_400_000),
-    );
-    // Need at least 7 days of history to extrapolate — short windows
-    // are noisy ("user deposited $50 yesterday so they'll have a
-    // million by Friday" is the kind of false positive we want to
-    // skip).
-    if (goal.daysActive < 7) return null;
-    if (daysUntil <= 0) return null;
-    const dailyRate = goal.balance / goal.daysActive;
-    const projected = goal.balance + dailyRate * daysUntil;
-    if (projected <= goal.target * AHEAD_THRESHOLD) return null;
-    // Round suggested target up to nearest $100.
-    const raw = goal.target * 1.1;
-    const suggested = Math.ceil(raw / 100) * 100;
-    return { projected, suggested };
-  }, [
-    goal.balance,
-    goal.target,
-    goal.targetDate,
-    goal.daysActive,
-    realStatus,
-  ]);
-
-  // Load any persisted dismiss timestamp from AsyncStorage on mount.
-  useEffect(() => {
-    let cancelled = false;
-    if (!goal.id) return;
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(AHEAD_DISMISSED_KEY(goal.id));
-        if (cancelled) return;
-        const ms = raw ? new Date(raw).getTime() : NaN;
-        setAheadDismissedAt(Number.isFinite(ms) ? ms : null);
-      } catch {
-        if (!cancelled) setAheadDismissedAt(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [goal.id]);
+  // aheadProjection + the AsyncStorage-load useEffect for
+  // aheadDismissedAt were hoisted above the loading/not-found early
+  // returns to keep the hook order stable. See the block right after
+  // recentActivity.
 
   const showAheadBanner =
     !!aheadProjection &&
@@ -875,20 +900,9 @@ export default function GoalDetailV2Screen() {
     loadGoal();
   };
 
-  // P2 (Bucket C.4) — animate the progress bar to the current value
-  // whenever it changes. The Animated.Value is initialised at 0 (see
-  // ref above), so the first paint after fetch animates from 0 → real
-  // progress. Subsequent refetches (deposits, withdrawals) animate
-  // from the prior progress.
-  useEffect(() => {
-    Animated.timing(progressAnim, {
-      toValue: goal.progressPercent ?? 0,
-      duration: 600,
-      easing: Easing.out(Easing.cubic),
-      // Width can't use the native driver — keep this on the JS thread.
-      useNativeDriver: false,
-    }).start();
-  }, [goal.progressPercent, progressAnim]);
+  // Progress-bar animation useEffect was hoisted above the early
+  // returns for hook-order stability. See the block right after
+  // recentActivity.
   const animatedProgressWidth = progressAnim.interpolate({
     inputRange: [0, 100],
     outputRange: ["0%", "100%"],
