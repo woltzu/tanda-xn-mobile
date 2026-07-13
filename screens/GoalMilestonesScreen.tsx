@@ -16,7 +16,7 @@
 // Route params (all optional — defaults applied for standalone preview).
 // ══════════════════════════════════════════════════════════════════════════════
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -29,7 +29,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useRoute, RouteProp } from "@react-navigation/native";
+import { useFocusEffect, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useGoalActions } from "../hooks/useGoalActions";
@@ -186,19 +186,33 @@ export default function GoalMilestonesScreen() {
   const goal = route.params?.goal ?? DEFAULT_GOAL;
   const goalId = route.params?.goalId ?? goal.id;
 
-  // Real DB rows: prefer the inline route-param payload (GoalDetailV2
-  // forwards them on navigate so we paint immediately), otherwise fetch
-  // fresh on mount when goalId is a UUID. Empty array stays empty until
-  // the first percentage threshold is crossed (handled by
-  // _record_goal_milestones in migration 078).
+  // Real DB rows. The route param is a paint-first optimisation
+  // (GoalDetailV2 forwards its current cache so this screen renders
+  // without a spinner), but we ALWAYS refetch fresh on mount / focus
+  // because:
+  //   * the caller may pass a stale snapshot (e.g. balance was already
+  //     past 10% but the parent's cache pre-dates the deposit that
+  //     crossed it), and
+  //   * the previous guard `if (route.params?.milestones) return`
+  //     treated an empty array as "already supplied inline" — but
+  //     Boolean([]) === true, so an empty-array forward silently
+  //     skipped the fetch and the screen was left stuck on the
+  //     zero-milestone state until a full remount.
   const [realMilestones, setRealMilestones] = useState<RealMilestone[]>(
     route.params?.milestones ?? []
   );
-  useEffect(() => {
-    if (route.params?.milestones) return; // already supplied inline
+
+  const refetchMilestones = useCallback(async () => {
     if (!UUID_RE.test(goalId)) return; // mock / preview mode
+    const { data, error } = await fetchGoal(goalId);
+    if (error || !data) return;
+    setRealMilestones(data.milestones);
+  }, [goalId, fetchGoal]);
+
+  useEffect(() => {
     let cancelled = false;
-    (async () => {
+    void (async () => {
+      if (!UUID_RE.test(goalId)) return;
       const { data, error } = await fetchGoal(goalId);
       if (cancelled || error || !data) return;
       setRealMilestones(data.milestones);
@@ -206,7 +220,18 @@ export default function GoalMilestonesScreen() {
     return () => {
       cancelled = true;
     };
-  }, [goalId, fetchGoal, route.params?.milestones]);
+  }, [goalId, fetchGoal]);
+
+  // Refetch every time the screen regains focus — covers the deposit-
+  // then-back flow where the user navigates away, deposits (which
+  // atomically records a new goal_milestones row via
+  // _record_goal_milestones), and returns to this screen expecting
+  // the new milestone to be lit.
+  useFocusEffect(
+    useCallback(() => {
+      void refetchMilestones();
+    }, [refetchMilestones]),
+  );
 
   // Decide whether to render the mock-driven canonical 7 rows (legacy
   // preview / debug nav) or the real-data-driven set. We treat the
