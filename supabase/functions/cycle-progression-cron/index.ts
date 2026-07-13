@@ -65,7 +65,7 @@ serve(async (req: Request) => {
         id,
         circle_id,
         cycle_number,
-        status,
+        cycle_status,
         start_date,
         contribution_deadline,
         grace_period_end,
@@ -81,7 +81,7 @@ serve(async (req: Request) => {
           status
         )
       `)
-      .in('status', ['scheduled', 'collecting', 'deadline_reached', 'grace_period', 'ready_payout', 'payout_completed'])
+      .in('cycle_status', ['scheduled', 'collecting', 'deadline_reached', 'grace_period', 'ready_payout', 'payout_completed'])
       .eq('circles.status', 'active')
 
     if (fetchError) {
@@ -109,10 +109,10 @@ serve(async (req: Request) => {
     for (const cycle of activeCycles) {
       try {
         let newStatus: string | null = null
-        const previousStatus = cycle.status
+        const previousStatus = cycle.cycle_status
 
         // Determine if transition is needed based on current status
-        switch (cycle.status) {
+        switch (cycle.cycle_status) {
           case 'scheduled':
             // Transition to collecting when start date is reached
             if (cycle.start_date <= todayStr) {
@@ -172,7 +172,7 @@ serve(async (req: Request) => {
                 await supabase
                   .from('circle_cycles')
                   .update({
-                    status: 'payout_pending',
+                    cycle_status: 'payout_pending',
                     status_changed_at: now.toISOString(),
                     notes: 'Awaiting manual payout processing'
                   })
@@ -192,7 +192,7 @@ serve(async (req: Request) => {
           const { error: updateError } = await supabase
             .from('circle_cycles')
             .update({
-              status: newStatus,
+              cycle_status: newStatus,
               status_changed_at: now.toISOString(),
               updated_at: now.toISOString()
             })
@@ -239,8 +239,8 @@ serve(async (req: Request) => {
         results.push({
           cycle_id: cycle.id,
           circle_id: cycle.circle_id,
-          previous_status: cycle.status,
-          new_status: cycle.status,
+          previous_status: cycle.cycle_status,
+          new_status: cycle.cycle_status,
           success: false,
           error: error.message
         })
