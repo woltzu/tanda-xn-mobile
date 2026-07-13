@@ -556,15 +556,45 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
     paymentMethodId?: string,
   ) => {
     if (!user) throw new Error('User not authenticated');
+    // Route through the real `create-payment-intent` Edge Function
+    // instead of StripeConnectEngine.createPaymentIntent, whose
+    // underlying `_createStripePaymentIntent` is still the TODO-mock
+    // that hands out fake `pi_test_<random>_secret_<random>` values.
+    // The mocked secrets don't match Stripe's real client_secret shape
+    // (`pi_XXX_secret_YYY`), which is what triggered the runtime
+    //     `secret` format does not match expected client secret formatting
+    // failure from presentPaymentSheet. The EF has STRIPE_SECRET_KEY
+    // in its env, calls stripe.paymentIntents.create for real, inserts
+    // its own stripe_payment_intents row under service_role (RLS-safe),
+    // and returns the transient client_secret verbatim.
+    // paymentMethodId is deliberately NOT forwarded here — the wallet-
+    // deposit EF path uses automatic_payment_methods and lets Stripe's
+    // PaymentSheet handle saved-card selection; passing a specific PM
+    // would require the goal-deposit / bank-mandate flow, which
+    // doesn't apply to a top-up.
+    void paymentMethodId;
     try {
-      const pi = await StripeConnectEngine.createPaymentIntent({
-        memberId: user.id,
-        amountCents,
-        currency,
-        purpose: 'wallet_deposit',
-        paymentMethodId,
-      });
-      return { clientSecret: pi.clientSecret!, paymentIntentId: pi.stripePaymentIntentId };
+      const { data, error } = await supabase.functions.invoke(
+        'create-payment-intent',
+        {
+          body: {
+            amount: amountCents,
+            currency,
+            purpose: 'wallet_deposit',
+          },
+        },
+      );
+      if (error) {
+        const msg = await extractEfErrorMessage(error, data);
+        throw new Error(msg);
+      }
+      if (!data?.clientSecret) {
+        throw new Error('Edge function did not return a clientSecret');
+      }
+      return {
+        clientSecret: data.clientSecret as string,
+        paymentIntentId: data.paymentIntentId as string,
+      };
     } catch (err: any) {
       setPaymentError(err.message);
       throw err;
