@@ -312,6 +312,39 @@ Deno.serve(async (req) => {
         },
       },
     };
+  } else if (
+    purpose === "wallet_deposit" &&
+    paymentMethodType === "card" &&
+    paymentMethodId
+  ) {
+    // ── Wallet-deposit with a saved card (server-side confirm) ───────
+    // When the caller supplies a paymentMethodId for a wallet_deposit,
+    // attach it and confirm the PaymentIntent server-side. The mobile
+    // client then either sees `status='succeeded'` (skip PaymentSheet
+    // entirely — no method chooser flashes at the user) or
+    // `status='requires_action'` (call handleNextAction for 3-D
+    // Secure on the client). Mirrors create-circle-contribution-intent.
+    //
+    // Stripe rejects a PI with an attached PM unless the customer is
+    // present. If the caller has no stripe_customers row yet we fall
+    // back to the automatic_payment_methods sheet path — the user can
+    // enter the card fresh, and refresh-payment-methods will pick it up
+    // for next time.
+    const serviceClientForCust = createClient(supabaseUrl, serviceRoleKey);
+    const { data: custRow } = await serviceClientForCust
+      .from("stripe_customers")
+      .select("stripe_customer_id")
+      .eq("member_id", user.id)
+      .maybeSingle();
+    if (custRow?.stripe_customer_id) {
+      piCreateParams.customer = custRow.stripe_customer_id;
+      piCreateParams.payment_method = paymentMethodId;
+      piCreateParams.confirm = true;
+      piCreateParams.off_session = false;
+      piCreateParams.return_url = "tandaxn://stripe-redirect";
+    } else {
+      piCreateParams.automatic_payment_methods = { enabled: true };
+    }
   } else {
     piCreateParams.automatic_payment_methods = { enabled: true };
   }
@@ -361,10 +394,17 @@ Deno.serve(async (req) => {
     );
   }
 
-  // ─── 5. Return clientSecret for mobile PaymentSheet ───
+  // ─── 5. Return clientSecret + status for the mobile client ───
+  // status is the caller's branch signal:
+  //   'succeeded' → server-side confirm worked, no PaymentSheet needed.
+  //   'requires_action' → 3-D Secure challenge; client runs
+  //                       handleNextAction with the clientSecret.
+  //   'requires_payment_method' / 'requires_confirmation' → fall back
+  //                       to PaymentSheet (fresh-card entry path).
   return jsonResponse({
     clientSecret: intent.client_secret,
     paymentIntentId: intent.id,
+    status: intent.status,
     amount: chargeAmountCents,
     depositAmount: depositAmountCents,
     feeCents,

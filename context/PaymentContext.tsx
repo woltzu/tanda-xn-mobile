@@ -88,7 +88,15 @@ export type PaymentContextType = {
     amountCents: number,
     currency: string,
     paymentMethodId?: string,
-  ) => Promise<{ clientSecret: string; paymentIntentId: string }>;
+  ) => Promise<{
+    clientSecret: string;
+    paymentIntentId: string;
+    /** Present only when the caller supplies a paymentMethodId — the
+     *  EF then server-confirms. 'succeeded' → skip PaymentSheet.
+     *  'requires_action' → handleNextActionForIntent for 3-D Secure.
+     *  Anything else → fall back to presentPaymentSheet. */
+    status?: string;
+  }>;
   createContribution: (
     amountCents: number,
     currency: string,
@@ -558,21 +566,18 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
     if (!user) throw new Error('User not authenticated');
     // Route through the real `create-payment-intent` Edge Function
     // instead of StripeConnectEngine.createPaymentIntent, whose
-    // underlying `_createStripePaymentIntent` is still the TODO-mock
-    // that hands out fake `pi_test_<random>_secret_<random>` values.
-    // The mocked secrets don't match Stripe's real client_secret shape
-    // (`pi_XXX_secret_YYY`), which is what triggered the runtime
-    //     `secret` format does not match expected client secret formatting
-    // failure from presentPaymentSheet. The EF has STRIPE_SECRET_KEY
-    // in its env, calls stripe.paymentIntents.create for real, inserts
-    // its own stripe_payment_intents row under service_role (RLS-safe),
-    // and returns the transient client_secret verbatim.
-    // paymentMethodId is deliberately NOT forwarded here — the wallet-
-    // deposit EF path uses automatic_payment_methods and lets Stripe's
-    // PaymentSheet handle saved-card selection; passing a specific PM
-    // would require the goal-deposit / bank-mandate flow, which
-    // doesn't apply to a top-up.
-    void paymentMethodId;
+    // underlying `_createStripePaymentIntent` is still a TODO-mock
+    // (fake `pi_test_<random>_secret_<random>` values that Stripe's
+    // SDK rejects with "secret format does not match expected client
+    // secret formatting"). The EF calls stripe.paymentIntents.create
+    // for real and returns a valid client_secret.
+    //
+    // When paymentMethodId (a Stripe `pm_...` id) is supplied, the EF
+    // attaches it + confirm=true so the PaymentIntent is processed
+    // server-side. That's what makes the "saved card = one tap" flow
+    // possible — otherwise Stripe's PaymentSheet would pop up with its
+    // full method list (Link, Cash App Pay, Klarna, …) even after the
+    // user picked a saved card in our UI.
     try {
       const { data, error } = await supabase.functions.invoke(
         'create-payment-intent',
@@ -581,6 +586,8 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
             amount: amountCents,
             currency,
             purpose: 'wallet_deposit',
+            paymentMethodType: 'card',
+            paymentMethodId: paymentMethodId ?? null,
           },
         },
       );
@@ -594,6 +601,7 @@ function PaymentProviderInner({ children }: { children: ReactNode }) {
       return {
         clientSecret: data.clientSecret as string,
         paymentIntentId: data.paymentIntentId as string,
+        status: typeof data.status === 'string' ? data.status : undefined,
       };
     } catch (err: any) {
       setPaymentError(err.message);

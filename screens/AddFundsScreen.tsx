@@ -89,7 +89,7 @@ export default function AddFundsScreen() {
   const navigation = useTypedNavigation();
   const { t } = useTranslation();
   const { addFunds } = useWallet();
-  const { paymentMethods, isLoadingMethods, createDeposit, presentPaymentSheet, isStripeReady, makeTestCharge } = usePayment();
+  const { paymentMethods, isLoadingMethods, createDeposit, presentPaymentSheet, handleNextActionForIntent, isStripeReady, makeTestCharge } = usePayment();
   const [amount, setAmount] = useState("");
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [selectedSavedMethodId, setSelectedSavedMethodId] = useState<string | null>(null);
@@ -127,6 +127,29 @@ export default function AddFundsScreen() {
     setAmount(value.toString());
   };
 
+  // Human-readable label for the receipt's "Method" row. When the user
+  // picked a saved card we render "Visa •••• 4242"; otherwise fall
+  // back to the funding-type i18n key (Card / Bank / Mobile / Apple
+  // Pay). The prior code read `selectedMethodData?.name` — but
+  // FUNDING_METHODS entries only have `nameKey`, so `.name` was always
+  // undefined and the receipt's Method row rendered empty.
+  const receiptMethodLabel = (() => {
+    if (selectedSavedMethodId) {
+      const pm = paymentMethods.find(
+        (m: any) => m.id === selectedSavedMethodId,
+      );
+      if (pm) {
+        if (pm.cardBrand && pm.cardLast4) {
+          return `${pm.cardBrand.charAt(0).toUpperCase()}${pm.cardBrand.slice(1)} •••• ${pm.cardLast4}`;
+        }
+        if (pm.bankName && pm.bankLast4) {
+          return `${pm.bankName} •••• ${pm.bankLast4}`;
+        }
+      }
+    }
+    return selectedMethodData ? t(selectedMethodData.nameKey) : "";
+  })();
+
   const handleContinue = async () => {
     if (!canContinue) return;
 
@@ -134,23 +157,44 @@ export default function AddFundsScreen() {
     try {
       const amountCents = Math.round(numericAmount * 100);
 
-      // Create deposit via Stripe
-      const { clientSecret, transactionId } = await createDeposit(
+      // Look up the Stripe pm_ id for the currently selected saved card
+      // (selectedSavedMethodId is the DB row id; the EF needs the
+      // Stripe id to attach + confirm server-side). undefined here
+      // means "no saved card — let the PaymentSheet handle it".
+      const stripePmId = selectedSavedMethodId
+        ? (paymentMethods.find(
+            (m: any) => m.id === selectedSavedMethodId,
+          ) as any)?.stripePaymentMethodId
+        : undefined;
+
+      // Create deposit via the create-payment-intent EF. When a saved
+      // card is provided, the EF server-confirms and status comes
+      // back as 'succeeded' or 'requires_action'.
+      const { clientSecret, paymentIntentId, status } = await createDeposit(
         amountCents,
         "usd",
-        selectedSavedMethodId || undefined
+        stripePmId,
       );
 
-      if (clientSecret) {
-        // Present the Stripe payment sheet.
-        // Note: presentPaymentSheet returns { success, error?: string } —
-        // `error` is a plain string, NOT an { message } object. The
-        // previous `error.message || <default>` therefore always fell
-        // through to the default copy and hid every Stripe error
-        // ("Your card was declined", "Payment authentication failed",
-        // "Invalid publishable key", etc.) behind a generic "Your
-        // payment could not be processed." Log the raw string and pass
-        // it to the alert so the next failure is actionable.
+      // Three branches, matching MakeContribution's proven pattern:
+      //   succeeded         → done, skip everything.
+      //   requires_action   → 3-D Secure via handleNextAction on
+      //                       the existing PI (no PaymentSheet).
+      //   otherwise         → fresh PaymentSheet (new-card entry).
+      if (status === "succeeded") {
+        // no-op; funds are on their way.
+      } else if (status === "requires_action" && clientSecret) {
+        const { success, error } =
+          await handleNextActionForIntent(clientSecret);
+        if (!success) {
+          console.error("[AddFunds] handleNextAction failed:", error);
+          Alert.alert(
+            t("add_funds.alert_payment_failed_title"),
+            error || t("add_funds.alert_payment_failed_body"),
+          );
+          return;
+        }
+      } else if (clientSecret) {
         const { error } = await presentPaymentSheet(clientSecret);
         if (error) {
           console.error("[AddFunds] presentPaymentSheet failed:", error);
@@ -163,14 +207,14 @@ export default function AddFundsScreen() {
       }
 
       // Payment succeeded - update local wallet state
-      await addFunds(numericAmount, selectedMethodData?.name || "");
+      await addFunds(numericAmount, receiptMethodLabel);
 
       // Navigate to success screen with real transaction info
       navigation.navigate(Routes.WalletTransactionSuccess, {
         type: "add",
         amount: numericAmount,
-        method: selectedMethodData?.name || "",
-        transactionId: transactionId || `TXN${Date.now()}`,
+        method: receiptMethodLabel,
+        transactionId: paymentIntentId || `TXN${Date.now()}`,
       });
     } catch (error: any) {
       console.error("Error adding funds:", error);
