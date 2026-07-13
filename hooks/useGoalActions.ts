@@ -272,6 +272,16 @@ export function useGoalActions() {
     source: string
   ): Promise<ActionResult<Goal>> => {
     if (!user) return authError();
+    // Guard against an empty / undefined goalId being coerced through to
+    // the RPC. Empty string binds as '' at the UUID parameter and blows up
+    // inside transfer_to_goal with a "invalid input syntax for type
+    // uuid" that would otherwise surface as an opaque "Deposit failed."
+    // to the user. Also catches the `goalId = undefined as any` accident
+    // some earlier callers introduced when the goal fetch was still in
+    // flight.
+    if (typeof goalId !== "string" || goalId.trim().length === 0) {
+      return { data: null, error: new Error("Missing or invalid goal id") };
+    }
     const amountCents = dollarsToCents(amount);
     if (amountCents <= 0)
       return { data: null, error: new Error("Amount must be greater than zero") };
