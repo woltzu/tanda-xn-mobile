@@ -302,6 +302,11 @@ export default function GoalCreateExpressScreen() {
         autoDepositEnabled,
         autoDepositDay: autoDepositEnabled ? autoDepositDay : null,
         linkedCircleId: linkedCircleId ?? null,
+        // Forward the template id (when the user arrived from the goal-
+        // template browser) so the RPC copies milestones + cost_breakdown
+        // into goals.metadata and the Milestones screen can render
+        // custom stage rows instead of the generic 10/25/50/75/90/100 arc.
+        templateId: template?.id,
       } as any);
 
       if (error || !goal) {

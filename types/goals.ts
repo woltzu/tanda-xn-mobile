@@ -64,6 +64,13 @@ export interface Goal {
   // meaningful on goal_type='round_up' but defaulted on every goal so
   // existing rows stay valid.
   roundUpEnabled?: boolean;
+  // Free-form JSONB from user_savings_goals.metadata. Currently used to
+  // carry template_id / template_name / template_milestones /
+  // template_cost_breakdown for goals created via a goal_templates row
+  // (migration 302). Rendered by the Milestones screen to display
+  // template-specific stages (Foundation 30% / Walls 25% / etc.)
+  // instead of the default 10/25/50/75/90/100 arc.
+  metadata?: Record<string, unknown>;
 }
 
 // P2 — banner data driving the "Save instead?" suggestion on the
@@ -112,6 +119,11 @@ export interface CreateGoalInput {
   lockEndDate?: string;
   lockPeriodMonths?: number;
   targetDate?: string;
+  /** Optional goal_templates.id. When set, the create RPC (mig 302) copies
+   *  the template's milestones + cost_breakdown JSONB into the new goal's
+   *  metadata so the Milestones screen can render template-specific
+   *  stages. Unknown / inactive ids are silently ignored server-side. */
+  templateId?: string;
 }
 
 /** Partial update for `updateGoal` (dollar-facing). */

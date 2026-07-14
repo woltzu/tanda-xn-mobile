@@ -51,6 +51,22 @@ type MilestonesGoal = {
   target: number;
   progressPercent: number;
   startDate: string;
+  /** Optional raw metadata blob forwarded from GoalDetailV2. Read by the
+   *  template-milestones branch below to pick up the goal_templates row
+   *  copied into goals.metadata by create_goal (migration 302). */
+  metadata?: Record<string, unknown>;
+};
+
+// Shape of one entry inside goal_templates.milestones — matches migration
+// 202's docblock: [{ name, description, default_percent, verification_method }].
+// default_percent is a PHASE WEIGHT, not a cumulative threshold — for
+// "Build a house" the array is Foundation 30 / Walls 25 / Roof 25 /
+// Finishing 20, which are individual phase shares that sum to 100.
+type TemplateMilestoneRow = {
+  name?: string;
+  description?: string;
+  default_percent?: number;
+  verification_method?: string;
 };
 
 type Milestone = {
@@ -125,6 +141,60 @@ function formatMilestoneDate(iso: string | null): string | null {
   } catch {
     return iso;
   }
+}
+
+// Icon rotation for template stages. Template rows carry a `name`
+// (Foundation / Walls / Roof / Finishing / Venue / etc.) — we don't try
+// to match each to a specific emoji since the template set is open-
+// ended, but a walking sequence keeps the timeline visually varied.
+const TEMPLATE_STAGE_EMOJI = ["🏗️", "🧱", "🪟", "🛠️", "🎯", "🏆"] as const;
+
+/**
+ * Build the milestone list from the goal_templates row copied into
+ * user_savings_goals.metadata by create_goal (mig 302). Each phase's
+ * default_percent is a WEIGHT (Foundation 30 / Walls 25 / …), so the
+ * cumulative-completion percentage is the running sum. Amount at
+ * completion = target * cumulative / 100, and "achieved" is a plain
+ * balance-comparison — no goal_milestones row lookup because the DB
+ * helper still writes on the fixed 10/25/50/75/90/100 thresholds and
+ * doesn't know about custom stages.
+ */
+function buildMilestonesFromTemplate(
+  templateRows: TemplateMilestoneRow[],
+  goal: MilestonesGoal,
+): Milestone[] {
+  const firstDeposit: Milestone = {
+    id: "m0_first_deposit",
+    type: "first_deposit",
+    label: "First Deposit",
+    emoji: "🚀",
+    percent: 0,
+    amount: 0,
+    achieved: goal.balance > 0,
+    achievedDate: null,
+    message: "Your journey begins!",
+  };
+
+  let cumulative = 0;
+  const stageRows: Milestone[] = templateRows.map((row, idx) => {
+    const weight = Number(row.default_percent) || 0;
+    cumulative += weight;
+    const percent = Math.min(100, Math.max(0, cumulative));
+    const amount = Math.round((goal.target * percent) / 100);
+    return {
+      id: `t${idx}_${(row.name ?? "stage").toLowerCase().replace(/\s+/g, "_")}`,
+      type: `template_stage_${idx}`,
+      label: row.name ?? `Stage ${idx + 1}`,
+      emoji: TEMPLATE_STAGE_EMOJI[idx % TEMPLATE_STAGE_EMOJI.length],
+      percent,
+      amount,
+      achieved: goal.balance >= amount,
+      achievedDate: null,
+      message: row.description ?? "",
+    };
+  });
+
+  return [firstDeposit, ...stageRows];
 }
 
 /**
@@ -204,11 +274,20 @@ export default function GoalMilestonesScreen() {
     route.params?.milestones ?? []
   );
 
+  // Metadata blob from the goal row. Populated by the fetch effect (and
+  // by refetchMilestones) so custom template stages survive a refresh
+  // even when the caller only forwarded the goal shape without metadata.
+  const [fetchedMetadata, setFetchedMetadata] =
+    useState<Record<string, unknown> | null>(null);
+
   const refetchMilestones = useCallback(async () => {
     if (!UUID_RE.test(goalId)) return; // mock / preview mode
     const { data, error } = await fetchGoal(goalId);
     if (error || !data) return;
     setRealMilestones(data.milestones);
+    setFetchedMetadata(
+      (data.goal.metadata as Record<string, unknown> | undefined) ?? null,
+    );
   }, [goalId, fetchGoal]);
 
   useEffect(() => {
@@ -218,6 +297,9 @@ export default function GoalMilestonesScreen() {
       const { data, error } = await fetchGoal(goalId);
       if (cancelled || error || !data) return;
       setRealMilestones(data.milestones);
+      setFetchedMetadata(
+        (data.goal.metadata as Record<string, unknown> | undefined) ?? null,
+      );
     })();
     return () => {
       cancelled = true;
@@ -235,11 +317,27 @@ export default function GoalMilestonesScreen() {
     }, [refetchMilestones]),
   );
 
-  // Decide whether to render the mock-driven canonical 7 rows (legacy
-  // preview / debug nav) or the real-data-driven set. We treat the
-  // presence of a UUID goalId as the marker for "real mode".
+  // Metadata comes from either the route-forwarded goal (paint-first,
+  // GoalDetailV2 has it live) or the freshly-fetched goal row. Prefer
+  // the fetch when available so a stale forwarded snapshot can't hide
+  // template info that was just added.
+  const activeMetadata = (fetchedMetadata ?? goal.metadata) as
+    | Record<string, unknown>
+    | undefined;
+  const templateMilestones =
+    Array.isArray(activeMetadata?.template_milestones) &&
+    (activeMetadata!.template_milestones as unknown[]).length > 0
+      ? (activeMetadata!.template_milestones as TemplateMilestoneRow[])
+      : null;
+
+  // Decide the milestone-list source:
+  //   * Mock preview mode → DEFAULT_MILESTONES.
+  //   * Real UUID goal with template_milestones metadata → custom stages.
+  //   * Real UUID goal without → default 10/25/50/75/90/100 arc.
   const milestones: Milestone[] = UUID_RE.test(goalId)
-    ? buildMilestonesFromReal(realMilestones, goal)
+    ? templateMilestones
+      ? buildMilestonesFromTemplate(templateMilestones, goal)
+      : buildMilestonesFromReal(realMilestones, goal)
     : DEFAULT_MILESTONES;
 
   const achievedCount = milestones.filter((m) => m.achieved).length;

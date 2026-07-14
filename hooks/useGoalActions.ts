@@ -84,6 +84,10 @@ function mapGoalRow(row: any): Goal {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     roundUpEnabled: row.round_up_enabled ?? undefined,
+    metadata:
+      row.metadata && typeof row.metadata === "object"
+        ? (row.metadata as Record<string, unknown>)
+        : undefined,
   };
 }
 
@@ -157,6 +161,7 @@ export function useGoalActions() {
         p_linked_circle_id: goalData.linkedCircleId ?? null,
         p_circle_payout_action: goalData.circlePayoutAction ?? null,
         p_circle_payout_percent: goalData.circlePayoutPercent ?? null,
+        p_template_id: goalData.templateId ?? null,
       });
       if (error) return { data: null, error };
       const row = Array.isArray(data) ? data[0] : data;
