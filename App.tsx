@@ -93,6 +93,7 @@ import CreateCircleInviteScreen from "./screens/CreateCircleInviteScreen";
 import CreateCircleSuccessScreen from "./screens/CreateCircleSuccessScreen";
 import HowCirclesWorkScreen from "./screens/HowCirclesWorkScreen";
 import CircleDetailScreen from "./screens/CircleDetailScreen";
+import MyCirclesScreen from "./screens/MyCirclesScreen";
 import JoinCircleConfirmScreen from "./screens/JoinCircleConfirmScreen";
 import JoinCircleSuccessScreen from "./screens/JoinCircleSuccessScreen";
 import MakeContributionScreen from "./screens/MakeContributionScreen";
@@ -481,6 +482,7 @@ export type RootStackParamList = {
   };
   HowCirclesWork: undefined;
   CircleDetail: { circleId: string };
+  MyCircles: undefined;
   // Join Circle Flow. `source` is telemetry metadata identifying where
   // the user entered the flow from — populated by each navigate call
   // site (browse, code, recommended, feed, detail, community,
@@ -1049,6 +1051,7 @@ function HomeStackScreen() {
   return (
     <HomeStack.Navigator screenOptions={{ headerShown: false }}>
       <HomeStack.Screen name="Dashboard" component={HomeScreen} />
+      <HomeStack.Screen name="MyCircles" component={MyCirclesScreen} />
       <HomeStack.Screen name="CircleDetail" component={CircleDetailScreen} />
       <HomeStack.Screen name="GroupChat" component={GroupChatScreen} options={{ headerShown: false }} />
       <HomeStack.Screen name="DomesticSendMoney" component={DomesticSendMoneyScreen} />

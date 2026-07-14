@@ -275,6 +275,20 @@ export default function HomeScreen() {
   );
   const hasActiveCircle = activeCircles.length > 0;
 
+  // Broader list for the "Circle Net Breakdown" bottom sheet. That sheet
+  // explains why your circle-net total is what it is, so it must include
+  // every circle that actually contributed to the total — not just the
+  // currently-running ones. Completed circles (mig 310 finalization) still
+  // have historical contributions + payouts that matter here. Paused/
+  // forming/pending circles are harmless (usually $0/$0). Only 'cancelled'
+  // circles are hidden — they were killed and shouldn't clutter the
+  // breakdown. Matches useCircleNetBalance's scope: any circle where the
+  // user's membership is still active.
+  const breakdownCircles = useMemo(
+    () => myCircles.filter((c) => c.status !== "cancelled"),
+    [myCircles],
+  );
+
   // Real circle net = contributions made minus payouts received,
   // aggregated across the user's currently-active memberships.
   // Bank-account sign convention: positive net = circle owes you
@@ -1759,6 +1773,22 @@ export default function HomeScreen() {
               );
             })
           )}
+          {/* "See all" jumps to MyCirclesScreen which lists every
+              membership regardless of status (completed / cancelled /
+              paused) so the user can review history the summary card
+              doesn't surface. Only rendered when the user actually has
+              circles — no point offering a link to an empty list. */}
+          {myCircles.length > 0 && (
+            <TouchableOpacity
+              style={styles.seeAllRow}
+              onPress={() => navigation.navigate(Routes.MyCircles)}
+              accessibilityRole="button"
+              accessibilityLabel="See all circles"
+            >
+              <Text style={styles.seeAllText}>See all circles</Text>
+              <Ionicons name="chevron-forward" size={14} color="#00C6AE" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ===== FUTURE SNAPSHOT CARD ===== */}
@@ -1913,17 +1943,21 @@ export default function HomeScreen() {
             </Text>
 
             <View style={styles.sheetList}>
-              {activeCircles.length === 0 ? (
+              {breakdownCircles.length === 0 ? (
                 <Text style={styles.sheetEmpty}>
                   {t("home_screen.circles_empty_body")}
                 </Text>
               ) : (
-                activeCircles.map((c) => {
+                breakdownCircles.map((c) => {
                   // Real per-circle figures from useCircleNetBalance.
-                  // Falls back to zeros if a circle in `activeCircles`
-                  // has no contributions or payouts yet (or if the
-                  // membership row landed before the hook's cache
-                  // settles) so the row still renders cleanly.
+                  // Uses `breakdownCircles` (see the memo above) so a
+                  // completed or paused circle with historical
+                  // contributions/payouts still shows here — the
+                  // breakdown must reconcile with the totals card
+                  // below, which sums across every active-membership
+                  // circle regardless of lifecycle status. Falls back
+                  // to zeros for pending/forming circles or a row that
+                  // landed before the hook cache settled.
                   const stat = circleNetById.get(c.id);
                   const contributed = stat?.contributed ?? 0;
                   const received = stat?.received ?? 0;

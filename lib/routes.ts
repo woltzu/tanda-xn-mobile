@@ -218,6 +218,7 @@ export const Routes = {
   LeaveReview: "LeaveReview",
   TripReviews: "TripReviews",
   MoodInsights: "MoodInsights",
+  MyCircles: "MyCircles",
   MyTrips: "MyTrips",
   MyTripStatus: "MyTripStatus",
   NearYou: "NearYou",
