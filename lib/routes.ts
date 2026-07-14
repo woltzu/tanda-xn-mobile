@@ -157,6 +157,7 @@ export const Routes = {
   GoalMilestones: "GoalMilestones",
   GoalsHub: "GoalsHub",
   GoalsHubV2: "GoalsHubV2",
+  TemplateGoalProgress: "TemplateGoalProgress",
   CreateDisbursementMilestones: "CreateDisbursementMilestones",
   GoalDisbursementMilestones: "GoalDisbursementMilestones",
   GoalProviderPayment: "GoalProviderPayment",

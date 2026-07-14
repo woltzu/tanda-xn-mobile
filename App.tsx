@@ -379,6 +379,7 @@ import GoalsHubV2Screen from "./screens/GoalsHubV2Screen";
 // GoalSetupSuccess (replaced by an inline celebration on GoalDetailV2).
 import GoalCreateExpressScreen from "./screens/GoalCreateExpressScreen";
 import GoalDetailV2Screen from "./screens/GoalDetailV2Screen";
+import TemplateGoalProgressScreen from "./screens/TemplateGoalProgressScreen";
 import GoalLinkCircleScreen from "./screens/GoalLinkCircleScreen";
 import GoalMilestonesScreen from "./screens/GoalMilestonesScreen";
 import GoalAchievedScreen from "./screens/GoalAchievedScreen";
@@ -982,6 +983,11 @@ export type RootStackParamList = {
   // V2 dead route types removed (GoalCategorySelect, GoalTypeSelect,
   // GoalCreate, GoalSetupSuccess).
   GoalDetailV2: { goalId?: string; goal?: object; justCreated?: boolean } | undefined;
+  /** Template-driven progress view. Rendered instead of GoalDetailV2 for
+   *  goals whose metadata carries `template_milestones` (goals created
+   *  from a goal_templates row via create_goal mig 302). Route decision
+   *  lives in GoalCreateExpressScreen.finish. */
+  TemplateGoalProgress: { goalId: string; justCreated?: boolean };
   GoalLinkCircle: { goalId?: string; goal?: object } | undefined;
   GoalMilestones: { goalId?: string; goal?: object } | undefined;
   GoalAchieved: { goalId?: string; goal?: object } | undefined;
@@ -1212,6 +1218,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="GoalsHubV2" component={GoalsHubV2Screen} />
       <HomeStack.Screen name="GoalCreateExpress" component={GoalCreateExpressScreen} />
       <HomeStack.Screen name="GoalDetailV2" component={GoalDetailV2Screen} />
+      <HomeStack.Screen name="TemplateGoalProgress" component={TemplateGoalProgressScreen} />
       <HomeStack.Screen name="GoalLinkCircle" component={GoalLinkCircleScreen} />
       <HomeStack.Screen name="GoalMilestones" component={GoalMilestonesScreen} />
       <HomeStack.Screen name="GoalAchieved" component={GoalAchievedScreen} />
@@ -1756,6 +1763,13 @@ function AppContent() {
               throws "was not handled by any navigator". Both registrations
               use the same component so state / analytics stay unified. */}
           <Stack.Screen name="GoalCreateExpress" component={GoalCreateExpressScreen} />
+          {/* Post-create navigation from GoalCreateExpress does a REPLACE
+              to GoalDetailV2 / TemplateGoalProgress. When the user came in
+              via the template picker (root Stack), REPLACE from the root
+              Stack blows up unless both screens are registered here too.
+              Same cross-stack pattern as GoalCreateExpress above. */}
+          <Stack.Screen name="GoalDetailV2" component={GoalDetailV2Screen} />
+          <Stack.Screen name="TemplateGoalProgress" component={TemplateGoalProgressScreen} />
           <Stack.Screen name="SubmitTemplate" component={SubmitTemplateScreen} />
           <Stack.Screen name="AdminTemplateQueue" component={AdminTemplateQueueScreen} />
           {/* Deep Link Invite Screens */}

@@ -388,16 +388,23 @@ export default function GoalCreateExpressScreen() {
       }
 
       // Replace so the user's back button goes to the Goals hub, not the
-      // empty express form. Carries `justCreated` so the detail screen can
-      // render the inline celebration banner.
+      // empty express form. Carries `justCreated` so the destination can
+      // render the inline celebration banner. Route selection:
+      //   * template set → TemplateGoalProgress (custom stages + cost
+      //     breakdown view driven by the template metadata create_goal
+      //     copied into user_savings_goals.metadata via mig 302).
+      //   * otherwise    → GoalDetailV2 (standard detail).
+      const destination = template
+        ? Routes.TemplateGoalProgress
+        : Routes.GoalDetailV2;
       const nav = navigation as unknown as {
         replace?: (n: string, p?: Record<string, unknown>) => void;
       };
       const params = { goalId: goal.id, justCreated: true } as const;
       if (typeof nav.replace === "function") {
-        nav.replace(Routes.GoalDetailV2, params);
+        nav.replace(destination, params);
       } else {
-        navigation.navigate(Routes.GoalDetailV2, params);
+        navigation.navigate(destination, params);
       }
     } catch (e: any) {
       console.error("[GoalCreateExpress] create failed:", e?.message ?? e);
@@ -412,14 +419,17 @@ export default function GoalCreateExpressScreen() {
 
   const continueToGoal = () => {
     if (!postCreate) return;
+    const destination = template
+      ? Routes.TemplateGoalProgress
+      : Routes.GoalDetailV2;
     const nav = navigation as unknown as {
       replace?: (n: string, p?: Record<string, unknown>) => void;
     };
     const params = { goalId: postCreate.goalId, justCreated: true } as const;
     if (typeof nav.replace === "function") {
-      nav.replace(Routes.GoalDetailV2, params);
+      nav.replace(destination, params);
     } else {
-      navigation.navigate(Routes.GoalDetailV2, params);
+      navigation.navigate(destination, params);
     }
   };
 
