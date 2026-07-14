@@ -53,8 +53,14 @@ export type Circle = {
   // Trust premium score, 0–100. Either inherited from members' past
   // completed circles at creation time, or computed from this circle's
   // own contribution history when it completes (Step 2 of
-  // feat(circle-reputation) #14).
-  reputationScore?: number;
+  // feat(circle-reputation) #14). NULL means "new circle" — no
+  // completed cycles yet, so no reputation to compute. UI renders
+  // NULL as a "Building trust — complete this circle to earn a
+  // reputation score" placeholder card; a numeric value renders the
+  // real score. Distinguishing null from 0 matters because 0 is a
+  // legitimate score (a fully-defaulted circle).
+  reputationScore?: number | null;
+  reputationUpdatedAt?: string | null;
 };
 
 export type CircleMember = {
@@ -159,7 +165,8 @@ type CircleRow = {
   payout_per_cycle: number | null;
   cycles_completed: number;
   total_payout_to_date: number;
-  reputation_score?: number;
+  reputation_score?: number | null;
+  reputation_updated_at?: string | null;
   created_by: string;
   created_at: string;
   updated_at: string;
@@ -312,10 +319,13 @@ const rowToCircle = (row: CircleRow): Circle => ({
   payoutPerCycle: row.payout_per_cycle || undefined,
   cyclesCompleted: row.cycles_completed,
   totalPayoutToDate: row.total_payout_to_date,
-  // Supabase returns NUMERIC as string; coerce. Falls back to 0 for
-  // older rows that haven't been migrated through Step 1 yet.
+  // Supabase returns NUMERIC as string; coerce. NULL means "no
+  // reputation yet" — preserved (not coerced to 0) so the UI can
+  // render the "New circle" placeholder. mig 320–322 write null for
+  // 0-completed circles and a numeric score for the rest.
   reputationScore:
-    row.reputation_score == null ? 0 : Number(row.reputation_score),
+    row.reputation_score == null ? null : Number(row.reputation_score),
+  reputationUpdatedAt: row.reputation_updated_at ?? null,
 });
 
 // Convert Circle object to database row (camelCase to snake_case)
