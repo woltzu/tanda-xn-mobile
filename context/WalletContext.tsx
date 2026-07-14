@@ -330,6 +330,55 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
 
     const newTransactions = [newTransaction, ...transactions];
     await saveWalletData(newCurrencies, newTransactions);
+
+    // Credit user_wallets.main_balance_cents so the DB balance moves
+    // with the UI. Previously addFunds only touched AsyncStorage — the
+    // Home + Wallet screens both reconcile against user_wallets on
+    // focus via loadWalletData(), so the DB's stale row snapped the
+    // balance back to the pre-deposit value the moment the user
+    // returned from the receipt screen. Mirrors makeContribution's
+    // debit pattern below (line 700+): read current cents, add, write.
+    // USD-only for now; the DB balance is a single main_balance_cents
+    // column and doesn't carry non-USD ledgers.
+    try {
+      if (currency === "USD") {
+        const amountCents = Math.round(amount * 100);
+        const { data: authData } = await supabase.auth.getUser();
+        const uid = authData?.user?.id;
+        if (uid) {
+          const { data: walletRow, error: readErr } = await supabase
+            .from("user_wallets")
+            .select("main_balance_cents")
+            .eq("user_id", uid)
+            .maybeSingle();
+          if (readErr || !walletRow) {
+            console.warn("[WalletContext.addFunds] wallet read failed", readErr);
+          } else {
+            const newBalanceCents = (walletRow.main_balance_cents ?? 0) + amountCents;
+            const { error: updErr } = await supabase
+              .from("user_wallets")
+              .update({ main_balance_cents: newBalanceCents })
+              .eq("user_id", uid);
+            if (updErr) {
+              console.error("[WalletContext.addFunds] wallet update failed", updErr);
+            } else {
+              console.log("[WalletContext.addFunds] wallet credited", {
+                before: walletRow.main_balance_cents, after: newBalanceCents,
+              });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[WalletContext.addFunds] server credit error", err);
+      // Local state already reflects the deposit; the periodic
+      // loadWalletData reconcile will surface any drift.
+    }
+
+    // Reconcile from the server so the UI shows the authoritative
+    // credited balance right away (also picks up any concurrent
+    // webhook credits when we later wire one up).
+    try { await loadWalletData(); } catch {}
     return transactionId;
   };
 
