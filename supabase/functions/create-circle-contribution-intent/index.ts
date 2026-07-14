@@ -130,20 +130,35 @@ Deno.serve(async (req) => {
 
   const serviceClient = createClient(supabaseUrl, serviceRoleKey);
 
-  // ─── 3. Load the circle to read fee config ───────────────────────────
-  // Stage 2 Bucket C — premium circles (is_premium=true) charge a
-  // platform fee on top of the contribution amount. Ordinary circles
-  // stay free (is_premium=false → platform_fee_bps=0). We trust the
-  // CHECK in migration 279 to keep platform_fee_bps in [0,1000].
+  // ─── 3. Load the circle to read fee config + lifecycle status ───────
+  // Fee config: premium circles (is_premium=true) charge a platform fee
+  // on top of the contribution amount. Ordinary circles stay free
+  // (is_premium=false → platform_fee_bps=0). We trust the CHECK in
+  // migration 279 to keep platform_fee_bps in [0,1000].
+  //
+  // Lifecycle status: mig 310 flips circles.status='completed' when the
+  // last cycle pays out (and 'cancelled' can be set by admin flows).
+  // Contributions to those circles are rejected up-front — the refund
+  // trigger in mig 309 is the safety net for anything that slips
+  // through this gate.
   const { data: circleRow, error: circleErr } = await serviceClient
     .from("circles")
-    .select("is_premium, platform_fee_bps")
+    .select("is_premium, platform_fee_bps, status")
     .eq("id", circleId)
     .maybeSingle();
   if (circleErr || !circleRow) {
     return jsonResponse(
       { error: "Circle not found", detail: circleErr?.message },
       404,
+    );
+  }
+  if (circleRow.status === "completed" || circleRow.status === "cancelled") {
+    return jsonResponse(
+      {
+        error: "This circle is closed. New contributions are not accepted.",
+        code: "circle_completed",
+      },
+      409,
     );
   }
   const platformFeeBps = circleRow.is_premium

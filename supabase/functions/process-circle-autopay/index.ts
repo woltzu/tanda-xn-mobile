@@ -315,6 +315,36 @@ Deno.serve(async (req) => {
     attempted++;
     const todayDate = new Date().toISOString().slice(0, 10);
 
+    // 0. Gate — parent circle must still be accepting contributions.
+    // mig 310's finalization flips circles.status='completed' when the
+    // last cycle pays out. 'cancelled' is set by admin flows. Either
+    // way, we disable the config so tomorrow's cron doesn't retry the
+    // same member on the same closed circle every day — and so the
+    // refund trigger (mig 309) stays a safety net, not a routine
+    // recovery path.
+    const { data: circleStatusRow } = await supabase
+      .from("circles")
+      .select("status")
+      .eq("id", cfg.circle_id)
+      .maybeSingle<{ status: string }>();
+    if (
+      circleStatusRow?.status === "completed" ||
+      circleStatusRow?.status === "cancelled"
+    ) {
+      skipped++;
+      await supabase
+        .from("circle_autopay_configs")
+        .update({ status: "disabled", updated_at: new Date().toISOString() })
+        .eq("id", cfg.id);
+      await supabase.from("circle_autopay_log").insert({
+        config_id: cfg.id,
+        scheduled_date: todayDate,
+        status: "skipped",
+        error_message: `circle status = '${circleStatusRow.status}' — autopay disabled`,
+      });
+      continue;
+    }
+
     // 1. Active cycle for this circle.
     const { data: cycleRow, error: cycErr } = await supabase
       .from("circle_cycles")
