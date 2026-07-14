@@ -340,6 +340,11 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
     // debit pattern below (line 700+): read current cents, add, write.
     // USD-only for now; the DB balance is a single main_balance_cents
     // column and doesn't carry non-USD ledgers.
+    //
+    // We ALSO write a wallet_transactions row after the credit lands so
+    // useRecentActivity picks the top-up up on the Home feed. Wallet-to-
+    // goal deposits already got this treatment via transfer_to_goal
+    // (migration 301); this closes the gap for straight top-ups.
     try {
       if (currency === "USD") {
         const amountCents = Math.round(amount * 100);
@@ -348,13 +353,14 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
         if (uid) {
           const { data: walletRow, error: readErr } = await supabase
             .from("user_wallets")
-            .select("main_balance_cents")
+            .select("id, main_balance_cents")
             .eq("user_id", uid)
             .maybeSingle();
           if (readErr || !walletRow) {
             console.warn("[WalletContext.addFunds] wallet read failed", readErr);
           } else {
-            const newBalanceCents = (walletRow.main_balance_cents ?? 0) + amountCents;
+            const balanceBeforeCents = walletRow.main_balance_cents ?? 0;
+            const newBalanceCents = balanceBeforeCents + amountCents;
             const { error: updErr } = await supabase
               .from("user_wallets")
               .update({ main_balance_cents: newBalanceCents })
@@ -363,8 +369,44 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
               console.error("[WalletContext.addFunds] wallet update failed", updErr);
             } else {
               console.log("[WalletContext.addFunds] wallet credited", {
-                before: walletRow.main_balance_cents, after: newBalanceCents,
+                before: balanceBeforeCents, after: newBalanceCents,
               });
+
+              // Home activity-feed row. Wrapped in its own try so a
+              // failure here (RLS drift, missing column, etc.) can't
+              // rewind the wallet credit that already committed above.
+              try {
+                const desc = `Added $${amount.toFixed(2)} to wallet`;
+                const { error: wtErr } = await supabase
+                  .from("wallet_transactions")
+                  .insert({
+                    wallet_id: walletRow.id,
+                    user_id: uid,
+                    transaction_type: "wallet_deposit",
+                    direction: "credit",
+                    amount_cents: amountCents,
+                    balance_type: "main",
+                    balance_before_cents: balanceBeforeCents,
+                    balance_after_cents: newBalanceCents,
+                    description: desc,
+                    transaction_status: "completed",
+                    metadata: {
+                      source: "stripe",
+                      method_label: method || null,
+                    },
+                  });
+                if (wtErr) {
+                  console.warn(
+                    "[WalletContext.addFunds] wallet_transactions insert failed",
+                    wtErr,
+                  );
+                }
+              } catch (wtEx) {
+                console.warn(
+                  "[WalletContext.addFunds] wallet_transactions insert threw",
+                  wtEx,
+                );
+              }
             }
           }
         }
