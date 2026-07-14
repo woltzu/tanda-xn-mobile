@@ -156,25 +156,44 @@ serve(async (req: Request) => {
             break
 
           case 'ready_payout':
-            // This transition happens when payout is executed
-            // For now, we check if payout should be triggered
+            // Trigger payout when its expected date is reached. Two error
+            // layers to keep the cycle honest:
+            //   1. rpcRes.error → SDK-level failure (network, missing
+            //      function, permission). Wrapped in try/catch because
+            //      PostgrestBuilder doesn't implement .catch().
+            //   2. rpcRes.data.success === false → the RPC itself
+            //      returned a business-logic failure (zero_amount,
+            //      no_recipient, wallet-credit rollback, …). Without
+            //      this branch the cycle would flip to payout_completed
+            //      even when no money actually moved — the bug that
+            //      let Test Circle Payout 4 stay in a fake-completed
+            //      state.
             if (cycle.expected_payout_date <= todayStr) {
-              // Try to execute payout via stored procedure
-              const { error: payoutError } = await supabase.rpc('execute_cycle_payout', {
-                p_cycle_id: cycle.id
-              }).catch(() => ({ error: { message: 'RPC not found' } }))
-
-              if (!payoutError) {
+              let rpcErr: string | null = null
+              let rpcData: any = null
+              try {
+                const res = await supabase.rpc('execute_cycle_payout', {
+                  p_cycle_id: cycle.id,
+                })
+                rpcData = res.data
+                if (res.error) rpcErr = res.error.message
+              } catch (e: any) {
+                rpcErr = e?.message || 'RPC threw'
+              }
+              const rpcSaidFail = rpcData && typeof rpcData === 'object' && rpcData.success === false
+              if (!rpcErr && !rpcSaidFail) {
                 newStatus = 'payout_completed'
               } else {
-                console.log(`ℹ️ Cycle ${cycle.id}: Payout RPC not available, marking for manual processing`)
-                // Mark for manual processing
+                const detail = rpcErr || rpcData?.error || 'unknown_error'
+                console.log(
+                  `ℹ️ Cycle ${cycle.id}: Payout deferred (${detail}) — marking payout_pending for manual review`,
+                )
                 await supabase
                   .from('circle_cycles')
                   .update({
                     cycle_status: 'payout_pending',
                     status_changed_at: now.toISOString(),
-                    notes: 'Awaiting manual payout processing'
+                    notes: `Awaiting manual payout processing: ${detail}`,
                   })
                   .eq('id', cycle.id)
               }
@@ -254,19 +273,27 @@ serve(async (req: Request) => {
       processing_time_ms: Date.now() - startTime
     }
 
-    // Log job
-    await supabase
-      .from('cron_job_logs')
-      .insert({
-        job_name: 'cycle-progression-cron',
-        status: 'success',
-        records_processed: activeCycles.length,
-        records_succeeded: transitionCount,
-        records_failed: 0,
-        execution_time_ms: stats.processing_time_ms,
-        details: stats
-      })
-      .catch(() => console.log('⚠️ Could not log job'))
+    // Log job. PostgrestBuilder isn't a native Promise — `.catch()` on
+    // its return threw at runtime ("supabase.from(...).insert(...).catch
+    // is not a function"), aborting the whole function 500 before the
+    // 200 response could ship. try/catch wrap keeps this fire-and-
+    // forget for real.
+    try {
+      const { error: logErr } = await supabase
+        .from('cron_job_logs')
+        .insert({
+          job_name: 'cycle-progression-cron',
+          status: 'success',
+          records_processed: activeCycles.length,
+          records_succeeded: transitionCount,
+          records_failed: 0,
+          execution_time_ms: stats.processing_time_ms,
+          details: stats
+        })
+      if (logErr) console.log('⚠️ Could not log job:', logErr.message)
+    } catch (e: any) {
+      console.log('⚠️ Could not log job (threw):', e?.message ?? e)
+    }
 
     console.log(`\n🏁 Cycle progression complete!`)
     console.log(`   📊 Checked: ${activeCycles.length}`)
