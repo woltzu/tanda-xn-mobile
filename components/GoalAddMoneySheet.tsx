@@ -44,6 +44,11 @@ type Props = {
   onClose: () => void;
   /** Fired after a successful deposit so the parent can refetch. */
   onSuccess?: () => void;
+  /** Optional starting amount in dollars. When the sheet is opened from a
+   *  milestone-driven surface ("$750 to unlock the 25% milestone"), the
+   *  caller passes the delta so the user just confirms. Reset to "" on
+   *  every open when omitted. */
+  prefillAmount?: number;
 };
 
 export default function GoalAddMoneySheet({
@@ -53,6 +58,7 @@ export default function GoalAddMoneySheet({
   walletBalance,
   onClose,
   onSuccess,
+  prefillAmount,
 }: Props) {
   const { t } = useTranslation();
   const { addMoney } = useGoalActions();
@@ -61,9 +67,18 @@ export default function GoalAddMoneySheet({
   const [submitting, setSubmitting] = useState(false);
 
   // Reset on each open so a prior amount doesn't bleed into the next visit.
+  // When the caller supplies a prefillAmount (e.g. the "$750 to unlock the
+  // 25% milestone" chip), start with it — Ceil-then-toFixed(2) so the
+  // rendered value has no floating-point tail like 749.99999.
   useEffect(() => {
-    if (visible) setAmount("");
-  }, [visible]);
+    if (!visible) return;
+    if (prefillAmount != null && prefillAmount > 0) {
+      const rounded = Math.ceil(prefillAmount * 100) / 100;
+      setAmount(String(rounded));
+    } else {
+      setAmount("");
+    }
+  }, [visible, prefillAmount]);
 
   const numericAmount = parseFloat(amount) || 0;
   const overdraw = numericAmount > walletBalance;

@@ -33,6 +33,8 @@ import { useFocusEffect, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { useGoalActions } from "../hooks/useGoalActions";
+import { useWallet } from "../context/WalletContext";
+import GoalAddMoneySheet from "../components/GoalAddMoneySheet";
 import type { GoalMilestone as RealMilestone } from "../types/goals";
 
 const NAVY = "#0A2342";
@@ -261,9 +263,29 @@ export default function GoalMilestonesScreen() {
   const nameWords = goal.name.split(" ");
   const shortName = [nameWords[0], nameWords[1]].filter(Boolean).join(" ");
 
-  // TODO(goals-wiring): Add Money → navigation.navigate(Routes.GoalAddMoney, { goal }).
-  const comingSoon = (label: string) =>
-    Alert.alert(label, "This will be available soon.");
+  // ── Add-money sheet wiring ───────────────────────────────────────────────
+  // Both the orange "Add Money" chip on the next-milestone card AND the
+  // bottom-fixed "Add Money to Reach Next Milestone" CTA now open the same
+  // GoalAddMoneySheet (already used by GoalDetailV2). Amount pre-fills to
+  // the delta needed to reach the next milestone — e.g. at $500 / $5000
+  // and next=25%, the sheet opens pre-populated with $750.
+  //
+  // Guarded on real mode: the mock-preview path (goalId not a UUID) still
+  // shows the "Coming soon" alert since the RPC would 404 on a made-up id.
+  const { balance: walletBalance } = useWallet();
+  const [sheetVisible, setSheetVisible] = useState(false);
+  const sheetPrefill =
+    amountToNext > 0 && amountToNext <= (nextMilestone?.amount ?? 0)
+      ? amountToNext
+      : undefined;
+  const isRealMode = UUID_RE.test(goalId);
+  const openAddMoney = () => {
+    if (!isRealMode) {
+      Alert.alert("Add Money", "This will be available soon.");
+      return;
+    }
+    setSheetVisible(true);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -343,7 +365,7 @@ export default function GoalMilestonesScreen() {
                   </View>
                 </View>
                 <TouchableOpacity
-                  onPress={() => comingSoon("Add Money")}
+                  onPress={openAddMoney}
                   accessibilityRole="button"
                   style={styles.nextAddButton}
                 >
@@ -456,7 +478,7 @@ export default function GoalMilestonesScreen() {
       {/* ===== BOTTOM CTA ===== */}
       <View style={styles.bottomBar}>
         <TouchableOpacity
-          onPress={() => comingSoon("Add Money")}
+          onPress={openAddMoney}
           accessibilityRole="button"
           style={styles.primaryButton}
         >
@@ -465,6 +487,21 @@ export default function GoalMilestonesScreen() {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {isRealMode && (
+        <GoalAddMoneySheet
+          visible={sheetVisible}
+          goalId={goalId}
+          goalName={goal.name}
+          walletBalance={walletBalance}
+          prefillAmount={sheetPrefill}
+          onClose={() => setSheetVisible(false)}
+          onSuccess={() => {
+            setSheetVisible(false);
+            void refetchMilestones();
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
