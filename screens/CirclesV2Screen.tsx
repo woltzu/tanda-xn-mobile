@@ -51,15 +51,11 @@ import { useConflictAlertSummary } from "../hooks/useConflictAlertSummary";
 import { useAuth } from "../context/AuthContext";
 import { useMyPayoutPosition } from "../hooks/useMyPayoutPosition";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { supabase } from "../lib/supabase";
 
 // ==========================================================================
 // Mock data — to be replaced with real API feeds in later steps.
 // ==========================================================================
-
-const mockSummary = {
-  circle_count: 3,
-  contributions_due_this_month: 2,
-};
 
 // Trending counter for Discover Circles card.
 const mockDiscover = {
@@ -361,6 +357,82 @@ export default function CirclesV2Screen() {
   //                     current user (member-centric, not per-circle).
   //   * useSubstitutePoolSummary → global active substitute count.
   const { user } = useAuth();
+
+  // ── Header summary counters (real, not the mockSummary literal above) ──
+  // "You're in N circles" = memberships in states that still require
+  // attention: active (running), pending / forming (haven't started yet).
+  // Completed/cancelled/paused circles are excluded — they don't need any
+  // action from the user and would inflate the number the header advertises
+  // as "circles you're in". Matches product spec's "summary of what
+  // requires attention".
+  const summaryCircles = useMemo(
+    () =>
+      myCircles.filter(
+        (c) =>
+          c.status === "active" ||
+          c.status === "pending" ||
+          c.status === "forming",
+      ),
+    [myCircles],
+  );
+  const summaryCircleCount = summaryCircles.length;
+
+  // "M contributions due this month" = summaryCircles where the user has
+  // NOT paid for the circle's current cycle yet. We fetch paid rows from
+  // BOTH source tables (circle_contributions for manual, contributions for
+  // autopay), tuple-key them by (circle_id, cycle_number), and count the
+  // circles whose (id, currentCycle) isn't in the paid set.
+  //
+  // Deferred re-fetch triggers: any change to myCircles (context refresh
+  // on focus / pull-to-refresh / realtime patch) re-runs the effect. The
+  // cleanup guard prevents a late response from a stale (unmounted or
+  // superseded) call from clobbering a fresher answer.
+  const [contributionsDueCount, setContributionsDueCount] = useState(0);
+  useEffect(() => {
+    const uid = user?.id;
+    if (!uid || summaryCircles.length === 0) {
+      setContributionsDueCount(0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const circleIds = summaryCircles.map((c) => c.id);
+      const [manualRes, autopayRes] = await Promise.all([
+        supabase
+          .from("circle_contributions")
+          .select("circle_id, cycle_number")
+          .eq("user_id", uid)
+          .eq("status", "paid")
+          .in("circle_id", circleIds),
+        supabase
+          .from("contributions")
+          .select("circle_id, cycle_number")
+          .eq("user_id", uid)
+          .eq("status", "paid")
+          .in("circle_id", circleIds),
+      ]);
+      if (cancelled) return;
+      const paidSet = new Set<string>();
+      for (const r of manualRes.data ?? []) {
+        paidSet.add(`${(r as any).circle_id}:${(r as any).cycle_number}`);
+      }
+      for (const r of autopayRes.data ?? []) {
+        paidSet.add(`${(r as any).circle_id}:${(r as any).cycle_number}`);
+      }
+      const due = summaryCircles.filter((c) => {
+        // Fall back to cycle 1 if the circle hasn't started tracking yet
+        // (pending/forming circles typically have currentCycle=0 or null;
+        // treat them as "you'll owe cycle 1 soon").
+        const cn = c.currentCycle && c.currentCycle > 0 ? c.currentCycle : 1;
+        return !paidSet.has(`${c.id}:${cn}`);
+      }).length;
+      setContributionsDueCount(due);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, summaryCircles]);
+
   const { entry: substituteEntry, isInPool: substituteInPool } =
     useSubstitutePoolEntry(user?.id);
   const { overview: substituteOverview } = useSubstitutePoolSummary();
@@ -510,12 +582,12 @@ export default function CirclesV2Screen() {
           </Text>
           <Text style={styles.headerTitle}>
             {t("circles_screen.header_summary", {
-              count: mockSummary.circle_count,
+              count: summaryCircleCount,
             })}
           </Text>
           <Text style={styles.headerSubtitle}>
             {t("circles_screen.header_due_summary", {
-              count: mockSummary.contributions_due_this_month,
+              count: contributionsDueCount,
             })}
           </Text>
         </LinearGradient>
