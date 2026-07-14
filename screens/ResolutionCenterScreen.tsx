@@ -122,7 +122,7 @@ const ResolutionCenterScreen: React.FC = () => {
           </View>
           <TouchableOpacity
             style={styles.primaryBtn}
-            onPress={() => navigation.navigate("Home")}
+            onPress={() => navigation.popToTop()}
           >
             <Text style={styles.primaryBtnText}>
               {t("resolution_center.return_home")}

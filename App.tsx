@@ -1422,6 +1422,13 @@ function CommunityStackScreen() {
       <CommunityStack.Screen name="Events" component={EventsScreen} />
       <CommunityStack.Screen name="CreateEvent" component={CreateEventScreen} />
       <CommunityStack.Screen name="DreamFeed" component={DreamFeedScreen} />
+      {/* DreamFeed's settings gear and post-tap both target these screens.
+          They are canonical on HomeStack (see "not Dream-Feed-specific"
+          comment there), duplicated here so intra-tab nav works from
+          DreamFeed without a jarring cross-tab hop. Same pattern as
+          GoalDetailV2/TemplateGoalProgress being on both HomeStack + root. */}
+      <CommunityStack.Screen name="FeedSettings" component={FeedSettingsScreen} />
+      <CommunityStack.Screen name="PostDetail" component={PostDetailScreen} />
       <CommunityStack.Screen name="CreateDreamPost" component={CreateDreamPostScreen} />
       <CommunityStack.Screen name="UserDreamProfile" component={UserDreamProfileScreen} />
       <CommunityStack.Screen name="SupportDream" component={SupportDreamScreen} />
