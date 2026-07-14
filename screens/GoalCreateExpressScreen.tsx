@@ -33,6 +33,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useTranslation } from "react-i18next";
+import { useRoute } from "@react-navigation/native";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useGoalActions } from "../hooks/useGoalActions";
@@ -112,24 +113,29 @@ export default function GoalCreateExpressScreen() {
   const { createGoal, suggestGoalAmount } = useGoalActions();
   const { myCircles } = useCircles();
 
-  // P2 — read route params so the spending banner on GoalsHubV2 can hand
-  // off a pre-filled name + amount when the user taps "Save instead?".
-  // Phase 4 — also accept a `template` param when the user arrives via
-  // the goal-template browser. The template wins over generic suggestions.
-  const route = (navigation as any).getState
-    ? ((navigation as any).getState().routes.find((r: any) => r.name === Routes.GoalCreateExpress) ?? { params: {} })
-    : { params: {} };
-  const prefillName = (route?.params as { suggestedName?: string })?.suggestedName;
-  const prefillAmount = (route?.params as { suggestedAmount?: number })?.suggestedAmount;
-  // Template arrives as an ID + optional country-adjusted target only.
-  // The full template row is fetched lazily below — the previous
-  // implementation attached the whole row (including huge milestones and
-  // cost_breakdown JSONB blobs) to the navigation params and tripped the
-  // React Navigation payload guard on some devices.
-  const templateId = (route?.params as { templateId?: string })?.templateId;
-  const overrideTargetCents = (route?.params as {
+  // Route params. Previously this file walked navigation.getState()
+  // .routes.find(r => r.name === "GoalCreateExpress") to hunt for the
+  // params — a fragile pattern that broke after commit b5a15d1
+  // registered GoalCreateExpress on BOTH HomeStack and the root
+  // Stack. The manual walk could return the wrong entry (a stale
+  // HomeStack history from a prior "New Goal" tap), whose params was
+  // {}. Result: the template picker's navigate handed off templateId
+  // correctly, but the screen kept reading the wrong stack's entry
+  // and pre-fill was silently blank. useRoute() is the canonical
+  // React-Navigation hook and always returns the params of THIS
+  // mount instance regardless of duplicate registrations elsewhere
+  // in the tree.
+  const route = useRoute();
+  const params = (route.params ?? {}) as {
+    suggestedName?: string;
+    suggestedAmount?: number;
+    templateId?: string;
     overrideTargetCents?: number | null;
-  })?.overrideTargetCents;
+  };
+  const prefillName = params.suggestedName;
+  const prefillAmount = params.suggestedAmount;
+  const templateId = params.templateId;
+  const overrideTargetCents = params.overrideTargetCents;
 
   // ── Form state ──────────────────────────────────────────────────────────
   // Start with prefill (or empty) — the async template fetch below will
@@ -161,7 +167,26 @@ export default function GoalCreateExpressScreen() {
         .select("id, category, name, default_target_cents, provider_categories")
         .eq("id", templateId)
         .maybeSingle();
-      if (cancelled || error || !data) return;
+      if (cancelled) return;
+      if (error) {
+        // Log and surface — the previous silent early-return let RLS
+        // denies and network hiccups pass through as "blank form" bugs
+        // that were impossible to triage from the outside.
+        console.warn(
+          "[GoalCreateExpress] template fetch failed for",
+          templateId,
+          ":",
+          error.message,
+        );
+        return;
+      }
+      if (!data) {
+        console.warn(
+          "[GoalCreateExpress] no goal_templates row for",
+          templateId,
+        );
+        return;
+      }
       const finalTargetCents =
         overrideTargetCents ?? (data.default_target_cents as number | null);
       setTemplate({
