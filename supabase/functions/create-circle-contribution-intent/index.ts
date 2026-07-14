@@ -202,20 +202,60 @@ Deno.serve(async (req) => {
     cycleId = cycleRow?.id ?? null;
   }
 
-  // ─── 4b. (removed 2026-07-13) Duplicate-contribution guard ───────────
-  // Historical: this branch used to 409 whenever a paid circle_
-  // contributions row already existed for (circle_id, user_id,
-  // cycle_number). It was over-strict — the DB explicitly permits
-  // multiple rows per (member, cycle) to support the partial-pool /
-  // catch-up flow and, more importantly for the current user report,
-  // top-up contributions on daily circles where the member has an
-  // autopay row already recorded (autopay writes to `contributions`,
-  // not `circle_contributions`, but users legitimately still want to
-  // add more via the manual flow). The webhook's own idempotency
-  // (`neq status paid` on the update, insert-else path) already
-  // prevents double-crediting the same paid row, and MakeContribution
-  // still surfaces a soft amber notice so the caller sees the state
-  // before proceeding.
+  // ─── 4b. Duplicate-contribution guard (restored 2026-07-14) ──────────
+  // Reversal of b4a7b40 (removed 2026-07-13). That removal was based on
+  // the belief that daily circles wanted top-up contributions. Live
+  // testing on "Test Circle Payout 4" produced 3 paid rows for one
+  // member on cycle 1 — which is invalid for a fixed-cadence circle
+  // (2 members × 1 contribution/cycle should = 2 rows).
+  //
+  // Every circle in the schema has a fixed frequency (daily/weekly/
+  // monthly/…) and there is no `is_flexible` column — so the invariant
+  // "1 paid row per member per cycle" applies to every circle_
+  // contributions insert reachable via this EF. The partial-pool /
+  // catch-up flow lives in `partial_contribution_plans` (a separate
+  // table + Edge Function path) and is unaffected.
+  //
+  // Only 'paid' rows block. 'pending' / 'due' rows are in-flight
+  // attempts (Stripe 3-DS challenge, ACH decline retry, …) and are
+  // legitimately retriable — treating them as duplicates would strand
+  // any user whose first attempt failed. cycle_number NULL is also
+  // allowed through: we can't identify the target cycle to check
+  // against.
+  if (cycleNumber !== null) {
+    const { data: existingPaid, error: dupErr } = await serviceClient
+      .from("circle_contributions")
+      .select("id")
+      .eq("circle_id", circleId)
+      .eq("user_id", user.id)
+      .eq("cycle_number", cycleNumber)
+      .eq("status", "paid")
+      .limit(1)
+      .maybeSingle();
+    if (dupErr) {
+      console.error(
+        "[create-circle-contribution-intent] duplicate-check failed:",
+        dupErr.message,
+      );
+      return jsonResponse(
+        {
+          error: "Failed to verify contribution history",
+          detail: dupErr.message,
+        },
+        500,
+      );
+    }
+    if (existingPaid) {
+      return jsonResponse(
+        {
+          error:
+            "You have already contributed to this cycle. Additional contributions are not allowed for fixed cycles.",
+          code: "already_contributed",
+        },
+        409,
+      );
+    }
+  }
 
   // ─── 5. Write pending_intents BEFORE calling Stripe ───────────────────
   // Reconciliation ledger (migration 276 + 277): a pending row exists for

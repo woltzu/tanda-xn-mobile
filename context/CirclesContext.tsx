@@ -909,7 +909,12 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
         (profilesData || []).map((p: any) => [p.id, p])
       );
 
-      // Fetch current cycle contributions to determine hasPaid status
+      // Fetch current cycle contributions to determine hasPaid status.
+      // circle_contributions.status is constrained to
+      // ('pending','paid','late','missed','waived') — 'completed' was
+      // never a valid value, so filtering on it silently returned zero
+      // rows and every member rendered as unpaid. That's why the
+      // "Current Cycle Payment Status" card was stuck at "0 of N".
       const circleData = circles.find(c => c.id === circleId);
       const currentCycle = circleData?.currentCycle || 1;
       const { data: cycleContributions } = await supabase
@@ -917,7 +922,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
         .select("user_id")
         .eq("circle_id", circleId)
         .eq("cycle_number", currentCycle)
-        .eq("status", "completed");
+        .eq("status", "paid");
 
       const paidUserIds = new Set(
         (cycleContributions || []).map((c: any) => c.user_id)
@@ -1290,14 +1295,16 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
       const circle = circles.find(c => c.id === circleId);
       const currentCycle = circle?.currentCycle || 1;
 
-      // Check if paid this cycle
+      // Check if paid this cycle. See the getCircleMembers comment
+      // above — status='completed' is not a valid circle_contributions
+      // value. Filtering on 'paid' is what the webhook actually writes.
       const { data: cyclePaid } = await supabase
         .from("circle_contributions")
         .select("id")
         .eq("circle_id", circleId)
         .eq("user_id", user.id)
         .eq("cycle_number", currentCycle)
-        .eq("status", "completed")
+        .eq("status", "paid")
         .limit(1);
 
       // Get total contributed
@@ -1306,7 +1313,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
         .select("amount")
         .eq("circle_id", circleId)
         .eq("user_id", user.id)
-        .eq("status", "completed");
+        .eq("status", "paid");
 
       const totalContributed = (totalData || []).reduce((sum: number, c: any) => sum + c.amount, 0);
 
