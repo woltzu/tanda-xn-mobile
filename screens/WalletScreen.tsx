@@ -316,26 +316,57 @@ export default function WalletScreen() {
   const activeCurrencies = currencies.filter((c) => c.isActive && c.balance > 0);
   const inactiveCurrencies = currencies.filter((c) => !c.isActive || c.balance === 0);
 
-  // Map RecentTransfer rows from money_transfers → the same Transaction
-  // shape the existing renderer below expects. Sign convention: sent is
-  // negative (red, "−"), received is positive (green, "+").
+  // Map RecentActivityRow union (money_transfers + wallet_transactions)
+  // → the shared Transaction shape the existing renderer expects.
+  //
+  // Sign convention:
+  //   * transfer sent / wallet debit  → negative (red, "−")
+  //   * transfer received / wallet credit → positive (green, "+")
+  //
+  // Type mapping (drives getTransactionStyle / getTransactionLabel):
+  //   * transfer sent      → "sent"        (red arrow-up, outflow)
+  //   * transfer received  → "received"    (teal arrow-down, inflow)
+  //   * wallet credit      → "added"       (teal arrow-down, inflow — top-ups)
+  //   * wallet debit       → "withdrawn"   (red arrow-up, outflow)
   const transferRows: Transaction[] = useMemo(
     () =>
       transfers.map((r) => {
         const dollars = r.amount_cents / 100;
-        const isSent = r.direction === "sent";
+        if (r.source === "transfer") {
+          const isSent = r.direction === "sent";
+          return {
+            id: r.id,
+            type: isSent ? "sent" : "received",
+            description: isSent
+              ? `To ${r.recipient_external_identifier}`
+              : t("wallet.transfer_received_label", {
+                  defaultValue: "Money received",
+                }),
+            amount: isSent ? -dollars : dollars,
+            currency: r.currency,
+            date: formatTransferDate(r.created_at),
+            method: r.method,
+            flag: undefined,
+          };
+        }
+        // source === "wallet" — wallet_transactions ledger row
+        const isCredit = r.direction === "credit";
         return {
           id: r.id,
-          type: isSent ? "sent" : "received",
-          description: isSent
-            ? `To ${r.recipient_external_identifier}`
-            : t("wallet.transfer_received_label", {
-                defaultValue: "Money received",
-              }),
-          amount: isSent ? -dollars : dollars,
+          type: isCredit ? "added" : "withdrawn",
+          description:
+            r.description ||
+            (isCredit
+              ? t("wallet.wallet_credit_generic", {
+                  defaultValue: "Wallet credit",
+                })
+              : t("wallet.wallet_debit_generic", {
+                  defaultValue: "Wallet debit",
+                })),
+          amount: isCredit ? dollars : -dollars,
           currency: r.currency,
           date: formatTransferDate(r.created_at),
-          method: r.method,
+          method: undefined,
           flag: undefined,
         };
       }),
