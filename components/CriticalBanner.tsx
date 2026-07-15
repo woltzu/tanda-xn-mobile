@@ -36,6 +36,16 @@ const CriticalBanner: React.FC = () => {
     <TouchableOpacity
       style={styles.banner}
       onPress={() => navigation.navigate("ResolutionCenter")}
+      // Users reported the tap target was too small — the banner sits
+      // right under the status bar so fingers arriving from above often
+      // miss the visual box. hitSlop extends the touch area 10dp in
+      // every direction. Combined with the bumped paddingVertical
+      // below (10 → 14), the effective touch height goes from ~34dp
+      // to ~54dp — well past the 44dp Apple HIG / 48dp Material
+      // minimum. onPress is attached to the outer TouchableOpacity so
+      // taps on the icon or chevron work the same as taps on the text.
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityLabel={t("resolution_center.banner_text")}
     >
@@ -57,7 +67,11 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: "#DC2626",
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    // Bumped 10 → 14 so the visual box itself is finger-friendly on
+    // its own, not just via hitSlop. Combined with the hitSlop on the
+    // TouchableOpacity above, effective touch height comfortably
+    // exceeds the platform minimums.
+    paddingVertical: 14,
     // Sit below the OS status bar; SafeAreaView will handle the inset
     // when mounted inside a Stack screen, but at root we need a small
     // top padding on iOS to clear the notch area.

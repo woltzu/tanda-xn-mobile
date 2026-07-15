@@ -465,6 +465,14 @@ export default function ProfileScreen() {
       section: t("profile.section_account"),
       items: [
         { icon: "person-outline", label: t("profile.item_personal_info"), onPress: () => navigation.navigate("PersonalInfo") },
+        // Permanent entry point for the Resolution Center — fallback for
+        // users whose account is restricted but who miss / mistap the
+        // red CriticalBanner at the very top of every screen. Also
+        // useful for users NOT currently restricted who want to check
+        // their status. Same destination as the banner. Falls back to
+        // English if the i18n key isn't defined yet in the current
+        // locale (adding it across all locale files is a follow-up).
+        { icon: "shield-outline", label: t("profile.item_account_status", { defaultValue: "Account status" }), onPress: () => navigation.navigate("ResolutionCenter") },
         { icon: "shield-checkmark-outline", label: t("profile.item_security"), onPress: () => navigation.navigate("SecuritySettings") },
         { icon: "card-outline", label: t("profile.item_payment_methods"), onPress: () => navigation.navigate("LinkedAccounts") },
         { icon: "arrow-redo-outline", label: t("profile.item_payout_destination"), onPress: () => navigation.navigate("PayoutPreferences", undefined) },
