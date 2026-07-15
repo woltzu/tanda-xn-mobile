@@ -1706,6 +1706,14 @@ function AppContent() {
           <Stack.Screen name="MainTabs" component={MainTabs} />
           {/* Modal screens that should appear over tabs without tab bar */}
           <Stack.Screen name="AccessRestricted" component={AccessRestrictedScreen} />
+          {/* ResolutionCenter is ALSO registered on HomeStack (line ~1253).
+              Duplicated here on the root Stack because CriticalBanner is
+              mounted above the Tab.Navigator (App.tsx:1838); its
+              navigation.navigate("ResolutionCenter") walks the ancestor
+              stacks and — without this registration — silently drops the
+              call. Same duplicate-registration pattern we use for
+              GoalDetailV2 / TemplateGoalProgress / FeedSettings. */}
+          <Stack.Screen name="ResolutionCenter" component={ResolutionCenterScreen} />
           {/* Modal-style screen reachable from CircleDetail's Circle Options sheet.
               The sheet renders via a portal outside CirclesStack's subtree, so
               useNavigation() inside it returns the root Stack — hence this
