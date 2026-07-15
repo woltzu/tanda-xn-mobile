@@ -266,6 +266,40 @@ function CircleDetailBody({
     for (const f of riskFlags) m.set(f.user_id, f);
     return m;
   }, [riskFlags]);
+
+  // Trust icon lookup for the member list — batched via mig 338's
+  // get_active_vouches_received_counts RPC to avoid an N+1 shape.
+  // Refetches when the set of member user_ids changes; a purple
+  // shield-checkmark badge renders on rows whose vouchee count > 0.
+  const [vouchesReceivedMap, setVouchesReceivedMap] = useState<
+    Map<string, number>
+  >(new Map());
+  useEffect(() => {
+    const userIds = members.map((m) => m.odictId).filter(Boolean);
+    if (userIds.length === 0) {
+      setVouchesReceivedMap(new Map());
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase.rpc(
+        "get_active_vouches_received_counts",
+        { p_user_ids: userIds },
+      );
+      if (cancelled || error) return;
+      const next = new Map<string, number>();
+      for (const row of (data ?? []) as Array<{
+        user_id: string;
+        vouch_count: number;
+      }>) {
+        next.set(row.user_id, row.vouch_count);
+      }
+      setVouchesReceivedMap(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [members]);
   const [muteSheetOpen, setMuteSheetOpen] = useState(false);
   // Phase 2 — file-dispute modal state (mounted at the bottom of this screen).
   const [fileDisputeOpen, setFileDisputeOpen] = useState(false);
@@ -1976,6 +2010,15 @@ function CircleDetailBody({
             {memberIsElder && (
               <View style={[styles.adminTag, { backgroundColor: "#EEF2FF" }]}>
                 <Text style={[styles.adminTagText, { color: "#6366F1" }]}>{t("circle_detail.tag_elder")}</Text>
+              </View>
+            )}
+            {(vouchesReceivedMap.get(member.odictId) ?? 0) > 0 && (
+              <View
+                style={styles.trustBadge}
+                accessibilityRole="image"
+                accessibilityLabel={`Trusted — ${vouchesReceivedMap.get(member.odictId)} active vouches`}
+              >
+                <Ionicons name="shield-checkmark" size={10} color={colors.cardBg} />
               </View>
             )}
             {riskEntry && (
@@ -3853,6 +3896,17 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "600",
     color: colors.warningLabel,
+  },
+  // Small purple circle behind a shield-checkmark icon. Same purple as
+  // the ProfileScreen header trust badge so a member with vouches reads
+  // as "trusted" consistently across surfaces.
+  trustBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#8B5CF6",
+    alignItems: "center",
+    justifyContent: "center",
   },
   riskBadge: {
     paddingVertical: 2,
