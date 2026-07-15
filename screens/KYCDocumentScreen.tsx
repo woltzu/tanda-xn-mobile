@@ -243,13 +243,23 @@ export default function KYCDocumentScreen() {
       return;
     }
     setSubmitting(true);
+    // kyc_type is the verification TIER, not a provider name — the
+    // CHECK constraint on the column allows only 'fallback', 'full',
+    // 'enhanced'. Sending 'persona' here (the vendor's name — that
+    // belongs in the `provider` column below) violated the constraint
+    // and the whole upsert failed with 23514. This flow is a manual
+    // document upload (plain URLs stored in id_document_*_url + a
+    // literal "manual_upload" provider_reference_id) with no real
+    // Persona.com integration on the backend — matches the fallback
+    // pattern used by KYCFallbackEngine (kyc_type='fallback',
+    // provider='fallback', reviewed by staff). Aligned here.
     const { error } = await supabase
       .from("kyc_verifications")
       .upsert(
         {
           member_id: user.id,
-          kyc_type: "persona",
-          provider: "persona",
+          kyc_type: "fallback",
+          provider: "fallback",
           provider_reference_id: "manual_upload",
           id_type: idType,
           id_document_front_url: front.uploadedUrl,
