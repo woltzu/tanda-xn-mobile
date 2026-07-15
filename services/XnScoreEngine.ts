@@ -760,24 +760,19 @@ export class XnScoreEngine {
   }
 
   /**
-   * Revoke a vouch
+   * Revoke a vouch. Routes through mig 337's revoke_xnscore_vouch RPC
+   * which reverses both apply_xnscore_adjustment calls (vouchee's diluted
+   * value + voucher's +0.5) and logs to vouch_audit_log. The prior
+   * direct-UPDATE version left the score adjustments dangling — a
+   * revoked vouch's points still stuck to both parties.
    */
   static async revokeVouch(vouchId: string, reason?: string): Promise<boolean> {
-    const userId = (await supabase.auth.getUser()).data.user?.id;
-    if (!userId) throw new Error('Not authenticated');
-
-    const { error } = await supabase
-      .from('vouches')
-      .update({
-        vouch_status: 'revoked',
-        revoked_at: new Date().toISOString(),
-        revoked_reason: reason
-      })
-      .eq('id', vouchId)
-      .eq('voucher_user_id', userId);
-
+    const { data, error } = await supabase.rpc('revoke_xnscore_vouch', {
+      p_vouch_id: vouchId,
+      p_reason: reason ?? null,
+    });
     if (error) throw error;
-    return true;
+    return Boolean(data);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

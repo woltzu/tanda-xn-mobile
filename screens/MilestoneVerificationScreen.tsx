@@ -37,13 +37,12 @@ import { useTranslation } from "react-i18next";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 
-// react-native-maps has no useful web implementation. Conditional
-// require so Metro tree-shakes it from the web bundle entirely; the
-// web branch renders a coords + distance panel instead. Phase 2D.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const Maps = Platform.OS !== "web" ? require("react-native-maps") : null;
-const MapView: any = Maps?.default ?? null;
-const Marker: any = Maps?.Marker ?? null;
+// react-native-maps has no useful web implementation. Import from the
+// platform-split shim (components/MapView.tsx for native, .web.tsx for
+// web). The prior runtime require() didn't tree-shake — Metro still
+// traversed the require path during static analysis and pulled
+// codegenNativeCommands into the web bundle.
+import MapView, { Marker } from "../components/MapView";
 import { supabase } from "../lib/supabase";
 import {
   DisbursementMilestone,
@@ -551,7 +550,7 @@ export default function MilestoneVerificationScreen() {
 
                 {/* Map view — react-native-maps on native, coords panel on web. */}
                 {projectPin && gps.status === "granted" ? (
-                  Platform.OS !== "web" && MapView && Marker ? (
+                  Platform.OS !== "web" ? (
                     <View style={styles.mapWrap}>
                       <MapView
                         style={styles.map}

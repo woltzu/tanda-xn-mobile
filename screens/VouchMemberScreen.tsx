@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,118 +7,171 @@ import {
   TouchableOpacity,
   Alert,
   TextInput,
+  ActivityIndicator,
+  Image,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
-import { useTrust } from "../context/TrustContext";
-import { useXnScoreFromBundle } from "../hooks/useXnScore";
-import MemberTrustBadge from "../components/MemberTrustBadge";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "../context/AuthContext";
+import { XnScoreEngine, Vouch, VouchLimits } from "../services/XnScoreEngine";
+import { useXnScore } from "../hooks/useXnScore";
 
 type VouchMemberNavigationProp = StackNavigationProp<RootStackParamList>;
-type VouchMemberRouteProp = RouteProp<RootStackParamList, "VouchMember">;
 
-// Mock users who need vouching (Critical tier users)
-const USERS_NEEDING_VOUCH = [
-  {
-    id: "user_1",
-    name: "Fatou Diallo",
-    score: 12,
-    phone: "+1 555-0101",
-    isContact: true,
-    requestedCircle: "Family Savings Circle",
-  },
-  {
-    id: "user_2",
-    name: "Kofi Mensah",
-    score: 18,
-    phone: "+1 555-0102",
-    isContact: true,
-    requestedCircle: null,
-  },
-  {
-    id: "user_3",
-    name: "Amara Toure",
-    score: 8,
-    phone: "+1 555-0103",
-    isContact: false,
-    requestedCircle: "Community Support",
-  },
-];
+type CandidateMember = {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+};
 
 export default function VouchMemberScreen() {
   const navigation = useNavigation<VouchMemberNavigationProp>();
-  const route = useRoute<VouchMemberRouteProp>();
   const { t } = useTranslation();
-  // Bucket D — real bundled XnScore for the vouch-power calculation.
-  const { score: realScore } = useXnScoreFromBundle();
-  const score = realScore ?? 0;
-  const {
-    canVouchForOthers,
-    honorStats,
-    vouchForUser,
-    vouchRecords,
-  } = useTrust();
+  const { user } = useAuth();
+  const { createVouch, loading: rpcLoading } = useXnScore();
 
+  const [limits, setLimits] = useState<VouchLimits | null>(null);
+  const [activeVouches, setActiveVouches] = useState<Vouch[]>([]);
+  const [candidates, setCandidates] = useState<CandidateMember[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [loading, setLoading] = useState(true);
   const [isVouching, setIsVouching] = useState(false);
 
-  const canVouch = canVouchForOthers(score);
-  const activeVouches = vouchRecords.filter((v) => v.status === "active");
-  const remainingVouches = honorStats.vouchLimit - activeVouches.length;
+  const refresh = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      // Vouch limits + active vouches given by me (parallel).
+      const [limitsResult, givenResult] = await Promise.all([
+        XnScoreEngine.getVouchLimits(user.id).catch(() => null),
+        XnScoreEngine.getVouchesGiven(user.id).catch(() => [] as Vouch[]),
+      ]);
+      setLimits(limitsResult);
+      setActiveVouches(
+        (givenResult || []).filter((v) => v.vouch_status === "active"),
+      );
 
-  const filteredUsers = USERS_NEEDING_VOUCH.filter((user) =>
-    user.name.toLowerCase().includes(searchQuery.toLowerCase())
+      // Circle-connected candidates. Two-step: my circle IDs, then peers.
+      // Restricting to circle-shared members is idiomatic here — the app
+      // deliberately avoids general profile enumeration (see mig 139).
+      const { data: myMemberships } = await supabase
+        .from("circle_members")
+        .select("circle_id")
+        .eq("user_id", user.id);
+      const circleIds = (myMemberships ?? [])
+        .map((m: { circle_id: string | null }) => m.circle_id)
+        .filter(Boolean) as string[];
+
+      if (circleIds.length === 0) {
+        setCandidates([]);
+      } else {
+        const { data: peers } = await supabase
+          .from("circle_members")
+          .select("user_id, profiles:user_id(id, full_name, avatar_url)")
+          .in("circle_id", circleIds)
+          .neq("user_id", user.id);
+        // Dedupe by user_id — a peer in N shared circles returns N rows.
+        const seen = new Set<string>();
+        const unique: CandidateMember[] = [];
+        for (const row of peers ?? []) {
+          const p = (row as { profiles: CandidateMember | null }).profiles;
+          if (!p?.id || seen.has(p.id)) continue;
+          seen.add(p.id);
+          unique.push({
+            id: p.id,
+            full_name: p.full_name ?? null,
+            avatar_url: p.avatar_url ?? null,
+          });
+        }
+        setCandidates(unique);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const alreadyVouchedIds = useMemo(
+    () => new Set(activeVouches.map((v) => v.vouchee_user_id)),
+    [activeVouches],
   );
 
-  const handleVouch = async (userId: string, userName: string) => {
+  const filteredCandidates = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return candidates;
+    return candidates.filter((c) =>
+      (c.full_name || "").toLowerCase().includes(q),
+    );
+  }, [candidates, searchQuery]);
+
+  const canVouch = limits?.can_vouch ?? false;
+  const remainingVouches = limits?.remaining_vouches ?? 0;
+  const activeCount = limits?.active_vouches ?? activeVouches.length;
+  const maxVouches = limits?.max_vouches ?? 0;
+  const myScore = limits?.vouch_power ?? 0;
+
+  const handleVouch = (userId: string, userName: string) => {
     if (!canVouch) {
       Alert.alert(
-        "Cannot Vouch",
-        "You need an XnScore™ of 75 or higher to vouch for others.",
-        [{ text: "OK" }]
+        "Cannot vouch",
+        limits?.reason || "You aren't eligible to vouch yet.",
       );
       return;
     }
-
+    if (alreadyVouchedIds.has(userId)) {
+      Alert.alert(
+        "Already vouched",
+        `You already have an active vouch for ${userName}.`,
+      );
+      return;
+    }
     if (remainingVouches <= 0) {
       Alert.alert(
-        "Vouch Limit Reached",
-        `You can only have ${honorStats.vouchLimit} active vouches at a time. Wait for a vouched member to complete their circle or revoke an existing vouch.`,
-        [{ text: "OK" }]
+        "Vouch limit reached",
+        `You can only have ${maxVouches} active vouches at a time. Wait for one to expire or for the vouchee to graduate.`,
       );
       return;
     }
 
     Alert.alert(
-      "Vouch for Member",
-      `Are you sure you want to vouch for ${userName}?\n\nBy vouching, you confirm this person is trustworthy. If they default on payments, your XnScore™ may be affected.`,
+      "Vouch for member",
+      `Are you sure you want to vouch for ${userName}?\n\nIf they default, your voucher reliability may drop and your XnScore may be affected.`,
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Vouch",
           onPress: async () => {
             setIsVouching(true);
-            const success = await vouchForUser(userId, userName);
+            const vouchId = await createVouch(userId);
             setIsVouching(false);
-
-            if (success) {
+            if (vouchId) {
+              await refresh();
+              setSearchQuery("");
               Alert.alert(
-                "Vouch Successful",
-                `You are now vouching for ${userName}. They can now join circles with your endorsement.`,
-                [{ text: "OK", onPress: () => navigation.goBack() }]
+                "Vouch created",
+                `You're now vouching for ${userName}.`,
               );
             } else {
-              Alert.alert(t("vouch_member_v2.alert_error_title"), t("vouch_member_v2.alert_failed_vouch"));
+              Alert.alert(
+                "Vouch failed",
+                "The vouch could not be created. Please try again.",
+              );
             }
           },
         },
-      ]
+      ],
     );
   };
+
+  const busy = loading || isVouching || rpcLoading;
 
   return (
     <View style={styles.container}>
@@ -131,20 +184,24 @@ export default function VouchMemberScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t("vouch_member.header_title")}</Text>
+          <Text style={styles.headerTitle}>
+            {t("vouch_member.header_title", { defaultValue: "Vouch for a member" })}
+          </Text>
           <View style={styles.placeholder} />
         </View>
 
-        {/* Elder Status Card */}
+        {/* Vouch Power Card */}
         <View style={styles.elderCard}>
           <View style={styles.elderLeft}>
             <View style={styles.elderIcon}>
               <Ionicons name="people" size={24} color="#8B5CF6" />
             </View>
             <View>
-              <Text style={styles.elderTitle}>{t("vouch_member_v2.elder_title")}</Text>
+              <Text style={styles.elderTitle}>Vouch power</Text>
               <Text style={styles.elderSubtitle}>
-                {canVouch ? "Active Elder Status" : "Score 75+ required"}
+                {canVouch
+                  ? `XnScore ${myScore} · you can vouch`
+                  : limits?.reason || "Score 70+ required"}
               </Text>
             </View>
           </View>
@@ -157,20 +214,20 @@ export default function VouchMemberScreen() {
         {/* Stats Row */}
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{honorStats.totalVouchesGiven}</Text>
-            <Text style={styles.statLabel}>{t("vouch_member_v2.stat_total")}</Text>
+            <Text style={styles.statValue}>{activeCount}</Text>
+            <Text style={styles.statLabel}>Active</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{honorStats.successfulVouches}</Text>
-            <Text style={styles.statLabel}>{t("vouch_member_v2.stat_successful")}</Text>
+            <Text style={styles.statValue}>{maxVouches}</Text>
+            <Text style={styles.statLabel}>Max</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={[styles.statValue, { color: "#00C6AE" }]}>
-              {honorStats.vouchSuccessRate}%
+              {Math.round(myScore)}
             </Text>
-            <Text style={styles.statLabel}>{t("vouch_member_v2.stat_success_rate")}</Text>
+            <Text style={styles.statLabel}>XnScore</Text>
           </View>
         </View>
       </LinearGradient>
@@ -184,9 +241,10 @@ export default function VouchMemberScreen() {
         <View style={styles.warningCard}>
           <Ionicons name="information-circle" size={20} color="#F59E0B" />
           <Text style={styles.warningText}>
-            <Text style={styles.bold}>Vouching Responsibility:</Text> If a member you vouch for
-            defaults on payments, your XnScore™ may be reduced by up to 4 points per incident.
-            Only vouch for people you trust.
+            <Text style={styles.bold}>Vouching responsibility: </Text>
+            If a member you vouch for defaults on payments, your XnScore™ may be
+            reduced by up to 4 points per incident. Only vouch for people you
+            trust.
           </Text>
         </View>
 
@@ -195,7 +253,7 @@ export default function VouchMemberScreen() {
           <Ionicons name="search" size={20} color="#9CA3AF" />
           <TextInput
             style={styles.searchInput}
-            placeholder={t("vouch_member_v2.search_placeholder")}
+            placeholder="Search members you share a circle with"
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -205,110 +263,139 @@ export default function VouchMemberScreen() {
         {/* Active Vouches */}
         {activeVouches.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Active Vouches ({activeVouches.length})</Text>
-            {activeVouches.map((vouch) => (
-              <View key={vouch.id} style={styles.activeVouchCard}>
-                <View style={styles.activeVouchLeft}>
-                  <View style={styles.activeVouchAvatar}>
-                    <Text style={styles.activeVouchAvatarText}>
-                      {vouch.vouchedUserName.charAt(0)}
-                    </Text>
+            <Text style={styles.sectionTitle}>
+              Your active vouches ({activeVouches.length})
+            </Text>
+            {activeVouches.map((vouch) => {
+              const name = vouch.vouchee_name || "Unknown member";
+              const avatarUrl = vouch.vouchee_avatar;
+              return (
+                <View key={vouch.id} style={styles.activeVouchCard}>
+                  <View style={styles.activeVouchLeft}>
+                    {avatarUrl ? (
+                      <Image
+                        source={{ uri: avatarUrl }}
+                        style={styles.activeVouchAvatar}
+                      />
+                    ) : (
+                      <View style={styles.activeVouchAvatar}>
+                        <Text style={styles.activeVouchAvatarText}>
+                          {name.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                    <View>
+                      <Text style={styles.activeVouchName}>{name}</Text>
+                      <Text style={styles.activeVouchDate}>
+                        Vouched{" "}
+                        {new Date(vouch.created_at).toLocaleDateString()}
+                      </Text>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={styles.activeVouchName}>{vouch.vouchedUserName}</Text>
-                    <Text style={styles.activeVouchDate}>
-                      Vouched {new Date(vouch.createdAt).toLocaleDateString()}
-                    </Text>
+                  <View style={styles.activeVouchStatus}>
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={16}
+                      color="#00C6AE"
+                    />
+                    <Text style={styles.activeVouchStatusText}>Active</Text>
                   </View>
                 </View>
-                <View style={styles.activeVouchStatus}>
-                  <Ionicons name="checkmark-circle" size={16} color="#00C6AE" />
-                  <Text style={styles.activeVouchStatusText}>{t("vouch_member_v2.tag_active")}</Text>
-                </View>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
-        {/* Users Needing Vouch */}
+        {/* Candidates */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("final_polish.vouchmember_people_who_need_vouching")}</Text>
+          <Text style={styles.sectionTitle}>People you can vouch for</Text>
           <Text style={styles.sectionSubtitle}>
-            These new members need an elder to vouch for them before joining circles
+            Members you share at least one savings circle with.
           </Text>
 
-          {filteredUsers.length > 0 ? (
-            filteredUsers.map((user) => (
-              <View key={user.id} style={styles.userCard}>
-                <View style={styles.userHeader}>
-                  <View style={styles.userAvatar}>
-                    <Text style={styles.userAvatarText}>{user.name.charAt(0)}</Text>
+          {busy && candidates.length === 0 ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator color="#8B5CF6" />
+            </View>
+          ) : filteredCandidates.length > 0 ? (
+            filteredCandidates.map((c) => {
+              const already = alreadyVouchedIds.has(c.id);
+              const disabled =
+                !canVouch || remainingVouches <= 0 || already || isVouching;
+              const displayName = c.full_name || "Unknown member";
+              return (
+                <View key={c.id} style={styles.userCard}>
+                  <View style={styles.userHeader}>
+                    {c.avatar_url ? (
+                      <Image
+                        source={{ uri: c.avatar_url }}
+                        style={styles.userAvatar}
+                      />
+                    ) : (
+                      <View style={styles.userAvatar}>
+                        <Text style={styles.userAvatarText}>
+                          {displayName.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                    <View style={styles.userInfo}>
+                      <View style={styles.userNameRow}>
+                        <Text style={styles.userName}>{displayName}</Text>
+                      </View>
+                    </View>
                   </View>
-                  <View style={styles.userInfo}>
-                    <View style={styles.userNameRow}>
-                      <Text style={styles.userName}>{user.name}</Text>
-                      {user.isContact && (
-                        <View style={styles.contactBadge}>
-                          <Ionicons name="people" size={10} color="#3B82F6" />
-                          <Text style={styles.contactBadgeText}>{t("vouch_member_v2.badge_contact")}</Text>
-                        </View>
+
+                  <View style={styles.userFooter}>
+                    <View style={styles.userStats}>
+                      {already ? (
+                        <Text style={styles.userStatText}>
+                          Already vouched
+                        </Text>
+                      ) : (
+                        <Text style={styles.userStatText}>
+                          Shared circle member
+                        </Text>
                       )}
                     </View>
-                    <Text style={styles.userPhone}>{user.phone}</Text>
-                  </View>
-                  <View style={styles.userScore}>
-                    <Ionicons name="alert-circle" size={14} color="#DC2626" />
-                    <Text style={styles.userScoreText}>{user.score}</Text>
-                  </View>
-                </View>
 
-                {user.requestedCircle && (
-                  <View style={styles.requestedCircle}>
-                    <Ionicons name="people-circle-outline" size={16} color="#6B7280" />
-                    <Text style={styles.requestedCircleText}>
-                      Wants to join: <Text style={styles.bold}>{user.requestedCircle}</Text>
-                    </Text>
-                  </View>
-                )}
-
-                <View style={styles.userFooter}>
-                  <View style={styles.userStats}>
-                    <Text style={styles.userStatText}>{t("vouch_member_v2.user_stat_new")}</Text>
-                    <Text style={styles.userStatDot}>•</Text>
-                    <Text style={styles.userStatText}>{t("vouch_member_v2.user_stat_no_history")}</Text>
-                  </View>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.vouchButton,
-                      (!canVouch || remainingVouches <= 0) && styles.vouchButtonDisabled,
-                    ]}
-                    onPress={() => handleVouch(user.id, user.name)}
-                    disabled={!canVouch || remainingVouches <= 0 || isVouching}
-                  >
-                    <Ionicons
-                      name="hand-right"
-                      size={16}
-                      color={canVouch && remainingVouches > 0 ? "#FFFFFF" : "#9CA3AF"}
-                    />
-                    <Text
+                    <TouchableOpacity
                       style={[
-                        styles.vouchButtonText,
-                        (!canVouch || remainingVouches <= 0) && styles.vouchButtonTextDisabled,
+                        styles.vouchButton,
+                        disabled && styles.vouchButtonDisabled,
                       ]}
+                      onPress={() => handleVouch(c.id, displayName)}
+                      disabled={disabled}
                     >
-                      Vouch
-                    </Text>
-                  </TouchableOpacity>
+                      <Ionicons
+                        name={already ? "checkmark" : "hand-right"}
+                        size={16}
+                        color={disabled ? "#9CA3AF" : "#FFFFFF"}
+                      />
+                      <Text
+                        style={[
+                          styles.vouchButtonText,
+                          disabled && styles.vouchButtonTextDisabled,
+                        ]}
+                      >
+                        {already ? "Vouched" : "Vouch"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           ) : (
             <View style={styles.emptyState}>
-              <Ionicons name="search-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>{t("vouch_member_v2.empty_no_results")}</Text>
+              <Ionicons name="people-outline" size={48} color="#D1D5DB" />
+              <Text style={styles.emptyTitle}>
+                {candidates.length === 0
+                  ? "No shared circle members yet"
+                  : "No matches"}
+              </Text>
               <Text style={styles.emptySubtitle}>
-                No users found matching your search
+                {candidates.length === 0
+                  ? "Join a circle to find people you can vouch for."
+                  : "Try a different name."}
               </Text>
             </View>
           )}
@@ -316,40 +403,50 @@ export default function VouchMemberScreen() {
 
         {/* How Vouching Works */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("final_polish.vouchmember_how_vouching_works")}</Text>
+          <Text style={styles.sectionTitle}>
+            {t("final_polish.vouchmember_how_vouching_works", {
+              defaultValue: "How vouching works",
+            })}
+          </Text>
           <View style={styles.howItWorksCard}>
             <View style={styles.howItWorksItem}>
-              <View style={[styles.howItWorksIcon, { backgroundColor: "#EEF2FF" }]}>
+              <View
+                style={[styles.howItWorksIcon, { backgroundColor: "#EEF2FF" }]}
+              >
                 <Text style={styles.howItWorksNumber}>1</Text>
               </View>
               <View style={styles.howItWorksContent}>
-                <Text style={styles.howItWorksTitle}>{t("vouch_member_v2.how_it_works_vouch")}</Text>
+                <Text style={styles.howItWorksTitle}>Vouch</Text>
                 <Text style={styles.howItWorksText}>
-                  Endorse a new member you trust
+                  Endorse a member you trust
                 </Text>
               </View>
             </View>
 
             <View style={styles.howItWorksItem}>
-              <View style={[styles.howItWorksIcon, { backgroundColor: "#F0FDFB" }]}>
+              <View
+                style={[styles.howItWorksIcon, { backgroundColor: "#F0FDFB" }]}
+              >
                 <Text style={styles.howItWorksNumber}>2</Text>
               </View>
               <View style={styles.howItWorksContent}>
-                <Text style={styles.howItWorksTitle}>{t("vouch_member_v2.how_it_works_join")}</Text>
+                <Text style={styles.howItWorksTitle}>They gain trust</Text>
                 <Text style={styles.howItWorksText}>
-                  They can join circles with your backing
+                  Your endorsement adds diluted points to their XnScore
                 </Text>
               </View>
             </View>
 
             <View style={styles.howItWorksItem}>
-              <View style={[styles.howItWorksIcon, { backgroundColor: "#FEF3C7" }]}>
+              <View
+                style={[styles.howItWorksIcon, { backgroundColor: "#FEF3C7" }]}
+              >
                 <Text style={styles.howItWorksNumber}>3</Text>
               </View>
               <View style={styles.howItWorksContent}>
-                <Text style={styles.howItWorksTitle}>{t("vouch_member_v2.how_it_works_trust")}</Text>
+                <Text style={styles.howItWorksTitle}>Time-bound</Text>
                 <Text style={styles.howItWorksText}>
-                  They build their own score over time
+                  Vouches expire after 1 year — renew if the relationship holds
                 </Text>
               </View>
             </View>
@@ -586,7 +683,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#DC262620",
+    backgroundColor: "#8B5CF620",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -594,7 +691,7 @@ const styles = StyleSheet.create({
   userAvatarText: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#DC2626",
+    color: "#8B5CF6",
   },
   userInfo: {
     flex: 1,
@@ -609,52 +706,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#0A2342",
   },
-  contactBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#EFF6FF",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    gap: 4,
-  },
-  contactBadgeText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#3B82F6",
-  },
-  userPhone: {
-    fontSize: 13,
-    color: "#6B7280",
-    marginTop: 2,
-  },
-  userScore: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FEE2E2",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    gap: 4,
-  },
-  userScoreText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#DC2626",
-  },
-  requestedCircle: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F5F7FA",
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 12,
-    gap: 8,
-  },
-  requestedCircleText: {
-    fontSize: 13,
-    color: "#6B7280",
-  },
   userFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -668,10 +719,6 @@ const styles = StyleSheet.create({
   userStatText: {
     fontSize: 12,
     color: "#9CA3AF",
-  },
-  userStatDot: {
-    fontSize: 12,
-    color: "#D1D5DB",
   },
   vouchButton: {
     flexDirection: "row",
@@ -707,6 +754,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#9CA3AF",
     marginTop: 4,
+    textAlign: "center",
+    paddingHorizontal: 24,
   },
   howItWorksCard: {
     backgroundColor: "#FFFFFF",

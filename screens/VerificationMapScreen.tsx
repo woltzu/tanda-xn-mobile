@@ -31,10 +31,13 @@ import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../lib/supabase";
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const Maps = Platform.OS !== "web" ? require("react-native-maps") : null;
-const MapView: any = Maps?.default ?? null;
-const Marker: any = Maps?.Marker ?? null;
+// Import from our platform-split shim (components/MapView.tsx for
+// native, components/MapView.web.tsx for web). The old runtime
+// `require("react-native-maps")` guard was insufficient — Metro still
+// traversed the require path during static analysis and pulled
+// codegenNativeCommands into the web bundle, blocking `expo start --web`.
+// The shim keeps react-native-maps out of the web graph entirely.
+import MapView, { Marker } from "../components/MapView";
 
 type RouteParams = { milestoneId: string };
 
@@ -233,7 +236,7 @@ export default function VerificationMapScreen() {
 
         {/* Map / coords panel */}
         {project && photoGps ? (
-          Platform.OS !== "web" && MapView && Marker ? (
+          Platform.OS !== "web" ? (
             <View style={styles.mapWrap}>
               <MapView
                 style={styles.map}

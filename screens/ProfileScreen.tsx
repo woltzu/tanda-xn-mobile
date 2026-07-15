@@ -42,6 +42,7 @@ import { useResolutionStatus } from "../hooks/useResolutionStatus";
 // the user has no provider row yet, or "Provider dashboard" if they do.
 import { useProviderDashboard } from "../hooks/useProviders";
 import { supabase } from "../lib/supabase";
+import { XnScoreEngine, Vouch } from "../services/XnScoreEngine";
 import { showToast } from "../components/Toast";
 import { resetDashboardTour } from "../components/DashboardTourOverlay";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
@@ -121,6 +122,65 @@ export default function ProfileScreen() {
   // once resolved. Re-fetched on focus so returning from KYCHub shows the
   // fresh status.
   const [kycStatus, setKycStatus] = useState<string | null>(null);
+
+  // Vouches state — hoisted here so both the header trust badge and the
+  // inline VouchesSection share one fetch. Refreshed on focus and after
+  // every revoke round-trip.
+  const [vouchesReceived, setVouchesReceived] = useState<Vouch[]>([]);
+  const [vouchesGiven, setVouchesGiven] = useState<Vouch[]>([]);
+  const [vouchesLoading, setVouchesLoading] = useState(true);
+
+  const refreshVouches = useCallback(async () => {
+    if (!user?.id) {
+      setVouchesLoading(false);
+      return;
+    }
+    setVouchesLoading(true);
+    try {
+      const [r, g] = await Promise.all([
+        XnScoreEngine.getVouchesReceived(user.id).catch(
+          () => [] as Vouch[],
+        ),
+        XnScoreEngine.getVouchesGiven(user.id).catch(() => [] as Vouch[]),
+      ]);
+      setVouchesReceived(
+        (r || []).filter((v) => v.vouch_status === "active"),
+      );
+      setVouchesGiven(
+        (g || []).filter((v) => v.vouch_status === "active"),
+      );
+    } finally {
+      setVouchesLoading(false);
+    }
+  }, [user?.id]);
+
+  const handleRevokeVouch = useCallback(
+    (vouchId: string, name: string) => {
+      Alert.alert(
+        "Revoke vouch",
+        `Revoke your vouch for ${name}? Their XnScore will drop by the vouch value and yours will drop by 0.5.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Revoke",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await XnScoreEngine.revokeVouch(vouchId);
+                await refreshVouches();
+              } catch (err: any) {
+                Alert.alert(
+                  "Revoke failed",
+                  err?.message || "Please try again.",
+                );
+              }
+            },
+          },
+        ],
+      );
+    },
+    [refreshVouches],
+  );
   // P1 (profile review): avatar + name editing surfaces.
   const [avatarErrored, setAvatarErrored] = useState(false);
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
@@ -175,7 +235,10 @@ export default function ProfileScreen() {
           /* best-effort */
         }
       })();
-    }, [refetchProfile, trackScreenView, track]),
+      // Refresh vouches on focus so a vouch just created / revoked
+      // elsewhere (e.g. VouchMemberScreen) shows the latest state.
+      refreshVouches();
+    }, [refetchProfile, trackScreenView, track, refreshVouches]),
   );
 
   // Pull-to-refresh: fans out the three context refetches in parallel.
@@ -790,6 +853,20 @@ export default function ProfileScreen() {
               </View>
             ) : null}
 
+            {/* Trust badge — shows when the user has at least one active
+                vouch received. Non-interactive; the full vouch list lives
+                in the VouchesSection card below. */}
+            {vouchesReceived.length > 0 ? (
+              <View style={styles.trustBadge}>
+                <Ionicons name="ribbon" size={11} color={colors.cardBg} />
+                <Text style={styles.roleBadgeText}>
+                  {vouchesReceived.length === 1
+                    ? "1 vouch received"
+                    : `${vouchesReceived.length} vouches received`}
+                </Text>
+              </View>
+            ) : null}
+
             {/* KYC badge — tap routes to KYCHub. Hidden while the status
                 fetch is still pending so we don't flash a wrong label. */}
             {kycStatus ? (
@@ -915,6 +992,17 @@ export default function ProfileScreen() {
             </View>
           );
         })()}
+
+        {/* Vouches — inline summary + top-3 lists for received/given.
+            Data hoisted to the parent so the header trust badge and the
+            list share one fetch. Revoke button per given vouch calls
+            mig 337's revoke_xnscore_vouch RPC. */}
+        <VouchesSection
+          received={vouchesReceived}
+          given={vouchesGiven}
+          loading={vouchesLoading}
+          onRevoke={handleRevokeVouch}
+        />
 
         {/* Menu Sections */}
         <View style={styles.content}>
@@ -1049,6 +1137,267 @@ export default function ProfileScreen() {
     </View>
   );
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// VouchesSection — dumb display card. Data + onRevoke callback come
+// from the parent so the header trust badge and this list share one
+// fetch. Renders the Revoke button on each given-vouch row (System A
+// revoke — mig 337 revoke_xnscore_vouch — reverses both score
+// adjustments).
+// ──────────────────────────────────────────────────────────────────────
+function VouchesSection({
+  received,
+  given,
+  loading,
+  onRevoke,
+}: {
+  received: Vouch[];
+  given: Vouch[];
+  loading: boolean;
+  onRevoke: (vouchId: string, name: string) => void;
+}) {
+  const { t } = useTranslation();
+
+  if (loading) {
+    return (
+      <View style={vouchStyles.wrapper}>
+        <View style={vouchStyles.card}>
+          <ActivityIndicator color={colors.accentTeal} />
+        </View>
+      </View>
+    );
+  }
+
+  const isEmpty = received.length === 0 && given.length === 0;
+
+  return (
+    <View style={vouchStyles.wrapper}>
+      <Text style={vouchStyles.sectionLabel}>
+        {t("profile.item_vouch", { defaultValue: "Vouches" })}
+      </Text>
+      <View style={vouchStyles.card}>
+        <View style={vouchStyles.countRow}>
+          <View style={vouchStyles.countBlock}>
+            <Text style={vouchStyles.countNum}>{received.length}</Text>
+            <Text style={vouchStyles.countLabel}>Received</Text>
+          </View>
+          <View style={vouchStyles.countDivider} />
+          <View style={vouchStyles.countBlock}>
+            <Text style={vouchStyles.countNum}>{given.length}</Text>
+            <Text style={vouchStyles.countLabel}>Given</Text>
+          </View>
+        </View>
+
+        {isEmpty ? (
+          <Text style={vouchStyles.emptyText}>
+            No active vouches yet. Vouch for someone from the Trust menu.
+          </Text>
+        ) : (
+          <>
+            {received.length > 0 && (
+              <View style={vouchStyles.list}>
+                <Text style={vouchStyles.listHeading}>Received from</Text>
+                {received.slice(0, 3).map((v) => (
+                  <VouchRow
+                    key={v.id}
+                    name={v.voucher_name || "Unknown"}
+                    avatarUrl={v.voucher_avatar}
+                    dateISO={v.created_at}
+                  />
+                ))}
+                {received.length > 3 ? (
+                  <Text style={vouchStyles.moreText}>
+                    +{received.length - 3} more
+                  </Text>
+                ) : null}
+              </View>
+            )}
+            {given.length > 0 && (
+              <View style={vouchStyles.list}>
+                <Text style={vouchStyles.listHeading}>You vouched for</Text>
+                {given.slice(0, 3).map((v) => {
+                  const name = v.vouchee_name || "Unknown";
+                  return (
+                    <VouchRow
+                      key={v.id}
+                      name={name}
+                      avatarUrl={v.vouchee_avatar}
+                      dateISO={v.created_at}
+                      onRevoke={() => onRevoke(v.id, name)}
+                    />
+                  );
+                })}
+                {given.length > 3 ? (
+                  <Text style={vouchStyles.moreText}>
+                    +{given.length - 3} more
+                  </Text>
+                ) : null}
+              </View>
+            )}
+          </>
+        )}
+      </View>
+    </View>
+  );
+}
+
+function VouchRow({
+  name,
+  avatarUrl,
+  dateISO,
+  onRevoke,
+}: {
+  name: string;
+  avatarUrl?: string;
+  dateISO: string;
+  onRevoke?: () => void;
+}) {
+  return (
+    <View style={vouchStyles.row}>
+      {avatarUrl ? (
+        <Image source={{ uri: avatarUrl }} style={vouchStyles.avatar} />
+      ) : (
+        <View style={[vouchStyles.avatar, vouchStyles.avatarFallback]}>
+          <Text style={vouchStyles.avatarText}>
+            {name.charAt(0).toUpperCase()}
+          </Text>
+        </View>
+      )}
+      <View style={{ flex: 1 }}>
+        <Text style={vouchStyles.rowName}>{name}</Text>
+        <Text style={vouchStyles.rowDate}>
+          {new Date(dateISO).toLocaleDateString()}
+        </Text>
+      </View>
+      {onRevoke ? (
+        <TouchableOpacity
+          onPress={onRevoke}
+          style={vouchStyles.revokeButton}
+          accessibilityRole="button"
+          accessibilityLabel={`Revoke vouch for ${name}`}
+        >
+          <Text style={vouchStyles.revokeButtonText}>Revoke</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
+const vouchStyles = StyleSheet.create({
+  wrapper: {
+    paddingHorizontal: 20,
+    marginTop: 12,
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+    marginLeft: 4,
+  },
+  card: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.borderColor,
+  },
+  countRow: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginBottom: 12,
+  },
+  countBlock: {
+    flex: 1,
+    alignItems: "center",
+  },
+  countNum: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: colors.primaryNavy,
+  },
+  countLabel: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  countDivider: {
+    width: 1,
+    backgroundColor: colors.borderColor,
+    marginHorizontal: 12,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    textAlign: "center",
+    marginTop: 4,
+  },
+  list: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderColor,
+  },
+  listHeading: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 8,
+  },
+  avatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  avatarFallback: {
+    backgroundColor: colors.accentTeal,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    color: colors.cardBg,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  rowName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.primaryNavy,
+  },
+  rowDate: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  moreText: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    fontStyle: "italic",
+    marginTop: 4,
+  },
+  revokeButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.errorText,
+  },
+  revokeButtonText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.errorText,
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -1193,6 +1542,21 @@ const styles = StyleSheet.create({
   },
   kycBadgeVerified: { backgroundColor: "rgba(0,198,174,0.85)" },
   kycBadgeRejected: { backgroundColor: "rgba(220,38,38,0.85)" },
+  // Trust badge — shown in the header when the user has at least one
+  // active vouch received. Same pill shape as roleBadge/kycBadge for
+  // visual consistency; purple tint to differentiate from teal (score)
+  // and green (verified KYC).
+  trustBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "center",
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: "rgba(139,92,246,0.85)",
+  },
   // ----- Open profile Bucket B.3 — Complete-your-profile banner -----
   // Lives between the navy LinearGradient header and the white content
   // section. Tap routes to PersonalInfoScreen so the user can fill in
