@@ -1714,6 +1714,14 @@ function AppContent() {
               call. Same duplicate-registration pattern we use for
               GoalDetailV2 / TemplateGoalProgress / FeedSettings. */}
           <Stack.Screen name="ResolutionCenter" component={ResolutionCenterScreen} />
+          {/* MyCircles — ALSO registered on HomeStack (line ~1054).
+              Duplicated here so navigate("MyCircles") from
+              CirclesV2Screen (which lives in CirclesStack, not
+              HomeStack) resolves via ancestor walk. Without this the
+              Circles tab's "See all circles" link errored with
+              "was not handled by any navigator". Same duplicate pattern
+              as ResolutionCenter above. */}
+          <Stack.Screen name="MyCircles" component={MyCirclesScreen} />
           {/* Modal-style screen reachable from CircleDetail's Circle Options sheet.
               The sheet renders via a portal outside CirclesStack's subtree, so
               useNavigation() inside it returns the root Stack — hence this
