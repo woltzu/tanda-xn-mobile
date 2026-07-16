@@ -1,10 +1,21 @@
 // hooks/useFutureSnapshot.ts
 //
 // Powers Home's "Future Snapshot" card. Two parallel selects:
-//   - circle_contributions where user_id=me AND status IN ('due', 'pending')
+//   - circle_contributions where user_id=me AND status='pending'
 //     AND due_date >= today → upcoming obligations
 //   - circle_cycles where recipient_user_id=me AND cycle_status IN
-//     ('pending', 'scheduled', 'in_progress') → expected payouts
+//     ('collecting', 'grace_period') → expected payouts
+//
+// Filter-value fix (2026-07-16): status values must match the live
+// schema, not the design-doc verbiage. circle_contributions.status
+// CHECK constraint (mig 309) allows only pending/paid/late/missed/
+// waived/refunded — 'due' and 'scheduled' are invalid so those
+// branches never matched. circle_cycles.cycle_status in prod carries
+// 'closed' / 'collecting' / 'grace_period' — 'pending', 'scheduled',
+// and 'in_progress' are wishful. Result before the fix: both queries
+// returned zero rows regardless of what the user had scheduled, and
+// the card stayed empty even though refresh-on-focus was firing
+// correctly.
 //
 // Circle names resolve client-side via useCircles' myCircles list —
 // same rationale as useRecentActivity: avoids nested Supabase selects
@@ -61,7 +72,7 @@ export function useFutureSnapshot(limit = 5) {
           .from("circle_contributions")
           .select("id, amount, due_date, status, circle_id")
           .eq("user_id", user.id)
-          .in("status", ["due", "pending", "scheduled"])
+          .eq("status", "pending")
           .gte("due_date", today)
           .order("due_date", { ascending: true })
           .limit(limit),
@@ -71,7 +82,7 @@ export function useFutureSnapshot(limit = 5) {
             "id, circle_id, payout_amount, expected_payout_date, cycle_status, recipient_user_id",
           )
           .eq("recipient_user_id", user.id)
-          .in("cycle_status", ["pending", "scheduled", "in_progress"])
+          .in("cycle_status", ["collecting", "grace_period"])
           .order("expected_payout_date", { ascending: true })
           .limit(limit),
       ]);
