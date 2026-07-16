@@ -52,6 +52,7 @@ const CATEGORIES: NotificationCategory[] = [
   { id: "payouts",   pushKey: "push_payouts",   emailKey: "email_payouts"   },
   { id: "circles",   pushKey: "push_circles",   emailKey: "email_circles"   },
   { id: "loans",     pushKey: "push_loans",     emailKey: "email_loans"     },
+  { id: "community", pushKey: "push_community", emailKey: "email_community" },
   { id: "reminders", pushKey: "push_reminders", emailKey: "email_reminders" },
   { id: "security",  pushKey: "push_security",  emailKey: "email_security"  },
   { id: "marketing", pushKey: "push_marketing", emailKey: "email_marketing" },
@@ -59,9 +60,11 @@ const CATEGORIES: NotificationCategory[] = [
 
 // P1 (notification-prefs review): logical groupings. Renders one
 // section per group with its own title + description so the user
-// has 3 chunks of 1–4 categories instead of one flat list of 7.
+// has 4 chunks of 1–4 categories instead of one flat list of 8.
+// mig 347 added the standalone "community" group between money and app.
 const CATEGORY_GROUPS: Array<{ id: string; ids: string[] }> = [
   { id: "money",     ids: ["payments", "payouts", "circles", "loans"] },
+  { id: "community", ids: ["community"] },
   { id: "app",       ids: ["reminders", "security"] },
   { id: "marketing", ids: ["marketing"] },
 ];

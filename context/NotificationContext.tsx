@@ -46,6 +46,7 @@ export interface NotificationPreferences {
   push_security: boolean;
   push_marketing: boolean;
   push_system: boolean;
+  push_community: boolean; // mig 347 — community + join-request notifications
   email_payments: boolean;
   email_payouts: boolean;
   email_circles: boolean;
@@ -53,6 +54,7 @@ export interface NotificationPreferences {
   email_reminders: boolean;
   email_security: boolean;
   email_marketing: boolean;
+  email_community: boolean; // mig 347 — community email fanout
   email_weekly_digest: boolean;
   quiet_hours_enabled: boolean;
   quiet_hours_start: string;
@@ -119,6 +121,7 @@ const defaultPreferences: NotificationPreferences = {
   push_security: true,
   push_marketing: false,
   push_system: true,
+  push_community: true, // mig 347 default
   email_payments: true,
   email_payouts: true,
   email_circles: true,
@@ -126,6 +129,7 @@ const defaultPreferences: NotificationPreferences = {
   email_reminders: true,
   email_security: true,
   email_marketing: false,
+  email_community: true, // mig 347 default
   email_weekly_digest: true,
   quiet_hours_enabled: false,
   quiet_hours_start: "22:00",

@@ -46,6 +46,23 @@ const getNotificationIcon = (type: string): { name: string; color: string; bg: s
       return { name: "arrow-down-circle", color: "#991B1B", bg: "#FEE2E2" };
     case "elder_promotion":
       return { name: "arrow-up-circle", color: "#166534", bg: "#DCFCE7" };
+    // Migration 347 — community notifications. join_request goes to
+    // elders; approved/rejected go to the applicant; new_arrival goes
+    // to existing community members. gathering_created and
+    // community_post_created were shipping with the default bell —
+    // this closes the icon gap for both.
+    case "community_join_request":
+      return { name: "person-add-outline", color: "#5B21B6", bg: "#EDE9FE" };
+    case "community_join_approved":
+      return { name: "checkmark-circle-outline", color: "#166534", bg: "#DCFCE7" };
+    case "community_join_rejected":
+      return { name: "close-circle-outline", color: "#991B1B", bg: "#FEE2E2" };
+    case "community_new_arrival":
+      return { name: "people-outline", color: "#0EA5E9", bg: "#E0F2FE" };
+    case "gathering_created":
+      return { name: "calendar-outline", color: "#7C3AED", bg: "#EDE9FE" };
+    case "community_post_created":
+      return { name: "chatbubble-outline", color: "#F97316", bg: "#FFEDD5" };
     default:
       return { name: "notifications", color: "#6B7280", bg: "#F5F7FA" };
   }
