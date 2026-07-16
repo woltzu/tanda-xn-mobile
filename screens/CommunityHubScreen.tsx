@@ -7,7 +7,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Image,
+  TextInput,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -20,6 +22,10 @@ import {
   type ActivityItem,
   type CommunityCircleRow,
 } from "../hooks/useCommunityHub";
+import {
+  useCommunityMembers,
+  type CommunityMemberRow,
+} from "../hooks/useCommunityMembers";
 
 // Compact relative-time formatter — mirrors the ElderDashboard helper.
 function timeAgo(iso: string): string {
@@ -54,7 +60,7 @@ export default function CommunityHubScreen() {
   const navigation = useNavigation<CommunityHubNavigationProp>();
   const route = useRoute<CommunityHubRouteProp>();
   const { t } = useTranslation();
-  const { communityId } = route.params;
+  const { communityId, initialTab } = route.params;
 
   const { getCommunityById, getCommunityCircles, getSubCommunities } = useCommunity();
 
@@ -73,6 +79,17 @@ export default function CommunityHubScreen() {
     activity,
     loading: hubLoading,
   } = useCommunityHub(communityId);
+
+  // Phase 8 — member directory. Search stays local; hook filters +
+  // sorts (elders/owners first) client-side. Only mounted / fetched
+  // when the Members tab is actually active-selected once, but the
+  // hook self-guards on no communityId so calling always is safe.
+  const [memberSearch, setMemberSearch] = useState("");
+  const {
+    members: communityMembers,
+    loading: membersLoading,
+    refresh: refreshMembers,
+  } = useCommunityMembers(communityId, memberSearch);
 
   // Bug fix: getCommunityCircles and getSubCommunities return Promises
   // (async DB queries in CommunityContext), not plain arrays. Prior code
@@ -108,7 +125,12 @@ export default function CommunityHubScreen() {
     };
   }, [communityId, getCommunityCircles, getSubCommunities]);
 
-  const [activeTab, setActiveTab] = useState<TabId>("circles");
+  // initialTab (Phase 8) lets a caller (e.g. ElderOverviewScreen)
+  // deep-link into a specific tab. Falls back to "circles" if absent
+  // or invalid.
+  const [activeTab, setActiveTab] = useState<TabId>(
+    (initialTab as TabId | undefined) ?? "circles",
+  );
 
   if (!community) {
     return (
@@ -399,20 +421,71 @@ export default function CommunityHubScreen() {
             </>
           )}
 
-          {/* MEMBERS TAB */}
+          {/* MEMBERS TAB — Phase 8. Real directory. Elder/Owner rows
+              float to the top via role rank; members follow by
+              joined_at ASC. Search filters client-side. */}
           {activeTab === "members" && (
-            <View style={styles.membersCard}>
-              <View style={styles.membersIconContainer}>
-                <Text style={styles.membersEmoji}>👥</Text>
+            <>
+              <View style={styles.memberSearchWrap}>
+                <Ionicons
+                  name="search"
+                  size={18}
+                  color="#9CA3AF"
+                  style={styles.memberSearchIcon}
+                />
+                <TextInput
+                  style={styles.memberSearchInput}
+                  value={memberSearch}
+                  onChangeText={setMemberSearch}
+                  placeholder="Search members"
+                  placeholderTextColor="#9CA3AF"
+                />
+                {memberSearch.length > 0 ? (
+                  <TouchableOpacity
+                    onPress={() => setMemberSearch("")}
+                    accessibilityLabel="Clear search"
+                  >
+                    <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+                  </TouchableOpacity>
+                ) : null}
               </View>
-              <Text style={styles.membersCount}>{displayMemberCount}</Text>
-              <Text style={styles.membersLabel}>{t("community_hub.members_label")}</Text>
-              <View style={styles.avgScoreCard}>
-                <Text style={styles.avgScoreText}>
-                  Avg. XnScore: <Text style={styles.avgScoreValue}>{community.stats?.avgXnScore || 75}</Text>
-                </Text>
-              </View>
-            </View>
+              {membersLoading ? (
+                <View style={styles.emptyState}>
+                  <ActivityIndicator color="#00C6AE" />
+                </View>
+              ) : communityMembers.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyEmoji}>👥</Text>
+                  <Text style={styles.emptyTitle}>
+                    {memberSearch ? "No matches" : "No members yet"}
+                  </Text>
+                  <Text style={styles.emptySubtitle}>
+                    {memberSearch
+                      ? "Try a different name."
+                      : "Be the first to join this community."}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.memberListWrap}>
+                  <FlashList
+                    data={communityMembers}
+                    keyExtractor={(m) => m.id}
+                    renderItem={({ item }) => (
+                      <MemberRow
+                        member={item}
+                        onPress={() =>
+                          navigation.navigate("UserDreamProfile" as any, {
+                            userId: item.user_id,
+                          })
+                        }
+                      />
+                    )}
+                    refreshing={membersLoading}
+                    onRefresh={refreshMembers}
+                  />
+                </View>
+              )}
+            </>
           )}
 
           {/* ACTIVITY TAB — Phase 7. Union of community_feed_items,
@@ -519,6 +592,83 @@ function CircleCard({
     </TouchableOpacity>
   );
 }
+
+// Member row — Phase 8. Avatar (fallback initial), name, role badge
+// for elders/owners/admins, muted joined-date. Tap → user profile.
+function MemberRow({
+  member,
+  onPress,
+}: {
+  member: CommunityMemberRow;
+  onPress: () => void;
+}) {
+  const displayName = member.profile?.full_name?.trim() || "Someone";
+  const roleBadge = ROLE_BADGE[member.role];
+  const joinedLabel = member.joined_at
+    ? new Date(member.joined_at).toLocaleDateString(undefined, {
+        month: "short",
+        year: "numeric",
+      })
+    : null;
+  return (
+    <TouchableOpacity
+      style={styles.memberRow}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${displayName}'s profile`}
+    >
+      {member.profile?.avatar_url ? (
+        <Image
+          source={{ uri: member.profile.avatar_url }}
+          style={styles.memberAvatar}
+        />
+      ) : (
+        <View style={[styles.memberAvatar, styles.memberAvatarFallback]}>
+          <Text style={styles.memberAvatarInitial}>
+            {displayName[0].toUpperCase()}
+          </Text>
+        </View>
+      )}
+      <View style={styles.memberBody}>
+        <View style={styles.memberNameRow}>
+          <Text style={styles.memberName} numberOfLines={1}>
+            {displayName}
+          </Text>
+          {roleBadge ? (
+            <View
+              style={[
+                styles.memberRoleBadge,
+                { backgroundColor: roleBadge.bg },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.memberRoleBadgeText,
+                  { color: roleBadge.fg },
+                ]}
+              >
+                {roleBadge.label}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+        {joinedLabel ? (
+          <Text style={styles.memberJoined}>Joined {joinedLabel}</Text>
+        ) : null}
+      </View>
+      <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+    </TouchableOpacity>
+  );
+}
+
+const ROLE_BADGE: Partial<
+  Record<CommunityMemberRow["role"], { label: string; bg: string; fg: string }>
+> = {
+  owner: { label: "Owner", bg: "#FEF3C7", fg: "#92400E" },
+  admin: { label: "Admin", bg: "#DBEAFE", fg: "#1E40AF" },
+  moderator: { label: "Mod", bg: "#EDE9FE", fg: "#5B21B6" },
+  elder: { label: "Elder", bg: "#F0FDFB", fg: "#00897B" },
+};
 
 // Activity card — Phase 7. Renders every ActivityItem kind through a
 // single card shape (icon + accent bar / name + timestamp / subtitle).
@@ -955,6 +1105,87 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 40,
+  },
+  // Phase 8 — member directory
+  memberSearchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 10,
+  },
+  memberSearchIcon: {
+    marginRight: 4,
+  },
+  memberSearchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: "#0A2342",
+    padding: 0,
+  },
+  memberListWrap: {
+    minHeight: 300,
+    height: 480,
+  },
+  memberRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    marginBottom: 8,
+  },
+  memberAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#E5E7EB",
+  },
+  memberAvatarFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  memberAvatarInitial: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#4B5563",
+  },
+  memberBody: {
+    flex: 1,
+  },
+  memberNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  memberName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0A2342",
+    flexShrink: 1,
+  },
+  memberRoleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  memberRoleBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  memberJoined: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    marginTop: 2,
   },
   // Phase 7 — activity feed
   activityCard: {

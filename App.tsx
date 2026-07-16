@@ -151,6 +151,7 @@ import VouchSystemScreen from "./screens/VouchSystemScreen";
 import ConflictCaseScreen from "./screens/ConflictCaseScreen";
 import ElderOnboardingScreen from "./screens/ElderOnboardingScreen";
 import ElderDashboardScreen from "./screens/ElderDashboardScreen";
+import ElderOverviewScreen from "./screens/ElderOverviewScreen";
 import JoinCircleByCodeScreen from "./screens/JoinCircleByCodeScreen";
 import QRScannerScreen from "./screens/QRScannerScreen";
 import QRCodeDisplayScreen from "./screens/QRCodeDisplayScreen";
@@ -629,12 +630,20 @@ export type RootStackParamList = {
   // Community Flow
   CommunityBrowser: undefined;
   CommunityFeed: undefined;
-  CommunityHub: { communityId: string };
+  CommunityHub: {
+    communityId: string;
+    // Phase 8: caller (e.g. ElderOverviewScreen) can request a
+    // specific tab to be selected on mount. Optional; falls back to
+    // the default "circles" tab.
+    initialTab?: "circles" | "sub" | "members" | "activity";
+  };
   CreateCommunity: { parentId?: string } | undefined;
   // Phase 1a (migration 131): read-only directory of the user's memberships
   MyCommunities: undefined;
   // Elder Flow
   ElderDashboard: undefined;
+  // Phase 8 — cross-community elder view. See ElderOverviewScreen.
+  ElderOverview: undefined;
   BecomeElder: undefined;
   HonorScoreOverview: undefined;
   VouchSystem: undefined;
@@ -1090,6 +1099,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="CreateCommunity" component={CreateCommunityScreen} />
       <HomeStack.Screen name="MyCommunities" component={MyCommunitiesScreen} />
       <HomeStack.Screen name="ElderDashboard" component={ElderDashboardScreen} />
+      <HomeStack.Screen name="ElderOverview" component={ElderOverviewScreen} />
       {/* Conflict P1 — legacy elder route names alias to ElderOnboarding /
           ConflictCase so any existing deep links keep landing somewhere
           sensible. The dedicated entries below are what new code uses. */}
@@ -1456,6 +1466,7 @@ function CommunityStackScreen() {
       <CommunityStack.Screen name="CommunityFeed" component={CommunityFeedScreen} />
       <CommunityStack.Screen name="PostToCommunity" component={PostToCommunityScreen} />
       <CommunityStack.Screen name="ElderDashboard" component={ElderDashboardScreen} />
+      <CommunityStack.Screen name="ElderOverview" component={ElderOverviewScreen} />
       {/* Conflict P1 — legacy elder route names aliased to merged screens. */}
       <CommunityStack.Screen name="BecomeElder" component={ElderOnboardingScreen} />
       <CommunityStack.Screen name="HonorScoreOverview" component={HonorScoreOverviewScreen} />

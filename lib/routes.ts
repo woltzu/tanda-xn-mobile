@@ -141,6 +141,7 @@ export const Routes = {
   EditStore: "EditStore",
   ElderDashboard: "ElderDashboard",
   ElderNominations: "ElderNominations",
+  ElderOverview: "ElderOverview",
   ElderTrainingHub: "ElderTrainingHub",
   EmailVerification: "EmailVerification",
   ExportData: "ExportData",

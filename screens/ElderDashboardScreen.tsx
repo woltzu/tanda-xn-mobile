@@ -17,6 +17,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useTranslation } from "react-i18next";
 import { useElder } from "../context/ElderContext";
 import { usePendingElderRequests } from "../hooks/useCommunityJoinRequests";
+import { useElderCommunities } from "../hooks/useElderCommunities";
 import { showToast } from "../components/Toast";
 
 // Compact relative-time formatter. No date library needed.
@@ -39,6 +40,7 @@ const COACH_MARK_KEY = "@tandaxn_elder_dashboard_seen_v1";
 
 type RootStackParamList = {
   ElderDashboard: undefined;
+  ElderOverview: undefined;
   BecomeElder: undefined;
   HonorScoreOverview: undefined;
   VouchSystem: undefined;
@@ -96,6 +98,10 @@ export default function ElderDashboardScreen() {
     approve: approveJoinRequest,
     reject: rejectJoinRequest,
   } = usePendingElderRequests();
+
+  // Phase 8 — cross-community elder view entry-point. Only render the
+  // card when the caller actually elders at least one community.
+  const { communities: elderCommunities } = useElderCommunities();
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
 
   const handleApproveJoinRequest = async (id: string) => {
@@ -348,6 +354,41 @@ export default function ElderDashboardScreen() {
             )}
           </View>
         )}
+
+        {/* Phase 8 — Elder Overview entry-point. Only rendered when
+            the caller elders at least one community. Card summarizes
+            the count and jumps into the dedicated cross-community
+            view. */}
+        {elderCommunities.length > 0 ? (
+          <View style={styles.overviewSection}>
+            <TouchableOpacity
+              style={styles.overviewCard}
+              onPress={() => navigation.navigate("ElderOverview")}
+              accessibilityRole="button"
+              accessibilityLabel="Open Elder Overview"
+            >
+              <View style={styles.overviewIconWrap}>
+                <Ionicons name="grid-outline" size={22} color="#00C6AE" />
+              </View>
+              <View style={styles.overviewBody}>
+                <Text style={styles.overviewTitle}>Elder Overview</Text>
+                <Text style={styles.overviewSubtitle}>
+                  {elderCommunities.length}{" "}
+                  {elderCommunities.length === 1
+                    ? "community"
+                    : "communities"}
+                  {" · "}
+                  {elderCommunities.reduce(
+                    (a, c) => a + c.pendingRequestsCount,
+                    0,
+                  )}{" "}
+                  pending
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* Phase 4 — Pending community join requests. Elders/owners see
             the queue for every community where they have that role. RLS
@@ -959,6 +1000,42 @@ const styles = StyleSheet.create({
     color: "#1a1a2e",
     paddingHorizontal: 20,
     marginBottom: 12,
+  },
+  // Phase 8 — Elder Overview entry-point
+  overviewSection: {
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  overviewCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  overviewIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#F0FDFB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  overviewBody: {
+    flex: 1,
+  },
+  overviewTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0A2342",
+  },
+  overviewSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
   },
   // Phase 4 — Pending join request styles
   joinRequestsSection: {
