@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,6 +15,7 @@ import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
 import { useCommunity, Community, CommunityType } from "../context/CommunityContext";
+import { useCommunityJoinRequests } from "../hooks/useCommunityJoinRequests";
 
 type CommunityBrowserNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -28,7 +30,13 @@ const categories: { id: CommunityType | "all"; label: string; icon: string }[] =
 export default function CommunityBrowserScreen() {
   const navigation = useNavigation<CommunityBrowserNavigationProp>();
   const { t } = useTranslation();
-  const { myCommunities, discoverCommunities, suggestions, joinCommunity, isLoading } = useCommunity();
+  const { myCommunities, discoverCommunities, suggestions, isLoading } = useCommunity();
+  // Phase 2 (mig 345) — communities other than auto-assigned ones go
+  // through the request-approve pipeline. The join CTA now creates a
+  // community_join_requests row instead of directly inserting a
+  // membership. Elders/owners review + approve/reject from their
+  // Elder dashboard (client UI is a follow-up; the RPCs are ready).
+  const { myPendingCommunityIds, requestToJoin } = useCommunityJoinRequests();
 
   const [activeTab, setActiveTab] = useState<"my" | "discover">("discover");
   const [searchQuery, setSearchQuery] = useState("");
@@ -41,8 +49,16 @@ export default function CommunityBrowserScreen() {
     return matchesQuery && matchesCategory;
   });
 
-  const handleJoinCommunity = async (community: Community) => {
-    await joinCommunity(community.id);
+  const handleRequestToJoin = async (community: Community) => {
+    const result = await requestToJoin(community.id);
+    if (result.success) {
+      Alert.alert(
+        "Request sent",
+        `Your request to join ${community.name} is pending elder review.`,
+      );
+    } else {
+      Alert.alert("Request failed", result.error || "Please try again.");
+    }
   };
 
   const handleViewCommunity = (communityId: string) => {
@@ -249,7 +265,8 @@ export default function CommunityBrowserScreen() {
                     </View>
                     <CommunityDiscoverCard
                       community={suggestion.community}
-                      onJoin={() => handleJoinCommunity(suggestion.community)}
+                      pending={myPendingCommunityIds.has(suggestion.community.id)}
+                      onJoin={() => handleRequestToJoin(suggestion.community)}
                       onView={() => handleViewCommunity(suggestion.community.id)}
                     />
                   </View>
@@ -266,7 +283,8 @@ export default function CommunityBrowserScreen() {
               <CommunityDiscoverCard
                 key={community.id}
                 community={community}
-                onJoin={() => handleJoinCommunity(community)}
+                pending={myPendingCommunityIds.has(community.id)}
+                onJoin={() => handleRequestToJoin(community)}
                 onView={() => handleViewCommunity(community.id)}
               />
             ))}
@@ -298,10 +316,12 @@ export default function CommunityBrowserScreen() {
 // Separate component for discover cards
 function CommunityDiscoverCard({
   community,
+  pending,
   onJoin,
   onView,
 }: {
   community: Community;
+  pending: boolean;
   onJoin: () => void;
   onView: () => void;
 }) {
@@ -355,9 +375,18 @@ function CommunityDiscoverCard({
         </View>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.joinButton} onPress={onJoin}>
-        <Text style={styles.joinButtonText}>{t("community_browser.btn_join")}</Text>
-      </TouchableOpacity>
+      {pending ? (
+        <View style={[styles.joinButton, styles.joinButtonPending]}>
+          <Ionicons name="time-outline" size={14} color="#6B7280" />
+          <Text style={[styles.joinButtonText, styles.joinButtonTextPending]}>
+            Pending review
+          </Text>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.joinButton} onPress={onJoin}>
+          <Text style={styles.joinButtonText}>Request to Join</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -744,6 +773,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  joinButtonPending: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F3F4F6",
+  },
+  joinButtonTextPending: {
+    color: "#6B7280",
   },
   emptyState: {
     alignItems: "center",
