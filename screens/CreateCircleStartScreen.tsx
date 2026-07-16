@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { RootStackParamList } from "../App";
@@ -115,9 +115,21 @@ const circleTypes: CircleTypeOption[] = [
 
 export default function CreateCircleStartScreen() {
   const navigation = useNavigation<CreateCircleStartNavigationProp>();
+  const route = useRoute();
   const { t } = useTranslation();
   const { user } = useAuth();
   const [selectedType, setSelectedType] = useState<string | null>(null);
+
+  // Phase 7 — CommunityHubScreen may pass communityId/communityName
+  // to pre-scope the new circle to a community. When present, we
+  // include them in the initial CircleDraft so downstream wizard
+  // steps carry the scope through to the createCircle RPC via
+  // CircleDraft.targetCommunityId.
+  const params = (route.params ?? {}) as
+    | { communityId?: string; communityName?: string }
+    | undefined;
+  const preseedCommunityId = params?.communityId;
+  const preseedCommunityName = params?.communityName;
 
   const userXnScore = user?.xnScore || 0;
   const minScoreRequired = 60;
@@ -180,7 +192,15 @@ export default function CreateCircleStartScreen() {
         // WizardForm screen with a typed draft. Replaces the old
         // CreateCircleDetails → CreateCircleSchedule two-hop chain.
         navigation.navigate("CreateCircleWizardForm", {
-          draft: { circleType: selectedType as CircleType },
+          draft: {
+            circleType: selectedType as CircleType,
+            ...(preseedCommunityId
+              ? {
+                  targetCommunityId: preseedCommunityId,
+                  targetCommunityName: preseedCommunityName,
+                }
+              : {}),
+          },
         });
       }
     }
@@ -190,7 +210,15 @@ export default function CreateCircleStartScreen() {
     // Escape hatch: user picked Travel but wants a basic savings circle instead
     if (canCreate) {
       navigation.navigate("CreateCircleWizardForm", {
-        draft: { circleType: "goal" },
+        draft: {
+          circleType: "goal",
+          ...(preseedCommunityId
+            ? {
+                targetCommunityId: preseedCommunityId,
+                targetCommunityName: preseedCommunityName,
+              }
+            : {}),
+        },
       });
     }
   };

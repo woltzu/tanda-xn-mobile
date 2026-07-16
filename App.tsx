@@ -415,7 +415,13 @@ export type RootStackParamList = {
   PersonalInfo: undefined;
   LanguageRegion: undefined;
   // Create Circle Flow
-  CreateCircleStart: undefined;
+  // Phase 7: optional communityId lets a caller (e.g. CommunityHubScreen)
+  // pre-seed the circle to a community. When set, the Start screen writes
+  // CircleDraft.targetCommunityId so downstream wizard steps carry the
+  // scope through to the createCircle RPC.
+  CreateCircleStart:
+    | { communityId?: string; communityName?: string }
+    | undefined;
   CreateCircleExpress: undefined;
   QuickCircle: undefined;
   Referral: undefined;
