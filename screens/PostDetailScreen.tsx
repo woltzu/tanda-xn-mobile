@@ -688,8 +688,17 @@ export default function PostDetailScreen() {
               </Text>
               {comments.length === 0 ? (
                 <View style={styles.noComments}>
+                  <Ionicons
+                    name="chatbubble-outline"
+                    size={24}
+                    color={colors.textSecondary}
+                    style={{ opacity: 0.5, marginBottom: 6 }}
+                  />
                   <Text style={styles.noCommentsText}>
-                    {t("dream_post.detail.no_comments_own")}
+                    {t("dream_post.detail.no_comments_own", {
+                      defaultValue:
+                        "No comments yet. The input below is ready — start the conversation on your own post.",
+                    })}
                   </Text>
                 </View>
               ) : (
@@ -909,8 +918,17 @@ export default function PostDetailScreen() {
             </Text>
             {comments.length === 0 ? (
               <View style={styles.noComments}>
+                <Ionicons
+                  name="chatbubble-outline"
+                  size={24}
+                  color={colors.textSecondary}
+                  style={{ opacity: 0.5, marginBottom: 6 }}
+                />
                 <Text style={styles.noCommentsText}>
-                  {t("dream_post.detail.no_comments")}
+                  {t("dream_post.detail.no_comments", {
+                    defaultValue:
+                      "Be the first to comment — the input below is ready.",
+                  })}
                 </Text>
               </View>
             ) : (

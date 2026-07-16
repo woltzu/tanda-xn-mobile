@@ -1173,20 +1173,63 @@ const CommunityTabScreen: React.FC = () => {
         {/* 1. Community Pills */}
         {renderCommunityPills()}
 
-        {/* 2. New Arrivals */}
-        {renderNewArrivals()}
+        {/* Empty-state CTA — when the user has joined zero communities,
+            selectedCommunityId falls through to '' and every downstream
+            hook (useArrivals, useGatherings, useDreamFeed,
+            useCommunityMemory) short-circuits on the !communityId
+            guard. Rendering four independently-empty sections in that
+            state reads as "the app is broken." One clear CTA card is
+            better. Gated on !communitiesLoading so the CTA doesn't
+            flash before the context has resolved on cold start. */}
+        {!communitiesLoading && (myCommunities?.length ?? 0) === 0 ? (
+          <View style={styles.communityEmptyCard}>
+            <View style={styles.communityEmptyIcon}>
+              <Ionicons name="people-circle-outline" size={40} color={COLORS.teal} />
+            </View>
+            <Text style={styles.communityEmptyTitle}>Join a community</Text>
+            <Text style={styles.communityEmptyBody}>
+              Connect with your village, share updates, and celebrate
+              together.
+            </Text>
+            <View style={styles.communityEmptyActions}>
+              <TouchableOpacity
+                style={styles.communityEmptyPrimary}
+                onPress={() => navigation.navigate('CommunityBrowser')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="search-outline" size={16} color={COLORS.white} />
+                <Text style={styles.communityEmptyPrimaryText}>
+                  Browse communities
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.communityEmptySecondary}
+                onPress={() => navigation.navigate('CreateCommunity')}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="add-outline" size={16} color={COLORS.teal} />
+                <Text style={styles.communityEmptySecondaryText}>
+                  Create a community
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <>
+            {/* 2. New Arrivals */}
+            {renderNewArrivals()}
 
-        {/* 2b. Upcoming Events teaser (full list in EventsScreen) */}
-        {renderUpcomingEvents()}
+            {/* 2b. Upcoming Events teaser (full list in EventsScreen) */}
+            {renderUpcomingEvents()}
 
-        {/* 2c. Community Posts — Post to Community Bucket A. Inline
-             FeedPostCards for member-authored type='community' posts
-             from feed_posts. Sits ahead of Dreams so a new post the
-             user just published is the first thing they see. */}
-        {renderCommunityPosts()}
+            {/* 2c. Community Posts — Post to Community Bucket A. Inline
+                 FeedPostCards for member-authored type='community' posts
+                 from feed_posts. Sits ahead of Dreams so a new post the
+                 user just published is the first thing they see. */}
+            {renderCommunityPosts()}
 
-        {/* 2d. Dreams teaser (full list in DreamFeedScreen) */}
-        {renderDreamFeed()}
+            {/* 2d. Dreams teaser (full list in DreamFeedScreen) */}
+            {renderDreamFeed()}
 
         {/* Kente Divider */}
         <View style={styles.kenteDivider}>
@@ -1233,6 +1276,8 @@ const CommunityTabScreen: React.FC = () => {
 
         {/* 6. Community Memory */}
         {renderCommunityMemory()}
+          </>
+        )}
 
         {/* Bottom spacing for tab bar */}
         <View style={{ height: 100 }} />
@@ -1597,6 +1642,79 @@ const styles = StyleSheet.create({
     color: COLORS.subtitle,
     textAlign: 'center',
     lineHeight: 20,
+  },
+
+  // Empty-state CTA card — shown when the user has zero communities.
+  // Replaces the four independently-empty sections that would otherwise
+  // stack under the pills row and read as "app broken."
+  communityEmptyCard: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 16,
+    padding: 20,
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    gap: 8,
+  },
+  communityEmptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#E6FBF7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  communityEmptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.navy,
+    textAlign: 'center',
+  },
+  communityEmptyBody: {
+    fontSize: 13,
+    color: COLORS.subtitle,
+    textAlign: 'center',
+    lineHeight: 18,
+    paddingHorizontal: 12,
+    marginBottom: 6,
+  },
+  communityEmptyActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  communityEmptyPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.teal,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  communityEmptyPrimaryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.white,
+  },
+  communityEmptySecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.teal,
+  },
+  communityEmptySecondaryText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.teal,
   },
 
   // ── Avatar ───────────────────────────────────────────────────────────────
