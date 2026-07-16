@@ -77,6 +77,21 @@ export type ActivityItem = {
   avatarUrl?: string | null;
   attributedName?: string | null;
   meta?: Record<string, unknown>;
+  // Phase 9 — navigation targets. Populated per kind so the screen
+  // can dispatch to the right detail route:
+  //   * arrival    → userId (community_arrivals.user_id)
+  //   * post       → postId (feed_posts.id — dedupe-safe: same as
+  //                  ActivityItem.id after the "post:" prefix)
+  //   * feed_item  → linkedPostId | linkedGatheringId | attributedUserId
+  //                  (first non-null wins)
+  //   * gathering  → gatheringId (community_gatherings.id — no detail
+  //                  screen yet; screen toasts "coming soon" on tap)
+  userId?: string | null;
+  postId?: string | null;
+  gatheringId?: string | null;
+  linkedPostId?: string | null;
+  linkedGatheringId?: string | null;
+  attributedUserId?: string | null;
 };
 
 export type CommunityHubData = {
@@ -144,7 +159,9 @@ export function useCommunityHub(communityId?: string): CommunityHubData {
         supabase
           .from("community_feed_items")
           .select(
-            "id, feed_type, title, body, icon_name, accent_color, attributed_name, created_at",
+            // Phase 9: linked_* and attributed_user_id let the screen
+            // route the tap to the right detail surface.
+            "id, feed_type, title, body, icon_name, accent_color, attributed_name, attributed_user_id, linked_post_id, linked_gathering_id, created_at",
           )
           .eq("community_id", communityId)
           .order("created_at", { ascending: false })
@@ -152,7 +169,9 @@ export function useCommunityHub(communityId?: string): CommunityHubData {
         supabase
           .from("community_arrivals")
           .select(
-            "id, first_name, origin_city, origin_country, origin_country_flag, created_at",
+            // Phase 9: user_id needed so a tap on an arrival card
+            // opens that user's profile.
+            "id, user_id, first_name, origin_city, origin_country, origin_country_flag, created_at",
           )
           .eq("community_id", communityId)
           .order("created_at", { ascending: false })
@@ -217,6 +236,9 @@ export function useCommunityHub(communityId?: string): CommunityHubData {
           icon_name: string | null;
           accent_color: string | null;
           attributed_name: string | null;
+          attributed_user_id: string | null;
+          linked_post_id: string | null;
+          linked_gathering_id: string | null;
           created_at: string;
         };
         items.push({
@@ -228,12 +250,16 @@ export function useCommunityHub(communityId?: string): CommunityHubData {
           iconName: f.icon_name ?? "megaphone-outline",
           accentColor: f.accent_color ?? "#00C6AE",
           attributedName: f.attributed_name,
+          linkedPostId: f.linked_post_id,
+          linkedGatheringId: f.linked_gathering_id,
+          attributedUserId: f.attributed_user_id,
         });
       }
 
       for (const ar of arrivalsRes.data ?? []) {
         const a = ar as {
           id: string;
+          user_id: string;
           first_name: string;
           origin_city: string | null;
           origin_country: string | null;
@@ -253,6 +279,7 @@ export function useCommunityHub(communityId?: string): CommunityHubData {
           iconName: "person-add-outline",
           accentColor: "#0EA5E9",
           attributedName: a.first_name,
+          userId: a.user_id,
         });
       }
 
@@ -273,6 +300,7 @@ export function useCommunityHub(communityId?: string): CommunityHubData {
           iconName: "calendar-outline",
           accentColor: "#7C3AED",
           meta: { event_type: g.event_type },
+          gatheringId: g.id,
         });
       }
 
@@ -295,6 +323,7 @@ export function useCommunityHub(communityId?: string): CommunityHubData {
           accentColor: "#F97316",
           avatarUrl: p.profile?.avatar_url ?? null,
           attributedName: author,
+          postId: p.id,
         });
       }
 

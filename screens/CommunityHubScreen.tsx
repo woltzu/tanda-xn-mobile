@@ -26,6 +26,7 @@ import {
   useCommunityMembers,
   type CommunityMemberRow,
 } from "../hooks/useCommunityMembers";
+import { showToast } from "../components/Toast";
 
 // Compact relative-time formatter — mirrors the ElderDashboard helper.
 function timeAgo(iso: string): string {
@@ -90,6 +91,43 @@ export default function CommunityHubScreen() {
     loading: membersLoading,
     refresh: refreshMembers,
   } = useCommunityMembers(communityId, memberSearch);
+
+  // Phase 9 — activity feed dispatcher. Maps each ActivityItem kind
+  // to the correct detail route. Feed items resolve in linked-first
+  // order (gathering → post → user). Gathering rows have no detail
+  // screen yet, so they toast "coming soon" instead of a dead nav.
+  const handleActivityPress = (item: ActivityItem) => {
+    if (item.kind === "arrival" && item.userId) {
+      navigation.navigate("UserDreamProfile" as any, { userId: item.userId });
+      return;
+    }
+    if (item.kind === "post" && item.postId) {
+      navigation.navigate("PostDetail" as any, { postId: item.postId });
+      return;
+    }
+    if (item.kind === "feed_item") {
+      if (item.linkedGatheringId) {
+        showToast("Gathering details coming soon", "info");
+        return;
+      }
+      if (item.linkedPostId) {
+        navigation.navigate("PostDetail" as any, {
+          postId: item.linkedPostId,
+        });
+        return;
+      }
+      if (item.attributedUserId) {
+        navigation.navigate("UserDreamProfile" as any, {
+          userId: item.attributedUserId,
+        });
+        return;
+      }
+    }
+    if (item.kind === "gathering") {
+      showToast("Gathering details coming soon", "info");
+      return;
+    }
+  };
 
   // Bug fix: getCommunityCircles and getSubCommunities return Promises
   // (async DB queries in CommunityContext), not plain arrays. Prior code
@@ -510,7 +548,11 @@ export default function CommunityHubScreen() {
                 </View>
               ) : (
                 activity.map((item) => (
-                  <ActivityCard key={item.id} item={item} />
+                  <ActivityCard
+                    key={item.id}
+                    item={item}
+                    onPress={() => handleActivityPress(item)}
+                  />
                 ))
               )}
             </>
@@ -670,11 +712,25 @@ const ROLE_BADGE: Partial<
   elder: { label: "Elder", bg: "#F0FDFB", fg: "#00897B" },
 };
 
-// Activity card — Phase 7. Renders every ActivityItem kind through a
-// single card shape (icon + accent bar / name + timestamp / subtitle).
-function ActivityCard({ item }: { item: ActivityItem }) {
+// Activity card — Phase 7 shape + Phase 9 tap. Renders every
+// ActivityItem kind through a single card layout (icon/avatar +
+// title/subtitle/time). The whole card is a TouchableOpacity — the
+// screen decides where to route via onPress.
+function ActivityCard({
+  item,
+  onPress,
+}: {
+  item: ActivityItem;
+  onPress: () => void;
+}) {
   return (
-    <View style={styles.activityCard}>
+    <TouchableOpacity
+      style={styles.activityCard}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={item.title}
+      activeOpacity={0.75}
+    >
       {item.avatarUrl ? (
         <Image source={{ uri: item.avatarUrl }} style={styles.activityAvatar} />
       ) : (
@@ -702,7 +758,8 @@ function ActivityCard({ item }: { item: ActivityItem }) {
         ) : null}
         <Text style={styles.activityTime}>{timeAgo(item.createdAt)}</Text>
       </View>
-    </View>
+      <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+    </TouchableOpacity>
   );
 }
 
