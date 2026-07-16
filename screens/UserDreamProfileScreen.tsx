@@ -10,12 +10,14 @@ import {
   Image,
   Dimensions,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useFeed, FeedPost } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
+import { useBlockedUsers } from "../hooks/useBlockedUsers";
 import FeedPostCard from "../components/FeedPostCard";
 import ReportButton from "../components/ReportButton";
 import { showToast } from "../components/Toast";
@@ -59,6 +61,7 @@ export default function UserDreamProfileScreen() {
   const { userId } = route.params;
   const { user } = useAuth();
   const { getUserPosts, likedPostIds, savedPostIds, toggleLike, toggleSave } = useFeed();
+  const { isUserBlocked, blockUser, unblockUser } = useBlockedUsers();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [posts, setPosts] = useState<FeedPost[]>([]);
@@ -348,14 +351,67 @@ export default function UserDreamProfileScreen() {
             <Ionicons name="add-circle-outline" size={24} color={colors.accentTeal} />
           </TouchableOpacity>
         ) : (
-          // Moderation P0 (2026-06-13): report this user. ReportButton hides
-          // itself when ownerUserId === auth.uid(), so we also short-circuit
-          // for own-profile above via the isOwnProfile branch.
-          <ReportButton
-            kind="user"
-            targetId={userId}
-            ownerUserId={userId === user?.id ? userId : undefined}
-          />
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              accessibilityLabel={isUserBlocked(userId) ? "Unblock user" : "Block user"}
+              onPress={() => {
+                const currentlyBlocked = isUserBlocked(userId);
+                if (currentlyBlocked) {
+                  Alert.alert(
+                    "Unblock user?",
+                    "You'll see their content again and they'll see yours.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Unblock",
+                        onPress: async () => {
+                          const r = await unblockUser(userId);
+                          if (r.success) showToast("User unblocked", "success");
+                          else showToast(r.error ?? "Failed to unblock", "error");
+                        },
+                      },
+                    ],
+                  );
+                } else {
+                  Alert.alert(
+                    "Block user?",
+                    "You won't see each other's posts or comments. They will not be notified.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Block",
+                        style: "destructive",
+                        onPress: async () => {
+                          const r = await blockUser(userId);
+                          if (r.success) {
+                            showToast("User blocked", "success");
+                            navigation.goBack();
+                          } else {
+                            showToast(r.error ?? "Failed to block", "error");
+                          }
+                        },
+                      },
+                    ],
+                  );
+                }
+              }}
+              hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+              style={styles.headerIconBtn}
+            >
+              <Ionicons
+                name={isUserBlocked(userId) ? "person-add" : "person-remove"}
+                size={22}
+                color={isUserBlocked(userId) ? colors.accentTeal : colors.textSecondary}
+              />
+            </TouchableOpacity>
+            {/* Moderation P0 (2026-06-13): report this user. ReportButton hides
+                itself when ownerUserId === auth.uid(). */}
+            <ReportButton
+              kind="user"
+              targetId={userId}
+              ownerUserId={userId === user?.id ? userId : undefined}
+            />
+          </View>
         )}
       </View>
 
@@ -413,6 +469,14 @@ const styles = StyleSheet.create({
     fontSize: typography.bodyLarge,
     fontWeight: typography.semibold,
     color: colors.textPrimary,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  headerIconBtn: {
+    padding: spacing.xs,
   },
   loadingContainer: {
     flex: 1,
