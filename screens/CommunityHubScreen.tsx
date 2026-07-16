@@ -464,6 +464,11 @@ function CircleCard({
   onJoin: () => void;
   onView: () => void;
 }) {
+  // Fix: t() was previously called on the Join button without being in
+  // scope (t is only bound inside the parent CommunityHubScreen). Any
+  // circle with status !== 'full' would have thrown ReferenceError on
+  // render.
+  const { t } = useTranslation();
   const statusColor = getStatusColor(circle.status);
 
   return (
