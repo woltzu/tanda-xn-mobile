@@ -260,6 +260,7 @@ export default function CirclesV2Screen() {
   const DEFAULT_CYCLE_ID = "default-cycle-1";
 
   const handleOpenDiscover = () => navigation.navigate(Routes.DiscoverCircles);
+  const handleOpenMyCircles = () => navigation.navigate(Routes.MyCircles);
   const handleOpenHealth = () => navigation.navigate(Routes.CircleHealth);
   // KYC P0 (2026-06-12): Conflict P0 bug fix — pass the user's first
   // active circle as circleId. When the user has no circles the screen
@@ -697,6 +698,25 @@ export default function CirclesV2Screen() {
             <Text style={styles.myCirclesEmptyText}>
               {t("circles_screen.my_circles_empty")}
             </Text>
+            {/* Empty-state CTA: users with no circles need a visible path
+                to discovery. The "See all circles" link further down is
+                gated on myCircles.length > 0, so without this button the
+                empty state has no forward affordance. */}
+            <TouchableOpacity
+              style={styles.myCirclesEmptyDiscover}
+              onPress={handleOpenDiscover}
+              accessibilityRole="button"
+              accessibilityLabel={t("circles_screen.my_circles_empty_discover_cta", {
+                defaultValue: "Discover circles",
+              })}
+            >
+              <Ionicons name="compass-outline" size={16} color={colors.cardBg} />
+              <Text style={styles.myCirclesEmptyDiscoverText}>
+                {t("circles_screen.my_circles_empty_discover_cta", {
+                  defaultValue: "Discover circles",
+                })}
+              </Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.myCirclesList}>
@@ -762,15 +782,20 @@ export default function CirclesV2Screen() {
                 </TouchableOpacity>
               );
             })}
-            {myCircles.length > 5 && (
+            {/* "See all circles" — always visible when the user has at
+                least one circle. Was previously conditional on
+                myCircles.length > 5 AND wired to DiscoverCircles, which
+                mismatched the "my_circles_see_all" i18n key's intent.
+                Now consistently routes to the MyCircles screen. */}
+            {myCircles.length > 0 && (
               <TouchableOpacity
                 style={styles.myCirclesSeeAll}
-                onPress={handleOpenDiscover}
+                onPress={handleOpenMyCircles}
                 accessibilityRole="link"
               >
                 <Text style={styles.myCirclesSeeAllText}>
-                  {t("circles_screen.my_circles_see_all", {
-                    count: myCircles.length - 5,
+                  {t("circles_screen.my_circles_see_all_v2", {
+                    defaultValue: "See all circles",
                   })}
                 </Text>
               </TouchableOpacity>
@@ -1461,6 +1486,21 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: "center",
     lineHeight: 18,
+  },
+  myCirclesEmptyDiscover: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: colors.accentTeal,
+  },
+  myCirclesEmptyDiscoverText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.cardBg,
   },
   myCirclesList: {
     marginBottom: 18,
