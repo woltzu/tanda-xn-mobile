@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useElder } from "../context/ElderContext";
 import { usePendingElderRequests } from "../hooks/useCommunityJoinRequests";
 import { useElderCommunities } from "../hooks/useElderCommunities";
+import ScreenHeader from "../components/ScreenHeader";
 import { showToast } from "../components/Toast";
 
 // Compact relative-time formatter. No date library needed.
@@ -139,16 +140,7 @@ export default function ElderDashboardScreen() {
   if (!isElder || !elderProfile || elderProfile.status !== "approved") {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color="#1a1a2e" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t("elder_dashboard.header_system")}</Text>
-          <View style={styles.placeholder} />
-        </View>
+        <ScreenHeader title={t("elder_dashboard.header_system")} />
 
         <View style={styles.notElderContent}>
           <View style={styles.notElderCard}>
@@ -252,21 +244,19 @@ export default function ElderDashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-        >
-          <Ionicons name="arrow-back" size={24} color="#1a1a2e" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t("elder_dashboard.header_dashboard")}</Text>
-        <TouchableOpacity
-          style={styles.settingsButton}
-          onPress={() => navigation.navigate("ElderOnboarding")}
-        >
-          <Ionicons name="settings-outline" size={22} color="#6B7280" />
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title={t("elder_dashboard.header_dashboard")}
+        rightElement={
+          <TouchableOpacity
+            onPress={() => navigation.navigate("ElderOnboarding")}
+            accessibilityRole="button"
+            accessibilityLabel="Elder onboarding"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="settings-outline" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
+        }
+      />
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Elder Status Card */}

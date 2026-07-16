@@ -103,10 +103,19 @@ export default function ScreenHeader({
           {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
         </View>
 
-        {/* Right-side slot. Always render the wrapper so the title
-            column stays centered whether or not a right element is
-            supplied. */}
-        <View style={styles.iconBtnSpacer}>{rightElement}</View>
+        {/* Right-side slot. When rightElement is absent we render a
+            fixed-width spacer so the title stays centered. When
+            present, the wrapper only enforces a minimum width — a
+            two- or three-icon row fits without clipping. */}
+        <View
+          style={
+            rightElement
+              ? styles.rightElementWrap
+              : styles.iconBtnSpacer
+          }
+        >
+          {rightElement}
+        </View>
       </View>
     </LinearGradient>
   );
@@ -136,6 +145,15 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     alignItems: "center",
+    justifyContent: "center",
+  },
+  rightElementWrap: {
+    // Used when a rightElement is supplied — fits 1–3 icons without
+    // clipping. minHeight preserves the row height; alignItems keeps
+    // the content vertically centered.
+    minWidth: 40,
+    height: 40,
+    alignItems: "flex-end",
     justifyContent: "center",
   },
   textCol: {

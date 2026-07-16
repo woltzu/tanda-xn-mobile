@@ -28,6 +28,7 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation } from "react-i18next";
 import { AppFlashList } from "../components/AppFlashList";
+import ScreenHeader from "../components/ScreenHeader";
 import { RootStackParamList } from "../App";
 import { colors } from "../theme/tokens";
 import { useCircles, Circle } from "../context/CirclesContext";
@@ -168,18 +169,7 @@ export default function MyCirclesScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-        >
-          <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Circles</Text>
-        <View style={styles.backButton} />
-      </View>
+      <ScreenHeader title="My Circles" />
 
       {orderedCircles.length === 0 ? (
         <View style={styles.emptyState}>

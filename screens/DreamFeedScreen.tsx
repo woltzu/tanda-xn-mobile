@@ -25,6 +25,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFeed, FeedPost } from "../context/FeedContext";
 import { useAuth } from "../context/AuthContext";
+import ScreenHeader from "../components/ScreenHeader";
 import { useCircles } from "../context/CirclesContext";
 import { useFilteredFeed, FeedFilter } from "../hooks/useFilteredFeed";
 import { useEventTracker } from "../hooks/useEventTracker";
@@ -482,47 +483,47 @@ export default function DreamFeedScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>{t("dream_feed.header_title")}</Text>
-          <Text style={styles.headerSubtitle}>{t("dream_feed.header_subtitle")}</Text>
-        </View>
-        <View style={styles.headerActions}>
-          {/* My Dreams button */}
-          <TouchableOpacity
-            style={styles.myDreamsButton}
-            onPress={() => {
-              if (user?.id) {
-                navigation.navigate("UserDreamProfile", { userId: user.id });
-              }
-            }}
-          >
-            <Ionicons name="person-outline" size={20} color={colors.accentTeal} />
-          </TouchableOpacity>
-          {/* VDF Bucket B.1 — HelpSheet trigger. Recurrent access to
-              the same 4 topics the 2-slide first-visit coach covers,
-              for returning users who want a refresher. */}
-          <TouchableOpacity
-            style={styles.helpButton}
-            onPress={() => setHelpOpen(true)}
-            accessibilityRole="button"
-            accessibilityLabel={t("dream_feed.help.title")}
-          >
-            <Ionicons
-              name="help-circle-outline"
-              size={22}
-              color={colors.textPrimary}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.settingsButton}
-            onPress={() => navigation.navigate("FeedSettings")}
-          >
-            <Ionicons name="settings-outline" size={22} color={colors.textPrimary} />
-          </TouchableOpacity>
-        </View>
-      </View>
+      {/* Header — migrated to shared ScreenHeader (navy gradient) to
+          match the rest of the app. Right slot fits three tap targets:
+          My Dreams (own profile), Help sheet, Feed settings. Icons are
+          white to sit on the navy gradient. */}
+      <ScreenHeader
+        title={t("dream_feed.header_title")}
+        subtitle={t("dream_feed.header_subtitle")}
+        showBack={false}
+        rightElement={
+          <View style={styles.headerActionsInHeader}>
+            <TouchableOpacity
+              onPress={() => {
+                if (user?.id) {
+                  navigation.navigate("UserDreamProfile", { userId: user.id });
+                }
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="My Dreams"
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="person-outline" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setHelpOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t("dream_feed.help.title")}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="help-circle-outline" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("FeedSettings")}
+              accessibilityRole="button"
+              accessibilityLabel="Feed settings"
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons name="settings-outline" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        }
+      />
 
       {/* Filter Tabs */}
       <View style={styles.filterRow}>
@@ -833,6 +834,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  // ScreenHeader rightElement wrapper — sits over the navy gradient
+  // so its children (My Dreams / Help / Settings icons) are all white.
+  headerActionsInHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
   },
   myDreamsButton: {
     width: 36,
