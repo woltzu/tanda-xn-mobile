@@ -29,7 +29,12 @@ import { useAuth } from "../context/AuthContext";
 
 // ── Shapes (match migration 145 jsonb_build_object keys) ─────────────────
 
-export type AdvanceUiCode = "contribution" | "quick" | "flex" | "premium";
+export type AdvanceUiCode =
+  | "contribution"
+  | "quick"
+  | "flex"
+  | "premium"
+  | "mortgage"; // mig 350 — Home Country Mortgage
 
 export type AdvanceProductCard = {
   ui_code: AdvanceUiCode;

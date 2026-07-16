@@ -59,6 +59,7 @@ const PRODUCT_ICON: Record<AdvanceUiCode, string> = {
   quick: "⚡",
   flex: "\u{1F4CA}",
   premium: "\u{1F48E}",
+  mortgage: "\u{1F3E0}", // 🏠 — matches loan_products.icon on the mortgage row
 };
 
 const FIRST_VISIT_KEY = "@tandaxn_advance_hub_seen_v1";
