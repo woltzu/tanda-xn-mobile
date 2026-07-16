@@ -24,12 +24,25 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 
+export type BlockedUserProfile = {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+};
+
 export type BlockedUserRow = {
   id: string;
   blocker_id: string;
   blocked_id: string;
   reason: string | null;
   created_at: string;
+  // Enriched via join on blocked_users.blocked_id → profiles.id
+  // (constraint name blocked_users_blocked_id_fkey, mig 346).
+  // Null-safe: if the blocked profile is later deleted, ON DELETE
+  // CASCADE removes the block row too — but during the brief window
+  // between deletion and cascade, or if the join returns nothing, we
+  // fall through to a "(deleted user)" display.
+  profile?: BlockedUserProfile | null;
 };
 
 export function useBlockedUsers() {
@@ -47,11 +60,22 @@ export function useBlockedUsers() {
     try {
       const { data, error } = await supabase
         .from("blocked_users")
-        .select("*")
+        .select(
+          `
+            id,
+            blocker_id,
+            blocked_id,
+            reason,
+            created_at,
+            profile:profiles!blocked_users_blocked_id_fkey(
+              id, full_name, avatar_url
+            )
+          `,
+        )
         .eq("blocker_id", user.id)
         .order("created_at", { ascending: false });
       if (!error && data) {
-        setBlocked(data as BlockedUserRow[]);
+        setBlocked(data as unknown as BlockedUserRow[]);
       }
     } finally {
       setLoading(false);
@@ -144,5 +168,9 @@ export function useBlockedUsers() {
     isUserBlocked,
     isBlockedByUser,
     getBlockedIds,
+    // Aliases requested by the Phase 5 spec — keep the existing names
+    // available too so we don't churn call sites.
+    blockedUsers: blocked,
+    fetchBlockedUsers: refresh,
   };
 }

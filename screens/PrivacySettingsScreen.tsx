@@ -390,6 +390,32 @@ export default function PrivacySettingsScreen() {
             </View>
           </View>
 
+          {/* Phase 5 — Blocked Users management. Entry point to a
+              dedicated screen listing everyone the caller has blocked
+              via the mig 346 blocked_users table. */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>People</Text>
+            <View style={styles.card}>
+              <TouchableOpacity
+                style={styles.navRow}
+                onPress={() => navigation.navigate("BlockedUsers")}
+                accessibilityRole="button"
+                accessibilityLabel="Blocked Users"
+              >
+                <View style={styles.navRowIconWrap}>
+                  <Ionicons name="ban-outline" size={20} color="#DC2626" />
+                </View>
+                <View style={styles.navRowBody}>
+                  <Text style={styles.navRowTitle}>Blocked Users</Text>
+                  <Text style={styles.navRowSubtitle}>
+                    Manage who can't see your content
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {/* Info Note */}
           <View style={styles.infoCard}>
             <Ionicons name="shield-checkmark" size={18} color="#00897B" />
@@ -561,6 +587,33 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     gap: 10,
+  },
+  navRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+    gap: 12,
+  },
+  navRowIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FEF2F2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  navRowBody: {
+    flex: 1,
+  },
+  navRowTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1a1a2e",
+  },
+  navRowSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
   },
   infoText: {
     flex: 1,

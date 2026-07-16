@@ -161,6 +161,7 @@ import TwoFactorAuthScreen from "./screens/TwoFactorAuthScreen";
 import NotificationPrefsScreen from "./screens/NotificationPrefsScreen";
 import NotificationsInboxScreen from "./screens/NotificationsInboxScreen";
 import PrivacySettingsScreen from "./screens/PrivacySettingsScreen";
+import BlockedUsersScreen from "./screens/BlockedUsersScreen";
 import LinkedAccountsScreen from "./screens/LinkedAccountsScreen";
 import ActiveSessionsScreen from "./screens/ActiveSessionsScreen";
 import HelpCenterScreen from "./screens/HelpCenterScreen";
@@ -651,6 +652,7 @@ export type RootStackParamList = {
   NotificationPrefs: undefined;
   NotificationsInbox: undefined;
   PrivacySettings: undefined;
+  BlockedUsers: undefined;
   LinkedAccounts: {
     // Select-a-card mode: rows show a Select button in place of the
     // more-menu. On tap, we navigate back to `returnScreen` with
@@ -1242,6 +1244,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="TwoFactorAuth" component={TwoFactorAuthScreen} />
       <HomeStack.Screen name="NotificationPrefs" component={NotificationPrefsScreen} />
       <HomeStack.Screen name="PrivacySettings" component={PrivacySettingsScreen} />
+      <HomeStack.Screen name="BlockedUsers" component={BlockedUsersScreen} />
       <HomeStack.Screen name="LinkedAccounts" component={LinkedAccountsScreen} />
       <HomeStack.Screen name="ActiveSessions" component={ActiveSessionsScreen} />
       <HomeStack.Screen name="AboutApp" component={AboutAppScreen} />

@@ -76,6 +76,7 @@ export const Routes = {
   CircleAutopaySetup: "CircleAutopaySetup",
   CommunityPreferences: "CommunityPreferences",
   BecomeElder: "BecomeElder",
+  BlockedUsers: "BlockedUsers",
   BookService: "BookService",
   BulkInvites: "BulkInvites",
   ChangePassword: "ChangePassword",
