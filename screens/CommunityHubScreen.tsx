@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -28,8 +29,40 @@ export default function CommunityHubScreen() {
   const { getCommunityById, getCommunityCircles, getSubCommunities } = useCommunity();
 
   const community = getCommunityById(communityId);
-  const circles = getCommunityCircles(communityId);
-  const subCommunities = getSubCommunities(communityId);
+
+  // Bug fix: getCommunityCircles and getSubCommunities return Promises
+  // (async DB queries in CommunityContext), not plain arrays. Prior code
+  // assigned the Promise object directly, so `circles.map(...)` crashed
+  // with "circles.map is not a function." Load them into state via a
+  // useEffect that awaits both in parallel.
+  const [circles, setCircles] = useState<CommunityCircle[]>([]);
+  const [subCommunities, setSubCommunities] = useState<SubCommunity[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (!communityId) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const [c, s] = await Promise.all([
+          getCommunityCircles(communityId).catch(() => [] as CommunityCircle[]),
+          getSubCommunities(communityId).catch(() => [] as SubCommunity[]),
+        ]);
+        if (cancelled) return;
+        setCircles(c || []);
+        setSubCommunities(s || []);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [communityId, getCommunityCircles, getSubCommunities]);
 
   const [activeTab, setActiveTab] = useState<TabId>("circles");
 
@@ -208,26 +241,37 @@ export default function CommunityHubScreen() {
                 <Text style={styles.createCircleText}>{t("community_hub.btn_create_circle")}</Text>
               </TouchableOpacity>
 
-              {/* Circles List */}
-              {circles.map((circle) => (
-                <CircleCard
-                  key={circle.id}
-                  circle={circle}
-                  getStatusColor={getStatusColor}
-                  getStatusLabel={getStatusLabel}
-                  onJoin={() => navigation.navigate("JoinCircleConfirm" as any, { circleId: circle.id, source: "community" })}
-                  onView={() => navigation.navigate("CircleDetail", { circleId: circle.id })}
-                />
-              ))}
-
-              {circles.length === 0 && (
+              {/* Loading spinner while the async fetch is in flight —
+                  avoids a flash of the "no circles" empty state on
+                  cold load. */}
+              {loading ? (
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyEmoji}>⭕</Text>
-                  <Text style={styles.emptyTitle}>{t("community_hub.empty_no_circles")}</Text>
-                  <Text style={styles.emptySubtitle}>
-                    Be the first to create a circle in this community
-                  </Text>
+                  <ActivityIndicator color="#00C6AE" />
                 </View>
+              ) : (
+                <>
+                  {/* Circles List */}
+                  {circles.map((circle) => (
+                    <CircleCard
+                      key={circle.id}
+                      circle={circle}
+                      getStatusColor={getStatusColor}
+                      getStatusLabel={getStatusLabel}
+                      onJoin={() => navigation.navigate("JoinCircleConfirm" as any, { circleId: circle.id, source: "community" })}
+                      onView={() => navigation.navigate("CircleDetail", { circleId: circle.id })}
+                    />
+                  ))}
+
+                  {circles.length === 0 && (
+                    <View style={styles.emptyState}>
+                      <Text style={styles.emptyEmoji}>⭕</Text>
+                      <Text style={styles.emptyTitle}>{t("community_hub.empty_no_circles")}</Text>
+                      <Text style={styles.emptySubtitle}>
+                        Be the first to create a circle in this community
+                      </Text>
+                    </View>
+                  )}
+                </>
               )}
             </>
           )}
