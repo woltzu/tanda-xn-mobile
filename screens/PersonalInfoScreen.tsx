@@ -45,6 +45,16 @@ export default function PersonalInfoScreen() {
   const [country, setCountry] = useState("");
   const [originalCity, setOriginalCity] = useState("");
   const [originalCountry, setOriginalCountry] = useState("");
+  // Phase 6 — heritage/origin fields. Writes to these two columns fire
+  // mig 344's tr_auto_assign_on_profile_change and enroll the user into
+  // the matching country + city communities. Country is an ISO alpha-2
+  // code from CountryPicker (matches the current-country picker). City
+  // is a freeform string.
+  const [cityOfOrigin, setCityOfOrigin] = useState("");
+  const [countryOfOrigin, setCountryOfOrigin] = useState("");
+  const [originalCityOfOrigin, setOriginalCityOfOrigin] = useState("");
+  const [originalCountryOfOrigin, setOriginalCountryOfOrigin] = useState("");
+  const [originCountryPickerOpen, setOriginCountryPickerOpen] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [avatarErrored, setAvatarErrored] = useState(false);
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
@@ -77,6 +87,15 @@ export default function PersonalInfoScreen() {
     setCountry(co);
     setOriginalCity(c);
     setOriginalCountry(co);
+    // Phase 6 — hydrate origin fields. Country_of_origin is stored as
+    // an ISO code (same convention as `country`); city_of_origin is a
+    // freeform string. Both nullable → default to "".
+    const oc = (profile.city_of_origin ?? "").toString();
+    const oco = (profile.country_of_origin ?? "").toUpperCase();
+    setCityOfOrigin(oc);
+    setCountryOfOrigin(oco);
+    setOriginalCityOfOrigin(oc);
+    setOriginalCountryOfOrigin(oco);
     setAvatarErrored(false);
     // Mirror profile.phone into the editable input — important after
     // OTP success bumps profile.phone via the migration 167 trigger.
@@ -140,37 +159,64 @@ export default function PersonalInfoScreen() {
     n: string,
     p: string,
     c: string,
-    co: string
+    co: string,
+    oc: string,
+    oco: string,
   ): boolean =>
     n !== (user?.name || "") ||
     p !== (user?.phone || "") ||
     c !== originalCity ||
-    co !== originalCountry;
+    co !== originalCountry ||
+    oc !== originalCityOfOrigin ||
+    oco !== originalCountryOfOrigin;
 
   const handleNameChange = (text: string) => {
     setName(text);
-    setHasChanges(recomputeChanges(text, phone, city, country));
+    setHasChanges(
+      recomputeChanges(text, phone, city, country, cityOfOrigin, countryOfOrigin),
+    );
   };
 
   const handlePhoneChange = (text: string) => {
     setPhone(text);
-    setHasChanges(recomputeChanges(name, text, city, country));
+    setHasChanges(
+      recomputeChanges(name, text, city, country, cityOfOrigin, countryOfOrigin),
+    );
   };
 
   const handleCityChange = (text: string) => {
     setCity(text);
-    setHasChanges(recomputeChanges(name, phone, text, country));
+    setHasChanges(
+      recomputeChanges(name, phone, text, country, cityOfOrigin, countryOfOrigin),
+    );
   };
 
   const handleCountryPick = (code: string) => {
     // P1: code is guaranteed to be a valid ISO 3166-1 alpha-2 because
     // it came from the static picker list. No regex validation needed.
     setCountry(code);
-    setHasChanges(recomputeChanges(name, phone, city, code));
+    setHasChanges(
+      recomputeChanges(name, phone, city, code, cityOfOrigin, countryOfOrigin),
+    );
     setCountryPickerOpen(false);
     // User overrode the auto-detected suggestion — drop the chip so we
     // stop telling them about a value they already replaced.
     setDetectedCountry(null);
+  };
+
+  const handleCityOfOriginChange = (text: string) => {
+    setCityOfOrigin(text);
+    setHasChanges(
+      recomputeChanges(name, phone, city, country, text, countryOfOrigin),
+    );
+  };
+
+  const handleCountryOfOriginPick = (code: string) => {
+    setCountryOfOrigin(code);
+    setHasChanges(
+      recomputeChanges(name, phone, city, country, cityOfOrigin, code),
+    );
+    setOriginCountryPickerOpen(false);
   };
 
   // P2 (profile review): kick off the SMS OTP for the current phone
@@ -225,17 +271,32 @@ export default function PersonalInfoScreen() {
         phone: phone.trim() || undefined,
       });
 
-      // city + country live directly on profiles. Empty strings → NULL so
-      // the inference engine's "skip when missing" guard fires correctly.
+      // city + country + city_of_origin + country_of_origin all live
+      // directly on profiles. Empty strings → NULL so:
+      //   * the inference engine's "skip when missing" guard fires (city/country)
+      //   * mig 344's auto-assign trigger's IS NOT NULL AND <> '' guard skips
+      //     when origin is cleared (country_of_origin/city_of_origin)
       const cityChanged = city !== originalCity;
       const countryChanged = country !== originalCountry;
-      if ((cityChanged || countryChanged) && user?.id) {
+      const cityOfOriginChanged = cityOfOrigin !== originalCityOfOrigin;
+      const countryOfOriginChanged = countryOfOrigin !== originalCountryOfOrigin;
+      const originChanged = cityOfOriginChanged || countryOfOriginChanged;
+      if (
+        (cityChanged || countryChanged || originChanged) &&
+        user?.id
+      ) {
+        const payload: Record<string, string | null> = {};
+        if (cityChanged) payload.city = city.trim() || null;
+        if (countryChanged) payload.country = trimmedCountry || null;
+        if (cityOfOriginChanged) {
+          payload.city_of_origin = cityOfOrigin.trim() || null;
+        }
+        if (countryOfOriginChanged) {
+          payload.country_of_origin = countryOfOrigin.trim() || null;
+        }
         const { error } = await supabase
           .from("profiles")
-          .update({
-            city: city.trim() || null,
-            country: trimmedCountry || null,
-          })
+          .update(payload)
           .eq("id", user.id);
         if (error) throw error;
 
@@ -251,6 +312,20 @@ export default function PersonalInfoScreen() {
             })
             .then(() => null)
             .catch(() => null);
+        }
+
+        // Phase 6 — surface auto-assignment as its own toast so the
+        // user knows why they suddenly appear in new communities. The
+        // trigger fires server-side inside the UPDATE transaction; we
+        // don't need to await anything here, just tell them what to
+        // expect. Only shown when either origin field was actually
+        // changed to a non-empty value.
+        if (
+          originChanged &&
+          ((cityOfOriginChanged && cityOfOrigin.trim()) ||
+            (countryOfOriginChanged && countryOfOrigin.trim()))
+        ) {
+          showToast("Adding you to matching communities…", "info");
         }
       }
 
@@ -507,6 +582,78 @@ export default function PersonalInfoScreen() {
                 {t("personal_info.country_helper")}
               </Text>
             </View>
+
+            {/* Phase 6 — Where you're from. Editing either field fires
+                mig 344's tr_auto_assign_on_profile_change trigger and
+                enrolls the user into the matching country/city
+                communities. Distinct from Current City / Current
+                Country above, which stay tied to the user's present
+                location (community-inference and localization). */}
+            <View style={styles.originSectionHeader}>
+              <Text style={styles.sectionTitle}>Where you're from</Text>
+              <Text style={styles.sectionSubtitle}>
+                We use this to add you to your heritage communities so
+                you can meet people from the same country or hometown.
+              </Text>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Country of origin</Text>
+              <TouchableOpacity
+                style={styles.inputContainer}
+                onPress={() => setOriginCountryPickerOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Country of origin"
+              >
+                <Ionicons
+                  name="earth-outline"
+                  size={20}
+                  color="#6B7280"
+                  style={styles.inputIcon}
+                />
+                <Text
+                  style={[
+                    styles.input,
+                    !countryOfOrigin && styles.countryPlaceholder,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {countryOfOrigin
+                    ? findCountryByCode(countryOfOrigin)?.name ??
+                      countryOfOrigin
+                    : "Tap to choose"}
+                </Text>
+                {countryOfOrigin ? (
+                  <Text style={styles.countryCodeChip}>
+                    {countryOfOrigin}
+                  </Text>
+                ) : null}
+                <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>City of origin</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons
+                  name="home-outline"
+                  size={20}
+                  color="#6B7280"
+                  style={styles.inputIcon}
+                />
+                <TextInput
+                  style={styles.input}
+                  value={cityOfOrigin}
+                  onChangeText={handleCityOfOriginChange}
+                  placeholder="Hometown"
+                  placeholderTextColor="#9CA3AF"
+                  autoCapitalize="words"
+                />
+              </View>
+              <Text style={styles.helperText}>
+                Your hometown or place of birth. Optional.
+              </Text>
+            </View>
           </View>
 
           {/* P0 (profile review): XnScore card removed — duplicated the
@@ -537,6 +684,13 @@ export default function PersonalInfoScreen() {
         currentCode={country}
         onPick={handleCountryPick}
         onClose={() => setCountryPickerOpen(false)}
+      />
+
+      <CountryPicker
+        visible={originCountryPickerOpen}
+        currentCode={countryOfOrigin}
+        onPick={handleCountryOfOriginPick}
+        onClose={() => setOriginCountryPickerOpen(false)}
       />
 
       <EmailChangeModal
@@ -710,6 +864,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#6B7280",
     marginLeft: 4,
+  },
+  // Phase 6 — origin section header sits between the current-location
+  // fields and the origin fields to break the form into two clear
+  // groups.
+  originSectionHeader: {
+    marginTop: 12,
+    gap: 4,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#0A2342",
+    marginLeft: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginLeft: 4,
+    lineHeight: 18,
   },
   footer: {
     position: "absolute",

@@ -20,6 +20,13 @@ export type Profile = {
   avatar_url: string | null;
   city: string | null;
   country: string | null;
+  // mig 344 — heritage/origin fields. Distinct from `city`/`country`
+  // (which are the current/current-country fields, already on
+  // profiles). Writes to these two columns fire
+  // tr_auto_assign_on_profile_change and enroll the user into the
+  // matching country + city communities.
+  city_of_origin: string | null;
+  country_of_origin: string | null;
   date_of_birth: string | null;
   email: string | null;
   full_name: string | null;
@@ -35,7 +42,7 @@ const CACHE_TTL_MS = 60_000;
 const cache = new Map<string, CacheEntry>();
 
 const SELECT_COLUMNS =
-  "id, avatar_url, city, country, date_of_birth, email, full_name, language, phone, phone_verified, round_up_increment, timezone";
+  "id, avatar_url, city, country, city_of_origin, country_of_origin, date_of_birth, email, full_name, language, phone, phone_verified, round_up_increment, timezone";
 
 export type UseProfileResult = {
   profile: Profile | null;
