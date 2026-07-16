@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Modal,
+  Image,
+  Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,6 +16,23 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useTranslation } from "react-i18next";
 import { useElder } from "../context/ElderContext";
+import { usePendingElderRequests } from "../hooks/useCommunityJoinRequests";
+import { showToast } from "../components/Toast";
+
+// Compact relative-time formatter. No date library needed.
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.round(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
 
 // Conflict P1 (2026-06-12): first-visit coach mark flag. One-shot.
 const COACH_MARK_KEY = "@tandaxn_elder_dashboard_seen_v1";
@@ -67,6 +86,48 @@ export default function ElderDashboardScreen() {
     submitRuling,
     escalateCase,
   } = useElder();
+
+  // Phase 4 — pending community join requests where the caller is an
+  // active elder or owner. Hook uses mig 345 RLS to gate visibility
+  // server-side; here we only need to render + wire approve/reject.
+  const {
+    pending: pendingJoinRequests,
+    loading: joinRequestsLoading,
+    approve: approveJoinRequest,
+    reject: rejectJoinRequest,
+  } = usePendingElderRequests();
+  const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
+
+  const handleApproveJoinRequest = async (id: string) => {
+    if (busyRequestId) return;
+    setBusyRequestId(id);
+    const r = await approveJoinRequest(id);
+    setBusyRequestId(null);
+    if (r.success) showToast("Request approved", "success");
+    else showToast(r.error ?? "Failed to approve", "error");
+  };
+
+  const handleRejectJoinRequest = (id: string) => {
+    if (busyRequestId) return;
+    Alert.alert(
+      "Reject request?",
+      "The applicant won't be notified with details. They can request again later.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reject",
+          style: "destructive",
+          onPress: async () => {
+            setBusyRequestId(id);
+            const r = await rejectJoinRequest(id);
+            setBusyRequestId(null);
+            if (r.success) showToast("Request rejected", "success");
+            else showToast(r.error ?? "Failed to reject", "error");
+          },
+        },
+      ],
+    );
+  };
 
   // If not an elder yet, show the become elder CTA
   if (!isElder || !elderProfile || elderProfile.status !== "approved") {
@@ -287,6 +348,103 @@ export default function ElderDashboardScreen() {
             )}
           </View>
         )}
+
+        {/* Phase 4 — Pending community join requests. Elders/owners see
+            the queue for every community where they have that role. RLS
+            filters server-side. Empty state stays visible so elders
+            know the surface exists once the queue drains. */}
+        <View style={styles.joinRequestsSection}>
+          <Text style={styles.sectionTitle}>Pending Join Requests</Text>
+          {joinRequestsLoading ? (
+            <View style={styles.joinRequestsEmpty}>
+              <Text style={styles.joinRequestsEmptyText}>Loading…</Text>
+            </View>
+          ) : pendingJoinRequests.length === 0 ? (
+            <View style={styles.joinRequestsEmpty}>
+              <Ionicons name="mail-open-outline" size={22} color="#9CA3AF" />
+              <Text style={styles.joinRequestsEmptyText}>
+                No pending join requests
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.joinRequestsList}>
+              {pendingJoinRequests.map((req) => {
+                const displayName =
+                  req.applicant?.full_name?.trim() || "Someone";
+                const origin =
+                  [req.applicant?.city_of_origin, req.applicant?.country_of_origin]
+                    .filter(Boolean)
+                    .join(", ") || null;
+                const isBusy = busyRequestId === req.id;
+                return (
+                  <View key={req.id} style={styles.joinRequestCard}>
+                    <View style={styles.joinRequestHeader}>
+                      {req.applicant?.avatar_url ? (
+                        <Image
+                          source={{ uri: req.applicant.avatar_url }}
+                          style={styles.joinRequestAvatar}
+                        />
+                      ) : (
+                        <View
+                          style={[
+                            styles.joinRequestAvatar,
+                            styles.joinRequestAvatarFallback,
+                          ]}
+                        >
+                          <Text style={styles.joinRequestAvatarInitial}>
+                            {displayName[0].toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.joinRequestBody}>
+                        <Text style={styles.joinRequestName} numberOfLines={1}>
+                          {displayName}
+                        </Text>
+                        <Text style={styles.joinRequestMeta} numberOfLines={1}>
+                          wants to join{" "}
+                          {req.community?.name ?? "a community"} ·{" "}
+                          {timeAgo(req.requested_at)}
+                        </Text>
+                        {origin ? (
+                          <Text style={styles.joinRequestOrigin} numberOfLines={1}>
+                            From {origin}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    {req.reason ? (
+                      <Text style={styles.joinRequestReason} numberOfLines={3}>
+                        "{req.reason}"
+                      </Text>
+                    ) : null}
+                    <View style={styles.joinRequestActions}>
+                      <TouchableOpacity
+                        style={[styles.joinRequestRejectBtn, isBusy && styles.joinRequestBtnDisabled]}
+                        onPress={() => handleRejectJoinRequest(req.id)}
+                        disabled={isBusy}
+                        accessibilityRole="button"
+                        accessibilityLabel="Reject join request"
+                      >
+                        <Ionicons name="close" size={16} color="#DC2626" />
+                        <Text style={styles.joinRequestRejectText}>Reject</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.joinRequestApproveBtn, isBusy && styles.joinRequestBtnDisabled]}
+                        onPress={() => handleApproveJoinRequest(req.id)}
+                        disabled={isBusy}
+                        accessibilityRole="button"
+                        accessibilityLabel="Approve join request"
+                      >
+                        <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                        <Text style={styles.joinRequestApproveText}>Approve</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
 
         {/* P2 — Batch resolution mode. Lets an elder pick multiple
             similar disputes and apply one action over the whole set.
@@ -801,6 +959,119 @@ const styles = StyleSheet.create({
     color: "#1a1a2e",
     paddingHorizontal: 20,
     marginBottom: 12,
+  },
+  // Phase 4 — Pending join request styles
+  joinRequestsSection: {
+    marginBottom: 20,
+  },
+  joinRequestsEmpty: {
+    marginHorizontal: 20,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+  },
+  joinRequestsEmptyText: {
+    fontSize: 13,
+    color: "#6B7280",
+  },
+  joinRequestsList: {
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  joinRequestCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  joinRequestHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  joinRequestAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#E5E7EB",
+  },
+  joinRequestAvatarFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  joinRequestAvatarInitial: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#4B5563",
+  },
+  joinRequestBody: {
+    flex: 1,
+  },
+  joinRequestName: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1a1a2e",
+  },
+  joinRequestMeta: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  joinRequestOrigin: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    marginTop: 2,
+  },
+  joinRequestReason: {
+    fontSize: 13,
+    color: "#4B5563",
+    fontStyle: "italic",
+    marginTop: 8,
+    lineHeight: 18,
+  },
+  joinRequestActions: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 12,
+    justifyContent: "flex-end",
+  },
+  joinRequestRejectBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FEF2F2",
+  },
+  joinRequestRejectText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#DC2626",
+  },
+  joinRequestApproveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#00C6AE",
+  },
+  joinRequestApproveText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  joinRequestBtnDisabled: {
+    opacity: 0.5,
   },
   // P2 — Batch resolution styles
   batchSection: { marginBottom: 20 },
