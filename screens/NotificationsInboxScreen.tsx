@@ -198,11 +198,81 @@ export default function NotificationsInboxScreen() {
       markAsRead(notification.id);
 
       // Navigate based on notification type or related entity. Priority:
+      //   0. community_* types (mig 347 + 231 + 221) — Phase 12 dispatch
       //   1. circleId (data or related_entity_type)
       //   2. loan-related
       //   3. security category
       //   4. action_url (Bucket B — real deep-link handling)
       const data = notification.data as Record<string, unknown> | undefined;
+
+      // Phase 12 — community-scoped tap-through. Runs first because the
+      // notification `type` tells us exactly where to go; falling through
+      // to the legacy circleId / action_url handlers would either miss
+      // (no circleId in data) or worst-case route to the wrong screen.
+      // The route_hint stamped by the community-notification EF (Phase
+      // 11) is treated as a last-ditch fallback for future community
+      // types we haven't wired here yet.
+      const communityId = data?.community_id as string | undefined;
+      switch (notification.type) {
+        case "community_join_request":
+          // Elders' review queue lives on ElderDashboard (Phase 4).
+          // No community-scoped filter yet; the whole pending queue
+          // opens and the elder finds the row.
+          navigation.navigate(Routes.ElderDashboard);
+          return;
+        case "community_join_approved":
+        case "community_join_rejected":
+          // Take the applicant into the community they just got a
+          // verdict on — Members tab so approvals see themselves
+          // already on the roster, rejections see the current
+          // membership state that excluded them.
+          if (communityId) {
+            navigation.navigate("CommunityHub", {
+              communityId,
+              initialTab: "members",
+            });
+            return;
+          }
+          break;
+        case "community_new_arrival":
+        case "gathering_created":
+          // Both surface as items on the Activity tab of the
+          // community's hub.
+          if (communityId) {
+            navigation.navigate("CommunityHub", {
+              communityId,
+              initialTab: "activity",
+            });
+            return;
+          }
+          break;
+        case "community_post_created": {
+          const postId = data?.post_id as string | undefined;
+          if (postId) {
+            navigation.navigate("PostDetail", { postId });
+            return;
+          }
+          if (communityId) {
+            navigation.navigate("CommunityHub", {
+              communityId,
+              initialTab: "activity",
+            });
+            return;
+          }
+          break;
+        }
+      }
+      // Fallback for a future community_* type the switch above
+      // doesn't cover: honor the route_hint the push sweeper stamped.
+      const hint = data?.route_hint as string | undefined;
+      if (hint === "ElderDashboard") {
+        navigation.navigate(Routes.ElderDashboard);
+        return;
+      }
+      if (hint === "CommunityHub" && communityId) {
+        navigation.navigate("CommunityHub", { communityId });
+        return;
+      }
 
       if (data?.circleId || notification.related_entity_type === "circle") {
         const circleId = (data?.circleId as string) || notification.related_entity_id;
