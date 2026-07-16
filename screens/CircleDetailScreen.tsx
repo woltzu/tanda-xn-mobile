@@ -476,6 +476,35 @@ function CircleDetailBody({
   const { overview: substituteOverview } = useSubstitutePoolSummary();
   const substituteAvailableCount = substituteOverview?.totalActive ?? 0;
 
+  // Payout ordering AI decision — surfaces a "View AI decision" link on
+  // the payout-order card when mig 327's assign_initial_positions has
+  // written an ai_decisions row for the current user in this circle.
+  // Query shape mirrors what record_ai_decision writes at
+  // 327_assign_initial_positions_by_rotation_method.sql:152 —
+  // (decision_type='payout_position', source_event_id=circle_id,
+  // source_event_type='circles'). RLS on ai_decisions restricts to
+  // member_id=auth.uid(), so this only returns the caller's own row —
+  // exactly the "your AI decision" we want to surface.
+  const [hasPayoutAiDecision, setHasPayoutAiDecision] = useState(false);
+  useEffect(() => {
+    if (!circleId) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("ai_decisions")
+        .select("id")
+        .eq("decision_type", "payout_position")
+        .eq("source_event_id", circleId)
+        .eq("source_event_type", "circles")
+        .limit(1)
+        .maybeSingle();
+      if (!cancelled) setHasPayoutAiDecision(!!data?.id);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [circleId]);
+
   // Voting Bucket A — open-count badge on the header voting icon. Uses the
   // same hook that drives the voting screen so it stays in sync (the hook
   // subscribes to postgres_changes on circle_proposals).
@@ -1695,6 +1724,38 @@ function CircleDetailBody({
         </View>
       )}
 
+      {/* Partial Contribution activation link — Phase D4 discovery fix.
+          Renders when the user is a member of an active circle and does
+          NOT already have a partial-contribution plan. Destination
+          screen (PartialContributionScreen) enforces eligibility gates
+          server-side via checkEligibility RPC; the link is a soft
+          affordance that surfaces the feature. cycleId omitted — the
+          screen resolves the active cycle from circle_cycles when
+          absent (see line 1703 comment on the active-plan card). */}
+      {isMember && !hasPartialPlan && circle.status === "active" && (
+        <TouchableOpacity
+          style={styles.partialActivateRow}
+          onPress={() =>
+            navigation.navigate("PartialContribution", { circleId })
+          }
+          accessibilityRole="button"
+          accessibilityLabel="Behind on payments? Split into catch-ups"
+        >
+          <View style={[styles.substituteRowIcon, { backgroundColor: "#EEF2FF" }]}>
+            <Ionicons name="calendar-outline" size={20} color={colors.accentTeal} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.substituteRowTitle}>
+              Need more time?
+            </Text>
+            <Text style={styles.substituteRowSubtitle}>
+              Split your contribution into two catch-up payments.
+            </Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
+      )}
+
       {/* Active Partial Plan Card — Phase D4 of feat(partial).
           Renders only when the current user has an active partial-
           contribution plan for this circle. Real entry point for plan
@@ -1757,6 +1818,57 @@ function CircleDetailBody({
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Position Swap discovery card — feat(position-swap) D2 follow-up.
+          The whole engine (14 RPCs + hourly cron + EF) was reachable
+          only from the Options sheet's "Swap Position" menu item.
+          This surface makes the feature visible on the main circle
+          screen when the user has a position assigned and the circle
+          is active. */}
+      {isMember &&
+        circle.status === "active" &&
+        typeof circle.myPosition === "number" &&
+        circle.myPosition > 0 && (
+          <TouchableOpacity
+            style={styles.positionSwapCard}
+            onPress={() =>
+              navigation.navigate("PositionSwap", { circleId })
+            }
+            accessibilityRole="button"
+            accessibilityLabel={`Your payout position is ${circle.myPosition} of ${circle.memberCount}. Tap to request a swap.`}
+          >
+            <View style={styles.positionSwapHeader}>
+              <View
+                style={[
+                  styles.substituteRowIcon,
+                  { backgroundColor: "#DBEAFE" },
+                ]}
+              >
+                <Ionicons
+                  name="swap-horizontal"
+                  size={20}
+                  color="#1D4ED8"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.substituteRowTitle}>
+                  Your payout position
+                </Text>
+                <Text style={styles.positionSwapPositionText}>
+                  You are #{circle.myPosition} of {circle.memberCount}
+                </Text>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={18}
+                color={colors.textSecondary}
+              />
+            </View>
+            <Text style={styles.substituteRowSubtitle}>
+              Request a position swap with another member.
+            </Text>
+          </TouchableOpacity>
+        )}
 
       {/* Payment Progress */}
       <View style={styles.card}>
@@ -2131,6 +2243,40 @@ function CircleDetailBody({
             {t("circle_detail.payout_order_title")}
           </Text>
           {payoutOrderBody}
+          {/* View AI decision link — mig 327's assign_initial_positions
+              records a payout_position ai_decisions row per member with
+              source_event_id=circle_id. Only rendered when the caller
+              has one (hasPayoutAiDecision effect above). Navigates to
+              DecisionHistoryScreen pre-filtered to payout_position type
+              via the initialDecisionType param the screen already
+              supports (see DecisionHistoryScreen.tsx:159). */}
+          {hasPayoutAiDecision && (
+            <TouchableOpacity
+              style={styles.payoutOrderAiLink}
+              onPress={() =>
+                navigation.navigate(
+                  "DecisionHistory" as never,
+                  { initialDecisionType: "payout_position" } as never,
+                )
+              }
+              accessibilityRole="button"
+              accessibilityLabel="View AI decision that generated the payout order"
+            >
+              <Ionicons
+                name="sparkles-outline"
+                size={14}
+                color={colors.accentTeal}
+              />
+              <Text style={styles.payoutOrderAiLinkText}>
+                View AI decision
+              </Text>
+              <Ionicons
+                name="chevron-forward"
+                size={14}
+                color={colors.accentTeal}
+              />
+            </TouchableOpacity>
+          )}
         </View>
 
         <Text style={styles.sectionTitle}>
@@ -3292,6 +3438,65 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textSecondary,
     marginTop: 2,
+  },
+  // Partial-contribution activation link — same shape as substituteRow
+  // so the two discovery affordances read as a group.
+  partialActivateRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: colors.cardBg,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  // Position swap discovery card — slightly taller than the substitute
+  // row because it stacks a two-line body (position + description).
+  positionSwapCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  positionSwapHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 4,
+  },
+  positionSwapPositionText: {
+    fontSize: 13,
+    color: colors.accentTeal,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  // "View AI decision" pill on the payout order card. Compact, teal
+  // tint so it reads as a secondary affordance rather than a primary CTA.
+  payoutOrderAiLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    marginTop: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: colors.tealTintBg,
+  },
+  payoutOrderAiLinkText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: colors.accentTeal,
   },
   memberCardMe: {
     backgroundColor: colors.tealTintBg,
