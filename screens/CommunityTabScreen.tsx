@@ -25,6 +25,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../context/AuthContext';
 import { useCommunity } from '../context/CommunityContext';
+import ScreenHeader from '../components/ScreenHeader';
 import { useElder } from '../context/ElderContext';
 import {
   useUpcomingEvents,
@@ -1132,29 +1133,39 @@ const CommunityTabScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Top Bar */}
-      <View style={styles.topBar}>
-        <View>
-          <Text style={styles.topBarTitle}>{t('community_tab.header')}</Text>
-          <Text style={styles.topBarSubtitle}>{t('community_tab.subtitle')}</Text>
-        </View>
-        <View style={styles.topBarRight}>
-          <TouchableOpacity
-            style={styles.topBarIcon}
-            onPress={() => navigation.navigate('CommunityBrowser')}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="search-outline" size={22} color={COLORS.navy} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.topBarAvatar}
-            onPress={() => navigation.navigate('ProfileMain')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.topBarAvatarText}>{userInitials}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      {/* Top Bar — migrated to shared ScreenHeader (navy gradient) for
+          consistency with the rest of the app. Right slot preserves the
+          two prior tap targets: search (opens CommunityBrowser) and the
+          user-initials avatar chip (opens ProfileMain). Icon + avatar
+          restyled for contrast on the navy background. Any floating
+          overlays mounted by a parent (e.g. the Xn home badge) sit
+          above this and are unaffected. */}
+      <ScreenHeader
+        title={t('community_tab.header')}
+        subtitle={t('community_tab.subtitle')}
+        showBack={false}
+        rightElement={
+          <View style={styles.topBarRight}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('CommunityBrowser')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Search communities"
+            >
+              <Ionicons name="search-outline" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.topBarAvatarOnNavy}
+              onPress={() => navigation.navigate('ProfileMain')}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Open profile"
+            >
+              <Text style={styles.topBarAvatarText}>{userInitials}</Text>
+            </TouchableOpacity>
+          </View>
+        }
+      />
 
       {/* Scrollable Content */}
       <ScrollView
@@ -1374,6 +1385,18 @@ const styles = StyleSheet.create({
     height: 34,
     borderRadius: 17,
     backgroundColor: COLORS.navy,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Avatar variant used inside the navy-gradient ScreenHeader — same
+  // shape but a lighter translucent background so the circle reads on
+  // navy. The old topBarAvatar (navy on white) stays exported in case
+  // anything else references it; safe to prune in a follow-up.
+  topBarAvatarOnNavy: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
