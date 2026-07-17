@@ -70,11 +70,11 @@ const PRODUCT_ICON: Record<AdvanceUiCode, string> = {
 // orange as a premium / long-term product; the others align with the
 // XnScore tier they map to.
 const PRODUCT_COLORS: Record<AdvanceUiCode, string> = {
-  contribution: "#00C6AE", // Circle Boost — teal
-  quick: "#D97706",        // Micro Emergency — amber
+  quick: "#00C6AE",        // Micro Emergency — teal (was amber)
+  contribution: "#8B5CF6", // Circle Boost — purple (was teal)
   flex: "#3B82F6",         // Education — blue
   premium: "#10B981",      // Small Business — green
-  mortgage: "#F97316",     // Home Country Mortgage — orange (accent)
+  mortgage: "#F97316",     // Home Country Mortgage — orange
 };
 
 function accentFor(uiCode: AdvanceUiCode | string): string {
