@@ -1617,7 +1617,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const requestEmailChange = async (newEmail: string) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ email: newEmail });
+      // emailRedirectTo mirrors what signUp does at line ~1454 — the
+      // confirmation link Supabase mails will now deep-link back into
+      // the app at /auth/confirm (AuthCallbackScreen), which reads the
+      // tokens from the URL and completes the auth flow. Without this
+      // the link opens whatever the project's default Site URL is.
+      const { error } = await supabase.auth.updateUser(
+        { email: newEmail },
+        { emailRedirectTo: getEmailRedirectUrl("auth/confirm") },
+      );
       if (error) throw error;
     } catch (error: any) {
       console.error("Request email change error:", error);

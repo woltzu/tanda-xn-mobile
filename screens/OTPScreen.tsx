@@ -35,7 +35,7 @@ export default function OTPScreen() {
   // Undefined falls back to signup-style behavior for backwards compat.
   const fromFlow: "login" | "signup" | "profile_edit" =
     route.params?.from ?? "signup";
-  const { verifyOTP, signInWithPhone, verifyPhoneFromProfile } = useAuth();
+  const { verifyOTP, signInWithPhone, verifyPhoneFromProfile, requestPhoneChange } = useAuth();
 
   const [otpCode, setOtpCode] = useState(["", "", "", "", "", ""]);
   const [resendTimer, setResendTimer] = useState(45);
@@ -147,9 +147,24 @@ export default function OTPScreen() {
     setError("");
     setIsComplete(false);
     inputRefs.current[0]?.focus();
-    // Re-request a fresh OTP via Supabase.
+    // Re-request a fresh OTP via Supabase. Branch on the flow that
+    // opened this screen because Supabase issues distinct OTP TYPES per
+    // flow — and verifyOtp on submit rejects any token whose type
+    // doesn't match:
+    //   * profile_edit  → phone_change token (via requestPhoneChange /
+    //                      supabase.auth.updateUser({ phone })).
+    //   * signup/login  → sms token (via signInWithPhone /
+    //                      supabase.auth.signInWithOtp({ phone })).
+    // Prior code sent a sms token in ALL flows, which meant a resend
+    // during a profile_edit flow silently invalidated the user's next
+    // code — GoTrue would 400 with "Token has expired or is invalid"
+    // even when they typed it correctly.
     try {
-      await signInWithPhone(phoneNumber);
+      if (fromFlow === "profile_edit") {
+        await requestPhoneChange(phoneNumber);
+      } else {
+        await signInWithPhone(phoneNumber);
+      }
     } catch (err: any) {
       setError(err?.message || t("otp.err_invalid_code"));
     }
