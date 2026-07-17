@@ -62,6 +62,33 @@ const PRODUCT_ICON: Record<AdvanceUiCode, string> = {
   mortgage: "\u{1F3E0}", // 🏠 — matches loan_products.icon on the mortgage row
 };
 
+// Per-product accent color. Drives the card border, badge, icon-box
+// tint, tagline text, and the "Advance Fee" stat value when the
+// product is in the active (eligible) state. Locked / preview cards
+// stay neutral (white + gray border + muted text) so the accent
+// clearly signals "you can act on this". Mortgage stands out in
+// orange as a premium / long-term product; the others align with the
+// XnScore tier they map to.
+const PRODUCT_COLORS: Record<AdvanceUiCode, string> = {
+  contribution: "#00C6AE", // Circle Boost — teal
+  quick: "#D97706",        // Micro Emergency — amber
+  flex: "#3B82F6",         // Education — blue
+  premium: "#10B981",      // Small Business — green
+  mortgage: "#F97316",     // Home Country Mortgage — orange (accent)
+};
+
+function accentFor(uiCode: AdvanceUiCode | string): string {
+  return (
+    (PRODUCT_COLORS as Record<string, string>)[uiCode] ?? TEAL
+  );
+}
+
+// Alpha suffix for the tinted background — matches the '#RRGGBB20'
+// pattern (12.5% opacity) the spec calls out for the unlocked card
+// tint. Kept as a named constant so a future design tweak is one
+// edit, not five.
+const ACCENT_TINT_ALPHA = "1F"; // ~12% — subtly warm, still text-legible
+
 const FIRST_VISIT_KEY = "@tandaxn_advance_hub_seen_v1";
 
 type TabKey = "available" | "active" | "history";
@@ -656,7 +683,8 @@ function ProductCard({
   t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   const state = productState(card, xnscore);
-  const styling = stateStyling(state, t);
+  const accent = accentFor(card.ui_code);
+  const styling = stateStyling(state, accent, t);
   const min = card.min_xnscore ?? 0;
   const progress = min > 0 ? Math.min(100, Math.round((xnscore / min) * 100)) : 100;
   const pointsNeeded = card.points_to_unlock ?? 0;
@@ -716,12 +744,12 @@ function ProductCard({
           style={[
             styles.productIconBox,
             {
+              // Active gets a stronger accent tint (matches the card
+              // border); preview + locked stay muted so the icon slot
+              // doesn't look like an unlock affordance the user hasn't
+              // earned yet.
               backgroundColor:
-                state === "active"
-                  ? "#F0FDFB"
-                  : state === "preview"
-                    ? "#EFF6FF"
-                    : "#F5F7FA",
+                state === "active" ? accent + ACCENT_TINT_ALPHA : "#F5F7FA",
               opacity: state === "locked" ? 0.6 : 1,
             },
           ]}
@@ -735,12 +763,10 @@ function ProductCard({
             style={[
               styles.productTagline,
               {
-                color:
-                  state === "active"
-                    ? TEAL
-                    : state === "preview"
-                      ? BLUE
-                      : MUTED,
+                // Tagline picks up the per-product accent when active,
+                // otherwise fades to muted alongside the rest of the
+                // locked-card treatment.
+                color: state === "active" ? accent : MUTED,
               },
             ]}
           >
@@ -763,7 +789,15 @@ function ProductCard({
               <Text style={styles.statLabel}>
                 {t("advance_hub_v2.stat_advance_fee")}
               </Text>
-              <Text style={styles.statValueTeal}>
+              <Text
+                style={[
+                  styles.statValueTeal,
+                  // Advance-fee gets the per-product accent when the
+                  // card is actionable; on locked/preview it mutes to
+                  // match the rest of the locked-card treatment.
+                  { color: state === "active" ? accent : MUTED },
+                ]}
+              >
                 {card.estimated_apr != null
                   ? `${card.estimated_apr.toFixed(1)}%`
                   : "—"}
@@ -797,7 +831,11 @@ function ProductCard({
                 <Text
                   style={[
                     styles.unlockProgressText,
-                    state === "preview" && { color: BLUE },
+                    // Progress text picks up the accent when the user
+                    // is close to unlocking (preview state). Fully
+                    // locked stays muted so it doesn't advertise the
+                    // product as achievable.
+                    state === "preview" && { color: accent },
                   ]}
                 >
                   {xnscore}/{card.min_xnscore}
@@ -809,8 +847,12 @@ function ProductCard({
                     styles.progressFillSm,
                     {
                       width: `${progress}%`,
+                      // Preview (close to unlock) uses the per-product
+                      // accent so the user can see which color they
+                      // are "earning towards". Fully locked stays
+                      // gray.
                       backgroundColor:
-                        state === "preview" ? BLUE : "#9CA3AF",
+                        state === "preview" ? accent : "#9CA3AF",
                     },
                   ]}
                 />
@@ -999,37 +1041,44 @@ function pastStatusPill(
   }
 }
 
-function stateStyling(state: ProductState, t: (key: string) => string) {
+function stateStyling(
+  state: ProductState,
+  accent: string,
+  t: (key: string) => string,
+) {
   switch (state) {
     case "active":
+      // Unlocked card — accent-tinted background + solid accent
+      // border + accent badge. The tint is a ~12% alpha overlay of
+      // the accent, matching the spec's "light tint" call-out.
       return {
-        bg: "#FFFFFF",
-        borderColor: TEAL,
+        bg: accent + ACCENT_TINT_ALPHA,
+        borderColor: accent,
         borderWidth: 2,
         opacity: 1,
-        badgeBg: TEAL,
+        badgeBg: accent,
         badgeLabel: t("advance_hub_v2.badge_active"),
       };
     case "preview":
-      // Bucket B P1.1 — preview now reads as "locked": opacity 0.7, lock icon
-      // inside the badge, uniform "Locked" label. The inner unlock-progress
-      // block still differentiates preview (blue bar + close-to-unlock copy)
-      // from locked (gray bar + further-out copy), so users can still tell
-      // them apart inside the card.
+      // Bucket B P1.1 — preview reads as locked to the user: neutral
+      // white + gray border + muted badge. Inner unlock-progress block
+      // still uses the accent color for the progress fill so the user
+      // can tell "close to unlock" from "far off" without needing a
+      // second border variant.
       return {
         bg: "#FFFFFF",
-        borderColor: BLUE,
+        borderColor: BORDER,
         borderWidth: 1,
-        opacity: 0.7,
-        badgeBg: BLUE,
+        opacity: 0.85,
+        badgeBg: MUTED,
         badgeLabel: t("advance_hub_v2.badge_locked"),
       };
     case "locked":
       return {
-        bg: "#F5F7FA",
+        bg: "#FFFFFF",
         borderColor: BORDER,
         borderWidth: 1,
-        opacity: 0.7,
+        opacity: 0.85,
         badgeBg: MUTED,
         badgeLabel: t("advance_hub_v2.badge_locked"),
       };
