@@ -1742,6 +1742,13 @@ function AppContent() {
               "was not handled by any navigator". Same duplicate pattern
               as ResolutionCenter above. */}
           <Stack.Screen name="MyCircles" component={MyCirclesScreen} />
+          {/* CircleDetail root-Stack fallback. Registered on HomeStack
+              (line ~1072) and CirclesStack (line ~1292) already, but
+              deep-link taps from a Community-tab surface (notification
+              inbox, activity card) resolve navigation against the root
+              Stack — which had no CircleDetail until now. Same pattern
+              as MyCircles / ReportIssue above. */}
+          <Stack.Screen name="CircleDetail" component={CircleDetailScreen} />
           {/* Modal-style screen reachable from CircleDetail's Circle Options sheet.
               The sheet renders via a portal outside CirclesStack's subtree, so
               useNavigation() inside it returns the root Stack — hence this

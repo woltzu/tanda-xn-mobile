@@ -1544,6 +1544,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (error) throw error;
     } catch (error: any) {
       console.error("Request phone change error:", error);
+      // Rewrite the two failure modes that surface to the toast so users
+      // don't see raw supabase-js error strings:
+      //   * "Unable to get SMS provider" — GoTrue can't reach Twilio
+      //     because the project's SMS provider isn't configured (or the
+      //     Twilio secret is unset). Not a user-fixable problem.
+      //   * "SMS rate limit exceeded" — GoTrue throttled us.
+      // Anything else falls through with the original error preserved for
+      // the console breadcrumb but a generic message for the user.
+      const raw = String(error?.message ?? "");
+      let friendly: string | null = null;
+      if (/unable to get sms provider/i.test(raw)) {
+        friendly = "Phone verification is temporarily unavailable. Please try again later or contact support.";
+      } else if (/sms.*rate limit|rate limit.*sms/i.test(raw)) {
+        friendly = "Too many verification requests. Please wait a few minutes and try again.";
+      }
+      if (friendly) {
+        const rewritten = new Error(friendly) as Error & { code?: string };
+        rewritten.code = "sms_unavailable";
+        throw rewritten;
+      }
       throw error;
     } finally {
       setIsLoading(false);

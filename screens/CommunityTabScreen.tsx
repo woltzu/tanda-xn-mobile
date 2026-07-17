@@ -237,6 +237,17 @@ const CommunityTabScreen: React.FC = () => {
     refresh: refreshNearYou,
   } = useNearYou(userCity);
 
+  // Bug fix: useDreamFeed lived inside renderDreamFeed as a nested-
+  // function call, which violates the Rules of Hooks — even though the
+  // function is invoked every render, React can't track hook order when
+  // hooks live in nested callbacks. Any conditional wrapping of
+  // renderDreamFeed's invocation flipped the hook order between renders
+  // and produced "React has detected a change in the order of Hooks
+  // called by CommunityTabScreen." Hoist to the top-level hook list
+  // alongside useArrivals/useGatherings/useCommunityMemory/useNearYou;
+  // renderDreamFeed reads `dream` from closure.
+  const { dream: rotatingDream } = useDreamFeed(selectedCommunityId);
+
   // Post to Community Bucket A — Community section data. Reads from the
   // live feed_posts pipeline (no separate fetch — useFeed already returns
   // every type and shares its cache with DreamFeedScreen). Filtered to
@@ -457,7 +468,9 @@ const CommunityTabScreen: React.FC = () => {
   // shortcut. Tap either the card or the section link to open the full
   // DreamFeed.
   const renderDreamFeed = () => {
-    const { dream } = useDreamFeed(selectedCommunityId);
+    // `dream` is fetched at the top-level via useDreamFeed(selectedCommunityId)
+    // (see hoisted call above). This function is a pure renderer; no hooks.
+    const dream = rotatingDream;
     const openFeed = () => navigation.navigate(Routes.DreamFeed as never);
     const openCreate = () =>
       navigation.navigate(Routes.CreateDreamPost as never);
