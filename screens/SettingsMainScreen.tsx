@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Linking,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -234,6 +235,28 @@ export default function SettingsMainScreen() {
       title: t("settings_main.item_legal_documents"),
       subtitle: t("settings_main.item_legal_documents_subtitle"),
       route: "LegalDocuments",
+    },
+    // Mig 353 — Twilio A2P 10DLC compliance surface. Distinct row that
+    // opens the public privacy-policy URL in the device browser so a
+    // carrier reviewer can point to a one-tap opt-in-to-policy-link
+    // affordance. Separate from the in-app "Legal Documents" viewer
+    // above by design — reviewers screenshot a browser URL, not an
+    // in-app render.
+    {
+      id: "privacy_policy",
+      icon: "shield-outline",
+      iconBg: "#F5F3FF",
+      iconColor: "#8B5CF6",
+      title: t("settings_main.item_privacy_policy"),
+      subtitle: t("settings_main.item_privacy_policy_subtitle"),
+      onPress: () => {
+        Linking.openURL("https://tandaxn.com/privacy-policy").catch((err) =>
+          console.warn(
+            "[SettingsMain] failed to open privacy policy URL:",
+            (err as Error)?.message,
+          ),
+        );
+      },
     },
     {
       id: "about",

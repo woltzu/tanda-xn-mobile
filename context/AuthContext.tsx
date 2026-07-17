@@ -315,6 +315,27 @@ async function recordSignupAcceptances(): Promise<void> {
       );
     }
   }
+  // Mig 353 — Twilio A2P 10DLC audit trail. The SMS-consent checkbox is
+  // MANDATORY on SignupScreen (validation blocks submit if unchecked),
+  // so any user reaching this helper post-SIGNED_IN implicitly ticked
+  // it. Only stamps when the column is still NULL — a returning user
+  // whose signup timestamp already landed doesn't overwrite it.
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    const uid = userData?.user?.id;
+    if (uid) {
+      await supabase
+        .from("profiles")
+        .update({ sms_consent_granted_at: new Date().toISOString() })
+        .eq("id", uid)
+        .is("sms_consent_granted_at", null);
+    }
+  } catch (e) {
+    console.warn(
+      "[AuthContext] sms_consent_granted_at stamp failed",
+      (e as Error)?.message,
+    );
+  }
 }
 
 export const useAuth = () => {

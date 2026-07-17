@@ -364,6 +364,7 @@ export default function NotificationPrefsScreen() {
 
   const masterPush = getValue("push_enabled");
   const masterEmail = getValue("email_enabled");
+  const masterSms = getValue("sms_enabled");
   const quietHoursEnabled = getValue("quiet_hours_enabled");
 
   return (
@@ -412,7 +413,7 @@ export default function NotificationPrefsScreen() {
                 />
               </View>
 
-              <View style={styles.toggleRow}>
+              <View style={[styles.toggleRow, styles.borderBottom]}>
                 <View style={[styles.toggleIcon, { backgroundColor: "#EFF6FF" }]}>
                   <Ionicons name="mail" size={20} color="#3B82F6" />
                 </View>
@@ -423,6 +424,28 @@ export default function NotificationPrefsScreen() {
                 <Switch
                   value={masterEmail}
                   onValueChange={(value) => handleToggle("email_enabled", value)}
+                  trackColor={{ false: "#E5E7EB", true: "#00C6AE" }}
+                  thumbColor="#FFFFFF"
+                />
+              </View>
+
+              {/* Mig 353 — SMS master toggle. Wired to
+                  notification_preferences.sms_enabled (single source of
+                  truth; the sign-up consent stamp lives on
+                  profiles.sms_consent_granted_at). Toggling off is the
+                  in-app equivalent of texting STOP; SMS-sending EFs
+                  should read this flag before dispatching. */}
+              <View style={styles.toggleRow}>
+                <View style={[styles.toggleIcon, { backgroundColor: "#F0FDFB" }]}>
+                  <Ionicons name="chatbubble" size={20} color="#00897B" />
+                </View>
+                <View style={styles.toggleContent}>
+                  <Text style={styles.toggleTitle}>{t("notification_prefs.toggle_sms_title")}</Text>
+                  <Text style={styles.toggleSubtitle}>{t("notification_prefs.toggle_sms_subtitle")}</Text>
+                </View>
+                <Switch
+                  value={masterSms}
+                  onValueChange={(value) => handleToggle("sms_enabled", value)}
                   trackColor={{ false: "#E5E7EB", true: "#00C6AE" }}
                   thumbColor="#FFFFFF"
                 />

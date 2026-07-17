@@ -46,6 +46,11 @@ export default function SignupScreen() {
     phone: "",
     password: "",
     agreedToTerms: false,
+    // Mig 353 — Twilio A2P 10DLC. Separate mandatory checkbox for SMS
+    // consent so the carrier reviewer can point to a distinct opt-in,
+    // not a bundled terms+SMS one. Text below matches the campaign
+    // submission verbatim (via i18n key).
+    agreedToSmsConsent: false,
   });
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -146,6 +151,8 @@ export default function SignupScreen() {
     // SMS notifications. No blocking validation.
     if (formData.password.length < 8) newErrors.password = t("signup.err_password_min");
     if (!formData.agreedToTerms) newErrors.terms = t("signup.err_terms_required");
+    if (!formData.agreedToSmsConsent)
+      newErrors.smsConsent = t("signup.err_sms_consent_required");
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -414,6 +421,37 @@ export default function SignupScreen() {
               </Text>
             </TouchableOpacity>
             {errors.terms ? <Text style={styles.fieldError}>{errors.terms}</Text> : null}
+
+            {/* Mig 353 — Twilio A2P 10DLC SMS-consent checkbox. Text is
+                submitted verbatim to the Twilio campaign; edits here
+                must be re-approved by the carrier. Rendered as a
+                distinct checkbox (NOT bundled into the terms row) so
+                a carrier reviewer can point to a single opt-in
+                affordance. */}
+            <TouchableOpacity
+              style={styles.termsRow}
+              onPress={() =>
+                updateFormData("agreedToSmsConsent", !formData.agreedToSmsConsent)
+              }
+              activeOpacity={0.7}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: formData.agreedToSmsConsent }}
+            >
+              <View style={[
+                styles.checkbox,
+                formData.agreedToSmsConsent ? styles.checkboxChecked : null,
+              ]}>
+                {formData.agreedToSmsConsent ? (
+                  <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+                ) : null}
+              </View>
+              <Text style={styles.termsText}>
+                {t("signup.sms_consent_text")}
+              </Text>
+            </TouchableOpacity>
+            {errors.smsConsent ? (
+              <Text style={styles.fieldError}>{errors.smsConsent}</Text>
+            ) : null}
 
             {/* Phase 2 Bucket C — flagged-account block. Shows when the
                 debounced is_account_flagged probe returns true. Disables

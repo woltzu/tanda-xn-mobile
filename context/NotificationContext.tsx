@@ -38,6 +38,7 @@ export interface Notification {
 export interface NotificationPreferences {
   push_enabled: boolean;
   email_enabled: boolean;
+  sms_enabled: boolean; // mig 353 — master SMS opt-out (Twilio A2P)
   push_payments: boolean;
   push_payouts: boolean;
   push_circles: boolean;
@@ -113,6 +114,7 @@ type NotificationContextType = {
 const defaultPreferences: NotificationPreferences = {
   push_enabled: true,
   email_enabled: true,
+  sms_enabled: true, // mig 353 default; sign-up checkbox = explicit opt-in
   push_payments: true,
   push_payouts: true,
   push_circles: true,
