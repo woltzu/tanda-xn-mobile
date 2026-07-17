@@ -758,7 +758,9 @@ function ProductCard({
         </View>
 
         <View style={{ flex: 1 }}>
-          <Text style={styles.productName}>{productName}</Text>
+          <Text style={[styles.productName, { color: styling.textColor }]}>
+            {productName}
+          </Text>
           <Text
             style={[
               styles.productTagline,
@@ -779,7 +781,7 @@ function ProductCard({
               <Text style={styles.statLabel}>
                 {t("advance_hub_v2.stat_max_advance")}
               </Text>
-              <Text style={styles.statValueNavy}>
+              <Text style={[styles.statValueNavy, { color: styling.textColor }]}>
                 {t("advance_hub_v2.stat_max_advance_value", {
                   amount: dollars(card.max_amount_cents).replace("$", ""),
                 })}
@@ -807,7 +809,7 @@ function ProductCard({
               <Text style={styles.statLabel}>
                 {t("advance_hub_v2.stat_repayment")}
               </Text>
-              <Text style={styles.statValueNavy}>
+              <Text style={[styles.statValueNavy, { color: styling.textColor }]}>
                 {card.min_term_months && card.max_term_months
                   ? card.min_term_months === card.max_term_months
                     ? t("advance_hub_v2.term_n_months", {
@@ -1051,6 +1053,8 @@ function stateStyling(
       // Unlocked card — accent-tinted background + solid accent
       // border + accent badge. The tint is a ~12% alpha overlay of
       // the accent, matching the spec's "light tint" call-out.
+      // textColor: dark navy so title + stat values pop against the
+      // tint.
       return {
         bg: accent + ACCENT_TINT_ALPHA,
         borderColor: accent,
@@ -1058,29 +1062,25 @@ function stateStyling(
         opacity: 1,
         badgeBg: accent,
         badgeLabel: t("advance_hub_v2.badge_active"),
+        textColor: "#0A2342",
       };
     case "preview":
-      // Bucket B P1.1 — preview reads as locked to the user: neutral
-      // white + gray border + muted badge. Inner unlock-progress block
-      // still uses the accent color for the progress fill so the user
-      // can tell "close to unlock" from "far off" without needing a
-      // second border variant.
-      return {
-        bg: "#FFFFFF",
-        borderColor: BORDER,
-        borderWidth: 1,
-        opacity: 0.85,
-        badgeBg: MUTED,
-        badgeLabel: t("advance_hub_v2.badge_locked"),
-      };
     case "locked":
+      // Advance-hub product-styling spec:
+      // border stays product-colored + 2px even when locked so the
+      // whole hub reads as a color-coded catalogue at a glance;
+      // background flips to white; opacity full (dimming removed —
+      // the muted-gray title/stat values carry the "locked" signal
+      // instead). Badge stays muted gray so we don't advertise the
+      // card as actionable.
       return {
         bg: "#FFFFFF",
-        borderColor: BORDER,
-        borderWidth: 1,
-        opacity: 0.85,
+        borderColor: accent,
+        borderWidth: 2,
+        opacity: 1,
         badgeBg: MUTED,
         badgeLabel: t("advance_hub_v2.badge_locked"),
+        textColor: MUTED,
       };
   }
 }
