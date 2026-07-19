@@ -38,6 +38,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
 import { useAuth } from "../context/AuthContext";
@@ -133,11 +134,47 @@ export default function KYCDocumentScreen() {
       return;
     }
 
-    const filename =
+    let uri = asset.uri;
+    let mimeType = asset.mimeType ?? "image/jpeg";
+    let filename =
       asset.fileName ?? `${idType}-${side}-${Date.now()}.jpg`;
-    const mimeType = asset.mimeType ?? "image/jpeg";
+
+    // iOS saves photos as HEIC by default and MediaUploadService only
+    // accepts jpeg/png/pdf. Transparently convert HEIC/HEIF to JPEG so
+    // iPhone users don't need to change their camera settings. No-op for
+    // any other format.
+    const isHeic =
+      mimeType.toLowerCase() === "image/heic" ||
+      mimeType.toLowerCase() === "image/heif" ||
+      /\.hei[cf]$/i.test(uri) ||
+      /\.hei[cf]$/i.test(filename);
+
+    if (isHeic) {
+      try {
+        const converted = await ImageManipulator.manipulateAsync(
+          uri,
+          [],
+          { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG },
+        );
+        uri = converted.uri;
+        mimeType = "image/jpeg";
+        filename = filename.replace(/\.hei[cf]$/i, ".jpg");
+        if (!/\.jpe?g$/i.test(filename)) {
+          filename = `${idType}-${side}-${Date.now()}.jpg`;
+        }
+      } catch (e) {
+        console.error("[KYCDocument] HEIC conversion failed:", e);
+        tileSetter[side]({ localUri: null, uploadedUrl: null, uploading: false });
+        Alert.alert(
+          t("kyc_document.upload_failed_title"),
+          t("kyc_document.upload_failed_default"),
+        );
+        return;
+      }
+    }
+
     const res = await MediaUploadService.uploadDocument(
-      { uri: asset.uri, type: mimeType, name: filename },
+      { uri, type: mimeType, name: filename },
       { entityType: "kyc_id_document", entityId: user.id },
     );
     if (!res.success || !res.url) {
@@ -149,7 +186,7 @@ export default function KYCDocumentScreen() {
       return;
     }
     tileSetter[side]({
-      localUri: asset.uri,
+      localUri: uri,
       uploadedUrl: res.url,
       uploading: false,
     });
