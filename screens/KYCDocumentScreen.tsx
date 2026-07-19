@@ -108,19 +108,44 @@ export default function KYCDocumentScreen() {
 
   // ── Pick + upload a single tile ──────────────────────────────────────
   const handlePick = async (side: Side) => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (perm.status !== "granted") {
-      Alert.alert(
-        t("kyc_document.perm_title"),
-        t("kyc_document.perm_body"),
-      );
-      return;
+    // Camera-only for selfie (fraud prevention — gallery uploads would
+    // let a bad actor submit someone else's face). Gallery still allowed
+    // for ID document sides, which are less spoof-sensitive at this
+    // stage of KYC.
+    let result: ImagePicker.ImagePickerResult;
+    if (side === "selfie") {
+      const perm = await ImagePicker.requestCameraPermissionsAsync();
+      if (perm.status !== "granted") {
+        Alert.alert(
+          t("kyc_document.perm_camera_title"),
+          t("kyc_document.perm_camera_body"),
+        );
+        return;
+      }
+      result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaType.Images,
+        quality: 0.85,
+        allowsEditing: true,
+        // Force front camera — expo-image-picker's default is
+        // CameraType.back. Selfie liveness verification requires the
+        // front lens so the face-to-ID match downstream is trustworthy.
+        cameraType: ImagePicker.CameraType.front,
+      });
+    } else {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm.status !== "granted") {
+        Alert.alert(
+          t("kyc_document.perm_title"),
+          t("kyc_document.perm_body"),
+        );
+        return;
+      }
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.85,
+        allowsEditing: false,
+      });
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.85,
-      allowsEditing: false,
-    });
     if (result.canceled || !result.assets?.[0]?.uri) return;
     const asset = result.assets[0];
 
@@ -415,6 +440,7 @@ export default function KYCDocumentScreen() {
           emptyKey="kyc_document.tile_selfie_empty"
           onPick={() => handlePick("selfie")}
           onHelp={() => showHelp("selfie")}
+          captureMode
         />
 
         <Text style={styles.footnote}>
@@ -460,6 +486,7 @@ function Tile({
   emptyKey,
   onPick,
   onHelp,
+  captureMode = false,
 }: {
   state: TileState;
   required: boolean;
@@ -467,6 +494,7 @@ function Tile({
   emptyKey: string;
   onPick: () => void;
   onHelp: () => void;
+  captureMode?: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -518,14 +546,24 @@ function Tile({
         ) : (
           <>
             <Ionicons
-              name={state.localUri ? "refresh-outline" : "cloud-upload-outline"}
+              name={
+                captureMode
+                  ? "camera-outline"
+                  : state.localUri
+                    ? "refresh-outline"
+                    : "cloud-upload-outline"
+              }
               size={16}
               color={colors.primaryNavy}
             />
             <Text style={styles.tileBtnText}>
-              {state.localUri
-                ? t("kyc_document.btn_replace")
-                : t("kyc_document.btn_pick")}
+              {captureMode
+                ? state.localUri
+                  ? t("kyc_document.btn_recapture_selfie")
+                  : t("kyc_document.btn_capture_selfie")
+                : state.localUri
+                  ? t("kyc_document.btn_replace")
+                  : t("kyc_document.btn_pick")}
             </Text>
           </>
         )}
