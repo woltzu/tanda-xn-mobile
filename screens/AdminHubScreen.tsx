@@ -68,7 +68,7 @@ const MODULES: ModuleDef[] = [
   { key: "trips",    icon: "airplane-outline",      route: "AdminTrips" },
   { key: "disputes", icon: "shield-half-outline",   route: "AdminModeration" },
   { key: "elders",   icon: "ribbon-outline",        route: "ElderDashboard" },
-  { key: "kyc",      icon: "id-card-outline",       route: "AdminVerificationQueue" },
+  { key: "kyc",      icon: "id-card-outline",       route: "AdminKYCReviewQueue" },
   { key: "settings", icon: "cog-outline",           route: "AdminPlatformSettings" },
   { key: "bug_reports", icon: "bug-outline",        route: "AdminBugReports" },
   { key: "advances",    icon: "cash-outline",       route: "AdminLiquidityAdvances" },

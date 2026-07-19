@@ -46,6 +46,8 @@ export const Routes = {
   AddRecipient: "AddRecipient",
   AdminBugReportDetail: "AdminBugReportDetail",
   AdminBugReports: "AdminBugReports",
+  AdminKYCReviewDetail: "AdminKYCReviewDetail",
+  AdminKYCReviewQueue: "AdminKYCReviewQueue",
   AdminLiquidityAdvances: "AdminLiquidityAdvances",
   AdminCircleDetail: "AdminCircleDetail",
   AdminCircles: "AdminCircles",
