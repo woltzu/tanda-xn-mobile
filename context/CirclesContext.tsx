@@ -90,6 +90,10 @@ export type CircleActivity = {
   // rows via circle_contributions.cycle_number + circle_cycles lookup.
   // Undefined for joined/created/left (those happen outside cycle scope).
   cycleNumber?: number | null;
+  // Improvement #7 — payout status. Populated for payout-type rows from
+  // circle_payouts.status. Values: 'pending' | 'completed' | 'failed' |
+  // 'reversed'. Undefined for non-payout types.
+  status?: string | null;
 };
 
 export type ContributionRecord = {
@@ -1050,7 +1054,9 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
         });
       }
 
-      // Get payouts
+      // Get payouts. Improvement #7 — no longer filtered to
+      // status='completed'; pending / failed / reversed rows also flow
+      // through so the activity feed can show their status badge.
       const { data: payouts, error: payoutsError } = await supabase
         .from("circle_payouts")
         .select(`
@@ -1066,7 +1072,6 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
           )
         `)
         .eq("circle_id", circleId)
-        .eq("status", "completed")
         .order("created_at", { ascending: false });
 
       if (payoutsError) {
@@ -1084,6 +1089,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
             timestamp: payout.created_at,
             isCurrentUser,
             cycleNumber: payout.cycle_number ?? null,
+            status: payout.status ?? null,
           });
         });
       }

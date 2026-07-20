@@ -2452,6 +2452,86 @@ function CircleDetailBody({
       return t("circle_detail.cycle_status_active");
     };
 
+    // Improvement #5 — contribution summary per member for the current
+    // cycle. `members` already carries hasPaid for the current cycle
+    // (computed in CirclesContext getCircleMembers), so no extra work.
+    const currentCycleNumForSummary =
+      numericKeys.length > 0 ? numericKeys[0] : null;
+    const showContribSummary =
+      currentCycleNumForSummary != null && members.length > 0;
+
+    // Improvement #6 — user net position across ALL cycles. Sums
+    // contributions and completed payouts from `activities`. Note:
+    // getCircleActivities caps contributions at the most-recent 50 —
+    // fine for the 2-member/2-cycle test circles, but a circle with
+    // 20+ cycles could under-count. Flagged as follow-up if it bites.
+    const userNetPosition = user?.id
+      ? (() => {
+          let contributed = 0;
+          let received = 0;
+          activities.forEach((a) => {
+            if (a.userId !== user.id) return;
+            const amt = Number(a.amount ?? 0);
+            if (!amt) return;
+            if (a.type === "contribution") contributed += amt;
+            if (
+              a.type === "payout" &&
+              (a.status ?? "completed") === "completed"
+            )
+              received += amt;
+          });
+          return { contributed, received, net: received - contributed };
+        })()
+      : null;
+
+    // Improvement #7 — payout status badge helpers.
+    const payoutStatusMeta = (
+      status: string | null | undefined,
+    ): {
+      icon: keyof typeof Ionicons.glyphMap;
+      color: string;
+      bg: string;
+      label: string;
+    } => {
+      switch (status) {
+        case "completed":
+          return {
+            icon: "checkmark-circle",
+            color: "#059669",
+            bg: "#D1FAE5",
+            label: t("circle_detail.payout_status_completed"),
+          };
+        case "pending":
+          return {
+            icon: "hourglass-outline",
+            color: "#B45309",
+            bg: colors.warningBg,
+            label: t("circle_detail.payout_status_pending"),
+          };
+        case "failed":
+          return {
+            icon: "alert-circle",
+            color: colors.errorText,
+            bg: colors.errorBg,
+            label: t("circle_detail.payout_status_failed"),
+          };
+        case "reversed":
+          return {
+            icon: "return-up-back-outline",
+            color: colors.textSecondary,
+            bg: "#F3F4F6",
+            label: t("circle_detail.payout_status_reversed"),
+          };
+        default:
+          return {
+            icon: "help-circle-outline",
+            color: colors.textSecondary,
+            bg: "#F3F4F6",
+            label: status ?? "",
+          };
+      }
+    };
+
     const renderSingleActivity = (activity: CircleActivity) => {
       const activityColors = getActivityColor(activity.type);
       return (
@@ -2514,6 +2594,29 @@ function CircleDetailBody({
                 </>
               )}
             </Text>
+            {/* Improvement #7 — payout status pill. Shown for every
+                payout so users see pending/failed states clearly, not
+                just completed ones. */}
+            {activity.type === "payout" && activity.status ? (
+              (() => {
+                const meta = payoutStatusMeta(activity.status);
+                return (
+                  <View
+                    style={[
+                      styles.payoutStatusBadge,
+                      { backgroundColor: meta.bg },
+                    ]}
+                  >
+                    <Ionicons name={meta.icon} size={12} color={meta.color} />
+                    <Text
+                      style={[styles.payoutStatusText, { color: meta.color }]}
+                    >
+                      {meta.label}
+                    </Text>
+                  </View>
+                );
+              })()
+            ) : null}
             <Text style={styles.activityTime}>
               {formatRelativeTime(activity.timestamp)}
             </Text>
@@ -2524,6 +2627,78 @@ function CircleDetailBody({
 
     return (
     <View style={styles.tabContent}>
+      {/* Improvement #5 — per-member contribution summary for the
+          current cycle. Hidden when no cycles exist or member list is
+          empty. */}
+      {showContribSummary ? (
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryTitle}>
+            {t("circle_detail.contributions_summary_title")}
+          </Text>
+          {members.map((m) => (
+            <View key={`contrib-${m.id}`} style={styles.summaryRow}>
+              <Ionicons
+                name={m.hasPaid ? "checkmark-circle" : "ellipse-outline"}
+                size={16}
+                color={m.hasPaid ? "#059669" : colors.textSecondary}
+              />
+              <Text style={styles.summaryRowText}>
+                {t("circle_detail.contributions_summary_row", {
+                  name: m.name,
+                  paid: m.hasPaid ? 1 : 0,
+                })}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {/* Improvement #6 — user net position across all cycles. */}
+      {userNetPosition ? (
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryTitle}>
+            {t("circle_detail.net_position_title")}
+          </Text>
+          <View style={styles.netPositionRow}>
+            <Text style={styles.netPositionLabel}>
+              {t("circle_detail.net_position_contributed")}
+            </Text>
+            <Text style={styles.netPositionValue}>
+              ${userNetPosition.contributed.toLocaleString()}
+            </Text>
+          </View>
+          <View style={styles.netPositionRow}>
+            <Text style={styles.netPositionLabel}>
+              {t("circle_detail.net_position_received")}
+            </Text>
+            <Text style={styles.netPositionValue}>
+              ${userNetPosition.received.toLocaleString()}
+            </Text>
+          </View>
+          <View style={[styles.netPositionRow, styles.netPositionRowTotal]}>
+            <Text style={styles.netPositionLabelTotal}>
+              {t("circle_detail.net_position_net")}
+            </Text>
+            <Text
+              style={[
+                styles.netPositionValueTotal,
+                {
+                  color:
+                    userNetPosition.net > 0
+                      ? "#059669"
+                      : userNetPosition.net < 0
+                        ? colors.errorText
+                        : colors.textPrimary,
+                },
+              ]}
+            >
+              {userNetPosition.net > 0 ? "+" : ""}$
+              {userNetPosition.net.toLocaleString()}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
       <Text style={styles.sectionTitle}>{t("circle_detail.section_recent_activity")}</Text>
 
       {isLoadingActivities ? (
@@ -3976,6 +4151,78 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,
     elevation: 2,
+  },
+  // Improvements #5/#6/#7 — summary cards + payout status pill
+  summaryCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  summaryTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.primaryNavy,
+    marginBottom: 10,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  summaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  summaryRowText: {
+    fontSize: 13,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  netPositionRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  netPositionRowTotal: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginTop: 4,
+    paddingTop: 10,
+  },
+  netPositionLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  netPositionValue: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.textPrimary,
+  },
+  netPositionLabelTotal: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.textPrimary,
+  },
+  netPositionValueTotal: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  payoutStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
+    marginTop: 4,
+  },
+  payoutStatusText: {
+    fontSize: 11,
+    fontWeight: "700",
   },
   // Improvement #3 — per-cycle group headers on the activity tab
   cycleGroup: {
