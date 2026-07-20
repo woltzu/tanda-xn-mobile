@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -627,6 +627,63 @@ function CircleDetailBody({
   // computation since getUserRole() (which reads circle + members) is
   // declared further down.
   const [codeCopied, setCodeCopied] = useState(false);
+
+  // Activity-tab cycle header (Improvement #1). Fetches the most-recent
+  // circle_cycles row for this circle + a count of paid contributions for
+  // that cycle. Piggybacks on `activities` reference-equality: any refresh
+  // (realtime, pull-to-refresh, manual) that swaps the activities array
+  // also re-fires this fetch. Null when no cycle rows exist yet.
+  type CurrentCycleInfo = {
+    cycle_number: number;
+    contribution_deadline: string | null;
+    expected_contributions: number;
+    received_contributions: number;
+    cycle_status: string | null;
+    total_cycles: number | null;
+  };
+  const [currentCycle, setCurrentCycle] = useState<CurrentCycleInfo | null>(null);
+
+  const fetchCurrentCycle = useCallback(async () => {
+    if (!circleId) return;
+    try {
+      const { data: cycleRow, error: cycleErr } = await supabase
+        .from("circle_cycles")
+        .select("cycle_number, contribution_deadline, expected_contributions, cycle_status")
+        .eq("circle_id", circleId)
+        .order("cycle_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cycleErr) throw new Error(cycleErr.message);
+      if (!cycleRow) {
+        setCurrentCycle(null);
+        return;
+      }
+      const { count } = await supabase
+        .from("circle_contributions")
+        .select("*", { count: "exact", head: true })
+        .eq("circle_id", circleId)
+        .eq("cycle_number", (cycleRow as any).cycle_number)
+        .eq("status", "paid");
+      setCurrentCycle({
+        cycle_number: (cycleRow as any).cycle_number,
+        contribution_deadline: (cycleRow as any).contribution_deadline,
+        expected_contributions: (cycleRow as any).expected_contributions ?? 0,
+        received_contributions: count ?? 0,
+        cycle_status: (cycleRow as any).cycle_status ?? null,
+        total_cycles: circle?.memberCount ?? null,
+      });
+    } catch (err) {
+      // Header is decorative — silently swallow so a transient failure
+      // doesn't affect the rest of the tab.
+      console.warn("[CircleDetail] fetchCurrentCycle failed:", err);
+      setCurrentCycle(null);
+    }
+  }, [circleId, circle?.memberCount]);
+
+  useEffect(() => {
+    fetchCurrentCycle();
+  }, [fetchCurrentCycle, activities]);
+
   useEffect(() => {
     if (openedTrackedRef.current) return;
     if (!circle) return;
@@ -2355,6 +2412,37 @@ function CircleDetailBody({
 
     return (
     <View style={styles.tabContent}>
+      {/* Improvement #1 — cycle header. Renders when we have any cycle
+          row; hidden for brand-new circles that haven't been cycled yet
+          (e.g., cycle 1 not created — the mig 362 gap). */}
+      {currentCycle ? (
+        <View style={styles.cycleHeaderCard}>
+          <Text style={styles.cycleHeaderTitle}>
+            {t("circle_detail.cycle_header_number", {
+              current: currentCycle.cycle_number,
+              total: currentCycle.total_cycles ?? currentCycle.cycle_number,
+            })}
+          </Text>
+          {currentCycle.contribution_deadline &&
+          currentCycle.cycle_status !== "closed" ? (
+            <Text style={styles.cycleHeaderMeta}>
+              {t("circle_detail.cycle_header_due", {
+                date: new Date(currentCycle.contribution_deadline).toLocaleDateString(
+                  undefined,
+                  { month: "short", day: "numeric", year: "numeric" },
+                ),
+              })}
+            </Text>
+          ) : null}
+          <Text style={styles.cycleHeaderProgress}>
+            {t("circle_detail.cycle_header_progress", {
+              received: currentCycle.received_contributions,
+              expected: currentCycle.expected_contributions,
+            })}
+          </Text>
+        </View>
+      ) : null}
+
       <Text style={styles.sectionTitle}>{t("circle_detail.section_recent_activity")}</Text>
 
       {isLoadingActivities ? (
@@ -3703,6 +3791,35 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,
     elevation: 2,
+  },
+  // Improvement #1 — activity-tab cycle header
+  cycleHeaderCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.04,
+    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  cycleHeaderTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.primaryNavy,
+    marginBottom: 4,
+  },
+  cycleHeaderMeta: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  cycleHeaderProgress: {
+    fontSize: 13,
+    color: colors.textSecondary,
   },
   partialPlanHeader: {
     flexDirection: "row",
