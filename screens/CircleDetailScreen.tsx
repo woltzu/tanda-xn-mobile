@@ -641,6 +641,7 @@ function CircleDetailBody({
     expected_contributions: number;
     received_contributions: number;
     payout_amount: number | null;
+    recipient_user_id: string | null;
   };
   const [cyclesMap, setCyclesMap] = useState<Map<number, CycleMeta>>(new Map());
   const [totalCycles, setTotalCycles] = useState<number | null>(null);
@@ -650,7 +651,7 @@ function CircleDetailBody({
     try {
       const { data: cycleRows, error: cycleErr } = await supabase
         .from("circle_cycles")
-        .select("cycle_number, cycle_status, contribution_deadline, expected_contributions, payout_amount")
+        .select("cycle_number, cycle_status, contribution_deadline, expected_contributions, payout_amount, recipient_user_id")
         .eq("circle_id", circleId)
         .order("cycle_number");
       if (cycleErr) throw new Error(cycleErr.message);
@@ -678,6 +679,7 @@ function CircleDetailBody({
           expected_contributions: c.expected_contributions ?? 0,
           received_contributions: receivedByCycle.get(c.cycle_number) ?? 0,
           payout_amount: c.payout_amount != null ? Number(c.payout_amount) : null,
+          recipient_user_id: c.recipient_user_id ?? null,
         });
       });
       setCyclesMap(map);
@@ -2629,6 +2631,106 @@ function CircleDetailBody({
     }
   };
 
+  // Improvement #4 — context-aware next-action state. Consumed by the
+  // bottom bar. Priority: circle completion → no-cycle → recipient state
+  // → contribution completion. `must_contribute` is the only state that
+  // still renders the Pay button; the other six render an info line
+  // instead.
+  type NextAction =
+    | { kind: "circle_completed" }
+    | { kind: "cycle_pending" }
+    | { kind: "recipient_waiting" }
+    | { kind: "ready_payout_recipient"; amount: number }
+    | { kind: "ready_payout_other" }
+    | { kind: "waiting_others"; remaining: number }
+    | { kind: "must_contribute"; amount: number };
+
+  const nextAction: NextAction = (() => {
+    if (circle.status === "completed") return { kind: "circle_completed" };
+    const currentCycleNum =
+      cyclesMap.size > 0 ? Math.max(...Array.from(cyclesMap.keys())) : null;
+    const meta = currentCycleNum != null ? cyclesMap.get(currentCycleNum) : null;
+    if (!meta || meta.cycle_status === "scheduled") {
+      return { kind: "cycle_pending" };
+    }
+    const userIsRecipient = meta.recipient_user_id === user?.id;
+    const allContributed =
+      meta.expected_contributions > 0 &&
+      meta.received_contributions >= meta.expected_contributions;
+    const userContributed = activities.some(
+      (a) =>
+        a.type === "contribution" &&
+        a.userId === user?.id &&
+        typeof a.cycleNumber === "number" &&
+        a.cycleNumber === currentCycleNum,
+    );
+    const remaining = Math.max(
+      0,
+      meta.expected_contributions - meta.received_contributions,
+    );
+    const payoutAmount =
+      meta.payout_amount ?? circle.amount * meta.expected_contributions;
+    if (allContributed) {
+      return userIsRecipient
+        ? { kind: "ready_payout_recipient", amount: payoutAmount }
+        : { kind: "ready_payout_other" };
+    }
+    if (userIsRecipient) return { kind: "recipient_waiting" };
+    if (userContributed) return { kind: "waiting_others", remaining };
+    return { kind: "must_contribute", amount: circle.amount };
+  })();
+
+  const getNextActionInfoRow = (): {
+    icon: keyof typeof Ionicons.glyphMap;
+    color: string;
+    text: string;
+  } | null => {
+    switch (nextAction.kind) {
+      case "circle_completed":
+        return {
+          icon: "checkmark-done-circle",
+          color: "#059669",
+          text: t("circle_detail.next_action_circle_completed"),
+        };
+      case "cycle_pending":
+        return {
+          icon: "hourglass-outline",
+          color: colors.textSecondary,
+          text: t("circle_detail.next_action_cycle_pending"),
+        };
+      case "recipient_waiting":
+        return {
+          icon: "gift-outline",
+          color: colors.accentTeal,
+          text: t("circle_detail.next_action_recipient_waiting"),
+        };
+      case "ready_payout_recipient":
+        return {
+          icon: "gift",
+          color: "#059669",
+          text: t("circle_detail.next_action_ready_payout_recipient", {
+            amount: nextAction.amount.toLocaleString(),
+          }),
+        };
+      case "ready_payout_other":
+        return {
+          icon: "hourglass-outline",
+          color: colors.textSecondary,
+          text: t("circle_detail.next_action_ready_payout_other"),
+        };
+      case "waiting_others":
+        return {
+          icon: "checkmark-circle",
+          color: colors.accentTeal,
+          text: t("circle_detail.next_action_waiting_others", {
+            count: nextAction.remaining,
+          }),
+        };
+      case "must_contribute":
+        return null;
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Outer surface: FlashList — same tab-driven row union, but
@@ -2742,35 +2844,50 @@ function CircleDetailBody({
         }
       />
 
-      {/* Bottom Action Button */}
+      {/* Bottom Action Button — context-aware per Improvement #4.
+          Renders the Pay button only in the must_contribute state;
+          otherwise shows an info row telling the user what's happening. */}
       <View style={styles.bottomBar}>
         {isMember ? (
-          <Animated.View
-            style={{
-              transform: [{ scale: shouldPulse ? pulseAnim : 1 }],
-              borderRadius: 14,
-              shadowColor: shouldPulse ? colors.accentTeal : "transparent",
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: shouldPulse ? 0.6 : 0,
-              shadowRadius: shouldPulse ? 14 : 0,
-              elevation: shouldPulse ? 8 : 0,
-            }}
-          >
-            <TouchableOpacity
-              style={styles.payButton}
-              onPress={() => {
-                // Tapping Contribute clears the pulse immediately —
-                // user has acknowledged the affordance.
-                if (shouldPulse) setShouldPulse(false);
-                if (isContributeBlocked) return showContributeBlocked();
-                trackContributeTap("bottom_bar");
-                navigation.navigate("MakeContribution", { circleId });
+          nextAction.kind === "must_contribute" ? (
+            <Animated.View
+              style={{
+                transform: [{ scale: shouldPulse ? pulseAnim : 1 }],
+                borderRadius: 14,
+                shadowColor: shouldPulse ? colors.accentTeal : "transparent",
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: shouldPulse ? 0.6 : 0,
+                shadowRadius: shouldPulse ? 14 : 0,
+                elevation: shouldPulse ? 8 : 0,
               }}
             >
-              <Ionicons name="wallet-outline" size={20} color={colors.cardBg} />
-              <Text style={styles.payButtonText}>Contribute ${circle.amount}</Text>
-            </TouchableOpacity>
-          </Animated.View>
+              <TouchableOpacity
+                style={styles.payButton}
+                onPress={() => {
+                  if (shouldPulse) setShouldPulse(false);
+                  if (isContributeBlocked) return showContributeBlocked();
+                  trackContributeTap("bottom_bar");
+                  navigation.navigate("MakeContribution", { circleId });
+                }}
+              >
+                <Ionicons name="wallet-outline" size={20} color={colors.cardBg} />
+                <Text style={styles.payButtonText}>
+                  {t("circle_detail.next_action_pay_now", {
+                    amount: nextAction.amount,
+                  })}
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
+          ) : (() => {
+            const row = getNextActionInfoRow();
+            if (!row) return null;
+            return (
+              <View style={styles.nextActionInfo}>
+                <Ionicons name={row.icon} size={20} color={row.color} />
+                <Text style={styles.nextActionText}>{row.text}</Text>
+              </View>
+            );
+          })()
         ) : (
           <TouchableOpacity
             style={[styles.payButton, isFull && styles.payButtonDisabled]}
@@ -4471,6 +4588,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
     color: colors.cardBg,
+  },
+  // Improvement #4 — info row shown in place of the Pay button when the
+  // user has nothing to do (already contributed / recipient waiting /
+  // ready payout / cycle pending / circle completed).
+  nextActionInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    backgroundColor: colors.screenBg,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  nextActionText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.textPrimary,
+    fontWeight: "600",
   },
   errorContainer: {
     flex: 1,
