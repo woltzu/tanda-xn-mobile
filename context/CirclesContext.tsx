@@ -86,6 +86,10 @@ export type CircleActivity = {
   amount?: number;
   timestamp: string;
   isCurrentUser: boolean;
+  // Improvement #3 — cycle grouping. Populated for contribution/payout
+  // rows via circle_contributions.cycle_number + circle_cycles lookup.
+  // Undefined for joined/created/left (those happen outside cycle scope).
+  cycleNumber?: number | null;
 };
 
 export type ContributionRecord = {
@@ -982,6 +986,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
           id,
           user_id,
           amount,
+          cycle_number,
           created_at,
           profiles!circle_contributions_user_id_fkey (
             full_name,
@@ -1006,6 +1011,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
             amount: contrib.amount,
             timestamp: contrib.created_at,
             isCurrentUser,
+            cycleNumber: contrib.cycle_number ?? null,
           });
         });
       }
@@ -1051,6 +1057,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
           id,
           recipient_id,
           amount,
+          cycle_number,
           created_at,
           status,
           profiles!circle_payouts_recipient_id_fkey (
@@ -1076,6 +1083,7 @@ export const CirclesProvider = ({ children }: { children: ReactNode }) => {
             amount: payout.amount,
             timestamp: payout.created_at,
             isCurrentUser,
+            cycleNumber: payout.cycle_number ?? null,
           });
         });
       }

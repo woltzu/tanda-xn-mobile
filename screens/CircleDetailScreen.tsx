@@ -628,61 +628,69 @@ function CircleDetailBody({
   // declared further down.
   const [codeCopied, setCodeCopied] = useState(false);
 
-  // Activity-tab cycle header (Improvement #1). Fetches the most-recent
-  // circle_cycles row for this circle + a count of paid contributions for
-  // that cycle. Piggybacks on `activities` reference-equality: any refresh
-  // (realtime, pull-to-refresh, manual) that swaps the activities array
-  // also re-fires this fetch. Null when no cycle rows exist yet.
-  type CurrentCycleInfo = {
+  // Improvement #3 — activity grouping by cycle. Fetches every
+  // circle_cycles row + per-cycle paid-contribution counts, and stores
+  // them keyed by cycle_number. Group headers in renderActivityTab
+  // consume this map. Piggybacks on `activities` reference-equality:
+  // any refresh (realtime, pull-to-refresh, manual) that swaps
+  // activities also re-fires this fetch. Empty map when no cycles exist.
+  type CycleMeta = {
     cycle_number: number;
+    cycle_status: string | null;
     contribution_deadline: string | null;
     expected_contributions: number;
     received_contributions: number;
-    cycle_status: string | null;
-    total_cycles: number | null;
+    payout_amount: number | null;
   };
-  const [currentCycle, setCurrentCycle] = useState<CurrentCycleInfo | null>(null);
+  const [cyclesMap, setCyclesMap] = useState<Map<number, CycleMeta>>(new Map());
+  const [totalCycles, setTotalCycles] = useState<number | null>(null);
 
-  const fetchCurrentCycle = useCallback(async () => {
+  const fetchAllCycles = useCallback(async () => {
     if (!circleId) return;
     try {
-      const { data: cycleRow, error: cycleErr } = await supabase
+      const { data: cycleRows, error: cycleErr } = await supabase
         .from("circle_cycles")
-        .select("cycle_number, contribution_deadline, expected_contributions, cycle_status")
+        .select("cycle_number, cycle_status, contribution_deadline, expected_contributions, payout_amount")
         .eq("circle_id", circleId)
-        .order("cycle_number", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order("cycle_number");
       if (cycleErr) throw new Error(cycleErr.message);
-      if (!cycleRow) {
-        setCurrentCycle(null);
+      if (!cycleRows || cycleRows.length === 0) {
+        setCyclesMap(new Map());
+        setTotalCycles(circle?.memberCount ?? null);
         return;
       }
-      const { count } = await supabase
+      const { data: paidRows } = await supabase
         .from("circle_contributions")
-        .select("*", { count: "exact", head: true })
+        .select("cycle_number")
         .eq("circle_id", circleId)
-        .eq("cycle_number", (cycleRow as any).cycle_number)
         .eq("status", "paid");
-      setCurrentCycle({
-        cycle_number: (cycleRow as any).cycle_number,
-        contribution_deadline: (cycleRow as any).contribution_deadline,
-        expected_contributions: (cycleRow as any).expected_contributions ?? 0,
-        received_contributions: count ?? 0,
-        cycle_status: (cycleRow as any).cycle_status ?? null,
-        total_cycles: circle?.memberCount ?? null,
+      const receivedByCycle = new Map<number, number>();
+      (paidRows ?? []).forEach((r: any) => {
+        const cn = r.cycle_number;
+        receivedByCycle.set(cn, (receivedByCycle.get(cn) ?? 0) + 1);
       });
+      const map = new Map<number, CycleMeta>();
+      (cycleRows as any[]).forEach((c) => {
+        map.set(c.cycle_number, {
+          cycle_number: c.cycle_number,
+          cycle_status: c.cycle_status ?? null,
+          contribution_deadline: c.contribution_deadline ?? null,
+          expected_contributions: c.expected_contributions ?? 0,
+          received_contributions: receivedByCycle.get(c.cycle_number) ?? 0,
+          payout_amount: c.payout_amount != null ? Number(c.payout_amount) : null,
+        });
+      });
+      setCyclesMap(map);
+      setTotalCycles(circle?.memberCount ?? cycleRows.length);
     } catch (err) {
-      // Header is decorative — silently swallow so a transient failure
-      // doesn't affect the rest of the tab.
-      console.warn("[CircleDetail] fetchCurrentCycle failed:", err);
-      setCurrentCycle(null);
+      console.warn("[CircleDetail] fetchAllCycles failed:", err);
+      setCyclesMap(new Map());
     }
   }, [circleId, circle?.memberCount]);
 
   useEffect(() => {
-    fetchCurrentCycle();
-  }, [fetchCurrentCycle, activities]);
+    fetchAllCycles();
+  }, [fetchAllCycles, activities]);
 
   useEffect(() => {
     if (openedTrackedRef.current) return;
@@ -2412,39 +2420,108 @@ function CircleDetailBody({
     const earlierCount = activities.length - recentActivities.length;
     const visibleActivities = showAllActivities ? activities : recentActivities;
 
+    // Improvement #3 — group visibleActivities by cycle_number. Numeric
+    // cycles descending (newest first per spec). Rows without a cycle
+    // (joined / created / left) fall into a "formation" bucket rendered
+    // last. Within each group, oldest → newest so the reader follows
+    // the cycle's chronological progression.
+    const groups = new Map<number | "formation", CircleActivity[]>();
+    visibleActivities.forEach((a) => {
+      const key: number | "formation" =
+        typeof a.cycleNumber === "number" ? a.cycleNumber : "formation";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(a);
+    });
+    groups.forEach((items) =>
+      items.sort(
+        (a, b) =>
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      ),
+    );
+    const numericKeys = Array.from(groups.keys())
+      .filter((k): k is number => typeof k === "number")
+      .sort((a, b) => b - a);
+    const hasFormation = groups.has("formation");
+
+    const statusLabel = (s: string | null): string => {
+      if (!s) return "";
+      if (s === "closed") return t("circle_detail.cycle_status_completed");
+      if (s === "scheduled") return t("circle_detail.cycle_status_pending");
+      return t("circle_detail.cycle_status_active");
+    };
+
+    const renderSingleActivity = (activity: CircleActivity) => {
+      const activityColors = getActivityColor(activity.type);
+      return (
+        <View key={activity.id} style={styles.activityItem}>
+          <View
+            style={[
+              styles.activityIcon,
+              { backgroundColor: activityColors.bg },
+            ]}
+          >
+            <Ionicons
+              name={getActivityIcon(activity.type) as any}
+              size={18}
+              color={activityColors.icon}
+            />
+          </View>
+          <View style={styles.activityContent}>
+            <Text style={styles.activityText}>
+              {activity.type === "contribution" && (
+                <>
+                  <Text style={styles.activityBold}>{activity.userName}</Text>{" "}
+                  contributed{" "}
+                  <Text style={styles.activityBold}>
+                    ${activity.amount?.toLocaleString()}
+                  </Text>
+                </>
+              )}
+              {activity.type === "payout" &&
+                (activity.isCurrentUser ? (
+                  <Text style={[styles.activityBold, { color: "#059669" }]}>
+                    {t("circle_detail.activity_you_received", {
+                      amount: activity.amount?.toLocaleString() ?? "0",
+                    })}
+                  </Text>
+                ) : (
+                  <Text>
+                    <Text style={styles.activityBold}>{activity.userName}</Text>
+                    {" "}
+                    {t("circle_detail.activity_received", {
+                      amount: activity.amount?.toLocaleString() ?? "0",
+                    })}
+                  </Text>
+                ))}
+              {activity.type === "joined" && (
+                <>
+                  <Text style={styles.activityBold}>{activity.userName}</Text>{" "}
+                  joined the circle
+                </>
+              )}
+              {activity.type === "created" && (
+                <>
+                  <Text style={styles.activityBold}>{activity.userName}</Text>{" "}
+                  created this circle
+                </>
+              )}
+              {activity.type === "left" && (
+                <>
+                  <Text style={styles.activityBold}>{activity.userName}</Text>{" "}
+                  left the circle
+                </>
+              )}
+            </Text>
+            <Text style={styles.activityTime}>
+              {formatRelativeTime(activity.timestamp)}
+            </Text>
+          </View>
+        </View>
+      );
+    };
+
     return (
     <View style={styles.tabContent}>
-      {/* Improvement #1 — cycle header. Renders when we have any cycle
-          row; hidden for brand-new circles that haven't been cycled yet
-          (e.g., cycle 1 not created — the mig 362 gap). */}
-      {currentCycle ? (
-        <View style={styles.cycleHeaderCard}>
-          <Text style={styles.cycleHeaderTitle}>
-            {t("circle_detail.cycle_header_number", {
-              current: currentCycle.cycle_number,
-              total: currentCycle.total_cycles ?? currentCycle.cycle_number,
-            })}
-          </Text>
-          {currentCycle.contribution_deadline &&
-          currentCycle.cycle_status !== "closed" ? (
-            <Text style={styles.cycleHeaderMeta}>
-              {t("circle_detail.cycle_header_due", {
-                date: new Date(currentCycle.contribution_deadline).toLocaleDateString(
-                  undefined,
-                  { month: "short", day: "numeric", year: "numeric" },
-                ),
-              })}
-            </Text>
-          ) : null}
-          <Text style={styles.cycleHeaderProgress}>
-            {t("circle_detail.cycle_header_progress", {
-              received: currentCycle.received_contributions,
-              expected: currentCycle.expected_contributions,
-            })}
-          </Text>
-        </View>
-      ) : null}
-
       <Text style={styles.sectionTitle}>{t("circle_detail.section_recent_activity")}</Text>
 
       {isLoadingActivities ? (
@@ -2461,63 +2538,52 @@ function CircleDetailBody({
           </Text>
         </View>
       ) : (
-        visibleActivities.map((activity) => {
-          const colors = getActivityColor(activity.type);
-          return (
-            <View key={activity.id} style={styles.activityItem}>
-              <View style={[styles.activityIcon, { backgroundColor: colors.bg }]}>
-                <Ionicons
-                  name={getActivityIcon(activity.type) as any}
-                  size={18}
-                  color={colors.icon}
-                />
+        <>
+          {numericKeys.map((cycleNum) => {
+            const meta = cyclesMap.get(cycleNum);
+            const items = groups.get(cycleNum) ?? [];
+            const status = meta ? statusLabel(meta.cycle_status) : "";
+            const payoutSubline =
+              meta && meta.cycle_status === "closed" && meta.payout_amount != null
+                ? t("circle_detail.cycle_group_payout", {
+                    amount: meta.payout_amount.toLocaleString(),
+                  })
+                : meta && meta.expected_contributions > 0
+                  ? t("circle_detail.cycle_header_progress", {
+                      received: meta.received_contributions,
+                      expected: meta.expected_contributions,
+                    })
+                  : "";
+            return (
+              <View key={`cycle-${cycleNum}`} style={styles.cycleGroup}>
+                <View style={styles.cycleGroupHeader}>
+                  <Text style={styles.cycleGroupTitle}>
+                    {t("circle_detail.cycle_header_number", {
+                      current: cycleNum,
+                      total: totalCycles ?? cycleNum,
+                    })}
+                  </Text>
+                  {status || payoutSubline ? (
+                    <Text style={styles.cycleGroupMeta}>
+                      {[status, payoutSubline].filter(Boolean).join(" · ")}
+                    </Text>
+                  ) : null}
+                </View>
+                {items.map(renderSingleActivity)}
               </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityText}>
-                  {activity.type === "contribution" && (
-                    <>
-                      <Text style={styles.activityBold}>{activity.userName}</Text> contributed{" "}
-                      <Text style={styles.activityBold}>${activity.amount?.toLocaleString()}</Text>
-                    </>
-                  )}
-                  {activity.type === "payout" && (
-                    activity.isCurrentUser ? (
-                      <Text style={[styles.activityBold, { color: "#059669" }]}>
-                        {t("circle_detail.activity_you_received", {
-                          amount: activity.amount?.toLocaleString() ?? "0",
-                        })}
-                      </Text>
-                    ) : (
-                      <Text>
-                        <Text style={styles.activityBold}>{activity.userName}</Text>
-                        {" "}
-                        {t("circle_detail.activity_received", {
-                          amount: activity.amount?.toLocaleString() ?? "0",
-                        })}
-                      </Text>
-                    )
-                  )}
-                  {activity.type === "joined" && (
-                    <>
-                      <Text style={styles.activityBold}>{activity.userName}</Text> joined the circle
-                    </>
-                  )}
-                  {activity.type === "created" && (
-                    <>
-                      <Text style={styles.activityBold}>{activity.userName}</Text> created this circle
-                    </>
-                  )}
-                  {activity.type === "left" && (
-                    <>
-                      <Text style={styles.activityBold}>{activity.userName}</Text> left the circle
-                    </>
-                  )}
+            );
+          })}
+          {hasFormation ? (
+            <View style={styles.cycleGroup}>
+              <View style={styles.cycleGroupHeader}>
+                <Text style={styles.cycleGroupTitle}>
+                  {t("circle_detail.activity_group_formation")}
                 </Text>
-                <Text style={styles.activityTime}>{formatRelativeTime(activity.timestamp)}</Text>
               </View>
+              {(groups.get("formation") ?? []).map(renderSingleActivity)}
             </View>
-          );
-        })
+          ) : null}
+        </>
       )}
 
       {/* Expander — only render when there are older events outside
@@ -3794,34 +3860,27 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  // Improvement #1 — activity-tab cycle header
-  cycleHeaderCard: {
-    backgroundColor: colors.cardBg,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 4,
-    elevation: 1,
+  // Improvement #3 — per-cycle group headers on the activity tab
+  cycleGroup: {
+    marginBottom: 8,
   },
-  cycleHeaderTitle: {
-    fontSize: 15,
+  cycleGroupHeader: {
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginTop: 12,
+    marginBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  cycleGroupTitle: {
+    fontSize: 14,
     fontWeight: "700",
     color: colors.primaryNavy,
-    marginBottom: 4,
   },
-  cycleHeaderMeta: {
-    fontSize: 13,
+  cycleGroupMeta: {
+    fontSize: 12,
     color: colors.textSecondary,
-    marginBottom: 2,
-  },
-  cycleHeaderProgress: {
-    fontSize: 13,
-    color: colors.textSecondary,
+    marginTop: 2,
   },
   partialPlanHeader: {
     flexDirection: "row",
