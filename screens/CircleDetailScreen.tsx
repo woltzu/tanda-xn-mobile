@@ -2461,10 +2461,17 @@ function CircleDetailBody({
       currentCycleNumForSummary != null && members.length > 0;
 
     // Improvement #6 — user net position across ALL cycles. Sums
-    // contributions and completed payouts from `activities`. Note:
-    // getCircleActivities caps contributions at the most-recent 50 —
-    // fine for the 2-member/2-cycle test circles, but a circle with
-    // 20+ cycles could under-count. Flagged as follow-up if it bites.
+    // contributions and completed payouts from `activities`. Sign
+    // convention (flipped from the initial ship):
+    //   Contributed → displayed with '+' (money the user put in)
+    //   Received    → displayed with '-' (money the user took out)
+    //   Net = Contributed - Received
+    //     • Net > 0 → member is ahead (paid more than received)
+    //     • Net < 0 → member owes the circle
+    //     • Net = 0 → break-even
+    // Note: getCircleActivities caps contributions at the most-recent
+    // 50 — fine for the 2-member/2-cycle test circles, but a circle
+    // with 20+ cycles could under-count. Flagged as follow-up if it bites.
     const userNetPosition = user?.id
       ? (() => {
           let contributed = 0;
@@ -2480,7 +2487,7 @@ function CircleDetailBody({
             )
               received += amt;
           });
-          return { contributed, received, net: received - contributed };
+          return { contributed, received, net: contributed - received };
         })()
       : null;
 
@@ -2664,7 +2671,7 @@ function CircleDetailBody({
               {t("circle_detail.net_position_contributed")}
             </Text>
             <Text style={styles.netPositionValue}>
-              ${userNetPosition.contributed.toLocaleString()}
+              +${userNetPosition.contributed.toLocaleString()}
             </Text>
           </View>
           <View style={styles.netPositionRow}>
@@ -2672,7 +2679,7 @@ function CircleDetailBody({
               {t("circle_detail.net_position_received")}
             </Text>
             <Text style={styles.netPositionValue}>
-              ${userNetPosition.received.toLocaleString()}
+              -${userNetPosition.received.toLocaleString()}
             </Text>
           </View>
           <View style={[styles.netPositionRow, styles.netPositionRowTotal]}>
@@ -2692,8 +2699,12 @@ function CircleDetailBody({
                 },
               ]}
             >
-              {userNetPosition.net > 0 ? "+" : ""}$
-              {userNetPosition.net.toLocaleString()}
+              {userNetPosition.net > 0
+                ? "+"
+                : userNetPosition.net < 0
+                  ? "-"
+                  : ""}
+              ${Math.abs(userNetPosition.net).toLocaleString()}
             </Text>
           </View>
         </View>
