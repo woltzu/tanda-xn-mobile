@@ -3,6 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
+  ScrollView,
   TouchableOpacity,
   Modal,
   Pressable,
@@ -1942,6 +1943,11 @@ export default function HomeScreen() {
               {t("home_screen.sheet_subtitle")}
             </Text>
 
+            <ScrollView
+              style={styles.sheetScroll}
+              contentContainerStyle={styles.sheetScrollContent}
+              showsVerticalScrollIndicator
+            >
             <View style={styles.sheetList}>
               {breakdownCircles.length === 0 ? (
                 <Text style={styles.sheetEmpty}>
@@ -2029,6 +2035,7 @@ export default function HomeScreen() {
                 </Text>
               </View>
             </View>
+            </ScrollView>
 
             <TouchableOpacity
               style={styles.sheetCloseBtn}
@@ -2896,6 +2903,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 28,
+    // Cap the sheet at 85% of screen height. Prior to this the sheet
+    // grew to fit content and the top rows of the circle breakdown
+    // scrolled off the top of the viewport with no way to reach them.
+    maxHeight: "85%",
+  },
+  sheetScroll: {
+    flexShrink: 1,
+    marginBottom: 12,
+  },
+  sheetScrollContent: {
+    paddingBottom: 4,
   },
   sheetHandle: {
     alignSelf: "center",
