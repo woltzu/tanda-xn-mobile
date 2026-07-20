@@ -1,0 +1,46 @@
+{
+  "cli": {
+    "version": ">= 7.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "ios": {
+        "image": "latest"
+      },
+      "android": {
+        "image": "latest"
+      },
+      "env": {
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "@stripe_publishable_key"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "TODO_APPLE_ID",
+        "ascAppId": "TODO_ASC_APP_ID",
+        "teamId": "TODO_TEAM_ID"
+      },
+      "android": {
+        "serviceAccountKeyPath": "TODO_path/to/service-account-key.json",
+        "track": "production"
+      }
+    }
+  }
+}

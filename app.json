@@ -2,7 +2,8 @@
   "expo": {
     "name": "TandaXn",
     "slug": "tanda-xn-mobile",
-    "version": "1.2.0",
+    "version": "1.0.0",
+    "owner": "TODO_EXPO_OWNER",
     "description": "Rotating savings circles for groups, families, and diaspora communities.",
     "primaryColor": "#00C6AE",
     "orientation": "portrait",
@@ -26,6 +27,9 @@
         "NSFaceIDUsageDescription": "Use Face ID to securely sign in to TandaXn and unlock your wallet.",
         "NSCameraUsageDescription": "TandaXn uses the camera to scan QR codes for two-factor authentication setup and to capture photos for community posts and identity verification.",
         "NSPhotoLibraryUsageDescription": "TandaXn accesses your photo library so you can attach images to community posts, set your profile picture, and submit identity documents.",
+        "NSPhotoLibraryAddUsageDescription": "TandaXn needs permission to save photos to your library (e.g., receipts, QR codes, or ID documents).",
+        "NSMicrophoneUsageDescription": "TandaXn needs microphone access to record audio for verifying your identity and for sharing voice notes in communities.",
+        "NSContactsUsageDescription": "TandaXn needs contacts access to help you find friends already on the app and invite others.",
         "NSLocationWhenInUseUsageDescription": "TandaXn uses your location only when you verify a savings-goal milestone on the ground or list yourself as a Verified Provider. Location is never tracked in the background.",
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -42,6 +46,9 @@
       "permissions": [
         "CAMERA",
         "READ_MEDIA_IMAGES",
+        "RECORD_AUDIO",
+        "READ_CONTACTS",
+        "WRITE_CONTACTS",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
       ],
@@ -77,7 +84,6 @@
     "plugins": [
       "expo-secure-store",
       "@react-native-community/datetimepicker",
-      "expo-barcode-scanner",
       [
         "@stripe/stripe-react-native",
         {
@@ -86,7 +92,43 @@
         }
       ],
       "expo-localization",
-      "expo-web-browser"
-    ]
+      "expo-web-browser",
+      "expo-notifications",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "TandaXn needs camera access to take photos of your ID and for selfie verification."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "TandaXn needs access to your photo library to upload ID documents and profile pictures."
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow TandaXn to use Face ID for secure authentication."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow TandaXn to use your location to find circles near you."
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow TandaXn to access your contacts to invite friends."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "TODO_EAS_PROJECT_ID"
+      }
+    }
   }
 }
