@@ -2377,8 +2377,10 @@ function CircleDetailBody({
 
   const getActivityIcon = (type: string): string => {
     switch (type) {
-      case "contribution": return "wallet";
-      case "payout": return "cash-outline";
+      // Directional pair (Improvement #2): contribution is money going
+      // OUT to the pool, payout is money coming IN from the pool.
+      case "contribution": return "arrow-up-circle";
+      case "payout": return "arrow-down-circle";
       case "joined": return "person-add";
       case "created": return "add-circle";
       case "left": return "exit-outline";
