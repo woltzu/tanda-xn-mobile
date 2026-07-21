@@ -2478,7 +2478,8 @@
       "kyc": "Vérification KYC",
       "settings": "Paramètres",
       "bug_reports": "Retours",
-      "advances": "Avances de liquidité"
+      "advances": "Avances de liquidité",
+      "reconciliation": "Réconciliation"
     },
     "overview": {
       "title": "Vue d'ensemble",

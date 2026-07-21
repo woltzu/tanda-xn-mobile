@@ -2478,7 +2478,8 @@
       "kyc": "KYC Verification",
       "settings": "Settings",
       "bug_reports": "Feedback",
-      "advances": "Liquidity Advances"
+      "advances": "Liquidity Advances",
+      "reconciliation": "Reconciliation"
     },
     "overview": {
       "title": "Overview",

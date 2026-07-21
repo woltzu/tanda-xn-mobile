@@ -72,6 +72,7 @@ const MODULES: ModuleDef[] = [
   { key: "settings", icon: "cog-outline",           route: "AdminPlatformSettings" },
   { key: "bug_reports", icon: "bug-outline",        route: "AdminBugReports" },
   { key: "advances",    icon: "cash-outline",       route: "AdminLiquidityAdvances" },
+  { key: "reconciliation", icon: "construct-outline", route: "AdminReconciliation" },
 ];
 
 export default function AdminHubScreen() {

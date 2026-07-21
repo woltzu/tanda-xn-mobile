@@ -361,6 +361,7 @@ import AdminBugReportsScreen from "./screens/AdminBugReportsScreen";
 import AdminBugReportDetailScreen from "./screens/AdminBugReportDetailScreen";
 import AdminKYCReviewQueueScreen from "./screens/AdminKYCReviewQueueScreen";
 import AdminKYCReviewDetailScreen from "./screens/AdminKYCReviewDetailScreen";
+import AdminReconciliationScreen from "./screens/AdminReconciliationScreen";
 import AdminLiquidityAdvancesScreen from "./screens/AdminLiquidityAdvancesScreen";
 import AdminUserDetailScreen from "./screens/AdminUserDetailScreen";
 import AdminCirclesScreen from "./screens/AdminCirclesScreen";
@@ -984,6 +985,8 @@ export type RootStackParamList = {
   // AdminVerificationQueue which is goal-milestone verifications.
   AdminKYCReviewQueue: undefined;
   AdminKYCReviewDetail: { verificationId: string };
+  // Doc 38 reconciliation — closable-circles list with per-row invariant.
+  AdminReconciliation: undefined;
   AdminLiquidityAdvances: undefined;
   // Admin Bucket C — platform-wide settings (feature flags, templates,
   // system config, admin user roster). Named AdminPlatformSettings to
@@ -1233,6 +1236,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AdminBugReportDetail" component={AdminBugReportDetailScreen} />
       <HomeStack.Screen name="AdminKYCReviewQueue" component={AdminKYCReviewQueueScreen} />
       <HomeStack.Screen name="AdminKYCReviewDetail" component={AdminKYCReviewDetailScreen} />
+      <HomeStack.Screen name="AdminReconciliation" component={AdminReconciliationScreen} />
       <HomeStack.Screen name="AdminLiquidityAdvances" component={AdminLiquidityAdvancesScreen} />
       <HomeStack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
       {/* StripeConnectScreen is reachable via deep link only; no user-facing menu entry. */}
