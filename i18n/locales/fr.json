@@ -4557,6 +4557,7 @@
     "cycle_group_payout": "Paiement : {{amount}} $",
     "activity_group_formation": "Formation du cercle",
     "next_action_pay_now": "Payer {{amount}} $ maintenant",
+    "next_action_circle_closed": "Ce cercle est clôturé. Aucune modification n'est autorisée.",
     "next_action_circle_completed": "Ce cercle est terminé.",
     "next_action_cycle_pending": "Ce cycle n'a pas encore commencé.",
     "next_action_recipient_waiting": "Vous êtes le bénéficiaire de ce cycle.",

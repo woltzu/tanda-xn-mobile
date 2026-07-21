@@ -35,6 +35,10 @@ import { useCircleAutopayConfig } from "../hooks/useCircleAutopay";
 import { useCircleAutopaySuggestion } from "../hooks/useCircleAutopaySuggestion";
 import { useCircleNotificationMute } from "../hooks/useCircleNotificationMute";
 import { useCircleDetail } from "../hooks/useCircleDetail";
+import { useCircleInvariant } from "../hooks/useCircleInvariant";
+import { useIsAdmin } from "../hooks/useIsAdmin";
+import CorrectionModal from "../components/CorrectionModal";
+import CloseCircleModal from "../components/CloseCircleModal";
 import { useEventTracker } from "../hooks/useEventTracker";
 import { useRoles } from "../hooks/useRoles";
 // Phase 2 (migration 257) — critical-tier gate. Intercepts contribute taps
@@ -1039,6 +1043,88 @@ function CircleDetailBody({
 
   const renderOverviewTab = () => (
     <View style={styles.tabContent}>
+      {/* Doc 38 — admin invariant card + correction/close controls.
+          Only rendered when the caller is an admin. Hidden entirely
+          for regular members. */}
+      {isAdmin && circleInvariant ? (
+        <View style={styles.adminCard}>
+          <View style={styles.adminCardHeader}>
+            <Ionicons name="shield-checkmark" size={16} color={colors.primaryNavy} />
+            <Text style={styles.adminCardTitle}>Admin controls</Text>
+          </View>
+
+          <View style={styles.invariantRow}>
+            <Text style={styles.invariantLabel}>Net</Text>
+            <Text
+              style={[
+                styles.invariantValue,
+                {
+                  color: circleInvariant.balanced
+                    ? "#059669"
+                    : colors.errorText,
+                },
+              ]}
+            >
+              {circleInvariant.net_cents >= 0 ? "+" : "-"}$
+              {Math.abs(circleInvariant.net_cents / 100).toFixed(2)}
+              {circleInvariant.balanced ? " ✓" : " ⚠"}
+            </Text>
+          </View>
+          <Text style={styles.invariantBreakdown}>
+            Contributions ${circleInvariant.contributions_total.toFixed(2)} −
+            Payouts ${circleInvariant.payouts_total.toFixed(2)} +
+            Corrections ${circleInvariant.corrections_total.toFixed(2)}
+          </Text>
+
+          {circle.status === "closed" ? (
+            <View style={styles.closedBanner}>
+              <Ionicons name="lock-closed" size={14} color={colors.textSecondary} />
+              <Text style={styles.closedBannerText}>
+                This circle is closed. No further changes are allowed.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.adminBtnRow}>
+              <TouchableOpacity
+                style={styles.adminBtn}
+                onPress={() => setCorrectionModalVisible(true)}
+                accessibilityRole="button"
+              >
+                <Ionicons name="construct-outline" size={14} color={colors.primaryNavy} />
+                <Text style={styles.adminBtnText}>Apply correction</Text>
+              </TouchableOpacity>
+              {(circle.status === "completed" ||
+                circle.status === "payout_complete") ? (
+                <TouchableOpacity
+                  style={[
+                    styles.adminBtn,
+                    styles.adminBtnPrimary,
+                    !circleInvariant.can_close && styles.adminBtnDisabled,
+                  ]}
+                  onPress={() => setCloseModalVisible(true)}
+                  disabled={!circleInvariant.can_close}
+                  accessibilityRole="button"
+                >
+                  <Ionicons
+                    name="checkmark-done"
+                    size={14}
+                    color={circleInvariant.can_close ? "#FFFFFF" : colors.textSecondary}
+                  />
+                  <Text
+                    style={[
+                      styles.adminBtnPrimaryText,
+                      !circleInvariant.can_close && { color: colors.textSecondary },
+                    ]}
+                  >
+                    Close circle
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          )}
+        </View>
+      ) : null}
+
       {/* Pending-circle banner. Bucket A of the "underfilled circle"
           work — the circle isn't at capacity yet, but the contribution
           path (EF + webhook) already accepts pending-circle payments.
@@ -2822,7 +2908,18 @@ function CircleDetailBody({
   // → contribution completion. `must_contribute` is the only state that
   // still renders the Pay button; the other six render an info line
   // instead.
+  // Doc 38 admin surface — invariant status + correction/close modals.
+  // Only active when the caller is an admin; non-admin flow is unchanged.
+  const { isAdmin } = useIsAdmin();
+  const {
+    invariant: circleInvariant,
+    refetch: refetchInvariant,
+  } = useCircleInvariant(isAdmin ? circleId : undefined);
+  const [correctionModalVisible, setCorrectionModalVisible] = useState(false);
+  const [closeModalVisible, setCloseModalVisible] = useState(false);
+
   type NextAction =
+    | { kind: "circle_closed" }
     | { kind: "circle_completed" }
     | { kind: "cycle_pending" }
     | { kind: "recipient_waiting" }
@@ -2832,6 +2929,9 @@ function CircleDetailBody({
     | { kind: "must_contribute"; amount: number };
 
   const nextAction: NextAction = (() => {
+    // Doc 38 — closed circles are read-only. Priority above completed
+    // since a closed circle is also technically completed.
+    if (circle.status === "closed") return { kind: "circle_closed" };
     if (circle.status === "completed") return { kind: "circle_completed" };
     const currentCycleNum =
       cyclesMap.size > 0 ? Math.max(...Array.from(cyclesMap.keys())) : null;
@@ -2872,6 +2972,12 @@ function CircleDetailBody({
     text: string;
   } | null => {
     switch (nextAction.kind) {
+      case "circle_closed":
+        return {
+          icon: "lock-closed",
+          color: colors.textSecondary,
+          text: t("circle_detail.next_action_circle_closed"),
+        };
       case "circle_completed":
         return {
           icon: "checkmark-done-circle",
@@ -3096,6 +3202,34 @@ function CircleDetailBody({
         <Ionicons name="chatbubble-ellipses" size={24} color={colors.cardBg} />
         <Text style={styles.floatingHelpText}>{t("final_polish.circledetail_help")}</Text>
       </TouchableOpacity>
+
+      {/* Doc 38 admin modals — rendered at root level so the modal
+          overlay covers the tab content. Both refetch the invariant
+          on success so the admin card updates immediately. */}
+      {isAdmin ? (
+        <>
+          <CorrectionModal
+            visible={correctionModalVisible}
+            circleId={circleId}
+            onClose={() => setCorrectionModalVisible(false)}
+            onSuccess={() => {
+              refetchInvariant();
+              refresh({ skipSpinner: true });
+            }}
+          />
+          <CloseCircleModal
+            visible={closeModalVisible}
+            circleId={circleId}
+            invariant={circleInvariant}
+            onClose={() => setCloseModalVisible(false)}
+            onSuccess={() => {
+              refetchInvariant();
+              refresh({ skipSpinner: true });
+              refreshCircles();
+            }}
+          />
+        </>
+      ) : null}
 
       {/* Menu Modal */}
       <Modal
@@ -4163,6 +4297,66 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
+  // Doc 38 — admin invariant + action card. Only rendered when isAdmin.
+  adminCard: {
+    backgroundColor: colors.cardBg,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.primaryNavy,
+    borderLeftWidth: 4,
+  },
+  adminCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 10,
+  },
+  adminCardTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: colors.primaryNavy,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  invariantRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  invariantLabel: { fontSize: 13, color: colors.textSecondary, fontWeight: "600" },
+  invariantValue: { fontSize: 16, fontWeight: "800" },
+  invariantBreakdown: { fontSize: 11, color: colors.textSecondary, marginBottom: 10 },
+  adminBtnRow: { flexDirection: "row", gap: 8, marginTop: 6 },
+  adminBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.primaryNavy,
+    backgroundColor: colors.cardBg,
+  },
+  adminBtnText: { fontSize: 12, fontWeight: "700", color: colors.primaryNavy },
+  adminBtnPrimary: { backgroundColor: "#059669", borderColor: "#059669" },
+  adminBtnPrimaryText: { color: "#FFFFFF", fontSize: 12, fontWeight: "700" },
+  adminBtnDisabled: { opacity: 0.4 },
+  closedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    padding: 8,
+    marginTop: 6,
+    backgroundColor: colors.screenBg,
+    borderRadius: 8,
+  },
+  closedBannerText: { fontSize: 12, color: colors.textSecondary, flex: 1 },
   // Improvements #5/#6/#7 — summary cards + payout status pill
   summaryCard: {
     backgroundColor: colors.cardBg,
