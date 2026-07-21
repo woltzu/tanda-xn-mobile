@@ -3,7 +3,7 @@
     "name": "TandaXn",
     "slug": "tanda-xn-mobile",
     "version": "1.0.0",
-    "owner": "TODO_EXPO_OWNER",
+    "owner": "kimagui52",
     "description": "Rotating savings circles for groups, families, and diaspora communities.",
     "primaryColor": "#00C6AE",
     "orientation": "portrait",
@@ -44,13 +44,15 @@
       "package": "com.tandaxn.app",
       "versionCode": 1,
       "permissions": [
-        "CAMERA",
-        "READ_MEDIA_IMAGES",
-        "RECORD_AUDIO",
-        "READ_CONTACTS",
-        "WRITE_CONTACTS",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "android.permission.CAMERA",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_CONTACTS",
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
       ],
       "intentFilters": [
         {
@@ -127,7 +129,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "TODO_EAS_PROJECT_ID"
+        "projectId": "c166c88a-2c5d-4672-87ab-6b86f4b47f2a"
       }
     }
   }
