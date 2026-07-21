@@ -1044,9 +1044,11 @@ function CircleDetailBody({
   const renderOverviewTab = () => (
     <View style={styles.tabContent}>
       {/* Doc 38 — admin invariant card + correction/close controls.
-          Only rendered when the caller is an admin. Hidden entirely
-          for regular members. */}
-      {isAdmin && circleInvariant ? (
+          Only rendered when the caller is a PLATFORM admin (admin_users
+          membership), not just a circle-role admin. Hidden entirely
+          for regular members and for circle-admins-who-are-not-platform-
+          admins. */}
+      {isPlatformAdmin && circleInvariant ? (
         <View style={styles.adminCard}>
           <View style={styles.adminCardHeader}>
             <Ionicons name="shield-checkmark" size={16} color={colors.primaryNavy} />
@@ -2909,12 +2911,18 @@ function CircleDetailBody({
   // still renders the Pay button; the other six render an info line
   // instead.
   // Doc 38 admin surface — invariant status + correction/close modals.
-  // Only active when the caller is an admin; non-admin flow is unchanged.
-  const { isAdmin } = useIsAdmin();
+  // Gated on PLATFORM admin (useIsAdmin, admin_users table), NOT the
+  // circle-role isAdmin defined earlier at line ~850 (which is
+  // creator/admin-member of THIS circle). Different concepts:
+  //   * circle-role isAdmin → this circle's manager
+  //   * platform isAdmin    → app-wide admin_users membership
+  // Doc 38's RPCs (apply_correction, close_circle) check admin_users
+  // server-side, so the UI must gate on the same signal.
+  const { isAdmin: isPlatformAdmin } = useIsAdmin();
   const {
     invariant: circleInvariant,
     refetch: refetchInvariant,
-  } = useCircleInvariant(isAdmin ? circleId : undefined);
+  } = useCircleInvariant(isPlatformAdmin ? circleId : undefined);
   const [correctionModalVisible, setCorrectionModalVisible] = useState(false);
   const [closeModalVisible, setCloseModalVisible] = useState(false);
 
@@ -3205,8 +3213,10 @@ function CircleDetailBody({
 
       {/* Doc 38 admin modals — rendered at root level so the modal
           overlay covers the tab content. Both refetch the invariant
-          on success so the admin card updates immediately. */}
-      {isAdmin ? (
+          on success so the admin card updates immediately. Gated on
+          platform admin (not circle-role admin) — see the hook
+          destructure comment above. */}
+      {isPlatformAdmin ? (
         <>
           <CorrectionModal
             visible={correctionModalVisible}
