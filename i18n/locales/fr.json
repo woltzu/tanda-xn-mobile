@@ -1964,6 +1964,7 @@
     "err_password_min": "Min 8 caractères",
     "err_terms_required": "Vous devez accepter les conditions",
     "sms_consent_text": "J'accepte de recevoir des SMS de TandaXn, notamment les rappels de paiement, alertes de versement et mises à jour de compte. Des frais de message et de données peuvent s'appliquer. Répondez STOP pour vous désinscrire à tout moment.",
+    "sms_consent_hint": "Facultatif — vous pouvez le modifier plus tard dans les Paramètres.",
     "err_sms_consent_required": "Vous devez accepter de recevoir des SMS",
     "err_email_invalid": "Veuillez saisir une adresse e-mail valide",
     "err_create_default": "Échec de la création du compte. Veuillez réessayer.",

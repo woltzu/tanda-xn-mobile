@@ -151,8 +151,10 @@ export default function SignupScreen() {
     // SMS notifications. No blocking validation.
     if (formData.password.length < 8) newErrors.password = t("signup.err_password_min");
     if (!formData.agreedToTerms) newErrors.terms = t("signup.err_terms_required");
-    if (!formData.agreedToSmsConsent)
-      newErrors.smsConsent = t("signup.err_sms_consent_required");
+    // Mig 353 SMS-consent checkbox is OPTIONAL (Twilio A2P 10DLC
+    // requires opt-in be genuinely optional). Unchecked leaves
+    // sms_consent_granted_at = NULL in recordSignupAcceptances.
+    // Users can toggle later in Settings → Notifications.
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -445,13 +447,15 @@ export default function SignupScreen() {
                   <Ionicons name="checkmark" size={14} color="#FFFFFF" />
                 ) : null}
               </View>
-              <Text style={styles.termsText}>
-                {t("signup.sms_consent_text")}
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.termsText}>
+                  {t("signup.sms_consent_text")}
+                </Text>
+                <Text style={styles.smsConsentHint}>
+                  {t("signup.sms_consent_hint")}
+                </Text>
+              </View>
             </TouchableOpacity>
-            {errors.smsConsent ? (
-              <Text style={styles.fieldError}>{errors.smsConsent}</Text>
-            ) : null}
 
             {/* Phase 2 Bucket C — flagged-account block. Shows when the
                 debounced is_account_flagged probe returns true. Disables
@@ -674,6 +678,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#666",
     lineHeight: 20,
+  },
+  smsConsentHint: {
+    fontSize: 11,
+    color: "#999",
+    marginTop: 4,
+    fontStyle: "italic",
   },
   termsLink: {
     color: "#00C6AE",
