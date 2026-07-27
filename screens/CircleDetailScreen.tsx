@@ -39,6 +39,7 @@ import { useCircleInvariant } from "../hooks/useCircleInvariant";
 import { useIsAdmin } from "../hooks/useIsAdmin";
 import CorrectionModal from "../components/CorrectionModal";
 import CloseCircleModal from "../components/CloseCircleModal";
+import CircleAdminJoinCard from "../components/CircleAdminJoinCard";
 import { useEventTracker } from "../hooks/useEventTracker";
 import { useRoles } from "../hooks/useRoles";
 // Phase 2 (migration 257) — critical-tier gate. Intercepts contribute taps
@@ -1126,6 +1127,12 @@ function CircleDetailBody({
           )}
         </View>
       ) : null}
+
+      {/* Mig 374/375 — per-circle admin join controls (approval-gate toggle,
+          pending-joins + suspicious-count chip that deep-links to the
+          global AdminCircleJoinLog scoped to this circle). Same platform-
+          admin gate as the invariant card above. */}
+      {isPlatformAdmin ? <CircleAdminJoinCard circleId={circleId} /> : null}
 
       {/* Pending-circle banner. Bucket A of the "underfilled circle"
           work — the circle isn't at capacity yet, but the contribution

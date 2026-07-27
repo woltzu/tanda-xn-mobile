@@ -52,7 +52,9 @@ type ModuleKey =
   | "kyc"
   | "settings"
   | "bug_reports"
-  | "advances";
+  | "advances"
+  | "reconciliation"
+  | "join_log";
 
 type ModuleDef = {
   key: ModuleKey;
@@ -73,6 +75,7 @@ const MODULES: ModuleDef[] = [
   { key: "bug_reports", icon: "bug-outline",        route: "AdminBugReports" },
   { key: "advances",    icon: "cash-outline",       route: "AdminLiquidityAdvances" },
   { key: "reconciliation", icon: "construct-outline", route: "AdminReconciliation" },
+  { key: "join_log", icon: "list-outline",           route: "AdminCircleJoinLog" },
 ];
 
 export default function AdminHubScreen() {
