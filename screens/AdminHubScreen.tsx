@@ -57,7 +57,8 @@ type ModuleKey =
   | "join_log"
   | "scoring"
   | "payout_console"
-  | "substitutes";
+  | "substitutes"
+  | "collection";
 
 type ModuleDef = {
   key: ModuleKey;
@@ -82,6 +83,7 @@ const MODULES: ModuleDef[] = [
   { key: "scoring",  icon: "analytics-outline",      route: "AdminScoringDashboard" },
   { key: "payout_console", icon: "cash-outline",     route: "AdminPayoutConsole" },
   { key: "substitutes", icon: "swap-horizontal-outline", route: "AdminSubstituteDashboard" },
+  { key: "collection", icon: "card-outline",             route: "AdminCollectionDashboard" },
 ];
 
 export default function AdminHubScreen() {

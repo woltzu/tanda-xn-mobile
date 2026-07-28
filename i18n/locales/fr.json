@@ -2484,7 +2484,8 @@
       "join_log": "Journal des adhésions",
       "scoring": "Scoring",
       "payout_console": "Console des paiements",
-      "substitutes": "Substituts"
+      "substitutes": "Substituts",
+      "collection": "Collectes"
     },
     "payout_console": {
       "title": "Console des paiements",
@@ -2641,6 +2642,30 @@
       "no_history_tag": "sans historique",
       "in_pool_reliability": "dans le pool · fiabilité {{score}}",
       "not_in_pool": "pas dans le pool",
+      "generated_at": "Actualisé {{rel}}"
+    },
+    "collection": {
+      "title": "Console de collecte",
+      "count_24h": "Échecs (24h)",
+      "count_7d": "Échecs (7j)",
+      "count_high": "Membres à échecs répétés",
+      "count_paused": "Suspendus",
+      "trends_title": "Tendance des échecs (14 jours)",
+      "trends_empty": "Aucun échec sur les 14 derniers jours.",
+      "recent_title": "Échecs récents (24h) ({{count}})",
+      "recent_empty": "Aucun échec sur les 24 dernières heures.",
+      "source_contribution": "contribution",
+      "source_autopay": "prélèvement auto",
+      "retry_count": "tentative {{n}}",
+      "high_title": "Membres avec 3+ échecs (30j) ({{count}})",
+      "high_subtitle": "Union des échecs de contributions et prélèvements automatiques sur tous les cercles.",
+      "high_empty": "Aucun membre avec des échecs répétés sur les 30 derniers jours.",
+      "fail_count": "{{n}} échecs",
+      "latest_failure": "dernier {{rel}}",
+      "already_paused": "collectes suspendues",
+      "paused_title": "Membres suspendus ({{count}})",
+      "paused_empty": "Aucun membre n'a ses collectes suspendues actuellement.",
+      "paused_by": "suspendu par {{name}} · {{rel}}",
       "generated_at": "Actualisé {{rel}}"
     },
     "scoring": {

@@ -2484,7 +2484,8 @@
       "join_log": "Join Log",
       "scoring": "Scoring",
       "payout_console": "Payout Console",
-      "substitutes": "Substitutes"
+      "substitutes": "Substitutes",
+      "collection": "Collections"
     },
     "payout_console": {
       "title": "Payout Console",
@@ -2641,6 +2642,30 @@
       "no_history_tag": "no history",
       "in_pool_reliability": "in pool · reliability {{score}}",
       "not_in_pool": "not in pool",
+      "generated_at": "Refreshed {{rel}}"
+    },
+    "collection": {
+      "title": "Collection Console",
+      "count_24h": "Failures (24h)",
+      "count_7d": "Failures (7d)",
+      "count_high": "High-fail members",
+      "count_paused": "Paused",
+      "trends_title": "Failure trend (14 days)",
+      "trends_empty": "No failures in the last 14 days.",
+      "recent_title": "Recent failures (24h) ({{count}})",
+      "recent_empty": "No failures in the last 24 hours.",
+      "source_contribution": "contribution",
+      "source_autopay": "autopay",
+      "retry_count": "retry attempt {{n}}",
+      "high_title": "Members with 3+ failures (30d) ({{count}})",
+      "high_subtitle": "Union of contribution and autopay failures across all circles.",
+      "high_empty": "No members with repeated failures in the last 30 days.",
+      "fail_count": "{{n}} fails",
+      "latest_failure": "latest {{rel}}",
+      "already_paused": "collections paused",
+      "paused_title": "Paused members ({{count}})",
+      "paused_empty": "No members currently have their collections paused.",
+      "paused_by": "paused by {{name}} · {{rel}}",
       "generated_at": "Refreshed {{rel}}"
     },
     "scoring": {
