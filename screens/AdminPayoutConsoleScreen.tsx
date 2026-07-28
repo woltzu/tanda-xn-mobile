@@ -295,20 +295,28 @@ export default function AdminPayoutConsoleScreen() {
     if (!holdTarget) return;
     if (holdJustification.trim().length < 20) return;
     setHolding(true);
+    const args = {
+      p_cycle_id: holdTarget.cycle_id,
+      p_reason_code: holdReason,
+      p_justification: holdJustification.trim(),
+      p_member_facing_note: holdMemberNote.trim() || null,
+    };
+    // eslint-disable-next-line no-console
+    if (__DEV__) console.log("[AdminPayoutConsole] hold_payout args:", args);
     try {
-      const { data, error: err } = await supabase.rpc("hold_payout", {
-        p_cycle_id: holdTarget.cycle_id,
-        p_reason_code: holdReason,
-        p_justification: holdJustification.trim(),
-        p_member_facing_note: holdMemberNote.trim() || null,
-      });
+      const { data, error: err } = await supabase.rpc("hold_payout", args);
+      // eslint-disable-next-line no-console
+      if (__DEV__) console.log("[AdminPayoutConsole] hold_payout resp:", { data, err });
       if (err) throw new Error(err.message);
       if (!(data as any)?.success) throw new Error("hold_failed");
       showToast(t("admin.payout_console.hold_toast"), "success");
       closeHoldModal();
       await load(true);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : String(e), "error");
+      const msg = e instanceof Error ? e.message : String(e);
+      // In-modal error path uses Alert.alert — showToast renders under the
+      // Modal's z-layer on React Native and users see nothing.
+      Alert.alert(t("admin.payout_console.hold_error_title"), msg);
     } finally {
       setHolding(false);
     }
@@ -370,18 +378,21 @@ export default function AdminPayoutConsoleScreen() {
     if (pauseReason.trim().length < 50) return;
     if (pauseConfirmText.trim() !== "PAUSE") return;
     setTogglingPause(true);
+    const args = { p_activate: true, p_reason: pauseReason.trim() };
+    // eslint-disable-next-line no-console
+    if (__DEV__) console.log("[AdminPayoutConsole] toggle_platform_pause args:", args);
     try {
-      const { data, error: err } = await supabase.rpc("toggle_platform_pause", {
-        p_activate: true,
-        p_reason: pauseReason.trim(),
-      });
+      const { data, error: err } = await supabase.rpc("toggle_platform_pause", args);
+      // eslint-disable-next-line no-console
+      if (__DEV__) console.log("[AdminPayoutConsole] toggle_platform_pause resp:", { data, err });
       if (err) throw new Error(err.message);
       if (!(data as any)?.success) throw new Error("pause_failed");
       showToast(t("admin.payout_console.paused_toast"), "success");
       closePauseModal();
       await load(true);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : String(e), "error");
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert(t("admin.payout_console.pause_error_title"), msg);
     } finally {
       setTogglingPause(false);
     }

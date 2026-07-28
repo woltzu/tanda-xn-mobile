@@ -2549,7 +2549,9 @@
       "reason_min_count": "{{current}} / {{min}} characters",
       "hint_reason_50": "Reason needs 50+ characters",
       "hint_type_pause": "Type PAUSE exactly to confirm",
-      "hint_justification_20": "Justification needs 20+ characters"
+      "hint_justification_20": "Justification needs 20+ characters",
+      "pause_error_title": "Couldn't pause payouts",
+      "hold_error_title": "Couldn't hold payout"
     },
     "scoring": {
       "title": "Scoring Dashboard",

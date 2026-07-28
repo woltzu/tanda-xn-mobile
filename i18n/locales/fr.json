@@ -2549,7 +2549,9 @@
       "reason_min_count": "{{current}} / {{min}} caractères",
       "hint_reason_50": "La raison doit faire au moins 50 caractères",
       "hint_type_pause": "Tapez PAUSE exactement pour confirmer",
-      "hint_justification_20": "La justification doit faire au moins 20 caractères"
+      "hint_justification_20": "La justification doit faire au moins 20 caractères",
+      "pause_error_title": "Impossible de suspendre les paiements",
+      "hold_error_title": "Impossible de suspendre le paiement"
     },
     "scoring": {
       "title": "Tableau de bord scoring",
