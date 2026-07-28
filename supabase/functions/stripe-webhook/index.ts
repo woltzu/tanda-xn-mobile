@@ -831,7 +831,13 @@ Deno.serve(async (req) => {
           { count: "exact" },
         )
         .eq("transfer_id", transfer.id)
-        .eq("status", "pending")
+        // Doc 39 Phase 3: process-circle-payout now writes 'executing'
+        // (was 'pending'). Filter accepts both — 'pending' preserves
+        // backward compatibility with any pre-Phase-3 in-flight rows, and
+        // an .in([...]) is cheap. Explicitly excludes 'completed' so a
+        // Stripe re-delivery of transfer.paid no-ops via cpCount=0
+        // (the existing log message covers that).
+        .in("status", ["executing", "pending"])
         .select("id");
       if (cpErr) {
         processingError = processingError ??

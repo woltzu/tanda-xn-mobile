@@ -219,12 +219,56 @@ Deno.serve(async (req) => {
     (pending as unknown as { id: string }) = existing as { id: string };
   }
 
-  // ─── 7. Create the Stripe Transfer ────────────────────────────────────
-  // Idempotency key is also deterministic on cycle_id — Stripe will
-  // return the SAME Transfer object on retry rather than creating a
-  // second one. This is the canonical guard against double-payouts.
-  const idempotencyKey = `payout-${cycleId}`;
+  // ─── 7. Insert circle_payouts (status='executing') BEFORE Stripe ─────
+  // Doc 39 Phase 3 (Option B): row lands with status='executing' before
+  // the Transfer API call so audit is preserved even if Stripe fails or
+  // times out mid-call. transfer_id is NULL at this stage — populated
+  // in step 9 after Stripe returns. On Stripe failure, we UPDATE the
+  // row to status='failed' with an error note (step 9b).
+  //
+  // 'executing' is meaningful in the Payout Console — mig 380's
+  // list_in_flight_payouts RPC queries status IN ('executing','processing')
+  // so admins see a live row for the duration of the Transfer.
   const transferGroup = `circle_${cycle.circle_id}_cycle_${cycleId}`;
+  const { data: payout, error: payoutErr } = await service
+    .from("circle_payouts")
+    .insert({
+      circle_id: cycle.circle_id,
+      cycle_id: cycleId,
+      cycle_number: cycle.cycle_number,
+      recipient_id: cycle.recipient_user_id,
+      amount: Number(cycle.payout_amount),
+      amount_cents: amountCents,
+      currency: "USD",
+      status: "executing",
+      transfer_id: null,
+      pending_intent_id: pending.id,
+      payment_method: "stripe",
+      metadata: {
+        admin_user_id: user.id,
+        transfer_group: transferGroup,
+        client_reference_id: clientReferenceId,
+        stage: "pre_transfer",
+      },
+    })
+    .select("id")
+    .single();
+  if (payoutErr || !payout) {
+    console.error(
+      "[process-circle-payout] pre-Stripe circle_payouts insert failed:",
+      payoutErr?.message,
+    );
+    return jsonResponse(
+      { error: "Failed to record pre-Stripe payout row", detail: payoutErr?.message },
+      500,
+    );
+  }
+
+  // ─── 8. Create the Stripe Transfer ────────────────────────────────────
+  // Idempotency key is deterministic on cycle_id — Stripe will return the
+  // SAME Transfer object on retry rather than creating a second one. This
+  // is the canonical guard against double-payouts.
+  const idempotencyKey = `payout-${cycleId}`;
   let transfer: Stripe.Transfer;
   try {
     transfer = await stripe.transfers.create(
@@ -241,61 +285,84 @@ Deno.serve(async (req) => {
           cycle_number: String(cycle.cycle_number),
           recipient_user_id: cycle.recipient_user_id,
           pending_intent_id: pending.id,
+          payout_id: payout.id,
           client_reference_id: clientReferenceId,
         },
       },
       { idempotencyKey },
     );
   } catch (e) {
-    console.error("[process-circle-payout] stripe.transfers.create failed:", (e as Error).message);
+    // ─── 8b. Stripe failed — flip the pre-inserted row to 'failed' ──────
+    // Preserves the audit trail (row + reason) even though no money
+    // moved. Best-effort; log if the update itself fails.
+    const stripeErrMsg = (e as Error).message;
+    console.error("[process-circle-payout] stripe.transfers.create failed:", stripeErrMsg);
+    const { error: failUpdErr } = await service
+      .from("circle_payouts")
+      .update({
+        status: "failed",
+        notes: `Stripe transfer failed: ${stripeErrMsg.slice(0, 480)}`,
+        metadata: {
+          admin_user_id: user.id,
+          transfer_group: transferGroup,
+          client_reference_id: clientReferenceId,
+          stage: "stripe_failed",
+          stripe_error: stripeErrMsg,
+        },
+      })
+      .eq("id", payout.id);
+    if (failUpdErr) {
+      console.error(
+        "[process-circle-payout] circle_payouts fail-update also failed for payout",
+        payout.id,
+        ":",
+        failUpdErr.message,
+      );
+    }
     return jsonResponse(
-      { error: "Stripe transfer failed", detail: (e as Error).message },
+      {
+        error: "Stripe transfer failed",
+        detail: stripeErrMsg,
+        payout_id: payout.id,
+      },
       502,
     );
   }
 
-  // ─── 8. Insert circle_payouts row (status='pending') ──────────────────
-  // We use the EXISTING column shape: recipient_id (not recipient_user_id),
-  // cycle_number alongside the new cycle_id FK, amount in dollars
-  // alongside the new amount_cents int. payment_method='stripe' so the
-  // dashboard can filter Stripe-vs-other-rails later.
-  const { data: payout, error: payoutErr } = await service
+  // ─── 9. Stripe accepted the Transfer — stamp transfer_id on the row ──
+  // status stays 'executing' until the transfer.paid webhook flips it to
+  // 'completed'. Stripe-webhook's UPDATE filter accepts both 'executing'
+  // and legacy 'pending' rows (see stripe-webhook line ~834 change).
+  const { error: transferStampErr } = await service
     .from("circle_payouts")
-    .insert({
-      circle_id: cycle.circle_id,
-      cycle_id: cycleId,
-      cycle_number: cycle.cycle_number,
-      recipient_id: cycle.recipient_user_id,
-      amount: Number(cycle.payout_amount),
-      amount_cents: amountCents,
-      currency: "USD",
-      status: "pending",
+    .update({
       transfer_id: transfer.id,
-      pending_intent_id: pending.id,
-      payment_method: "stripe",
       metadata: {
         admin_user_id: user.id,
         transfer_group: transferGroup,
         client_reference_id: clientReferenceId,
+        stage: "stripe_accepted",
       },
     })
-    .select("id")
-    .single();
-
-  if (payoutErr) {
-    // The Transfer already exists on Stripe — we can't undo it. Surface
-    // the situation so the admin knows manual reconciliation is needed.
+    .eq("id", payout.id);
+  if (transferStampErr) {
+    // The Transfer already exists on Stripe — we can't undo it. Row is
+    // still 'executing' but without transfer_id, so the webhook can't
+    // find it. Surface for manual reconciliation.
     console.error(
-      "[process-circle-payout] circle_payouts insert failed AFTER Transfer creation:",
-      payoutErr.message,
+      "[process-circle-payout] transfer_id stamp failed AFTER Transfer creation:",
+      transferStampErr.message,
       "transfer_id=",
       transfer.id,
+      "payout_id=",
+      payout.id,
     );
     return jsonResponse(
       {
-        error: "Transfer succeeded but circle_payouts insert failed — manual reconciliation needed",
-        detail: payoutErr.message,
+        error: "Transfer succeeded but transfer_id stamp failed — manual reconciliation needed",
+        detail: transferStampErr.message,
         transfer_id: transfer.id,
+        payout_id: payout.id,
         pending_intent_id: pending.id,
       },
       500,
@@ -304,9 +371,9 @@ Deno.serve(async (req) => {
 
   return jsonResponse({
     transfer_id: transfer.id,
-    payout_id: payout?.id,
+    payout_id: payout.id,
     pending_intent_id: pending.id,
     amount_cents: amountCents,
-    status: "pending",
+    status: "executing",
   });
 });

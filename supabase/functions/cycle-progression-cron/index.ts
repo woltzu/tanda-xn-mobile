@@ -58,6 +58,38 @@ serve(async (req: Request) => {
     const now = new Date()
     const todayStr = now.toISOString().split('T')[0]
 
+    // ── Doc 39 Phase 3: platform pause check (mig 379 + 383) ─────────────────
+    // Read platform_settings.payouts_paused once at cron entry. If paused,
+    // we do NOT touch the ready_payout branch below (execute_cycle_payout
+    // would refuse anyway per mig 379's guard, but this skips N per-cycle
+    // RPC round-trips and produces a single cleanly-labeled log row).
+    // Other state transitions (scheduled→collecting, deadline_reached,
+    // grace_period entry, closed) still fire — the pause is scoped to
+    // outbound Transfers, not internal state bookkeeping.
+    let isPaused = false
+    let pausedSince: string | null = null
+    let pausedByAdminId: string | null = null
+    let pausedReason: string | null = null
+    let payoutsSkippedDueToPause = 0
+    try {
+      const { data: settings, error: settingsErr } = await supabase
+        .from('platform_settings')
+        .select('payouts_paused, payouts_paused_at, payouts_paused_by_admin_id, payouts_paused_reason')
+        .eq('id', 1)
+        .maybeSingle()
+      if (settingsErr) {
+        console.warn('⚠️ Could not read platform_settings; proceeding without pause check:', settingsErr.message)
+      } else if (settings?.payouts_paused) {
+        isPaused = true
+        pausedSince = settings.payouts_paused_at ?? null
+        pausedByAdminId = settings.payouts_paused_by_admin_id ?? null
+        pausedReason = settings.payouts_paused_reason ?? null
+        console.log(`⏸️  Platform pause active since ${pausedSince} — ready_payout branch will be skipped this run`)
+      }
+    } catch (e: any) {
+      console.warn('⚠️ platform_settings read threw; proceeding without pause check:', e?.message ?? e)
+    }
+
     // Get all cycles that might need progression
     const { data: activeCycles, error: fetchError } = await supabase
       .from('circle_cycles')
@@ -156,6 +188,15 @@ serve(async (req: Request) => {
             break
 
           case 'ready_payout':
+            // Doc 39 Phase 3: skip payout execution entirely when platform
+            // pause is active. Cycle stays in ready_payout and will be
+            // re-picked-up on the next tick once pause clears. NO RPC
+            // round-trip, NO payout_pending drift, NO log churn.
+            if (isPaused) {
+              payoutsSkippedDueToPause++
+              console.log(`⏸️  Cycle ${cycle.id} (${(cycle.circles as any).name}): skipped — platform paused`)
+              break
+            }
             // Trigger payout when its expected date is reached. Two error
             // layers to keep the cycle honest:
             //   1. rpcRes.error → SDK-level failure (network, missing
@@ -288,7 +329,14 @@ serve(async (req: Request) => {
           records_succeeded: transitionCount,
           records_failed: 0,
           execution_time_ms: stats.processing_time_ms,
-          details: stats
+          details: {
+            ...stats,
+            paused:                            isPaused,
+            payouts_skipped_due_to_pause:      payoutsSkippedDueToPause,
+            paused_since:                      pausedSince,
+            paused_by_admin_id:                pausedByAdminId,
+            paused_reason:                     pausedReason,
+          }
         })
       if (logErr) console.log('⚠️ Could not log job:', logErr.message)
     } catch (e: any) {
