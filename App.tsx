@@ -365,6 +365,8 @@ import AdminReconciliationScreen from "./screens/AdminReconciliationScreen";
 import AdminCircleJoinLogScreen from "./screens/AdminCircleJoinLogScreen";
 import AdminScoringDashboardScreen from "./screens/AdminScoringDashboardScreen";
 import AdminPayoutConsoleScreen from "./screens/AdminPayoutConsoleScreen";
+import AdminDisputeDashboardScreen from "./screens/AdminDisputeDashboardScreen";
+import AdminDisputeDetailScreen from "./screens/AdminDisputeDetailScreen";
 import AdminLiquidityAdvancesScreen from "./screens/AdminLiquidityAdvancesScreen";
 import AdminUserDetailScreen from "./screens/AdminUserDetailScreen";
 import AdminCirclesScreen from "./screens/AdminCirclesScreen";
@@ -997,6 +999,9 @@ export type RootStackParamList = {
   AdminScoringDashboard: undefined;
   // Doc 39 Phase 2 (mig 379 + 380) payout console — hold / approve / pause.
   AdminPayoutConsole: undefined;
+  // Mig 384 admin dispute console — visibility + override + reassign.
+  AdminDisputeDashboard: undefined;
+  AdminDisputeDetail: { disputeId: string };
   AdminLiquidityAdvances: undefined;
   // Admin Bucket C — platform-wide settings (feature flags, templates,
   // system config, admin user roster). Named AdminPlatformSettings to
@@ -1250,6 +1255,8 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AdminCircleJoinLog" component={AdminCircleJoinLogScreen} />
       <HomeStack.Screen name="AdminScoringDashboard" component={AdminScoringDashboardScreen} />
       <HomeStack.Screen name="AdminPayoutConsole" component={AdminPayoutConsoleScreen} />
+      <HomeStack.Screen name="AdminDisputeDashboard" component={AdminDisputeDashboardScreen} />
+      <HomeStack.Screen name="AdminDisputeDetail" component={AdminDisputeDetailScreen} />
       <HomeStack.Screen name="AdminLiquidityAdvances" component={AdminLiquidityAdvancesScreen} />
       <HomeStack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
       {/* StripeConnectScreen is reachable via deep link only; no user-facing menu entry. */}

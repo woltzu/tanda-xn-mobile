@@ -70,7 +70,7 @@ const MODULES: ModuleDef[] = [
   { key: "users",    icon: "people-outline",        route: "AdminUsers" },
   { key: "circles",  icon: "refresh-outline",       route: "AdminCircles" },
   { key: "trips",    icon: "airplane-outline",      route: "AdminTrips" },
-  { key: "disputes", icon: "shield-half-outline",   route: "AdminModeration" },
+  { key: "disputes", icon: "shield-half-outline",   route: "AdminDisputeDashboard" },
   { key: "elders",   icon: "ribbon-outline",        route: "ElderDashboard" },
   { key: "kyc",      icon: "id-card-outline",       route: "AdminKYCReviewQueue" },
   { key: "settings", icon: "cog-outline",           route: "AdminPlatformSettings" },
