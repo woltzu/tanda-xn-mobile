@@ -372,6 +372,7 @@ import AdminSubstituteDashboardScreen from "./screens/AdminSubstituteDashboardSc
 import AdminCollectionDashboardScreen from "./screens/AdminCollectionDashboardScreen";
 import AdminChargebackConsoleScreen from "./screens/AdminChargebackConsoleScreen";
 import AdminNotificationHealthScreen from "./screens/AdminNotificationHealthScreen";
+import AdminObservabilityDashboardScreen from "./screens/AdminObservabilityDashboardScreen";
 import ProfileVisibilitySettingsScreen from "./screens/ProfileVisibilitySettingsScreen";
 import AdminLiquidityAdvancesScreen from "./screens/AdminLiquidityAdvancesScreen";
 import AdminUserDetailScreen from "./screens/AdminUserDetailScreen";
@@ -1016,6 +1017,8 @@ export type RootStackParamList = {
   AdminChargebackConsole: undefined;
   // Mig 392 admin notification-health dashboard.
   AdminNotificationHealth: undefined;
+  // Mig 394 admin system-observability dashboard.
+  AdminObservabilityDashboard: undefined;
   // Mig 388 Doc 40 profile visibility — member-facing settings + access log.
   ProfileVisibilitySettings: undefined;
   AdminLiquidityAdvances: undefined;
@@ -1277,6 +1280,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AdminCollectionDashboard" component={AdminCollectionDashboardScreen} />
       <HomeStack.Screen name="AdminChargebackConsole" component={AdminChargebackConsoleScreen} />
       <HomeStack.Screen name="AdminNotificationHealth" component={AdminNotificationHealthScreen} />
+      <HomeStack.Screen name="AdminObservabilityDashboard" component={AdminObservabilityDashboardScreen} />
       <HomeStack.Screen name="ProfileVisibilitySettings" component={ProfileVisibilitySettingsScreen} />
       <HomeStack.Screen name="AdminLiquidityAdvances" component={AdminLiquidityAdvancesScreen} />
       <HomeStack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
