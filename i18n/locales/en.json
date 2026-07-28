@@ -2546,7 +2546,10 @@
       "member_note_label": "Member-facing note (optional)",
       "member_note_placeholder": "Custom message for the recipient",
       "member_note_hint": "If empty, the default hold copy is sent verbatim.",
-      "reason_min_count": "{{current}} / {{min}} characters"
+      "reason_min_count": "{{current}} / {{min}} characters",
+      "hint_reason_50": "Reason needs 50+ characters",
+      "hint_type_pause": "Type PAUSE exactly to confirm",
+      "hint_justification_20": "Justification needs 20+ characters"
     },
     "scoring": {
       "title": "Scoring Dashboard",

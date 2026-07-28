@@ -2546,7 +2546,10 @@
       "member_note_label": "Note pour le bénéficiaire (optionnel)",
       "member_note_placeholder": "Message personnalisé pour le bénéficiaire",
       "member_note_hint": "Si vide, le message par défaut est envoyé tel quel.",
-      "reason_min_count": "{{current}} / {{min}} caractères"
+      "reason_min_count": "{{current}} / {{min}} caractères",
+      "hint_reason_50": "La raison doit faire au moins 50 caractères",
+      "hint_type_pause": "Tapez PAUSE exactement pour confirmer",
+      "hint_justification_20": "La justification doit faire au moins 20 caractères"
     },
     "scoring": {
       "title": "Tableau de bord scoring",

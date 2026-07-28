@@ -862,6 +862,11 @@ export default function AdminPayoutConsoleScreen() {
                 )}
               </TouchableOpacity>
             </View>
+            {!holding && holdJustification.trim().length < 20 ? (
+              <Text style={styles.disabledHint}>
+                {t("admin.payout_console.hint_justification_20")}
+              </Text>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -945,6 +950,21 @@ export default function AdminPayoutConsoleScreen() {
                 )}
               </TouchableOpacity>
             </View>
+            {!togglingPause &&
+            (pauseReason.trim().length < 50 || pauseConfirmText.trim() !== "PAUSE") ? (
+              <Text style={styles.disabledHint}>
+                {[
+                  pauseReason.trim().length < 50
+                    ? t("admin.payout_console.hint_reason_50")
+                    : null,
+                  pauseConfirmText.trim() !== "PAUSE"
+                    ? t("admin.payout_console.hint_type_pause")
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </Text>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -1155,6 +1175,13 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: "right",
     marginTop: -6,
+  },
+  disabledHint: {
+    marginTop: 8,
+    fontSize: 11,
+    color: "#991B1B",
+    fontWeight: "600",
+    textAlign: "center",
   },
   reasonRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   reasonPill: {
