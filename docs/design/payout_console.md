@@ -189,9 +189,11 @@ other cycle.
 2. Write a `'payout.held'` ledger event with metadata
    `{ cycle_id, admin_user_id, reason }`.
 3. Notify the recipient via the standard notification pipeline
-   (`notification_queue`), category `payout_held`, with the reason
-   redacted to a short admin-authored user-facing message (the raw
-   `reason` is admin-only; see §4.6).
+   (`notification_queue`), category `payout_held`. Copy is authored
+   per §3.1.1 — the hold RPC accepts an optional
+   `member_facing_note` parameter; if omitted, the default copy in
+   §3.1.1 is sent unmodified. The raw `reason` field is admin-only
+   and is never surfaced to the recipient.
 4. Return `{ success, cycle_id, held_at, held_by }`.
 
 **Release:**
@@ -212,6 +214,110 @@ other cycle.
 predicate to also refuse when status is `held` or
 `awaiting_approval` (see §5.2). This is the sole coordination point
 between auto-path and holds.
+
+#### 3.1.1. Notification copy
+
+The hold RPC accepts an optional `member_facing_note TEXT`
+parameter. When present, the admin's note is delivered as-is
+(subject to `notification_queue`'s length caps). When absent (the
+default path), the copy below is sent verbatim across all three
+channels — email, push, in-app.
+
+**Member-facing default:**
+
+> **Your payout is on a brief hold.**
+>
+> Your money is safe with TandaXn. A team member is verifying a
+> routine detail before releasing your payout. Most holds resolve
+> within 24 hours — we'll notify you as soon as it's released.
+> No action is needed from you. If you have questions, tap Help
+> below.
+
+**Admin-facing console form (the shape that renders in the admin
+UI when placing a hold):**
+
+```
+Payout held
+  Amount:             $X
+  Recipient:          [Name]
+  Reason code:        [dropdown — enum]
+  Justification:      [free text — min 20 chars, mirrors Doc 38]
+  Recipient notified: Yes
+  [Release hold] button
+```
+
+**Audit trail on every hold action:** the hold write is logged
+with `admin_user_id`, timestamp, `reason_code`, and free-text
+`justification`. This lands both on `circle_payouts` (the hold
+columns from §5.1) and in `ledger_events` as the `payout.held`
+row (§4). The two sources overlap deliberately — the
+`circle_payouts` snapshot is the fast admin-UI read path, the
+`ledger_events` row is the immutable forensic record.
+
+#### 3.1.2. Interaction with lending auto-repay (Doc 36)
+
+`execute_cycle_payout` (mig 357) delegates to
+`process_advance_repayment` when the recipient has an active loan
+with `target_cycle_id` set to the cycle being paid. Holds interact
+with that path in three distinct ways:
+
+1. **Held → released normally.** Loan auto-repay proceeds
+   atomically with the payout at release time. No lending-side
+   change needed. This is the default happy path.
+2. **Held → corrected via Doc 38.** The originally-targeted
+   payout never lands, so the loan is orphaned — its
+   `target_cycle_id` points at a payout that will never fire, and
+   no repayment will ever offset the balance. Admin must decide
+   per-case, with a reason code recorded:
+   - **(i)** Re-point `target_cycle_id` to the member's next
+     scheduled payout (loan continues), OR
+   - **(ii)** Emit a `loan.corrected` event zeroing the loan
+     balance (platform absorbs the loss).
+3. **Held indefinitely (30+ days).** Auto-escalate to platform
+   admin: cron job enqueues an alert to `super_admin` /
+   `platform_admin` demanding an explicit decision (release,
+   correct, or extend). Prevents loans quietly ageing in limbo
+   because a hold was placed and forgotten.
+
+**Follow-up task, not this doc's scope:** Doc 36 needs a new
+section "Interaction with payout holds and corrections" that
+formalises the `loan.corrected` event, the `target_cycle_id`
+re-point RPC, and the 30-day escalation cron. Flagged here so it
+doesn't fall through the crack.
+
+#### 3.1.3. Concurrency — two admins hold the same payout
+
+Two admins clicking Hold on the same payout at roughly the same
+time is a real operational scenario, not a theoretical race. The
+ledger's job is to record what happened, so both events are
+preserved. UX makes the collision visible instead of hiding it.
+
+**Behavior:**
+- **First hold:** normal success path. Writes the
+  `circle_payouts` row (status → `held`), writes the
+  `payout.held` ledger event, notifies the recipient.
+- **Second hold** (fires while the first is still active):
+  - Still writes a `payout.held` ledger event, with
+    `metadata.secondary_hold: true` and a `metadata.parent_hold_event_id`
+    pointing at the first hold. (No dedupe, no UNIQUE index — Option
+    (a) in prior draft discussions is adopted.)
+  - Does NOT re-UPSERT the `circle_payouts` row (the first admin's
+    `held_by_admin_id` + `hold_reason` stay authoritative on the
+    payout row itself).
+  - RPC response to the second admin surfaces the collision
+    directly: `{ success: true, secondary_hold: true, first_holder:
+    { admin_user_id, name, held_at, reason } }`.
+- **UI toast (second admin):** *"This payout was just held by
+  [first admin's name] at [timestamp]. Your hold has also been
+  recorded."* No false-success confusion; both admins see the
+  shared state.
+- **Release semantics unchanged:** a single `release_payout`
+  clears the `circle_payouts.status = 'held'`. The two ledger
+  rows remain as-is — releasing does not retroactively "merge"
+  them. `release_payout` writes one `payout.released` event; if
+  operators want to indicate that the release resolves both
+  holds, the release_note can mention it, but no schema-level
+  linkage is required.
 
 ### 3.2. Per-circle Manual Approval Mode
 
@@ -312,6 +418,34 @@ outage, suspected fraud wave, or in-flight schema migration.
   running by accident. The friction of the recurring alert makes
   "forgot to unpause" unlikely.
 
+#### 3.3.2. Community-admin visibility
+
+`community_admin` role (mig 269 — scoped to a single community)
+sees the platform-pause badge in the top pane so they can explain
+to their members why circles aren't paying out. They do NOT see
+the activate/release buttons — the kill switch is `super_admin`
+only.
+
+**Badge is actionable in a limited way.** Tapping it reveals:
+- **Who** activated the pause
+  (`payouts_paused_by_admin_id` → display name).
+- **When** it was activated (`payouts_paused_at`, formatted as
+  relative + absolute).
+- **The reason** (`payouts_paused_reason`).
+
+Rationale: silence + broken payouts + no explanation reads to
+members as a platform failure. Giving community admins the
+"who, when, why" lets them respond with confidence instead of
+guessing. This is read-only enrichment of what they can already
+see (the badge itself); no elevation of write privilege.
+
+The `get_platform_pause_state()` RPC (§5.5) returns this payload
+to any active admin regardless of role. The community-admin's
+console renders the details in a tooltip / expandable panel on
+badge tap; the buttons rendered next to the badge for
+`super_admin` (`Release pause`) are omitted from the
+`community_admin` render.
+
 ---
 
 ## 4. New Ledger Event Types
@@ -345,15 +479,42 @@ Doc 38's `reopen_circle`.
 
 ## 5. Backend Changes Required
 
-### 5.1. `circle_payouts.status` — new values
+### 5.1. `circle_payouts.status` — convert to ENUM
 
-Add `'held'` and `'awaiting_approval'` to whatever the current
-`status` allowed-set is. Mig 278 notes the existing set covers
-`'pending'`, `'processing'`, `'completed'`, etc. (no CHECK on the
-current column). Formalising the CHECK is scope for the implementation
-migration; at minimum, the code paths must recognise the two new values.
+Replace `circle_payouts.status`'s current unconstrained TEXT column
+with a Postgres ENUM type. ENUM is preferred over a CHECK constraint:
+values are validated at insert time, `ALTER TYPE ADD VALUE` is
+idempotent and cheap for future additions, and the type is a first-
+class object that surfaces in `pg_type` (easier to audit than a CHECK
+expression embedded in the table definition).
 
-New columns:
+```sql
+CREATE TYPE public.payout_status AS ENUM (
+  'pending', 'processing', 'completed', 'failed',
+  'reversed', 'held', 'awaiting_approval'
+);
+
+ALTER TABLE public.circle_payouts
+  ALTER COLUMN status TYPE public.payout_status
+  USING status::public.payout_status;
+```
+
+**Code sweep required in the same migration PR.** Grep every writer
+that touches `circle_payouts.status` and confirm the string value it
+writes is a member of the ENUM. Any writer using an invalid string
+will fail the `USING status::payout_status` cast at migration time —
+the migration will abort with a clear error, and the offending
+writer must be fixed in the same PR before the migration lands.
+
+Search targets (non-exhaustive):
+- `supabase/migrations/*.sql` — grep `circle_payouts` with a nearby
+  SET/VALUES/INSERT INTO clause.
+- `supabase/functions/**/*.ts` — grep `.from("circle_payouts")` for
+  edge-function writers.
+- `context/`, `services/` — client side rarely writes this column
+  directly, but sweep to be sure.
+
+New columns (unchanged from prior draft):
 
 ```sql
 ALTER TABLE public.circle_payouts
@@ -553,44 +714,45 @@ implementation:
 
 ## 7. Open Questions for the Implementation Phase
 
-1. **CHECK on `circle_payouts.status`** — mig 278 noted the column
-   currently has no formal CHECK. Should the implementation migration
-   introduce one (enumerating `pending / processing / completed /
-   failed / reversed / held / awaiting_approval`), or continue with
-   the inline-comment convention the codebase uses today? A CHECK
-   is safer; a CHECK is also a coordination point across every
-   writer, so needs a code sweep.
-2. **`community_admin` scope on platform pause** — a
-   `community_admin` sees only their community's data (per mig
-   269). The platform pause is inherently platform-scoped; should a
-   `community_admin` see the pause badge in the top pane at all, or
-   is that a `platform_admin` / `super_admin`-only surface?
-   Recommendation: show the badge (they should know why their
-   circles aren't paying out); hide the buttons.
-3. **Notification wording** for hold / approval / pause — needs a
-   copy pass with product before shipping. Especially §3.1(3)
-   "reason redacted" — who authors the user-facing summary?
-   Proposal: hold RPC accepts an optional `member_facing_note`
-   parameter; if omitted, uses a generic "Your payout is
-   temporarily held for review." string.
-4. **Interaction with lending auto-repay** — `execute_cycle_payout`
-   (mig 357) delegates to `process_advance_repayment` when the
-   recipient has an active loan. If a payout is `held` after
-   contributions are collected but before execution, the loan's
-   `target_cycle_id` still points at that cycle. On `release_payout`,
-   the auto-repay proceeds normally. On indefinite hold + Doc 38
-   correction of the payout, the loan's `target_cycle_id` must be
-   re-pointed or the loan itself corrected. This is a lending-doc
-   conversation, flagged here so it isn't missed.
-5. **Concurrency: two admins hold the same payout** — the UPSERT
-   in §3.1 is race-tolerant (last-writer-wins on `held_by_admin_id`),
-   but the ledger event is a permanent record and there'd be two
-   `payout.held` rows for a single actual hold. Options: (a) accept
-   the redundant events as forensic detail; (b) add a UNIQUE partial
-   index on `ledger_events (metadata->>'cycle_id', event_type)
-   WHERE event_type = 'payout.held' AND (no subsequent released
-   event)`. Recommendation: (a) — the ledger's job is to record
-   what happened; two admins clicking the same button is what
-   happened.
+### 7.1. Resolved decisions
+
+The five open questions in prior drafts of this section are all
+resolved. Their answers landed in the relevant sections above:
+
+| # | Question | Decision | Where |
+|---|----------|----------|-------|
+| 1 | Formal CHECK vs inline comment for `circle_payouts.status`? | Neither — use a Postgres ENUM type + in-PR writer sweep. | §5.1 |
+| 2 | Should `community_admin` see the platform-pause badge? | Yes, and the badge is actionable (who/when/why on tap). Buttons remain `super_admin` only. | §3.3.2 |
+| 3 | Notification wording for holds? | Optional `member_facing_note` on the hold RPC with a documented default copy sent verbatim across email / push / in-app. | §3.1.1 |
+| 4 | Lending auto-repay interaction with holds? | Three scenarios documented (released-normally, corrected-via-Doc-38, held-30d+). Doc 36 gets a follow-up section for the schema-level pieces. | §3.1.2 |
+| 5 | Concurrency on hold — two admins, same payout? | Option (a) — accept both ledger events. UX surfaces the collision (`secondary_hold: true` + toast naming the first holder). | §3.1.3 |
+
+### 7.2. Remaining edge case — Platform-pause vs per-payout hold interaction
+
+Per-payout holds (§3.1) and the platform-wide pause (§3.3) are
+**independent locks**. The release of one does not release the
+other. Concretely:
+
+1. Admin holds payout X via `hold_payout` → `circle_payouts.status
+   = 'held'`.
+2. Platform pause activates via `activate_platform_pause` →
+   `platform_settings.payouts_paused = true`.
+3. Platform pause releases via `release_platform_pause` →
+   `platform_settings.payouts_paused = false`.
+4. **Payout X stays held.** The per-payout hold on X survives the
+   pause lifecycle untouched.
+
+Console UI already reflects this via §2.2's row-level status
+derivation: `Platform-paused` outranks `Held` while the pause is
+active, and once the pause clears, the `Held` state re-surfaces
+in the row.
+
+**Implementation-time verification:** confirm
+`release_platform_pause` writes only to
+`platform_settings.payouts_paused` — it must NOT touch any
+`circle_payouts.status = 'held'` rows. A one-line unit test on
+the RPC (assert row count unchanged on `circle_payouts WHERE
+status = 'held'` across activate/release cycle) is enough. Flag
+here so this is not silently dropped during implementation.
 
 ---
