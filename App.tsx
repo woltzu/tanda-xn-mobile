@@ -363,6 +363,7 @@ import AdminKYCReviewQueueScreen from "./screens/AdminKYCReviewQueueScreen";
 import AdminKYCReviewDetailScreen from "./screens/AdminKYCReviewDetailScreen";
 import AdminReconciliationScreen from "./screens/AdminReconciliationScreen";
 import AdminCircleJoinLogScreen from "./screens/AdminCircleJoinLogScreen";
+import AdminScoringDashboardScreen from "./screens/AdminScoringDashboardScreen";
 import AdminLiquidityAdvancesScreen from "./screens/AdminLiquidityAdvancesScreen";
 import AdminUserDetailScreen from "./screens/AdminUserDetailScreen";
 import AdminCirclesScreen from "./screens/AdminCirclesScreen";
@@ -991,6 +992,8 @@ export type RootStackParamList = {
   // Mig 374/375 audit surface for circle joins + suspicious-cluster review.
   // Optional circleId param scopes the list to a single circle.
   AdminCircleJoinLog: { circleId?: string } | undefined;
+  // Mig 376 scoring pipeline admin surface — deltas, runs, freeze toggle.
+  AdminScoringDashboard: undefined;
   AdminLiquidityAdvances: undefined;
   // Admin Bucket C — platform-wide settings (feature flags, templates,
   // system config, admin user roster). Named AdminPlatformSettings to
@@ -1242,6 +1245,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AdminKYCReviewDetail" component={AdminKYCReviewDetailScreen} />
       <HomeStack.Screen name="AdminReconciliation" component={AdminReconciliationScreen} />
       <HomeStack.Screen name="AdminCircleJoinLog" component={AdminCircleJoinLogScreen} />
+      <HomeStack.Screen name="AdminScoringDashboard" component={AdminScoringDashboardScreen} />
       <HomeStack.Screen name="AdminLiquidityAdvances" component={AdminLiquidityAdvancesScreen} />
       <HomeStack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
       {/* StripeConnectScreen is reachable via deep link only; no user-facing menu entry. */}
