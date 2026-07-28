@@ -3846,7 +3846,19 @@
     "default_reason_mute_chat": "Examiné par un modérateur : silence chat appliqué.",
     "default_reason_unmute_chat": "Examiné par un modérateur : silence chat levé.",
     "toast_mute_chated": "Utilisateur silencié dans le chat",
-    "toast_unmute_chated": "L'utilisateur peut à nouveau écrire"
+    "toast_unmute_chated": "L'utilisateur peut à nouveau écrire",
+    "report_history_link": "Voir l'historique des signalements",
+    "report_history_title": "Historique des signalements",
+    "history_total": "Total",
+    "history_pending": "En attente",
+    "history_resolved": "Résolus",
+    "history_by_circle": "Par cercle",
+    "history_by_circle_empty": "Aucun signalement lié à un cercle.",
+    "history_recent": "Signalements récents (5 derniers)",
+    "history_recent_empty": "Aucun signalement enregistré.",
+    "history_kind_user": "Utilisateur",
+    "history_kind_content": "Contenu",
+    "history_reporter": "par {{name}}"
   },
   "moderation_p2": {
     "priority_high": "Haute",

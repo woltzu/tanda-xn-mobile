@@ -222,6 +222,37 @@ export default function GroupChatScreen() {
     };
   }, [circleId]);
 
+  // ── Realtime: caller's own chat-mute state ─────────────────────────────────
+  // Mig 391 follow-up. Without this, an admin muting the user mid-session
+  // wouldn't surface here until the user navigated away and back. Server-
+  // side RLS still blocks any send attempt in-session, but the UX is
+  // clearer if the banner appears immediately.
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    const channel = supabase
+      .channel(`profile-mute:${currentUserId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "profiles",
+          filter: `id=eq.${currentUserId}`,
+        },
+        (payload: any) => {
+          const newMutedUntil =
+            (payload?.new?.chat_muted_until as string | null | undefined) ?? null;
+          setChatMutedUntil(newMutedUntil);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUserId]);
+
   // ── Send handler ───────────────────────────────────────────────────────────
   const handleSend = async () => {
     const trimmed = inputText.trim();

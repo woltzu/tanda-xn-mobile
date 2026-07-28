@@ -3846,7 +3846,19 @@
     "default_reason_mute_chat": "Reviewed by moderator: chat mute issued.",
     "default_reason_unmute_chat": "Reviewed by moderator: chat mute lifted.",
     "toast_mute_chated": "User muted in chat",
-    "toast_unmute_chated": "User can chat again"
+    "toast_unmute_chated": "User can chat again",
+    "report_history_link": "View report history",
+    "report_history_title": "Report history",
+    "history_total": "Total",
+    "history_pending": "Pending",
+    "history_resolved": "Resolved",
+    "history_by_circle": "By circle",
+    "history_by_circle_empty": "No circle-scoped reports.",
+    "history_recent": "Recent reports (last 5)",
+    "history_recent_empty": "No reports on file.",
+    "history_kind_user": "User",
+    "history_kind_content": "Content",
+    "history_reporter": "by {{name}}"
   },
   "moderation_p2": {
     "priority_high": "High",

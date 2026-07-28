@@ -678,6 +678,8 @@ function UserReportDetail({
   // Mig 391 — chat-only mute (distinct from account suspension).
   const [muteDays, setMuteDays] = useState("3");
   const [busy, setBusy] = useState(false);
+  // Mig 391 follow-up — cross-circle report history.
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -829,6 +831,17 @@ function UserReportDetail({
             />
           ) : null}
 
+          <TouchableOpacity
+            style={styles.historyLinkBtn}
+            onPress={() => setShowHistory(true)}
+            accessibilityRole="button"
+          >
+            <Ionicons name="time-outline" size={14} color={TEAL} />
+            <Text style={styles.historyLinkText}>
+              {t("moderation_admin.report_history_link")}
+            </Text>
+          </TouchableOpacity>
+
           <Text style={styles.fieldLabel}>
             {t("moderation_admin.suspend_days_label")}
           </Text>
@@ -910,7 +923,252 @@ function UserReportDetail({
           </View>
         </Pressable>
       </Pressable>
+      {showHistory ? (
+        <ReportHistoryModal
+          userId={report.reported_user_id}
+          userName={profile?.full_name ?? null}
+          onClose={() => setShowHistory(false)}
+          t={t}
+        />
+      ) : null}
     </Modal>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// ReportHistoryModal — cross-circle report history for a member.
+// Backed by get_member_report_history (mig 391). Rendered on top of the
+// UserReportDetail modal so the admin can peek at pattern data without
+// losing their place in the current review flow.
+// ══════════════════════════════════════════════════════════════════════════
+
+type HistoryRecent = {
+  kind: "user" | "content";
+  report_id: string;
+  created_at: string;
+  reporter_id: string | null;
+  reporter_name: string | null;
+  reason: string;
+  status: string;
+  content_type?: string;
+  content_id?: string;
+  circle_id?: string | null;
+  circle_name?: string | null;
+};
+
+type HistoryByCircle = {
+  circle_id: string;
+  circle_name: string | null;
+  count: number;
+};
+
+type HistoryPayload = {
+  user_id: string;
+  total_reports: number;
+  pending: number;
+  resolved: number;
+  by_circle: HistoryByCircle[];
+  recent: HistoryRecent[];
+};
+
+function ReportHistoryModal({
+  userId,
+  userName,
+  onClose,
+  t,
+}: {
+  userId: string;
+  userName: string | null;
+  onClose: () => void;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
+  const [data, setData] = useState<HistoryPayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const { data: res, error: e } = await supabase.rpc(
+        "get_member_report_history",
+        { p_user_id: userId },
+      );
+      if (cancelled) return;
+      if (e) {
+        setError(e.message);
+      } else {
+        setData(res as HistoryPayload);
+      }
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose}>
+        <Pressable style={styles.sheet} onPress={() => {}}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>
+            {t("moderation_admin.report_history_title")}
+          </Text>
+          {userName ? (
+            <Text style={styles.historySubject} numberOfLines={1}>
+              {userName}
+            </Text>
+          ) : null}
+
+          {loading ? (
+            <View style={{ padding: 24, alignItems: "center" }}>
+              <ActivityIndicator size="large" color={TEAL} />
+            </View>
+          ) : error ? (
+            <View style={{ padding: 24, alignItems: "center", gap: 8 }}>
+              <Ionicons name="warning-outline" size={28} color={RED} />
+              <Text style={styles.previewMissing}>{error}</Text>
+            </View>
+          ) : !data ? null : (
+            <ScrollView style={{ maxHeight: 480 }}>
+              {/* Totals strip */}
+              <View style={styles.historyStrip}>
+                <HistoryStat
+                  label={t("moderation_admin.history_total")}
+                  value={data.total_reports}
+                />
+                <HistoryStat
+                  label={t("moderation_admin.history_pending")}
+                  value={data.pending}
+                  tone={data.pending > 0 ? "warn" : "muted"}
+                />
+                <HistoryStat
+                  label={t("moderation_admin.history_resolved")}
+                  value={data.resolved}
+                  tone="muted"
+                />
+              </View>
+
+              {/* By-circle breakdown */}
+              <Text style={styles.historySectionLabel}>
+                {t("moderation_admin.history_by_circle")}
+              </Text>
+              {data.by_circle.length === 0 ? (
+                <Text style={styles.historyEmpty}>
+                  {t("moderation_admin.history_by_circle_empty")}
+                </Text>
+              ) : (
+                data.by_circle.map((row) => (
+                  <View key={row.circle_id} style={styles.historyRow}>
+                    <Text style={styles.historyRowMain} numberOfLines={1}>
+                      {row.circle_name ?? row.circle_id.slice(0, 8) + "…"}
+                    </Text>
+                    <Text style={styles.historyRowCount}>{row.count}</Text>
+                  </View>
+                ))
+              )}
+
+              {/* Recent reports */}
+              <Text style={styles.historySectionLabel}>
+                {t("moderation_admin.history_recent")}
+              </Text>
+              {data.recent.length === 0 ? (
+                <Text style={styles.historyEmpty}>
+                  {t("moderation_admin.history_recent_empty")}
+                </Text>
+              ) : (
+                data.recent.slice(0, 5).map((r) => (
+                  <View key={r.report_id} style={styles.historyRecentRow}>
+                    <View style={styles.historyRecentHeader}>
+                      <View
+                        style={[
+                          styles.typeBadge,
+                          {
+                            backgroundColor:
+                              r.kind === "user" ? "#FEE2E2" : "#DBEAFE",
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.typeBadgeText,
+                            {
+                              color:
+                                r.kind === "user" ? RED : "#0369A1",
+                            },
+                          ]}
+                        >
+                          {t(`moderation_admin.history_kind_${r.kind}`)}
+                        </Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.statusPill,
+                          {
+                            backgroundColor:
+                              r.status === "pending"
+                                ? "#FEF3C7"
+                                : "#D1FAE5",
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.statusPillText,
+                            {
+                              color:
+                                r.status === "pending" ? AMBER : "#059669",
+                            },
+                          ]}
+                        >
+                          {r.status}
+                        </Text>
+                      </View>
+                      <Text style={styles.cardDate}>{relTime(r.created_at)}</Text>
+                    </View>
+                    <Text style={styles.historyRecentReason}>
+                      {t(`moderation.reason_${r.reason}_label`)}
+                    </Text>
+                    <Text style={styles.historyRecentMeta} numberOfLines={1}>
+                      {t("moderation_admin.history_reporter", {
+                        name:
+                          r.reporter_name ??
+                          (r.reporter_id
+                            ? r.reporter_id.slice(0, 8) + "…"
+                            : "—"),
+                      })}
+                      {r.circle_name ? " · " + r.circle_name : ""}
+                    </Text>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function HistoryStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: "warn" | "muted";
+}) {
+  const fg =
+    tone === "warn" ? AMBER : tone === "muted" ? MUTED : NAVY;
+  return (
+    <View style={styles.historyStatCell}>
+      <Text style={[styles.historyStatValue, { color: fg }]}>{value}</Text>
+      <Text style={styles.historyStatLabel} numberOfLines={2}>
+        {label}
+      </Text>
+    </View>
   );
 }
 
@@ -1272,6 +1530,111 @@ const styles = StyleSheet.create({
   metaLabel: { width: 90, fontSize: 12, color: MUTED, fontWeight: "700" },
   metaValue: { flex: 1, fontSize: 12, color: TEXT },
 
+  historyLinkBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginTop: 6,
+  },
+  historyLinkText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: TEAL,
+  },
+  historySubject: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: MUTED,
+    marginTop: -8,
+    marginBottom: 12,
+  },
+  historyStrip: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 14,
+  },
+  historyStatCell: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: BORDER,
+    alignItems: "center",
+  },
+  historyStatValue: {
+    fontSize: 20,
+    fontWeight: "800",
+  },
+  historyStatLabel: {
+    fontSize: 10,
+    color: MUTED,
+    fontWeight: "700",
+    marginTop: 4,
+    textAlign: "center",
+  },
+  historySectionLabel: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: MUTED,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  historyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  historyRowMain: {
+    flex: 1,
+    fontSize: 13,
+    color: TEXT,
+    fontWeight: "600",
+  },
+  historyRowCount: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: NAVY,
+    marginLeft: 12,
+  },
+  historyRecentRow: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+    gap: 4,
+  },
+  historyRecentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  historyRecentReason: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: TEXT,
+    marginTop: 4,
+  },
+  historyRecentMeta: {
+    fontSize: 11,
+    color: MUTED,
+  },
+  historyEmpty: {
+    fontSize: 12,
+    color: MUTED,
+    fontStyle: "italic",
+    textAlign: "center",
+    paddingVertical: 12,
+  },
   fieldLabel: { fontSize: 12, fontWeight: "700", color: TEXT, marginTop: 10, marginBottom: 4 },
   input: {
     backgroundColor: "#F9FAFB",
