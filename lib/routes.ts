@@ -54,6 +54,7 @@ export const Routes = {
   AdminSubstituteDashboard: "AdminSubstituteDashboard",
   AdminCollectionDashboard: "AdminCollectionDashboard",
   AdminChargebackConsole: "AdminChargebackConsole",
+  AdminNotificationHealth: "AdminNotificationHealth",
   ProfileVisibilitySettings: "ProfileVisibilitySettings",
   AdminKYCReviewDetail: "AdminKYCReviewDetail",
   AdminKYCReviewQueue: "AdminKYCReviewQueue",

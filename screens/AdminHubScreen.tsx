@@ -60,7 +60,8 @@ type ModuleKey =
   | "substitutes"
   | "collection"
   | "chargebacks"
-  | "moderation";
+  | "moderation"
+  | "notification_health";
 
 type ModuleDef = {
   key: ModuleKey;
@@ -88,6 +89,7 @@ const MODULES: ModuleDef[] = [
   { key: "collection", icon: "card-outline",             route: "AdminCollectionDashboard" },
   { key: "chargebacks", icon: "shield-outline",           route: "AdminChargebackConsole" },
   { key: "moderation",  icon: "flag-outline",             route: "AdminModeration" },
+  { key: "notification_health", icon: "notifications-outline", route: "AdminNotificationHealth" },
 ];
 
 export default function AdminHubScreen() {
