@@ -3,9 +3,16 @@
 // ══════════════════════════════════════════════════════════════════════════════
 // Schedule: Daily at 03:30 UTC (suggested — actual scheduling via pg_cron
 // or Supabase Scheduler is configured separately when this is deployed).
-// Purpose:  Clear profiles.suspended_until rows whose timestamp is in the
-//           past so the suspension stops applying and a clean audit value
-//           is left behind. Logs a moderation_actions row for traceability.
+// Purpose:  Two independent sweeps of expired mod-state on profiles:
+//           1. suspended_until — clear rows whose suspension has run out
+//              (original mig-152 behavior).
+//           2. chat_muted_until — clear rows whose chat mute has run out
+//              (added mig 391). is_chat_muted() already returns FALSE
+//              once the timestamp passes NOW(), so functional correctness
+//              doesn't depend on this sweep — it's a housekeeping step
+//              that keeps the columns tidy so admin surfaces show a
+//              clean "not muted" state instead of "muted, but expired".
+//           Sweeps are independent — one failing doesn't skip the other.
 //
 // Deployment:
 //   supabase functions deploy auto-expire-suspensions --no-verify-jwt
@@ -38,48 +45,66 @@ serve(async (req: Request) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // 1. Find the profiles whose suspension has run out.
     const nowIso = new Date().toISOString();
-    const { data: expired, error: selectErr } = await supabase
+
+    // ─── Sweep 1: suspended_until ──────────────────────────────────────
+    const { data: expiredSuspensions, error: sSelectErr } = await supabase
       .from("profiles")
       .select("id, suspended_until")
       .lte("suspended_until", nowIso)
       .not("suspended_until", "is", null);
+    if (sSelectErr) throw sSelectErr;
+    const suspensionIds = (expiredSuspensions ?? []).map(
+      (p: { id: string }) => p.id,
+    );
 
-    if (selectErr) throw selectErr;
-    const ids = (expired ?? []).map((p: { id: string }) => p.id);
-
-    if (ids.length === 0) {
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          startedAt,
-          finishedAt: new Date().toISOString(),
-          cleared: 0,
-          message: "no expired suspensions",
-        }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
+    let clearedSuspensions = 0;
+    if (suspensionIds.length > 0) {
+      const { error: sUpdErr } = await supabase
+        .from("profiles")
+        .update({ suspended_until: null })
+        .in("id", suspensionIds);
+      if (sUpdErr) throw sUpdErr;
+      clearedSuspensions = suspensionIds.length;
     }
 
-    // 2. Clear them in one statement.
-    const { error: updateErr } = await supabase
+    // ─── Sweep 2: chat_muted_until (mig 391) ──────────────────────────
+    // is_chat_muted() already returns FALSE past the deadline so this
+    // sweep only affects display state, not enforcement. We also clear
+    // the _by / _reason columns so the admin surface shows a clean
+    // "not muted" state.
+    const { data: expiredMutes, error: mSelectErr } = await supabase
       .from("profiles")
-      .update({ suspended_until: null })
-      .in("id", ids);
-    if (updateErr) throw updateErr;
+      .select("id, chat_muted_until")
+      .lte("chat_muted_until", nowIso)
+      .not("chat_muted_until", "is", null);
+    if (mSelectErr) throw mSelectErr;
+    const muteIds = (expiredMutes ?? []).map((p: { id: string }) => p.id);
 
-    // No audit row — the original suspension is already in
-    // moderation_actions, and expiration is a passive event (no admin
-    // took an action). moderation_actions.action enum doesn't cover
-    // "auto-expired" and we don't want to overload an existing value.
+    let clearedMutes = 0;
+    if (muteIds.length > 0) {
+      const { error: mUpdErr } = await supabase
+        .from("profiles")
+        .update({
+          chat_muted_until: null,
+          chat_muted_by: null,
+          chat_muted_reason: null,
+        })
+        .in("id", muteIds);
+      if (mUpdErr) throw mUpdErr;
+      clearedMutes = muteIds.length;
+    }
+
+    // No audit rows — expiration is a passive event (no admin took an
+    // action). The original suspend/mute is already in moderation_actions.
 
     return new Response(
       JSON.stringify({
         ok: true,
         startedAt,
         finishedAt: new Date().toISOString(),
-        cleared: ids.length,
+        clearedSuspensions,
+        clearedChatMutes: clearedMutes,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
