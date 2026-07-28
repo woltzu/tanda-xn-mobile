@@ -77,9 +77,44 @@ interface PipelineStatus {
   cron_note: string;
 }
 
+interface AlertRow {
+  id: string;
+  title: string;
+  body: string;
+  data: {
+    target_user_id?: string;
+    member_name?: string;
+    old_score?: number;
+    new_score?: number;
+    delta?: number;
+    threshold?: number;
+    pipeline_run_id?: string;
+  };
+  read: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
+interface OverrideRow {
+  id: string;
+  user_id: string;
+  member_name: string;
+  old_score: number;
+  new_score: number;
+  delta: number;
+  reason: string;
+  admin_note: string | null;
+  admin_user_id: string;
+  admin_name: string;
+  created_at: string;
+  expires_at: string | null;
+  is_expired: boolean;
+}
+
 interface DashboardPayload {
   biggest_deltas: Delta[];
   recent_runs: RunRow[];
+  recent_alerts: AlertRow[];
   pipeline_status: PipelineStatus;
   threshold_used: number;
 }
@@ -124,6 +159,7 @@ export default function AdminScoringDashboardScreen() {
   const canFreeze = CAN_FREEZE_ROLES.has(String(scope.role ?? ""));
 
   const [data, setData] = useState<DashboardPayload | null>(null);
+  const [overrides, setOverrides] = useState<OverrideRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -132,21 +168,125 @@ export default function AdminScoringDashboardScreen() {
   const [freezeReason, setFreezeReason] = useState("");
   const [toggling, setToggling] = useState(false);
 
+  // Override modal state. When overrideTarget is non-null, the modal is
+  // open and the fields are bound to the target user.
+  const [overrideTarget, setOverrideTarget] = useState<{
+    user_id: string;
+    display_name: string;
+    current_score: number;
+  } | null>(null);
+  const [overrideNewScore, setOverrideNewScore] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overrideDays, setOverrideDays] = useState("");
+  const [savingOverride, setSavingOverride] = useState(false);
+  const [removingOverride, setRemovingOverride] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data: res, error: err } = await supabase.rpc("get_scoring_dashboard", {
-        p_threshold: null,
-      });
-      if (err) throw new Error(err.message);
-      setData(res as DashboardPayload);
+      const [dashRes, ovRes] = await Promise.all([
+        supabase.rpc("get_scoring_dashboard", { p_threshold: null }),
+        supabase.rpc("get_active_xnscore_overrides"),
+      ]);
+      if (dashRes.error) throw new Error(dashRes.error.message);
+      if (ovRes.error) throw new Error(ovRes.error.message);
+      setData(dashRes.data as DashboardPayload);
+      setOverrides(((ovRes.data as any)?.overrides ?? []) as OverrideRow[]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const openOverrideModal = (delta: Delta) => {
+    setOverrideTarget({
+      user_id: delta.user_id,
+      display_name: delta.display_name,
+      current_score: delta.total_score,
+    });
+    setOverrideNewScore(String(delta.total_score.toFixed(2)));
+    setOverrideReason("");
+    setOverrideDays("");
+  };
+
+  const closeOverrideModal = () => {
+    setOverrideTarget(null);
+    setOverrideNewScore("");
+    setOverrideReason("");
+    setOverrideDays("");
+  };
+
+  const submitOverride = async () => {
+    if (!overrideTarget) return;
+    const parsedScore = Number.parseFloat(overrideNewScore);
+    if (!Number.isFinite(parsedScore) || parsedScore < 0 || parsedScore > 100) {
+      showToast(t("admin.scoring.override_bad_score"), "error");
+      return;
+    }
+    if (overrideReason.trim().length < 20) return;
+    const parsedDays = overrideDays.trim() === "" ? null : Number.parseInt(overrideDays, 10);
+    if (parsedDays !== null && (!Number.isFinite(parsedDays) || parsedDays < 1)) {
+      showToast(t("admin.scoring.override_bad_days"), "error");
+      return;
+    }
+    const expiresAt =
+      parsedDays !== null
+        ? new Date(Date.now() + parsedDays * 86400_000).toISOString()
+        : null;
+
+    setSavingOverride(true);
+    try {
+      const { data: res, error: err } = await supabase.rpc("override_xn_score", {
+        p_user_id: overrideTarget.user_id,
+        p_new_score: parsedScore,
+        p_reason: overrideReason.trim(),
+        p_admin_note: null,
+        p_expires_at: expiresAt,
+      });
+      if (err) throw new Error(err.message);
+      if (!(res as any)?.success) throw new Error("override_failed");
+      showToast(t("admin.scoring.override_saved_toast"), "success");
+      closeOverrideModal();
+      await load();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : String(e), "error");
+    } finally {
+      setSavingOverride(false);
+    }
+  };
+
+  const confirmRemoveOverride = (row: OverrideRow) => {
+    Alert.alert(
+      t("admin.scoring.remove_override_confirm_title"),
+      t("admin.scoring.remove_override_confirm_body", { name: row.member_name }),
+      [
+        { text: t("common.cancel"), style: "cancel" },
+        {
+          text: t("admin.scoring.overrides_remove_btn"),
+          style: "destructive",
+          onPress: async () => {
+            setRemovingOverride(row.id);
+            try {
+              const { data: res, error: err } = await supabase.rpc(
+                "remove_xn_score_override",
+                { p_user_id: row.user_id, p_reason: "admin_removed_via_dashboard" },
+              );
+              if (err) throw new Error(err.message);
+              if (!(res as any)?.success) throw new Error("remove_failed");
+              showToast(t("admin.scoring.override_removed_toast"), "info");
+              await load();
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : String(e), "error");
+            } finally {
+              setRemovingOverride(null);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   useEffect(() => {
     if (!adminLoading && isAdmin) load();
@@ -396,6 +536,114 @@ export default function AdminScoringDashboardScreen() {
                       {fmtDelta(row.delta)}
                     </Text>
                   </View>
+                  {canFreeze ? (
+                    <TouchableOpacity
+                      style={styles.overrideBtn}
+                      onPress={() => openOverrideModal(row)}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons name="create-outline" size={14} color={colors.primaryNavy} />
+                      <Text style={styles.overrideBtnText}>
+                        {t("admin.scoring.override_btn")}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ))
+            )}
+          </View>
+
+          {/* Card 2.5 — Active overrides (mig 377) */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="hand-left-outline" size={16} color={colors.primaryNavy} />
+              <Text style={styles.cardTitle}>
+                {t("admin.scoring.overrides_card_title", { count: overrides.length })}
+              </Text>
+            </View>
+            {overrides.length === 0 ? (
+              <Text style={styles.emptyText}>{t("admin.scoring.overrides_empty")}</Text>
+            ) : (
+              overrides.map((o) => {
+                const isRemoving = removingOverride === o.id;
+                return (
+                  <View
+                    key={o.id}
+                    style={[styles.overrideRow, o.is_expired && styles.overrideRowExpired]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.overrideName} numberOfLines={1}>
+                        {o.member_name}
+                        {o.is_expired ? (
+                          <Text style={styles.overrideExpiredTag}>
+                            {"  "}
+                            {t("admin.scoring.overrides_expired_tag")}
+                          </Text>
+                        ) : null}
+                      </Text>
+                      <Text style={styles.overrideSub}>
+                        {o.old_score.toFixed(2)} → {o.new_score.toFixed(2)} ({fmtDelta(o.delta)})
+                        {" · "}
+                        {t("admin.scoring.overrides_by", { name: o.admin_name })}
+                        {" · "}
+                        {fmtRelative(o.created_at)}
+                        {o.expires_at
+                          ? ` · ${t("admin.scoring.overrides_expires_in")} ${
+                              Math.max(
+                                0,
+                                Math.round(
+                                  (new Date(o.expires_at).getTime() - Date.now()) / 86400_000,
+                                ),
+                              )
+                            }d`
+                          : ""}
+                      </Text>
+                      <Text style={styles.overrideReason} numberOfLines={2}>
+                        "{o.reason}"
+                      </Text>
+                    </View>
+                    {canFreeze ? (
+                      <TouchableOpacity
+                        style={[styles.overrideRemoveBtn, isRemoving && styles.actionDisabled]}
+                        onPress={() => confirmRemoveOverride(o)}
+                        disabled={isRemoving}
+                        accessibilityRole="button"
+                      >
+                        {isRemoving ? (
+                          <ActivityIndicator size="small" color="#991B1B" />
+                        ) : (
+                          <>
+                            <Ionicons name="trash-outline" size={14} color="#991B1B" />
+                            <Text style={styles.overrideRemoveText}>
+                              {t("admin.scoring.overrides_remove_btn")}
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                );
+              })
+            )}
+          </View>
+
+          {/* Card 2.6 — Recent alerts (mig 378) */}
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Ionicons name="notifications-outline" size={16} color={colors.primaryNavy} />
+              <Text style={styles.cardTitle}>{t("admin.scoring.alerts_card_title")}</Text>
+            </View>
+            {data.recent_alerts.length === 0 ? (
+              <Text style={styles.emptyText}>{t("admin.scoring.alerts_empty")}</Text>
+            ) : (
+              data.recent_alerts.map((a) => (
+                <View key={a.id} style={[styles.alertRow, !a.read && styles.alertRowUnread]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.alertTitle} numberOfLines={1}>{a.title}</Text>
+                    <Text style={styles.alertBody} numberOfLines={2}>{a.body}</Text>
+                    <Text style={styles.alertMeta}>{fmtRelative(a.created_at)}</Text>
+                  </View>
+                  {!a.read ? <View style={styles.alertDot} /> : null}
                 </View>
               ))
             )}
@@ -454,6 +702,100 @@ export default function AdminScoringDashboardScreen() {
           </View>
         </ScrollView>
       )}
+
+      {/* Override modal (mig 377) */}
+      <Modal
+        visible={overrideTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={closeOverrideModal}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="create-outline" size={20} color={colors.primaryNavy} />
+              <Text style={styles.modalTitle}>
+                {t("admin.scoring.override_modal_title", {
+                  name: overrideTarget?.display_name ?? "",
+                })}
+              </Text>
+            </View>
+            <Text style={styles.modalBody}>
+              {t("admin.scoring.override_modal_body", {
+                current: overrideTarget?.current_score.toFixed(2) ?? "—",
+              })}
+            </Text>
+
+            <Text style={styles.fieldLabel}>{t("admin.scoring.override_new_score_label")}</Text>
+            <TextInput
+              style={styles.smallInput}
+              placeholder={t("admin.scoring.override_new_score_placeholder")}
+              placeholderTextColor={colors.textSecondary}
+              keyboardType="decimal-pad"
+              value={overrideNewScore}
+              onChangeText={setOverrideNewScore}
+              editable={!savingOverride}
+            />
+
+            <Text style={styles.fieldLabel}>{t("admin.scoring.override_reason_label")}</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder={t("admin.scoring.override_reason_placeholder")}
+              placeholderTextColor={colors.textSecondary}
+              multiline
+              value={overrideReason}
+              onChangeText={setOverrideReason}
+              maxLength={500}
+              editable={!savingOverride}
+            />
+            <Text style={styles.charCount}>
+              {t("admin.scoring.reason_min_count", {
+                current: overrideReason.trim().length,
+                min: 20,
+              })}
+            </Text>
+
+            <Text style={styles.fieldLabel}>{t("admin.scoring.override_days_label")}</Text>
+            <TextInput
+              style={styles.smallInput}
+              placeholder={t("admin.scoring.override_days_placeholder")}
+              placeholderTextColor={colors.textSecondary}
+              keyboardType="number-pad"
+              value={overrideDays}
+              onChangeText={setOverrideDays}
+              editable={!savingOverride}
+            />
+            <Text style={styles.fieldHint}>{t("admin.scoring.override_days_hint")}</Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalCancel]}
+                onPress={closeOverrideModal}
+                disabled={savingOverride}
+              >
+                <Text style={styles.modalCancelText}>{t("common.cancel")}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalBtn,
+                  styles.modalOverrideConfirm,
+                  (overrideReason.trim().length < 20 || savingOverride) && styles.actionDisabled,
+                ]}
+                onPress={submitOverride}
+                disabled={overrideReason.trim().length < 20 || savingOverride}
+              >
+                {savingOverride ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalConfirmText}>
+                    {t("admin.scoring.override_save_btn")}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Freeze modal */}
       <Modal
@@ -708,5 +1050,88 @@ const styles = StyleSheet.create({
   modalCancel: { backgroundColor: colors.screenBg, borderWidth: 1, borderColor: colors.border },
   modalCancelText: { color: colors.textPrimary, fontWeight: "700" },
   modalConfirm: { backgroundColor: "#991B1B" },
+  modalOverrideConfirm: { backgroundColor: colors.primaryNavy },
   modalConfirmText: { color: "#FFFFFF", fontWeight: "700" },
+
+  overrideBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.screenBg,
+    marginLeft: 6,
+  },
+  overrideBtnText: { fontSize: 11, fontWeight: "700", color: colors.primaryNavy },
+
+  overrideRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 8,
+  },
+  overrideRowExpired: { opacity: 0.55 },
+  overrideName: { fontSize: 13, fontWeight: "700", color: colors.textPrimary },
+  overrideExpiredTag: { fontSize: 10, fontWeight: "700", color: colors.warningLabel },
+  overrideSub: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  overrideReason: {
+    fontSize: 11,
+    color: colors.textPrimary,
+    fontStyle: "italic",
+    marginTop: 3,
+  },
+  overrideRemoveBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: colors.errorBg,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+    minWidth: 72,
+    justifyContent: "center",
+  },
+  overrideRemoveText: { fontSize: 11, fontWeight: "700", color: "#991B1B" },
+
+  alertRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 8,
+  },
+  alertRowUnread: { backgroundColor: colors.warningBg },
+  alertTitle: { fontSize: 13, fontWeight: "700", color: colors.textPrimary },
+  alertBody: { fontSize: 12, color: colors.textPrimary, marginTop: 1 },
+  alertMeta: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  alertDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.warningLabel,
+  },
+
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.primaryNavy,
+    marginTop: 6,
+  },
+  fieldHint: { fontSize: 11, color: colors.textSecondary, marginTop: -2 },
+  smallInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    padding: 10,
+    color: colors.textPrimary,
+    fontSize: 13,
+  },
 });
