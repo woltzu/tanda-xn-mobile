@@ -9404,6 +9404,15 @@
     "honor_warning_near": "Votre score d'Honneur est {{score}}. Vous serez rétrogradé de {{role}} s'il descend sous {{threshold}}.",
     "honor_warning_below": "Votre score d'Honneur est inférieur à {{threshold}}. Vous pourriez être rétrogradé bientôt — restez actif pour récupérer."
   },
+  "account_frozen": {
+    "banner_text": "Votre compte est gelé — appuyez pour plus de détails",
+    "detail_title": "Compte gelé",
+    "detail_body_with_reason": "Votre compte TandaXn a été gelé.\n\nMotif : {{reason}}\n\nJusqu'à ce qu'un administrateur dégèle votre compte, vous ne pouvez plus contribuer aux cercles, recevoir des paiements, demander des avances, ajouter des fonds, retirer ou envoyer de l'argent. Contactez le support pour résoudre.",
+    "detail_body_no_reason": "Votre compte TandaXn a été gelé.\n\nJusqu'à ce qu'un administrateur dégèle votre compte, vous ne pouvez plus contribuer aux cercles, recevoir des paiements, demander des avances, ajouter des fonds, retirer ou envoyer de l'argent. Contactez le support pour résoudre.",
+    "contact_support": "Contacter le support",
+    "dismiss": "OK",
+    "email_subject": "Compte gelé — demande de révision"
+  },
   "resolution_center": {
     "title": "Centre de résolution",
     "banner_text": "Votre compte est restreint — appuyez pour résoudre",

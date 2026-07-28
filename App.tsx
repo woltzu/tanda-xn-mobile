@@ -118,6 +118,7 @@ import ResolutionCenterScreen from "./screens/ResolutionCenterScreen";
 import DisputesListScreen from "./screens/DisputesListScreen";
 import DisputeDetailScreen from "./screens/DisputeDetailScreen";
 import CriticalBanner from "./components/CriticalBanner";
+import FrozenBanner from "./components/FrozenBanner";
 // Honor Bucket A — HonorSystemScreen deleted. Its content was a separate
 // vouching-tier story (Newcomer/Guardian/Mentor/Elder/Sage based on vouches
 // count) that contradicted the canonical Honor Score tier ladder. Vouching
@@ -1927,6 +1928,10 @@ function MainTabs() {
     // never see it, which is correct — there's no user to restrict.
     <View style={{ flex: 1 }}>
       <CriticalBanner />
+      {/* Mig 390 — freeze banner sits alongside the critical banner.
+          Both can appear at once in rare intersection; they stack
+          visually with the frozen (blue) below the critical (red). */}
+      <FrozenBanner />
       <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: false,

@@ -9404,6 +9404,15 @@
     "honor_warning_near": "Your Honor score is {{score}}. You will be demoted from {{role}} if it drops below {{threshold}}.",
     "honor_warning_below": "Your Honor score is below {{threshold}}. You may be demoted soon — stay active to recover."
   },
+  "account_frozen": {
+    "banner_text": "Your account is frozen — tap for details",
+    "detail_title": "Account frozen",
+    "detail_body_with_reason": "Your TandaXn account has been frozen.\n\nReason: {{reason}}\n\nUntil an admin unfreezes your account, you cannot contribute to circles, receive payouts, request advances, add funds, withdraw, or send money. Please contact support to resolve.",
+    "detail_body_no_reason": "Your TandaXn account has been frozen.\n\nUntil an admin unfreezes your account, you cannot contribute to circles, receive payouts, request advances, add funds, withdraw, or send money. Please contact support to resolve.",
+    "contact_support": "Contact support",
+    "dismiss": "OK",
+    "email_subject": "Frozen account — request review"
+  },
   "resolution_center": {
     "title": "Resolution Center",
     "banner_text": "Your account is restricted — tap to resolve",
