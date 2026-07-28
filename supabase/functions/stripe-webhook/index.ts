@@ -1131,6 +1131,240 @@ Deno.serve(async (req) => {
       external_reference_type: "charge",
       metadata: { ...cMeta, refund_id: lastRefund?.id ?? null },
     });
+  } else if (event.type.startsWith("charge.dispute.")) {
+    // ── Chargeback / dispute lifecycle (migration 389) ─────────────────────
+    // Handles: charge.dispute.created / .updated / .closed / .funds_withdrawn
+    //          / .funds_reinstated. We only mutate stripe_disputes on the
+    // three shape-preserving ones (created / updated / closed) — the
+    // funds_* variants are recorded to the ledger for reconciliation but
+    // don't change dispute state.
+    //
+    // Idempotency: outer stripe_webhook_events UNIQUE catches Stripe
+    // retries. Additionally the INSERT uses ON CONFLICT
+    // (stripe_dispute_id) DO NOTHING as belt-and-braces so a re-created
+    // dispute event (rare — Stripe re-fires a created if the client 500s
+    // repeatedly) doesn't produce a duplicate row.
+    //
+    // member_id resolution: Stripe dispute payloads carry
+    // dispute.payment_intent (a pi_XXX string). We look it up in our
+    // stripe_payment_intents to get the internal UUID + member_id +
+    // circle_id. If the PI isn't in our DB (should never happen for
+    // real payments — all our PIs go through create-payment-intent),
+    // we log a warning and skip the DB write, returning 200 so Stripe
+    // stops retrying an unfixable event.
+    const dispute = event.data.object as Stripe.Dispute;
+    const stripePiText =
+      typeof dispute.payment_intent === "string"
+        ? dispute.payment_intent
+        : dispute.payment_intent?.id ?? null;
+    const stripeChargeText =
+      typeof dispute.charge === "string"
+        ? dispute.charge
+        : dispute.charge?.id ?? null;
+
+    // Resolve internal PI + member + circle + cycle from stripe_payment_intents.
+    let piRow: {
+      id: string;
+      member_id: string;
+      circle_id: string | null;
+      cycle_id: string | null;
+      metadata: Record<string, unknown> | null;
+    } | null = null;
+    if (stripePiText) {
+      const { data } = await supabase
+        .from("stripe_payment_intents")
+        .select("id, member_id, circle_id, cycle_id, metadata")
+        .eq("stripe_payment_intent_id", stripePiText)
+        .maybeSingle();
+      piRow = data ?? null;
+    }
+
+    if (event.type === "charge.dispute.created") {
+      if (!piRow?.member_id) {
+        console.warn(
+          "[stripe-webhook] charge.dispute.created — no stripe_payment_intents row for PI",
+          stripePiText,
+          "— cannot resolve member_id; skipping DB insert.",
+          "Dispute id:",
+          dispute.id
+        );
+      } else {
+        const evidenceDueBy = dispute.evidence_details?.due_by
+          ? new Date(dispute.evidence_details.due_by * 1000).toISOString()
+          : null;
+
+        const { data: inserted, error: insErr } = await supabase
+          .from("stripe_disputes")
+          .upsert(
+            {
+              stripe_dispute_id: dispute.id,
+              member_id: piRow.member_id,
+              circle_id: piRow.circle_id,
+              payment_intent_id: piRow.id,
+              stripe_payment_intent_text: stripePiText,
+              amount_cents: dispute.amount ?? 0,
+              currency: (dispute.currency ?? "usd").toLowerCase(),
+              reason: dispute.reason ?? "unknown",
+              status: dispute.status ?? "needs_response",
+              evidence_due_by: evidenceDueBy,
+              is_charge_refundable: dispute.is_charge_refundable ?? true,
+              metadata: {
+                stripe_charge_id: stripeChargeText,
+                pi_metadata: piRow.metadata ?? {},
+                dispute_evidence_details: dispute.evidence_details ?? {},
+              },
+            },
+            { onConflict: "stripe_dispute_id", ignoreDuplicates: false }
+          )
+          .select("id")
+          .maybeSingle();
+
+        if (insErr) {
+          console.error(
+            "[stripe-webhook] stripe_disputes upsert failed:",
+            insErr.message
+          );
+          processingError = processingError ??
+            `stripe_disputes upsert failed: ${insErr.message}`;
+        } else if (inserted?.id) {
+          console.log(
+            "[stripe-webhook] stripe_disputes row upserted for",
+            dispute.id,
+            "→ dispute_id",
+            inserted.id
+          );
+          // Fan out admin notifications. RPC is service_role-only and
+          // handles the loop over active admins internally.
+          const { error: notifyErr } = await supabase.rpc(
+            "notify_admins_new_chargeback",
+            { p_dispute_id: inserted.id }
+          );
+          if (notifyErr) {
+            console.error(
+              "[stripe-webhook] notify_admins_new_chargeback failed:",
+              notifyErr.message
+            );
+            // Non-fatal: the dispute row landed. Admins can still see it
+            // in the console; only the push/badge misses.
+          }
+        }
+      }
+
+      await writeLedgerEvent({
+        stripe_object_id: dispute.id,
+        event_type: "dispute.created",
+        amount_cents: dispute.amount ?? 0,
+        currency: (dispute.currency ?? "usd").toUpperCase(),
+        user_id: piRow?.member_id ?? null,
+        circle_id: piRow?.circle_id ?? null,
+        cycle_id: piRow?.cycle_id ?? null,
+        external_reference_type: "stripe_dispute",
+        external_reference_id: null, // stripe_disputes id is UUID but we don't need to link ledger→dispute here
+        metadata: {
+          stripe_dispute_id: dispute.id,
+          stripe_charge_id: stripeChargeText,
+          stripe_payment_intent_id: stripePiText,
+          reason: dispute.reason,
+          status: dispute.status,
+        },
+      });
+    } else if (
+      event.type === "charge.dispute.updated" ||
+      event.type === "charge.dispute.closed"
+    ) {
+      // Terminal statuses that Stripe considers "closed" for our purposes.
+      // Populating resolved_at only for these lets the console distinguish
+      // in-progress from resolved without re-parsing the status enum.
+      const TERMINAL = new Set([
+        "won",
+        "lost",
+        "charge_refunded",
+        "warning_closed",
+      ]);
+      const isTerminal = TERMINAL.has(dispute.status ?? "");
+      const evidenceDueBy = dispute.evidence_details?.due_by
+        ? new Date(dispute.evidence_details.due_by * 1000).toISOString()
+        : null;
+
+      const { error: updErr, count } = await supabase
+        .from("stripe_disputes")
+        .update(
+          {
+            status: dispute.status ?? "under_review",
+            evidence_due_by: evidenceDueBy,
+            is_charge_refundable: dispute.is_charge_refundable ?? true,
+            resolved_at: isTerminal ? new Date().toISOString() : null,
+            updated_at: new Date().toISOString(),
+          },
+          { count: "exact" }
+        )
+        .eq("stripe_dispute_id", dispute.id);
+
+      if (updErr) {
+        console.error(
+          "[stripe-webhook] stripe_disputes update failed for",
+          dispute.id,
+          ":",
+          updErr.message
+        );
+        processingError = processingError ??
+          `stripe_disputes update failed: ${updErr.message}`;
+      } else if (count === 0) {
+        // Dispute update arrived before we recorded the created event —
+        // rare but possible on the very first delivery ordering. Log
+        // and drop; the created handler above will backfill when it lands.
+        console.warn(
+          "[stripe-webhook] stripe_disputes update — no matching row for",
+          dispute.id,
+          "(created event likely delayed)"
+        );
+      } else {
+        console.log(
+          "[stripe-webhook] stripe_disputes updated for",
+          dispute.id,
+          "→ status =",
+          dispute.status,
+          isTerminal ? "(terminal)" : ""
+        );
+      }
+
+      await writeLedgerEvent({
+        stripe_object_id: dispute.id,
+        event_type: isTerminal ? "dispute.closed" : "dispute.updated",
+        amount_cents: dispute.amount ?? 0,
+        currency: (dispute.currency ?? "usd").toUpperCase(),
+        user_id: piRow?.member_id ?? null,
+        circle_id: piRow?.circle_id ?? null,
+        cycle_id: piRow?.cycle_id ?? null,
+        external_reference_type: "stripe_dispute",
+        external_reference_id: null,
+        metadata: {
+          stripe_dispute_id: dispute.id,
+          stripe_charge_id: stripeChargeText,
+          stripe_payment_intent_id: stripePiText,
+          status: dispute.status,
+        },
+      });
+    } else {
+      // funds_withdrawn / funds_reinstated — ledger-only for reconciliation.
+      await writeLedgerEvent({
+        stripe_object_id: dispute.id,
+        event_type: event.type, // e.g. "charge.dispute.funds_withdrawn"
+        amount_cents: dispute.amount ?? 0,
+        currency: (dispute.currency ?? "usd").toUpperCase(),
+        user_id: piRow?.member_id ?? null,
+        circle_id: piRow?.circle_id ?? null,
+        cycle_id: piRow?.cycle_id ?? null,
+        external_reference_type: "stripe_dispute",
+        external_reference_id: null,
+        metadata: {
+          stripe_dispute_id: dispute.id,
+          stripe_charge_id: stripeChargeText,
+          stripe_payment_intent_id: stripePiText,
+          status: dispute.status,
+        },
+      });
+    }
   } else {
     console.log("[stripe-webhook] ignoring non-PI/non-account event", event.type);
   }
