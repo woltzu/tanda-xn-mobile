@@ -643,6 +643,98 @@ Deno.serve(async (req) => {
         // transfer.paid event needs its downstream bookkeeping.
       }
     }
+
+    // ── payment_intent.payment_failed — mig 387 Phase 0 wiring ────────────
+    // Prior to this handler, Stripe-side declines were silently lost to
+    // stripe_payment_intents.status only (the auto-update at line ~188).
+    // No ledger event, no circle_contributions status change, no admin
+    // visibility. This handler:
+    //   * writes a ledger_events row for audit trail
+    //   * flips the linked circle_contributions row to status='failed'
+    //     with failure metadata (mig 387 columns: last_failure_code,
+    //     last_failure_reason, last_failure_at, retry_count, stripe_pi_id)
+    // Only fires when meta.type === 'circle_contribution'; other PI types
+    // (wallet_deposit, goal_deposit, trip_payment) currently have no
+    // per-purpose failure side-effect — add here as they need them.
+    if (event.type === "payment_intent.payment_failed") {
+      const meta = pi.metadata ?? {};
+      const failureCode = pi.last_payment_error?.code ?? null;
+      const failureMessage = pi.last_payment_error?.message ?? null;
+
+      await writeLedgerEvent({
+        stripe_object_id: pi.id,
+        event_type: "stripe.payment_intent.payment_failed",
+        amount_cents: (pi.amount ?? 0) as number,
+        currency: (pi.currency ?? "usd").toUpperCase(),
+        user_id: maybeUuid(meta.user_id),
+        circle_id: maybeUuid(meta.circle_id),
+        external_reference_id: maybeUuid(meta.pending_intent_id),
+        external_reference_type: meta.pending_intent_id ? "pending_intent" : null,
+        metadata: {
+          failure_code: failureCode,
+          failure_message: failureMessage,
+          purpose: typeof meta.type === "string" ? meta.type : null,
+          cycle_number: typeof meta.cycle_number === "string" ? meta.cycle_number : null,
+        },
+      });
+
+      if (meta.type === "circle_contribution") {
+        const circleIdMeta = maybeUuid(meta.circle_id);
+        const payerUserId = maybeUuid(meta.user_id);
+        const cycleNumberRaw =
+          typeof meta.cycle_number === "string" ? meta.cycle_number : "";
+        const cycleNumber = /^\d+$/.test(cycleNumberRaw)
+          ? parseInt(cycleNumberRaw, 10)
+          : 1;
+
+        if (circleIdMeta && payerUserId) {
+          // Fetch current retry_count so we can increment in a single
+          // UPDATE. Small race window (two failures within ms) would
+          // double-count once — acceptable for MVP visibility.
+          const { data: existing } = await supabase
+            .from("circle_contributions")
+            .select("id, retry_count")
+            .eq("circle_id", circleIdMeta)
+            .eq("user_id", payerUserId)
+            .eq("cycle_number", cycleNumber)
+            .neq("status", "paid")
+            .limit(1)
+            .maybeSingle();
+
+          if (existing) {
+            const nextRetry =
+              ((existing.retry_count as number | null) ?? 0) + 1;
+            const { error: ccUpdErr } = await supabase
+              .from("circle_contributions")
+              .update({
+                status: "failed",
+                last_failure_code: failureCode,
+                last_failure_reason: failureMessage,
+                last_failure_at: new Date().toISOString(),
+                stripe_pi_id: pi.id,
+                retry_count: nextRetry,
+              })
+              .eq("id", existing.id);
+            if (ccUpdErr) {
+              console.error(
+                "[stripe-webhook] circle_contributions failure update failed:",
+                ccUpdErr.message,
+              );
+              processingError = processingError ??
+                `circle_contributions failure update failed: ${ccUpdErr.message}`;
+            }
+          } else {
+            // No pending row — likely a user paying ahead of a scheduled
+            // contribution whose card was declined. Ledger event captured
+            // the fact; no row to persist to.
+            console.log(
+              "[stripe-webhook] payment_intent.payment_failed — no matching pending circle_contribution for",
+              pi.id,
+            );
+          }
+        }
+      }
+    }
   } else if (event.type === "account.updated") {
     // ── Stage 1: Connect onboarding status updates ──
     // Connect Express accounts fire account.updated whenever their state
