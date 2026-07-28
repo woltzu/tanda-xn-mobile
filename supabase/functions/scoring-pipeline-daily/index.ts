@@ -60,6 +60,49 @@ serve(async (req: Request) => {
       throw new Error(`Pipeline RPC failed: ${error.message}`)
     }
 
+    // ── Freeze gate (mig 376) ───────────────────────────────────────────
+    // If admin has frozen scoring via set_scoring_freeze, run_scoring_pipeline
+    // returns {skipped: true, reason: 'scoring_frozen', ...} without touching
+    // any of the 7 core steps. Skip step 8 too (per the "freeze blocks 1–8"
+    // spec) and log the skipped run for the dashboard.
+    // Defense in depth: refresh_circle_reputation also short-circuits on
+    // freeze at the DB layer, so even if this EF isn't redeployed the loop
+    // in step 8 no-ops per circle.
+    if ((data as any)?.skipped) {
+      const processingTimeMs = Date.now() - startTime
+      console.log(`⏸️  Scoring pipeline skipped due to admin freeze — reason: ${(data as any).frozen_reason ?? '(none)'}`)
+      await supabase
+        .from('cron_job_logs')
+        .insert({
+          job_name: 'scoring-pipeline-daily',
+          status: 'success',
+          records_processed: 0,
+          records_succeeded: 0,
+          records_failed: 0,
+          execution_time_ms: processingTimeMs,
+          details: {
+            skipped: true,
+            reason: (data as any).reason ?? 'scoring_frozen',
+            frozen_by: (data as any).frozen_by ?? null,
+            frozen_at: (data as any).frozen_at ?? null,
+            frozen_reason: (data as any).frozen_reason ?? null,
+            note: 'Pipeline skipped by admin freeze (mig 376). Steps 1–8 not executed.',
+          },
+        })
+        .then(() => console.log('📝 Skipped run logged'))
+        .catch((e: any) => console.log('⚠️ Could not log skipped run:', e.message))
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          skipped: true,
+          reason: (data as any).reason ?? 'scoring_frozen',
+          processing_time_ms: processingTimeMs,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+
     // ── Step 8 (mig 320–322): Circle Reputation per Doc 37 v3 ─────────
     // Additive to the 7-step run_scoring_pipeline above. Loops over
     // every non-cancelled circle and calls refresh_circle_reputation
