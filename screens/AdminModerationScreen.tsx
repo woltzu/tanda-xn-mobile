@@ -675,6 +675,8 @@ function UserReportDetail({
   const [profileLoading, setProfileLoading] = useState(true);
   const [notes, setNotes] = useState("");
   const [suspendDays, setSuspendDays] = useState("7");
+  // Mig 391 — chat-only mute (distinct from account suspension).
+  const [muteDays, setMuteDays] = useState("3");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -682,7 +684,7 @@ function UserReportDetail({
     setProfileLoading(true);
     supabase
       .from("profiles")
-      .select("id, full_name, suspended_until, banned")
+      .select("id, full_name, suspended_until, banned, chat_muted_until, chat_muted_reason")
       .eq("id", report.reported_user_id)
       .maybeSingle()
       .then(({ data }) => {
@@ -697,7 +699,7 @@ function UserReportDetail({
   }, [report.reported_user_id]);
 
   const runAction = async (
-    action: "warn" | "suspend" | "ban" | "dismiss",
+    action: "warn" | "suspend" | "ban" | "dismiss" | "mute_chat" | "unmute_chat",
   ) => {
     setBusy(true);
     if (action === "dismiss") {
@@ -720,11 +722,14 @@ function UserReportDetail({
       return;
     }
 
-    // Build the duration for suspend. Days × seconds, then PG interval.
-    const duration =
-      action === "suspend"
-        ? `${Math.max(1, parseInt(suspendDays, 10) || 7)} days`
-        : null;
+    // Build duration. suspend uses suspendDays; mute_chat uses muteDays.
+    // ban / warn / unmute_chat have no duration.
+    let duration: string | null = null;
+    if (action === "suspend") {
+      duration = `${Math.max(1, parseInt(suspendDays, 10) || 7)} days`;
+    } else if (action === "mute_chat") {
+      duration = `${Math.max(1, parseInt(muteDays, 10) || 3)} days`;
+    }
 
     const { error: actionErr } = await supabase.rpc("apply_moderation_action", {
       p_action: action,
@@ -791,6 +796,16 @@ function UserReportDetail({
                     </Text>
                   </View>
                 ) : null}
+                {profile.chat_muted_until &&
+                new Date(profile.chat_muted_until).getTime() > Date.now() ? (
+                  <View style={[styles.statusPill, { backgroundColor: "#DBEAFE" }]}>
+                    <Text style={[styles.statusPillText, { color: "#0369A1" }]}>
+                      {t("moderation_admin.status_chat_muted_until", {
+                        date: new Date(profile.chat_muted_until).toLocaleString(),
+                      })}
+                    </Text>
+                  </View>
+                ) : null}
               </>
             ) : (
               <Text style={styles.previewMissing}>
@@ -827,6 +842,19 @@ function UserReportDetail({
             editable={!busy}
           />
 
+          <Text style={styles.fieldLabel}>
+            {t("moderation_admin.mute_days_label")}
+          </Text>
+          <TextInput
+            style={[styles.input, { minHeight: 40 }]}
+            value={muteDays}
+            onChangeText={setMuteDays}
+            placeholder="3"
+            placeholderTextColor={MUTED}
+            keyboardType="numeric"
+            editable={!busy}
+          />
+
           <Text style={styles.fieldLabel}>{t("moderation_admin.notes_label")}</Text>
           <TextInput
             style={styles.input}
@@ -851,6 +879,22 @@ function UserReportDetail({
               disabled={busy}
               variant="warn"
             />
+            {profile?.chat_muted_until &&
+            new Date(profile.chat_muted_until).getTime() > Date.now() ? (
+              <ActionBtn
+                label={t("moderation_admin.action_unmute_chat")}
+                onPress={() => runAction("unmute_chat")}
+                disabled={busy}
+                variant="ghost"
+              />
+            ) : (
+              <ActionBtn
+                label={t("moderation_admin.action_mute_chat")}
+                onPress={() => runAction("mute_chat")}
+                disabled={busy}
+                variant="warn"
+              />
+            )}
             <ActionBtn
               label={t("moderation_admin.action_suspend")}
               onPress={() => runAction("suspend")}

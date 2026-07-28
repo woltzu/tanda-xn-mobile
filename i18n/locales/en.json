@@ -2521,7 +2521,8 @@
       "payout_console": "Payout Console",
       "substitutes": "Substitutes",
       "collection": "Collections",
-      "chargebacks": "Chargebacks"
+      "chargebacks": "Chargebacks",
+      "moderation": "Moderation"
     },
     "payout_console": {
       "title": "Payout Console",
@@ -3837,7 +3838,15 @@
     "default_reason_delete": "Removed by moderator after review.",
     "default_reason_warn": "Reviewed by moderator: warning issued.",
     "default_reason_suspend": "Reviewed by moderator: suspension issued.",
-    "default_reason_ban": "Reviewed by moderator: account banned."
+    "default_reason_ban": "Reviewed by moderator: account banned.",
+    "status_chat_muted_until": "Chat muted until {{date}}",
+    "mute_days_label": "Chat mute length (days)",
+    "action_mute_chat": "Mute chat",
+    "action_unmute_chat": "Unmute chat",
+    "default_reason_mute_chat": "Reviewed by moderator: chat mute issued.",
+    "default_reason_unmute_chat": "Reviewed by moderator: chat mute lifted.",
+    "toast_mute_chated": "User muted in chat",
+    "toast_unmute_chated": "User can chat again"
   },
   "moderation_p2": {
     "priority_high": "High",
@@ -7351,7 +7360,13 @@
   "group_chat": {
     "alert_could_not_send_title": "Could not send",
     "alert_please_try_again": "Please try again",
-    "placeholder_message": "Type a message…"
+    "placeholder_message": "Type a message…",
+    "placeholder_muted": "You are muted.",
+    "chat_muted_title": "You are muted in chat",
+    "chat_muted_body_until": "You cannot send messages until {{date}}. Contact support if you believe this is in error.",
+    "chat_muted_body_no_date": "You cannot send messages right now. Contact support if you believe this is in error.",
+    "muted_banner_until": "You are muted until {{date}}. Contact support if this is in error.",
+    "muted_banner_no_date": "You are muted from chat. Contact support if this is in error."
   },
   "referral": {
     "alert_could_not_load": "Couldn't load referrals",

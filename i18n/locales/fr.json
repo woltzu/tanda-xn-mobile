@@ -2521,7 +2521,8 @@
       "payout_console": "Console des paiements",
       "substitutes": "Substituts",
       "collection": "Collectes",
-      "chargebacks": "Rétrofacturations"
+      "chargebacks": "Rétrofacturations",
+      "moderation": "Modération"
     },
     "payout_console": {
       "title": "Console des paiements",
@@ -3837,7 +3838,15 @@
     "default_reason_delete": "Supprimé par un modérateur après examen.",
     "default_reason_warn": "Examiné par un modérateur : avertissement émis.",
     "default_reason_suspend": "Examiné par un modérateur : suspension émise.",
-    "default_reason_ban": "Examiné par un modérateur : compte banni."
+    "default_reason_ban": "Examiné par un modérateur : compte banni.",
+    "status_chat_muted_until": "Chat silencié jusqu'au {{date}}",
+    "mute_days_label": "Durée du silence chat (jours)",
+    "action_mute_chat": "Silencier chat",
+    "action_unmute_chat": "Réactiver chat",
+    "default_reason_mute_chat": "Examiné par un modérateur : silence chat appliqué.",
+    "default_reason_unmute_chat": "Examiné par un modérateur : silence chat levé.",
+    "toast_mute_chated": "Utilisateur silencié dans le chat",
+    "toast_unmute_chated": "L'utilisateur peut à nouveau écrire"
   },
   "moderation_p2": {
     "priority_high": "Haute",
@@ -7351,7 +7360,13 @@
   "group_chat": {
     "alert_could_not_send_title": "Impossible d'envoyer",
     "alert_please_try_again": "Veuillez réessayer",
-    "placeholder_message": "Tapez un message…"
+    "placeholder_message": "Tapez un message…",
+    "placeholder_muted": "Vous êtes silencié.",
+    "chat_muted_title": "Vous êtes silencié dans le chat",
+    "chat_muted_body_until": "Vous ne pouvez pas envoyer de messages jusqu'au {{date}}. Contactez le support si vous pensez qu'il s'agit d'une erreur.",
+    "chat_muted_body_no_date": "Vous ne pouvez pas envoyer de messages actuellement. Contactez le support si vous pensez qu'il s'agit d'une erreur.",
+    "muted_banner_until": "Silencié jusqu'au {{date}}. Contactez le support si erreur.",
+    "muted_banner_no_date": "Silencié du chat. Contactez le support si erreur."
   },
   "referral": {
     "alert_could_not_load": "Impossible de charger les parrainages",

@@ -79,6 +79,11 @@ export default function GroupChatScreen() {
   const [loading, setLoading] = useState<boolean>(true);
   const [sending, setSending] = useState<boolean>(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  // Mig 391 — client-side chat-mute pre-check (RLS is the real gate).
+  const [chatMutedUntil, setChatMutedUntil] = useState<string | null>(null);
+  const isChatMuted = Boolean(
+    chatMutedUntil && new Date(chatMutedUntil).getTime() > Date.now(),
+  );
 
   // ── Initial load: auth + last 50 messages ──────────────────────────────────
   useEffect(() => {
@@ -91,7 +96,22 @@ export default function GroupChatScreen() {
       try {
         const { data: sessionData } = await supabase.auth.getUser();
         if (cancelled) return;
-        setCurrentUserId(sessionData?.user?.id ?? null);
+        const uid = sessionData?.user?.id ?? null;
+        setCurrentUserId(uid);
+
+        // Load the caller's chat-mute state. RLS on circle_messages
+        // INSERT blocks muted users server-side (mig 391); this
+        // client read only powers the UI (disabled input + banner).
+        if (uid) {
+          const { data: muteRow } = await supabase
+            .from("profiles")
+            .select("chat_muted_until")
+            .eq("id", uid)
+            .maybeSingle();
+          if (!cancelled) {
+            setChatMutedUntil((muteRow?.chat_muted_until as string | null) ?? null);
+          }
+        }
 
         console.log("[GroupChat] loading last 50 messages", { circleId });
         const { data, error } = await supabase
@@ -206,6 +226,18 @@ export default function GroupChatScreen() {
   const handleSend = async () => {
     const trimmed = inputText.trim();
     if (!trimmed || sending || !currentUserId) return;
+    if (isChatMuted) {
+      const until = chatMutedUntil
+        ? new Date(chatMutedUntil).toLocaleString()
+        : "";
+      Alert.alert(
+        t("group_chat.chat_muted_title"),
+        until
+          ? t("group_chat.chat_muted_body_until", { date: until })
+          : t("group_chat.chat_muted_body_no_date"),
+      );
+      return;
+    }
     setSending(true);
     console.log("[GroupChat] sending", { circleId, length: trimmed.length });
 
@@ -317,23 +349,44 @@ export default function GroupChatScreen() {
           />
         )}
 
+        {/* Mig 391 — muted banner. Renders above the input when the
+            caller's chat is muted. Server-side RLS is the real gate;
+            this is UX polish so the user understands why send is disabled. */}
+        {isChatMuted ? (
+          <View style={styles.mutedBanner}>
+            <Ionicons name="volume-mute" size={16} color="#0369A1" />
+            <Text style={styles.mutedBannerText} numberOfLines={2}>
+              {chatMutedUntil
+                ? t("group_chat.muted_banner_until", {
+                    date: new Date(chatMutedUntil).toLocaleString(),
+                  })
+                : t("group_chat.muted_banner_no_date")}
+            </Text>
+          </View>
+        ) : null}
+
         {/* Input */}
         <View style={styles.inputBar}>
           <TextInput
             value={inputText}
             onChangeText={setInputText}
-            placeholder={t("group_chat.placeholder_message")}
+            placeholder={
+              isChatMuted
+                ? t("group_chat.placeholder_muted")
+                : t("group_chat.placeholder_message")
+            }
             placeholderTextColor="#94A3B8"
             multiline
             maxLength={2000}
             style={styles.input}
+            editable={!isChatMuted}
           />
           <TouchableOpacity
             onPress={handleSend}
-            disabled={!inputText.trim() || sending}
+            disabled={!inputText.trim() || sending || isChatMuted}
             style={[
               styles.sendBtn,
-              (!inputText.trim() || sending) && styles.sendBtnDisabled,
+              (!inputText.trim() || sending || isChatMuted) && styles.sendBtnDisabled,
             ]}
             accessibilityRole="button"
             accessibilityLabel="Send message"
@@ -440,4 +493,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   sendBtnDisabled: { backgroundColor: "#94A3B8" },
+  mutedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#DBEAFE",
+    borderTopWidth: 1,
+    borderTopColor: "#BFDBFE",
+  },
+  mutedBannerText: {
+    flex: 1,
+    fontSize: 12,
+    color: "#0369A1",
+    fontWeight: "600",
+  },
 });
