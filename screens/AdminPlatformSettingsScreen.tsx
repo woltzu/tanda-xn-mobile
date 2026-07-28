@@ -48,6 +48,37 @@ interface FeatureGate {
   enabled: boolean;
 }
 
+// Mig 393 — override + audit history returned by get_feature_gate_history.
+interface FeatureOverrideRow {
+  override_id: string;
+  user_id: string;
+  user_name: string | null;
+  access_granted: boolean;
+  reason: string | null;
+  granted_by: string | null;
+  granted_by_name: string | null;
+  expires_at: string | null;
+  created_at: string;
+  expired: boolean;
+}
+interface FeatureAuditRow {
+  id: string;
+  admin_id: string | null;
+  admin_name: string | null;
+  action: string;
+  entity_type: string;
+  details: Record<string, unknown> | null;
+  created_at: string;
+}
+interface PlatformSettings {
+  scoring_frozen: boolean;
+  scoring_frozen_reason: string | null;
+  scoring_frozen_at: string | null;
+  payouts_paused: boolean;
+  payouts_paused_reason: string | null;
+  payouts_paused_at: string | null;
+}
+
 interface NotifTemplate {
   id: string;
   type: string;
@@ -105,6 +136,27 @@ export default function AdminPlatformSettingsScreen() {
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState<SettableRole>("support");
 
+  // Mig 393 — platform kill switches + reason-prompt for feature toggle +
+  // per-gate details modal (audit + overrides + grant form).
+  const [platform, setPlatform] = useState<PlatformSettings | null>(null);
+  const [pendingToggle, setPendingToggle] = useState<
+    | { kind: "feature"; feature: FeatureGate; nextEnabled: boolean }
+    | { kind: "platform"; setting: "scoring_frozen" | "payouts_paused"; nextEnabled: boolean }
+    | null
+  >(null);
+  const [pendingReason, setPendingReason] = useState("");
+  const [pendingSaving, setPendingSaving] = useState(false);
+
+  const [detailsFor, setDetailsFor] = useState<FeatureGate | null>(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsOverrides, setDetailsOverrides] = useState<FeatureOverrideRow[]>([]);
+  const [detailsHistory, setDetailsHistory] = useState<FeatureAuditRow[]>([]);
+  const [grantEmail, setGrantEmail] = useState("");
+  const [grantAccess, setGrantAccess] = useState<boolean>(true);
+  const [grantReason, setGrantReason] = useState("");
+  const [grantExpiresDays, setGrantExpiresDays] = useState("");
+  const [grantSaving, setGrantSaving] = useState(false);
+
   const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
@@ -137,16 +189,26 @@ export default function AdminPlatformSettingsScreen() {
         .select("key, value")
         .limit(50);
 
-      const [callerR, gatesR, adminsR, templatesR, configR] = await Promise.all([
+      const platformP = supabase
+        .from("platform_settings")
+        .select(
+          "scoring_frozen, scoring_frozen_reason, scoring_frozen_at, payouts_paused, payouts_paused_reason, payouts_paused_at",
+        )
+        .eq("id", 1)
+        .maybeSingle();
+
+      const [callerR, gatesR, adminsR, templatesR, configR, platformR] = await Promise.all([
         callerRowP,
         gatesP,
         adminsP,
         templatesP,
         configP,
+        platformP,
       ]);
 
       setCallerRole(((callerR.data as any) || {}).role ?? null);
       setFeatures(((gatesR.data ?? []) as FeatureGate[]) || []);
+      setPlatform((platformR.data as PlatformSettings | null) ?? null);
 
       const adminRows = ((adminsR.data ?? []) as any[]).map((r) => ({
         id: r.id,
@@ -173,25 +235,199 @@ export default function AdminPlatformSettingsScreen() {
 
   const canManageAdmins = callerRole === "super_admin";
 
-  const toggleFeature = useCallback(
-    async (gate: FeatureGate, next: boolean) => {
-      setFeatures((prev) =>
-        prev.map((g) => (g.id === gate.id ? { ...g, enabled: next } : g)),
-      );
-      const { error } = await supabase
-        .from("feature_gates")
-        .update({ enabled: next })
-        .eq("id", gate.id);
-      if (error) {
+  // Mig 393 — toggle now opens a reason prompt instead of firing directly.
+  // The confirmed submit calls admin_toggle_feature_gate which writes an
+  // admin_audit_log row alongside the mutation.
+  const requestToggleFeature = useCallback(
+    (gate: FeatureGate, next: boolean) => {
+      setPendingToggle({ kind: "feature", feature: gate, nextEnabled: next });
+      setPendingReason("");
+    },
+    [],
+  );
+
+  const requestTogglePlatform = useCallback(
+    (setting: "scoring_frozen" | "payouts_paused", next: boolean) => {
+      setPendingToggle({ kind: "platform", setting, nextEnabled: next });
+      setPendingReason("");
+    },
+    [],
+  );
+
+  const confirmPendingToggle = useCallback(async () => {
+    if (!pendingToggle) return;
+    const reason = pendingReason.trim();
+    if (!reason) {
+      showToast(t("admin.settings.reason_required"), "error");
+      return;
+    }
+    setPendingSaving(true);
+    try {
+      if (pendingToggle.kind === "feature") {
+        const { error } = await supabase.rpc("admin_toggle_feature_gate", {
+          p_feature_id: pendingToggle.feature.id,
+          p_enabled: pendingToggle.nextEnabled,
+          p_reason: reason,
+        });
+        if (error) throw new Error(error.message);
         setFeatures((prev) =>
-          prev.map((g) => (g.id === gate.id ? { ...g, enabled: !next } : g)),
+          prev.map((g) =>
+            g.id === pendingToggle.feature.id
+              ? { ...g, enabled: pendingToggle.nextEnabled }
+              : g,
+          ),
         );
-        showToast(t("admin.settings.toggle_failed"), "error");
       } else {
-        showToast(t("admin.settings.toggle_saved"), "success");
+        const { error } = await supabase.rpc("admin_toggle_platform_setting", {
+          p_setting: pendingToggle.setting,
+          p_enabled: pendingToggle.nextEnabled,
+          p_reason: reason,
+        });
+        if (error) throw new Error(error.message);
+        setPlatform((prev) => {
+          if (!prev) return prev;
+          if (pendingToggle.setting === "scoring_frozen") {
+            return {
+              ...prev,
+              scoring_frozen: pendingToggle.nextEnabled,
+              scoring_frozen_reason: pendingToggle.nextEnabled ? reason : null,
+              scoring_frozen_at: pendingToggle.nextEnabled
+                ? new Date().toISOString()
+                : null,
+            };
+          }
+          return {
+            ...prev,
+            payouts_paused: pendingToggle.nextEnabled,
+            payouts_paused_reason: pendingToggle.nextEnabled ? reason : null,
+            payouts_paused_at: pendingToggle.nextEnabled
+              ? new Date().toISOString()
+              : null,
+          };
+        });
+      }
+      showToast(t("admin.settings.toggle_saved"), "success");
+      setPendingToggle(null);
+      setPendingReason("");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(t("admin.settings.toggle_failed_msg", { msg }), "error");
+    } finally {
+      setPendingSaving(false);
+    }
+  }, [pendingToggle, pendingReason, t]);
+
+  // Feature details modal — load overrides + audit history.
+  const openFeatureDetails = useCallback(async (gate: FeatureGate) => {
+    setDetailsFor(gate);
+    setGrantEmail("");
+    setGrantAccess(true);
+    setGrantReason("");
+    setGrantExpiresDays("");
+    setDetailsLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("get_feature_gate_history", {
+        p_feature_id: gate.id,
+        p_limit: 20,
+      });
+      if (error) throw new Error(error.message);
+      const payload = data as
+        | {
+            overrides: FeatureOverrideRow[];
+            history: FeatureAuditRow[];
+          }
+        | null;
+      setDetailsOverrides(payload?.overrides ?? []);
+      setDetailsHistory(payload?.history ?? []);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(msg, "error");
+      setDetailsOverrides([]);
+      setDetailsHistory([]);
+    } finally {
+      setDetailsLoading(false);
+    }
+  }, []);
+
+  const refreshDetails = useCallback(async () => {
+    if (!detailsFor) return;
+    await openFeatureDetails(detailsFor);
+  }, [detailsFor, openFeatureDetails]);
+
+  const submitGrant = useCallback(async () => {
+    if (!detailsFor) return;
+    const email = grantEmail.trim().toLowerCase();
+    const reason = grantReason.trim();
+    if (!email) {
+      showToast(t("admin.settings.grant_email_required"), "error");
+      return;
+    }
+    if (!reason) {
+      showToast(t("admin.settings.reason_required"), "error");
+      return;
+    }
+    setGrantSaving(true);
+    try {
+      const { data: profile, error: lookupErr } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
+      if (lookupErr || !profile?.id) {
+        showToast(t("admin.settings.user_not_found"), "error");
+        setGrantSaving(false);
+        return;
+      }
+      let expiresAt: string | null = null;
+      const daysNum = parseInt(grantExpiresDays, 10);
+      if (Number.isFinite(daysNum) && daysNum > 0) {
+        expiresAt = new Date(Date.now() + daysNum * 86400_000).toISOString();
+      }
+      const { error } = await supabase.rpc("admin_grant_feature_override", {
+        p_feature_id: detailsFor.id,
+        p_user_id: profile.id,
+        p_access_granted: grantAccess,
+        p_reason: reason,
+        p_expires_at: expiresAt,
+      });
+      if (error) throw new Error(error.message);
+      showToast(t("admin.settings.grant_saved"), "success");
+      setGrantEmail("");
+      setGrantReason("");
+      setGrantExpiresDays("");
+      await refreshDetails();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast(msg, "error");
+    } finally {
+      setGrantSaving(false);
+    }
+  }, [detailsFor, grantEmail, grantAccess, grantReason, grantExpiresDays, refreshDetails, t]);
+
+  const revokeOverride = useCallback(
+    async (row: FeatureOverrideRow) => {
+      if (!detailsFor) return;
+      const ok = await platformConfirm(
+        t("admin.settings.revoke_confirm", {
+          name: row.user_name ?? row.user_id.slice(0, 8),
+        }),
+      );
+      if (!ok) return;
+      try {
+        const { error } = await supabase.rpc("admin_revoke_feature_override", {
+          p_feature_id: detailsFor.id,
+          p_user_id: row.user_id,
+          p_reason: "Revoked via admin console",
+        });
+        if (error) throw new Error(error.message);
+        showToast(t("admin.settings.revoke_saved"), "success");
+        await refreshDetails();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        showToast(msg, "error");
       }
     },
-    [t],
+    [detailsFor, refreshDetails, t],
   );
 
   const openEditTemplate = (tpl: NotifTemplate) => {
@@ -321,6 +557,64 @@ export default function AdminPlatformSettingsScreen() {
           <ActivityIndicator size="small" color={TEAL} style={{ marginTop: 40 }} />
         ) : (
           <>
+            {/* Mig 393 — Platform kill switches (scoring / payouts).
+                Sits at the top so an admin dropping in during an
+                incident sees the two big red buttons first. Both
+                toggles route through admin_toggle_platform_setting
+                which writes an admin_audit_log row. */}
+            <Section title={t("admin.settings.kill_switches")}>
+              {!platform ? (
+                <Text style={styles.emptyText}>
+                  {t("admin.settings.kill_switches_unavailable")}
+                </Text>
+              ) : (
+                <>
+                  <View style={[styles.row, styles.rowBorder]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rowName}>
+                        {t("admin.settings.kill_scoring")}
+                      </Text>
+                      <Text style={styles.rowMeta} numberOfLines={2}>
+                        {platform.scoring_frozen && platform.scoring_frozen_reason
+                          ? t("admin.settings.kill_reason", {
+                              reason: platform.scoring_frozen_reason,
+                            })
+                          : t("admin.settings.kill_scoring_hint")}
+                      </Text>
+                    </View>
+                    <Switch
+                      value={platform.scoring_frozen}
+                      onValueChange={(v) =>
+                        requestTogglePlatform("scoring_frozen", v)
+                      }
+                      trackColor={{ false: "#E5E7EB", true: "#DC2626" }}
+                    />
+                  </View>
+                  <View style={styles.row}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.rowName}>
+                        {t("admin.settings.kill_payouts")}
+                      </Text>
+                      <Text style={styles.rowMeta} numberOfLines={2}>
+                        {platform.payouts_paused && platform.payouts_paused_reason
+                          ? t("admin.settings.kill_reason", {
+                              reason: platform.payouts_paused_reason,
+                            })
+                          : t("admin.settings.kill_payouts_hint")}
+                      </Text>
+                    </View>
+                    <Switch
+                      value={platform.payouts_paused}
+                      onValueChange={(v) =>
+                        requestTogglePlatform("payouts_paused", v)
+                      }
+                      trackColor={{ false: "#E5E7EB", true: "#DC2626" }}
+                    />
+                  </View>
+                </>
+              )}
+            </Section>
+
             {/* a. Feature flags */}
             <Section title={t("admin.settings.feature_flags")}>
               {features.length === 0 ? (
@@ -346,9 +640,18 @@ export default function AdminPlatformSettingsScreen() {
                       </View>
                       <Switch
                         value={!!f.enabled}
-                        onValueChange={(v) => toggleFeature(f, v)}
+                        onValueChange={(v) => requestToggleFeature(f, v)}
                         trackColor={{ false: "#E5E7EB", true: TEAL }}
                       />
+                      <TouchableOpacity
+                        style={styles.smallBtn}
+                        onPress={() => openFeatureDetails(f)}
+                        accessibilityRole="button"
+                      >
+                        <Text style={styles.smallBtnText}>
+                          {t("admin.settings.details")}
+                        </Text>
+                      </TouchableOpacity>
                     </View>
                   );
                 })
@@ -494,6 +797,264 @@ export default function AdminPlatformSettingsScreen() {
               >
                 <Text style={styles.modalPrimaryText}>
                   {saving ? "…" : t("admin.settings.save")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Mig 393 — Pending toggle confirm modal. Fires for BOTH feature
+          gates and platform kill switches. Reason is required by every
+          admin_toggle_* RPC so the audit trail is never empty. */}
+      <Modal
+        visible={!!pendingToggle}
+        animationType="fade"
+        transparent
+        onRequestClose={() => (pendingSaving ? null : setPendingToggle(null))}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {pendingToggle?.kind === "feature"
+                ? t(
+                    pendingToggle.nextEnabled
+                      ? "admin.settings.confirm_enable_title"
+                      : "admin.settings.confirm_disable_title",
+                    { name: pendingToggle.feature.name },
+                  )
+                : pendingToggle
+                ? t(
+                    pendingToggle.nextEnabled
+                      ? "admin.settings.confirm_kill_on_title"
+                      : "admin.settings.confirm_kill_off_title",
+                    { name: t(`admin.settings.kill_${pendingToggle.setting}`) },
+                  )
+                : ""}
+            </Text>
+            <Text style={styles.modalLabel}>
+              {t("admin.settings.confirm_reason_label")}
+            </Text>
+            <TextInput
+              style={[styles.modalInput, styles.modalInputMulti]}
+              value={pendingReason}
+              onChangeText={setPendingReason}
+              placeholder={t("admin.settings.confirm_reason_placeholder")}
+              placeholderTextColor={MUTED}
+              multiline
+              editable={!pendingSaving}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalSecondary}
+                onPress={() => setPendingToggle(null)}
+                disabled={pendingSaving}
+              >
+                <Text style={styles.modalSecondaryText}>
+                  {t("common.cancel")}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalPrimary}
+                onPress={confirmPendingToggle}
+                disabled={pendingSaving || !pendingReason.trim()}
+              >
+                <Text style={styles.modalPrimaryText}>
+                  {pendingSaving ? "…" : t("admin.settings.confirm_apply")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Mig 393 — Per-feature details modal.
+          Shows current per-user overrides (with revoke), recent audit
+          entries (last 20), and a grant form to add a new override. */}
+      <Modal
+        visible={!!detailsFor}
+        animationType="slide"
+        transparent
+        onRequestClose={() => (grantSaving ? null : setDetailsFor(null))}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { maxHeight: "90%" }]}>
+            <Text style={styles.modalTitle}>
+              {detailsFor
+                ? t("admin.settings.details_title", {
+                    name: detailsFor.name,
+                  })
+                : ""}
+            </Text>
+            <ScrollView style={{ maxHeight: 520 }}>
+              {detailsLoading ? (
+                <ActivityIndicator size="small" color={TEAL} style={{ marginTop: 20 }} />
+              ) : (
+                <>
+                  {/* Overrides */}
+                  <Text style={styles.detailsSection}>
+                    {t("admin.settings.overrides_title", {
+                      count: detailsOverrides.length,
+                    })}
+                  </Text>
+                  {detailsOverrides.length === 0 ? (
+                    <Text style={styles.emptyText}>
+                      {t("admin.settings.overrides_empty")}
+                    </Text>
+                  ) : (
+                    detailsOverrides.map((o) => (
+                      <View key={o.override_id} style={styles.detailsRow}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.rowName} numberOfLines={1}>
+                            {o.user_name ?? o.user_id.slice(0, 8) + "…"}
+                          </Text>
+                          <Text style={styles.rowMeta} numberOfLines={1}>
+                            {o.access_granted
+                              ? t("admin.settings.override_granted")
+                              : t("admin.settings.override_denied")}
+                            {o.expires_at
+                              ? " · " +
+                                (o.expired
+                                  ? t("admin.settings.override_expired")
+                                  : t("admin.settings.override_expires_at", {
+                                      date: new Date(o.expires_at).toLocaleDateString(),
+                                    }))
+                              : ""}
+                          </Text>
+                          {o.reason ? (
+                            <Text style={styles.rowMeta} numberOfLines={2}>
+                              "{o.reason}"
+                            </Text>
+                          ) : null}
+                        </View>
+                        <TouchableOpacity
+                          style={styles.dangerBtn}
+                          onPress={() => revokeOverride(o)}
+                        >
+                          <Text style={styles.dangerBtnText}>
+                            {t("admin.settings.override_revoke")}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))
+                  )}
+
+                  {/* Grant form */}
+                  <Text style={styles.detailsSection}>
+                    {t("admin.settings.grant_title")}
+                  </Text>
+                  <Text style={styles.modalLabel}>
+                    {t("admin.settings.grant_email_label")}
+                  </Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={grantEmail}
+                    onChangeText={setGrantEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    placeholder="user@example.com"
+                    placeholderTextColor={MUTED}
+                    editable={!grantSaving}
+                  />
+                  <View style={styles.roleRow}>
+                    <TouchableOpacity
+                      style={[styles.roleChip, grantAccess && styles.roleChipActive]}
+                      onPress={() => setGrantAccess(true)}
+                    >
+                      <Text
+                        style={[
+                          styles.roleChipText,
+                          grantAccess && styles.roleChipTextActive,
+                        ]}
+                      >
+                        {t("admin.settings.grant_access_true")}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.roleChip, !grantAccess && styles.roleChipActive]}
+                      onPress={() => setGrantAccess(false)}
+                    >
+                      <Text
+                        style={[
+                          styles.roleChipText,
+                          !grantAccess && styles.roleChipTextActive,
+                        ]}
+                      >
+                        {t("admin.settings.grant_access_false")}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.modalLabel}>
+                    {t("admin.settings.grant_expires_label")}
+                  </Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={grantExpiresDays}
+                    onChangeText={setGrantExpiresDays}
+                    keyboardType="numeric"
+                    placeholder={t("admin.settings.grant_expires_placeholder")}
+                    placeholderTextColor={MUTED}
+                    editable={!grantSaving}
+                  />
+                  <Text style={styles.modalLabel}>
+                    {t("admin.settings.grant_reason_label")}
+                  </Text>
+                  <TextInput
+                    style={[styles.modalInput, styles.modalInputMulti]}
+                    value={grantReason}
+                    onChangeText={setGrantReason}
+                    placeholder={t("admin.settings.grant_reason_placeholder")}
+                    placeholderTextColor={MUTED}
+                    multiline
+                    editable={!grantSaving}
+                  />
+                  <TouchableOpacity
+                    style={[styles.modalPrimary, { marginTop: 12, alignSelf: "flex-start" }]}
+                    onPress={submitGrant}
+                    disabled={grantSaving || !grantEmail.trim() || !grantReason.trim()}
+                  >
+                    <Text style={styles.modalPrimaryText}>
+                      {grantSaving ? "…" : t("admin.settings.grant_submit")}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Recent audit */}
+                  <Text style={styles.detailsSection}>
+                    {t("admin.settings.history_title")}
+                  </Text>
+                  {detailsHistory.length === 0 ? (
+                    <Text style={styles.emptyText}>
+                      {t("admin.settings.history_empty")}
+                    </Text>
+                  ) : (
+                    detailsHistory.slice(0, 10).map((h) => (
+                      <View key={h.id} style={styles.detailsAuditRow}>
+                        <Text style={styles.rowMeta}>
+                          {h.action} ·{" "}
+                          {h.admin_name ??
+                            (h.admin_id ? h.admin_id.slice(0, 8) + "…" : "—")}
+                          {" · "}
+                          {new Date(h.created_at).toLocaleString()}
+                        </Text>
+                        {h.details ? (
+                          <Text style={styles.rowMeta} numberOfLines={2}>
+                            {(h.details as any).reason ?? ""}
+                          </Text>
+                        ) : null}
+                      </View>
+                    ))
+                  )}
+                </>
+              )}
+            </ScrollView>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalSecondary}
+                onPress={() => setDetailsFor(null)}
+                disabled={grantSaving}
+              >
+                <Text style={styles.modalSecondaryText}>
+                  {t("common.close")}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -723,4 +1284,29 @@ const styles = StyleSheet.create({
 
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   mutedText: { fontSize: typography.body, color: MUTED, textAlign: "center" },
+
+  // Mig 393 — feature details modal
+  detailsSection: {
+    fontSize: typography.label,
+    color: MUTED,
+    fontWeight: typography.bold,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    marginTop: 16,
+    marginBottom: 6,
+  },
+  detailsRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#F3F4F6",
+    gap: 8,
+  },
+  detailsAuditRow: {
+    paddingVertical: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#F3F4F6",
+    gap: 2,
+  },
 });
