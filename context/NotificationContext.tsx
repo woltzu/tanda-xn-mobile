@@ -488,14 +488,37 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return;
 
     try {
-      const { data, error: fetchError } = await supabase
+      // maybeSingle → null-when-missing without the PGRST116 dance.
+      let { data, error: fetchError } = await supabase
         .from("notification_preferences")
         .select("*")
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
 
-      if (fetchError && fetchError.code !== "PGRST116") {
-        throw fetchError;
+      if (fetchError) throw fetchError;
+
+      if (!data) {
+        // Row missing — insert defaults. Race-safe upsert with
+        // ignoreDuplicates:true handles the case where a DB trigger or a
+        // concurrent client fetch already inserted the row between our
+        // SELECT and INSERT (was surfacing as Postgres 23505). On a race
+        // we DO NOT overwrite the racer's values with defaults — the
+        // subsequent re-fetch below returns whichever row exists.
+        const { error: upsertError } = await supabase
+          .from("notification_preferences")
+          .upsert(
+            { user_id: user.id, ...defaultPreferences },
+            { onConflict: "user_id", ignoreDuplicates: true },
+          );
+        if (upsertError) throw upsertError;
+
+        const { data: fresh, error: refetchError } = await supabase
+          .from("notification_preferences")
+          .select("*")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (refetchError) throw refetchError;
+        data = fresh;
       }
 
       if (data) {
@@ -534,16 +557,6 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
             );
           }
         }
-      } else {
-        // Create default preferences
-        const { data: newPrefs, error: createError } = await supabase
-          .from("notification_preferences")
-          .insert({ user_id: user.id, ...defaultPreferences })
-          .select()
-          .single();
-
-        if (createError) throw createError;
-        setPreferences(newPrefs);
       }
     } catch (err) {
       console.error("Error fetching notification preferences:", err);
