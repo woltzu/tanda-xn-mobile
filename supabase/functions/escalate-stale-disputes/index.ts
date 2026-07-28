@@ -2,21 +2,30 @@
 // EDGE FUNCTION: escalate-stale-disputes
 // ══════════════════════════════════════════════════════════════════════════════
 // Schedule (suggested): daily at 06:00 UTC.
-// Purpose: walk open dispute_cases rows and bump their escalation_tier
-//   based on how long they've sat without action.
+// Purpose: walk open `disputes` rows and bump their escalation_tier based on
+//   how long they've sat without action.
 //
 //   - 48h+ since updated_at, escalation_tier IS NULL
 //       → escalation_tier = 'elder_l2'
-//       → notify every elder in the circle (no longer just the
-//         original recipients of the dispute_filed fan-out)
+//       → notify every elder in the circle
 //   - 7d+ since updated_at, escalation_tier IN (NULL, 'elder_l2')
 //       → escalation_tier = 'global_queue'
 //       → notify every active platform admin (admin_users.is_active)
 //
+// Retargeted from dispute_cases → disputes as part of mig 384. dispute_cases
+// is dead — nothing has written to it since mig 249 (verified 2026-07-28).
+// All real dispute traffic lives in `disputes` (mig 261 + mig 384).
+//
+// New in this retarget:
+//   * status filter: 'open', 'assigned', 'reviewing' (disputes has no CHECK
+//     on status, so we match the same set the dashboard RPC does).
+//   * escalated_at TIMESTAMPTZ stamped on both tier bumps (added by mig 384).
+//   * escalated_to = tier value maintained for continuity with the legacy
+//     text column (mig 261's original design).
+//
 // Idempotency anchor is the escalation_tier value itself — a row already
 // in 'global_queue' is skipped by the WHERE filter, so re-running the
-// cron is a no-op for already-escalated rows. We also stamp updated_at
-// on each escalation so the next tier's 7d clock starts from the bump.
+// cron is a no-op for already-escalated rows.
 //
 // Deployment:
 //   supabase functions deploy escalate-stale-disputes --no-verify-jwt
@@ -34,6 +43,7 @@ const corsHeaders = {
 const HOUR = 3600 * 1000;
 const TIER1_THRESHOLD_HOURS = 48;
 const TIER2_THRESHOLD_HOURS = 7 * 24;
+const ACTIVE_STATUSES = ["open", "assigned", "reviewing"] as const;
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -50,12 +60,13 @@ serve(async (req: Request) => {
     const now = Date.now();
     const tier1Cutoff = new Date(now - TIER1_THRESHOLD_HOURS * HOUR).toISOString();
     const tier2Cutoff = new Date(now - TIER2_THRESHOLD_HOURS * HOUR).toISOString();
+    const bumpTs = new Date().toISOString();
 
     // ── Pass 1: 48h+ → elder_l2 ──────────────────────────────────────
     const { data: tier1Rows, error: t1Err } = await supabase
-      .from("dispute_cases")
-      .select("id, circle_id, respondent_id, dispute_type")
-      .eq("status", "open")
+      .from("disputes")
+      .select("id, circle_id, against_user_id, type")
+      .in("status", ACTIVE_STATUSES as unknown as string[])
       .is("escalation_tier", null)
       .lt("updated_at", tier1Cutoff)
       .limit(2000);
@@ -64,10 +75,12 @@ serve(async (req: Request) => {
     let tier1Bumped = 0;
     for (const d of tier1Rows ?? []) {
       const { error: upErr } = await supabase
-        .from("dispute_cases")
+        .from("disputes")
         .update({
           escalation_tier: "elder_l2",
-          updated_at: new Date().toISOString(),
+          escalated_at: bumpTs,
+          escalated_to: "elder_l2",
+          updated_at: bumpTs,
         })
         .eq("id", d.id)
         .is("escalation_tier", null); // idempotency: only bump if still NULL
@@ -101,9 +114,9 @@ serve(async (req: Request) => {
 
     // ── Pass 2: 7d+ → global_queue ───────────────────────────────────
     const { data: tier2Rows, error: t2Err } = await supabase
-      .from("dispute_cases")
+      .from("disputes")
       .select("id, circle_id")
-      .eq("status", "open")
+      .in("status", ACTIVE_STATUSES as unknown as string[])
       .or("escalation_tier.is.null,escalation_tier.eq.elder_l2")
       .lt("updated_at", tier2Cutoff)
       .limit(2000);
@@ -121,10 +134,12 @@ serve(async (req: Request) => {
     let tier2Bumped = 0;
     for (const d of tier2Rows ?? []) {
       const { error: upErr } = await supabase
-        .from("dispute_cases")
+        .from("disputes")
         .update({
           escalation_tier: "global_queue",
-          updated_at: new Date().toISOString(),
+          escalated_at: bumpTs,
+          escalated_to: "global_queue",
+          updated_at: bumpTs,
         })
         .eq("id", d.id)
         .or("escalation_tier.is.null,escalation_tier.eq.elder_l2");
@@ -139,7 +154,7 @@ serve(async (req: Request) => {
           user_id: uid,
           type: "dispute_escalated_global",
           title: "Dispute reached the global queue",
-          body: `A dispute has been open for 7 days without resolution. Review in the platform admin queue.`,
+          body: `A dispute has been open for 7 days without resolution. Review in the admin dispute dashboard.`,
           data: { dispute_id: d.id, circle_id: d.circle_id, tier: "global_queue" },
           read: false,
         }));
