@@ -58,7 +58,8 @@ type ModuleKey =
   | "scoring"
   | "payout_console"
   | "substitutes"
-  | "collection";
+  | "collection"
+  | "chargebacks";
 
 type ModuleDef = {
   key: ModuleKey;
@@ -84,6 +85,7 @@ const MODULES: ModuleDef[] = [
   { key: "payout_console", icon: "cash-outline",     route: "AdminPayoutConsole" },
   { key: "substitutes", icon: "swap-horizontal-outline", route: "AdminSubstituteDashboard" },
   { key: "collection", icon: "card-outline",             route: "AdminCollectionDashboard" },
+  { key: "chargebacks", icon: "shield-outline",           route: "AdminChargebackConsole" },
 ];
 
 export default function AdminHubScreen() {
