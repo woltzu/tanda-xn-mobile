@@ -364,6 +364,7 @@ import AdminKYCReviewDetailScreen from "./screens/AdminKYCReviewDetailScreen";
 import AdminReconciliationScreen from "./screens/AdminReconciliationScreen";
 import AdminCircleJoinLogScreen from "./screens/AdminCircleJoinLogScreen";
 import AdminScoringDashboardScreen from "./screens/AdminScoringDashboardScreen";
+import AdminPayoutConsoleScreen from "./screens/AdminPayoutConsoleScreen";
 import AdminLiquidityAdvancesScreen from "./screens/AdminLiquidityAdvancesScreen";
 import AdminUserDetailScreen from "./screens/AdminUserDetailScreen";
 import AdminCirclesScreen from "./screens/AdminCirclesScreen";
@@ -994,6 +995,8 @@ export type RootStackParamList = {
   AdminCircleJoinLog: { circleId?: string } | undefined;
   // Mig 376 scoring pipeline admin surface — deltas, runs, freeze toggle.
   AdminScoringDashboard: undefined;
+  // Doc 39 Phase 2 (mig 379 + 380) payout console — hold / approve / pause.
+  AdminPayoutConsole: undefined;
   AdminLiquidityAdvances: undefined;
   // Admin Bucket C — platform-wide settings (feature flags, templates,
   // system config, admin user roster). Named AdminPlatformSettings to
@@ -1246,6 +1249,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AdminReconciliation" component={AdminReconciliationScreen} />
       <HomeStack.Screen name="AdminCircleJoinLog" component={AdminCircleJoinLogScreen} />
       <HomeStack.Screen name="AdminScoringDashboard" component={AdminScoringDashboardScreen} />
+      <HomeStack.Screen name="AdminPayoutConsole" component={AdminPayoutConsoleScreen} />
       <HomeStack.Screen name="AdminLiquidityAdvances" component={AdminLiquidityAdvancesScreen} />
       <HomeStack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
       {/* StripeConnectScreen is reachable via deep link only; no user-facing menu entry. */}

@@ -55,7 +55,8 @@ type ModuleKey =
   | "advances"
   | "reconciliation"
   | "join_log"
-  | "scoring";
+  | "scoring"
+  | "payout_console";
 
 type ModuleDef = {
   key: ModuleKey;
@@ -78,6 +79,7 @@ const MODULES: ModuleDef[] = [
   { key: "reconciliation", icon: "construct-outline", route: "AdminReconciliation" },
   { key: "join_log", icon: "list-outline",           route: "AdminCircleJoinLog" },
   { key: "scoring",  icon: "analytics-outline",      route: "AdminScoringDashboard" },
+  { key: "payout_console", icon: "cash-outline",     route: "AdminPayoutConsole" },
 ];
 
 export default function AdminHubScreen() {

@@ -48,6 +48,7 @@ export const Routes = {
   AdminBugReports: "AdminBugReports",
   AdminCircleJoinLog: "AdminCircleJoinLog",
   AdminScoringDashboard: "AdminScoringDashboard",
+  AdminPayoutConsole: "AdminPayoutConsole",
   AdminKYCReviewDetail: "AdminKYCReviewDetail",
   AdminKYCReviewQueue: "AdminKYCReviewQueue",
   AdminReconciliation: "AdminReconciliation",
