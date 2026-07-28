@@ -345,6 +345,26 @@ Deno.serve(async (req) => {
       continue;
     }
 
+    // 0.5. Freeze gate — mig 390. Skip frozen users so autopay doesn't
+    // attempt to move money for an account that admin actions or
+    // chargebacks have locked. Uses the is_account_frozen RPC (STABLE)
+    // so we get the current value at request time. The config is NOT
+    // disabled — a future unfreeze should let the next run pick it up
+    // normally.
+    const { data: freezeCheck } = await supabase.rpc("is_account_frozen", {
+      p_user_id: cfg.user_id,
+    });
+    if (freezeCheck === true) {
+      skipped++;
+      await supabase.from("circle_autopay_log").insert({
+        config_id: cfg.id,
+        scheduled_date: todayDate,
+        status: "skipped",
+        error_message: "user account frozen — autopay skipped",
+      });
+      continue;
+    }
+
     // 1. Active cycle for this circle.
     const { data: cycleRow, error: cycErr } = await supabase
       .from("circle_cycles")
