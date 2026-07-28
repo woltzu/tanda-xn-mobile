@@ -367,6 +367,7 @@ import AdminScoringDashboardScreen from "./screens/AdminScoringDashboardScreen";
 import AdminPayoutConsoleScreen from "./screens/AdminPayoutConsoleScreen";
 import AdminDisputeDashboardScreen from "./screens/AdminDisputeDashboardScreen";
 import AdminDisputeDetailScreen from "./screens/AdminDisputeDetailScreen";
+import AdminSubstituteDashboardScreen from "./screens/AdminSubstituteDashboardScreen";
 import AdminLiquidityAdvancesScreen from "./screens/AdminLiquidityAdvancesScreen";
 import AdminUserDetailScreen from "./screens/AdminUserDetailScreen";
 import AdminCirclesScreen from "./screens/AdminCirclesScreen";
@@ -1002,6 +1003,8 @@ export type RootStackParamList = {
   // Mig 384 admin dispute console — visibility + override + reassign.
   AdminDisputeDashboard: undefined;
   AdminDisputeDetail: { disputeId: string };
+  // Mig 386 admin substitute console — visibility-only (Phase 1).
+  AdminSubstituteDashboard: undefined;
   AdminLiquidityAdvances: undefined;
   // Admin Bucket C — platform-wide settings (feature flags, templates,
   // system config, admin user roster). Named AdminPlatformSettings to
@@ -1257,6 +1260,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AdminPayoutConsole" component={AdminPayoutConsoleScreen} />
       <HomeStack.Screen name="AdminDisputeDashboard" component={AdminDisputeDashboardScreen} />
       <HomeStack.Screen name="AdminDisputeDetail" component={AdminDisputeDetailScreen} />
+      <HomeStack.Screen name="AdminSubstituteDashboard" component={AdminSubstituteDashboardScreen} />
       <HomeStack.Screen name="AdminLiquidityAdvances" component={AdminLiquidityAdvancesScreen} />
       <HomeStack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
       {/* StripeConnectScreen is reachable via deep link only; no user-facing menu entry. */}

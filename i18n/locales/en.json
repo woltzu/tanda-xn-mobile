@@ -2483,7 +2483,8 @@
       "reconciliation": "Reconciliation",
       "join_log": "Join Log",
       "scoring": "Scoring",
-      "payout_console": "Payout Console"
+      "payout_console": "Payout Console",
+      "substitutes": "Substitutes"
     },
     "payout_console": {
       "title": "Payout Console",
@@ -2613,6 +2614,34 @@
       "overridden_toast": "Override applied. Dispute resolved.",
       "override_error_title": "Couldn't override",
       "reason_min_count": "{{current}} / {{min}} characters"
+    },
+    "substitutes": {
+      "title": "Substitute Console",
+      "pool_health_title": "Pool health",
+      "stat_active": "Active",
+      "stat_suspended": "Suspended",
+      "stat_removed": "Removed",
+      "stat_frequent_decliners": "Frequent decliners (90d)",
+      "stat_avg_reliability": "Avg reliability",
+      "stat_lifetime_subs": "Substitutions (lifetime)",
+      "at_risk_title": "Open at-risk events ({{count}})",
+      "at_risk_empty": "No open at-risk events.",
+      "risk": "risk {{score}}",
+      "age": "flagged {{rel}}",
+      "pending_title": "Pending confirmations ({{count}})",
+      "pending_empty": "No substitutes awaiting confirmation.",
+      "deadline_in": "in {{dur}}",
+      "substituting_for": "for {{name}}",
+      "auto_approved": "auto-approved",
+      "manual_approval": "manual approval",
+      "payout_position": "position {{pos}}",
+      "risky_title": "Risky matches ({{count}})",
+      "risky_subtitle": "Substitutes assigned to a circle they've never been a member of.",
+      "risky_empty": "No risky matches — all pending substitutes have prior circle membership.",
+      "no_history_tag": "no history",
+      "in_pool_reliability": "in pool · reliability {{score}}",
+      "not_in_pool": "not in pool",
+      "generated_at": "Refreshed {{rel}}"
     },
     "scoring": {
       "title": "Scoring Dashboard",

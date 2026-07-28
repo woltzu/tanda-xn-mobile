@@ -2483,7 +2483,8 @@
       "reconciliation": "Réconciliation",
       "join_log": "Journal des adhésions",
       "scoring": "Scoring",
-      "payout_console": "Console des paiements"
+      "payout_console": "Console des paiements",
+      "substitutes": "Substituts"
     },
     "payout_console": {
       "title": "Console des paiements",
@@ -2613,6 +2614,34 @@
       "overridden_toast": "Override appliqué. Litige résolu.",
       "override_error_title": "Impossible d'appliquer l'override",
       "reason_min_count": "{{current}} / {{min}} caractères"
+    },
+    "substitutes": {
+      "title": "Console des substituts",
+      "pool_health_title": "Santé du pool",
+      "stat_active": "Actifs",
+      "stat_suspended": "Suspendus",
+      "stat_removed": "Retirés",
+      "stat_frequent_decliners": "Refus fréquents (90j)",
+      "stat_avg_reliability": "Fiabilité moy.",
+      "stat_lifetime_subs": "Substitutions (total)",
+      "at_risk_title": "Événements à risque ouverts ({{count}})",
+      "at_risk_empty": "Aucun événement à risque ouvert.",
+      "risk": "risque {{score}}",
+      "age": "signalé {{rel}}",
+      "pending_title": "Confirmations en attente ({{count}})",
+      "pending_empty": "Aucun substitut en attente de confirmation.",
+      "deadline_in": "dans {{dur}}",
+      "substituting_for": "pour {{name}}",
+      "auto_approved": "auto-approuvé",
+      "manual_approval": "approbation manuelle",
+      "payout_position": "position {{pos}}",
+      "risky_title": "Correspondances risquées ({{count}})",
+      "risky_subtitle": "Substituts attribués à un cercle dont ils n'ont jamais été membres.",
+      "risky_empty": "Aucune correspondance risquée — tous les substituts en attente ont une histoire dans le cercle.",
+      "no_history_tag": "sans historique",
+      "in_pool_reliability": "dans le pool · fiabilité {{score}}",
+      "not_in_pool": "pas dans le pool",
+      "generated_at": "Actualisé {{rel}}"
     },
     "scoring": {
       "title": "Tableau de bord scoring",
