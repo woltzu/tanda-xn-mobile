@@ -369,6 +369,7 @@ import AdminDisputeDashboardScreen from "./screens/AdminDisputeDashboardScreen";
 import AdminDisputeDetailScreen from "./screens/AdminDisputeDetailScreen";
 import AdminSubstituteDashboardScreen from "./screens/AdminSubstituteDashboardScreen";
 import AdminCollectionDashboardScreen from "./screens/AdminCollectionDashboardScreen";
+import ProfileVisibilitySettingsScreen from "./screens/ProfileVisibilitySettingsScreen";
 import AdminLiquidityAdvancesScreen from "./screens/AdminLiquidityAdvancesScreen";
 import AdminUserDetailScreen from "./screens/AdminUserDetailScreen";
 import AdminCirclesScreen from "./screens/AdminCirclesScreen";
@@ -1008,6 +1009,8 @@ export type RootStackParamList = {
   AdminSubstituteDashboard: undefined;
   // Mig 387 admin collection dashboard — visibility-only (Phase 1).
   AdminCollectionDashboard: undefined;
+  // Mig 388 Doc 40 profile visibility — member-facing settings + access log.
+  ProfileVisibilitySettings: undefined;
   AdminLiquidityAdvances: undefined;
   // Admin Bucket C — platform-wide settings (feature flags, templates,
   // system config, admin user roster). Named AdminPlatformSettings to
@@ -1265,6 +1268,7 @@ function HomeStackScreen() {
       <HomeStack.Screen name="AdminDisputeDetail" component={AdminDisputeDetailScreen} />
       <HomeStack.Screen name="AdminSubstituteDashboard" component={AdminSubstituteDashboardScreen} />
       <HomeStack.Screen name="AdminCollectionDashboard" component={AdminCollectionDashboardScreen} />
+      <HomeStack.Screen name="ProfileVisibilitySettings" component={ProfileVisibilitySettingsScreen} />
       <HomeStack.Screen name="AdminLiquidityAdvances" component={AdminLiquidityAdvancesScreen} />
       <HomeStack.Screen name="AdminPlatformSettings" component={AdminPlatformSettingsScreen} />
       {/* StripeConnectScreen is reachable via deep link only; no user-facing menu entry. */}

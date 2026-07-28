@@ -390,6 +390,32 @@ export default function PrivacySettingsScreen() {
             </View>
           </View>
 
+          {/* Doc 40 (mig 388) — Community visibility toggles + access log */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t("privacy.section_profile_visibility")}</Text>
+            <View style={styles.card}>
+              <TouchableOpacity
+                style={styles.navRow}
+                onPress={() => navigation.navigate("ProfileVisibilitySettings")}
+                accessibilityRole="button"
+                accessibilityLabel={t("privacy.nav_profile_visibility")}
+              >
+                <View
+                  style={[styles.navRowIconWrap, { backgroundColor: "#F0FDFB" }]}
+                >
+                  <Ionicons name="eye-outline" size={20} color="#00897B" />
+                </View>
+                <View style={styles.navRowBody}>
+                  <Text style={styles.navRowTitle}>{t("privacy.nav_profile_visibility")}</Text>
+                  <Text style={styles.navRowSubtitle}>
+                    {t("privacy.nav_profile_visibility_subtitle")}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {/* Phase 5 — Blocked Users management. Entry point to a
               dedicated screen listing everyone the caller has blocked
               via the mig 346 blocked_users table. */}
