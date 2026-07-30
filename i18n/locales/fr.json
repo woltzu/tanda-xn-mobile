@@ -3397,7 +3397,12 @@
     "tier_2_title": "Niveau 2 — Standard",
     "tier_2_body": "Identité vérifiée. Envoyez et recevez de l'argent dans la limite standard.",
     "tier_3_title": "Niveau 3 — Renforcé",
-    "tier_3_body": "Numéro fiscal enregistré. Limites plus élevées et intérêts débloqués."
+    "tier_3_body": "Numéro fiscal enregistré. Limites plus élevées et intérêts débloqués.",
+    "verification_error_title": "Impossible de démarrer la vérification",
+    "verification_error_fallback_body": "Si le problème persiste, vous pouvez téléverser votre pièce d'identité manuellement et notre équipe l'examinera.",
+    "verification_error_fallback_cta": "Téléverser manuellement",
+    "verification_web_opened_title": "Vérification ouverte",
+    "verification_web_opened_body": "Complétez la vérification dans le nouvel onglet. Votre statut sera mis à jour automatiquement lorsque Persona aura terminé."
   },
   "kyc_document": {
     "header_title": "Téléversez votre pièce d'identité",

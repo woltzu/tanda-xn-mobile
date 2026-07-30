@@ -3397,7 +3397,12 @@
     "tier_2_title": "Tier 2 — Standard",
     "tier_2_body": "Identity verified. Send and receive money up to standard limits.",
     "tier_3_title": "Tier 3 — Enhanced",
-    "tier_3_body": "Tax ID on file. Higher limits and interest earnings unlocked."
+    "tier_3_body": "Tax ID on file. Higher limits and interest earnings unlocked.",
+    "verification_error_title": "Could not start verification",
+    "verification_error_fallback_body": "If this keeps happening, you can upload your ID manually and our team will review it.",
+    "verification_error_fallback_cta": "Upload manually",
+    "verification_web_opened_title": "Verification opened",
+    "verification_web_opened_body": "Complete the verification in the new tab. Your status will update automatically once Persona finishes."
   },
   "kyc_document": {
     "header_title": "Upload your ID",

@@ -175,11 +175,48 @@ export default function KYCHubScreen() {
     };
   }, [user?.id]);
 
-  const handleStartVerification = () => {
-    navigation.navigate(
-      Routes.KYCDocument as never,
-      { idType: routingHint.idType } as never,
-    );
+  // Persona SDK path (native) or Persona hosted flow (web). Falls back
+  // to the manual document-upload screen ONLY if the create-inquiry EF
+  // fails (Persona outage, missing secrets, etc.). Manual upload remains
+  // an admin escape hatch — reachable via the deep-linked KYCDocument
+  // route — but is no longer the default path.
+  const [personaBusy, setPersonaBusy] = useState(false);
+  const handleStartVerification = async () => {
+    if (personaBusy) return;
+    setPersonaBusy(true);
+    try {
+      const { startPersonaVerification } = await import("../lib/personaVerify");
+      const res = await startPersonaVerification();
+      if (!res.ok) {
+        Alert.alert(
+          t("kyc_hub.verification_error_title"),
+          res.error + "\n\n" + t("kyc_hub.verification_error_fallback_body"),
+          [
+            { text: t("common.cancel"), style: "cancel" },
+            {
+              text: t("kyc_hub.verification_error_fallback_cta"),
+              onPress: () =>
+                navigation.navigate(
+                  Routes.KYCDocument as never,
+                  { idType: routingHint.idType } as never,
+                ),
+            },
+          ],
+        );
+        return;
+      }
+      // Success: SDK dismissed OR web tab opened. Webhook will flip
+      // kyc.isVerified when Persona completes verification server-side,
+      // and the screen's realtime subscription picks that up.
+      if (res.kind === "web_opened") {
+        Alert.alert(
+          t("kyc_hub.verification_web_opened_title"),
+          t("kyc_hub.verification_web_opened_body"),
+        );
+      }
+    } finally {
+      setPersonaBusy(false);
+    }
   };
 
   // P0 (kyc-trigger review): when verified, project the freshest kyc
