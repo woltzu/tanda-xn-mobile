@@ -20,19 +20,17 @@
     "production": {
       "distribution": "store",
       "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "@stripe_publishable_key",
+        "RCT_NEW_ARCH_ENABLED": "0",
+        "EXPO_USE_PRECOMPILED_MODULES": "0"
+      },
       "ios": {
         "image": "latest",
-        "cocoapods": "1.15.2",
-        "env": {
-          "RCT_NEW_ARCH_ENABLED": "0",
-          "EXPO_USE_PRECOMPILED_MODULES": "0"
-        }
+        "cocoapods": "1.15.2"
       },
       "android": {
         "image": "latest"
-      },
-      "env": {
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "@stripe_publishable_key"
       }
     }
   },

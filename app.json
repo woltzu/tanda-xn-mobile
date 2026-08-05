@@ -130,6 +130,14 @@
         {
           "contactsPermission": "Allow TandaXn to access your contacts to invite friends."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "newArchEnabled": false
+          }
+        }
       ]
     ],
     "extra": {
