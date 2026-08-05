@@ -22,8 +22,10 @@
       "autoIncrement": true,
       "ios": {
         "image": "latest",
+        "cocoapods": "1.15.2",
         "env": {
-          "RCT_NEW_ARCH_ENABLED": "0"
+          "RCT_NEW_ARCH_ENABLED": "0",
+          "EXPO_USE_PRECOMPILED_MODULES": "0"
         }
       },
       "android": {
