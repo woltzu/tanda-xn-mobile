@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 7.0.0"
+    "version": ">= 7.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -20,7 +21,10 @@
       "distribution": "store",
       "autoIncrement": true,
       "ios": {
-        "image": "latest"
+        "image": "latest",
+        "env": {
+          "RCT_NEW_ARCH_ENABLED": "0"
+        }
       },
       "android": {
         "image": "latest"
@@ -34,8 +38,7 @@
     "production": {
       "ios": {
         "appleId": "TODO_APPLE_ID",
-        "ascAppId": "TODO_ASC_APP_ID",
-        "teamId": "TODO_TEAM_ID"
+        "ascAppId": "TODO_ASC_APP_ID"
       },
       "android": {
         "serviceAccountKeyPath": "TODO_path/to/service-account-key.json",

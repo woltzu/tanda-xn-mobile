@@ -17,7 +17,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tandaxn.app",
+      "bundleIdentifier": "com.tandaxn.mobile",
       "buildNumber": "1",
       "associatedDomains": [
         "applinks:tandaxn.com",
@@ -83,13 +83,18 @@
       "output": "single",
       "name": "TandaXn"
     },
+    "experiments": {
+      "ios": {
+        "newArchEnabled": false
+      }
+    },
     "plugins": [
       "expo-secure-store",
       "@react-native-community/datetimepicker",
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "merchant.com.tandaxn.app",
+          "merchantIdentifier": "merchant.com.tandaxn.mobile",
           "enableGooglePay": true
         }
       ],
