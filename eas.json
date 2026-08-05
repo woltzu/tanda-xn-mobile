@@ -21,9 +21,7 @@
       "distribution": "store",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "@stripe_publishable_key",
-        "RCT_NEW_ARCH_ENABLED": "0",
-        "EXPO_USE_PRECOMPILED_MODULES": "0"
+        "EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY": "@stripe_publishable_key"
       },
       "ios": {
         "image": "latest",

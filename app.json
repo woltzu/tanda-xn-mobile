@@ -83,11 +83,6 @@
       "output": "single",
       "name": "TandaXn"
     },
-    "experiments": {
-      "ios": {
-        "newArchEnabled": false
-      }
-    },
     "plugins": [
       "expo-secure-store",
       "@react-native-community/datetimepicker",
@@ -131,14 +126,7 @@
           "contactsPermission": "Allow TandaXn to access your contacts to invite friends."
         }
       ],
-      [
-        "expo-build-properties",
-        {
-          "ios": {
-            "newArchEnabled": false
-          }
-        }
-      ]
+      "expo-font"
     ],
     "extra": {
       "eas": {
