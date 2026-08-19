@@ -214,8 +214,10 @@ export function usePartialPlanSummary(userId?: string) {
 
   useEffect(() => {
     if (!userId) return;
-    const channel = PartialContributionEngine.subscribeToPlans(userId, () =>
-      fetchSummary(),
+    const channel = PartialContributionEngine.subscribeToPlans(
+      userId,
+      () => fetchSummary(),
+      `summary-${userId}`,
     );
     return () => {
       supabase.removeChannel(channel);
@@ -262,14 +264,18 @@ export function useActivePlan(userId?: string, circleId?: string) {
   useEffect(() => {
     if (!userId) return;
 
-    const channel = PartialContributionEngine.subscribeToPlans(userId, () => {
-      fetchPlan();
-    });
+    const channel = PartialContributionEngine.subscribeToPlans(
+      userId,
+      () => {
+        fetchPlan();
+      },
+      `active-${userId}-${circleId ?? 'none'}`,
+    );
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userId, fetchPlan]);
+  }, [userId, circleId, fetchPlan]);
 
   // Computed
   const hasPlan = useMemo(() => plan !== null, [plan]);
@@ -338,9 +344,13 @@ export function useMemberPlanHistory(userId?: string) {
   useEffect(() => {
     if (!userId) return;
 
-    const channel = PartialContributionEngine.subscribeToPlans(userId, () => {
-      fetchHistory();
-    });
+    const channel = PartialContributionEngine.subscribeToPlans(
+      userId,
+      () => {
+        fetchHistory();
+      },
+      `history-${userId}`,
+    );
 
     return () => {
       supabase.removeChannel(channel);

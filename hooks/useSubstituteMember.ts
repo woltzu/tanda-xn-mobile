@@ -453,7 +453,13 @@ export function useAdminSubstitutionQueue(userId?: string) {
 // Refetches whenever the substitute_pool table changes anywhere.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function useSubstitutePoolSummary() {
+export function useSubstitutePoolSummary(channelKey: string) {
+  // channelKey MUST be unique per subscriber on the client. Supabase reuses
+  // an existing channel when the name matches, which throws "cannot add
+  // postgres_changes callbacks after subscribe()" as soon as a second
+  // mount happens (e.g. CircleDetailScreen pushed on top of CirclesV2).
+  // Callers name their channel per screen context — 'circles-list',
+  // `circle-detail-${circleId}`, etc.
   const [overview, setOverview] = useState<{
     totalActive: number;
     totalStandby: number;
@@ -481,7 +487,7 @@ export function useSubstitutePoolSummary() {
   // Realtime: any change to substitute_pool anywhere re-aggregates. Cheap.
   useEffect(() => {
     const ch = supabase
-      .channel('substitute-pool-summary')
+      .channel(`substitute-pool-${channelKey}`)
       .on(
         'postgres_changes' as any,
         { event: '*', schema: 'public', table: 'substitute_pool' },
@@ -491,7 +497,7 @@ export function useSubstitutePoolSummary() {
     return () => {
       supabase.removeChannel(ch);
     };
-  }, [fetchOverview]);
+  }, [fetchOverview, channelKey]);
 
   return { overview, loading, refresh: fetchOverview };
 }

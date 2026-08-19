@@ -436,7 +436,7 @@ export default function CirclesV2Screen() {
 
   const { entry: substituteEntry, isInPool: substituteInPool } =
     useSubstitutePoolEntry(user?.id);
-  const { overview: substituteOverview } = useSubstitutePoolSummary();
+  const { overview: substituteOverview } = useSubstitutePoolSummary('circles-list');
   const substituteAvailableCount = substituteOverview?.totalActive ?? 0;
   // Map the user's pool entry to the i18n key suffix used on the badge.
   const substituteStatusKey: "in_pool" | "standby" | "suspended" | "not_joined" =

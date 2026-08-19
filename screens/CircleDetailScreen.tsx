@@ -478,7 +478,7 @@ function CircleDetailBody({
   // Substitute Pool Bucket B — global active-substitute count for the
   // entry row added below the icon strip. The hook keeps itself fresh via
   // a postgres_changes subscription on substitute_pool.
-  const { overview: substituteOverview } = useSubstitutePoolSummary();
+  const { overview: substituteOverview } = useSubstitutePoolSummary(`circle-detail-${circleId}`);
   const substituteAvailableCount = substituteOverview?.totalActive ?? 0;
 
   // Payout ordering AI decision — surfaces a "View AI decision" link on

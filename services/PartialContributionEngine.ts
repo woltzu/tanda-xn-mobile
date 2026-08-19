@@ -640,10 +640,20 @@ export class PartialContributionEngine {
 
   /**
    * Subscribe to a member's partial contribution plan changes.
+   *
+   * channelKey MUST be unique per subscriber on a given client — Supabase
+   * returns the existing channel when the same name is reused, which throws
+   * "cannot add postgres_changes callbacks after subscribe()" if a second
+   * hook mounts. Callers name their channel per hook + relevant IDs
+   * (e.g. `active-${userId}-${circleId}`, `summary-${userId}`).
    */
-  static subscribeToPlans(userId: string, callback: () => void) {
+  static subscribeToPlans(
+    userId: string,
+    callback: () => void,
+    channelKey: string,
+  ) {
     return supabase
-      .channel(`partial-plans-${userId}`)
+      .channel(`partial-plans-${channelKey}`)
       .on(
         'postgres_changes',
         {
