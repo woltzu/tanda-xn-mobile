@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute, RouteProp, CommonActions } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { useTranslation, Trans } from "react-i18next";
 import { RootStackParamList } from "../App";
@@ -251,13 +251,14 @@ export default function JoinCircleConfirmScreen() {
           {/* Go Home instead of Go Back: goBack() lands the user on
               JoinCircleByCode where they'd just re-try the same code
               and hit the same wall. A reset to the Home tab is what a
-              stuck user actually wants. CommonActions.navigate walks up
-              to the tab navigator and switches to the Home tab from any
-              nested stack. */}
+              stuck user actually wants. Nested navigation — "Home" is
+              a tab inside MainTabs, not a route on this stack; the
+              { screen } form targets the tab explicitly from any
+              nested navigator. */}
           <TouchableOpacity
             style={styles.errorButton}
             onPress={() =>
-              navigation.dispatch(CommonActions.navigate({ name: "Home" }))
+              navigation.navigate("MainTabs", { screen: "Home" })
             }
           >
             <Text style={styles.errorButtonText}>{t("join_circle_confirm.btn_go_home")}</Text>

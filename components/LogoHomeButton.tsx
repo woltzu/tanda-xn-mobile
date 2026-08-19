@@ -18,7 +18,7 @@
 
 import React, { useCallback } from "react";
 import { StyleSheet, TouchableOpacity, Text } from "react-native";
-import { useNavigation, CommonActions } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, typography } from "../theme/tokens";
 import { useAuth } from "../context/AuthContext";
@@ -32,11 +32,12 @@ export default function LogoHomeButton() {
   const { user } = useAuth();
 
   const handlePress = useCallback(() => {
-    // CommonActions.navigate walks up to the nearest navigator that
-    // owns a "Home" route — the tab navigator in our tree — so this
-    // works from any nested stack. If the user is already on the Home
-    // tab, React Navigation is a no-op instead of pushing.
-    navigation.dispatch(CommonActions.navigate({ name: "Home" }));
+    // Nested navigation — "Home" is a tab inside MainTabs, not a route
+    // on the root Stack. Dispatching plain navigate({name:"Home"}) to
+    // the root Stack errors ("was not handled by any navigator"). The
+    // { screen } form targets the tab explicitly and is a no-op if the
+    // user is already on the Home tab.
+    navigation.navigate("MainTabs", { screen: "Home" });
   }, [navigation]);
 
   // Only render for signed-in users. The unauthenticated tree

@@ -1799,6 +1799,14 @@ function AppContent() {
               "was not handled by any navigator". Same duplicate pattern
               as ResolutionCenter above. */}
           <Stack.Screen name="MyCircles" component={MyCirclesScreen} />
+          {/* MakeContribution — ALSO registered on HomeStack (line ~1131)
+              and CirclesStack (line ~1378). Duplicated here so
+              navigate("MakeContribution") from a context whose
+              useNavigation() captured the root Stack (deep-link entry,
+              notification-tap router, or Portal-mounted CTAs) resolves
+              without a "not handled by any navigator" throw. Same
+              duplicate pattern as ResolutionCenter / MyCircles above. */}
+          <Stack.Screen name="MakeContribution" component={MakeContributionScreen} />
           {/* CircleDetail root-Stack fallback. Registered on HomeStack
               (line ~1072) and CirclesStack (line ~1292) already, but
               deep-link taps from a Community-tab surface (notification
