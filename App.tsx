@@ -21,6 +21,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ScrollDiagnosticProvider } from "./utils/scrollDiagnostics";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { eventService } from "./services/EventService";
 import { PreferencesProvider } from "./context/PreferencesContext";
 import { useInactivityLock } from "./hooks/useInactivityLock";
@@ -2056,6 +2057,13 @@ function MainTabs() {
   );
 }
 
+// Module-level singleton — react-query recommends creating the QueryClient
+// once per app instance (not per render) so cached queries survive across
+// re-mounts. All four hooks that use react-query today (useCreditworthiness,
+// useMonthlyPayment, useInterestCalculation, useScoreBreakdown) rely on
+// this client via <QueryClientProvider> below.
+const queryClient = new QueryClient();
+
 export default function App() {
   const [toast, setToast] = useState<{
     visible: boolean;
@@ -2078,6 +2086,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaProvider>
+    <QueryClientProvider client={queryClient}>
     <ScrollDiagnosticProvider>
     <AuthProvider>
       <PreferencesProvider>
@@ -2128,6 +2137,7 @@ export default function App() {
       </PreferencesProvider>
     </AuthProvider>
     </ScrollDiagnosticProvider>
+    </QueryClientProvider>
     </SafeAreaProvider>
     </GestureHandlerRootView>
   );
