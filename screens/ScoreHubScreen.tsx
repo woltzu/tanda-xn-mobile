@@ -44,6 +44,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/tokens";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
+import { formatDeltaLine } from "../lib/scoreDelta";
 import ScoreExplainerSheet from "../components/ScoreExplainerSheet";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -188,31 +189,11 @@ function trendIcon(trend: StressTrend): "trending-down" | "remove-outline" | "tr
 }
 
 // ==========================================================================
-// Format the inline "+N vs last week" delta. For higher-is-better scores
-// (XnScore, Honor) a positive delta is improvement; for lower-is-better
-// scores (Stress, Mood) a positive delta is worsening — colour flips.
+// formatDeltaLine ("+N vs last week") lives in lib/scoreDelta so
+// XnScoreDashboardScreen can render the same delta line below its score
+// ring using the same rules. Default translation keys point to the
+// score_hub.* namespace so this screen's call sites stay unchanged.
 // ==========================================================================
-
-function formatDeltaLine(
-  delta: number | null,
-  higherIsBetter: boolean,
-  tFn: (key: string, opts?: Record<string, unknown>) => string,
-): { text: string; color: string } | null {
-  if (delta == null) return null;
-  if (delta === 0) {
-    return {
-      text: tFn("score_hub.delta_no_change"),
-      color: colors.textSecondary,
-    };
-  }
-  const isImprovement = higherIsBetter ? delta > 0 : delta < 0;
-  const sign = delta > 0 ? "+" : "−"; // proper minus sign
-  const abs = Math.abs(delta);
-  return {
-    text: tFn("score_hub.delta_vs_last_week", { sign, value: abs }),
-    color: isImprovement ? colors.successText : colors.errorText,
-  };
-}
 
 // ==========================================================================
 // Hero card priority picker — scans the bundle in spec order and returns
@@ -905,6 +886,8 @@ export default function ScoreHubScreen() {
     navigation.navigate(Routes.CreditReport);
   const handleViewCreditProfile = () =>
     navigation.navigate(Routes.CreditProfile);
+  const handleOpenXnScoreBreakdown = () =>
+    navigation.navigate(Routes.XnScoreDashboard);
   const handleOpenAIInsights = () => navigation.navigate(Routes.AIInsights);
   const handleOpenHonor = () => navigation.navigate(Routes.HonorScoreOverview);
   const handleOpenStress = () =>
@@ -1179,6 +1162,20 @@ export default function ScoreHubScreen() {
               />
               <Text style={styles.headerLinkText}>
                 {t("score_hub.xnscore_credit_profile_link")}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleOpenXnScoreBreakdown}
+              accessibilityRole="button"
+              style={styles.headerLinkBtn}
+            >
+              <Ionicons
+                name="analytics-outline"
+                size={14}
+                color={colors.textWhite}
+              />
+              <Text style={styles.headerLinkText}>
+                {t("score_hub.xnscore_breakdown_link")}
               </Text>
             </TouchableOpacity>
           </View>

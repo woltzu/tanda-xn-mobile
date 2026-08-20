@@ -5676,6 +5676,11 @@
     "tips_title": "Améliorer votre score",
     "tip_points_label": "+{{points}} pts",
     "tip_no_data": "Vous atteignez tous les plafonds de facteurs. Restez régulier pour conserver votre palier.",
+    "tips_show_all": "Voir les {{count}} conseils",
+    "tips_show_less": "Réduire",
+    "percentile_label": "Top {{percent}}% des utilisateurs",
+    "delta_no_change": "Aucun changement vs semaine dernière",
+    "delta_vs_last_week": "{{sign}}{{value}} vs semaine dernière",
     "no_history": "Pas encore d'historique du score"
   },
   "xnscore_history": {
@@ -8754,6 +8759,7 @@
     "xnscore_defaults": "Défauts",
     "xnscore_cta": "Voir l'historique du score",
     "xnscore_credit_profile_link": "Voir le profil de crédit complet",
+    "xnscore_breakdown_link": "Voir le détail du score",
     "card_loading": "Chargement…",
     "card_error": "Impossible de charger ce score.",
     "card_retry": "Réessayer",

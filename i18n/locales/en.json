@@ -5676,6 +5676,11 @@
     "tips_title": "Improve your score",
     "tip_points_label": "+{{points}} pts",
     "tip_no_data": "You're hitting every factor cap. Stay consistent to maintain your tier.",
+    "tips_show_all": "See all {{count}} tips",
+    "tips_show_less": "Show less",
+    "percentile_label": "Top {{percent}}% of users",
+    "delta_no_change": "No change vs last week",
+    "delta_vs_last_week": "{{sign}}{{value}} vs last week",
     "no_history": "No score history yet"
   },
   "xnscore_history": {
@@ -8754,6 +8759,7 @@
     "xnscore_defaults": "Defaults",
     "xnscore_cta": "View score history",
     "xnscore_credit_profile_link": "View full credit profile",
+    "xnscore_breakdown_link": "View score breakdown",
     "card_loading": "Loading…",
     "card_error": "Couldn't load this score.",
     "card_retry": "Retry",

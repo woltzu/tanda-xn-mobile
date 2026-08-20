@@ -39,6 +39,7 @@ import {
   getNextTier,
   TIER_CATALOG,
 } from "../lib/tiers";
+import { formatDeltaLine } from "../lib/scoreDelta";
 
 type XnScoreDashboardNavigationProp = StackNavigationProp<RootStackParamList>;
 
@@ -159,6 +160,8 @@ export default function XnScoreDashboardScreen() {
   const {
     score,
     tierKey,
+    delta,
+    percentile,
     loading: bundleLoading,
     error: bundleError,
     refresh: refreshBundle,
@@ -251,12 +254,31 @@ export default function XnScoreDashboardScreen() {
     [breakdown, track],
   );
 
-  // ── Tier resolution (Bucket A.3) ──────────────────────────────────────
-  // The bundle returns a tierKey string ('newcomer' / 'trusted' / …) that
-  // maps 1-to-1 to TIER_CATALOG entries. getTierByKeyOrFallback returns a
-  // neutral grey "Unknown" entry on miss so the render path stays clean.
-  const tier = getTierByKeyOrFallback(tierKey);
-  const nextTier = tierKey ? getNextTier(tierKey) : null;
+  // ── Tier resolution (Bucket A.3 — revised) ────────────────────────────
+  // The bundle returns bundle.xnscore_tier as a QUALITY-rating string
+  // ('good' / 'fair' / 'poor' / 'critical' from xn_scores.score_tier
+  // enum), NOT a TIER_CATALOG progression key. Looking it up against
+  // TIER_CATALOG (whose keys are 'newcomer'/'trusted'/'elder'/…) always
+  // missed → the badge showed "Unknown". Fix: derive the TIER_CATALOG
+  // entry from the score value (its authoritative source), then display
+  // the raw quality-rating string as the badge label so this screen
+  // matches ScoreHub. TIER_CATALOG entry still drives icon / color /
+  // next-tier / features so the tier-progress strip below stays correct.
+  const tierByScore = score != null
+    ? (TIER_CATALOG.find(
+        (tt) => score >= tt.xnScoreMin && score <= tt.xnScoreMax,
+      ) ?? null)
+    : null;
+  const tier = tierByScore ?? getTierByKeyOrFallback(tierKey);
+  const tierDisplayLabel = tierKey && tierKey.length > 0 ? tierKey : tier.label;
+  const nextTier = tier.tierKey ? getNextTier(tier.tierKey) : null;
+
+  // Delta line — same format the Hub uses ("↑ better −3 vs last week").
+  // XnScore is higher-is-better, so a positive delta is improvement.
+  const xnDeltaLine = formatDeltaLine(delta, true, t, {
+    noChangeKey: "xnscore_dashboard.delta_no_change",
+    deltaKey: "xnscore_dashboard.delta_vs_last_week",
+  });
   // Tier-progress strip (Bucket A.7) — N points to next tier + 3 features
   // it unlocks. featuresSummary is one summary line per tier; we split on
   // ", " so the strip can show real bullets without inventing copy.
@@ -306,9 +328,13 @@ export default function XnScoreDashboardScreen() {
   }, [history, score]);
 
   // Bucket B improvement tips — server returns up to 5 ordered by
-  // priority. We display the top 3 here; tapping a tip routes the user
-  // to a sensible surface for that factor.
-  const topTips = breakdown?.improvement_tips?.slice(0, 3) ?? [];
+  // priority. Default view shows top 3; the "See all N tips" toggle
+  // below expands to the full list. Tapping a tip routes the user to a
+  // sensible surface for that factor.
+  const allTips = breakdown?.improvement_tips ?? [];
+  const [showAllTips, setShowAllTips] = useState(false);
+  const topTips = showAllTips ? allTips : allTips.slice(0, 3);
+  const hasMoreTips = allTips.length > 3;
 
   // Five factors, rendered in TIER_CATALOG's canonical order. The RPC
   // sometimes returns them under a different key order; pull from
@@ -418,12 +444,27 @@ export default function XnScoreDashboardScreen() {
             </View>
           </View>
 
-          {/* Tier badge — sourced from TIER_CATALOG so this stays
-              consistent with the Hub, Profile, and gating logic. */}
+          {/* Tier badge — TIER_CATALOG entry (score-derived) for icon +
+              color; label is the bundle's raw quality-rating string
+              ('good' / 'fair' / …) so this reads the same as the Hub. */}
           <View style={[styles.tierBadge, { backgroundColor: tier.color + "30" }]}>
             <Text style={styles.tierIcon}>{tier.icon}</Text>
-            <Text style={styles.tierLabel}>{tier.label}</Text>
+            <Text style={styles.tierLabel}>{tierDisplayLabel}</Text>
           </View>
+
+          {/* Week-over-week delta (only when the RPC returned one). */}
+          {xnDeltaLine ? (
+            <Text style={[styles.headerDeltaText, { color: xnDeltaLine.color }]}>
+              {xnDeltaLine.text}
+            </Text>
+          ) : null}
+
+          {/* Percentile line — matches the Hub's "Top 82% of users". */}
+          {percentile != null ? (
+            <Text style={styles.headerPercentile}>
+              {t("xnscore_dashboard.percentile_label", { percent: percentile })}
+            </Text>
+          ) : null}
 
           {/* Bucket B — 30-day sparkline. Reads the same history rows the
               Recent Activity section uses (limit 30 from the hook), then
@@ -641,6 +682,34 @@ export default function XnScoreDashboardScreen() {
                 <Text style={styles.tipsEmptyText}>{t("xnscore_dashboard.tip_no_data")}</Text>
               </View>
             )}
+            {/* "See all N tips" / "Show less" toggle. Only rendered when
+                the server actually returned more than 3 tips. */}
+            {hasMoreTips ? (
+              <TouchableOpacity
+                style={styles.tipsToggle}
+                onPress={() => {
+                  setShowAllTips((v) => !v);
+                  track({
+                    eventType: "xnscore.tips_toggle",
+                    eventCategory: "score",
+                    eventAction: showAllTips ? "collapsed" : "expanded",
+                    eventValue: { total_tips: allTips.length },
+                  });
+                }}
+                accessibilityRole="button"
+              >
+                <Text style={styles.tipsToggleText}>
+                  {showAllTips
+                    ? t("xnscore_dashboard.tips_show_less")
+                    : t("xnscore_dashboard.tips_show_all", { count: allTips.length })}
+                </Text>
+                <Ionicons
+                  name={showAllTips ? "chevron-up" : "chevron-down"}
+                  size={16}
+                  color="#1565C0"
+                />
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           {/* Recent Activity — real rows from xnscore_history. */}
@@ -892,7 +961,9 @@ const styles = StyleSheet.create({
   // TIER_CATALOG so colour + label + icon always match the Hub.
   tierBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, gap: 8 },
   tierIcon: { fontSize: 18 },
-  tierLabel: { fontSize: 15, fontWeight: "700", color: "#FFFFFF" },
+  tierLabel: { fontSize: 15, fontWeight: "700", color: "#FFFFFF", textTransform: "capitalize" },
+  headerDeltaText: { fontSize: 13, fontWeight: "600", marginTop: 8, textAlign: "center" },
+  headerPercentile: { fontSize: 12, fontWeight: "500", color: "rgba(255,255,255,0.85)", marginTop: 4, textAlign: "center" },
 
   content: { padding: 20 },
 
@@ -966,6 +1037,8 @@ const styles = StyleSheet.create({
   tipBody: { fontSize: 13, color: "#6B7280", lineHeight: 18 },
   tipsEmptyCard: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 24, alignItems: "center", borderWidth: 1, borderColor: "#E5E7EB" },
   tipsEmptyText: { fontSize: 13, color: "#6B7280", marginTop: 8, textAlign: "center" },
+  tipsToggle: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, paddingVertical: 12, marginTop: 4 },
+  tipsToggleText: { fontSize: 14, fontWeight: "600", color: "#1565C0" },
 
   // Bucket B — coach mark.
   coachOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "flex-start" },
