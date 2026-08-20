@@ -6,7 +6,7 @@
 // Follows useHonorScore.ts / useMemberRemoval.ts patterns.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useId } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   GraduatedEntryEngine,
@@ -89,6 +89,14 @@ export function useMemberTier(userId?: string) {
   const { user } = useAuth();
   const targetId = userId || user?.id;
 
+  // Per-instance channel key. Guarantees a unique Supabase realtime channel
+  // per hook mount — required because 5 screens (Dashboard / Home /
+  // KYCHub / VerificationHub / GraduatedEntry) call useMemberTier, and
+  // React Navigation keeps parent screens mounted while a child is
+  // pushed. Sharing a channel name across mounts throws "cannot add
+  // postgres_changes callbacks after subscribe()".
+  const instanceId = useId();
+
   // Seed initial state from the cache if a fresh entry exists. Avoids a
   // null-flash + skeleton render when switching between screens.
   const [status, setStatus] = useState<MemberTierStatus | null>(() => {
@@ -151,10 +159,11 @@ export function useMemberTier(userId?: string) {
         bustTierCache(targetId);
         fetchStatus({ force: true });
       },
+      `tier-${instanceId}`,
     );
 
     return () => { subscription.unsubscribe(); };
-  }, [targetId, fetchStatus]);
+  }, [targetId, fetchStatus, instanceId]);
 
   // Computed: tier definition
   const tierDef = useMemo((): TierDefinition | null => {

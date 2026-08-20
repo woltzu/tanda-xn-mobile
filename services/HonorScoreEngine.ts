@@ -321,13 +321,21 @@ export class HonorScoreEngine {
 
   /**
    * Subscribe to realtime changes on a user's honor score.
+   *
+   * channelKey MUST be unique per subscriber on the client. Supabase reuses
+   * an existing channel when the name matches, which throws "cannot add
+   * postgres_changes callbacks after subscribe()" on the second .on() call.
+   * useHonorScore derives the key from React's useId() so nested hook
+   * chains (e.g. useHonorScoreDashboard transitively creating two
+   * useHonorScore instances) get distinct channels automatically.
    */
   static subscribeToHonorScore(
     userId: string,
-    callback: (payload: any) => void
+    callback: (payload: any) => void,
+    channelKey: string,
   ) {
     return supabase
-      .channel(`honor_score_${userId}`)
+      .channel(`honor_score-${channelKey}`)
       .on(
         'postgres_changes',
         {

@@ -7,7 +7,7 @@
 // Follows useXnScore.ts pattern.
 // ══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useId } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
   HonorScoreEngine,
@@ -32,6 +32,14 @@ export function useHonorScore(userId?: string) {
   const [score, setScore] = useState<HonorScore | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Per-instance channel key. Guarantees a unique Supabase realtime channel
+  // per hook mount — required because useHonorScoreDashboard transitively
+  // creates two useHonorScore instances on the same render, and a screen
+  // may compose several honor-score hooks side-by-side. Sharing a channel
+  // name across instances throws "cannot add postgres_changes callbacks
+  // after subscribe()".
+  const instanceId = useId();
 
   const targetUserId = userId || user?.id;
 
@@ -61,11 +69,12 @@ export function useHonorScore(userId?: string) {
 
     const subscription = HonorScoreEngine.subscribeToHonorScore(
       targetUserId,
-      () => { fetchScore(); }
+      () => { fetchScore(); },
+      `honor-${instanceId}`,
     );
 
     return () => { subscription.unsubscribe(); };
-  }, [targetUserId, fetchScore]);
+  }, [targetUserId, fetchScore, instanceId]);
 
   // Computed: tier info
   const tierInfo = useMemo((): HonorScoreTierInfo | null => {

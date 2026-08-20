@@ -514,13 +514,21 @@ export class GraduatedEntryEngine {
 
   /**
    * Subscribe to tier status changes for a user.
+   *
+   * channelKey MUST be unique per subscriber on the client. Supabase reuses
+   * an existing channel when the name matches, which throws "cannot add
+   * postgres_changes callbacks after subscribe()" as soon as a second
+   * useMemberTier mounts. useMemberTier derives the key from React's
+   * useId() so any two screens (Dashboard + Home, KYCHub + Verification
+   * Hub, etc.) get distinct channels automatically.
    */
   static subscribeToTierChanges(
     userId: string,
-    callback: (payload: any) => void
+    callback: (payload: any) => void,
+    channelKey: string,
   ) {
     return supabase
-      .channel(`member_tier_${userId}`)
+      .channel(`member_tier-${channelKey}`)
       .on(
         'postgres_changes',
         {
