@@ -452,16 +452,18 @@ export default function XnScoreDashboardScreen() {
             <Text style={styles.tierLabel}>{tierDisplayLabel}</Text>
           </View>
 
-          {/* Week-over-week delta with arrow + direction word — matches
-              the "↑ better -3 vs last week" shape the Hub shows, but
-              picks arrow/word from the actual sign (Hub's badge is
-              hardcoded to "↑ better" — a Hub-side bug to fix later). */}
+          {/* Week-over-week delta with arrow + direction word. Arrow
+              tracks the literal delta sign (isPositive), word tracks
+              the improvement judgment (isImprovement) — for XnScore
+              (higher-is-better) they always agree, but keeping the
+              two separate mirrors the Hub's shared helper contract. */}
           {xnDeltaLine ? (
             <View style={styles.headerDeltaRow}>
-              {xnDeltaLine.isImprovement !== null ? (
+              {xnDeltaLine.isPositive !== null &&
+               xnDeltaLine.isImprovement !== null ? (
                 <>
                   <Ionicons
-                    name={xnDeltaLine.isImprovement ? "arrow-up" : "arrow-down"}
+                    name={xnDeltaLine.isPositive ? "arrow-up" : "arrow-down"}
                     size={13}
                     color={xnDeltaLine.color}
                   />

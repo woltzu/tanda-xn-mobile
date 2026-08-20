@@ -31,15 +31,29 @@ export interface FormatDeltaOptions {
 /** null when delta == 0 (no direction), true when the change is in the
  *  desired direction (higher-is-better + positive delta OR lower-is-better
  *  + negative delta), false otherwise. Callers use this to render the
- *  optional "↑ better" / "↓ worse" prefix badge. */
+ *  optional "better" / "worse" word in the badge. */
 export type DeltaImprovement = boolean | null;
+
+/** null when delta == 0, true when delta > 0, false when delta < 0.
+ *  Callers use this to pick the arrow direction (↑ vs ↓). Deliberately
+ *  distinct from isImprovement: for lower-is-better scores (Stress,
+ *  Mood) a negative delta is an improvement AND points down. Using
+ *  isImprovement for the arrow would flip it upside-down on those cards. */
+export type DeltaSign = boolean | null;
+
+export interface FormattedDelta {
+  text: string;
+  color: string;
+  isImprovement: DeltaImprovement;
+  isPositive: DeltaSign;
+}
 
 export function formatDeltaLine(
   delta: number | null | undefined,
   higherIsBetter: boolean,
   tFn: TFn,
   opts?: FormatDeltaOptions,
-): { text: string; color: string; isImprovement: DeltaImprovement } | null {
+): FormattedDelta | null {
   if (delta == null) return null;
 
   const noChangeKey = opts?.noChangeKey ?? 'score_hub.delta_no_change';
@@ -50,10 +64,12 @@ export function formatDeltaLine(
       text: tFn(noChangeKey),
       color: colors.textSecondary,
       isImprovement: null,
+      isPositive: null,
     };
   }
 
   const isImprovement = higherIsBetter ? delta > 0 : delta < 0;
+  const isPositive = delta > 0;
   const sign = delta > 0 ? '+' : '−'; // proper minus sign
   const abs = Math.abs(delta);
 
@@ -61,5 +77,6 @@ export function formatDeltaLine(
     text: tFn(deltaKey, { sign, value: abs }),
     color: isImprovement ? colors.successText : colors.errorText,
     isImprovement,
+    isPositive,
   };
 }

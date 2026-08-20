@@ -44,7 +44,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme/tokens";
 import { useTypedNavigation } from "../hooks/useTypedNavigation";
 import { Routes } from "../lib/routes";
-import { formatDeltaLine } from "../lib/scoreDelta";
+import { formatDeltaLine, type FormattedDelta } from "../lib/scoreDelta";
 import ScoreExplainerSheet from "../components/ScoreExplainerSheet";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -394,24 +394,44 @@ function FeatureCard({
 }
 
 // ==========================================================================
-// DirectionBadge — a small inline pill that says whether higher-is-better.
+// DirectionBadge — small inline pill that reflects the actual
+// week-over-week delta: arrow follows the literal sign of the change
+// (↑ up when the number rose, ↓ down when it fell), word follows the
+// improvement judgment ("better" when the change is in the desired
+// direction for that score, "worse" otherwise). For higher-is-better
+// scores (XnScore, Honor) the two agree; for lower-is-better scores
+// (Stress, Mood) they diverge — a dropped stress score reads as
+// "↓ better", a risen stress score as "↑ worse".
+//
+// Returns null when there is no delta or delta === 0 — the "No change
+// vs last week" text below the score already covers the zero case.
 // ==========================================================================
 
-function DirectionBadge({
-  higherIsBetter,
-  label,
-}: {
-  higherIsBetter: boolean;
-  label: string;
+function DirectionBadge({ deltaLine }: {
+  deltaLine: FormattedDelta | null;
 }) {
+  const { t } = useTranslation();
+  if (
+    !deltaLine ||
+    deltaLine.isPositive === null ||
+    deltaLine.isImprovement === null
+  ) {
+    return null;
+  }
   return (
     <View style={styles.directionBadge}>
       <Ionicons
-        name={higherIsBetter ? "arrow-up" : "arrow-down"}
+        name={deltaLine.isPositive ? "arrow-up" : "arrow-down"}
         size={11}
         color={colors.textSecondary}
       />
-      <Text style={styles.directionBadgeText}>{label}</Text>
+      <Text style={styles.directionBadgeText}>
+        {t(
+          deltaLine.isImprovement
+            ? "score_hub.direction_better"
+            : "score_hub.direction_worse",
+        )}
+      </Text>
     </View>
   );
 }
@@ -1085,10 +1105,12 @@ export default function ScoreHubScreen() {
                 missing (no bundle yet) or zero (no change); the "No
                 change vs last week" line below already covers the zero
                 case, so hiding the badge is the cleaner UX. */}
-            {xnDeltaLine && xnDeltaLine.isImprovement !== null ? (
+            {xnDeltaLine &&
+             xnDeltaLine.isPositive !== null &&
+             xnDeltaLine.isImprovement !== null ? (
               <View style={styles.headerDirectionBadge}>
                 <Ionicons
-                  name={xnDeltaLine.isImprovement ? "arrow-up" : "arrow-down"}
+                  name={xnDeltaLine.isPositive ? "arrow-up" : "arrow-down"}
                   size={11}
                   color={colors.textOnNavy}
                 />
@@ -1257,10 +1279,7 @@ export default function ScoreHubScreen() {
                   <Text style={styles.gaugeLabel}>
                     {t("score_hub.honor_score_label")}
                   </Text>
-                  <DirectionBadge
-                    higherIsBetter
-                    label={t("score_hub.direction_better")}
-                  />
+                  <DirectionBadge deltaLine={honorDeltaLine} />
                 </View>
                 <Text style={[styles.gaugeScore, { color: honorTierColor }]}>
                   {honorScoreValue}
@@ -1361,10 +1380,7 @@ export default function ScoreHubScreen() {
                   <Text style={styles.gaugeLabel}>
                     {t("score_hub.stress_score_label")}
                   </Text>
-                  <DirectionBadge
-                    higherIsBetter={false}
-                    label={t("score_hub.direction_better")}
-                  />
+                  <DirectionBadge deltaLine={stressDeltaLine} />
                 </View>
                 <Text style={[styles.gaugeScore, { color: stressColorValue }]}>
                   {stressScoreValue}
@@ -1503,10 +1519,7 @@ export default function ScoreHubScreen() {
                   <Text style={styles.gaugeLabel}>
                     {t("score_hub.mood_score_label")}
                   </Text>
-                  <DirectionBadge
-                    higherIsBetter={false}
-                    label={t("score_hub.direction_better")}
-                  />
+                  <DirectionBadge deltaLine={moodDeltaLine} />
                 </View>
                 <Text style={[styles.gaugeScore, { color: moodColorValue }]}>
                   {moodScoreValue}
