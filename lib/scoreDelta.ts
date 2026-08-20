@@ -28,12 +28,18 @@ export interface FormatDeltaOptions {
   deltaKey?: string;
 }
 
+/** null when delta == 0 (no direction), true when the change is in the
+ *  desired direction (higher-is-better + positive delta OR lower-is-better
+ *  + negative delta), false otherwise. Callers use this to render the
+ *  optional "↑ better" / "↓ worse" prefix badge. */
+export type DeltaImprovement = boolean | null;
+
 export function formatDeltaLine(
   delta: number | null | undefined,
   higherIsBetter: boolean,
   tFn: TFn,
   opts?: FormatDeltaOptions,
-): { text: string; color: string } | null {
+): { text: string; color: string; isImprovement: DeltaImprovement } | null {
   if (delta == null) return null;
 
   const noChangeKey = opts?.noChangeKey ?? 'score_hub.delta_no_change';
@@ -43,6 +49,7 @@ export function formatDeltaLine(
     return {
       text: tFn(noChangeKey),
       color: colors.textSecondary,
+      isImprovement: null,
     };
   }
 
@@ -53,5 +60,6 @@ export function formatDeltaLine(
   return {
     text: tFn(deltaKey, { sign, value: abs }),
     color: isImprovement ? colors.successText : colors.errorText,
+    isImprovement,
   };
 }

@@ -452,11 +452,32 @@ export default function XnScoreDashboardScreen() {
             <Text style={styles.tierLabel}>{tierDisplayLabel}</Text>
           </View>
 
-          {/* Week-over-week delta (only when the RPC returned one). */}
+          {/* Week-over-week delta with arrow + direction word — matches
+              the "↑ better -3 vs last week" shape the Hub shows, but
+              picks arrow/word from the actual sign (Hub's badge is
+              hardcoded to "↑ better" — a Hub-side bug to fix later). */}
           {xnDeltaLine ? (
-            <Text style={[styles.headerDeltaText, { color: xnDeltaLine.color }]}>
-              {xnDeltaLine.text}
-            </Text>
+            <View style={styles.headerDeltaRow}>
+              {xnDeltaLine.isImprovement !== null ? (
+                <>
+                  <Ionicons
+                    name={xnDeltaLine.isImprovement ? "arrow-up" : "arrow-down"}
+                    size={13}
+                    color={xnDeltaLine.color}
+                  />
+                  <Text style={[styles.headerDeltaText, { color: xnDeltaLine.color }]}>
+                    {t(
+                      xnDeltaLine.isImprovement
+                        ? "score_hub.direction_better"
+                        : "score_hub.direction_worse",
+                    )}
+                  </Text>
+                </>
+              ) : null}
+              <Text style={[styles.headerDeltaText, { color: xnDeltaLine.color }]}>
+                {xnDeltaLine.text}
+              </Text>
+            </View>
           ) : null}
 
           {/* Percentile line — matches the Hub's "Top 82% of users". */}
@@ -962,7 +983,8 @@ const styles = StyleSheet.create({
   tierBadge: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, gap: 8 },
   tierIcon: { fontSize: 18 },
   tierLabel: { fontSize: 15, fontWeight: "700", color: "#FFFFFF", textTransform: "capitalize" },
-  headerDeltaText: { fontSize: 13, fontWeight: "600", marginTop: 8, textAlign: "center" },
+  headerDeltaRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4, marginTop: 8 },
+  headerDeltaText: { fontSize: 13, fontWeight: "600", textAlign: "center" },
   headerPercentile: { fontSize: 12, fontWeight: "500", color: "rgba(255,255,255,0.85)", marginTop: 4, textAlign: "center" },
 
   content: { padding: 20 },

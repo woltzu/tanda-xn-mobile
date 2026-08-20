@@ -8796,6 +8796,7 @@
     "delta_no_change": "Aucun changement vs semaine dernière",
     "delta_vs_last_week": "{{sign}}{{value}} vs semaine dernière",
     "direction_better": "mieux",
+    "direction_worse": "moins bien",
     "hero_kicker_stress": "Attention",
     "hero_message_stress_red": "Votre score de stress est élevé — voyons ce qui le motive.",
     "hero_message_stress_orange": "Votre score de stress est élevé. Un coup d'œil peut aider.",
