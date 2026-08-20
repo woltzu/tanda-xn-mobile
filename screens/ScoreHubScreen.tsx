@@ -1079,12 +1079,28 @@ export default function ScoreHubScreen() {
             <Text style={styles.headerScoreOutOf}>
               {t("score_hub.out_of_label", { max: 100 })}
             </Text>
-            <View style={styles.headerDirectionBadge}>
-              <Ionicons name="arrow-up" size={11} color={colors.textOnNavy} />
-              <Text style={styles.headerDirectionBadgeText}>
-                {t("score_hub.direction_better")}
-              </Text>
-            </View>
+            {/* Direction badge — driven off the same xnDeltaLine that
+                feeds the inline delta text below, so arrow + word always
+                agree with the sign. Hidden entirely when the delta is
+                missing (no bundle yet) or zero (no change); the "No
+                change vs last week" line below already covers the zero
+                case, so hiding the badge is the cleaner UX. */}
+            {xnDeltaLine && xnDeltaLine.isImprovement !== null ? (
+              <View style={styles.headerDirectionBadge}>
+                <Ionicons
+                  name={xnDeltaLine.isImprovement ? "arrow-up" : "arrow-down"}
+                  size={11}
+                  color={colors.textOnNavy}
+                />
+                <Text style={styles.headerDirectionBadgeText}>
+                  {t(
+                    xnDeltaLine.isImprovement
+                      ? "score_hub.direction_better"
+                      : "score_hub.direction_worse",
+                  )}
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {/* Inline delta line on the header (XnScore — higher is better) */}
