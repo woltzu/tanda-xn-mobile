@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
+  Image,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
@@ -93,12 +94,16 @@ export default function SplashScreen() {
       {/* Logo Container with floating animation */}
       <View style={styles.logoContainer}>
         <Animated.View style={{ transform: [{ translateY: floatAnim }] }}>
-          <LinearGradient
-            colors={["#00C6AE", "#00A896"]}
-            style={styles.logoBox}
-          >
-            <Text style={styles.logoText}>Xn</Text>
-          </LinearGradient>
+          {/* Xn logo image. The float animation stays on the outer
+              Animated.View so the whole mark bobs together; the PNG
+              carries the teal square + gradient + rounded corners it
+              used to be drawn as inline. */}
+          <Image
+            source={require("../assets/icon.png")}
+            style={styles.logoImage}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
         </Animated.View>
 
         <Text style={styles.title}>{t("final_polish.splash_tandaxn")}</Text>
@@ -193,23 +198,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 40,
   },
-  logoBox: {
+  logoImage: {
+    // Replaces the old logoBox + logoText pair. The PNG's built-in
+    // teal-square-with-rounded-corners handles what the LinearGradient
+    // used to do; the shadow (teal glow behind the mark) is kept.
     width: 120,
     height: 120,
-    borderRadius: 30,
-    alignItems: "center",
-    justifyContent: "center",
     marginBottom: 24,
     shadowColor: "#00C6AE",
     shadowOffset: { width: 0, height: 20 },
     shadowOpacity: 0.4,
     shadowRadius: 30,
     elevation: 20,
-  },
-  logoText: {
-    color: "#0A2342",
-    fontSize: 48,
-    fontWeight: "800",
   },
   title: {
     color: "#FFFFFF",

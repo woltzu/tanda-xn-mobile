@@ -9,7 +9,7 @@
 // and useTypedNavigation.
 //
 // Visual design preserved: navy → #143654 gradient hero, decorative
-// teal circles, "Tx" logo block, hero copy, flag row, white card with
+// teal circles, "Xn" logo image, hero copy, flag row, white card with
 // 4 highlights, trust badges, two-button footer.
 //
 // Navigation:
@@ -27,6 +27,7 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
+  Image,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useTranslation } from "react-i18next";
@@ -136,10 +137,15 @@ export default function OnboardingWelcomeScreen() {
           <View style={styles.decorCircleTopRight} />
           <View style={styles.decorCircleBottomLeft} />
 
-          {/* Logo block */}
-          <View style={styles.logoBox}>
-            <Text style={styles.logoText}>Tx</Text>
-          </View>
+          {/* Xn logo image — replaces the inline teal-square + text
+              draw. The PNG carries its own teal background and rounded
+              corners, so no wrapping View is needed. */}
+          <Image
+            source={require("../assets/icon.png")}
+            style={styles.logoImage}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+          />
 
           <Text style={styles.heroTitle}>{t("onboarding_welcome.hero_title")}</Text>
           <Text style={styles.heroSubtitle}>
@@ -270,19 +276,13 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     backgroundColor: "rgba(0, 198, 174, 0.05)",
   },
-  logoBox: {
+  logoImage: {
+    // Replaces the old logoBox + logoText pair. The PNG's built-in
+    // teal-square + rounded corners handles what the inline draw
+    // used to do at the same 80x80 footprint.
     width: 80,
     height: 80,
-    borderRadius: 20,
-    backgroundColor: TEAL,
-    alignItems: "center",
-    justifyContent: "center",
     marginBottom: 24,
-  },
-  logoText: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#FFFFFF",
   },
   heroTitle: {
     fontSize: 32,

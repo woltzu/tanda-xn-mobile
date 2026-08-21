@@ -17,13 +17,15 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import React, { useCallback } from "react";
-import { StyleSheet, TouchableOpacity, Text } from "react-native";
+import { StyleSheet, TouchableOpacity, Image } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, typography } from "../theme/tokens";
+import { colors } from "../theme/tokens";
 import { useAuth } from "../context/AuthContext";
 
-const NAVY = colors.primaryNavy;
+// TEAL kept as the container's backgroundColor so a brief blank state
+// (image cache miss / decode) still shows a teal square rather than a
+// hole in the layout. The PNG's own teal covers it once loaded.
 const TEAL = colors.accentTeal;
 
 export default function LogoHomeButton() {
@@ -53,7 +55,12 @@ export default function LogoHomeButton() {
       activeOpacity={0.85}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
-      <Text style={styles.xnMarkText}>Xn</Text>
+      <Image
+        source={require("../assets/icon.png")}
+        style={styles.logoImage}
+        resizeMode="contain"
+        accessibilityIgnoresInvertColors
+      />
     </TouchableOpacity>
   );
 }
@@ -77,12 +84,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
-  xnMarkText: {
-    fontSize: 13,
-    fontWeight: typography.bold,
-    color: NAVY,
-    // Tighten the "Xn" glyph pair a touch so it centers optically
-    // inside the small rounded square without extra padding tricks.
-    letterSpacing: -0.3,
+  logoImage: {
+    // Fills the 28x28 badge. resizeMode="contain" preserves the PNG's
+    // built-in rounded corners without stretching. Sized in %s so any
+    // future tweak to xnMark's width/height flows through.
+    width: "100%",
+    height: "100%",
   },
 });
