@@ -35,8 +35,8 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "TODO_APPLE_ID",
-        "ascAppId": "TODO_ASC_APP_ID"
+        "appleId": "kimagui@hotmail.com",
+        "ascAppId": "6803644495"
       },
       "android": {
         "serviceAccountKeyPath": "TODO_path/to/service-account-key.json",
