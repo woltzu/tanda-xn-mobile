@@ -9594,7 +9594,7 @@
     "delete_blocked_title": "Account restricted",
     "delete_blocked_critical": "You cannot delete your account while it is restricted. Please resolve the issue first.",
     "delete_confirm_title": "Delete account?",
-    "delete_confirm": "Are you sure you want to delete your account? Your data will be scheduled for permanent deletion after a 30-day grace period.",
+    "delete_confirm": "Delete your account? After a 30-day grace period, your personal info (name, email, phone, and profile picture) will be permanently removed. Your anonymized transaction and score history stays so your XnScore and the circles you've participated in remain intact.",
     "delete_confirm_yes": "Yes, delete",
     "delete_success": "Account scheduled for deletion. You have been signed out.",
     "delete_failed_title": "Deletion failed",

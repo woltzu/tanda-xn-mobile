@@ -9594,7 +9594,7 @@
     "delete_blocked_title": "Compte restreint",
     "delete_blocked_critical": "Vous ne pouvez pas supprimer votre compte tant qu'il est restreint. Veuillez d'abord résoudre le problème.",
     "delete_confirm_title": "Supprimer le compte ?",
-    "delete_confirm": "Êtes-vous sûr de vouloir supprimer votre compte ? Vos données seront programmées pour suppression définitive après un délai de grâce de 30 jours.",
+    "delete_confirm": "Supprimer votre compte ? Après un délai de grâce de 30 jours, vos informations personnelles (nom, e-mail, téléphone et photo de profil) seront définitivement supprimées. Votre historique de transactions et de score, anonymisé, est conservé pour préserver votre XnScore et l'intégrité des circles auxquels vous avez participé.",
     "delete_confirm_yes": "Oui, supprimer",
     "delete_success": "Compte programmé pour suppression. Vous avez été déconnecté.",
     "delete_failed_title": "Échec de la suppression",
