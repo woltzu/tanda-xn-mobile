@@ -37,7 +37,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#00C6AE"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -126,7 +126,8 @@
           "contactsPermission": "Allow TandaXn to access your contacts to invite friends."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "./plugins/withMlKitManifestFix"
     ],
     "extra": {
       "eas": {
